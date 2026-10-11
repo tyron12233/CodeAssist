@@ -57,7 +57,10 @@ class JavaIncrementalParser(
         latestIfText(snapshot.file.path, snapshot.text)?.let { return it }
         val text = snapshot.text.toString()
         val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version, apiContext, languageLevel)
-        latest[snapshot.file.path] = Live(text, tree)
+        // An edit supersedes the previous tree; its resolve-cache entries would keep it alive (see
+        // [JavaEnvironment.dropSourceResolveCache]). Clearing per edit also sweeps the one-off parses (rename,
+        // imports, structure) that never come through here.
+        if (latest.put(snapshot.file.path, Live(text, tree)) != null) env.dropSourceResolveCache()
         return tree
     }
 

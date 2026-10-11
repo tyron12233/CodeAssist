@@ -8,6 +8,7 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.impl.PsiModificationTrackerImpl
+import com.intellij.psi.impl.source.resolve.ResolveCache
 import com.intellij.psi.util.PsiModificationTracker
 import dev.ide.platform.log.Log
 import dev.ide.psi.IntellijPsiHost
@@ -90,6 +91,18 @@ class JavaEnvironment private constructor(
             (PsiModificationTracker.getInstance(project) as? PsiModificationTrackerImpl)
                 ?.incCounter()
         }
+    }
+
+    /**
+     * Drop the resolve results cached against parsed source trees. Every [parse] makes a new non-physical file
+     * with the event system off, so no PSI change ever reaches [ResolveCache] and it never clears itself. Its
+     * keys are weak but its values are soft, and a result usually points back into the tree it came from (a
+     * local, a parameter, the enclosing class), so each superseded tree stayed alive until ART cleared soft
+     * references at the edge of an OOM: tens of MB after a few minutes of typing, a full heap after an hour.
+     * Physical (class-file) entries are kept, so library resolution stays warm.
+     */
+    fun dropSourceResolveCache() {
+        runCatching { ResolveCache.getInstance(project).clearCache(false) }
     }
 
     /**
