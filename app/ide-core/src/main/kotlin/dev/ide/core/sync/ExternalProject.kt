@@ -2,9 +2,13 @@ package dev.ide.core.sync
 
 import dev.ide.model.sync.ExternalRepository
 import dev.ide.platform.ProgressReporter
+import java.io.IOException
 import java.nio.file.FileSystems
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
@@ -92,16 +96,24 @@ internal object SyncStamp {
         val matchers = globs.mapNotNull { runCatching { fs.getPathMatcher("glob:$it") }.getOrNull() }
         if (matchers.isEmpty()) return emptyList()
         val out = ArrayList<Path>()
+        // Pruned directories are skipped, not descended into: filtering their files after the fact still
+        // stat'd every entry under build/ and .gradle/, which is most of a built project's tree.
         runCatching {
-            Files.walk(root).use { stream ->
-                for (path in stream) {
-                    if (path == root || !Files.isRegularFile(path)) continue
-                    val rel = root.relativize(path)
-                    if ((0 until rel.nameCount).any { rel.getName(it).toString() in PRUNED }) continue
-                    val relPath = fs.getPath(rel.toString().replace('\\', '/'))
-                    if (matchers.any { it.matches(relPath) }) out.add(path)
+            Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult =
+                    if (dir != root && dir.fileName?.toString() in PRUNED) FileVisitResult.SKIP_SUBTREE
+                    else FileVisitResult.CONTINUE
+
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    if (attrs.isRegularFile || (attrs.isSymbolicLink && Files.isRegularFile(file))) {
+                        val relPath = fs.getPath(root.relativize(file).toString().replace('\\', '/'))
+                        if (matchers.any { it.matches(relPath) }) out.add(file)
+                    }
+                    return FileVisitResult.CONTINUE
                 }
-            }
+
+                override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult = FileVisitResult.CONTINUE
+            })
         }
         return out.sorted()
     }

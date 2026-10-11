@@ -29,6 +29,7 @@ import dev.ide.ui.actions.dispatchAction
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
+import dev.ide.ui.backend.UiCompatibilityInfo
 import dev.ide.ui.components.DepsProgressBar
 import dev.ide.ui.components.EditorTopBar
 import org.jetbrains.compose.resources.stringResource
@@ -62,8 +63,10 @@ import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 import dev.ide.ui.actions.applyWorkspaceEdits
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
 
 /**
  * Top bar + deps progress + tabs + breadcrumb row + the code canvas — the editor column shared by both
@@ -95,8 +98,19 @@ internal fun EditorCenter(
     // the disk read so a convert/revert (which drops/re-adds the marker without changing rootPath) refreshes it
     // — otherwise the cached non-null value would leave a ghost banner/chip after converting.
     var compatEpoch by remember(project.rootPath) { mutableStateOf(0) }
-    val compatInfo = remember(project.rootPath, compatEpoch) { state.backend.projects.compatibilityInfo() }
-    var showCompatBanner by remember(project.rootPath) { mutableStateOf(compatInfo != null) }
+    // Read off the main thread: its sync-staleness check walks the project tree, which ANR'd the editor open
+    // on large projects and slow storage. `compatLoaded` gates what must wait for the first read.
+    var compatInfo by remember(project.rootPath) { mutableStateOf<UiCompatibilityInfo?>(null) }
+    var compatLoaded by remember(project.rootPath) { mutableStateOf(false) }
+    var showCompatBanner by remember(project.rootPath) { mutableStateOf(false) }
+    LaunchedEffect(project.rootPath, compatEpoch) {
+        val info = withContext(Dispatchers.Default) { state.backend.projects.compatibilityInfo() }
+        compatInfo = info
+        if (!compatLoaded) {
+            showCompatBanner = info != null
+            compatLoaded = true
+        }
+    }
     var showConvertDialog by remember(project.rootPath) { mutableStateOf(false) }
     // A project adopted from a folder nothing recognized (a clone). Read once per project: the marker only
     // changes when the project gains a module, which re-opens the editor anyway.
@@ -104,9 +118,10 @@ internal fun EditorCenter(
     var showUnrecognizedBanner by remember(project.rootPath) { mutableStateOf(unrecognizedInfo != null) }
     // One-shot: an import where "Convert to CodeAssist project" was chosen at the picker. Now that the editor
     // is open (so the reader's notes are known), run the convert flow — the confirm dialog is the gate when
-    // `gradle.convert.warnUnresolved` is on (default); otherwise convert straight away.
-    LaunchedEffect(project.rootPath) {
-        if (!state.pendingGradleConvertPrompt) return@LaunchedEffect
+    // `gradle.convert.warnUnresolved` is on (default); otherwise convert straight away. Waits for the first
+    // compat read, so a compat project isn't mistaken for a native one.
+    LaunchedEffect(project.rootPath, compatLoaded) {
+        if (!compatLoaded || !state.pendingGradleConvertPrompt) return@LaunchedEffect
         state.pendingGradleConvertPrompt = false
         if (compatInfo == null) return@LaunchedEffect
         val warn = state.backend.settings.preference("gradle.convert.warnUnresolved")?.toBooleanStrictOrNull() != false
@@ -273,10 +288,10 @@ internal fun EditorCenter(
                         }
                     }
                     EditorNoticeStrip(notices)
-                    if (compatInfo != null) {
+                    compatInfo?.let { info ->
                         GradleCompatBanner(
                             state = state,
-                            info = compatInfo,
+                            info = info,
                             visible = showCompatBanner,
                             compact = compact,
                             onDismiss = { showCompatBanner = false },
