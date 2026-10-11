@@ -26,6 +26,13 @@ object BuiltInSettingsPages {
     /** Project-scoped Compose Preview page — the interpreter sandbox toggles (see `PreviewSandboxPolicy`). */
     const val PREVIEW = "preview"
 
+    /** Toggle key on the [APPEARANCE] page: resume into the last open project on a cold launch (default on).
+     *  Read once at startup by the UI app state through [REOPEN_LAST_PROJECT_KEY]. */
+    const val REOPEN_LAST_PROJECT = "reopenLastProject"
+
+    /** Full preference key of [REOPEN_LAST_PROJECT]. */
+    const val REOPEN_LAST_PROJECT_KEY = "settings.$APPEARANCE.$REOPEN_LAST_PROJECT"
+
     /** Choice key on the [BUILD_RUNTIME] page: the "Low memory mode" override of the detected device tier
      *  (`auto` / `on` / `off`, see [dev.ide.platform.DeviceMemory]). Applied when a project opens. */
     const val LOW_MEMORY_MODE = "lowMemoryMode"
@@ -179,6 +186,11 @@ object BuiltInSettingsPages {
                 "rightToolWindowBar", "Right tool window bar",
                 "Show the tool window icons along the right edge on wide screens. Off moves the AI chat's button into the top bar",
                 default = d.rightToolWindowBar,
+            ),
+            SettingControl.Toggle(
+                REOPEN_LAST_PROJECT, "Reopen last project on launch",
+                "Open the project you were working on when the app starts. Off starts on the project list instead",
+                default = true, group = "Startup",
             ),
         )
     }

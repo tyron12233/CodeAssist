@@ -41,8 +41,9 @@ internal const val EXPORT_AUTHOR_PREF = "export.author"
  *  kill (or a normal relaunch) resumes back into it instead of the picker. Blank = the picker was showing. */
 private const val LAST_PROJECT_PREF = "session.lastProject"
 
-/** App preference gating the resume-last-project behavior. Unset/anything-but-"false" = on (the default). */
-private const val REOPEN_LAST_PROJECT_PREF = "session.reopenLastProject"
+/** App preference gating the resume-last-project behavior: the "Reopen last project on launch" toggle on the
+ *  Appearance settings page (`settings.<pageId>.<key>`). Unset/anything-but-"false" = on (the default). */
+private const val REOPEN_LAST_PROJECT_PREF = "settings.appearance.reopenLastProject"
 
 private const val MIGRATION_ACK_PREF = "migration.acknowledged"
 private const val LEGACY_RECOVERY_SEEN_PREF = "legacy.recovery.seen"

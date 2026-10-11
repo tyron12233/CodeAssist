@@ -1154,7 +1154,7 @@
     <string name="settings_scope_project">此项目</string>
     <string name="settings_search_placeholder">搜索设置</string>
     <string name="settings_search_empty">没有与“%1$s”匹配的设置</string>
-    <string name="settings_page_appearance_subtitle">主题、强调色与工具窗口</string>
+    <string name="settings_page_appearance_subtitle">主题、强调色、工具窗口与启动</string>
     <string name="settings_page_editor_subtitle">字体、换行、折叠与手势</string>
     <string name="settings_page_keymap_subtitle">键盘快捷键</string>
     <string name="settings_page_completion_subtitle">建议、后缀模板与时机</string>

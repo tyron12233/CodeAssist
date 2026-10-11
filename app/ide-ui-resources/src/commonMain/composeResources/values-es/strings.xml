@@ -684,7 +684,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="settings_scope_project">Este proyecto</string>
     <string name="settings_search_placeholder">Buscar configuración</string>
     <string name="settings_search_empty">Ninguna configuración coincide con «%1$s»</string>
-    <string name="settings_page_appearance_subtitle">Tema, color de acento y ventanas</string>
+    <string name="settings_page_appearance_subtitle">Tema, color de acento, ventanas e inicio</string>
     <string name="settings_page_editor_subtitle">Fuente, ajuste, plegado y gestos</string>
     <string name="settings_page_keymap_subtitle">Atajos de teclado</string>
     <string name="settings_page_completion_subtitle">Sugerencias, plantillas postfijas y tiempo</string>

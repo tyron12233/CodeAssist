@@ -1205,7 +1205,7 @@
     <string name="settings_scope_project">هذا المشروع</string>
     <string name="settings_search_placeholder">ابحث في الإعدادات</string>
     <string name="settings_search_empty">لا توجد إعدادات تطابق «%1$s»</string>
-    <string name="settings_page_appearance_subtitle">السمة ولون التمييز ونوافذ الأدوات</string>
+    <string name="settings_page_appearance_subtitle">السمة ولون التمييز ونوافذ الأدوات وبدء التشغيل</string>
     <string name="settings_page_editor_subtitle">الخط والالتفاف والطي والإيماءات</string>
     <string name="settings_page_keymap_subtitle">اختصارات لوحة المفاتيح</string>
     <string name="settings_page_completion_subtitle">الاقتراحات وقوالب اللاحقة والتوقيت</string>

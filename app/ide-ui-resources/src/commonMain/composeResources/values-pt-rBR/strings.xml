@@ -640,7 +640,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="settings_scope_project">Este projeto</string>
     <string name="settings_search_placeholder">Pesquisar configurações</string>
     <string name="settings_search_empty">Nenhuma configuração corresponde a “%1$s”</string>
-    <string name="settings_page_appearance_subtitle">Tema, cor de destaque e janelas</string>
+    <string name="settings_page_appearance_subtitle">Tema, cor de destaque, janelas e inicialização</string>
     <string name="settings_page_editor_subtitle">Fonte, quebra, dobra e gestos</string>
     <string name="settings_page_keymap_subtitle">Atalhos de teclado</string>
     <string name="settings_page_completion_subtitle">Sugestões, templates pós-fixos e tempo</string>

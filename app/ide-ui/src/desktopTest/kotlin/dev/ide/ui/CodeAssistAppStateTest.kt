@@ -184,6 +184,44 @@ class CodeAssistAppStateTest {
         assertEquals(emptyList(), backend.opened, "installing must not navigate into the editor")
     }
 
+    /**
+     * Lets the cold-launch resume settle. It checks the project still exists on the real IO dispatcher, which
+     * the test scheduler cannot advance, so this alternates real-time waits with scheduler advances until an
+     * open lands (or [timeoutMs] passes, the expected outcome when resume is off).
+     */
+    private fun TestScope.settleResume(backend: AppBackend, timeoutMs: Long = 2_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        advanceUntilIdle()
+        while (backend.opened.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+            advanceUntilIdle()
+        }
+    }
+
+    /** By default a cold launch resumes into the project that was on screen last run. */
+    @Test
+    fun coldLaunchReopensTheLastProject() = runTest {
+        val backend = AppBackend(settledPrefs() + ("session.lastProject" to "/ws/app")).apply { analyticsConsent = false }
+        val app = appState(backend)
+        settleResume(backend)
+
+        assertEquals(listOf("/ws/app"), backend.opened)
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** With "Reopen last project on launch" off, a cold launch stays on the picker. */
+    @Test
+    fun reopenToggleOffLandsOnThePicker() = runTest {
+        val backend = AppBackend(
+            settledPrefs() + ("session.lastProject" to "/ws/app") + ("settings.appearance.reopenLastProject" to "false"),
+        ).apply { analyticsConsent = false }
+        val app = appState(backend)
+        settleResume(backend, timeoutMs = 300)
+
+        assertEquals(emptyList(), backend.opened)
+        assertEquals(Screen.Projects, app.screen)
+    }
+
     @Test
     fun pickerLandingLeavesBackToTheSystem() = runTest {
         val backend = settled() // the consent sheet is already answered

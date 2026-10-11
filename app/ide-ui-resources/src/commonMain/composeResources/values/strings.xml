@@ -1156,7 +1156,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="settings_scope_project">This project</string>
     <string name="settings_search_placeholder">Search settings</string>
     <string name="settings_search_empty">No settings match “%1$s”</string>
-    <string name="settings_page_appearance_subtitle">Theme, accent color &amp; tool windows</string>
+    <string name="settings_page_appearance_subtitle">Theme, accent color, tool windows &amp; startup</string>
     <string name="settings_page_editor_subtitle">Font, wrapping, folding &amp; gestures</string>
     <string name="settings_page_keymap_subtitle">Keyboard shortcuts</string>
     <string name="settings_page_completion_subtitle">Suggestions, postfix &amp; timing</string>

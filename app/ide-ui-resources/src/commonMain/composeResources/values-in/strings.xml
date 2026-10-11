@@ -610,7 +610,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="settings_scope_project">Proyek ini</string>
     <string name="settings_search_placeholder">Cari setelan</string>
     <string name="settings_search_empty">Tidak ada setelan yang cocok dengan “%1$s”</string>
-    <string name="settings_page_appearance_subtitle">Tema, warna aksen &amp; jendela alat</string>
+    <string name="settings_page_appearance_subtitle">Tema, warna aksen, jendela alat &amp; saat mulai</string>
     <string name="settings_page_editor_subtitle">Font, pembungkusan, pelipatan &amp; gestur</string>
     <string name="settings_page_keymap_subtitle">Pintasan keyboard</string>
     <string name="settings_page_completion_subtitle">Saran, templat postfix &amp; waktu</string>

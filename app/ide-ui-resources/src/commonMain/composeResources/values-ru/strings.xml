@@ -574,7 +574,7 @@
     <string name="settings_scope_project">Этот проект</string>
     <string name="settings_search_placeholder">Поиск настроек</string>
     <string name="settings_search_empty">Нет настроек для «%1$s»</string>
-    <string name="settings_page_appearance_subtitle">Тема, акцентный цвет и панели</string>
+    <string name="settings_page_appearance_subtitle">Тема, акцентный цвет, панели и запуск</string>
     <string name="settings_page_editor_subtitle">Шрифт, перенос, свёртка и жесты</string>
     <string name="settings_page_keymap_subtitle">Сочетания клавиш</string>
     <string name="settings_page_completion_subtitle">Подсказки, постфиксные шаблоны и задержка</string>
