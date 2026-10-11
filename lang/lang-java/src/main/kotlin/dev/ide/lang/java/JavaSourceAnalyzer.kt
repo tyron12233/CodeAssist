@@ -29,7 +29,7 @@ import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.java.resolve.JavaApiLevelCheck
 import dev.ide.lang.java.resolve.JavaLibraryDocs
 import dev.ide.lang.resolve.SourceDocProvider
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.lang.java.completion.JavaCompletion
 import dev.ide.lang.java.services.JavaFolder
@@ -99,7 +99,7 @@ class JavaSourceAnalyzer private constructor(
     }
     private val env: JavaEnvironment by envLazy
 
-    private val javaIncrementalParser by lazy { JavaIncrementalParser(env, { androidApi() }, { languageLevel }) }
+    private val javaIncrementalParser by lazy { JavaIncrementalParser(env, { apiContext() }, { languageLevel }) }
     override val incrementalParser: IncrementalParser get() = javaIncrementalParser
 
     // --- JvmIndexScopeProvider: the roots this analyzer contributes to the workspace index scope ----------
@@ -166,10 +166,11 @@ class JavaSourceAnalyzer private constructor(
      *  a supertype FQN). Default empty keeps completion working index-free. */
     var subtypeIndexQuery: (String) -> List<JavaCompletion.IndexedType> = { emptyList() }
 
-    /** The module's minSdk + platform API-level table, injected by the host for an Android module. Read on
-     *  every diagnostics pass, so a minSdk edit takes effect without rebuilding the analyzer. */
+    /** The module's API-level check inputs, injected by the host: minSdk + the platform table for an Android
+     *  module, the Java release + the JDK table for a JVM module. Read on every diagnostics pass, so a minSdk
+     *  edit takes effect without rebuilding the analyzer. */
     @Volatile
-    var androidApi: () -> AndroidApiContext? = { null }
+    var apiContext: () -> ApiLevelContext? = { null }
 
     /** The module's Java language level (`8`, `17`, ...): syntax newer than it is reported, as the build's
      *  compiler would. Files are still parsed at the highest level so a newer construct reads as itself.
@@ -277,7 +278,7 @@ class JavaSourceAnalyzer private constructor(
     private fun cachedParse(file: VirtualFile): JavaParsedFile {
         val hash = file.contentHash()
         cache[file.path]?.let { if (it.first == hash) return it.second }
-        val tree = JavaParsedFile(env.parse(file.name, file.readText()), file, version.incrementAndGet(), { androidApi() }, { languageLevel })
+        val tree = JavaParsedFile(env.parse(file.name, file.readText()), file, version.incrementAndGet(), { apiContext() }, { languageLevel })
         cache[file.path] = hash to tree
         return tree
     }
@@ -422,7 +423,7 @@ class JavaSourceAnalyzer private constructor(
                 // A platform API's doc opens with the level that added it ("Added in API 26"). A compiled symbol
                 // has no comment of its own, so its doc comes from sources or the bundled docs.
                 doc = (sym.documentation() ?: libraryDocs.rawDoc(target)).let { doc ->
-                    androidApi()?.levels?.let { JavaApiLevelCheck.levelOf(target, it) }?.prependTo(doc) ?: doc
+                    apiContext()?.let { api -> JavaApiLevelCheck.levelOf(target, api.levels)?.prependTo(doc, api.platform) } ?: doc
                 },
                 docFormat = DocFormat.JAVADOC,
             )

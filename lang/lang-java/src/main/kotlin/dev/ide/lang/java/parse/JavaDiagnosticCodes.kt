@@ -72,4 +72,7 @@ object JavaDiagnosticCodes {
 
     /** A platform API newer than the module's `minSdk`, not covered by an `SDK_INT` guard or `@RequiresApi`. */
     const val NEW_API = dev.ide.lang.resolve.ApiGuards.NEW_API
+
+    /** A JDK API newer than a JVM module's Java language level (what `javac --release` rejects). */
+    const val NEW_JDK_API = dev.ide.lang.resolve.ApiGuards.NEW_JDK_API
 }

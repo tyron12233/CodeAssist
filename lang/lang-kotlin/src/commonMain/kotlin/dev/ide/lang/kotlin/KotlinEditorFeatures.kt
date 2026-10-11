@@ -688,8 +688,7 @@ class KotlinEditorFeatures(
             }
             else -> sym.documentation() to DocFormat.PLAIN
         }
-        val level = service.apiLevelOf(sym)
-        return QuickDocInfo(sig, sym.name, sym.kind, container, level?.prependTo(doc) ?: doc, fmt)
+        return QuickDocInfo(sig, sym.name, sym.kind, container, service.withApiLevel(sym, doc), fmt)
     }
 
     private fun declarationDoc(decl: KtNamedDeclaration): QuickDocInfo {

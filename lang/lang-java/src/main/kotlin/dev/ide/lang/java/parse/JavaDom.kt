@@ -29,7 +29,7 @@ import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.vfs.VirtualFile
 import java.util.IdentityHashMap
 
@@ -106,8 +106,8 @@ class JavaParsedFile(
     val javaFile: PsiJavaFile,
     override val file: VirtualFile,
     override val documentVersion: Long,
-    /** The module's minSdk + API-level table when it is an Android module; null skips the minSdk check. */
-    private val androidApi: () -> AndroidApiContext? = { null },
+    /** The module's API-level check inputs (Android minSdk, or a JVM module's Java release); null skips it. */
+    private val apiContext: () -> ApiLevelContext? = { null },
     /** The module's Java language level (`8`, `17`); syntax newer than it is reported. */
     private val languageLevel: () -> Int = { Int.MAX_VALUE },
 ) : ParsedFile {
@@ -128,7 +128,7 @@ class JavaParsedFile(
     // the (locked, resolving) semantic pass runs only when diagnostics are actually read (the analysis pass),
     // not for completion/folding/etc. that never touch `.diagnostics`.
     override val diagnostics: List<Diagnostic> by lazy {
-        val api = androidApi()
+        val api = apiContext()
         collectDiagnostics(javaFile) + dev.ide.lang.java.resolve.JavaSemanticDiagnostics.of(javaFile) +
             dev.ide.lang.java.resolve.JavaLanguageLevelCheck.of(javaFile, languageLevel()) +
             (if (api != null) dev.ide.lang.java.resolve.JavaApiLevelCheck.of(javaFile, api) else emptyList())

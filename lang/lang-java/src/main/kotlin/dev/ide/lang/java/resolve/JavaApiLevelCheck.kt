@@ -33,26 +33,31 @@ import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.java.parse.JavaDiagnosticCodes
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.ApiGuards
 import dev.ide.lang.resolve.ApiLevel
+import dev.ide.lang.resolve.ApiPlatform
 import dev.ide.lang.resolve.PlatformApiLevels
 import dev.ide.platform.EngineCancellation
 import dev.ide.psi.IntellijPsiHost
 
 /**
- * The minSdk check (Android lint's `NewApi`): a call, constructor or field read of a platform API added after
- * the module's `minSdk` is reported unless something guarantees the level where it runs:
+ * The API-level check. On an Android module it is the minSdk check (Android lint's `NewApi`): a call,
+ * constructor or field read of a platform API added after the module's `minSdk` is reported unless something
+ * guarantees the level where it runs:
  *  - an enclosing `if`/`?:`/`while`/`&&` on `Build.VERSION.SDK_INT` ([ApiGuards.levelGuaranteed]);
  *  - an earlier `if (SDK_INT < N) return;` in an enclosing block;
  *  - `@RequiresApi(N)` / `@TargetApi(N)` on an enclosing method or class.
  *
  * Constants are not reported (javac inlines them), nor are the `java.*` methods D8 backports. An API the
  * table does not know is never reported.
+ *
+ * On a plain JVM module the same walk compares JDK APIs with the module's Java release (`javac --release`),
+ * with no guards: nothing at run time makes a newer JDK API available to code compiled for an older release.
  */
 internal object JavaApiLevelCheck {
 
-    fun of(psi: PsiJavaFile, api: AndroidApiContext): List<Diagnostic> = IntellijPsiHost.withParseLock {
+    fun of(psi: PsiJavaFile, api: ApiLevelContext): List<Diagnostic> = IntellijPsiHost.withParseLock {
         val out = ArrayList<Diagnostic>()
         psi.accept(object : JavaRecursiveElementVisitor() {
             private var seen = 0
@@ -114,7 +119,7 @@ internal object JavaApiLevelCheck {
             ?: levels.methodLevel(ownerName, name, null, method.parameterList.parametersCount)
     }
 
-    private fun report(anchor: PsiElement, what: String, method: PsiMethod, api: AndroidApiContext, out: MutableList<Diagnostic>) {
+    private fun report(anchor: PsiElement, what: String, method: PsiMethod, api: ApiLevelContext, out: MutableList<Diagnostic>) {
         val owner = method.containingClass ?: return
         val level = methodLevel(method, api.levels) ?: return
         val label = if (method.isConstructor) "new ${owner.qualifiedName}" else "${owner.qualifiedName}#${method.name}"
@@ -123,15 +128,15 @@ internal object JavaApiLevelCheck {
 
     private fun reportIfTooNew(
         anchor: PsiElement, what: String, label: String, level: ApiLevel,
-        api: AndroidApiContext, out: MutableList<Diagnostic>,
+        api: ApiLevelContext, out: MutableList<Diagnostic>,
     ) {
-        if (level.desugared || level.since <= api.minSdk) return
-        if (guaranteedLevel(anchor) >= level.since) return
+        if (level.since <= api.minLevel) return
+        if (api.platform == ApiPlatform.ANDROID && (level.desugared || guaranteedLevel(anchor) >= level.since)) return
         val r = anchor.textRange
         out += Diagnostic(
-            TextRange(r.startOffset, r.endOffset), Severity.WARNING,
-            "$what requires API level ${level.since} (current min is ${api.minSdk}): `$label`",
-            code = JavaDiagnosticCodes.NEW_API,
+            TextRange(r.startOffset, r.endOffset), if (api.enforced) Severity.ERROR else Severity.WARNING,
+            ApiGuards.message(what, label, level.since, api),
+            code = ApiGuards.codeFor(api.platform),
         )
     }
 

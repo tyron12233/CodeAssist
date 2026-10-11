@@ -5,7 +5,7 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.java.env.JavaEnvironment
 import dev.ide.lang.java.parse.JavaDiagnosticCodes
 import dev.ide.lang.java.parse.JavaParsedFile
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.ApiLevel
 import dev.ide.lang.resolve.PlatformApiLevels
 import dev.ide.vfs.local.LocalFileSystem
@@ -106,7 +106,7 @@ class JavaApiLevelCheckTest {
         """.trimIndent()
         val f = File(srcRoot, "com/foo/Use.java").apply { parentFile.mkdirs() }
         f.writeText(src)
-        val parsed = JavaParsedFile(env.parse("com/foo/Use.java", src), fs.fileFor(f.toPath()), 1L, androidApi = { AndroidApiContext(minSdk, 36, levels) })
+        val parsed = JavaParsedFile(env.parse("com/foo/Use.java", src), fs.fileFor(f.toPath()), 1L, apiContext = { ApiLevelContext.android(minSdk, levels) })
         return parsed.diagnostics.filter { it.code == JavaDiagnosticCodes.NEW_API }
     }
 
@@ -179,7 +179,7 @@ class JavaApiLevelCheckTest {
     private fun fixesFor(body: String): Fixes {
         val src = "package com.foo;\nimport android.app.*;\nimport android.os.Build;\nimport androidx.annotation.RequiresApi;\nclass Use {\n$body\n}"
         val f = File(srcRoot, "com/foo/Use.java").apply { parentFile.mkdirs(); writeText(src) }
-        val parsed = JavaParsedFile(env.parse("com/foo/Use.java", src), fs.fileFor(f.toPath()), 1L, androidApi = { AndroidApiContext(21, 36, levels) })
+        val parsed = JavaParsedFile(env.parse("com/foo/Use.java", src), fs.fileFor(f.toPath()), 1L, apiContext = { ApiLevelContext.android(21, levels) })
         val d = parsed.diagnostics.first { it.code == JavaDiagnosticCodes.NEW_API }
         val target = object : dev.ide.analysis.AnalysisTarget {
             override val file = parsed.file

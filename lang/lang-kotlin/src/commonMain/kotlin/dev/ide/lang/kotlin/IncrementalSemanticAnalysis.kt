@@ -46,11 +46,11 @@ class IncrementalSemanticAnalysis(
      * missing diagnostic, never a wrong one.
      */
     private val resolveReady: () -> Boolean = { service.classpathReady() },
-    /** The module's minSdk + API-level table when it is an Android module (the minSdk check); null skips it. */
-    private val androidApi: () -> dev.ide.lang.resolve.AndroidApiContext? = { null },
+    /** The module's API-level check inputs (Android minSdk, or a JVM module's Java release); null skips it. */
+    private val apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null },
 ) {
 
-    private val checks = KotlinSemanticChecks(service, androidApi)
+    private val checks = KotlinSemanticChecks(service, apiContext)
 
     // The read-only checker set, driven over each declaration's subtree in one walk (see KotlinCheckerDriver).
     // Built once: the checkers are stateless beyond the per-pass caches [checks] clears in resetPassCaches.

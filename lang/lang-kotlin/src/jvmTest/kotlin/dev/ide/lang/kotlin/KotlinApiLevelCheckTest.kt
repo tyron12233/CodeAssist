@@ -2,7 +2,7 @@ package dev.ide.lang.kotlin
 
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.ApiLevel
 import dev.ide.lang.resolve.PlatformApiLevels
 import kotlinx.coroutines.runBlocking
@@ -139,9 +139,39 @@ class KotlinApiLevelCheckTest {
         assertTrue(d.none { it.code == KotlinDiagnosticCodes.NEW_API }, d.toString())
     }
 
+    @Test
+    fun aJvmModuleChecksJdkApisAgainstItsJavaRelease() {
+        fun check(release: Int): List<Diagnostic> {
+            jdkRelease = release
+            try {
+                val doc = SnippetDoc(
+                    "package demo\nfun m(a: String?): String {\n    return java.util.Objects.requireNonNullElse(a, \"x\")\n}\n",
+                    DiskFile(srcDir.resolve("Jdk${counter.incrementAndGet()}.kt")),
+                )
+                val all = runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
+                return all.filter { it.code == KotlinDiagnosticCodes.NEW_JDK_API }
+            } finally {
+                jdkRelease = null
+            }
+        }
+        val d = check(8)
+        assertEquals(listOf("Call requires Java 9 (module language level is 8): `java.util.Objects#requireNonNullElse`"), d.map { it.message })
+        assertTrue(d.all { it.severity == Severity.ERROR })
+        assertEquals(emptyList(), check(9))
+    }
+
     companion object {
         private val counter = AtomicInteger()
         @Volatile private var minSdkFor: Int? = 21
+        @Volatile private var jdkRelease: Int? = null
+
+        private val jdk = object : PlatformApiLevels {
+            override val platformLevel = 25
+            override fun classLevel(className: String): ApiLevel? = null
+            override fun methodLevel(ownerClass: String, name: String, descriptor: String?, arity: Int) =
+                if (ownerClass.replace('/', '.') == "java.util.Objects" && name == "requireNonNullElse") ApiLevel(9) else null
+            override fun fieldLevel(ownerClass: String, name: String): ApiLevel? = null
+        }
 
         private val levels = object : PlatformApiLevels {
             override val platformLevel = 36
@@ -160,7 +190,12 @@ class KotlinApiLevelCheckTest {
 
         val srcDir: Path = tempProject(emptyMap())
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir, libJars = listOf(stdlibJarPath(), platformJar())))
-            .also { a -> a.androidApi = { minSdkFor?.let { AndroidApiContext(it, 36, levels) } } }
+            .also { a ->
+                a.apiContext = {
+                    jdkRelease?.let { ApiLevelContext.jdk(it, jdk, enforced = true) }
+                        ?: minSdkFor?.let { ApiLevelContext.android(it, levels) }
+                }
+            }
 
         private fun platformJar(): Path {
             val jar = Files.createTempFile("platform", ".jar")
@@ -171,6 +206,12 @@ class KotlinApiLevelCheckTest {
                 put("android/app/NotificationChannel", classBytes("android/app/NotificationChannel") {
                     method("<init>", "(Ljava/lang/String;)V")
                     method("getId", "()Ljava/lang/String;")
+                })
+                // The test analyzer has no JDK; a stub stands in for the one JDK class the JDK case calls.
+                put("java/util/Objects", classBytes("java/util/Objects") {
+                    visitMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC, "requireNonNullElse", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", "<T:Ljava/lang/Object;>(TT;TT;)TT;", null).apply {
+                        visitCode(); visitInsn(Opcodes.ACONST_NULL); visitInsn(Opcodes.ARETURN); visitMaxs(1, 2); visitEnd()
+                    }
                 })
                 put("android/view/View", classBytes("android/view/View") {
                     method("<init>", "()V")

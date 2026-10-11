@@ -25,7 +25,7 @@ import java.util.Collections
  */
 class JavaIncrementalParser(
     private val env: JavaEnvironment,
-    private val androidApi: () -> dev.ide.lang.resolve.AndroidApiContext? = { null },
+    private val apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null },
     private val languageLevel: () -> Int = { Int.MAX_VALUE },
 ) : IncrementalParser {
 
@@ -56,7 +56,7 @@ class JavaIncrementalParser(
     override fun parseFull(snapshot: DocumentSnapshot): ParsedFile {
         latestIfText(snapshot.file.path, snapshot.text)?.let { return it }
         val text = snapshot.text.toString()
-        val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version, androidApi, languageLevel)
+        val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version, apiContext, languageLevel)
         latest[snapshot.file.path] = Live(text, tree)
         return tree
     }

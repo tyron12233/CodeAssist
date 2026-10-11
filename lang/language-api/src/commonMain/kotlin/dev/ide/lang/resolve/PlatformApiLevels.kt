@@ -56,11 +56,21 @@ data class ApiLevel(
     val removedIn: Int = 0,
     val desugared: Boolean = false,
 ) {
-    /** A one-line, human-readable summary: `Added in API 31 · Deprecated in API 33`. */
-    fun describe(): String = buildString {
-        append("Added in API ").append(maxOf(since, 1))
-        if (deprecatedIn > 0) append(" · Deprecated in API ").append(deprecatedIn)
-        if (removedIn > 0) append(" · Removed in API ").append(removedIn)
+    /**
+     * A one-line, human-readable summary: `Added in API 31 · Deprecated in API 33`, or for the JDK
+     * `Since Java 9 · Deprecated in Java 17`. The JDK table starts at Java 8, so an API from 8 or earlier gets
+     * no "Since" part, and the line is empty when there is nothing else to say.
+     */
+    fun describe(platform: ApiPlatform = ApiPlatform.ANDROID): String {
+        val unit = platform.unit
+        val parts = ArrayList<String>(3)
+        when {
+            platform == ApiPlatform.ANDROID -> parts += "Added in $unit ${maxOf(since, 1)}"
+            since > JDK_BASELINE -> parts += "Since $unit $since"
+        }
+        if (deprecatedIn > 0) parts += "Deprecated in $unit $deprecatedIn"
+        if (removedIn > 0) parts += "Removed in $unit $removedIn"
+        return parts.joinToString(" · ")
     }
 
     /**
@@ -68,8 +78,9 @@ data class ApiLevel(
      * renderer that strips them still finds the tags after the description; a null or blank [doc] becomes the
      * line alone.
      */
-    fun prependTo(doc: String?): String {
-        val line = describe()
+    fun prependTo(doc: String?, platform: ApiPlatform = ApiPlatform.ANDROID): String {
+        val line = describe(platform)
+        if (line.isEmpty()) return doc.orEmpty()
         if (doc.isNullOrBlank()) return line
         val trimmed = doc.trimStart()
         if (trimmed.startsWith("/**")) return "/**\n * $line\n *\n * " + trimmed.removePrefix("/**").trimStart(' ', '\n')
@@ -77,12 +88,35 @@ data class ApiLevel(
     }
 }
 
+/** The oldest release the JDK table distinguishes: its `since` of 8 means "Java 8 or earlier". */
+const val JDK_BASELINE = 8
+
+/** Whose levels a [PlatformApiLevels] table holds: Android API levels, or Java releases. */
+enum class ApiPlatform(val unit: String) {
+    ANDROID("API"),
+    JDK("Java"),
+}
+
 /**
- * What the minSdk check needs about the module being analyzed: its [minSdk] and the [levels] table. A module
- * that is not an Android module has no context (null), and the check does not run.
+ * What the API-level check needs about the module being analyzed. For an Android module it is the minSdk check
+ * (lint's `NewApi`): [minLevel] is the module's `minSdk` and [levels] the platform's API-level table. For a plain
+ * JVM module it is the language-level check (`javac --release`): [minLevel] is the module's Java release and
+ * [levels] the JDK's table. A module with neither has no context (null), and the check does not run.
+ *
+ * [enforced] says the build rejects such a call too (a desktop build compiled with `--release`), which makes
+ * the editor report it as an error rather than a warning.
  */
-data class AndroidApiContext(
-    val minSdk: Int,
-    val compileSdk: Int,
+data class ApiLevelContext(
+    val platform: ApiPlatform,
+    val minLevel: Int,
     val levels: PlatformApiLevels,
-)
+    val enforced: Boolean = false,
+) {
+    companion object {
+        /** An Android module's minSdk check. */
+        fun android(minSdk: Int, levels: PlatformApiLevels) = ApiLevelContext(ApiPlatform.ANDROID, minSdk, levels)
+
+        /** A JVM module's check against its Java [release]. */
+        fun jdk(release: Int, levels: PlatformApiLevels, enforced: Boolean) = ApiLevelContext(ApiPlatform.JDK, release, levels, enforced)
+    }
+}

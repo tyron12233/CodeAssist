@@ -153,10 +153,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var isAndroidModule: Boolean? = null
 
-    /** Injected by the host for an Android module: its minSdk + the platform API-level table, for the minSdk
-     *  check and the "Added in API N" doc line. Read on every pass, so a minSdk edit applies without a rebuild. */
+    /** Injected by the host: an Android module's minSdk + platform table, or a JVM module's Java release + the
+     *  JDK table, for the API-level check and the "Added in API N" / "Since Java N" doc line. Read on every
+     *  pass, so a minSdk edit applies without a rebuild. */
     @Volatile
-    var androidApi: () -> dev.ide.lang.resolve.AndroidApiContext? = { null }
+    var apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null }
 
     /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
      *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
@@ -223,7 +224,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
             syntheticMemberProviders = { syntheticMemberProviders() },
             javaSourceMemberProvider = { javaSourceMemberProvider(it) },
-            apiLevels = { androidApi()?.levels },
+            apiContext = { apiContext() },
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value
@@ -523,7 +524,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         IncrementalSemanticAnalysis(
             service,
             ::sharedCachesFor,
-            androidApi = { androidApi() },
+            apiContext = { apiContext() },
         )
     }
     private val incrementalAnalysis by incrementalAnalysisLazy

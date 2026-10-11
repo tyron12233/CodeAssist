@@ -81,6 +81,8 @@ object KotlinDiagnosticCodes {
     /** A platform API newer than the module's `minSdk`, not covered by an `SDK_INT` guard or `@RequiresApi`.
      *  Shared with the Java editor. */
     const val NEW_API = dev.ide.lang.resolve.ApiGuards.NEW_API
+    /** A JDK API newer than a JVM module's Java release (what `-Xjdk-release` rejects). Shared with Java. */
+    const val NEW_JDK_API = dev.ide.lang.resolve.ApiGuards.NEW_JDK_API
     /** Use of an experimental API (a `@RequiresOptIn(level = WARNING)` marker) without opting in — the
      *  compiler's OPT_IN_USAGE. Resolved via [KotlinSymbolService.optInMarkersOf]. */
     const val OPT_IN_USAGE = "kt.optInUsage"

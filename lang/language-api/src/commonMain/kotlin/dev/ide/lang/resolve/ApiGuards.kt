@@ -11,6 +11,20 @@ object ApiGuards {
     /** The diagnostic code both editors report the minSdk check under, so quick fixes can key off it. */
     const val NEW_API = "android.newApi"
 
+    /** The code both editors report a JDK API newer than a JVM module's Java release under. */
+    const val NEW_JDK_API = "java.newJdkApi"
+
+    /** The [ApiLevelContext.platform]-specific code an API-level diagnostic is reported under. */
+    fun codeFor(platform: ApiPlatform): String = if (platform == ApiPlatform.JDK) NEW_JDK_API else NEW_API
+
+    /**
+     * The API-level diagnostic's message: `Call requires API level 26 (current min is 21): `label``, or for
+     * the JDK `Call requires Java 11 (module language level is 8): `label``.
+     */
+    fun message(what: String, label: String, since: Int, api: ApiLevelContext): String =
+        if (api.platform == ApiPlatform.JDK) "$what requires Java $since (module language level is ${api.minLevel}): `$label`"
+        else "$what requires API level $since (current min is ${api.minLevel}): `$label`"
+
     /** `android.os.Build.VERSION_CODES` constant names to their level. */
     val VERSION_CODES: Map<String, Int> = mapOf(
         "BASE" to 1, "BASE_1_1" to 2, "CUPCAKE" to 3, "DONUT" to 4, "ECLAIR" to 5, "ECLAIR_0_1" to 6,

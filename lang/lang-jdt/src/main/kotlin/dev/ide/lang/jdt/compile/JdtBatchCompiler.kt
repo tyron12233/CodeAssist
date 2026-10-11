@@ -150,15 +150,24 @@ object JdtBatchCompiler {
     }
 
     /** Compliance level parsed from an ecj `-source`/`-target` string (`"8"`, `"11"`, `"1.8"`, …) is >= 9. */
-    private fun complianceAtLeast9(level: String): Boolean {
-        val n = level.removePrefix("1.").takeWhile { it.isDigit() }.toIntOrNull() ?: return false
-        return n >= 9
-    }
+    private fun complianceAtLeast9(level: String): Boolean = releaseOf(level) >= 9
+
+    /** The release number of a `-source` string (`"1.8"` is 8), or -1. */
+    private fun releaseOf(level: String): Int = level.removePrefix("1.").takeWhile { it.isDigit() }.toIntOrNull() ?: -1
 
     /** True on Android's runtime (ART/Dalvik), where ecj cannot read the platform library off the VM. */
     private val isAndroidRuntime: Boolean =
         System.getProperty("java.vm.name").orEmpty().contains("Dalvik", ignoreCase = true) ||
             System.getProperty("java.vendor").orEmpty().contains("Android", ignoreCase = true)
+
+    /**
+     * Whether a compile with no boot library can pass `--release`: off ART, on a JDK that ships `lib/ct.sym`
+     * (the per-release signatures `--release` reads). The compile then sees exactly the JDK API of the
+     * module's release, which is what the editor's JDK API-level check reports against.
+     */
+    val releaseAvailable: Boolean by lazy {
+        !isAndroidRuntime && System.getProperty("java.home")?.let { Files.isRegularFile(Paths.get(it, "lib", "ct.sym")) } == true
+    }
 
     fun compile(
         sources: List<Path>,
@@ -187,7 +196,11 @@ object JdtBatchCompiler {
         }
 
         val args = ArrayList<String>()
-        args += listOf("-source", sourceLevel, "-target", sourceLevel, "-proc:none", "-nowarn", "-g")
+        // On a desktop JDK, compile against the module's release of the JDK API rather than the running JDK's,
+        // so `List.of` is an error at 8 here just as the editor reports it.
+        args += if (boot.isEmpty() && releaseAvailable && releaseOf(sourceLevel) >= 8) listOf("--release", releaseOf(sourceLevel).toString())
+        else listOf("-source", sourceLevel, "-target", sourceLevel)
+        args += listOf("-proc:none", "-nowarn", "-g")
         args += listOf("-d", outputDir.toString())
         if (boot.isNotEmpty()) {
             args += "-bootclasspath"

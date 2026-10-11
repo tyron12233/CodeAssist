@@ -25,9 +25,10 @@ import dev.ide.lang.kotlin.resolve.callTargets
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.ApiGuards
 import dev.ide.lang.resolve.ApiLevel
+import dev.ide.lang.resolve.ApiPlatform
 import dev.ide.lang.resolve.PlatformApiLevels
 import dev.ide.lang.resolve.SymbolKind
 
@@ -39,11 +40,12 @@ import dev.ide.lang.resolve.SymbolKind
  * shared [ApiGuards].
  *
  * Only BINARY symbols with a declaring class are looked up, so project code is never reported, and an API
- * the table does not know is never reported.
+ * the table does not know is never reported. On a plain JVM module the same lookups compare JDK APIs with the
+ * module's Java release (`-Xjdk-release`), with no guards.
  */
 internal class KotlinApiLevelCheck(private val service: KotlinSymbolService) {
 
-    fun call(call: KtCallExpression, resolver: KotlinResolver, api: AndroidApiContext): Diagnostic? {
+    fun call(call: KtCallExpression, resolver: KotlinResolver, api: ApiLevelContext): Diagnostic? {
         // `calleeFunctionOf` answers functions only; a constructor call is matched among the call's targets.
         val callee = resolver.calleeFunctionOf(call) ?: constructorOf(call, resolver) ?: return null
         val anchor = call.calleeExpression ?: return null
@@ -60,7 +62,7 @@ internal class KotlinApiLevelCheck(private val service: KotlinSymbolService) {
     }
 
     /** `recv.foo` / `recv.foo = x` where `foo` is a Java bean accessor seen as a Kotlin property. */
-    fun accessorProperty(qualified: KtDotQualifiedExpression, resolver: KotlinResolver, api: AndroidApiContext): Diagnostic? {
+    fun accessorProperty(qualified: KtDotQualifiedExpression, resolver: KotlinResolver, api: ApiLevelContext): Diagnostic? {
         val selector = qualified.selectorExpression as? KtNameReferenceExpression ?: return null
         val name = selector.getReferencedName()
         val receiverType = resolver.inferType(qualified.receiverExpression) ?: return null
@@ -91,14 +93,14 @@ internal class KotlinApiLevelCheck(private val service: KotlinSymbolService) {
         }
     }
 
-    private fun reportIfTooNew(anchor: KtElement, what: String, label: String, level: ApiLevel, api: AndroidApiContext): Diagnostic? {
-        if (level.desugared || level.since <= api.minSdk) return null
-        if (guaranteedLevel(anchor) >= level.since) return null
+    private fun reportIfTooNew(anchor: KtElement, what: String, label: String, level: ApiLevel, api: ApiLevelContext): Diagnostic? {
+        if (level.since <= api.minLevel) return null
+        if (api.platform == ApiPlatform.ANDROID && (level.desugared || guaranteedLevel(anchor) >= level.since)) return null
         val r = anchor.textRange
         return Diagnostic(
-            TextRange(r.startOffset, r.endOffset), Severity.WARNING,
-            "$what requires API level ${level.since} (current min is ${api.minSdk}): `$label`",
-            KotlinDiagnosticCodes.NEW_API,
+            TextRange(r.startOffset, r.endOffset), if (api.enforced) Severity.ERROR else Severity.WARNING,
+            ApiGuards.message(what, label, level.since, api),
+            ApiGuards.codeFor(api.platform),
         )
     }
 

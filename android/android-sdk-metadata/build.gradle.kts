@@ -37,3 +37,13 @@ tasks.register<JavaExec>("generateAndroidDocs") {
     mainClass.set("dev.ide.android.support.metadata.gen.AndroidDocsGeneratorKt")
     workingDir = rootDir
 }
+
+// The JDK API-level table generator (a JDK's lib/ct.sym -> jdk-api-levels.bin):
+//   ./gradlew :android-sdk-metadata:generateJdkApiLevels --args "<ct.sym> <output.bin>"
+tasks.register<JavaExec>("generateJdkApiLevels") {
+    group = "application"
+    description = "Generates the bundled JDK API-level table from a JDK's lib/ct.sym."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.ide.android.support.metadata.gen.JdkApiLevelsGeneratorKt")
+    workingDir = rootDir
+}

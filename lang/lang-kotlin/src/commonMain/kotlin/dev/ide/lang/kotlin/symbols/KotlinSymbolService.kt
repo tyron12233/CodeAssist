@@ -34,7 +34,8 @@ import dev.ide.lang.kotlin.resolve.delegatedValueType
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.resolve.ApiLevel
 import dev.ide.lang.resolve.Modifier
-import dev.ide.lang.resolve.PlatformApiLevels
+import dev.ide.lang.resolve.ApiLevelContext
+import dev.ide.lang.resolve.ApiPlatform
 import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.SymbolKind
@@ -99,9 +100,9 @@ class KotlinSymbolService(
      *  answers instead. A same-project Java source class is treated as VOLATILE (never pinned in the classpath
      *  memos) so both live-buffer and post-save edits show at once. */
     private val javaSourceMemberProvider: (String) -> List<MemberValue>? = { null },
-    /** Optional: the Android platform API-level table, for the "Added in API N" line of a platform symbol's
-     *  docs. Null for a module that is not an Android module. */
-    private val apiLevels: () -> PlatformApiLevels? = { null },
+    /** Optional: the module's API-level context (the Android platform's table, or the JDK's for a JVM module),
+     *  for the "Added in API N" / "Since Java N" line of a platform symbol's docs. Null when there is none. */
+    private val apiContext: () -> ApiLevelContext? = { null },
 ) : KotlinTypeContext, AutoCloseable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -2195,7 +2196,7 @@ class KotlinSymbolService(
      */
     fun apiLevelOf(s: KotlinSymbol): ApiLevel? {
         if (s.origin.fromSource || s.isExtension) return null
-        val levels = apiLevels() ?: return null
+        val levels = apiContext()?.levels ?: return null
         val owner = s.declaringClassFqn
         return when (s.kind) {
             SymbolKind.METHOD -> owner?.let { levels.methodLevel(it, s.name, null, s.paramTypes.size) }
@@ -2209,6 +2210,12 @@ class KotlinSymbolService(
                 ((s.type as? KotlinType)?.qualifiedName ?: owner)?.let(levels::classLevel)
             else -> null
         }
+    }
+
+    /** [doc] with [s]'s API-level line in front ([ApiLevel.prependTo]), or [doc] itself when there is none. */
+    fun withApiLevel(s: KotlinSymbol, doc: String?): String? {
+        val level = apiLevelOf(s) ?: return doc
+        return level.prependTo(doc, apiContext()?.platform ?: ApiPlatform.ANDROID).ifEmpty { doc }
     }
 
     /**

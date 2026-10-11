@@ -274,6 +274,9 @@ class KotlinJvmCompiler(
             noJdk = true    // ART has no JDK; the platform is android.jar, folded into the classpath
         } else {
             jdkHome = System.getProperty("java.home")
+            // Compile against the module's release of the JDK API (`List.of` is an error at 8), as the
+            // editor's JDK API-level check reports it. Needs the JDK's per-release signatures, `lib/ct.sym`.
+            if (hasCtSym) jdkRelease = jvmTargetOf(jvmTarget)
         }
         if (commonSources.isNotEmpty()) {
             // A collapsed KMP module. Multiplatform mode alone is NOT enough: the compiler rejects an
@@ -328,6 +331,10 @@ class KotlinJvmCompiler(
     /** An internal compiler failure (kotlinc threw, or rejected our arguments) is a problem, not just a log line. */
     private fun internalError(message: String) =
         KotlinDiagnostic(KotlinDiagnosticSeverity.ERROR, message.removePrefix("error: ").trim())
+
+    private val hasCtSym: Boolean by lazy {
+        System.getProperty("java.home")?.let { java.nio.file.Files.isRegularFile(java.nio.file.Paths.get(it, "lib", "ct.sym")) } == true
+    }
 
     private fun jvmTargetOf(level: String): String = when (level) {
         "8" -> "1.8"

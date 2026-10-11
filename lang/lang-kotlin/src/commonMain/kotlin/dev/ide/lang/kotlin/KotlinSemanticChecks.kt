@@ -100,7 +100,7 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.OptInLevel
 import dev.ide.lang.kotlin.symbols.OptInMarker
-import dev.ide.lang.resolve.AndroidApiContext
+import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.kotlin.syntax.psi.Variance
@@ -116,8 +116,9 @@ import dev.ide.kotlin.syntax.psi.Variance
  */
 internal class KotlinSemanticChecks(
     private val service: KotlinSymbolService,
-    /** The module's minSdk + API-level table for an Android module, read each pass; null skips the minSdk check. */
-    private val androidApi: () -> AndroidApiContext? = { null },
+    /** The module's API-level check inputs (Android minSdk, or a JVM module's Java release), read each pass;
+     *  null skips the check. */
+    private val apiContext: () -> ApiLevelContext? = { null },
 ) {
 
     private val apiLevelCheck = KotlinApiLevelCheck(service)
@@ -278,7 +279,7 @@ internal class KotlinSemanticChecks(
                 KotlinPerf.span("call.suspend") { report(suspendInvocation(psi, resolver)) }
                 KotlinPerf.span("call.deprecation") { if (resolveReady) report(deprecatedCall(psi, resolver)) }
                 KotlinPerf.span("call.optIn") { if (resolveReady) report(optInCallUsage(psi, resolver)) }
-                KotlinPerf.span("call.newApi") { if (resolveReady) androidApi()?.let { report(apiLevelCheck.call(psi, resolver, it)) } }
+                KotlinPerf.span("call.newApi") { if (resolveReady) apiContext()?.let { report(apiLevelCheck.call(psi, resolver, it)) } }
                 KotlinPerf.span("call.inferType") { report(cannotInferType(psi, resolver)) }
                 KotlinPerf.span("call.abstractInst") { if (resolveReady) report(abstractInstantiation(psi, resolver)) }
             }
@@ -287,7 +288,7 @@ internal class KotlinSemanticChecks(
         KotlinChecker(KtDotQualifiedExpression::class) { psi ->
             KotlinPerf.span("sem.qualified") { report(unsafeNullableAccess(psi as KtDotQualifiedExpression, resolver)) }
             KotlinPerf.span("sem.newApi") {
-                if (resolveReady) androidApi()?.let { report(apiLevelCheck.accessorProperty(psi as KtDotQualifiedExpression, resolver, it)) }
+                if (resolveReady) apiContext()?.let { report(apiLevelCheck.accessorProperty(psi as KtDotQualifiedExpression, resolver, it)) }
             }
         },
         KotlinChecker(KtSafeQualifiedExpression::class) { psi ->
