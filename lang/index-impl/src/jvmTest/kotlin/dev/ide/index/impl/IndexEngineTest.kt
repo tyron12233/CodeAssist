@@ -725,4 +725,60 @@ class IndexEngineTest {
             cache.toFile().deleteRecursively()
         }
     }
+
+    /** Segment files under [cache] by size class. */
+    private fun segSizes(cache: Path): List<Long> =
+        Files.walk(cache).use { s -> s.filter { it.toString().endsWith(".seg") }.map { Files.size(it) }.toList() }
+
+    /**
+     * An extension that accepts nothing in an artifact writes a ZERO-LENGTH segment, which a later pass knows is
+     * empty from its size alone and never opens. Most of an artifact's segments are like this in the IDE (only
+     * about a third of the extensions accept classes).
+     */
+    @Test
+    fun anExtensionWithNothingInAnArtifactWritesAZeroLengthSegment() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxEmpty")
+        try {
+            val jar = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            // The class index accepts the jar's class; the source index accepts nothing in a jar.
+            val exts = listOf(CountingClassIndex(AtomicInteger(0)), CountingSourceIndex(AtomicInteger(0)))
+            runBlocking { IndexServiceImpl(exts, cache).ensureUpToDate(IndexScope(libraryJars = listOf(jar))) }
+            val sizes = segSizes(cache)
+            assertEquals(2, sizes.size, "one segment per extension: $sizes")
+            assertEquals(1, sizes.count { it == 0L }, "the source index's segment is empty: $sizes")
+
+            // A relaunch reuses both, and the non-empty one still answers.
+            val again = IndexServiceImpl(exts, cache)
+            runBlocking { again.ensureUpToDate(IndexScope(libraryJars = listOf(jar))) }
+            assertEquals(0, again.status.stats!!.artifactsBuilt)
+            assertTrue(again.status.ready)
+            assertTrue(again.prefix<ClassNameValue>(CLASS, "Alpha", 10).any())
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
+    /** A cache written before empty segments were zero-length converts on first reopen, without a rebuild. */
+    @Test
+    fun anOldFormatEmptySegmentIsShrunkOnReopen() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxShrink")
+        try {
+            val jar = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            val counted = AtomicInteger(0)
+            val exts = listOf(CountingClassIndex(counted), CountingSourceIndex(AtomicInteger(0)))
+            runBlocking { IndexServiceImpl(exts, cache).ensureUpToDate(IndexScope(libraryJars = listOf(jar))) }
+            // Rewrite the empty segment the way older builds did: a real (header + footer) segment with no terms.
+            val empty = Files.walk(cache).use { s -> s.filter { it.toString().endsWith(".seg") && Files.size(it) == 0L }.toList() }.single()
+            SegmentWriter(empty.toString(), CountingSourceIndex(AtomicInteger(0))).use { it.finish() }
+            assertTrue(Files.size(empty) > 0, "the fixture is an old-format empty segment")
+
+            val again = IndexServiceImpl(exts, cache)
+            runBlocking { again.ensureUpToDate(IndexScope(libraryJars = listOf(jar))) }
+            assertEquals(1, counted.get(), "nothing was rebuilt")
+            assertEquals(0L, Files.size(empty), "the old empty segment was shrunk to zero length")
+            assertTrue(again.prefix<ClassNameValue>(CLASS, "Alpha", 10).any())
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
 }

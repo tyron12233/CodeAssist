@@ -88,6 +88,9 @@ internal class Segment private constructor(
     // Set once a value payload in this segment fails to deserialize (see [readPostings]); throttles the warning.
     private var warnedCorrupt = false
 
+    /** True when the segment holds no terms (the extension accepted nothing in its artifact). */
+    val isEmpty: Boolean get() = numTerms == 0
+
     // ---- queries (mirror IndexData's semantics so ranking is identical) ----
 
     /** Append every value stored under [key] exactly. */

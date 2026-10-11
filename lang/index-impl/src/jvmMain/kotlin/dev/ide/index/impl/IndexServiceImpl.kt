@@ -123,15 +123,27 @@ class IndexServiceImpl(
          *  distinct key, so no key races). Always mutated together with [segments]. */
         val open = ConcurrentHashMap<String, Segment>()
 
-        /** Keys whose segment is open, for the reuse checks. */
-        val openHashes: Set<String> get() = open.keys
+        /** Keys whose segment is EMPTY (the extension accepted nothing in that artifact). Stored on disk as a
+         *  zero-length file, so it is known from a size check alone and never opened or queried. Most of an
+         *  artifact's segments are empty: only about a third of the extensions accept `.class` inputs. */
+        val emptyKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        fun isOpen(key: String): Boolean = open.containsKey(key) || key in emptyKeys
+
+        /** Every key this extension currently covers, open or empty. */
+        fun openKeys(): Set<String> = open.keys + emptyKeys
 
         fun addOpen(key: String, seg: Segment) {
             open[key] = seg; segments.add(seg)
         }
 
+        fun addEmpty(key: String) {
+            emptyKeys.add(key)
+        }
+
         /** Close and forget the segment for [key], if open. */
         fun closeOpen(key: String) {
+            emptyKeys.remove(key)
             val seg = open.remove(key) ?: return
             segments.remove(seg)
             runCatching { seg.close() }
@@ -403,13 +415,13 @@ class IndexServiceImpl(
             //  - anything not open yet is what this pass has to open or build.
             val probeState = states.values.firstOrNull()
             for (k in all) {
-                if (probeState != null && k.key in probeState.openHashes &&
+                if (probeState != null && probeState.isOpen(k.key) &&
                     !Files.exists(segmentFile(probeState.ext, k.hash))
                 ) states.values.forEach { it.closeOpen(k.key) }
             }
             val wanted = all.mapTo(HashSet()) { it.key }
-            val removed = states.values.flatMapTo(HashSet()) { st -> st.openHashes.filter { it !in wanted } }
-            val toOpen = keyed.filter { k -> states.values.any { k.key !in it.openHashes } }
+            val removed = states.values.flatMapTo(HashSet()) { st -> st.openKeys().filter { it !in wanted } }
+            val toOpen = keyed.filter { k -> states.values.any { !it.isOpen(k.key) } }
 
             // Nothing on the classpath changed and the last pass was complete: the index already holds exactly
             // this scope. Don't announce a build (that would clear the editor's classpath caches and re-run its
@@ -646,6 +658,19 @@ class IndexServiceImpl(
         }
     }
 
+    /** Write [file] as an empty segment (zero length), atomically: a temp file renamed over it, so a concurrent
+     *  reader sees either the old file or the empty one, never a partial write. */
+    private fun writeEmptySegment(file: Path) {
+        Files.createDirectories(file.parent)
+        val tmp = "$file.${temporaryName("empty")}.tmp"
+        try {
+            (dev.ide.platform.openFileForWrite(tmp) ?: error("cannot write $tmp")).close()
+            check(dev.ide.platform.moveFile(tmp, file.toString())) { "cannot move $tmp into place" }
+        } finally {
+            dev.ide.platform.deleteFile(tmp)
+        }
+    }
+
     /** Background work for library source archives, started at the end of each pass (see [deferSourceArchives]).
      *  One thread on a tight heap, two otherwise: it is never urgent, and it must not crowd the editor. */
     private val docsScope = CoroutineScope(
@@ -696,9 +721,9 @@ class IndexServiceImpl(
         // set), so a "Re-index" forces those artifacts to rebuild without disturbing other projects. Reclaiming
         // orphaned segments (a jar changed → a stale `.seg`) is a shared-store GC concern, intentionally not
         // done here. The in-memory source side is always per-project. Capture paths before closeSegments()
-        // clears openHashes; close channels first so the files aren't held open when we delete them.
+        // clears the open keys; close channels first so the files aren't held open when we delete them.
         val openFiles = states.values.flatMap { st ->
-            st.openHashes.map { key ->
+            st.openKeys().map { key ->
                 segmentFileForKey(
                     st.ext, key
                 )
@@ -729,6 +754,7 @@ class IndexServiceImpl(
             st.segments.forEach { runCatching { it.close() } }
             st.segments.clear()
             st.open.clear()
+            st.emptyKeys.clear()
         }
     }
 
@@ -795,20 +821,34 @@ class IndexServiceImpl(
         // is the warm-cache path; it holds no accumulator, so it runs ungated at the full I/O concurrency.
         var reused = 0
         for (st in states.values) {
-            if (key in st.openHashes) continue
+            if (st.isOpen(key)) continue
             val f = segmentFile(st.ext, hash)
-            if (Files.exists(f)) {
-                runCatching {
-                    Segment.open(
-                        f.toString(),
-                        st.ext,
-                        blockCache,
-                        segIds.getAndIncrement()
-                    )
-                }.onSuccess { st.addOpen(key, it); reused++ }
+            // One stat answers both "built yet?" and "empty?": an empty segment is a zero-length file.
+            val size = runCatching { Files.size(f) }.getOrNull() ?: continue
+            if (size == 0L) {
+                st.addEmpty(key); reused++; continue
+            }
+            runCatching {
+                Segment.open(
+                    f.toString(),
+                    st.ext,
+                    blockCache,
+                    segIds.getAndIncrement()
+                )
+            }.onSuccess { seg ->
+                // A cache from before empty segments were zero-length: shrink this one now, so the next reopen
+                // skips it too. Replaced atomically, and an empty segment is never read, so a service in another
+                // project still holding the old file open is unaffected.
+                if (seg.isEmpty && !readOnly && runCatching { writeEmptySegment(f) }.isSuccess) {
+                    runCatching { seg.close() }
+                    st.addEmpty(key)
+                } else {
+                    st.addOpen(key, seg)
+                }
+                reused++
             }
         }
-        val needBuild = states.values.filter { key !in it.openHashes }
+        val needBuild = states.values.filter { !it.isOpen(key) }
         if (needBuild.isEmpty()) {
             return ArtifactProbe(art.label, reused, 0, 0, elapsedMs(t0), artifact = art, rekeyed = rekeyed)
         }
@@ -869,6 +909,13 @@ class IndexServiceImpl(
                 // index. That must propagate to the per-artifact handler in [ensureUpToDate] (which counts it as
                 // a skip, so the index is marked incomplete and ready is withheld), not be swallowed into a
                 // falsely "ready" index that the name environment would then trust for authoritative negatives.
+                if (w.count == 0) {
+                    // Nothing for this extension in this artifact: a zero-length file, never opened again.
+                    w.close()
+                    writeEmptySegment(segmentFile(st.ext, hash))
+                    st.addEmpty(key)
+                    continue
+                }
                 w.finish()
                 val seg = Segment.open(segmentFile(st.ext, hash).toString(), st.ext, blockCache, segIds.getAndIncrement())
                 st.addOpen(key, seg)
