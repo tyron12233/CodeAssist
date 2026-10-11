@@ -22,20 +22,61 @@ internal data class DocSection(val title: String, val items: List<AnnotatedStrin
 internal fun parseQuickDoc(doc: String, codeStyle: SpanStyle): QuickDocContent {
     val body = stripDocMarkers(doc)
     // Partition into the leading description and the trailing block tags (a line whose first non-space is `@`).
+    // Not inside a fenced code block: a KDoc sample's `@Composable` is code, not the start of the tags.
     val descLines = ArrayList<String>()
     val tagLines = ArrayList<String>()
     var inTags = false
+    var inFence = false
     for (raw in body.lines()) {
-        if (!inTags && raw.trim().startsWith("@")) inTags = true
+        if (raw.trim().startsWith("```")) inFence = !inFence
+        if (!inTags && !inFence && raw.trim().startsWith("@")) inTags = true
         (if (inTags) tagLines else descLines).add(raw)
     }
-    val description = inlineMarkup(descLines.joinToString("\n").trim(), codeStyle)
+    val description = descriptionMarkup(descLines.joinToString("\n").trim('\n', ' '), codeStyle)
     return QuickDocContent(description, parseTags(tagLines, codeStyle))
 }
 
-/** Strip `/**` … `*/` markers and per-line leading `*`, so the inline pass sees just the comment text. */
+/**
+ * The description: prose through [inlineMarkup], and a KDoc/Markdown fenced block (```` ``` ````, optionally
+ * with a language) as verbatim code lines, indentation kept. An unclosed fence runs to the end.
+ */
+private fun descriptionMarkup(text: String, codeStyle: SpanStyle): AnnotatedString = buildAnnotatedString {
+    val prose = ArrayList<String>()
+    val code = ArrayList<String>()
+    var inFence = false
+    fun flushProse() {
+        if (prose.isEmpty()) return
+        val joined = prose.joinToString("\n").trim('\n')
+        if (joined.isNotEmpty()) { if (length > 0) append("\n"); append(inlineMarkup(joined, codeStyle)) }
+        prose.clear()
+    }
+    fun flushCode() {
+        if (code.isEmpty()) return
+        if (length > 0) append("\n")
+        withStyle(codeStyle) { append(code.joinToString("\n").trimEnd()) }
+        append("\n")
+        code.clear()
+    }
+    for (line in text.lines()) {
+        if (line.trim().startsWith("```")) {
+            if (inFence) flushCode() else flushProse()
+            inFence = !inFence
+            continue
+        }
+        if (inFence) code.add(line) else prose.add(line)
+    }
+    flushCode()
+    flushProse()
+}
+
+/**
+ * Strip `/**` … `*/` markers and per-line leading `*`, so the inline pass sees just the comment text. Only for
+ * a comment that still has its markers (Javadoc and source KDoc do); a library KDoc from the index arrives
+ * already undecorated, and there a leading `*` is a Markdown bullet to keep.
+ */
 private fun stripDocMarkers(raw: String): String {
     var s = raw.trim()
+    if (!s.startsWith("/*")) return s
     if (s.startsWith("/**")) s = s.substring(3) else if (s.startsWith("/*")) s = s.substring(2)
     if (s.endsWith("*/")) s = s.substring(0, s.length - 2)
     return s.lines().joinToString("\n") { line ->
@@ -124,6 +165,24 @@ internal fun inlineMarkup(input: String, codeStyle: SpanStyle): AnnotatedString 
                 val close = s.indexOf('>', i)
                 if (close > i && Regex("</?[a-zA-Z][^>]*>").matches(s.substring(i, close + 1))) { i = close + 1; continue }
             }
+            // KDoc links: `[Foo]` / `[Foo.bar]` as code (the last segment), `[label][Foo]` as the label, and a
+            // Markdown `[text](url)` as its text. Brackets around anything else stay literal.
+            if (c == '[') {
+                val close = s.indexOf(']', i + 1)
+                if (close > i) {
+                    val inner = s.substring(i + 1, close)
+                    val next = s.getOrNull(close + 1)
+                    if (next == '(') {
+                        val end = s.indexOf(')', close + 2)
+                        if (end > close) { plain.append(inner); i = end + 1; continue }
+                    }
+                    if (next == '[') {
+                        val end = s.indexOf(']', close + 2)
+                        if (end > close) { code(inner); i = end + 1; continue }
+                    }
+                    if (KDOC_LINK.matches(inner)) { code(inner.substringAfterLast('.').substringAfterLast('#')); i = close + 1; continue }
+                }
+            }
             if (c == '*' && s.startsWith("**", i)) {
                 val end = s.indexOf("**", i + 2)
                 if (end > i) { styled(s.substring(i + 2, end), SpanStyle(fontWeight = FontWeight.Bold)); i = end + 2; continue }
@@ -133,6 +192,8 @@ internal fun inlineMarkup(input: String, codeStyle: SpanStyle): AnnotatedString 
         flush()
     }
 }
+
+private val KDOC_LINK = Regex("[A-Za-z_][\\w.#]*")
 
 /** The displayable content of a `{@tag …}` body: a `{@link pkg.Foo#bar label}` keeps its label (or simple
  *  member name); `{@code x}` / `{@value}` keep their text. */

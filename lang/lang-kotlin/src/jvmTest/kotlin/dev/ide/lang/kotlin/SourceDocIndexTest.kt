@@ -33,6 +33,68 @@ class SourceDocIndexTest {
     }
 
     @Test
+    fun importsDoNotLeakIntoThePackage() {
+        // `import` is a soft keyword (an IDENTIFIER to the lexer). The package scan used to run straight on through
+        // the import lines, keying this class `androidx.activityimportandroid.app.Activity...ComponentActivity`.
+        val src = """
+            package androidx.activity
+
+            import android.app.Activity
+            import androidx.lifecycle.LifecycleOwner
+
+            /**
+             * Base class for activities that enables composition of higher level components.
+             */
+            open class ComponentActivity() : Activity(), LifecycleOwner
+        """.trimIndent()
+        val byFqn = KotlinSourceDocIndex.index(Input("androidx/activity/ComponentActivity.kt", src))
+        val entries = byFqn["androidx.activity.ComponentActivity"] ?: error("not keyed by its FQN; got ${byFqn.keys}")
+        val classDoc = entries.first { it.name.isEmpty() }.doc
+        assertTrue(classDoc?.contains("Base class for activities") == true, "class KDoc; got $classDoc")
+    }
+
+    @Test
+    fun topLevelFunctionsAreKeyedByTheFileFacade() {
+        // What a top-level or extension function's compiled symbol reports as its owner: the file's facade
+        // class. Unindexed, `setContent` and every Compose function hovered with no documentation.
+        val src = """
+            package androidx.activity.compose
+
+            import androidx.activity.ComponentActivity
+
+            /**
+             * Composes the given composable into the given activity.
+             */
+            public fun ComponentActivity.setContent(parent: Any? = null, content: () -> Unit) {
+                fun local() {}
+            }
+
+            /** Not an extension. */
+            fun <T> helper(value: T): T = value
+        """.trimIndent()
+        val byFqn = KotlinSourceDocIndex.index(Input("androidx/activity/compose/ComponentActivity.kt", src))
+        val facade = byFqn["androidx.activity.compose.ComponentActivityKt"] ?: error("no facade entry; got ${byFqn.keys}")
+        val setContent = facade.single { it.name == "setContent" }
+        assertEquals(listOf("parent", "content"), setContent.names, "the receiver is not a parameter")
+        assertTrue(setContent.doc?.contains("Composes the given composable") == true, "KDoc; got ${setContent.doc}")
+        assertTrue(facade.any { it.name == "helper" && it.arity == 1 })
+        assertTrue(facade.none { it.name == "local" }, "a local function belongs to no facade")
+    }
+
+    @Test
+    fun jvmNameRenamesTheFacade() {
+        val src = """
+            @file:JvmName("Flows")
+            package com.example
+
+            /** Collects. */
+            fun collectAll() {}
+        """.trimIndent()
+        val byFqn = KotlinSourceDocIndex.index(Input("com/example/FlowExtensions.kt", src))
+        assertTrue(byFqn["com.example.Flows"]?.any { it.name == "collectAll" } == true, "got ${byFqn.keys}")
+    }
+
+    @Test
     fun onlyAcceptsKotlinSourceUnits() {
         assertTrue(KotlinSourceDocIndex.inputFilter.accepts(Input("a/B.kt", "")))
         assertTrue(!KotlinSourceDocIndex.inputFilter.accepts(Input("a/B.java", "")))

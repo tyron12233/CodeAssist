@@ -2211,6 +2211,33 @@ class KotlinSymbolService(
         }
     }
 
+    /**
+     * A BINARY symbol's doc comment from the attached sources, for the quick-doc popup: the raw comment (markup
+     * kept) when the provider has one, else its cleaned text. Null for project code and when no source is
+     * attached. Types are answered here and nowhere else, since [enrich] only reaches members, so a library
+     * class like `ComponentActivity` used to hover with an empty doc even with its sources downloaded.
+     */
+    fun sourceDocOf(s: KotlinSymbol): SourceDocText? {
+        if (sourceDoc === SourceDocProvider.NONE || s.origin.fromSource) return null
+        val owner = s.declaringClassFqn
+        return when (s.kind) {
+            SymbolKind.METHOD, SymbolKind.CONSTRUCTOR -> owner?.let { o ->
+                val arity = s.paramTypes.size
+                sourceDoc.methodRaw(o, s.name, arity)?.let { SourceDocText(it, raw = true) }
+                    ?: sourceDoc.method(o, s.name, arity)?.doc?.let { SourceDocText(it, raw = false) }
+            }
+            SymbolKind.CLASS, SymbolKind.INTERFACE, SymbolKind.ENUM, SymbolKind.ANNOTATION_TYPE, SymbolKind.RECORD ->
+                ((s.type as? KotlinType)?.qualifiedName ?: owner)?.let { fqn ->
+                    sourceDoc.classDocRaw(fqn)?.let { SourceDocText(it, raw = true) }
+                        ?: sourceDoc.classDoc(fqn)?.let { SourceDocText(it, raw = false) }
+                }
+            else -> null
+        }?.takeIf { it.text.isNotBlank() }
+    }
+
+    /** A doc comment recovered from sources; [raw] when it still carries its javadoc markup. */
+    class SourceDocText(val text: String, val raw: Boolean)
+
     /** `p0`/`p1`/… — the placeholder names Java bytecode surfaces when real ones were stripped. */
     private fun isSyntheticParamName(n: String): Boolean =
         n.length >= 2 && n[0] == 'p' && n.drop(1).all { it.isDigit() }

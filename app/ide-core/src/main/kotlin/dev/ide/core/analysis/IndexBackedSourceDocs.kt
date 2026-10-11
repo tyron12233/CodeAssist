@@ -17,7 +17,17 @@ class IndexBackedSourceDocs(
     private val fallback: SourceDocProvider = SourceDocProvider.NONE,
 ) : SourceDocProvider {
 
-    private class TypeDocs(val byMethod: Map<String, List<SourceDocValue>>, val classDoc: String?)
+    /**
+     * One type's docs. Java values hold cleaned text (raw comes from the live fallback); Kotlin values hold the
+     * KDoc with its markup ([KotlinSourceDocIndex] stores it so), which is the raw doc as is and is cleaned on
+     * read for the plain-text panels.
+     */
+    private class TypeDocs(
+        val byMethod: Map<String, List<SourceDocValue>>,
+        val classDoc: String?,
+        val rawByMethod: Map<String, List<SourceDocValue>>,
+        val rawClassDoc: String?,
+    )
 
     private val cache = object : LinkedHashMap<String, TypeDocs>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TypeDocs>?) = size > 256
@@ -26,12 +36,16 @@ class IndexBackedSourceDocs(
     private fun fromIndex(fqn: String): TypeDocs? {
         synchronized(cache) { cache[fqn]?.let { return it } }
         val ix = index ?: return null
-        val values = (ix.exact<SourceDocValue>(JavaSourceDocIndex.id, fqn) +
-            ix.exact<SourceDocValue>(KotlinSourceDocIndex.id, fqn)).toList()
-        if (values.isEmpty()) return null // not indexed (yet) → let the fallback parse live
+        val java = ix.exact<SourceDocValue>(JavaSourceDocIndex.id, fqn).toList()
+        val kotlinRaw = ix.exact<SourceDocValue>(KotlinSourceDocIndex.id, fqn).toList()
+        if (java.isEmpty() && kotlinRaw.isEmpty()) return null // not indexed (yet) → let the fallback parse live
+        val kotlin = kotlinRaw.map { v -> v.doc?.let { v.copy(doc = KotlinSourceDocIndex.cleanKDoc(it)) } ?: v }
+        val values = java + kotlin
         val docs = TypeDocs(
             byMethod = values.filter { it.name.isNotEmpty() }.groupBy { it.name },
             classDoc = values.firstOrNull { it.name.isEmpty() }?.doc,
+            rawByMethod = kotlinRaw.filter { it.name.isNotEmpty() }.groupBy { it.name },
+            rawClassDoc = kotlinRaw.firstOrNull { it.name.isEmpty() }?.doc,
         )
         synchronized(cache) { cache[fqn] = docs }
         return docs
@@ -48,11 +62,16 @@ class IndexBackedSourceDocs(
     override fun classDoc(fqn: String): String? =
         fromIndex(fqn)?.classDoc ?: fallback.classDoc(fqn)
 
-    // The index stores only CLEANED doc, so raw markup (for quick-doc's rich rendering) always comes from the
-    // live fallback — it re-parses the source on demand (project dir or -sources.jar), which is fine for a
-    // user-triggered popup.
-    override fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? =
-        fallback.methodRaw(declaringFqn, methodName, arity)
+    // Raw markup, for quick-doc's rich rendering: a Kotlin library's KDoc straight from the index, which keeps
+    // it; a Java one from the live fallback, which re-parses the source on demand (project dir or
+    // -sources.jar), fine for a user-triggered popup.
+    override fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? {
+        fromIndex(declaringFqn)?.rawByMethod?.get(methodName)?.let { cands ->
+            val v = cands.firstOrNull { it.arity == arity } ?: cands.first()
+            v.doc?.let { return it }
+        }
+        return fallback.methodRaw(declaringFqn, methodName, arity)
+    }
 
-    override fun classDocRaw(fqn: String): String? = fallback.classDocRaw(fqn)
+    override fun classDocRaw(fqn: String): String? = fromIndex(fqn)?.rawClassDoc ?: fallback.classDocRaw(fqn)
 }

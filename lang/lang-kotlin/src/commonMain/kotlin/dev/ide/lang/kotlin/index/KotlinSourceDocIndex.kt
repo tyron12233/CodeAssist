@@ -15,7 +15,7 @@ import dev.ide.kotlin.syntax.KotlinSyntax
 import dev.ide.kotlin.syntax.psi.KtTokens
 
 /**
- * sourceDoc (Kotlin): owner class FQN -> per-member-function real parameter NAMES + cleaned KDoc, recovered
+ * sourceDoc (Kotlin): owner class FQN -> per-member-function real parameter NAMES + KDoc (markup kept), recovered
  * from an attached Kotlin `-sources.jar`. Kotlin `@Metadata` already carries parameter names, so the win here
  * is the KDoc text the editor's doc panel shows; names/arity are filled too for overload disambiguation. A
  * class's own KDoc is the empty-name entry.
@@ -28,13 +28,18 @@ import dev.ide.kotlin.syntax.psi.KtTokens
  * a doc, which only degrades a doc popup (never crashes), and `@Metadata` remains the source of truth for
  * parameter names on the binary symbol being enriched (see `KotlinSymbolService.enrich`).
  *
- * Members of classes/objects only (keyed by the declaring class FQN, matching a binary member symbol's
- * `declaringClassFqn`). Top-level/extension callables — keyed by the `<File>Kt` facade — are not indexed yet.
+ * Members of classes/objects are keyed by the declaring class FQN, matching a binary member symbol's
+ * `declaringClassFqn`. Top-level functions (extensions included) are keyed by the file's facade class, the
+ * owner their compiled symbol reports: `<pkg>.<File>Kt`, or the name `@file:JvmName` gives it. Top-level
+ * properties are not indexed.
  */
 object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
     override val id = IndexId("kotlin.sourceDoc")
     // v2: switched from a PSI parse to a lexer scan (bumped so stale v1 segments rebuild with the new extractor).
-    override val version = 2
+    // v3: the package name stopped swallowing the imports after it; every v2 segment keyed its docs wrong.
+    // v4: top-level functions, keyed by the file facade (`setContent`, `BackHandler`, most of Compose).
+    // v5: the doc keeps its markup and tags for the rich quick-doc popup; readers clean it themselves.
+    override val version = 5
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = SourceDocExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
@@ -46,7 +51,7 @@ object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
         // parameter names) is the KDoc text the doc panel shows. A source with no KDoc at all contributes
         // nothing new, so skip it entirely — a cheap substring scan drops every undocumented library file.
         if (!text.contains("/**")) return emptyMap()
-        return runCatching { scan(text) }.getOrDefault(emptyMap())
+        return runCatching { scan(text, facadeName(input.unitName, text)) }.getOrDefault(emptyMap())
     }
 
     private class Tok(val type: SyntaxElementType, val text: String)
@@ -69,7 +74,22 @@ object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
     /** One type currently open on the nesting stack: its FQN, simple name, and the brace depth of its body. */
     private class Frame(val fqn: String, val simple: String, val bodyDepth: Int)
 
-    private fun scan(text: CharSequence): Map<String, Collection<SourceDocValue>> {
+    private val JVM_NAME = Regex("""@file\s*:\s*(?:kotlin\.jvm\.)?JvmName\(\s*"([^"]+)"\s*\)""")
+
+    /**
+     * The simple name of the class a file's top-level functions compile into: `@file:JvmName("X")`'s X, else
+     * the file name with its first letter capitalized, anything not legal in a name turned to `_`, and `Kt`
+     * appended (`ComponentActivity.kt` → `ComponentActivityKt`). Null when the unit has no name.
+     */
+    internal fun facadeName(unitName: String?, text: CharSequence): String? {
+        JVM_NAME.find(text)?.let { return it.groupValues[1] }
+        val file = unitName?.substringAfterLast('/')?.substringAfterLast('\\')?.removeSuffix(".kt") ?: return null
+        if (file.isEmpty()) return null
+        val base = file.map { if (it.isLetterOrDigit() || it == '_') it else '_' }.joinToString("")
+        return base.replaceFirstChar { it.uppercaseChar() } + "Kt"
+    }
+
+    private fun scan(text: CharSequence, facade: String?): Map<String, Collection<SourceDocValue>> {
         val toks = lex(text)
         val n = toks.size
         val out = HashMap<String, MutableList<SourceDocValue>>()
@@ -94,15 +114,25 @@ object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
         while (i < n) {
             val tk = toks[i]
             when (tk.type) {
-                KtTokens.DOC_COMMENT -> { pendingDoc = cleanKDoc(tk.text); i++ }
+                KtTokens.DOC_COMMENT -> { pendingDoc = kdocText(tk.text); i++ }
 
                 KtTokens.PACKAGE_KEYWORD -> {
+                    // A dotted name: identifiers and dots strictly alternating. `import` is a SOFT keyword, so it
+                    // lexes as an IDENTIFIER, and with whitespace dropped a loop that took any run of identifiers
+                    // and dots swallowed every import line into the package (`androidx.activityimportandroid...`),
+                    // filing each documented library file under a key nothing ever looks up.
                     var j = i + 1
                     val sb = StringBuilder()
-                    while (j < n && (toks[j].type == KtTokens.IDENTIFIER || toks[j].type == KtTokens.DOT)) {
-                        sb.append(toks[j].text); j++
+                    var wantIdent = true
+                    while (j < n) {
+                        val t = toks[j].type
+                        if (wantIdent && t == KtTokens.IDENTIFIER) sb.append(toks[j].text)
+                        else if (!wantIdent && t == KtTokens.DOT) sb.append('.')
+                        else break
+                        wantIdent = !wantIdent
+                        j++
                     }
-                    pkg = sb.toString(); i = j
+                    pkg = sb.toString().removeSuffix("."); i = j
                 }
 
                 KtTokens.LBRACE -> {
@@ -156,7 +186,15 @@ object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
                             clearBodylessPending()
                             val isMember = top != null && braceDepth == top.bodyDepth &&
                                 parenDepth == 0 && bracketDepth == 0
-                            if (!isMember) { pendingDoc = null; i++ } else {
+                            // A top-level function, extension or not: owned by the file's facade class.
+                            val isTopLevel = top == null && facade != null && braceDepth == 0 &&
+                                parenDepth == 0 && bracketDepth == 0
+                            val owner = when {
+                                isMember -> top!!.fqn
+                                isTopLevel -> if (pkg.isEmpty()) facade!! else "$pkg.$facade"
+                                else -> null
+                            }
+                            if (owner == null) { pendingDoc = null; i++ } else {
                                 // The name is the last identifier before the param-list '('.
                                 var j = i + 1
                                 var name: String? = null
@@ -171,7 +209,7 @@ object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
                                 val doc = pendingDoc; pendingDoc = null
                                 if (name != null && j < n && toks[j].type == KtTokens.LPAR) {
                                     val (names, after) = params(toks, j)
-                                    bucket(top!!.fqn).add(SourceDocValue(name, names.size, names, doc))
+                                    bucket(owner).add(SourceDocValue(name, names.size, names, doc))
                                     i = after
                                 } else i = j
                             }
@@ -230,12 +268,37 @@ object KotlinSourceDocIndex : IndexExtension<String, SourceDocValue> {
     }
 
     /** Strip the `/** … */` markers and `@tag` lines, keep paragraph breaks, cap the length. */
-    private fun cleanKDoc(raw: String): String =
+    /**
+     * A KDoc comment as stored: the `/**`, `*/` and leading `*` decoration dropped, everything the reader sees
+     * kept, Markdown, `[links]`, fenced code (its indentation too) and the `@param`/`@return` tags, so the
+     * quick-doc popup can render it richly. Plain-text consumers take [cleanKDoc] of this.
+     */
+    private fun kdocText(raw: String): String =
         raw.lineSequence()
-            .map { it.trim().removePrefix("/**").removePrefix("/*").let { l -> if (l.endsWith("*/")) l.dropLast(2) else l }.trim().removePrefix("*").trim() }
+            .map { line ->
+                val t = line.trimStart().removePrefix("/**").removePrefix("/*")
+                    .let { l -> if (l.trimEnd().endsWith("*/")) l.trimEnd().dropLast(2) else l }
+                // ` * text` keeps what follows the single space after the star (code-block indentation).
+                val starred = t.trimStart()
+                if (starred.startsWith("*")) starred.removePrefix("*").removePrefix(" ") else t.trim()
+            }
+            .joinToString("\n")
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim('\n', ' ')
+            .take(MAX_DOC)
+
+    /**
+     * Plain text from a stored KDoc ([kdocText]): the block tags dropped, the prose and its inline markup kept,
+     * as the completion and signature panels have always received it.
+     */
+    fun cleanKDoc(stored: String): String =
+        stored.lineSequence()
+            .map { it.trim() }
             .filterNot { it.startsWith("@") }
             .joinToString("\n")
             .replace(Regex("\n{3,}"), "\n\n")
             .trim()
             .take(2000)
+
+    private const val MAX_DOC = 4000
 }

@@ -1,6 +1,9 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.lang.resolve.DocFormat
 import dev.ide.lang.resolve.SourceDocProvider
+import dev.ide.testkit.DiskVirtualFile
+import dev.ide.testkit.caret
 import kotlinx.coroutines.runBlocking
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -50,6 +53,27 @@ class KotlinSourceDocEnrichmentTest {
         assertEquals(null, item.documentation)
     }
 
+    // ---- quick documentation (hover / Ctrl-Q) on a library symbol, which has no PSI to read a doc from ----
+
+    private fun quickDoc(code: String) = caret(code).let { (clean, offset) ->
+        analyzer.quickDoc(DiskVirtualFile(srcDir.resolve("Use.kt")), clean, offset)
+    }
+
+    @Test
+    fun hoveringALibraryClassShowsItsSourceDoc() {
+        // Used to come back empty: only members were enriched, so a class's doc never left the index.
+        val info = assertNotNull(quickDoc("import com.example.Widget\nfun f(w: Wid|get) {}"))
+        assertEquals("/** A widget that shows text. */", info.doc)
+        assertEquals(DocFormat.JAVADOC, info.docFormat)
+    }
+
+    @Test
+    fun hoveringALibraryMethodPrefersTheRawDoc() {
+        val info = assertNotNull(quickDoc("import com.example.Widget\nfun f(w: Widget) { w.setT|ext(\"\", 0) }"))
+        assertEquals("/** Sets the widget text. @param message the text */", info.doc)
+        assertEquals(DocFormat.JAVADOC, info.docFormat)
+    }
+
     companion object {
         val srcDir: Path = tempProject(emptyMap())
 
@@ -58,6 +82,14 @@ class KotlinSourceDocEnrichmentTest {
                 if (declaringFqn == "com.example.Widget" && methodName == "setText" && arity == 2)
                     SourceDocProvider.MethodDoc(listOf("message", "flags"), "Sets the widget text.")
                 else null
+
+            override fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? =
+                if (declaringFqn == "com.example.Widget" && methodName == "setText" && arity == 2)
+                    "/** Sets the widget text. @param message the text */"
+                else null
+
+            override fun classDocRaw(fqn: String): String? =
+                if (fqn == "com.example.Widget") "/** A widget that shows text. */" else null
         }
 
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir, libJars = listOf(stdlibJarPath(), widgetJar())))

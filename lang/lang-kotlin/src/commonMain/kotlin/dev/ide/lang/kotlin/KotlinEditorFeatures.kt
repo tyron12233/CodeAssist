@@ -675,8 +675,19 @@ class KotlinEditorFeatures(
                 ?.takeIf { it.isNotEmpty() }
         val declPsi = (sym.declaration() as? KotlinDomNode)?.psi
         val rawKdoc = (declPsi as? KtDeclaration)?.docComment?.text?.takeIf { it.isNotBlank() }
-        val (doc, fmt) = if (rawKdoc != null) rawKdoc to DocFormat.KDOC
-        else sym.documentation() to DocFormat.PLAIN
+        // A library symbol has no PSI: its doc comes from the attached sources, with its markup. A Java
+        // library's Javadoc keeps its comment markers; a Kotlin library's KDoc comes from the index already
+        // undecorated.
+        val fromSources = if (rawKdoc == null) service.sourceDocOf(sym) else null
+        val (doc, fmt) = when {
+            rawKdoc != null -> rawKdoc to DocFormat.KDOC
+            fromSources != null -> fromSources.text to when {
+                !fromSources.raw -> DocFormat.PLAIN
+                fromSources.text.startsWith("/*") -> DocFormat.JAVADOC
+                else -> DocFormat.KDOC
+            }
+            else -> sym.documentation() to DocFormat.PLAIN
+        }
         val level = service.apiLevelOf(sym)
         return QuickDocInfo(sig, sym.name, sym.kind, container, level?.prependTo(doc) ?: doc, fmt)
     }

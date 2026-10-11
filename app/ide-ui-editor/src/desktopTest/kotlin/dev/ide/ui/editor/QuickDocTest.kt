@@ -12,6 +12,34 @@ class QuickDocTest {
     private val code = SpanStyle(color = Color.Red)
 
     @Test
+    fun aFencedKdocSampleIsVerbatimCodeAndNotATag() {
+        // A library KDoc as the index stores it: undecorated, with a sample whose `@Composable` is code.
+        val doc = "Composes [content] into a [ComponentActivity].\n\n```kotlin\n@Composable\nfun Screen() {\n    Text(\"hi\")\n}\n```\n\n@param content the UI"
+        val parsed = parseQuickDoc(doc, code)
+        val text = parsed.description.text
+        assertTrue("@Composable\nfun Screen() {\n    Text(\"hi\")\n}" in text, "sample verbatim, indentation kept: $text")
+        assertTrue("```" !in text, text)
+        assertEquals(listOf("Parameters"), parsed.sections.map { it.title }, "the sample's @Composable is not a tag")
+        val coded = parsed.description.spanStyles.filter { it.item == code }.map { text.substring(it.start, it.end) }
+        assertTrue(coded.any { "fun Screen()" in it }, "the sample is code-styled: $coded")
+        assertTrue("content" in coded && "ComponentActivity" in coded, "KDoc links render as code: $coded")
+    }
+
+    @Test
+    fun kdocLinksAndMarkdownLinks() {
+        assertEquals("see bar and the docs", inlineMarkup("see [foo.Bar.bar] and [the docs](https://x)", code).text)
+        assertEquals("use Label now", inlineMarkup("use [Label][pkg.Target] now", code).text)
+        assertEquals("a [1, 2] list", inlineMarkup("a [1, 2] list", code).text, "non-identifier brackets stay literal")
+    }
+
+    @Test
+    fun anUndecoratedDocKeepsItsBullets() {
+        // Only a comment with its /** */ markers has per-line stars to strip.
+        assertTrue("* one" in parseQuickDoc("Items:\n* one\n* two", code).description.text)
+        assertEquals("Text.", parseQuickDoc("/**\n * Text.\n */", code).description.text)
+    }
+
+    @Test
     fun stripsHtmlAndDecodesEntities() {
         assertEquals("Use foo & bar.", inlineMarkup("Use <tt>foo</tt> &amp; bar.", code).text)
         assertEquals("a < b > c", inlineMarkup("a &lt; b &gt; c", code).text)
