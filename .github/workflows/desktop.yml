@@ -95,7 +95,7 @@ jobs:
             { run create --project "$(cygpath -w "$dir")" --template "$template" --name SmokeApp --package dev.ide.smoke --cache "$cache" &&
               run assemble --project "$(cygpath -w "$dir")" --cache "$cache"; } 2>&1 | tee "$log"
             # A Windows path mistake can be swallowed into a warning (an index pass, a cache write), so look for it.
-            if grep -E "Illegal char|InvalidPathException" "$log"; then
+            if grep -E "Illegal char|InvalidPathException|cannot write|indexing .* failed" "$log"; then
               echo "::error::$template: a path was built that Windows rejects"; exit 1
             fi
             apk="$dir/app/build/outputs/apk/debug/app-debug.apk"
