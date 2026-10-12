@@ -14,6 +14,9 @@ package dev.ide.platform
  * build targets a platform where it is wrong. A path read off disk on Windows can still arrive with
  * backslashes, so [normalizePath] folds them.
  *
+ * A path is absolute when it starts at a root: `/`, or a Windows drive (`C:/`). Treating `C:/Users/...` as relative made [resolvePath] append one absolute path to another
+ * (`C:/proj/app/C:/Users/...`), which Windows rejects as "Illegal char <:>".
+ *
  * These are PURE: nothing here touches the file system, so `..` is resolved lexically and a symbolic link is
  * not followed. That matches `Path.normalize`, and differs from `Path.toRealPath`.
  */
@@ -24,27 +27,38 @@ const val PATH_SEPARATOR: Char = '/'
 /**
  * [path] with `.` segments dropped, `..` segments applied to their parent, and repeated separators collapsed.
  *
- * A leading `/` is kept (the path stays absolute) and a trailing one is dropped. A `..` that would climb
+ * The root is kept (the path stays absolute) and a trailing separator is dropped. A `..` that would climb
  * past the root of an absolute path is discarded, as `Path.normalize` discards it; on a relative path it is
  * kept, because there is no root to climb past and dropping it would change what the path means.
  */
 fun normalizePath(path: String): String {
     val folded = path.replace('\\', PATH_SEPARATOR)
-    val absolute = folded.startsWith(PATH_SEPARATOR)
+    val root = rootOf(folded)
     val out = ArrayList<String>()
-    for (segment in folded.split(PATH_SEPARATOR)) {
+    for (segment in folded.substring(minOf(root.length, folded.length)).split(PATH_SEPARATOR)) {
         when {
             segment.isEmpty() || segment == "." -> Unit
             segment == ".." -> {
                 val last = out.lastOrNull()
                 if (last != null && last != "..") out.removeAt(out.size - 1)
-                else if (!absolute) out.add(segment)  // nothing to climb: keep it, it still means something
+                else if (root.isEmpty()) out.add(segment)  // nothing to climb: keep it, it still means something
             }
             else -> out.add(segment)
         }
     }
-    val joined = out.joinToString(PATH_SEPARATOR.toString())
-    return if (absolute) "$PATH_SEPARATOR$joined" else joined
+    return root + out.joinToString(PATH_SEPARATOR.toString())
+}
+
+/**
+ * The root [folded] (separators already `/`) starts with: `/`, `C:/` for a Windows drive (a bare `C:` too), or
+ * `""` for a relative path. A UNC share (`//server/share`) still collapses to `/server/share`, as it always has: keeping
+ * `//` would change the identity of the `//Users/...` a string join produces on Unix.
+ */
+private fun rootOf(folded: String): String = when {
+    folded.length >= 2 && folded[1] == ':' && folded[0].isLetter() &&
+        (folded.length == 2 || folded[2] == PATH_SEPARATOR) -> "${folded[0]}:$PATH_SEPARATOR"
+    folded.startsWith(PATH_SEPARATOR) -> PATH_SEPARATOR.toString()
+    else -> ""
 }
 
 /**
@@ -55,8 +69,7 @@ fun normalizePath(path: String): String {
  */
 fun resolvePath(base: String, rel: String): String = when {
     rel.isEmpty() || rel == "." -> normalizePath(base)
-    rel.startsWith(PATH_SEPARATOR) || rel.replace('\\', PATH_SEPARATOR).startsWith(PATH_SEPARATOR) ->
-        normalizePath(rel)
+    isAbsolutePath(rel) -> normalizePath(rel)
     base.isEmpty() -> normalizePath(rel)
     else -> normalizePath("${base.trimEnd(PATH_SEPARATOR)}$PATH_SEPARATOR$rel")
 }
@@ -80,17 +93,20 @@ fun relativizePath(base: String, path: String): String {
 /** Everything before the last separator, or null when [path] has no parent (a bare name, or the root). */
 fun parentPath(path: String): String? {
     val p = normalizePath(path)
-    if (p == PATH_SEPARATOR.toString()) return null
+    val root = rootOf(p)
+    if (p == root) return null
     val cut = p.lastIndexOf(PATH_SEPARATOR)
     return when {
-        cut < 0 -> null
-        cut == 0 -> PATH_SEPARATOR.toString()
+        cut < root.length -> root.ifEmpty { null }
         else -> p.substring(0, cut)
     }
 }
 
-/** The last segment of [path]: a file's name, or a directory's. */
-fun fileName(path: String): String = normalizePath(path).substringAfterLast(PATH_SEPARATOR)
+/** The last segment of [path]: a file's name, or a directory's. Empty for a root. */
+fun fileName(path: String): String {
+    val p = normalizePath(path)
+    return if (p == rootOf(p)) "" else p.substringAfterLast(PATH_SEPARATOR)
+}
 
-/** True when [path] starts at a root rather than at wherever the caller happens to be. */
-fun isAbsolutePath(path: String): Boolean = path.replace('\\', PATH_SEPARATOR).startsWith(PATH_SEPARATOR)
+/** True when [path] starts at a root (`/`, `C:/`) rather than at wherever the caller happens to be. */
+fun isAbsolutePath(path: String): Boolean = rootOf(path.replace('\\', PATH_SEPARATOR)).isNotEmpty()
