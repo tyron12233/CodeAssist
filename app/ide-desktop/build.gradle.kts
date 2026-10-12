@@ -86,6 +86,16 @@ val desktopVersion: String = providers.gradleProperty("desktopVersion").orNull
         ?.groupValues?.get(1)
     ?: error("no versionName in app/ide-android/build.gradle.kts; pass -PdesktopVersion")
 
+// Every module of the JDK that packages the app (the Gradle daemon's JBR, which the plugin links from), less the
+// JetBrains Runtime's embedded Chromium and its OpenGL bindings: nothing here uses them, and on Windows JCEF alone
+// is ~270 MB (libcef.dll, dxcompiler.dll, resources.pak). Read from jmods/ since the set differs per OS.
+val bundledRuntimeModules: List<String> =
+    (File(System.getProperty("java.home"), "jmods").listFiles() ?: emptyArray())
+        .map { it.name.removeSuffix(".jmod") }
+        .filter { it !in setOf("jcef", "jogl.all", "gluegen.rt") }
+        .sorted()
+        .ifEmpty { error("no jmods in ${System.getProperty("java.home")}: package with a JDK that has them (the JBR SDK)") }
+
 compose.desktop {
     application {
         mainClass = "dev.ide.desktop.MainKt"
@@ -97,7 +107,7 @@ compose.desktop {
             vendor = "CodeAssist"
             // The bundled runtime is also the JDK user projects compile and complete against, and kotlinc needs
             // java.management: a runtime trimmed to the modules the IDE itself links fails every Kotlin build.
-            includeAllModules = true
+            modules(*bundledRuntimeModules.toTypedArray())
             appResourcesRootDir.set(appResourcesRoot)
             macOS {
                 bundleID = "com.tyron.code.desktop"
