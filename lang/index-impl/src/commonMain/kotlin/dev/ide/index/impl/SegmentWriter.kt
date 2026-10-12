@@ -5,6 +5,7 @@ import dev.ide.index.IndexExtension
 import dev.ide.index.IndexOrigin
 import dev.ide.index.MatchingMode
 import dev.ide.platform.createDirectories
+import dev.ide.platform.parentPath
 import dev.ide.platform.deleteFile
 import dev.ide.platform.moveFile
 import dev.ide.platform.openFile
@@ -203,7 +204,10 @@ internal class SegmentWriter(
     private val fuzzy = ext.matching == MatchingMode.PREFIX_AND_FUZZY
     @Suppress("UNCHECKED_CAST")
     private val ser = ext.valueExternalizer as Externalizer<Any>
-    private val tmpDir: String = file.substringBeforeLast('/', ".")
+    // The segment's own directory, which the spill files share and [finish] writes into. Through [parentPath], not
+    // a split on `/`: a Windows path has only `\`, and the split answered "." there, so the segment dir was never
+    // created and every index write failed with "cannot write".
+    private val tmpDir: String = parentPath(file) ?: "."
     private var seq = 0L
     private var added = 0
     // Origin is a per-artifact property, so every entry of a real segment shares one; track that so [finish]
