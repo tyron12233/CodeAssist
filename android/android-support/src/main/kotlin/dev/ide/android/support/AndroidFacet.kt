@@ -203,11 +203,62 @@ data class BuildType(
 data class AndroidPackaging(
     val resources: ResourcePackaging = ResourcePackaging(),
     val jniLibs: JniLibsPackaging = JniLibsPackaging(),
+    /**
+     * AGP's `androidResources { noCompress += … }` (formerly `aaptOptions.noCompress`): file suffixes, usually
+     * extensions like `tflite` or `.bin`, whose APK entries are STORED rather than deflated. Added to
+     * [DEFAULT_NO_COMPRESS_EXTENSIONS]. AGP's matching rule applies (see [isNoCompressed]): a case-insensitive
+     * suffix match on the entry path, so `""` stores everything and `dex` also stores `classes*.dex`.
+     */
+    val noCompress: Set<String> = emptySet(),
 ) {
     /** True when the user configured anything (drives "emit only when set" persistence). */
-    val isDefault: Boolean get() = resources.isEmpty && jniLibs.isEmpty
+    val isDefault: Boolean get() = resources.isEmpty && jniLibs.isEmpty && noCompress.isEmpty()
+
+    /** [DEFAULT_NO_COMPRESS_EXTENSIONS] plus the module's own [noCompress] suffixes, in that order. */
+    val noCompressSuffixes: List<String> get() = (DEFAULT_NO_COMPRESS_EXTENSIONS + noCompress).distinct()
+
+    /**
+     * Whether the APK entry at [path] is packaged uncompressed. AGP's `PackagingUtils` rule: the path ends with
+     * any of [noCompressSuffixes], ignoring case. Applied to every entry the packager adds (dex, assets, native
+     * libs, Java resources), which is what makes `AssetManager.openFd()` work on an asset.
+     */
+    fun isNoCompressed(path: String): Boolean = noCompressSuffixes.any { path.endsWith(it, ignoreCase = true) }
 
     companion object {
+        /**
+         * The suffixes AGP never compresses, whatever the module declares: aapt's list of formats that are
+         * already compressed (images, audio, video), plus `.tflite`, which TensorFlow Lite memory-maps
+         * (AGP 8.x `PackagingUtils.DEFAULT_AAPT_NO_COMPRESS_EXTENSIONS` + `DOT_TFLITE`).
+         */
+        val DEFAULT_NO_COMPRESS_EXTENSIONS: List<String> = listOf(
+            ".jpg", ".jpeg", ".png", ".gif", ".opus", ".wav", ".mp2", ".mp3", ".ogg",
+            ".aac", ".mpg", ".mpeg", ".mid", ".midi", ".smf", ".jet", ".rtttl", ".imy",
+            ".xmf", ".mp4", ".m4a", ".m4v", ".3gp", ".3gpp", ".3g2", ".3gpp2", ".amr",
+            ".awb", ".wma", ".wmv", ".webm", ".mkv", ".webp", ".tflite",
+        )
+
+        /**
+         * [suffixes] as bundletool `uncompressedGlob`s, matched case-insensitively the way AGP's
+         * `getNoCompressGlobsForBundle` writes them: `.bin` becomes `**[.][bB][iI][nN]`.
+         */
+        fun bundleGlobs(suffixes: Collection<String>): List<String> = suffixes.map { suffix ->
+            buildString {
+                append("**")
+                for (c in suffix) {
+                    val lower = c.lowercaseChar()
+                    val upper = c.uppercaseChar()
+                    when {
+                        lower != upper -> append('[').append(lower).append(upper).append(']')
+                        c in GLOB_SPECIALS -> append('[').append(c).append(']')
+                        else -> append(c)
+                    }
+                }
+            }
+        }.distinct().sorted()
+
+        /** Characters a glob would read as syntax; wrapped in a one-character class to match literally. */
+        private const val GLOB_SPECIALS = ".*?[]{}\\!"
+
         /**
          * AGP's default Java-resource excludes, always applied on top of the module's own: jar signatures
          * (invalid after repackaging), the redundant per-jar `MANIFEST.MF`, Maven/tooling metadata,

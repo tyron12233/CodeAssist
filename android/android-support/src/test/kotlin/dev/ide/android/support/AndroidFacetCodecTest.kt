@@ -59,6 +59,7 @@ class AndroidFacetCodecTest {
                 merges = linkedSetOf("/META-INF/custom/**"),
             ),
             jniLibs = JniLibsPackaging(pickFirsts = linkedSetOf("**/libpick.so")),
+            noCompress = linkedSetOf("tflite", ".bin"),
         ),
     )
 
@@ -152,7 +153,13 @@ class AndroidFacetCodecTest {
         val res = pkg["resources"] as Map<String, Any?>
         assertEquals(listOf("/META-INF/extra.txt"), res["excludes"])
         assertEquals(listOf("/META-INF/custom/**"), res["merges"])
+        assertEquals(listOf("tflite", ".bin"), pkg["noCompress"])
         assertEquals(richFacet.packaging, AndroidFacetCodec.decode(values).packaging)
+
+        // noCompress alone is enough to persist the block.
+        val onlyNoCompress = AndroidFacet(namespace = "a.b", compileSdk = 34, packaging = AndroidPackaging(noCompress = setOf("db")))
+        val decoded = AndroidFacetCodec.decode(AndroidFacetCodec.encode(onlyNoCompress)).packaging
+        assertEquals(setOf("db"), decoded.noCompress)
     }
 
     /** Build with a facet, save, reload -> identical. */

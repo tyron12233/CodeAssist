@@ -796,6 +796,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="modcfg_packaging_merge_desc">Gabungkan duplikat alih-alih membuangnya.</string>
     <string name="modcfg_packaging_default_excludes">Selalu dikecualikan secara default</string>
     <string name="modcfg_packaging_default_merges">Selalu digabung secara default</string>
+    <string name="modcfg_packaging_compression">Kompresi</string>
+    <string name="modcfg_packaging_no_compress">Jangan kompres</string>
+    <string name="modcfg_packaging_no_compress_desc">Akhiran file seperti tflite atau .bin yang disimpan tanpa kompresi di APK, agar AssetManager.openFd() dan pemetaan memori berfungsi. Dicocokkan dengan akhir setiap jalur, tanpa membedakan huruf besar/kecil.</string>
+    <string name="modcfg_packaging_default_no_compress">Tidak pernah dikompres secara default</string>
     <string name="modcfg_manage_keystores">Kelola keystore</string>
     <string name="modcfg_keystores_empty">Belum ada keystore. Buat satu di Pengelola Keystore untuk menandatangani build rilis.</string>
     <string name="modcfg_debug_default">debug (default)</string>

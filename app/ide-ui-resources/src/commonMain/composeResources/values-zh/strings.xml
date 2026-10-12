@@ -1416,6 +1416,10 @@
     <string name="modcfg_packaging_merge_desc">拼接重复项，而不是移除它们。</string>
     <string name="modcfg_packaging_default_excludes">默认始终排除</string>
     <string name="modcfg_packaging_default_merges">默认始终合并</string>
+    <string name="modcfg_packaging_compression">压缩</string>
+    <string name="modcfg_packaging_no_compress">不压缩</string>
+    <string name="modcfg_packaging_no_compress_desc">在 APK 中以不压缩方式存储的文件后缀（如 tflite 或 .bin），使 AssetManager.openFd() 和内存映射可用。与每个路径的结尾匹配，不区分大小写。</string>
+    <string name="modcfg_packaging_default_no_compress">默认始终不压缩</string>
     <string name="modcfg_manage_keystores">管理密钥库</string>
     <string name="modcfg_keystores_empty">尚无密钥库。请在密钥库管理器中创建一个，以签名发布构建。</string>
     <string name="modcfg_debug_default">debug（默认）</string>

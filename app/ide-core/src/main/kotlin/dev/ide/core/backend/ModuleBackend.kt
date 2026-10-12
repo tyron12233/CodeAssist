@@ -136,9 +136,9 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
         withContext(Dispatchers.IO) { ctx.services.moduleService.getPackagingOptions(moduleName) }
 
     override suspend fun updatePackagingOptions(
-        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules, noCompress: List<String>,
     ): UiConfigResult = withContext(Dispatchers.IO) {
-        ctx.services.moduleService.updatePackagingOptions(moduleName, resources, jniLibs)
+        ctx.services.moduleService.updatePackagingOptions(moduleName, resources, jniLibs, noCompress)
             .also { if (it.success) ctx.bumpFileSystemEpoch() }
     }
 

@@ -751,6 +751,10 @@
     <string name="modcfg_packaging_merge_desc">Объединять дубликаты вместо их удаления.</string>
     <string name="modcfg_packaging_default_excludes">Всегда исключается по умолчанию</string>
     <string name="modcfg_packaging_default_merges">Всегда объединяется по умолчанию</string>
+    <string name="modcfg_packaging_compression">Сжатие</string>
+    <string name="modcfg_packaging_no_compress">Не сжимать</string>
+    <string name="modcfg_packaging_no_compress_desc">Суффиксы файлов, например tflite или .bin, которые хранятся в APK без сжатия, чтобы работали AssetManager.openFd() и отображение в память. Сравниваются с концом каждого пути без учёта регистра.</string>
+    <string name="modcfg_packaging_default_no_compress">Никогда не сжимаются по умолчанию</string>
     <string name="modcfg_manage_keystores">Управление хранилищами ключей</string>
     <string name="modcfg_keystores_empty">Хранилищ ключей пока нет. Создайте его в Менеджере хранилищ ключей, чтобы подписывать релизные сборки.</string>
     <string name="modcfg_debug_default">debug (по умолчанию)</string>

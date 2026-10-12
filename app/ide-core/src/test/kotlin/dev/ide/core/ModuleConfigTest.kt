@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class ModuleConfigTest {
 
     @Test
-    fun readsCoreFieldsAndAGenericAndroidFacetPanel() = withTempDir("ide-cfg") { dir ->
+    fun readsCoreFieldsAndAGenericAndroidFacetPanel(): Unit = withTempDir("ide-cfg") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val config = assertNotNull(ide.moduleService.getModuleConfig("app"), "app config should load")
             assertEquals("app", config.name)
@@ -43,7 +43,7 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun editingLanguageLevelAndAFacetFieldPersistsAndReloads() = withTempDir("ide-cfg-edit") { dir ->
+    fun editingLanguageLevelAndAFacetFieldPersistsAndReloads(): Unit = withTempDir("ide-cfg-edit") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val before = assertNotNull(ide.moduleService.getModuleConfig("app"))
             val android = assertNotNull(before.facets.firstOrNull { it.table == "android" })
@@ -84,7 +84,7 @@ class ModuleConfigTest {
      *  explicit override persists through module.toml. This is the "console apps don't see android.*" fix,
      *  surfaced in Module Config. */
     @Test
-    fun platformSdkResolvesByTypeAndOverridePersists() = withTempDir("ide-cfg-sdk") { dir ->
+    fun platformSdkResolvesByTypeAndOverridePersists(): Unit = withTempDir("ide-cfg-sdk") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val core = assertNotNull(ide.moduleService.getModuleConfig("core")) // a java-lib
             assertTrue(core.availableSdks.isNotEmpty(), "SDK table is populated")
@@ -121,13 +121,14 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun packagingOptionsRoundTripAndPersist() = withTempDir("ide-pkg") { dir ->
+    fun packagingOptionsRoundTripAndPersist(): Unit = withTempDir("ide-pkg") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             // Defaults exposed; a fresh module has no configured rules.
             val initial = assertNotNull(ide.moduleService.getPackagingOptions("app"), "android module has packaging options")
             assertTrue(initial.resources.excludes.isEmpty() && initial.jniLibs.pickFirsts.isEmpty(), "starts unconfigured")
             assertTrue(initial.defaultResourceExcludes.any { it.contains("MANIFEST.MF") }, "AGP defaults exposed read-only")
             assertTrue(initial.defaultResourceMerges.any { it.contains("services") }, "default services merge exposed")
+            assertTrue(initial.noCompress.isEmpty() && ".tflite" in initial.defaultNoCompress, "no-compress defaults exposed")
 
             // A pure-Java module returns null (not Android).
             assertEquals(null, ide.moduleService.getPackagingOptions("core"), "java-lib has no packaging options")
@@ -136,6 +137,7 @@ class ModuleConfigTest {
                 "app",
                 UiPackagingRules(excludes = listOf("/META-INF/extra.txt", "  "), pickFirsts = listOf("**/win.properties"), merges = listOf("/META-INF/custom/**")),
                 UiPackagingRules(excludes = listOf("**/libc++_shared.so")),
+                noCompress = listOf("bin", " "),
             )
             assertTrue(r.success, "update should succeed: ${r.message}")
 
@@ -144,23 +146,26 @@ class ModuleConfigTest {
             assertEquals(listOf("**/win.properties"), after.resources.pickFirsts)
             assertEquals(listOf("/META-INF/custom/**"), after.resources.merges)
             assertEquals(listOf("**/libc++_shared.so"), after.jniLibs.excludes)
+            assertEquals(listOf("bin"), after.noCompress, "blank suffixes dropped")
         }
         // Persisted to module.toml.
         IdeServices.open(dir).use { reopened ->
             val reloaded = assertNotNull(reopened.moduleService.getPackagingOptions("app"))
             assertEquals(listOf("/META-INF/extra.txt"), reloaded.resources.excludes, "packaging persisted")
             assertEquals(listOf("**/libc++_shared.so"), reloaded.jniLibs.excludes)
+            assertEquals(listOf("bin"), reloaded.noCompress, "noCompress persisted")
         }
         dir.toFile().deleteRecursively()
     }
 
     @Test
-    fun settingsSaveDoesNotClobberPackaging() = withTempDir("ide-pkg-preserve") { dir ->
+    fun settingsSaveDoesNotClobberPackaging(): Unit = withTempDir("ide-pkg-preserve") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             ide.moduleService.updatePackagingOptions(
                 "app",
                 UiPackagingRules(excludes = listOf("/META-INF/keep-me.txt")),
                 UiPackagingRules(),
+                noCompress = emptyList(),
             )
             // A Settings-tab save sends the facet map WITHOUT the packaging block (it's edited on its own tab).
             val cfg = assertNotNull(ide.moduleService.getModuleConfig("app"))
@@ -178,7 +183,7 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun findInFilesMatchesProjectSources() = withTempDir("ide-find") { dir ->
+    fun findInFilesMatchesProjectSources(): Unit = withTempDir("ide-find") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // "package" appears in every Java source — a stable probe.
             val hits = ide.search.findInFiles("package", UiSearchOptions(), limit = 200)

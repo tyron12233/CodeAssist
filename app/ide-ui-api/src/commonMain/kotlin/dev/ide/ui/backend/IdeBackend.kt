@@ -1153,6 +1153,10 @@ data class UiPackagingOptions(
     val jniLibs: UiPackagingRules,
     val defaultResourceExcludes: List<String>,
     val defaultResourceMerges: List<String>,
+    /** AGP's `androidResources.noCompress`: file suffixes (`tflite`, `.bin`) packaged uncompressed. */
+    val noCompress: List<String> = emptyList(),
+    /** The suffixes that are never compressed whatever the module says (images, audio, video, `.tflite`). */
+    val defaultNoCompress: List<String> = emptyList(),
 )
 
 /** The editable glob-pattern lists for one packaging category. [merges] is unused for native libs (binary). */

@@ -76,6 +76,10 @@ class AndroidAabBuildTest {
             assertTrue("base/dex/classes.dex" in entries, "AAB lacks base/dex/classes.dex: $entries")
             assertTrue(entries.any { it.startsWith("META-INF/") && (it.endsWith(".RSA") || it.endsWith(".SF")) },
                 "AAB is not v1-signed (no META-INF signature): $entries")
+            // noCompress reaches the bundle config, where the APKs Play generates take it from.
+            val config = ZipFile(aab.toFile()).use { z -> String(z.getInputStream(z.getEntry("BundleConfig.pb")).readBytes(), Charsets.ISO_8859_1) }
+            assertTrue("**[.][bB][iI][nN]" !in config && "**[bB][iI][nN]" in config, "module noCompress glob missing from BundleConfig.pb")
+            assertTrue("**[.][tT][fF][lL][iI][tT][eE]" in config, "default noCompress glob missing from BundleConfig.pb")
 
             val again = runBlocking { TaskExecutorImpl(cache).execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "rebuild should do no work, ran=${again.ranTasks.map { it.value }}")
@@ -91,7 +95,12 @@ class AndroidAabBuildTest {
         store.workspace.projects.single().beginModification().apply {
             addModule("app", appType).apply {
                 languageLevel = LanguageLevel.JAVA_17
-                putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34, isApplication = true))
+                putFacet(
+                    AndroidFacet(
+                        namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34, isApplication = true,
+                        packaging = AndroidPackaging(noCompress = setOf("bin")),
+                    )
+                )
             }
             commit()
         }

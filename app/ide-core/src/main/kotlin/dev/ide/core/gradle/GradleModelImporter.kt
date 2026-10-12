@@ -3,6 +3,7 @@ package dev.ide.core.gradle
 import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
+import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.BuildFeatures
 import dev.ide.build.jvm.compose.ComposeResourcesFacet
 import dev.ide.build.jvm.compose.ComposeResourcesFacetCodec
@@ -294,6 +295,9 @@ class GradleModelImporter : ProjectImporter {
                 compose = features?.get("compose") as? Boolean ?: false,
                 parcelize = features?.get("parcelize") as? Boolean ?: false,
                 serialization = features?.get("serialization") as? Boolean ?: false,
+            ),
+            packaging = AndroidPackaging(
+                noCompress = (android["noCompress"] as? List<*>).orEmpty().filterIsInstance<String>().toSet(),
             ),
         )
         return ExternalFacet(AndroidFacetCodec.tomlTable, AndroidFacetCodec.encode(facet))

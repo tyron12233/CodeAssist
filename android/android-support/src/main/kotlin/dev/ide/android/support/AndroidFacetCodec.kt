@@ -80,8 +80,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
     }
 
     /**
-     * `packaging` as a nested inline table `{ resources = { excludes = [...], ... }, jniLibs = { ... } }`;
-     * each sub-table and each list is emitted only when non-empty so the encoded map matches a reload.
+     * `packaging` as a nested inline table `{ resources = { excludes = [...], ... }, jniLibs = { ... },
+     * noCompress = [...] }`; each sub-table and each list is emitted only when non-empty so the encoded map matches a reload.
      */
     private fun encodePackaging(p: AndroidPackaging): Map<String, Any?> = buildMap {
         if (!p.resources.isEmpty) put("resources", buildMap {
@@ -93,6 +93,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             if (p.jniLibs.excludes.isNotEmpty()) put("excludes", p.jniLibs.excludes.toList())
             if (p.jniLibs.pickFirsts.isNotEmpty()) put("pickFirsts", p.jniLibs.pickFirsts.toList())
         })
+        if (p.noCompress.isNotEmpty()) put("noCompress", p.noCompress.toList())
     }
 
     private fun decodePackaging(t: Map<String, Any?>): AndroidPackaging {
@@ -108,6 +109,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
                 excludes = jni.stringSet("excludes"),
                 pickFirsts = jni.stringSet("pickFirsts"),
             ),
+            noCompress = t.stringSet("noCompress"),
         )
     }
 

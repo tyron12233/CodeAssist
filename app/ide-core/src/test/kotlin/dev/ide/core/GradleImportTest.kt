@@ -779,6 +779,58 @@ class GradleImportTest {
         }
     }
 
+    /** `androidResources { noCompress }` and the older `aaptOptions { noCompress }`, in each DSL's forms, reach
+     *  the facet's `packaging.noCompress`, which is what the packager stores uncompressed. */
+    @Test
+    fun parsesNoCompress() {
+        withTempDir("gradle-nocompress") { tmp ->
+            val proj = tmp.resolve("NoCompress")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle", "rootProject.name = 'NoCompress'\ninclude ':app', ':legacy'")
+            w("app/build.gradle.kts", """
+                plugins { id("com.android.application") }
+                android {
+                    namespace = "com.example.app"
+                    compileSdk = 34
+                    androidResources {
+                        noCompress += listOf(
+                            "tflite",
+                            "bin",
+                        )
+                        noCompress.add(".db")
+                        ignoreAssetsPattern = "!.svn"
+                    }
+                }
+            """)
+            w("app/src/main/AndroidManifest.xml", """<manifest package="com.example.app"/>""")
+            w("legacy/build.gradle", """
+                apply plugin: 'com.android.library'
+                android {
+                    namespace 'com.example.legacy'
+                    compileSdk 34
+                    aaptOptions {
+                        noCompress 'pak', "dat"
+                    }
+                }
+            """)
+            w("legacy/src/main/AndroidManifest.xml", """<manifest package="com.example.legacy"/>""")
+
+            val spec = assertNotNull(GradleImport.parse(proj))
+            assertEquals(setOf("tflite", "bin", ".db"), spec.modules.first { it.name == "app" }.noCompress)
+            assertEquals(setOf("pak", "dat"), spec.modules.first { it.name == "legacy" }.noCompress)
+
+            val outcome = runBlocking {
+                GradleProjectImporter().resolve(SyncRequest(proj, NoProgress, SyncReason.IMPORT))
+            }
+            val facet = outcome.model!!.modules.first { it.name == "app" }.facets.first { it.table == "android" }
+            @Suppress("UNCHECKED_CAST")
+            val packaging = facet.values["packaging"] as Map<String, Any?>
+            assertEquals(listOf("tflite", "bin", ".db"), packaging["noCompress"])
+        }
+    }
+
     private object NoProgress : ProgressReporter {
         override fun report(fraction: Double, message: String?) {}
         override fun checkCanceled() {}

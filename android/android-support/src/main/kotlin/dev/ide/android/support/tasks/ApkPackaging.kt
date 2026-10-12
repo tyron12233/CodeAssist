@@ -1,5 +1,6 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.tools.ArtProfiles
 import java.nio.file.Files
 import java.nio.file.Path
@@ -15,7 +16,8 @@ import java.util.zip.ZipOutputStream
  * class *directory*, so [jarClasses] packs compiled `.class` files into a jar to feed the dexer.
  * [assembleApk] is the `packageApk` step: it starts from aapt2's `resources.ap_` (binary manifest +
  * `resources.arsc` + compiled res), preserving each entry's original storage method so `resources.arsc`
- * stays uncompressed, then adds `classes*.dex` and any `assets/`.
+ * stays uncompressed, then adds `classes*.dex` and any `assets/`. An entry the module's no-compress rule
+ * matches ([AndroidPackaging.isNoCompressed]) is STORED rather than deflated.
  */
 internal object ApkPackaging {
 
@@ -50,7 +52,9 @@ internal object ApkPackaging {
      * `lib/<abi>/…`), and the merged Java resources in each of [javaResJars] (their entries copied to the
      * APK root). aapt2's output is written first, so a Java resource can never shadow the manifest /
      * `resources.arsc` / `res/`. [artProfile] is the compiled Baseline Profile pair (`.prof`, `.profm`) when
-     * the build made one. Returns the entry names written, for diagnostics.
+     * the build made one. [noCompress] says which entry paths are STORED (AGP's `androidResources.noCompress`
+     * plus its defaults); it is applied to aapt2's entries too, so a `res/raw` file with a listed extension is
+     * stored even though aapt2 deflated it. Returns the entry names written, for diagnostics.
      */
     fun assembleApk(
         resourcesAp: Path,
@@ -60,30 +64,26 @@ internal object ApkPackaging {
         outApk: Path,
         javaResJars: List<Path> = emptyList(),
         artProfile: Pair<Path, Path>? = null,
+        noCompress: (String) -> Boolean = AndroidPackaging()::isNoCompressed,
     ): List<String> {
         outApk.parent?.let { Files.createDirectories(it) }
         val written = LinkedHashSet<String>()
         ZipOutputStream(Files.newOutputStream(outApk)).use { zos ->
             zos.setLevel(Deflater.BEST_COMPRESSION)
 
-            // 1) Everything aapt2 produced, preserving STORED/DEFLATED (keeps resources.arsc mmap-friendly).
+            // 1) Everything aapt2 produced, preserving STORED (keeps resources.arsc mmap-friendly). A deflated
+            //    entry is stored when the no-compress rule names it.
             ZipFile(resourcesAp.toFile()).use { ap ->
                 val entries = ap.entries().toList().sortedBy { it.name }
                 for (e in entries) {
                     if (!written.add(e.name)) continue
-                    val copy = ZipEntry(e.name).apply {
-                        method = e.method
-                        if (e.method == ZipEntry.STORED) { size = e.size; crc = e.crc }
-                    }
-                    zos.putNextEntry(copy)
-                    ap.getInputStream(e).use { it.copyTo(zos) }
-                    zos.closeEntry()
+                    copyEntry(zos, ap, e, stored = e.method == ZipEntry.STORED || noCompress(e.name))
                 }
             }
 
             // 2) classes.dex / classes2.dex …
             for ((name, dex) in packagedDex(dexDirs)) {
-                if (written.add(name)) putDeflated(zos, name, dex)
+                if (written.add(name)) putFile(zos, name, dex, noCompress(name))
             }
 
             // 3) The compiled Baseline Profile, ahead of assets/** so a stale copy under a source `assets/dexopt/`
@@ -91,7 +91,7 @@ internal object ApkPackaging {
             //    compressed entry cannot give, and then installs nothing.
             artProfile?.let { (prof, profm) ->
                 for ((name, file) in listOf(ArtProfiles.APK_PROFILE to prof, ArtProfiles.APK_PROFILE_METADATA to profm)) {
-                    if (Files.isRegularFile(file) && written.add(name)) putStored(zos, name, file)
+                    if (Files.isRegularFile(file) && written.add(name)) putFile(zos, name, file, stored = true)
                 }
             }
 
@@ -99,7 +99,7 @@ internal object ApkPackaging {
             for (dir in assetsDirs.filter { Files.isDirectory(it) }) {
                 allFiles(dir).forEach { f ->
                     val name = "assets/" + dir.relativize(f).toString().replace('\\', '/')
-                    if (written.add(name)) putDeflated(zos, name, f)
+                    if (written.add(name)) putFile(zos, name, f, noCompress(name))
                 }
             }
 
@@ -107,7 +107,7 @@ internal object ApkPackaging {
             for (dir in jniLibDirs.filter { Files.isDirectory(it) }) {
                 allFiles(dir).forEach { f ->
                     val name = "lib/" + dir.relativize(f).toString().replace('\\', '/')
-                    if (written.add(name)) putDeflated(zos, name, f)
+                    if (written.add(name)) putFile(zos, name, f, noCompress(name))
                 }
             }
 
@@ -120,9 +120,7 @@ internal object ApkPackaging {
                     val entries = zf.entries().toList().filter { !it.isDirectory }.sortedBy { it.name }
                     for (e in entries) {
                         if (!written.add(e.name)) continue
-                        zos.putNextEntry(ZipEntry(e.name).apply { method = ZipEntry.DEFLATED })
-                        zf.getInputStream(e).use { it.copyTo(zos) }
-                        zos.closeEntry()
+                        copyEntry(zos, zf, e, stored = noCompress(e.name))
                     }
                 }
             }
@@ -131,25 +129,44 @@ internal object ApkPackaging {
     }
 
     /** STREAM the file into the zip (8 KB buffer) rather than reading it whole into a ByteArray — keeps heap
-     *  flat regardless of entry size (native `.so` libs / large assets are the biggest files in an APK). */
-    private fun putDeflated(zos: ZipOutputStream, name: String, file: Path) {
-        zos.putNextEntry(ZipEntry(name).apply { method = ZipEntry.DEFLATED })
+     *  flat regardless of entry size (native `.so` libs / large assets are the biggest files in an APK). A
+     *  STORED entry needs its size and CRC before the data, so it is read twice: once for the CRC, then copied. */
+    private fun putFile(zos: ZipOutputStream, name: String, file: Path, stored: Boolean) {
+        val entry = ZipEntry(name)
+        if (stored) {
+            val crc = CRC32()
+            val buf = ByteArray(64 * 1024)
+            Files.newInputStream(file).use { input ->
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    crc.update(buf, 0, n)
+                }
+            }
+            entry.storedAs(Files.size(file), crc.value)
+        } else {
+            entry.method = ZipEntry.DEFLATED
+        }
+        zos.putNextEntry(entry)
         Files.newInputStream(file).use { it.copyTo(zos) }
         zos.closeEntry()
     }
 
-    /** A STORED entry needs its size and CRC up front. Only used for the small profile files, so reading the
-     *  file whole is fine. */
-    private fun putStored(zos: ZipOutputStream, name: String, file: Path) {
-        val bytes = Files.readAllBytes(file)
-        zos.putNextEntry(ZipEntry(name).apply {
-            method = ZipEntry.STORED
-            size = bytes.size.toLong()
-            compressedSize = bytes.size.toLong()
-            crc = CRC32().apply { update(bytes) }.value
-        })
-        zos.write(bytes)
+    /** Copy [e] out of [zip] under its own name. A ZipFile entry's size and CRC come from the central directory,
+     *  so storing it needs no extra pass. */
+    private fun copyEntry(zos: ZipOutputStream, zip: ZipFile, e: ZipEntry, stored: Boolean) {
+        val copy = ZipEntry(e.name)
+        if (stored) copy.storedAs(e.size, e.crc) else copy.method = ZipEntry.DEFLATED
+        zos.putNextEntry(copy)
+        zip.getInputStream(e).use { it.copyTo(zos) }
         zos.closeEntry()
+    }
+
+    private fun ZipEntry.storedAs(length: Long, checksum: Long) {
+        method = ZipEntry.STORED
+        size = length
+        compressedSize = length
+        crc = checksum
     }
 
     private fun classFiles(root: Path): List<Path> =

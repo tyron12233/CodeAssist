@@ -526,13 +526,15 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
             jniLibs = UiPackagingRules(p.jniLibs.excludes.toList(), p.jniLibs.pickFirsts.toList()),
             defaultResourceExcludes = AndroidPackaging.DEFAULT_RESOURCE_EXCLUDES,
             defaultResourceMerges = AndroidPackaging.DEFAULT_RESOURCE_MERGES,
+            noCompress = p.noCompress.toList(),
+            defaultNoCompress = AndroidPackaging.DEFAULT_NO_COMPRESS_EXTENSIONS,
         )
     }
 
-    /** Persist [moduleName]'s packaging merge rules. Blank patterns are dropped; all-empty clears the block
-     *  (the codec then omits it, so the module falls back to the AGP defaults). */
+    /** Persist [moduleName]'s packaging merge rules and [noCompress] suffixes. Blank patterns are dropped;
+     *  all-empty clears the block (the codec then omits it, so the module falls back to the AGP defaults). */
     fun updatePackagingOptions(
-        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules, noCompress: List<String>,
     ): UiConfigResult {
         val module = ctx.modules().firstOrNull { it.name == moduleName }
             ?: return UiConfigResult(false, "No module '$moduleName'.")
@@ -543,6 +545,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         val packaging = AndroidPackaging(
             resources = ResourcePackaging(clean(resources.excludes), clean(resources.pickFirsts), clean(resources.merges)),
             jniLibs = JniLibsPackaging(clean(jniLibs.excludes), clean(jniLibs.pickFirsts)),
+            noCompress = clean(noCompress),
         )
         if (packaging == facet.packaging) return UiConfigResult(true, "No change.")
         try {

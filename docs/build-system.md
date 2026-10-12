@@ -391,6 +391,15 @@ mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed
   or unconfigured duplicate keeps the module's own copy. Native `.so` are packaged as-is: debug-symbol stripping
   needs the NDK, absent on device (AGP without an NDK does the same). For an app bundle these merges feed the
   base-module zip too (Java resources under `root/`, `.so` under `lib`).
+- **Uncompressed entries (`androidResources.noCompress`).** `AndroidPackaging.noCompress` holds file suffixes
+  (`tflite`, `.bin`) the packager STORES instead of deflating, so `AssetManager.openFd()` and memory-mapping
+  work on them. AGP's rule applies to every APK entry (aapt2's `res/` output, dex, assets, native libs, Java
+  resources): a case-insensitive suffix match, so `""` stores everything and `dex` stores `classes*.dex` too.
+  AGP's defaults are always added (already-compressed image/audio/video formats, plus `.tflite`). apksig
+  4-byte-aligns the stored entries when it signs. For a bundle the same suffixes become the bundle config's
+  `compression.uncompressedGlob`s (`**[.][bB][iI][nN]`), which the APKs Play generates honour. The Gradle
+  importer reads `androidResources { noCompress … }` and the older `aaptOptions { noCompress … }`; the
+  exporter writes `androidResources`; Module Settings edits it on the Packaging tab.
 - **Prebuilt native libraries from dependencies.** A native library published for Android ships one artifact
   per ABI, addressed by a Maven **classifier**: `com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a`
   holds a bare `libgdx.so` with no `lib/<abi>/` prefix, and the module publishes no main artifact at all. Such

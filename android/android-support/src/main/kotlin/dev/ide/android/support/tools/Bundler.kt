@@ -20,7 +20,23 @@ data class BundleRequest(
     val outputAab: Path,
     /** Files for the bundle's `BUNDLE-METADATA/` (e.g. the compiled Baseline Profile), which Play reads. */
     val metadataFiles: List<BundleMetadataFile> = emptyList(),
-)
+    /** The bundle config's `compression.uncompressedGlob`: entries the generated APKs keep STORED
+     *  (AGP's `androidResources.noCompress` + defaults, see `AndroidPackaging.bundleGlobs`). */
+    val uncompressedGlobs: List<String> = emptyList(),
+) {
+    /**
+     * Writes the bundle config bundletool takes as JSON (`{"compression":{"uncompressedGlob":[…]}}`) next to
+     * the output and returns its path, or null when there is nothing to configure. JSON rather than the
+     * `BundleConfig` proto so android-support needs no protobuf on its compile classpath.
+     */
+    fun writeBundleConfig(): Path? {
+        if (uncompressedGlobs.isEmpty()) return null
+        val json = uncompressedGlobs.joinToString(",", "{\"compression\":{\"uncompressedGlob\":[", "]}}") {
+            "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        }
+        return outputAab.resolveSibling("${outputAab.fileName}.config.json").also { Files.write(it, json.toByteArray()) }
+    }
+}
 
 /** One `BUNDLE-METADATA/<directory>/<fileName>` entry, copied from [file]. */
 data class BundleMetadataFile(val directory: String, val fileName: String, val file: Path)
@@ -46,6 +62,7 @@ class BundletoolInProcess : Bundler {
                 .setModulesPaths(ImmutableList.copyOf(present))
                 .setOutputPath(request.outputAab)
                 .apply { request.metadataFiles.forEach { addMetadataFile(it.directory, it.fileName, it.file) } }
+                .apply { request.writeBundleConfig()?.let { setBundleConfig(it) } }
                 .build()
                 .execute()
             ToolResult.ok(listOf("bundletool (in-process) built ${request.outputAab.fileName}"))
@@ -87,12 +104,14 @@ class BundletoolSubprocess(private val bundletoolJar: Path, private val javaLaun
         runCatching { Files.deleteIfExists(request.outputAab) }
         val present = request.moduleZips.filter { Files.exists(it) }
         if (present.isEmpty()) return ToolResult.fail("no bundle module zips to build")
+        val config = request.writeBundleConfig()
         val cmd = listOf(
             javaLauncher.toString(), "-jar", bundletoolJar.toString(), "build-bundle",
             "--modules=${present.joinToString(",")}",
             "--output=${request.outputAab}",
             "--overwrite",
-        ) + request.metadataFiles.map { "--metadata-file=${it.directory}/${it.fileName}:${it.file}" }
+        ) + request.metadataFiles.map { "--metadata-file=${it.directory}/${it.fileName}:${it.file}" } +
+            listOfNotNull(config?.let { "--config=$it" })
         return Subprocess.run(cmd)
     }
 }

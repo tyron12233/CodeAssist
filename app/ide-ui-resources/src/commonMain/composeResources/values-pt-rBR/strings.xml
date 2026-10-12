@@ -837,6 +837,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="modcfg_packaging_merge_desc">Concatenar as duplicatas em vez de descartá-las.</string>
     <string name="modcfg_packaging_default_excludes">Sempre excluído por padrão</string>
     <string name="modcfg_packaging_default_merges">Sempre mesclado por padrão</string>
+    <string name="modcfg_packaging_compression">Compressão</string>
+    <string name="modcfg_packaging_no_compress">Não comprimir</string>
+    <string name="modcfg_packaging_no_compress_desc">Sufixos de arquivo como tflite ou .bin armazenados sem compressão no APK, para que AssetManager.openFd() e o mapeamento em memória funcionem. Comparados com o fim de cada caminho, sem diferenciar maiúsculas.</string>
+    <string name="modcfg_packaging_default_no_compress">Nunca comprimidos por padrão</string>
     <string name="modcfg_manage_keystores">Gerenciar keystores</string>
     <string name="modcfg_keystores_empty">Nenhuma keystore ainda. Crie uma no Gerenciador de Keystore para assinar compilações de release.</string>
     <string name="modcfg_debug_default">debug (padrão)</string>

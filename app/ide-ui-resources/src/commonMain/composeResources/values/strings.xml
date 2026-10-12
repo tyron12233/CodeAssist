@@ -1424,6 +1424,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_packaging_merge_desc">Concatenate duplicates instead of dropping them.</string>
     <string name="modcfg_packaging_default_excludes">Always excluded by default</string>
     <string name="modcfg_packaging_default_merges">Always merged by default</string>
+    <string name="modcfg_packaging_compression">Compression</string>
+    <string name="modcfg_packaging_no_compress">Don't compress</string>
+    <string name="modcfg_packaging_no_compress_desc">File suffixes such as tflite or .bin to store uncompressed in the APK, so AssetManager.openFd() and memory-mapping work. Matched against the end of each path, ignoring case.</string>
+    <string name="modcfg_packaging_default_no_compress">Never compressed by default</string>
     <string name="modcfg_manage_keystores">Manage keystores</string>
     <string name="modcfg_keystores_empty">No keystores yet. Create one in the Keystore Manager to sign release builds.</string>
     <string name="modcfg_debug_default">debug (default)</string>

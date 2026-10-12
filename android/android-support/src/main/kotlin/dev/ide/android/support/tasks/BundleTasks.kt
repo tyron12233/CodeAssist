@@ -1,5 +1,6 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.tools.ArtProfiles
 import dev.ide.android.support.tools.BundleMetadataFile
 import dev.ide.android.support.tools.BundleRequest
@@ -22,6 +23,8 @@ import java.nio.file.Path
 /**
  * `package<Variant>Bundle`: assemble the bundletool base module zip ([BundlePackaging]) from the proto
  * resources + dex + assets + native libs, then run `bundletool build-bundle` to produce the unsigned `.aab`.
+ * The module's no-compress suffixes go into the bundle config as `uncompressedGlob`s, which is how the APKs
+ * Play generates from the bundle keep those entries STORED (the module zip's own compression is irrelevant).
  */
 internal class BundleTask(
     override val name: TaskName,
@@ -35,7 +38,10 @@ internal class BundleTask(
     private val javaResJars: List<Path> = emptyList(),
     /** The compiled Baseline Profile (`.prof`, `.profm`) from [CompileArtProfileTask], added as bundle metadata. */
     private val artProfile: Pair<Path, Path>? = null,
+    private val packaging: AndroidPackaging = AndroidPackaging(),
 ) : Task {
+    private val uncompressedGlobs: List<String> get() = AndroidPackaging.bundleGlobs(packaging.noCompressSuffixes)
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             filePaths("ap", listOf(protoAp).filter { Files.exists(it) })
@@ -44,6 +50,7 @@ internal class BundleTask(
             dirPaths("jni", jniLibDirs)
             filePaths("javaRes", javaResJars)
             artProfile?.let { (prof, profm) -> filePaths("artProfile", listOf(prof, profm).filter { Files.exists(it) }) }
+            property("uncompressedGlobs", uncompressedGlobs.joinToString("\n"))
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("aab", outAab) }
 
@@ -59,7 +66,7 @@ internal class BundleTask(
                     .filter { Files.isRegularFile(it.second) }
                     .map { (fileName, file) -> BundleMetadataFile(ArtProfiles.BUNDLE_METADATA_DIR, fileName, file) }
             }.orEmpty()
-            val r = bundler.bundle(BundleRequest(listOf(baseModuleZip), outAab, metadata))
+            val r = bundler.bundle(BundleRequest(listOf(baseModuleZip), outAab, metadata, uncompressedGlobs))
             ctx.reportTool("bundletool", r, DiagnosticKind.PACKAGING)
             if (r.success) TaskResult.Success as TaskResult
             else TaskResult.Failed("bundletool build-bundle failed")

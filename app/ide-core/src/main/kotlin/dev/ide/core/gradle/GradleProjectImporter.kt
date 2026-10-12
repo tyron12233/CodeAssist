@@ -3,6 +3,7 @@ package dev.ide.core.gradle
 import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
+import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.BuildType
 import dev.ide.android.support.ProductFlavor
@@ -161,6 +162,7 @@ class GradleProjectImporter : ProjectImporter {
             serialization = spec.serialization,
             kspProcessors = spec.kspProcessors,
         ),
+        packaging = AndroidPackaging(noCompress = spec.noCompress),
     )
 
     /** A declared `group:name[:version[:classifier]]`, or null when the text isn't a coordinate. The

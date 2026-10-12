@@ -275,6 +275,9 @@ internal object NativeModelExtractor {
         // Recorded for fidelity; AndroidFacet has no applicationId field (it derives one from the
         // namespace), so the importer reports it as dropped rather than silently renaming the app.
         defaultConfig?.readString("getApplicationId")?.let { facet["applicationId"] = it }
+        // `androidResources { noCompress }`: the suffixes the packager must store uncompressed.
+        (source?.readProperty("getAndroidResources")?.readProperty("getNoCompress") as? Collection<*>)
+            ?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() }?.let { facet["noCompress"] = it }
         return facet
     }
 

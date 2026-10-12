@@ -617,6 +617,12 @@ object GradleProjectExport {
     private fun packagingBlock(k: Kts, facet: AndroidFacet) {
         val packaging = facet.packaging
         if (packaging.isDefault) return
+        // The model keeps noCompress with the other packaging options; AGP declares it on androidResources.
+        if (packaging.noCompress.isNotEmpty()) {
+            k.line()
+            k.block("androidResources") { setOfPatterns("noCompress", packaging.noCompress) }
+        }
+        if (packaging.resources.isEmpty && packaging.jniLibs.isEmpty) return
         k.line()
         k.block("packaging") {
             if (!packaging.resources.isEmpty) {

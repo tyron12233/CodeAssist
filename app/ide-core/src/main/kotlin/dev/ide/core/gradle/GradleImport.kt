@@ -96,6 +96,8 @@ object GradleImport {
         val flavorDimensions: List<String>,
         val buildTypes: List<BuildTypeSpec>,
         val productFlavors: List<FlavorSpec>,
+        /** `androidResources { noCompress … }` (or the older `aaptOptions`): suffixes packaged uncompressed. */
+        val noCompress: Set<String> = emptySet(),
     )
 
     /** Human-readable notes on what the tolerant reader could and couldn't extract (surfaced in the UI). */
@@ -328,6 +330,7 @@ object GradleImport {
             flavorDimensions = androidTexts.flatMap { flavorDimensions(it) }.distinct(),
             buildTypes = buildTypeSpecs,
             productFlavors = flavorSpecs,
+            noCompress = androidTexts.flatMapTo(LinkedHashSet()) { parseNoCompress(it, vars) },
         )
     }
 
@@ -602,6 +605,28 @@ object GradleImport {
      * `${marketApplicationId}`/`${marketPermission}`), and an unresolved placeholder fails the aapt2 link, so
      * dropping the block (as the reader did before) turned a working Gradle project into an unbuildable one.
      */
+    /**
+     * The suffixes of every `noCompress` statement in `androidResources { }` and the older `aaptOptions { }`,
+     * whatever form it takes: `noCompress += listOf("tflite")`, `noCompress.add("bin")`, `noCompress("a", "b")`,
+     * Groovy's `noCompress 'a', 'b'` / `noCompress = ['a']`. Every string literal of the statement is a suffix.
+     * A plain `=` replaces only the module's list in AGP, never its built-in defaults, so the union is right.
+     */
+    private fun parseNoCompress(android: String, vars: Map<String, String>): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (block in listOf("androidResources", "aaptOptions")) {
+            for (body in GradleScript.allBlockBodies(android, block)) {
+                for (st in GradleScript.statements(body)) {
+                    if (!NO_COMPRESS_STATEMENT.containsMatchIn(st)) continue
+                    for (m in STRING_LITERAL.findAll(st)) out.add(interpolate(m.groupValues[2], vars))
+                }
+            }
+        }
+        return out
+    }
+
+    private val NO_COMPRESS_STATEMENT = Regex("""^noCompress\b""")
+    private val STRING_LITERAL = Regex("""(['"])([^'"]*)\1""")
+
     private fun parseManifestPlaceholders(body: String, vars: Map<String, String>): Map<String, String> {
         val out = LinkedHashMap<String, String>()
         for (st in GradleScript.statements(body)) {

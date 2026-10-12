@@ -217,6 +217,7 @@ internal class PackagingPaneState(
     val resourceMerges: SnapshotStateList<String> = mutableStateListOf()
     val jniExcludes: SnapshotStateList<String> = mutableStateListOf()
     val jniPickFirsts: SnapshotStateList<String> = mutableStateListOf()
+    val noCompress: SnapshotStateList<String> = mutableStateListOf()
 
     init {
         reload()
@@ -230,6 +231,7 @@ internal class PackagingPaneState(
                 moduleName,
                 UiPackagingRules(resourceExcludes.toList(), resourcePickFirsts.toList(), resourceMerges.toList()),
                 UiPackagingRules(jniExcludes.toList(), jniPickFirsts.toList()),
+                noCompress.toList(),
             )
             saving = false
             if (report(result)) reload()
@@ -247,6 +249,7 @@ internal class PackagingPaneState(
                 resourceMerges.reset(loaded.resources.merges)
                 jniExcludes.reset(loaded.jniLibs.excludes)
                 jniPickFirsts.reset(loaded.jniLibs.pickFirsts)
+                noCompress.reset(loaded.noCompress)
             }
             loading = false
         }

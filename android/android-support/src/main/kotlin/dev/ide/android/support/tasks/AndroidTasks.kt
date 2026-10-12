@@ -1,5 +1,6 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.DesugaredLibrary
@@ -2109,6 +2110,8 @@ internal class PackageApkTask(
     private val javaResJars: List<Path> = emptyList(),
     /** The compiled Baseline Profile (`.prof`, `.profm`) from [CompileArtProfileTask], packaged when present. */
     private val artProfile: Pair<Path, Path>? = null,
+    /** The module's packaging options; only [AndroidPackaging.noCompress] matters here (which entries are STORED). */
+    private val packaging: AndroidPackaging = AndroidPackaging(),
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -2118,6 +2121,7 @@ internal class PackageApkTask(
             dirPaths("jni", jniLibDirs)
             filePaths("javaRes", javaResJars)
             artProfile?.let { (prof, profm) -> filePaths("artProfile", listOf(prof, profm).filter { Files.exists(it) }) }
+            property("noCompress", packaging.noCompressSuffixes.joinToString("\n"))
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", outApk) }
 
@@ -2125,7 +2129,9 @@ internal class PackageApkTask(
         ctx.checkCanceled()
         return runCatching {
             val names =
-                ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars, artProfile)
+                ApkPackaging.assembleApk(
+                    resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars, artProfile, packaging::isNoCompressed,
+                )
             ctx.debug("packageApk -> ${outApk.fileName} (${names.size} entries)")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("packageApk failed: ${it.message}", it) }

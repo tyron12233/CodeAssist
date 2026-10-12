@@ -157,6 +157,10 @@ import dev.ide.ui.generated.resources.modcfg_signing_intro
 import dev.ide.ui.generated.resources.modcfg_packaging_android_only
 import dev.ide.ui.generated.resources.modcfg_packaging_intro
 import dev.ide.ui.generated.resources.modcfg_packaging_glob_hint
+import dev.ide.ui.generated.resources.modcfg_packaging_compression
+import dev.ide.ui.generated.resources.modcfg_packaging_no_compress
+import dev.ide.ui.generated.resources.modcfg_packaging_no_compress_desc
+import dev.ide.ui.generated.resources.modcfg_packaging_default_no_compress
 import dev.ide.ui.generated.resources.modcfg_packaging_resources
 import dev.ide.ui.generated.resources.modcfg_packaging_jni
 import dev.ide.ui.generated.resources.modcfg_packaging_jni_note
@@ -499,6 +503,11 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
                     Text(stringResource(Res.string.modcfg_packaging_jni_note), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                     PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.jniExcludes, codeFont)
                     PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.jniPickFirsts, codeFont)
+                }
+
+                SectionCard(stringResource(Res.string.modcfg_packaging_compression)) {
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_no_compress), stringResource(Res.string.modcfg_packaging_no_compress_desc), state.noCompress, codeFont)
+                    DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_no_compress), o.defaultNoCompress, codeFont)
                 }
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {

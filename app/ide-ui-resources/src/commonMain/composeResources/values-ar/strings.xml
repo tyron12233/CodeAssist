@@ -1476,6 +1476,10 @@
     <string name="modcfg_packaging_merge_desc">ضم التكرارات بدلاً من إسقاطها.</string>
     <string name="modcfg_packaging_default_excludes">مستبعدة دائمًا افتراضيًا</string>
     <string name="modcfg_packaging_default_merges">مدموجة دائمًا افتراضيًا</string>
+    <string name="modcfg_packaging_compression">الضغط</string>
+    <string name="modcfg_packaging_no_compress">بدون ضغط</string>
+    <string name="modcfg_packaging_no_compress_desc">لواحق الملفات مثل tflite أو ‎.bin التي تُخزَّن دون ضغط في APK، ليعمل AssetManager.openFd()‎ والتعيين في الذاكرة. تُطابَق مع نهاية كل مسار دون تمييز حالة الأحرف.</string>
+    <string name="modcfg_packaging_default_no_compress">لا تُضغَط أبدًا افتراضيًا</string>
     <string name="modcfg_manage_keystores">إدارة مخازن المفاتيح</string>
     <string name="modcfg_keystores_empty">لا توجد مخازن مفاتيح بعد. أنشئ واحدًا في مدير مخازن المفاتيح لتوقيع إصدارات النشر.</string>
     <string name="modcfg_debug_default">debug (افتراضي)</string>

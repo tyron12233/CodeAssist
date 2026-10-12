@@ -584,9 +584,10 @@ interface ModuleService {
      *  it is not an Android module. */
     suspend fun getPackagingOptions(moduleName: String): UiPackagingOptions? = null
 
-    /** Persist the Android packaging merge rules for [moduleName] (empty lists clear the block). */
+    /** Persist the Android packaging merge rules and the [noCompress] suffixes for [moduleName] (empty lists
+     *  clear the block). */
     suspend fun updatePackagingOptions(
-        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules, noCompress: List<String>,
     ): UiConfigResult = UiConfigResult(false, "Packaging options not supported by this backend")
 
     /**
