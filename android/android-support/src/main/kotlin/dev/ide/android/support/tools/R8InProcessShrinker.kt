@@ -33,6 +33,7 @@ class R8InProcessShrinker : Shrinker {
         // problem structurally (origin + position, for a navigable Problems entry) as well as textually.
         val collected = DexDiagnosticsCollector()
         val handler: DiagnosticsHandler = collected
+        if (request.resources != null) pinStaxProviderOnArt()
         return try {
             val builder = R8Command.builder(handler)
                 .addProgramFiles(programs)
@@ -133,5 +134,20 @@ class R8InProcessShrinker : Shrinker {
                 collected.diagnostics + ToolDiagnostic(ToolSeverity.ERROR, "L8 (core-library desugaring) failed: ${t.message}"),
             )
         }
+    }
+}
+
+private const val XML_INPUT_FACTORY = "javax.xml.stream.XMLInputFactory"
+
+/**
+ * R8's resource shrinker parses the XML keep files in `res/raw` with `XMLInputFactory.newInstance()`. ART
+ * ships no StAX, so the app supplies the API (:art-compat) and aalto (via the Kotlin compiler's dependencies).
+ * That API finds its provider through `META-INF/services` on the thread's context class loader, which a build
+ * thread need not have, so name aalto outright. ART only: a JVM has its own provider, and this is process-wide.
+ */
+private fun pinStaxProviderOnArt() {
+    if (System.getProperty("java.vm.name")?.contains("Dalvik") != true) return
+    if (System.getProperty(XML_INPUT_FACTORY) == null) {
+        System.setProperty(XML_INPUT_FACTORY, "com.fasterxml.aalto.stax.InputFactoryImpl")
     }
 }

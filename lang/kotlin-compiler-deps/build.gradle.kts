@@ -253,8 +253,8 @@ dependencies {
     // a constructor that only exists from ASM 9.1 onward. 9.0 lacked it, so inlining any library inline fun on
     // device (e.g. OkHttp's addInterceptor) died with NoSuchMethodError. 9.6.1 is the platform 251 pin.
     api("org.jetbrains.intellij.deps:asm-all:9.6.1")
-    api("org.codehaus.woodstox:stax2-api:4.2.1") { isTransitive = false }
-    api("com.fasterxml:aalto-xml:1.3.0") { isTransitive = false }
+    api(libs.stax2.api) { isTransitive = false }
+    api(libs.aalto.xml) { isTransitive = false }
     api("com.github.ben-manes.caffeine:caffeine:2.9.3")
     api("org.jetbrains.intellij.deps.jna:jna:5.9.0.26") { isTransitive = false }
     api("org.jetbrains.intellij.deps.jna:jna-platform:5.9.0.26") { isTransitive = false }

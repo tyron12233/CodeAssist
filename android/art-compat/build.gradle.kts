@@ -86,39 +86,33 @@ val relocateEquinoxCommonForArt = tasks.register<RelocateTypesInJar>("relocateEq
     renames.put("java/lang/StackWalker", "dev/ide/lang/jdt/compat/StackWalker")
 }
 
-// --- javax.xml.stream (StAX API) for on-device K2 ------------------------------------------------
-// IntelliJ-core parses its plugin/extension descriptors with StAX. The implementation (aalto + stax2,
-// relocated) is bundled and dexed with the compiler, but the StAX *API* (javax.xml.stream) is a JDK
-// module Android omits entirely (Android ships SAX/DOM/XmlPullParser, not StAX) — so the dexed aalto
-// classes fail to resolve javax.xml.stream.XMLStreamReader at runtime. App classes may live in javax.*
-// (unlike java.*), so we extract javax/xml/stream/** from the build JBR's java.xml module and dex it,
-// exactly as libs/java-compiler.jar supplies the also-absent javax.lang.model. Version-matched to the
-// build JDK, so it agrees with what aalto expects. (javax.xml.namespace/.transform it references DO exist
-// on the device platform, so we ship only the missing stream subpackage.)
-val generateStaxApiJar = tasks.register("generateStaxApiJar") {
-    description = "Extract javax.xml.stream (StAX API) from the build JDK's java.xml module into a dexable jar."
-    val outJar = layout.buildDirectory.file("stax-api/stax-api.jar")
-    outputs.file(outJar)
-    doLast {
-        val out = outJar.get().asFile
-        out.parentFile.mkdirs()
-        // The running build JVM (JBR 17) exposes its modules through the built-in jrt filesystem.
-        val jrt = FileSystems.getFileSystem(URI.create("jrt:/"))
-        val streamRoot = jrt.getPath("/modules/java.xml/javax/xml/stream")
-        var count = 0
-        ZipOutputStream(out.outputStream().buffered()).use { zos ->
-            Files.walk(streamRoot).use { paths ->
-                paths.filter { it.toString().endsWith(".class") }.forEach { p ->
-                    val entryName = p.toString().removePrefix("/modules/java.xml/")
-                    zos.putNextEntry(ZipEntry(entryName).apply { time = 315532800000L })
-                    Files.copy(p, zos)
-                    zos.closeEntry()
-                    count++
-                }
-            }
-        }
-        logger.lifecycle("generateStaxApiJar: wrote $count javax.xml.stream class(es) → ${out.name}")
-    }
+// --- javax.xml.stream (StAX API) -----------------------------------------------------------------
+// IntelliJ-core parses its plugin/extension descriptors with StAX, and R8's resource shrinker parses `res/raw`
+// keep files with it. The implementation (aalto + stax2) reaches the app through :kotlin-compiler-deps, but the
+// StAX *API* (javax.xml.stream) is a JDK module Android omits entirely (Android ships SAX/DOM/XmlPullParser,
+// not StAX). App classes may live in javax.* (unlike java.*), so we dex the API ourselves, exactly as
+// libs/java-compiler.jar supplies the also-absent javax.lang.model.
+//
+// It is the standalone JSR-173 jar, NOT a copy of the build JDK's java.xml classes. The JDK's FactoryFinder
+// calls `jdk.xml.internal.SecuritySupport` and falls back to `com.sun.xml.internal.stream.*`, neither of which
+// exists on ART, so `XMLInputFactory.newInstance()` died with ClassNotFoundException (R8's resource shrinker on
+// a project with a `res/raw/*.xml`). The standalone FactoryFinder is self-contained and finds aalto through its
+// `META-INF/services` registration. The only API it lacks is the Java 9 `newFactory`/`newDefaultFactory`
+// statics, which could not run on ART through the JDK copy either. (javax.xml.namespace, which it references,
+// exists on the device platform, so only the stream packages are shipped.)
+val staxApi: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { staxApi(libs.stax.api) { isTransitive = false } }
+
+val generateStaxApiJar = tasks.register<Jar>("generateStaxApiJar") {
+    description = "Package the standalone javax.xml.stream (StAX) API as a dexable jar."
+    from(staxApi.elements.map { set -> set.map { zipTree(it.asFile) } }) { include("javax/xml/stream/**") }
+    archiveFileName.set("stax-api.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("stax-api"))
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }
 
 // --- javax.* JDK types (java.desktop, java.management) for on-device K2 --------------------------
@@ -130,7 +124,7 @@ val generateStaxApiJar = tasks.register("generateStaxApiJar") {
 // PsiPackageImpl, whose ElementBase/PsiPackageBase supertypes fail to verify ("can't resolve returned type
 // javax.swing.Icon"), which kills the Kotlin parse host AND the bundled K2 compiler.
 // App classes may live in javax.* (unlike java.*), so we dex the real javax.swing.Icon interface from the
-// build JBR's java.desktop module — exactly like generateStaxApiJar / libs/java-compiler.jar. It is a pure
+// build JBR's java.desktop module, as libs/java-compiler.jar supplies javax.lang.model. It is a pure
 // interface (3 abstract methods); the java.awt.Component/Graphics it names live only in those abstract
 // descriptors (never resolved at load, never invoked headless), so Icon alone suffices and pulls in no AWT.
 // With the type present, RowIcon stays a subtype of Icon and every icon method/ctor/<clinit> + the four
@@ -257,9 +251,9 @@ val mergeCompatJars = tasks.register<Jar>("mergeCompatJars") {
     from(relocateCoreRuntimeForArt.map { zipTree(it.outputJar) })
     from(relocateEquinoxCommonForArt.map { zipTree(it.outputJar) })
     from(artShimsJar.map { zipTree(it.archiveFile) })
-    // These two are plain `register` tasks (no typed output property), so reach the jar through the task's
-    // declared outputs, which carries the task dependency with it.
-    from(generateStaxApiJar.map { zipTree(it.outputs.files.singleFile) })
+    from(generateStaxApiJar.map { zipTree(it.archiveFile) })
+    // A plain `register` task (no typed output property), so reach the jar through the task's declared
+    // outputs, which carries the task dependency with it.
     from(generateSwingApiJar.map { zipTree(it.outputs.files.singleFile) })
     // javax.lang.model + the javac API surface, checked in rather than generated: the app's Java
     // annotation-processing path (:lang-ksp, the JDT/ecj processor host) links against types Android
