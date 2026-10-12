@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -54,6 +55,13 @@ import dev.ide.preview.LayoutPreviewResult
 import dev.ide.preview.PreviewEngine
 import dev.ide.preview.PreviewRequest
 import dev.ide.preview.PreviewViewNode
+import dev.ide.preview.ResourceError
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.layout_preview_resource_error_open
+import dev.ide.ui.generated.resources.layout_preview_resource_errors
+import dev.ide.ui.generated.resources.layout_preview_resource_errors_last_render
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import dev.ide.preview.RCanvas
 import dev.ide.preview.RImage
 import dev.ide.preview.RPaint
@@ -109,6 +117,7 @@ actual fun LayoutPreviewPane(
     session: EditorSession,
     modifier: Modifier,
     onStatus: ((PreviewPaneStatus) -> Unit)?,
+    onOpenFile: ((path: String, line: Int) -> Unit)?,
 ) {
     // A layout opened from a qualified folder previews THAT variant (the backend renders it under a matching
     // configuration), so the chrome starts on the matching orientation and day/night mode instead of showing
@@ -146,6 +155,9 @@ actual fun LayoutPreviewPane(
     var result by remember { mutableStateOf<LayoutPreviewResult?>(null) }
     // Whether the current request has come back, so "no result" can be told apart from "not fetched yet".
     var fetched by remember(path) { mutableStateOf(false) }
+    // Errors in the project's resources from the latest request. They don't replace [result]: the last render
+    // stays behind them, so a half-typed edit doesn't blank the preview.
+    var resourceErrors by remember(path) { mutableStateOf<List<ResourceError>>(emptyList()) }
     // Re-fetch when dependency resolution settles: a re-resolve changes the module classpath the real-view
     // render dexes against, so the preview must re-render rather than keep a stale (pre-resolve) result.
     val depsResolving = backend.deps.depsState.collectAsState().value.resolving
@@ -159,7 +171,10 @@ actual fun LayoutPreviewPane(
         // The effect re-launches (cancelling the prior) on every keystroke; this delay coalesces a typing
         // burst into a single render. The fetch runs on the backend's preview lane, off the UI thread.
         delay(PREVIEW_DEBOUNCE_MS)
-        result = lpBackend?.layoutPreview(path, text, request)
+        val next = lpBackend?.layoutPreview(path, text, request)
+        resourceErrors = next?.resourceErrors.orEmpty()
+        // With no render yet, the error result is the only thing to show.
+        if (resourceErrors.isEmpty() || result == null) result = next
         fetched = true
     }
 
@@ -173,6 +188,7 @@ actual fun LayoutPreviewPane(
             lpBackend == null -> PreviewPaneStatus(settled = true, failed = true, problems = listOf("Layout preview isn't available for this project."))
             !fetched || renderProgress != null -> PreviewPaneStatus(settled = false)
             r == null -> PreviewPaneStatus(settled = true, failed = true, problems = listOf("No layout preview for this file."))
+            resourceErrors.isNotEmpty() -> PreviewPaneStatus(settled = true, failed = true, problems = resourceErrors.map(::describe))
             r.buildRequired -> PreviewPaneStatus(
                 settled = true, failed = true,
                 problems = listOf(
@@ -194,6 +210,17 @@ actual fun LayoutPreviewPane(
                 modifier = Modifier.align(Alignment.Center),
             )
             // First render (no prior result yet): still show the pipeline status chip.
+            renderProgress?.let { PreviewStatusChip(it.stage, Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3)) }
+        }
+        return
+    }
+    // Resource errors and no render to keep behind them: list the errors on their own.
+    if (r.resourceErrors.isNotEmpty()) {
+        Box(modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+            ResourceErrorPanel(
+                resourceErrors, lastRender = false, onOpenFile,
+                Modifier.align(Alignment.Center).padding(Ca.spacing.s4),
+            )
             renderProgress?.let { PreviewStatusChip(it.stage, Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3)) }
         }
         return
@@ -352,6 +379,14 @@ actual fun LayoutPreviewPane(
             }
         }
     }
+
+        // Resource errors over the last render: the layout can't link until they're fixed.
+        if (resourceErrors.isNotEmpty()) {
+            ResourceErrorPanel(
+                resourceErrors, lastRender = true, onOpenFile,
+                Modifier.align(Alignment.Center).padding(Ca.spacing.s4),
+            )
+        }
 
         // Build-required prompt: the real-view preview no longer dexes libraries itself. When they aren't
         // prepared yet (fresh project, or a newly-added dependency), the backend returns `buildRequired` (with an
@@ -666,6 +701,81 @@ private fun findViewById(root: PreviewViewNode, id: String): PreviewViewNode? {
     if (root.id == id) return root
     for (c in root.children) findViewById(c, id)?.let { return it }
     return null
+}
+
+/** `values.xml:12: message` (or the bare message when aapt2 named no file), for the off-screen status. */
+private fun describe(e: ResourceError): String {
+    val where = e.file?.substringAfterLast('/')?.let { name -> name + (e.line?.let { ":$it" } ?: "") + ": " } ?: ""
+    return where + e.message
+}
+
+/**
+ * The errors in the project's resources that stop the layout from linking, each with the file and line it is
+ * in. A row opens its file at the error through [onOpenFile] (rows aren't clickable without one, or without a
+ * file). [lastRender] says the surface behind still shows the last render that succeeded.
+ */
+@Composable
+private fun ResourceErrorPanel(
+    errors: List<ResourceError>,
+    lastRender: Boolean,
+    onOpenFile: ((path: String, line: Int) -> Unit)?,
+    modifier: Modifier,
+) {
+    val openLabel = stringResource(Res.string.layout_preview_resource_error_open)
+    Column(
+        modifier.widthIn(max = 420.dp)
+            .shadow(16.dp, RoundedCornerShape(Ca.radius.lg))
+            .clip(RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
+            .padding(Ca.spacing.s4),
+        verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3)) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.error.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(CaIcons.error, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.error) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    pluralStringResource(Res.plurals.layout_preview_resource_errors, errors.size, errors.size),
+                    style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (lastRender) Text(
+                    stringResource(Res.string.layout_preview_resource_errors_last_render),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Column(
+            Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Ca.spacing.s1),
+        ) {
+            for (e in errors) {
+                val file = e.file
+                val open = if (file != null && onOpenFile != null) Modifier.clickable(onClickLabel = openLabel) { onOpenFile(file, e.line ?: 1) } else Modifier
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .then(open)
+                        .padding(horizontal = Ca.spacing.s3, vertical = Ca.spacing.s2),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    if (file != null) Text(
+                        file.substringAfterLast('/') + (e.line?.let { ":$it" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(e.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                    if (file != null) Text(
+                        file.substringBeforeLast('/', ""),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**

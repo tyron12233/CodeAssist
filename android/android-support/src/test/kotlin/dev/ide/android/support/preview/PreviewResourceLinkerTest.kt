@@ -40,7 +40,7 @@ import dev.ide.model.impl.open
 
 /**
  * Drives [PreviewResourceLinker] over a real built `android-app`: builds once with the native toolchain
- * (aapt2 + JDT + D8 + apksig) so the build's compiled resources + merged manifest exist, then relinks the
+ * (aapt2 + JDT + D8 + apksig) so the build's compiled resources exist, then relinks the
  * live editor buffer over them. Asserts (a) an EDITED layout's live text is linked, (b) a layout added since
  * the build (the "<name> not found in linked resources" case) lands in the linked output, and (c) re-linking
  * the same text is cached. Skipped (not failed) when no Android SDK is installed.
@@ -73,14 +73,13 @@ class PreviewResourceLinkerTest {
             )
             val layoutDir = dir.resolve("app/src/main/res/layout")
             val resDirs = AndroidResources.resourceDirs(module, store.workspace)
-            val manifest = AndroidBuildSystem.mergedManifestPath(module, "debug")
 
             // (a) An EDITED existing layout: the live buffer (a second TextView) links over the saved copy.
             // The buffer is real file content, so the XML declaration is at the start (trimIndent, as on disk).
             val baseLayout = LAYOUT.trimIndent()
             val editedText = baseLayout.replace("</LinearLayout>", "    <TextView android:id=\"@+id/edited\"\n" +
                 "        android:layout_width=\"wrap_content\" android:layout_height=\"wrap_content\"/>\n</LinearLayout>")
-            val edited = linker.link(module, "debug", resDirs, layoutDir.resolve("activity_main.xml"), editedText, manifest, "com.example.app", 24, 34)
+            val edited = linker.link(module, "debug", resDirs, layoutDir.resolve("activity_main.xml"), editedText, "com.example.app", 24, 34)
             assertNull(edited.error, "edited relink failed: ${edited.error}")
             val editedAp = assertNotNull(edited.resourcesAp, "edited relink produced no resources.ap_")
             assertTrue(Files.isRegularFile(editedAp), "preview resources.ap_ missing at $editedAp")
@@ -90,14 +89,14 @@ class PreviewResourceLinkerTest {
 
             // (b) A layout that does NOT exist on disk / in the build (the fragment_surahs case): adding it via
             // the live buffer lands it in the linked output, so getIdentifier would resolve it.
-            val newLayout = linker.link(module, "debug", resDirs, layoutDir.resolve("fragment_surahs.xml"), baseLayout, manifest, "com.example.app", 24, 34)
+            val newLayout = linker.link(module, "debug", resDirs, layoutDir.resolve("fragment_surahs.xml"), baseLayout, "com.example.app", 24, 34)
             assertNull(newLayout.error, "new-layout relink failed: ${newLayout.error}")
             val newAp = assertNotNull(newLayout.resourcesAp, "new-layout relink produced no resources.ap_")
             assertTrue(zipEntries(newAp).any { it.endsWith("fragment_surahs.xml") },
                 "the newly added layout is not in the relinked output")
 
             // (c) Re-linking the same text is cached (same output, no error).
-            val again = linker.link(module, "debug", resDirs, layoutDir.resolve("fragment_surahs.xml"), baseLayout, manifest, "com.example.app", 24, 34)
+            val again = linker.link(module, "debug", resDirs, layoutDir.resolve("fragment_surahs.xml"), baseLayout, "com.example.app", 24, 34)
             assertEquals(newAp, again.resourcesAp, "cached relink should return the same resources.ap_")
         }
     }
@@ -115,12 +114,14 @@ class PreviewResourceLinkerTest {
             val linker = PreviewResourceLinker(
                 Aapt2Subprocess(sdk.aapt2), sdk.androidJar, dir.resolve(".caches/preview-res"),
             )
-            // No build ran → the linker self-builds its base from the live res tree, using the module's own
-            // manifest (no merged manifest exists yet).
+            // No build ran → the linker self-builds its base from the live res tree. The source manifest is the
+            // shape a freshly imported project has before its first build: no `package` (the namespace lives in
+            // the build script), a placeholder and a resource the project lacks. aapt2 rejects all three, so the
+            // preview must not link against it.
+            dir.writeSource("app/src/main/AndroidManifest.xml", NAMESPACE_ONLY_MANIFEST)
             val resDirs = AndroidResources.resourceDirs(module, store.workspace)
-            val manifest = dir.resolve("app/src/main/AndroidManifest.xml")
             val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
-            val r = linker.link(module, "debug", resDirs, layout, LAYOUT.trimIndent(), manifest, "com.example.app", 24, 34)
+            val r = linker.link(module, "debug", resDirs, layout, LAYOUT.trimIndent(), "com.example.app", 24, 34)
 
             assertNull(r.error, "relink without a build failed: ${r.error}")
             val ap = assertNotNull(r.resourcesAp, "relink without a build produced no resources.ap_")
@@ -144,7 +145,6 @@ class PreviewResourceLinkerTest {
                 Aapt2Subprocess(sdk.aapt2), sdk.androidJar, dir.resolve(".caches/preview-res"),
             )
             val resDirs = AndroidResources.resourceDirs(module, store.workspace)
-            val manifest = dir.resolve("app/src/main/AndroidManifest.xml")
             val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
 
             // A library/framework view references its OWN `R` at inflate time (e.g. CoordinatorLayout →
@@ -152,7 +152,7 @@ class PreviewResourceLinkerTest {
             // package (as the build does via aapt2 --extra-packages) into the preview R.jar — else inflation
             // crashes with NoClassDefFoundError. Assert both the app's own R and the extra package's R are there.
             val r = linker.link(
-                module, "debug", resDirs, layout, LAYOUT.trimIndent(), manifest, "com.example.app", 24, 34,
+                module, "debug", resDirs, layout, LAYOUT.trimIndent(), "com.example.app", 24, 34,
                 extraPackages = listOf("com.example.lib"),
             )
             assertNull(r.error, "relink failed: ${r.error}")
@@ -164,10 +164,73 @@ class PreviewResourceLinkerTest {
 
             // Re-linking the same buffer + extra packages is cached, and still surfaces the R.jar.
             val again = linker.link(
-                module, "debug", resDirs, layout, LAYOUT.trimIndent(), manifest, "com.example.app", 24, 34,
+                module, "debug", resDirs, layout, LAYOUT.trimIndent(), "com.example.app", 24, 34,
                 extraPackages = listOf("com.example.lib"),
             )
             assertEquals(rJar, again.rJar, "cached relink should return the same preview R.jar")
+        }
+    }
+
+    @Test
+    fun reportsResourceErrorsInTheUsersOwnFiles() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("preview-relink-errors") { env ->
+            val dir = env.dir
+            val store = buildAppWorkspace(dir, env.platform)
+            val module: Module = store.workspace.projects.single().modules.single { it.name == "app" }
+            val linker = PreviewResourceLinker(
+                Aapt2Subprocess(sdk.aapt2), sdk.androidJar, dir.resolve(".caches/preview-res"),
+            )
+            val resDirs = AndroidResources.resourceDirs(module, store.workspace)
+            val strings = dir.resolve("app/src/main/res/values/strings.xml")
+            val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
+            fun link(text: String = LAYOUT.trimIndent()) =
+                linker.link(module, "debug", resDirs, layout, text, "com.example.app", 24, 34)
+
+            // A values entry referencing a missing resource fails the link inside the preview's merged
+            // values.xml; the error must name the user's strings.xml and the line declaring the entry.
+            dir.writeSource("app/src/main/res/values/strings.xml", """
+                <?xml version="1.0" encoding="utf-8"?>
+                <resources>
+                    <string name="app_name">CodeAssist Demo</string>
+                    <color name="accent">@color/missing</color>
+                </resources>
+            """.trimIndent())
+            val dangling = link()
+            assertNull(dangling.resourcesAp, "a broken resource set must not produce a render")
+            val missing = dangling.resourceErrors.single { "color/missing" in it.message }
+            assertEquals(strings, missing.file)
+            assertEquals(4, missing.line)
+
+            // A file that doesn't parse fails the base compile; the error names the user's file.
+            dir.writeSource("app/src/main/res/values/strings.xml", """
+                <?xml version="1.0" encoding="utf-8"?>
+                <resources>
+                    <string name="app_name">CodeAssist Demo</string
+                </resources>
+            """.trimIndent())
+            val malformed = link()
+            assertNull(malformed.resourcesAp)
+            assertTrue(malformed.resourceErrors.isNotEmpty(), "no resource errors for a malformed file: ${malformed.error}")
+            assertTrue(malformed.resourceErrors.all { it.file == strings }, "errors not mapped to strings.xml: ${malformed.resourceErrors}")
+
+            // Fixed on disk: the next link renders again (the remembered errors were keyed on the old tree).
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            val fixed = link()
+            assertNull(fixed.error, "relink after the fix failed: ${fixed.error}")
+            assertNotNull(fixed.resourcesAp)
+
+            // The live buffer referencing a missing string: the error names the edited layout, at the line its
+            // element starts (aapt2 reports the element, not the attribute).
+            val badRef = LAYOUT.trimIndent().replace("@string/app_name", "@string/nope")
+            val unresolved = link(badRef).resourceErrors.single { "string/nope" in it.message }
+            assertEquals(layout, unresolved.file)
+            assertEquals(badRef.lines().indexOfFirst { "<TextView" in it } + 1, unresolved.line)
+
+            // A half-typed buffer that isn't well-formed XML: the error names the edited layout.
+            val unclosed = link(LAYOUT.trimIndent().substringBefore("</LinearLayout>")).resourceErrors
+            assertTrue(unclosed.isNotEmpty() && unclosed.all { it.file == layout }, "unexpected errors: $unclosed")
         }
     }
 
@@ -199,6 +262,16 @@ class PreviewResourceLinkerTest {
             <?xml version="1.0" encoding="utf-8"?>
             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
                 <application android:label="@string/app_name">
+                    <activity android:name=".MainActivity" android:exported="true"/>
+                </application>
+            </manifest>
+        """
+
+        val NAMESPACE_ONLY_MANIFEST = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                <application android:label="@string/app_name" android:icon="${'$'}{appIcon}"
+                    android:roundIcon="@mipmap/ic_launcher_round">
                     <activity android:name=".MainActivity" android:exported="true"/>
                 </application>
             </manifest>

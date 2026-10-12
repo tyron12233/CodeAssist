@@ -1011,6 +1011,12 @@ We never collect your code, file or project names, which features you use, or an
         <item quantity="one">%1$d problem</item>
         <item quantity="other">%1$d problems</item>
     </plurals>
+    <plurals name="layout_preview_resource_errors">
+        <item quantity="one">A resource error stops this layout from rendering</item>
+        <item quantity="other">%1$d resource errors stop this layout from rendering</item>
+    </plurals>
+    <string name="layout_preview_resource_errors_last_render">Until then, the preview keeps its last successful render.</string>
+    <string name="layout_preview_resource_error_open">Open the file at this error</string>
     <string name="edoverlay_rename_kind">Rename %1$s</string>
     <string name="edoverlay_renaming">Renaming…</string>
     <string name="edoverlay_rename_hint">Enter to rename '%1$s', Esc to cancel</string>

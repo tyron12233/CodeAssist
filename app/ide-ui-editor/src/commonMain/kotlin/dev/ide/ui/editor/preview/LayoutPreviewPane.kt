@@ -32,4 +32,6 @@ expect fun LayoutPreviewPane(
     modifier: Modifier,
     /** Reports the pane's progress, for a caller rendering it off screen (see [PreviewPaneStatus]). */
     onStatus: ((PreviewPaneStatus) -> Unit)? = null,
+    /** Opens a file at a 1-based line, for the resource errors the pane lists; null leaves them unlinked. */
+    onOpenFile: ((path: String, line: Int) -> Unit)? = null,
 )

@@ -86,7 +86,17 @@ class LayoutPreviewResult(
      */
     var buildRequired: Boolean = false,
     var undexedCount: Int = 0,
+    /**
+     * Real-view only: errors in the project's resources that stop the layout from linking (a malformed file, a
+     * reference to a missing resource). When non-empty there is no render: the UI lists these instead, since
+     * a fallback render would show the layout wrong without saying why.
+     */
+    val resourceErrors: List<ResourceError> = emptyList(),
 )
+
+/** An error in a project resource file: the [file] path (null when the tool named none), its 1-based [line]
+ *  (null when unknown) and the tool's [message]. */
+data class ResourceError(val file: String?, val line: Int?, val message: String)
 
 /** A node the preview couldn't render as intended; [tag] is the widget/structural tag, [message] the reason. */
 data class PreviewProblem(val tag: String, val message: String)

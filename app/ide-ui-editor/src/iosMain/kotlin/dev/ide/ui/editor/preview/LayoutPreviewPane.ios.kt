@@ -25,6 +25,7 @@ actual fun LayoutPreviewPane(
     session: EditorSession,
     modifier: Modifier,
     onStatus: ((PreviewPaneStatus) -> Unit)?,
+    onOpenFile: ((path: String, line: Int) -> Unit)?,
 ) {
     LaunchedEffect(onStatus) {
         onStatus?.invoke(PreviewPaneStatus(settled = true, failed = true, problems = listOf("Layout preview isn't available on this platform.")))

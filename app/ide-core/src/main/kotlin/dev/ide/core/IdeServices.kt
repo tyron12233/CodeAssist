@@ -3613,18 +3613,11 @@ class IdeServices private constructor(
             ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
 
         // Resolve against the user's ACTIVE variant (the persisted per-module choice the editor and build
-        // target), not the default — the merged manifest, exploded AARs, resource link caches and dex caches
+        // target), not the default — the exploded AARs, resource link caches and dex caches
         // are all variant-scoped, so the default here made a variant switch invisible to the preview.
         val selectedVariant = AndroidVariants.select(module, activeVariant(module))
             ?: AndroidVariants.defaultVariant(module)
         val variant = selectedVariant?.name ?: "debug"
-        // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
-        // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
-        // is NOT required and edits to other resources show; it falls back internally to the build's flats.
-        val moduleDir = Paths.get(module.dir.path)
-        val manifestPath =
-            AndroidBuildSystem.mergedManifestPath(module, variant)
-                .takeIf { Files.exists(it) } ?: moduleDir.resolve(facet.manifest)
         val resDirs = AndroidResources.resourceDirs(module, store.workspace)
 
         // The runtime library set + the AAR package names, resolved once. Must be the RUNTIME set (what the APK
@@ -3654,8 +3647,7 @@ class IdeServices private constructor(
 
         // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
         // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
-        // is NOT required and edits to other resources show; it falls back internally to the build's flats. It
-        // also generates a preview `R.jar` (app + [extraPackages]) with ids matching the relinked arsc, so the
+        // is NOT required and edits to other resources show. It also generates a preview `R.jar` (app + [extraPackages]) with ids matching the relinked arsc, so the
         // preview no longer depends on a prior build's (id-mismatched, possibly absent) R.jar.
         val linked = previewResourceLinker?.link(
             module,
@@ -3663,13 +3655,25 @@ class IdeServices private constructor(
             resDirs,
             file,
             text,
-            manifestPath,
             facet.namespace,
             facet.minSdk,
             facet.targetSdk,
             extraPackages = extraPackages,
             progress = { _realViewProgress.value = PreviewProgress(it) },
         )
+        // Broken project resources: report them. Rendering the build's last resources.ap_ (or owned rendering)
+        // here would show the layout wrong with no hint why.
+        if (linked != null && linked.resourceErrors.isNotEmpty()) {
+            return LayoutPreviewResult(
+                RenderNode().apply { renderer = PlaceholderRenderer; tag = "real-view" },
+                ProjectPreviewResources(repo, request.density, request.density, night = request.night, themeName = themeName),
+                request.density,
+                request.density,
+                resourceErrors = linked.resourceErrors.map {
+                    dev.ide.preview.ResourceError(it.file?.toString(), it.line, it.message)
+                },
+            )
+        }
         // The resources.ap_ to render against: the live relink, else the build's own, else owned rendering.
         val resourcesAp = linked?.resourcesAp
             ?: AndroidBuildSystem.resourcesApPath(module, variant)

@@ -423,6 +423,7 @@ internal fun EditorCenter(
                                     backend = state.backend,
                                     session = active.session,
                                     modifier = mod,
+                                    onOpenFile = { file, line -> state.openAtLine(file, line, 1) },
                                 )
 
                                 isPreviewable(active.path) -> ResourcePreviewPane(

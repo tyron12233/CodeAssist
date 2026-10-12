@@ -106,9 +106,10 @@ internal class MergeResourcesTask(
  * files overlay by RESOURCE IDENTITY (higher priority wins, extension-independent); `values*` files merge by
  * entry (last wins), deduplicating a resource that arrives from more than one source so it reaches `aapt2 link`
  * once. A values file that fails to parse is copied verbatim under a unique name (so a single broken file
- * doesn't drop the rest of the merge).
+ * doesn't drop the rest of the merge). Returns where each merged output came from ([ResourceMergeMap]), so an
+ * aapt2 error naming a merged file can point at the user's own.
  */
-internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
+internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path): ResourceMergeMap {
     if (Files.exists(outDir)) Files.walk(outDir).use { s ->
         s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } }
     }
@@ -118,6 +119,7 @@ internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
         Files.copy(from, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
     val values = ValuesMerger()
+    val copies = HashMap<Path, Path>()   // merged verbatim copy -> its source file
     // File resources overlay by RESOURCE IDENTITY (qualifier dir + name, extension-INDEPENDENT), not by file
     // name — so a higher-priority source's `ic_launcher.png` overrides a lower one's `ic_launcher.xml` instead
     // of BOTH landing in merged-res and failing aapt2 link with "resource 'drawable/ic_launcher' has a
@@ -131,18 +133,53 @@ internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
                 val qualifier = rel.getName(0).toString()
                 if (qualifier.startsWith("values")) {
                     // Accumulate entries; ascending priority means a later source's entry wins.
-                    if (!values.add(qualifier, f)) copyRaw(f, outDir.resolve(qualifier).resolve("unparsed_${values.bump()}_${f.fileName}"))
+                    if (!values.add(qualifier, f)) {
+                        val dest = outDir.resolve(qualifier).resolve("unparsed_${values.bump()}_${f.fileName}")
+                        copyRaw(f, dest)
+                        copies[dest] = f
+                    }
                 } else {
                     val dest = outDir.resolve(rel)
                     val id = "$qualifier/${fileResourceName(rel.fileName.toString())}"
                     // A prior same-identity file under a DIFFERENT name (extension) must go, or aapt2 sees two.
-                    fileResOutput.put(id, dest)?.let { prior -> if (prior != dest) runCatching { Files.deleteIfExists(prior) } }
+                    fileResOutput.put(id, dest)?.let { prior ->
+                        if (prior != dest) { runCatching { Files.deleteIfExists(prior) }; copies.remove(prior) }
+                    }
                     copyRaw(f, dest) // overlay: a higher-priority source overrides the same resource
+                    copies[dest] = f
                 }
             }
         }
     }
-    values.writeTo(outDir)
+    return ResourceMergeMap(copies, values.writeTo(outDir))
+}
+
+/** One `<resources>` entry of a merged `values.xml`: the lines it spans there, and the file it came from. */
+internal class MergedValuesEntry(val startLine: Int, val endLine: Int, val tag: String, val name: String, val source: Path)
+
+/**
+ * Where [mergeResourceDirs] took each merged output from: a file resource (or an unparseable values file) is a
+ * verbatim copy, so its lines carry over; a merged `values.xml` entry is found in its source by tag and name.
+ */
+internal class ResourceMergeMap(copies: Map<Path, Path>, values: Map<Path, List<MergedValuesEntry>>) {
+    private val copies = copies.mapKeys { norm(it.key) }
+    private val values = values.mapKeys { norm(it.key) }
+
+    private fun norm(p: Path): Path = p.toAbsolutePath().normalize()
+
+    /** The user's file and 1-based line behind [line] of the merged file [merged], or null when [merged] is
+     *  not a merge output. The line is null when it can't be placed. */
+    fun sourceOf(merged: Path, line: Int?): Pair<Path, Int?>? {
+        copies[norm(merged)]?.let { return it to line }
+        val entries = values[norm(merged)] ?: return null
+        val entry = line?.let { l -> entries.firstOrNull { l in it.startLine..it.endLine } } ?: return null
+        val text = runCatching { String(Files.readAllBytes(entry.source), Charsets.UTF_8) }.getOrNull()
+            ?: return entry.source to null
+        val decl = Regex("<${Regex.escape(entry.tag)}\\b[^>]*\\bname\\s*=\\s*\"${Regex.escape(entry.name)}\"").find(text)
+            ?: return entry.source to null
+        val declLine = 1 + text.substring(0, decl.range.first).count { it == '\n' }
+        return entry.source to declLine + (line - entry.startLine)
+    }
 }
 
 /** The aapt2 resource name of a res FILE, i.e. its name without the type extension (`ic_launcher.png` ->
@@ -163,6 +200,8 @@ private fun fileResourceName(fileName: String): String {
 private class ValuesMerger {
     // qualifier -> (entry key -> imported element); LinkedHashMap keeps a stable, insertion-ordered output.
     private val byQualifier = LinkedHashMap<String, LinkedHashMap<String, org.w3c.dom.Element>>()
+    // qualifier -> (entry key -> the file the kept entry came from), for [ResourceMergeMap].
+    private val sources = HashMap<String, HashMap<String, Path>>()
     private val rootAttrs =
         LinkedHashMap<String, String>()   // xmlns:* (and other root attrs) seen on any <resources>
     private val doc =
@@ -187,6 +226,7 @@ private class ValuesMerger {
             if (a.nodeName.startsWith("xmlns")) rootAttrs.putIfAbsent(a.nodeName, a.nodeValue)
         }
         val bucket = byQualifier.getOrPut(qualifier) { LinkedHashMap() }
+        val origin = sources.getOrPut(qualifier) { HashMap() }
         val children = root.childNodes
         for (i in 0 until children.length) {
             val n = children.item(i)
@@ -208,6 +248,7 @@ private class ValuesMerger {
                 unionStyleable(prior, imported)
             } else {
                 bucket[key] = imported   // last source wins
+                origin[key] = file
             }
         }
         return true
@@ -260,22 +301,38 @@ private class ValuesMerger {
         return s
     }
 
-    /** Emit `<qualifier>/values.xml` for every accumulated qualifier. */
-    fun writeTo(outDir: Path) {
-        if (byQualifier.isEmpty()) return
+    /**
+     * Emit `<qualifier>/values.xml` for every accumulated qualifier, one entry per line start, and return each
+     * file's entries with the lines they span (what [ResourceMergeMap] maps an aapt2 error line back through).
+     */
+    fun writeTo(outDir: Path): Map<Path, List<MergedValuesEntry>> {
+        val out = HashMap<Path, List<MergedValuesEntry>>()
         for ((qualifier, entries) in byQualifier) {
-            val out = doc.createElement("resources")
-            rootAttrs.forEach { (k, v) -> out.setAttribute(k, v) }
-            entries.values.forEach { out.appendChild(it) }
+            val root = doc.createElement("resources")
+            rootAttrs.forEach { (k, v) -> root.setAttribute(k, v) }
             val dir = outDir.resolve(qualifier)
             Files.createDirectories(dir)
             val target = dir.resolve("values.xml")
             // Serialize by hand (NOT javax.xml.transform): the identity Transformer is an ART hazard — on
             // device it reaches for a SAX driver that isn't on the platform. XmlDomWriter preserves each
-            // entry's text / CDATA / nested markup faithfully, which is all aapt2 needs.
-            Files.write(target, XmlDomWriter.toXml(out).toByteArray(Charsets.UTF_8))
-            // appendChild moves nodes out of `out`; rebuild not needed since each entry is written once.
+            // entry's text / CDATA / nested markup faithfully, which is all aapt2 needs. The childless root
+            // serializes as `<resources …/>`; reopen it so the entries can follow.
+            val sb = StringBuilder(XmlDomWriter.toXml(root).removeSuffix("/>")).append('>')
+            var line = 2   // the XML declaration, then the opening <resources>
+            val spans = ArrayList<MergedValuesEntry>(entries.size)
+            val origin = sources[qualifier].orEmpty()
+            for ((key, el) in entries) {
+                val xml = XmlDomWriter.toXml(el, xmlDeclaration = false)
+                sb.append('\n').append(xml)
+                val start = ++line
+                line += xml.count { it == '\n' }
+                origin[key]?.let { spans.add(MergedValuesEntry(start, line, el.tagName, el.getAttribute("name"), it)) }
+            }
+            sb.append("\n</resources>\n")
+            Files.write(target, sb.toString().toByteArray(Charsets.UTF_8))
+            out[target] = spans
         }
+        return out
     }
 }
 
