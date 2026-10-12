@@ -42,13 +42,55 @@ dependencies {
     implementation(libs.bouncycastle.pkix)
 }
 
+// The installer carries the IDE's release version. The Android app's versionName is the one version file, so
+// read it from there; a release build can still pass `-PdesktopVersion=X.Y.Z`.
+val desktopVersion: String = providers.gradleProperty("desktopVersion").orNull
+    ?: Regex("""versionName\s*=\s*"([^"]+)"""")
+        .find(rootProject.file("app/ide-android/build.gradle.kts").readText())
+        ?.groupValues?.get(1)
+    ?: error("no versionName in app/ide-android/build.gradle.kts; pass -PdesktopVersion")
+
 compose.desktop {
     application {
         mainClass = "dev.ide.desktop.MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Deb)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "CodeAssist"
-            packageVersion = "1.0.0"
+            packageVersion = desktopVersion
+            description = "Android and Kotlin IDE"
+            vendor = "CodeAssist"
+            // The bundled runtime is also the JDK user projects compile and complete against, and kotlinc needs
+            // java.management: a runtime trimmed to the modules the IDE itself links fails every Kotlin build.
+            includeAllModules = true
+            macOS {
+                bundleID = "com.tyron.code.desktop"
+                iconFile.set(project.file("icons/CodeAssist.icns"))
+            }
+            windows {
+                iconFile.set(project.file("icons/CodeAssist.ico"))
+                menuGroup = "CodeAssist"
+                shortcut = true
+                // Installs into the user's AppData: no administrator prompt, and nothing in the install dir is
+                // written to at runtime anyway.
+                perUserInstall = true
+                dirChooser = true
+                // Keeps upgrades replacing the installed version instead of installing beside it. Never change it.
+                upgradeUuid = "6f0d3c1e-8a4b-4e2f-9c7d-2b5a1e8f4c90"
+            }
+            linux {
+                iconFile.set(project.file("icons/CodeAssist.png"))
+                packageName = "codeassist"
+                shortcut = true
+            }
         }
     }
+}
+
+// jlink strips the runtime's bin/ by default, but a desktop Android build over an installed SDK forks `java` (d8,
+// apksigner) and every desktop build creates its debug keystore with `keytool`, both from java.home/bin: without
+// them the SDK reads as incomplete and assemble fails "Android SDK not found". The plugin keeps this switch
+// internal, hence the reflection.
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().configureEach {
+    @Suppress("UNCHECKED_CAST")
+    (javaClass.getMethod("getStripNativeCommands\$compose").invoke(this) as Property<Boolean>).set(false)
 }
