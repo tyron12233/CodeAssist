@@ -1,0 +1,120 @@
+name: Desktop
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Build the standalone desktop IDE (:ide-desktop) for Windows: an .msi installer and a portable .zip of the same
+# app image. jpackage cannot cross-build, so this runs on a Windows runner. The app bundles its own Java runtime
+# and an Android toolchain (android.jar, aapt2; D8 and apksigner in-process), so it needs nothing installed.
+#
+# The smoke test proves that claim on the packaged bits: it builds an APK with the app's own runtime and toolchain
+# while every Android SDK location is hidden. On a published release both files are attached to it.
+env:
+  # Starts Gradle; the daemon itself runs on the JBR 21 SDK from gradle-daemon-jvm.properties (it has jpackage).
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    permissions:
+      contents: write # only used by the release-upload step
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Only for configuring the build: the Compose/AGP shells :ide-core pulls in need an SDK at configure time.
+      # The packaged app does not use it (the smoke test hides it).
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            v="${{ github.event.release.tag_name }}"
+            echo "flag=-PdesktopVersion=${v#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the installer and app image
+        run: >
+          ./gradlew :ide-desktop:packageMsi :ide-desktop:createDistributable :build-cli:jar
+          ${{ steps.version.outputs.flag }} --console=plain --stacktrace
+
+      # The packaged runtime and toolchain, with no Android SDK reachable: ANDROID_HOME/ANDROID_SDK_ROOT unset and
+      # user.home pointed at an empty dir (the per-user default location lives under it). Runs the build CLI's
+      # main on the app's own java.exe and classpath, which is what the IDE's Build action runs in-process.
+      - name: Smoke test, an APK with no Android SDK
+        run: |
+          set -euo pipefail
+          image=app/ide-desktop/build/compose/binaries/main/app/CodeAssist
+          ls "$image"
+          java="$image/runtime/bin/java.exe"
+          toolchain="$image/app/resources/android-toolchain"
+          ls -l "$toolchain"
+          cli=$(ls app/build-cli/build/libs/build-cli-*.jar | head -1)
+          cp=$(cygpath -w "$image/app")'\*;'$(cygpath -w "$cli")
+          home="$RUNNER_TEMP/empty-home"; mkdir -p "$home"
+          run() {
+            env -u ANDROID_HOME -u ANDROID_SDK_ROOT "$java" -cp "$cp" \
+              "-Duser.home=$(cygpath -w "$home")" \
+              "-Dcodeassist.android.toolchain=$(cygpath -w "$toolchain")" \
+              dev.ide.buildcli.MainKt "$@"
+          }
+          smoke=$(cygpath -w "$RUNNER_TEMP/smoke")
+          run create --project "$smoke" --template android-app --name SmokeApp --package dev.ide.smoke
+          run assemble --project "$smoke"
+          apk="$RUNNER_TEMP/smoke/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$apk" || { echo "::error::the smoke build reported success but produced no APK"; exit 1; }
+          echo "APK: $(du -h "$apk" | cut -f1)"
+
+      - name: Collect the files
+        id: files
+        run: |
+          set -euo pipefail
+          out=app/ide-desktop/build/compose/binaries/main
+          msi=$(ls "$out"/msi/*.msi | head -1)
+          name=$(basename "$msi" .msi)
+          mkdir -p dist
+          cp "$msi" "dist/$name-windows-x64.msi"
+          (cd "$out/app" && 7z a -tzip -bd "$GITHUB_WORKSPACE/dist/$name-windows-x64-portable.zip" CodeAssist > /dev/null)
+          ls -lh dist
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeassist-desktop-windows
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
