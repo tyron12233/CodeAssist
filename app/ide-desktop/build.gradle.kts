@@ -40,6 +40,42 @@ dependencies {
     // Bouncy Castle: in-process keystore creation (android-support keeps it compileOnly) — same code path on
     // desktop and device, so the desktop launcher bundles it too.
     implementation(libs.bouncycastle.pkix)
+    // D8 and apksigner, run in-process when the machine has no Android SDK (android-support keeps them
+    // compileOnly; the device app bundles them the same way). See BundledAndroidToolchain.
+    implementation(libs.android.r8)
+    implementation(libs.android.apksig)
+}
+
+// --- The bundled Android toolchain ----------------------------------------------------------------------------
+// So an Android project builds on a machine with no Android SDK, the app ships what the build would otherwise take
+// from one: the platform android.jar and the desugar stubs (the same files :ide-android bundles) and a host aapt2,
+// which Google publishes per OS on Maven (the one AGP itself runs). It lands in the app resources, which the
+// launcher hands to BundledAndroidToolchain. jpackage cannot cross-build, so the aapt2 is the build host's.
+val hostAapt2Classifier: String = System.getProperty("os.name").lowercase().let {
+    when {
+        "mac" in it -> "osx"
+        "win" in it -> "windows"
+        else -> "linux"
+    }
+}
+val aapt2Tool: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies {
+    aapt2Tool(variantOf(libs.android.aapt2) { classifier(hostAapt2Classifier) }) { isTransitive = false }
+}
+
+val appResourcesRoot = layout.buildDirectory.dir("app-resources")
+val stageAndroidToolchain = tasks.register<Sync>("stageAndroidToolchain") {
+    description = "Stage android.jar, the desugar stubs and the host aapt2 into the desktop app resources."
+    into(appResourcesRoot.map { it.dir("common/android-toolchain") })
+    from(rootProject.file("app/ide-android/src/main/sdk/android.jar"))
+    from(rootProject.file("app/ide-android/src/main/assets/core-lambda-stubs.jar"))
+    from(aapt2Tool.elements.map { files -> files.map { zipTree(it.asFile) } }) {
+        include("aapt2", "aapt2.exe", "*.dll")
+        filePermissions { unix("rwxr-xr-x") }
+    }
 }
 
 // The installer carries the IDE's release version. The Android app's versionName is the one version file, so
@@ -62,6 +98,7 @@ compose.desktop {
             // The bundled runtime is also the JDK user projects compile and complete against, and kotlinc needs
             // java.management: a runtime trimmed to the modules the IDE itself links fails every Kotlin build.
             includeAllModules = true
+            appResourcesRootDir.set(appResourcesRoot)
             macOS {
                 bundleID = "com.tyron.code.desktop"
                 iconFile.set(project.file("icons/CodeAssist.icns"))
@@ -94,3 +131,6 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
     @Suppress("UNCHECKED_CAST")
     (javaClass.getMethod("getStripNativeCommands\$compose").invoke(this) as Property<Boolean>).set(false)
 }
+
+// Every task that reads the app resources (the packagers' prepareAppResources, and `run`) needs the toolchain staged.
+tasks.matching { it.name == "prepareAppResources" || it.name == "run" }.configureEach { dependsOn(stageAndroidToolchain) }

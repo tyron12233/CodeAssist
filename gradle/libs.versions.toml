@@ -22,9 +22,11 @@ androidxProfileInstaller = "1.4.1"  # androidx.profileinstaller — applies the 
 androidxTestRunner = "1.6.2"      # androidx.test:runner — AndroidJUnitRunner for connectedAndroidTest
 androidxTestExtJunit = "1.2.1"    # androidx.test.ext:junit — JUnit4 + AndroidJUnit4 on device
 # Pure-Java Android build tools, invoked IN-PROCESS (no `java -jar`) so they run on ART when statically
-# linked into the app. On desktop they're test-only; :ide-android bundles them (see android-support).
+# linked into the app. :ide-android bundles them (see android-support), and so does :ide-desktop, which runs
+# them in-process when the machine has no Android SDK.
 r8 = "8.13.19"        # com.android.tools.r8.D8 — the dexer
 apksig = "8.7.3"      # com.android.apksig.ApkSigner — APK v1/v2/v3 signing
+aapt2 = "9.2.1-15009934" # com.android.tools.build:aapt2 — the host aapt2 binary (classifier osx/linux/windows) :ide-desktop ships
 bundletool = "1.18.3" # com.android.tools.build.bundletool — builds the .aab (aligns with AGP 9.x's bundletool)
 guava = "32.0.1-jre"  # com.google.common.* — bundletool's collections (ImmutableList) at compile time
 asm = "9.7"           # org.ow2.asm — bytecode rewrite of System.exit for the in-process Java dex-run
@@ -167,6 +169,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 android-r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 android-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
+android-aapt2 = { module = "com.android.tools.build:aapt2", version.ref = "aapt2" }
 android-bundletool = { module = "com.android.tools.build:bundletool", version.ref = "bundletool" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }

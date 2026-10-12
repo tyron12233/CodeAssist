@@ -86,6 +86,7 @@ import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
 import dev.ide.core.perf.MemSample
 import dev.ide.core.perf.PeakHeap
 import dev.ide.core.project.SampleProject
+import dev.ide.core.sdk.BundledAndroidToolchain
 import dev.ide.core.sdk.SdkManagerService
 import dev.ide.core.sdk.SwingApiStubs
 import dev.ide.core.services.AndroidResourceService
@@ -4429,10 +4430,10 @@ class IdeServices private constructor(
         else -> dev.ide.preview.ValueFormat.ANY
     }
 
-    /** The `android.jar` for the preview compile — the device's bundled jar, else a detected desktop SDK's. */
+    /** The `android.jar` for the preview compile: the device's bundled jar, else a desktop SDK's or the desktop
+     *  app's own. */
     private fun previewAndroidJar(): Path? =
-        androidTools?.androidJar ?: (AndroidSdk.findSdkRoot()
-            ?.let { AndroidSdk.detect(it) }?.androidJar)
+        androidTools?.androidJar ?: BundledAndroidToolchain.androidJar()
 
     /** The activity/application theme name (raw dotted, sans `@style/`) and window title from the manifest. */
     private fun manifestThemeAndLabel(
@@ -4822,9 +4823,12 @@ class IdeServices private constructor(
             return IdeServices(platform, store, env = env)
         }
 
-        /** An installed Android SDK's `android.jar` as the workspace SDK, or null if none is found. */
+        /** An Android `android.jar` as the workspace SDK (installed or bundled), or null if there is none. */
         private fun detectAndroidSdk(): SdkData? {
-            val sdk = AndroidSdk.findSdkRoot()?.let(AndroidSdk::detect) ?: return null
+            // An installed SDK, else the toolchain the desktop app ships, so a machine with no SDK still opens
+            // Android projects against android.jar rather than the JDK.
+            val sdk = AndroidSdk.findSdkRoot()?.let(AndroidSdk::detect) ?: BundledAndroidToolchain.bundled()
+                ?: return null
             // android.jar omits java.lang.invoke.StringConcatFactory / LambdaMetafactory; ship the build-tools
             // desugar stubs alongside it on the boot classpath so Java ≥ 9 string-concat (`"a" + b`) and
             // lambdas resolve during analysis (and compilation). Compile-only — see AndroidSdk.coreLambdaStubs.

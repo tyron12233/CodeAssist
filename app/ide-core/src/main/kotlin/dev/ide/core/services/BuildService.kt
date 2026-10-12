@@ -53,6 +53,7 @@ import dev.ide.core.perf.MEM_HEARTBEAT_EVERY_SAMPLES
 import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
 import dev.ide.core.perf.MemSample
 import dev.ide.core.perf.PeakHeap
+import dev.ide.core.sdk.BundledAndroidToolchain
 import dev.ide.core.PermissionPolicy
 import dev.ide.core.plugins.PluginProject
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
@@ -189,8 +190,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     /**
      * The native Android build. On-device ([ctx.androidTools] non-null) it is the in-process wiring (D8/R8/
      * apksigner in-process, bundled native `aapt2`/`zipalign` from `nativeLibraryDir`, debug keystore from
-     * assets). On the desktop it is the subprocess wiring over a detected SDK, or null when none is
-     * installed (the UI then reports "install an SDK" for assemble tasks).
+     * assets). On the desktop it is the subprocess wiring over an installed SDK; without one, the in-process
+     * wiring over the toolchain the desktop app bundles ([BundledAndroidToolchain]). Null when neither exists
+     * (the UI then reports "install an SDK" for assemble tasks).
      */
 
 
@@ -264,13 +266,30 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 platformFor = platformJarFor,
             )
         }
-        val sdk =
-            AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }?.takeIf { it.isComplete() }
-                ?: return@lazy null
+        val installed = BundledAndroidToolchain.installed()
+        if (installed != null) {
+            val signing =
+                DebugKeystore.getOrCreate(ctx.store.rootPath.resolve(".platform/debug.ks"), installed.keytool)
+            return@lazy AndroidBuildSystem.subprocess(
+                installed,
+                signing,
+                bootClasspath = ctx.compileBootClasspath,
+                kotlin = incrementalKotlin,
+                plugins = kotlinCompilerPlugins,
+                generators = sourceGenerators,
+                classTransforms = classTransforms,
+                dexCacheRoot = dexCache,
+                signingResolver = signingResolver,
+                platformFor = platformJarFor,
+            )
+        }
+        // No SDK on this machine: the desktop app's own android.jar + aapt2, with D8 and apksigner in-process
+        // (the desktop launcher bundles both libraries), so a fresh install builds an APK with nothing to set up.
+        val bundled = BundledAndroidToolchain.bundled() ?: return@lazy null
         val signing =
-            DebugKeystore.getOrCreate(ctx.store.rootPath.resolve(".platform/debug.ks"), sdk.keytool)
-        AndroidBuildSystem.subprocess(
-            sdk,
+            DebugKeystore.getOrCreate(ctx.store.rootPath.resolve(".platform/debug.ks"), bundled.keytool)
+        AndroidBuildSystem.inProcess(
+            bundled,
             signing,
             bootClasspath = ctx.compileBootClasspath,
             kotlin = incrementalKotlin,

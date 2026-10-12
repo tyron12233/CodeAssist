@@ -11,11 +11,13 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.project.ProjectManager
+import dev.ide.core.sdk.BundledAndroidToolchain
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.editor.preview.ImageSceneComposer
 import dev.ide.ui.editor.preview.OffscreenPreviewRenderer
 import dev.ide.ui.ext.PreviewSnapshots
 import dev.ide.ui.platform.LocalWindowTitleBar
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -30,6 +32,12 @@ fun main(args: Array<String>) {
     // Survive an unexpected exception on the AWT event thread (e.g. the live-preview interpreter crashing deep
     // in Compose's measure/semantics pass on a half-typed buffer) instead of taking the whole IDE down.
     AwtThreadGuard.install()
+    // The Android toolchain the app ships (android.jar, the desugar stubs, aapt2), staged into the app resources by
+    // the build: Android projects build with no SDK installed. Absent when run from a classpath without them.
+    System.getProperty("compose.application.resources.dir")
+        ?.let { Path.of(it, "android-toolchain") }
+        ?.takeIf { Files.isDirectory(it) }
+        ?.let { System.setProperty(BundledAndroidToolchain.DIR_PROPERTY, it.toString()) }
 
     val projectsRoot = Path.of(
         System.getProperty("codeassist.projects.root")
