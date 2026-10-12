@@ -32,11 +32,19 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiChallengeBoard
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CircularProgressIndicator
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.challenge_board_empty_body
+import dev.ide.ui.generated.resources.challenge_board_empty_title
+import dev.ide.ui.generated.resources.challenge_everyone_else
+import dev.ide.ui.generated.resources.challenge_leaderboard
+import dev.ide.ui.generated.resources.challenge_today
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tonalPair
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The full leaderboard for one day.
@@ -65,17 +73,22 @@ fun ChallengeBoardScreen(
                 Modifier.size(40.dp).clip(RoundedCornerShape(Ca.radius.pill)).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Symbol(CaSymbols.arrowBack, contentDescription = "Back", size = 22.dp, tint = MaterialTheme.colorScheme.onSurface)
+                Symbol(
+                    CaSymbols.arrowBack,
+                    contentDescription = stringResource(Res.string.back),
+                    size = 22.dp,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
                 Text(
-                    "Leaderboard",
+                    stringResource(Res.string.challenge_leaderboard),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    if (date.isBlank()) "Today" else date,
+                    if (date.isBlank()) stringResource(Res.string.challenge_today) else date,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
@@ -98,7 +111,7 @@ fun ChallengeBoardScreen(
                     item { BoardRow(you) }
                     item {
                         Text(
-                            "Everyone else",
+                            stringResource(Res.string.challenge_everyone_else),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.padding(top = 8.dp),
@@ -132,14 +145,14 @@ private fun EmptyBoard() {
     ) {
         Symbol(CaSymbols.workspacePremium, contentDescription = null, size = 40.dp, tint = pair.container)
         Text(
-            "Nobody has solved it yet",
+            stringResource(Res.string.challenge_board_empty_title),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 12.dp),
         )
         Text(
-            "First one on the board sets the pace.",
+            stringResource(Res.string.challenge_board_empty_body),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
         )

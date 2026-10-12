@@ -144,6 +144,7 @@ import dev.ide.ui.generated.resources.share_type_android_app
 import dev.ide.ui.generated.resources.share_type_android_lib
 import dev.ide.ui.generated.resources.share_type_java_lib
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1047,7 +1048,7 @@ private fun ModuleLabel(
         )
         if (parts.isNotEmpty()) {
             Text(
-                parts.joinToString(" · "),
+                parts.joinMeta(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 maxLines = 1,

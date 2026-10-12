@@ -58,6 +58,30 @@ import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.folding.FoldRegion
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.challenge_constraints
+import dev.ide.ui.generated.resources.challenge_did_not_compile
+import dev.ide.ui.generated.resources.challenge_example_got
+import dev.ide.ui.generated.resources.challenge_example_nothing
+import dev.ide.ui.generated.resources.challenge_example_threw
+import dev.ide.ui.generated.resources.challenge_examples
+import dev.ide.ui.generated.resources.challenge_examples_all_pass
+import dev.ide.ui.generated.resources.challenge_examples_failed
+import dev.ide.ui.generated.resources.challenge_hidden_tests_decide
+import dev.ide.ui.generated.resources.challenge_indexing
+import dev.ide.ui.generated.resources.challenge_input
+import dev.ide.ui.generated.resources.challenge_judging
+import dev.ide.ui.generated.resources.challenge_output
+import dev.ide.ui.generated.resources.challenge_pane_code
+import dev.ide.ui.generated.resources.challenge_pane_problem
+import dev.ide.ui.generated.resources.challenge_preparing
+import dev.ide.ui.generated.resources.challenge_reset
+import dev.ide.ui.generated.resources.challenge_run_examples
+import dev.ide.ui.generated.resources.challenge_run_failed
+import dev.ide.ui.generated.resources.challenge_running
+import dev.ide.ui.generated.resources.challenge_show_hint
+import dev.ide.ui.generated.resources.challenge_submit
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.markdown.Markdown
 import dev.ide.ui.platform.nowMillis
@@ -69,6 +93,8 @@ import dev.ide.ui.theme.tonalPair
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The solve screen.
@@ -143,6 +169,8 @@ private fun Solver(
     var verdict by remember(problem.id) { mutableStateOf<UiChallengeVerdict?>(null) }
 
     val editorBackend = remember(backend, language) { ChallengeEditorBackend(backend, language) }
+    // Resolved here because the run itself happens in a coroutine, where a resource cannot be read.
+    val runFailed = stringResource(Res.string.challenge_run_failed)
 
     // The scratch project's index is built before the editor is usable, so completion works from the
     // first keystroke rather than after a pause nobody can explain.
@@ -207,7 +235,7 @@ private fun Solver(
                 scope.launch {
                     localRun = runCatching {
                         backend.challenges.run(language, session.doc.text, problem)
-                    }.getOrElse { UiLocalRun(diagnostics = listOf(it.message ?: "The run failed.")) }
+                    }.getOrElse { UiLocalRun(diagnostics = listOf(it.message ?: runFailed)) }
                     running = false
                     pane = SolverPane.Code
                 }
@@ -246,7 +274,12 @@ private fun SolverTopBar(problem: UiChallengeProblem, startedAtMs: Long, onExit:
             Modifier.size(40.dp).clip(RoundedCornerShape(Ca.radius.pill)).clickable(onClick = onExit),
             contentAlignment = Alignment.Center,
         ) {
-            Symbol(CaSymbols.arrowBack, contentDescription = "Back", size = 22.dp, tint = MaterialTheme.colorScheme.onSurface)
+            Symbol(
+                CaSymbols.arrowBack,
+                contentDescription = stringResource(Res.string.back),
+                size = 22.dp,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
         }
         Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
             Text(
@@ -257,7 +290,7 @@ private fun SolverTopBar(problem: UiChallengeProblem, startedAtMs: Long, onExit:
                 maxLines = 1,
             )
             Text(
-                problem.difficulty.replaceFirstChar { it.uppercase() },
+                difficultyLabel(problem.difficulty).replaceFirstChar { it.uppercase() },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -301,7 +334,7 @@ private fun PaneSwitch(selected: SolverPane, onSelect: (SolverPane) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    if (option == SolverPane.Problem) "Problem" else "Code",
+                    stringResource(if (option == SolverPane.Problem) Res.string.challenge_pane_problem else Res.string.challenge_pane_code),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                     color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
@@ -327,7 +360,7 @@ private fun ProblemPane(problem: UiChallengeProblem) {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Constraints",
+                    stringResource(Res.string.challenge_constraints),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -338,7 +371,7 @@ private fun ProblemPane(problem: UiChallengeProblem) {
 
         if (problem.samples.isNotEmpty()) {
             Text(
-                "Examples",
+                stringResource(Res.string.challenge_examples),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -358,7 +391,7 @@ private fun ProblemPane(problem: UiChallengeProblem) {
                 }
             } else {
                 OutlinedButton(onClick = { hintShown = true }, shape = RoundedCornerShape(Ca.radius.pill)) {
-                    Text("Show a hint")
+                    Text(stringResource(Res.string.challenge_show_hint))
                 }
             }
         }
@@ -373,8 +406,8 @@ private fun SampleCard(sample: UiChallengeSample) {
             .background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        MonoLine("Input", sample.inputJson)
-        MonoLine("Output", sample.expectedJson)
+        MonoLine(stringResource(Res.string.challenge_input), sample.inputJson)
+        MonoLine(stringResource(Res.string.challenge_output), sample.expectedJson)
         sample.explanation?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         }
@@ -430,7 +463,7 @@ private fun CodePane(
             }
             Spacer(Modifier.weight(1f))
             Text(
-                "Reset",
+                stringResource(Res.string.challenge_reset),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.clickable(onClick = onResetStub).padding(6.dp),
@@ -443,7 +476,7 @@ private fun CodePane(
             exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(tween(Motion.FAST)),
         ) {
             Text(
-                "Indexing, suggestions are still catching up",
+                stringResource(Res.string.challenge_indexing),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -459,7 +492,7 @@ private fun CodePane(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
                         Text(
-                            "Preparing your workspace",
+                            stringResource(Res.string.challenge_preparing),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -508,9 +541,13 @@ private fun LocalRunStrip(run: UiLocalRun) {
             )
             Text(
                 when {
-                    !run.compiled -> "Did not compile"
-                    run.passed -> "All " + run.outcomes.size + " examples pass"
-                    else -> failed.size.toString() + " of " + run.outcomes.size + " examples fail"
+                    !run.compiled -> stringResource(Res.string.challenge_did_not_compile)
+                    run.passed -> pluralStringResource(
+                        Res.plurals.challenge_examples_all_pass,
+                        run.outcomes.size,
+                        run.outcomes.size,
+                    )
+                    else -> stringResource(Res.string.challenge_examples_failed, failed.size, run.outcomes.size)
                 },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
@@ -534,9 +571,18 @@ private fun LocalRunStrip(run: UiLocalRun) {
             }
         } else {
             failed.take(2).forEach { outcome ->
+                val error = outcome.error
                 Text(
-                    "Example " + (outcome.idx + 1) + ": expected " + outcome.expectedJson +
-                        (outcome.error?.let { ", threw " + it } ?: (", got " + (outcome.actualJson ?: "nothing"))),
+                    if (error != null) {
+                        stringResource(Res.string.challenge_example_threw, outcome.idx + 1, outcome.expectedJson, error)
+                    } else {
+                        stringResource(
+                            Res.string.challenge_example_got,
+                            outcome.idx + 1,
+                            outcome.expectedJson,
+                            outcome.actualJson ?: stringResource(Res.string.challenge_example_nothing),
+                        )
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = pair.onContainer.copy(alpha = 0.85f),
@@ -544,7 +590,7 @@ private fun LocalRunStrip(run: UiLocalRun) {
             }
             if (run.passed) {
                 Text(
-                    "Hidden tests decide the verdict. Submit when you are ready.",
+                    stringResource(Res.string.challenge_hidden_tests_decide),
                     style = MaterialTheme.typography.bodySmall,
                     color = pair.onContainer.copy(alpha = 0.7f),
                 )
@@ -578,7 +624,7 @@ private fun ActionBar(
                 Symbol(CaSymbols.playArrow, contentDescription = null, size = 18.dp, filled = true)
             }
             Spacer(Modifier.width(8.dp))
-            Text(if (running) "Running" else "Run examples")
+            Text(stringResource(if (running) Res.string.challenge_running else Res.string.challenge_run_examples))
         }
         Button(
             onClick = onSubmit,
@@ -597,7 +643,10 @@ private fun ActionBar(
                 Symbol(CaSymbols.bolt, contentDescription = null, size = 18.dp, filled = true)
             }
             Spacer(Modifier.width(8.dp))
-            Text(if (submitting) "Judging" else "Submit", fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(if (submitting) Res.string.challenge_judging else Res.string.challenge_submit),
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

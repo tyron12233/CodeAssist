@@ -36,6 +36,37 @@ import dev.ide.ui.backend.UiChallengeProblem
 import dev.ide.ui.backend.UiChallengeVerdict
 import dev.ide.ui.backend.UiGrowthPoint
 import dev.ide.ui.components.BottomSheet
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.challenge_back_to_code
+import dev.ide.ui.generated.resources.challenge_complexity_note
+import dev.ide.ui.generated.resources.challenge_did_not_compile
+import dev.ide.ui.generated.resources.challenge_done
+import dev.ide.ui.generated.resources.challenge_exponent
+import dev.ide.ui.generated.resources.challenge_hidden_tests_note
+import dev.ide.ui.generated.resources.challenge_how_it_scaled
+import dev.ide.ui.generated.resources.challenge_judged_on_server
+import dev.ide.ui.generated.resources.challenge_keep_improving
+import dev.ide.ui.generated.resources.challenge_legend_reference
+import dev.ide.ui.generated.resources.challenge_legend_yours
+import dev.ide.ui.generated.resources.challenge_matched_reference
+import dev.ide.ui.generated.resources.challenge_metric_allocated
+import dev.ide.ui.generated.resources.challenge_metric_memory
+import dev.ide.ui.generated.resources.challenge_metric_runtime
+import dev.ide.ui.generated.resources.challenge_metric_time
+import dev.ide.ui.generated.resources.challenge_rank
+import dev.ide.ui.generated.resources.challenge_rank_of
+import dev.ide.ui.generated.resources.challenge_reference_faster
+import dev.ide.ui.generated.resources.challenge_reference_value
+import dev.ide.ui.generated.resources.challenge_score
+import dev.ide.ui.generated.resources.challenge_tests_passed
+import dev.ide.ui.generated.resources.challenge_verdict_accepted
+import dev.ide.ui.generated.resources.challenge_verdict_memory_limit
+import dev.ide.ui.generated.resources.challenge_verdict_not_judged
+import dev.ide.ui.generated.resources.challenge_verdict_rejected
+import dev.ide.ui.generated.resources.challenge_verdict_runtime_error
+import dev.ide.ui.generated.resources.challenge_verdict_timeout
+import dev.ide.ui.generated.resources.challenge_verdict_unknown
+import dev.ide.ui.generated.resources.challenge_verdict_wrong_answer
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Symbol
@@ -43,6 +74,7 @@ import dev.ide.ui.theme.tonalPair
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The verdict.
@@ -80,13 +112,19 @@ fun ChallengeResultSheet(
                     onClick = onDismiss,
                     shape = RoundedCornerShape(Ca.radius.pill),
                     modifier = Modifier.weight(1f).height(48.dp),
-                ) { Text(if (result.accepted) "Keep improving" else "Back to the code") }
+                ) {
+                    Text(
+                        stringResource(
+                            if (result.accepted) Res.string.challenge_keep_improving else Res.string.challenge_back_to_code,
+                        ),
+                    )
+                }
                 if (result.accepted) {
                     Button(
                         onClick = onBackToTab,
                         shape = RoundedCornerShape(Ca.radius.pill),
                         modifier = Modifier.weight(1f).height(48.dp),
-                    ) { Text("Done", fontWeight = FontWeight.Bold) }
+                    ) { Text(stringResource(Res.string.challenge_done), fontWeight = FontWeight.Bold) }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -118,8 +156,11 @@ private fun VerdictHeader(result: UiChallengeVerdict) {
                 color = pair.onContainer,
             )
             Text(
-                if (result.testsTotal > 0) result.testsPassed.toString() + " of " + result.testsTotal + " tests passed"
-                else "Judged on the server",
+                if (result.testsTotal > 0) {
+                    stringResource(Res.string.challenge_tests_passed, result.testsPassed, result.testsTotal)
+                } else {
+                    stringResource(Res.string.challenge_judged_on_server)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = pair.onContainer.copy(alpha = 0.75f),
             )
@@ -139,17 +180,20 @@ private fun VerdictHeader(result: UiChallengeVerdict) {
     }
 }
 
-private fun headline(result: UiChallengeVerdict): String = when {
-    result.error != null -> "Not judged"
-    result.verdict == "accepted" -> "Accepted"
-    result.verdict == "wrong_answer" -> "Wrong answer"
-    result.verdict == "compile_error" -> "Did not compile"
-    result.verdict == "runtime_error" -> "Crashed while running"
-    result.verdict == "timeout" -> "Too slow"
-    result.verdict == "memory_limit" -> "Used too much memory"
-    result.verdict == "rejected" -> "Could not be measured"
-    else -> "Something went wrong"
-}
+@Composable
+private fun headline(result: UiChallengeVerdict): String = stringResource(
+    when {
+        result.error != null -> Res.string.challenge_verdict_not_judged
+        result.verdict == "accepted" -> Res.string.challenge_verdict_accepted
+        result.verdict == "wrong_answer" -> Res.string.challenge_verdict_wrong_answer
+        result.verdict == "compile_error" -> Res.string.challenge_did_not_compile
+        result.verdict == "runtime_error" -> Res.string.challenge_verdict_runtime_error
+        result.verdict == "timeout" -> Res.string.challenge_verdict_timeout
+        result.verdict == "memory_limit" -> Res.string.challenge_verdict_memory_limit
+        result.verdict == "rejected" -> Res.string.challenge_verdict_rejected
+        else -> Res.string.challenge_verdict_unknown
+    },
+)
 
 /**
  * How the solution scaled against the reference.
@@ -168,24 +212,42 @@ private fun ComplexityPanel(result: UiChallengeVerdict) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Symbol(CaSymbols.functions, contentDescription = null, size = 18.dp, tint = MaterialTheme.colorScheme.primary)
             Text(
-                if (matched) "You matched the reference" else "The reference is faster",
+                stringResource(if (matched) Res.string.challenge_matched_reference else Res.string.challenge_reference_faster),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            MetricTile("Time", result.timeClass ?: "-", result.optimalTime, 0, Modifier.weight(1f))
-            MetricTile("Memory", result.spaceClass ?: "-", result.optimalSpace, 1, Modifier.weight(1f))
+            MetricTile(
+                stringResource(Res.string.challenge_metric_time),
+                result.timeClass ?: "-",
+                result.optimalTime,
+                0,
+                Modifier.weight(1f),
+            )
+            MetricTile(
+                stringResource(Res.string.challenge_metric_memory),
+                result.spaceClass ?: "-",
+                result.optimalSpace,
+                1,
+                Modifier.weight(1f),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            PlainTile("Runtime", formatRuntime(result.runtimeNs), Modifier.weight(1f))
-            PlainTile("Allocated", formatAllocated(result.allocBytes), Modifier.weight(1f))
+            PlainTile(
+                stringResource(Res.string.challenge_metric_runtime),
+                formatRuntime(result.runtimeNs),
+                Modifier.weight(1f),
+            )
+            PlainTile(
+                stringResource(Res.string.challenge_metric_allocated),
+                formatAllocated(result.allocBytes),
+                Modifier.weight(1f),
+            )
         }
         Text(
-            "Complexity is inferred from how the run scaled across six input sizes, compared against the " +
-                "reference solution measured the same way. Memory counts everything allocated, including the " +
-                "answer itself.",
+            stringResource(Res.string.challenge_complexity_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
         )
@@ -209,7 +271,7 @@ private fun MetricTile(label: String, value: String, reference: String?, index: 
         )
         if (reference != null && reference != value) {
             Text(
-                "reference " + reference,
+                stringResource(Res.string.challenge_reference_value, reference),
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
                 color = pair.onContainer.copy(alpha = 0.7f),
@@ -244,7 +306,11 @@ private fun ScorePanel(result: UiChallengeVerdict) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Score", style = MaterialTheme.typography.labelMedium, color = pair.onContainer.copy(alpha = 0.7f))
+            Text(
+                stringResource(Res.string.challenge_score),
+                style = MaterialTheme.typography.labelMedium,
+                color = pair.onContainer.copy(alpha = 0.7f),
+            )
             Text(
                 (result.score ?: 0).toString(),
                 style = MaterialTheme.typography.headlineMedium,
@@ -252,11 +318,16 @@ private fun ScorePanel(result: UiChallengeVerdict) {
                 color = pair.onContainer,
             )
         }
-        if (result.rank != null) {
+        val rank = result.rank
+        if (rank != null) {
             Column(horizontalAlignment = Alignment.End) {
-                Text("Rank", style = MaterialTheme.typography.labelMedium, color = pair.onContainer.copy(alpha = 0.7f))
                 Text(
-                    "#" + result.rank + (result.total?.let { " of " + it } ?: ""),
+                    stringResource(Res.string.challenge_rank),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = pair.onContainer.copy(alpha = 0.7f),
+                )
+                Text(
+                    result.total?.let { stringResource(Res.string.challenge_rank_of, rank, it) } ?: "#$rank",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = pair.onContainer,
@@ -281,8 +352,7 @@ private fun FailureDetail(message: String, result: UiChallengeVerdict) {
         )
         if (result.verdict == "wrong_answer" && result.testsPassed > 0) {
             Text(
-                "The hidden tests are not shown. Add the case you think is failing to your own reasoning, " +
-                    "not to the code.",
+                stringResource(Res.string.challenge_hidden_tests_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -300,7 +370,7 @@ private fun GrowthCard(result: UiChallengeVerdict) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Symbol(CaSymbols.trendingUp, contentDescription = null, size = 18.dp, tint = MaterialTheme.colorScheme.primary)
             Text(
-                "How it scaled",
+                stringResource(Res.string.challenge_how_it_scaled),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -308,7 +378,7 @@ private fun GrowthCard(result: UiChallengeVerdict) {
             Spacer(Modifier.weight(1f))
             result.growthExponent?.let {
                 Text(
-                    "exponent " + oneDecimalOf(it),
+                    stringResource(Res.string.challenge_exponent, oneDecimalOf(it)),
                     style = MaterialTheme.typography.labelMedium,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.outline,
@@ -325,8 +395,8 @@ private fun GrowthCard(result: UiChallengeVerdict) {
         )
         if (result.referenceGrowth.size >= 2) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Legend("yours", MaterialTheme.colorScheme.primary)
-                Legend("reference", MaterialTheme.colorScheme.outline)
+                Legend(stringResource(Res.string.challenge_legend_yours), MaterialTheme.colorScheme.primary)
+                Legend(stringResource(Res.string.challenge_legend_reference), MaterialTheme.colorScheme.outline)
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

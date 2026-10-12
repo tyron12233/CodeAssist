@@ -101,6 +101,7 @@
     <string name="no_project_yet">Проектов пока нет. Создайте один, чтобы начать.</string>
     <string name="your_projects">Ваши проекты</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_files">Файлы</string>
     <string name="project_opened_just_now">Открыто только что</string>
     <string name="beta_notice">Вы используете %1$s</string>
     <string name="beta_notice_content">Некоторые функции могут быть неполными или изменяться. Мы будем рады вашим отзывам — сообщите нам о недочетах.</string>

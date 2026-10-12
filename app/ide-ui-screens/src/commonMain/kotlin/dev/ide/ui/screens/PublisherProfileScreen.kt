@@ -48,6 +48,7 @@ import dev.ide.ui.generated.resources.profile_rating
 import dev.ide.ui.generated.resources.profile_unrated
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -215,7 +216,7 @@ private fun ProfileHeader(
         if (meta.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Text(
-                meta.joinToString(" · "),
+                meta.joinMeta(),
                 style = MaterialTheme.typography.bodySmall,
                 color = c.outline,
             )

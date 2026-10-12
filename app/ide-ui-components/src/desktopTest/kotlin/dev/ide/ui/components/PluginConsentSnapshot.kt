@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -17,6 +18,7 @@ import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -39,11 +41,11 @@ class PluginConsentSnapshot {
      */
     @Test
     fun everyKnownCapabilityIsWordedForTheUser() {
-        val raw = PluginCapabilities.KNOWN.filter { describeCapability(it) == it }
+        val raw = PluginCapabilities.KNOWN.filter { capabilityDescription(it) == null }
         assertTrue(
             raw.isEmpty(),
             "these capabilities would be shown to the user as their raw ids: $raw. " +
-                "Add a sentence for each to describeCapability.",
+                "Add a sentence for each to capabilityDescription.",
         )
     }
 
@@ -102,7 +104,7 @@ class PluginConsentSnapshot {
     /** An unreadable certificate is stated, not quietly left out. */
     @Test
     fun `an unreadable certificate is called out`() {
-        val line = publisherLine(plugin(signature = null))
+        val line = composed { publisherLine(plugin(signature = null)) }
         assertTrue("could not be identified" in line, line)
         assertTrue("Signed by" !in line, line)
     }
@@ -110,8 +112,22 @@ class PluginConsentSnapshot {
     /** A capability this build does not recognise reaches the screen verbatim. */
     @Test
     fun `an unrecognised capability is shown as written`() {
-        assertEquals("quantum.entangle", describeCapability("quantum.entangle"))
-        assertEquals("Add a page to Settings", describeCapability("ui.settingsPage"))
+        assertNull(capabilityDescription("quantum.entangle"))
+        assertEquals("quantum.entangle", composed { describeCapability("quantum.entangle") })
+        assertEquals("Add a page to Settings", composed { describeCapability("ui.settingsPage") })
+    }
+
+    /** Runs [content] in a composition and returns its result, for the helpers that read string resources. */
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun <T> composed(content: @Composable () -> T): T {
+        var result: Result<T>? = null
+        val scene = ImageComposeScene(width = 10, height = 10) { result = Result.success(content()) }
+        try {
+            scene.render()
+        } finally {
+            scene.close()
+        }
+        return result!!.getOrThrow()
     }
 
     @OptIn(ExperimentalComposeUiApi::class)

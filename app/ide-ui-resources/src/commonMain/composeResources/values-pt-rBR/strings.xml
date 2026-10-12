@@ -101,6 +101,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="no_project_yet">Nenhum projeto ainda. Crie um para começar.</string>
     <string name="your_projects">Seus projetos</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_files">Arquivos</string>
     <string name="project_opened_just_now">Aberto agora mesmo</string>
     <string name="beta_notice">Você está no %1$s</string>
     <string name="beta_notice_content">Alguns recursos podem estar incompletos ou mudar. Adoraríamos receber seu feedback, conte-nos o que está faltando ou quebrado.</string>

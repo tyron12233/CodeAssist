@@ -60,6 +60,7 @@ import dev.ide.ui.generated.resources.plugins_tab_builtin
 import dev.ide.ui.generated.resources.plugins_tab_installed
 import dev.ide.ui.generated.resources.settings_plugins
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -303,7 +304,7 @@ private fun PluginRow(
                 if (p.dependsOn.isNotEmpty()) add(stringResource(Res.string.plugins_requires, p.dependsOn.joinToString(", ")))
             }
             if (meta.isNotEmpty()) {
-                Text(meta.joinToString("  ·  "), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+                Text(meta.joinMeta("  ·  "), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
             }
             if (p.needsConsent) {
                 Text(

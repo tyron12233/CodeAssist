@@ -20,8 +20,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiPluginInfo
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.allow
+import dev.ide.ui.generated.resources.plugin_consent_cap_build_run_task
+import dev.ide.ui.generated.resources.plugin_consent_cap_build_source_generator
+import dev.ide.ui.generated.resources.plugin_consent_cap_build_task
+import dev.ide.ui.generated.resources.plugin_consent_cap_fs_read
+import dev.ide.ui.generated.resources.plugin_consent_cap_fs_write
+import dev.ide.ui.generated.resources.plugin_consent_cap_interp_run
+import dev.ide.ui.generated.resources.plugin_consent_cap_lang_backend
+import dev.ide.ui.generated.resources.plugin_consent_cap_model_facet
+import dev.ide.ui.generated.resources.plugin_consent_cap_model_module_type
+import dev.ide.ui.generated.resources.plugin_consent_cap_net
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_action
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_color_attribute
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_action
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_decoration
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_language
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_layer
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_painter
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_preview
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_key_binding
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_new_file_template
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_overlay
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_screen
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_settings_page
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_tool_window
+import dev.ide.ui.generated.resources.plugin_consent_declares
+import dev.ide.ui.generated.resources.plugin_consent_deny
+import dev.ide.ui.generated.resources.plugin_consent_publisher_unknown
+import dev.ide.ui.generated.resources.plugin_consent_signed_by
+import dev.ide.ui.generated.resources.plugin_consent_title
+import dev.ide.ui.generated.resources.plugin_consent_warning
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The question asked before an installed plugin is allowed to run.
@@ -51,7 +85,7 @@ fun PluginConsent(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            "Allow ${plugin.name} to run?",
+            stringResource(Res.string.plugin_consent_title, plugin.name),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
@@ -72,7 +106,7 @@ fun PluginConsent(
 
             if (plugin.capabilities.isNotEmpty()) {
                 Text(
-                    "It says it will:",
+                    stringResource(Res.string.plugin_consent_declares),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -105,9 +139,7 @@ fun PluginConsent(
             ) {
                 Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    "A plugin runs inside CodeAssist, with the same access to your projects and account as the " +
-                        "IDE itself. It is not sandboxed, and the list above is not enforced. Allow it only if " +
-                        "you trust whoever published it.",
+                    stringResource(Res.string.plugin_consent_warning),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -121,8 +153,8 @@ fun PluginConsent(
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-            TextButton(onRefuse) { Text("Don't allow") }
-            TextButton(onAccept) { Text("Allow") }
+            TextButton(onRefuse) { Text(stringResource(Res.string.plugin_consent_deny)) }
+            TextButton(onAccept) { Text(stringResource(Res.string.allow)) }
         }
     }
 }
@@ -132,12 +164,13 @@ fun PluginConsent(
  * unreadable certificate is stated plainly, because "we cannot tell who published this" is the most
  * important thing on the screen when it is true.
  */
+@Composable
 internal fun publisherLine(plugin: UiPluginInfo): String {
     val signature = plugin.signature
     return if (signature == null) {
-        "The publisher could not be identified: this package has no readable signing certificate."
+        stringResource(Res.string.plugin_consent_publisher_unknown)
     } else {
-        "Signed by ${shortSignature(signature)}. An update from the same publisher reuses this certificate."
+        stringResource(Res.string.plugin_consent_signed_by, shortSignature(signature))
     }
 }
 
@@ -149,33 +182,38 @@ internal fun shortSignature(hex: String): String =
  * A declared capability in words. An unrecognised value is shown verbatim rather than dropped: a capability
  * this build has never heard of is exactly the one the user should see.
  */
-internal fun describeCapability(capability: String): String = when (capability) {
-    "ui.action" -> "Add commands to the palette and menus"
-    "ui.settingsPage" -> "Add a page to Settings"
-    "ui.toolWindow" -> "Add a tool window to the IDE"
-    "ui.screen" -> "Add a screen to the IDE"
-    "ui.overlay" -> "Show a prompt over any screen"
-    "ui.editorAction" -> "Add actions at the cursor in the editor"
-    "ui.editorPreview" -> "Add a preview pane for some of your files"
-    "ui.keyBinding" -> "Take keyboard shortcuts"
+@Composable
+internal fun describeCapability(capability: String): String =
+    capabilityDescription(capability)?.let { stringResource(it) } ?: capability
+
+/** The sentence for a declared capability, or null for one this build does not know. */
+internal fun capabilityDescription(capability: String): StringResource? = when (capability) {
+    "ui.action" -> Res.string.plugin_consent_cap_ui_action
+    "ui.settingsPage" -> Res.string.plugin_consent_cap_ui_settings_page
+    "ui.toolWindow" -> Res.string.plugin_consent_cap_ui_tool_window
+    "ui.screen" -> Res.string.plugin_consent_cap_ui_screen
+    "ui.overlay" -> Res.string.plugin_consent_cap_ui_overlay
+    "ui.editorAction" -> Res.string.plugin_consent_cap_ui_editor_action
+    "ui.editorPreview" -> Res.string.plugin_consent_cap_ui_editor_preview
+    "ui.keyBinding" -> Res.string.plugin_consent_cap_ui_key_binding
     // The three that change how the user's own code looks, phrased so the difference between them is the
     // part a reader can act on: what is marked, what is added beside it, and what is painted over it.
-    "ui.editorDecoration" -> "Mark up the text of your files"
-    "ui.editorLayer" -> "Put controls of its own inside the editor"
-    "ui.editorPainter" -> "Draw into the editor"
-    "ui.editorLanguage" -> "Color and comment a language in the editor, including ones the IDE already knows"
-    "ui.colorAttribute" -> "Add entries to your editor color scheme, and change what the built-in ones look like"
-    "ui.newFileTemplate" -> "Add kinds of file to the New menu"
-    "lang.backend" -> "Teach the editor a language: parsing, completion and errors"
-    "model.moduleType" -> "Add a kind of module, and templates that create one"
-    "model.facet" -> "Keep configuration of its own in your modules"
+    "ui.editorDecoration" -> Res.string.plugin_consent_cap_ui_editor_decoration
+    "ui.editorLayer" -> Res.string.plugin_consent_cap_ui_editor_layer
+    "ui.editorPainter" -> Res.string.plugin_consent_cap_ui_editor_painter
+    "ui.editorLanguage" -> Res.string.plugin_consent_cap_ui_editor_language
+    "ui.colorAttribute" -> Res.string.plugin_consent_cap_ui_color_attribute
+    "ui.newFileTemplate" -> Res.string.plugin_consent_cap_ui_new_file_template
+    "lang.backend" -> Res.string.plugin_consent_cap_lang_backend
+    "model.moduleType" -> Res.string.plugin_consent_cap_model_module_type
+    "model.facet" -> Res.string.plugin_consent_cap_model_facet
     // Phrased as what it does to the user's own code, since that is the part worth deciding about.
-    "interp.run" -> "Run your project's code inside the IDE, to preview or run it"
-    "build.task" -> "Add steps to your builds"
-    "build.sourceGenerator" -> "Generate source code into your modules"
-    "build.runTask" -> "Add an entry to the Run picker"
-    "fs.read" -> "Read the files in your projects"
-    "fs.write" -> "Change the files in your projects"
-    "net" -> "Make network requests"
-    else -> capability
+    "interp.run" -> Res.string.plugin_consent_cap_interp_run
+    "build.task" -> Res.string.plugin_consent_cap_build_task
+    "build.sourceGenerator" -> Res.string.plugin_consent_cap_build_source_generator
+    "build.runTask" -> Res.string.plugin_consent_cap_build_run_task
+    "fs.read" -> Res.string.plugin_consent_cap_fs_read
+    "fs.write" -> Res.string.plugin_consent_cap_fs_write
+    "net" -> Res.string.plugin_consent_cap_net
+    else -> null
 }

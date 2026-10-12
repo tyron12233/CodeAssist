@@ -44,6 +44,8 @@ import dev.ide.ui.generated.resources.store_bundled_subtitle
 import dev.ide.ui.generated.resources.store_bundled_title
 import dev.ide.ui.generated.resources.store_catalogue_subtitle
 import dev.ide.ui.generated.resources.store_collections_title
+import dev.ide.ui.generated.resources.store_coming_soon
+import dev.ide.ui.generated.resources.store_ghost_switches_on
 import dev.ide.ui.generated.resources.store_ghost_next_title
 import dev.ide.ui.generated.resources.store_ghost_section_subtitle
 import dev.ide.ui.generated.resources.store_ghost_section_title
@@ -81,6 +83,8 @@ import dev.ide.ui.components.TrendingTicker
 import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
 import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.joinMeta
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.LocalExpressiveShapeCycling
@@ -265,7 +269,7 @@ fun ExploreFeed(
                                 Spacer(Modifier.height(10.dp))
                                 BundledTemplateRow(
                                     title = item.title,
-                                    meta = listOfNotNull(item.language, stringResource(Res.string.store_meta_offline)).joinToString(" · "),
+                                    meta = listOfNotNull(item.language, stringResource(Res.string.store_meta_offline)).joinMeta(),
                                     iconId = item.iconId,
                                     index = i,
                                     onUse = { onUseBundled(item) },
@@ -289,9 +293,9 @@ fun ExploreFeed(
                                 // The hand-written copy wins where there is any; a shelf added to the
                                 // registry that this build has never heard of still gets its own words
                                 // rather than the generic card.
-                                title = spec.title ?: shelf.title ?: "Coming soon",
+                                title = spec.title ?: shelf.title ?: stringResource(Res.string.store_coming_soon),
                                 note = spec.note ?: shelf.note
-                                    ?: "Switches on at ${shelf.need} projects.",
+                                    ?: pluralStringResource(Res.plurals.store_ghost_switches_on, shelf.need, shelf.need),
                                 glyph = spec.glyph,
                                 slotHeight = spec.slotHeight,
                                 slotCount = spec.slotCount,
@@ -396,7 +400,7 @@ private fun FeaturedRow(
             FeaturedHeroCard(
                 title = item.title,
                 badge = item.kind.name,
-                subtitle = listOfNotNull(item.author, item.language).joinToString(" · ").ifBlank { item.category },
+                subtitle = listOfNotNull(item.author, item.language).joinMeta().ifBlank { item.category },
                 pair = tonalPair(i),
                 motif = remember(item.id) { motifFor(item.id) },
                 rating = item.rating,
@@ -571,7 +575,7 @@ private fun LazyListScope.shelfSection(
                         title = item.title,
                         badge = item.kind.name,
                         subtitle = listOfNotNull(item.author, item.language)
-                            .joinToString(" · ").ifBlank { item.category },
+                            .joinMeta().ifBlank { item.category },
                         pair = tonalPair(i),
                         motif = remember(item.id) { motifFor(item.id) },
                         rating = item.rating,
@@ -833,7 +837,7 @@ private fun ExploreEmpty(
                     Spacer(Modifier.height(10.dp))
                     BundledTemplateRow(
                         title = item.title,
-                        meta = listOfNotNull(item.language, stringResource(Res.string.store_meta_offline)).joinToString(" · "),
+                        meta = listOfNotNull(item.language, stringResource(Res.string.store_meta_offline)).joinMeta(),
                         iconId = item.iconId,
                         index = i,
                         onUse = { onUseBundled(item) },

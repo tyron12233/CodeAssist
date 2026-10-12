@@ -101,6 +101,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="no_project_yet">Belum ada proyek. Buat satu untuk memulai.</string>
     <string name="your_projects">Proyek Anda</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_files">File</string>
     <string name="project_opened_just_now">Baru saja dibuka</string>
     <string name="beta_notice">Anda berada di %1$s</string>
     <string name="beta_notice_content">Beberapa fitur mungkin tidak lengkap atau berubah. Kami sangat mengharapkan masukan Anda, beri tahu kami apa yang hilang atau rusak.</string>

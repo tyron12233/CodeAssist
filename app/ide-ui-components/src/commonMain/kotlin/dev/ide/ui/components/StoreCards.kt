@@ -47,11 +47,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.store_installs
+import dev.ide.ui.generated.resources.store_projects
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.CaShapes
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.pluralStringResource
 
 /**
  * The Explore tab's card vocabulary.
@@ -407,14 +411,19 @@ fun TrendingTicker(
 }
 
 /** `48K`, `1.2K`, `940`. Abbreviated the way the design writes install counts. */
-fun installLabel(installs: Int): String = when {
-    installs >= 1_000_000 -> "${(installs / 100_000) / 10.0}M installs"
-    installs >= 10_000 -> "${installs / 1_000}K installs"
-    installs >= 1_000 -> "${(installs / 100) / 10.0}K installs"
-    else -> "$installs installs"
+@Composable
+fun installLabel(installs: Int): String {
+    val formatted = when {
+        installs >= 1_000_000 -> "${(installs / 100_000) / 10.0}M"
+        installs >= 10_000 -> "${installs / 1_000}K"
+        installs >= 1_000 -> "${(installs / 100) / 10.0}K"
+        else -> installs.toString()
+    }
+    return pluralStringResource(Res.plurals.store_installs, installs, formatted)
 }
 
-private fun countLabel(count: Int): String = if (count == 1) "1 project" else "$count projects"
+@Composable
+private fun countLabel(count: Int): String = pluralStringResource(Res.plurals.store_projects, count, count)
 
 /** One decimal place, always — "4.8", never "4.80" or "5". Shared with the chart rows. */
 fun formatRating(rating: Float): String {

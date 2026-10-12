@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import dev.ide.ui.joinMeta
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.generated.resources.home_account
 import dev.ide.ui.generated.resources.home_search_projects
@@ -109,7 +110,12 @@ import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.project_opened_days
 import dev.ide.ui.generated.resources.project_opened_hours
+import dev.ide.ui.generated.resources.modules
 import dev.ide.ui.generated.resources.project_age_just_now
+import dev.ide.ui.generated.resources.project_kind_android
+import dev.ide.ui.generated.resources.project_kind_codeassist
+import dev.ide.ui.generated.resources.project_kind_files
+import dev.ide.ui.generated.resources.project_kind_gradle
 import dev.ide.ui.generated.resources.project_age_minutes
 import dev.ide.ui.generated.resources.project_age_hours
 import dev.ide.ui.generated.resources.project_age_days
@@ -684,13 +690,14 @@ private fun LocalProjectCard(
                 )
                 // One line, not three rows. The card used to carry the path, two chips, the opened-ago
                 // text, a chevron AND two buttons; the chevron and the Open button did the same thing,
-                // which is the "which do I tap" problem users reported.
+                // which is the "which do I tap" problem users reported. Kind, then size, then age: what the
+                // project is comes before how big it is.
                 Text(
                     listOfNotNull(
-                        moduleLabel(project.moduleCount),
                         kindLabel(project),
+                        moduleLabel(project.moduleCount),
                         relativeAge(project.lastOpened, now),
-                    ).joinToString(" · "),
+                    ).joinMeta(),
                     style = MaterialTheme.typography.bodySmall,
                     color = c.onSurfaceVariant,
                     maxLines = 1,
@@ -832,7 +839,7 @@ private fun ResumeCard(project: ProjectInfo, now: Long, onOpen: () -> Unit) {
                     project.name,
                     moduleLabel(project.moduleCount),
                     relativeOpened(project.lastOpened, now),
-                ).joinToString(" · "),
+                ).joinMeta(),
                 onContainer = c.onTertiaryContainer,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 6.dp),
@@ -1041,16 +1048,20 @@ private fun symbolForProject(project: ProjectInfo): Char = when {
     else -> CaSymbols.folder
 }
 
-private fun kindLabel(project: ProjectInfo): String = when {
-    project.isAndroid -> "Android"
-    project.compatibility -> "Gradle"
-    // A cloned folder nothing recognized is listed so the user can reach it, but calling it a CodeAssist
-    // project would be the same claim that made a clone confusing in the first place.
-    project.unrecognized -> "Files"
-    else -> "CodeAssist"
-}
+@Composable
+private fun kindLabel(project: ProjectInfo): String = stringResource(
+    when {
+        project.isAndroid -> Res.string.project_kind_android
+        project.compatibility -> Res.string.project_kind_gradle
+        // A cloned folder nothing recognized is listed so the user can reach it, but calling it a CodeAssist
+        // project would be the same claim that made a clone confusing in the first place.
+        project.unrecognized -> Res.string.project_kind_files
+        else -> Res.string.project_kind_codeassist
+    },
+)
 
-private fun moduleLabel(count: Int): String = if (count == 1) "1 module" else "$count modules"
+@Composable
+private fun moduleLabel(count: Int): String = pluralStringResource(Res.plurals.modules, count, count)
 
 /** Drop the leading path components so the project folder — the identifying part — always survives. */
 private fun shortenPath(path: String, maxSegments: Int = 2): String {
@@ -1352,7 +1363,7 @@ private fun DenseProjectRow(
         }
         if (showKind) {
             Text(
-                "${kindLabel(project)} · ${moduleLabel(project.moduleCount)}",
+                listOf(kindLabel(project), moduleLabel(project.moduleCount)).joinMeta(),
                 style = MaterialTheme.typography.bodySmall,
                 color = c.onSurfaceVariant,
                 maxLines = 1,

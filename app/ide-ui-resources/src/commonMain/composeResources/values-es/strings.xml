@@ -104,6 +104,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="no_project_yet">Aún no hay proyectos. Crea uno para comenzar.</string>
     <string name="your_projects">Tus proyectos</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_files">Archivos</string>
     <string name="project_opened_just_now">Abierto justo ahora</string>
     <plurals name="project_opened_minutes">
         <item quantity="one">Abierto hace %1$d minuto</item>

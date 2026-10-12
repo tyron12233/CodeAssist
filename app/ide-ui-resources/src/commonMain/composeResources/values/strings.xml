@@ -162,6 +162,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="no_project_yet">No projects yet. Create one to get started.</string>
     <string name="your_projects">Your projects</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_gradle">Gradle</string>
+    <!-- A folder no project format recognized, listed so it can still be opened. -->
+    <string name="project_kind_files">Files</string>
+    <string name="project_kind_codeassist">CodeAssist</string>
     <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
          does not fit and the "Opened" is carried by the context. -->
     <string name="project_age_just_now">just now</string>
@@ -2026,4 +2030,156 @@ We never collect your code, file or project names, which features you use, or an
     <string name="switcher_no_match">No matching files</string>
     <string name="shortcut_no_build_task">Nothing to build on its own here. Use Run instead.</string>
     <string name="shortcut_nothing_to_reopen">No closed tab to reopen</string>
+    <!-- Explore store shelves and charts -->
+    <plurals name="store_projects">
+        <item quantity="one">%1$d project</item>
+        <item quantity="other">%1$d projects</item>
+    </plurals>
+    <string name="store_publisher_spotlight">Publisher spotlight</string>
+    <string name="store_verified_publisher">Verified publisher</string>
+    <!-- Lowercase on purpose: it sits beside the chart title as a quiet status word. -->
+    <string name="store_chart_live">live</string>
+    <string name="store_chart_updated_hourly">Updated hourly</string>
+    <string name="store_kind_sample_app">Sample app</string>
+    <!-- Shown instead of an install count below ten. -->
+    <string name="store_installs_new">New</string>
+    <!-- %1$s is the count, already abbreviated (48K, 1.2M). -->
+    <plurals name="store_installs">
+        <item quantity="one">%1$s install</item>
+        <item quantity="other">%1$s installs</item>
+    </plurals>
+    <plurals name="store_likes">
+        <item quantity="one">%1$s like</item>
+        <item quantity="other">%1$s likes</item>
+    </plurals>
+    <plurals name="store_reviews">
+        <item quantity="one">%1$s review</item>
+        <item quantity="other">%1$s reviews</item>
+    </plurals>
+    <plurals name="store_ghost_switches_on">
+        <item quantity="one">Switches on at %1$d project.</item>
+        <item quantity="other">Switches on at %1$d projects.</item>
+    </plurals>
+    <!-- Plugin consent dialog -->
+    <string name="plugin_consent_title">Allow %1$s to run?</string>
+    <string name="plugin_consent_declares">It says it will:</string>
+    <string name="plugin_consent_warning">A plugin runs inside CodeAssist, with the same access to your projects and account as the IDE itself. It is not sandboxed, and the list above is not enforced. Allow it only if you trust whoever published it.</string>
+    <string name="plugin_consent_deny">Don't allow</string>
+    <string name="plugin_consent_publisher_unknown">The publisher could not be identified: this package has no readable signing certificate.</string>
+    <string name="plugin_consent_signed_by">Signed by %1$s. An update from the same publisher reuses this certificate.</string>
+    <string name="plugin_consent_cap_ui_action">Add commands to the palette and menus</string>
+    <string name="plugin_consent_cap_ui_settings_page">Add a page to Settings</string>
+    <string name="plugin_consent_cap_ui_tool_window">Add a tool window to the IDE</string>
+    <string name="plugin_consent_cap_ui_screen">Add a screen to the IDE</string>
+    <string name="plugin_consent_cap_ui_overlay">Show a prompt over any screen</string>
+    <string name="plugin_consent_cap_ui_editor_action">Add actions at the cursor in the editor</string>
+    <string name="plugin_consent_cap_ui_editor_preview">Add a preview pane for some of your files</string>
+    <string name="plugin_consent_cap_ui_key_binding">Take keyboard shortcuts</string>
+    <string name="plugin_consent_cap_ui_editor_decoration">Mark up the text of your files</string>
+    <string name="plugin_consent_cap_ui_editor_layer">Put controls of its own inside the editor</string>
+    <string name="plugin_consent_cap_ui_editor_painter">Draw into the editor</string>
+    <string name="plugin_consent_cap_ui_editor_language">Color and comment a language in the editor, including ones the IDE already knows</string>
+    <string name="plugin_consent_cap_ui_color_attribute">Add entries to your editor color scheme, and change what the built-in ones look like</string>
+    <string name="plugin_consent_cap_ui_new_file_template">Add kinds of file to the New menu</string>
+    <string name="plugin_consent_cap_lang_backend">Teach the editor a language: parsing, completion and errors</string>
+    <string name="plugin_consent_cap_model_module_type">Add a kind of module, and templates that create one</string>
+    <string name="plugin_consent_cap_model_facet">Keep configuration of its own in your modules</string>
+    <string name="plugin_consent_cap_interp_run">Run your project's code inside the IDE, to preview or run it</string>
+    <string name="plugin_consent_cap_build_task">Add steps to your builds</string>
+    <string name="plugin_consent_cap_build_source_generator">Generate source code into your modules</string>
+    <string name="plugin_consent_cap_build_run_task">Add an entry to the Run picker</string>
+    <string name="plugin_consent_cap_fs_read">Read the files in your projects</string>
+    <string name="plugin_consent_cap_fs_write">Change the files in your projects</string>
+    <string name="plugin_consent_cap_net">Make network requests</string>
+    <!-- Daily challenge tab -->
+    <string name="challenge_title">Daily Challenge</string>
+    <string name="challenge_subtitle">One problem a day</string>
+    <string name="challenge_todays_top">Today's top</string>
+    <string name="challenge_full_board">Full board</string>
+    <string name="challenge_previous_days">Previous days</string>
+    <string name="challenge_stat_solved_today">solved today</string>
+    <string name="challenge_stat_featured">featured</string>
+    <string name="challenge_stat_attempts">attempts</string>
+    <string name="challenge_sign_in_to_solve">Sign in to solve</string>
+    <string name="challenge_solved_open_again">Solved. Open it again</string>
+    <string name="challenge_keep_going">Keep going</string>
+    <string name="challenge_solve_today">Solve today's challenge</string>
+    <string name="challenge_signed_out_note">Browsing is open to everyone. An account is only needed to submit and to appear on the board.</string>
+    <string name="challenge_solved_in">Solved in %1$s</string>
+    <!-- %1$s is a complexity class such as O(n log n). -->
+    <string name="challenge_meta_time">time %1$s</string>
+    <string name="challenge_meta_memory">memory %1$s</string>
+    <string name="challenge_streak">Streak</string>
+    <string name="challenge_longest">Longest</string>
+    <string name="challenge_solved">Solved</string>
+    <string name="challenge_solved_cd">solved</string>
+    <string name="challenge_offline_title">Cannot reach the challenge server</string>
+    <string name="challenge_offline_body">Check your connection and pull to refresh.</string>
+    <string name="challenge_none_title">No challenge today</string>
+    <string name="challenge_none_body">The next one arrives at midnight UTC.</string>
+    <string name="challenge_difficulty_easy">Easy</string>
+    <string name="challenge_difficulty_medium">Medium</string>
+    <string name="challenge_difficulty_hard">Hard</string>
+    <!-- Daily challenge leaderboard -->
+    <string name="challenge_leaderboard">Leaderboard</string>
+    <string name="challenge_today">Today</string>
+    <string name="challenge_everyone_else">Everyone else</string>
+    <string name="challenge_board_empty_title">Nobody has solved it yet</string>
+    <string name="challenge_board_empty_body">First one on the board sets the pace.</string>
+    <!-- Daily challenge solve screen -->
+    <string name="challenge_pane_problem">Problem</string>
+    <string name="challenge_pane_code">Code</string>
+    <string name="challenge_constraints">Constraints</string>
+    <string name="challenge_examples">Examples</string>
+    <string name="challenge_show_hint">Show a hint</string>
+    <string name="challenge_input">Input</string>
+    <string name="challenge_output">Output</string>
+    <string name="challenge_reset">Reset</string>
+    <string name="challenge_indexing">Indexing, suggestions are still catching up</string>
+    <string name="challenge_preparing">Preparing your workspace</string>
+    <string name="challenge_run_failed">The run failed.</string>
+    <string name="challenge_did_not_compile">Did not compile</string>
+    <plurals name="challenge_examples_all_pass">
+        <item quantity="one">%1$d example passes</item>
+        <item quantity="other">All %1$d examples pass</item>
+    </plurals>
+    <string name="challenge_examples_failed">%1$d of %2$d examples fail</string>
+    <string name="challenge_example_threw">Example %1$d: expected %2$s, threw %3$s</string>
+    <string name="challenge_example_got">Example %1$d: expected %2$s, got %3$s</string>
+    <string name="challenge_example_nothing">nothing</string>
+    <string name="challenge_hidden_tests_decide">Hidden tests decide the verdict. Submit when you are ready.</string>
+    <string name="challenge_running">Running</string>
+    <string name="challenge_run_examples">Run examples</string>
+    <string name="challenge_judging">Judging</string>
+    <string name="challenge_submit">Submit</string>
+    <!-- Daily challenge verdict sheet -->
+    <string name="challenge_keep_improving">Keep improving</string>
+    <string name="challenge_back_to_code">Back to the code</string>
+    <string name="challenge_done">Done</string>
+    <string name="challenge_tests_passed">%1$d of %2$d tests passed</string>
+    <string name="challenge_judged_on_server">Judged on the server</string>
+    <string name="challenge_verdict_not_judged">Not judged</string>
+    <string name="challenge_verdict_accepted">Accepted</string>
+    <string name="challenge_verdict_wrong_answer">Wrong answer</string>
+    <string name="challenge_verdict_runtime_error">Crashed while running</string>
+    <string name="challenge_verdict_timeout">Too slow</string>
+    <string name="challenge_verdict_memory_limit">Used too much memory</string>
+    <string name="challenge_verdict_rejected">Could not be measured</string>
+    <string name="challenge_verdict_unknown">Something went wrong</string>
+    <string name="challenge_matched_reference">You matched the reference</string>
+    <string name="challenge_reference_faster">The reference is faster</string>
+    <string name="challenge_metric_time">Time</string>
+    <string name="challenge_metric_memory">Memory</string>
+    <string name="challenge_metric_runtime">Runtime</string>
+    <string name="challenge_metric_allocated">Allocated</string>
+    <string name="challenge_complexity_note">Complexity is inferred from how the run scaled across six input sizes, compared against the reference solution measured the same way. Memory counts everything allocated, including the answer itself.</string>
+    <string name="challenge_reference_value">reference %1$s</string>
+    <string name="challenge_score">Score</string>
+    <string name="challenge_rank">Rank</string>
+    <string name="challenge_rank_of">#%1$d of %2$d</string>
+    <string name="challenge_hidden_tests_note">The hidden tests are not shown. Add the case you think is failing to your own reasoning, not to the code.</string>
+    <string name="challenge_how_it_scaled">How it scaled</string>
+    <string name="challenge_exponent">exponent %1$s</string>
+    <string name="challenge_legend_yours">yours</string>
+    <string name="challenge_legend_reference">reference</string>
 </resources>

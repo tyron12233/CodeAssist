@@ -51,6 +51,7 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.*
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -354,7 +355,7 @@ private fun ProfileHead(backend: IdeBackend, profile: UiMyProfile, onEdit: () ->
         val meta = listOfNotNull(profile.location, profile.linkUrl)
         if (meta.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
-            Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = c.outline)
+            Text(meta.joinMeta(), style = MaterialTheme.typography.bodySmall, color = c.outline)
         }
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

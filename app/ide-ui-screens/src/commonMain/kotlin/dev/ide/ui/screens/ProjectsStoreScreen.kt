@@ -60,6 +60,7 @@ import dev.ide.ui.generated.resources.store_unavailable_content
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tileShape
@@ -172,7 +173,7 @@ private fun StoreBrowse(
                         FeaturedHeroCard(
                             title = item.title,
                             badge = kindLabel(item.kind),
-                            subtitle = listOfNotNull(item.author, item.language).joinToString(" · ")
+                            subtitle = listOfNotNull(item.author, item.language).joinMeta()
                                 .ifBlank { item.category },
                             pair = tonalPair(i),
                             motif = remember(item.id) { motifFor(item.id) },
@@ -294,7 +295,7 @@ internal fun storeItemMeta(item: UiStoreItem): String = listOfNotNull(
     item.language,
     item.rating.takeIf { it >= 0f && item.ratingCount > 0 }?.let { "${formatRating(it)} ★" },
     item.downloadBytes.takeIf { it > 0 }?.let { formatSizeShort(it) },
-).joinToString(" · ")
+).joinMeta()
 
 /**
  * The non-editable search entry on the browse screen.

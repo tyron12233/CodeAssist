@@ -64,6 +64,7 @@ import dev.ide.ui.generated.resources.settings_search_empty
 import dev.ide.ui.generated.resources.settings_search_placeholder
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.joinMeta
 import org.jetbrains.compose.resources.stringResource
 
 /** Width from which the hub becomes a sidebar beside the open destination instead of a page of links. */
@@ -165,7 +166,7 @@ private fun HubRow(entry: HubEntry, onClick: () -> Unit) {
         headlineContent = { Text(entry.title, style = MaterialTheme.typography.titleMedium) },
         // A project page leads with its scope, so a change is never mistaken for one to every project.
         supportingContent = listOfNotNull(entry.scopeLabel, entry.subtitle).takeIf { it.isNotEmpty() }?.let { parts ->
-            { Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium) }
+            { Text(parts.joinMeta(), style = MaterialTheme.typography.bodyMedium) }
         },
         trailingContent = {
             Icon(CaIcons.chevronRight, null, Modifier.size(18.dp), tint = scheme.outline)

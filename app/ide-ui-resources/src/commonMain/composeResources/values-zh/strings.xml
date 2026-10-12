@@ -162,6 +162,7 @@
     <string name="no_project_yet">还没有项目哦~新建项目即可开始开发</string>
     <string name="your_projects">你的项目</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_files">文件</string>
     <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
          does not fit and the "Opened" is carried by the context. -->
     <string name="project_age_just_now">刚刚</string>

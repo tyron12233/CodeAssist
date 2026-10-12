@@ -45,8 +45,37 @@ import dev.ide.ui.backend.UiChallengeHistoryEntry
 import dev.ide.ui.backend.UiChallengeRank
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CircularProgressIndicator
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.challenge_difficulty_easy
+import dev.ide.ui.generated.resources.challenge_difficulty_hard
+import dev.ide.ui.generated.resources.challenge_difficulty_medium
+import dev.ide.ui.generated.resources.challenge_full_board
+import dev.ide.ui.generated.resources.challenge_keep_going
+import dev.ide.ui.generated.resources.challenge_longest
+import dev.ide.ui.generated.resources.challenge_meta_memory
+import dev.ide.ui.generated.resources.challenge_meta_time
+import dev.ide.ui.generated.resources.challenge_none_body
+import dev.ide.ui.generated.resources.challenge_none_title
+import dev.ide.ui.generated.resources.challenge_offline_body
+import dev.ide.ui.generated.resources.challenge_offline_title
+import dev.ide.ui.generated.resources.challenge_previous_days
+import dev.ide.ui.generated.resources.challenge_sign_in_to_solve
+import dev.ide.ui.generated.resources.challenge_signed_out_note
+import dev.ide.ui.generated.resources.challenge_solve_today
+import dev.ide.ui.generated.resources.challenge_solved
+import dev.ide.ui.generated.resources.challenge_solved_cd
+import dev.ide.ui.generated.resources.challenge_solved_in
+import dev.ide.ui.generated.resources.challenge_solved_open_again
+import dev.ide.ui.generated.resources.challenge_stat_attempts
+import dev.ide.ui.generated.resources.challenge_stat_featured
+import dev.ide.ui.generated.resources.challenge_stat_solved_today
+import dev.ide.ui.generated.resources.challenge_streak
+import dev.ide.ui.generated.resources.challenge_subtitle
+import dev.ide.ui.generated.resources.challenge_title
+import dev.ide.ui.generated.resources.challenge_todays_top
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.joinMeta
 import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -54,6 +83,7 @@ import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Challenges tab.
@@ -104,7 +134,11 @@ fun DailyChallengeScreen(
         }
 
         if (state.board.rows.isNotEmpty()) {
-            item { ChallengeSectionHeader("Today's top", onAction = onOpenBoard, actionLabel = "Full board") }
+            item { ChallengeSectionHeader(
+                    stringResource(Res.string.challenge_todays_top),
+                    onAction = onOpenBoard,
+                    actionLabel = stringResource(Res.string.challenge_full_board),
+                ) }
             // Keyed on the position, not the rank: a tie is a legitimate leaderboard, and two rows sharing a
             // rank would be a duplicate lazy-list key, which throws out of the measure pass.
             itemsIndexedKeyed(state.board.rows, key = { i, r -> "$i:${r.rank}" }) { _, row -> BoardRow(row) }
@@ -122,7 +156,7 @@ fun DailyChallengeScreen(
 
         val history = state.profile.history.filter { it.date != day.date }
         if (history.isNotEmpty()) {
-            item { ChallengeSectionHeader("Previous days") }
+            item { ChallengeSectionHeader(stringResource(Res.string.challenge_previous_days)) }
             item { ArchiveStrip(history, onOpenArchive) }
         }
     }
@@ -133,13 +167,13 @@ private fun ChallengeHeader(day: UiChallengeDay, streak: Int) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                "Daily Challenge",
+                stringResource(Res.string.challenge_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                if (day.date.isBlank()) "One problem a day" else day.date,
+                if (day.date.isBlank()) stringResource(Res.string.challenge_subtitle) else day.date,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -227,9 +261,11 @@ private fun TodayHero(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            HeroStat(day.solvedCount.toString(), "solved today", pair.onContainer)
-            HeroStat(problem.featuredLanguage.name, "featured", pair.onContainer)
-            if (day.you.attempts > 0) HeroStat(day.you.attempts.toString(), "attempts", pair.onContainer)
+            HeroStat(day.solvedCount.toString(), stringResource(Res.string.challenge_stat_solved_today), pair.onContainer)
+            HeroStat(problem.featuredLanguage.name, stringResource(Res.string.challenge_stat_featured), pair.onContainer)
+            if (day.you.attempts > 0) {
+                HeroStat(day.you.attempts.toString(), stringResource(Res.string.challenge_stat_attempts), pair.onContainer)
+            }
         }
 
         val solved = day.you.solved
@@ -251,12 +287,14 @@ private fun TodayHero(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                when {
-                    !signedIn -> "Sign in to solve"
-                    solved -> "Solved. Open it again"
-                    day.you.attempts > 0 -> "Keep going"
-                    else -> "Solve today's challenge"
-                },
+                stringResource(
+                    when {
+                        !signedIn -> Res.string.challenge_sign_in_to_solve
+                        solved -> Res.string.challenge_solved_open_again
+                        day.you.attempts > 0 -> Res.string.challenge_keep_going
+                        else -> Res.string.challenge_solve_today
+                    },
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -264,7 +302,7 @@ private fun TodayHero(
 
         if (!signedIn) {
             Text(
-                "Browsing is open to everyone. An account is only needed to submit and to appear on the board.",
+                stringResource(Res.string.challenge_signed_out_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = pair.onContainer.copy(alpha = 0.7f),
             )
@@ -280,10 +318,19 @@ private fun HeroStat(value: String, label: String, color: Color) {
     }
 }
 
+/** The server's difficulty word in the reader's language; one this build does not know is shown as sent. */
+@Composable
+internal fun difficultyLabel(difficulty: String): String = when (difficulty.lowercase()) {
+    "easy" -> stringResource(Res.string.challenge_difficulty_easy)
+    "medium" -> stringResource(Res.string.challenge_difficulty_medium)
+    "hard" -> stringResource(Res.string.challenge_difficulty_hard)
+    else -> difficulty
+}
+
 @Composable
 private fun DifficultyPill(difficulty: String, onContainer: Color) {
     Text(
-        difficulty.uppercase(),
+        difficultyLabel(difficulty).uppercase(),
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
         color = onContainer,
@@ -305,17 +352,17 @@ private fun YourResultCard(day: UiChallengeDay) {
         Symbol(CaSymbols.checkCircle, contentDescription = null, size = 28.dp, tint = pair.onContainer, filled = true)
         Column(Modifier.weight(1f)) {
             Text(
-                "Solved in " + formatSolveTime(day.you.solveMs),
+                stringResource(Res.string.challenge_solved_in, formatSolveTime(day.you.solveMs)),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = pair.onContainer,
             )
             Text(
                 listOfNotNull(
-                    day.you.timeClass?.let { "time " + it },
-                    day.you.spaceClass?.let { "memory " + it },
+                    day.you.timeClass?.let { stringResource(Res.string.challenge_meta_time, it) },
+                    day.you.spaceClass?.let { stringResource(Res.string.challenge_meta_memory, it) },
                     formatRuntime(day.you.runtimeNs).takeIf { it != "-" },
-                ).joinToString("  ·  "),
+                ).joinMeta("  ·  "),
                 style = MaterialTheme.typography.bodySmall,
                 color = pair.onContainer.copy(alpha = 0.7f),
             )
@@ -417,9 +464,9 @@ private fun RankBadge(rank: Int, fallback: Color) {
 @Composable
 private fun StreakStrip(state: ChallengeTabState) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        StatTile("Streak", state.profile.streak.current.toString(), CaSymbols.localFireDepartment, 0, Modifier.weight(1f))
-        StatTile("Longest", state.profile.streak.longest.toString(), CaSymbols.trendingUp, 1, Modifier.weight(1f))
-        StatTile("Solved", state.profile.streak.totalSolved.toString(), CaSymbols.checkCircle, 2, Modifier.weight(1f))
+        StatTile(stringResource(Res.string.challenge_streak), state.profile.streak.current.toString(), CaSymbols.localFireDepartment, 0, Modifier.weight(1f))
+        StatTile(stringResource(Res.string.challenge_longest), state.profile.streak.longest.toString(), CaSymbols.trendingUp, 1, Modifier.weight(1f))
+        StatTile(stringResource(Res.string.challenge_solved), state.profile.streak.totalSolved.toString(), CaSymbols.checkCircle, 2, Modifier.weight(1f))
     }
 }
 
@@ -461,7 +508,7 @@ private fun ArchiveStrip(history: List<UiChallengeHistoryEntry>, onOpen: (String
                         modifier = Modifier.weight(1f),
                     )
                     if (entry.solved) {
-                        Symbol(CaSymbols.check, contentDescription = "solved", size = 16.dp, tint = pair.onContainer)
+                        Symbol(CaSymbols.check, contentDescription = stringResource(Res.string.challenge_solved_cd), size = 16.dp, tint = pair.onContainer)
                     }
                 }
                 Text(
@@ -472,7 +519,7 @@ private fun ArchiveStrip(history: List<UiChallengeHistoryEntry>, onOpen: (String
                     maxLines = 2,
                 )
                 Text(
-                    if (entry.solved) entry.timeClass.orEmpty() else entry.difficulty,
+                    if (entry.solved) entry.timeClass.orEmpty() else difficultyLabel(entry.difficulty),
                     style = MaterialTheme.typography.labelSmall,
                     color = pair.onContainer.copy(alpha = 0.7f),
                 )
@@ -513,13 +560,13 @@ private fun NothingScheduledCard(offline: Boolean) {
             tint = MaterialTheme.colorScheme.outline,
         )
         Text(
-            if (offline) "Cannot reach the challenge server" else "No challenge today",
+            stringResource(if (offline) Res.string.challenge_offline_title else Res.string.challenge_none_title),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            if (offline) "Check your connection and pull to refresh." else "The next one arrives at midnight UTC.",
+            stringResource(if (offline) Res.string.challenge_offline_body else Res.string.challenge_none_body),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
             textAlign = TextAlign.Center,

@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import dev.ide.ui.itemsKeyed
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.LocalTonalCardFills
 import dev.ide.ui.theme.LocalExpressiveShapeCycling
 import androidx.compose.runtime.CompositionLocalProvider
@@ -740,7 +741,7 @@ private fun InstallHint(item: UiStoreItem, message: String?) {
     )
     if (parts.isEmpty()) return
     Text(
-        parts.joinToString(" · "),
+        parts.joinMeta(),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

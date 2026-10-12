@@ -36,12 +36,22 @@ import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiStoreCollection
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStorePublisher
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.profile_follow
+import dev.ide.ui.generated.resources.profile_following
+import dev.ide.ui.generated.resources.store_not_rated
+import dev.ide.ui.generated.resources.store_projects
+import dev.ide.ui.generated.resources.store_publisher_spotlight
+import dev.ide.ui.generated.resources.store_verified_publisher
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Collections, the personalized poster row, and the publisher spotlight.
@@ -107,7 +117,7 @@ fun CollectionCard(
                     IconStack(collection.previewIconIds, pair)
                     Spacer(Modifier.weight(1f))
                     SupportingOnContainer(
-                        text = if (collection.projectCount == 1) "1 project" else "${collection.projectCount} projects",
+                        text = pluralStringResource(Res.plurals.store_projects, collection.projectCount, collection.projectCount),
                         onContainer = pair.onContainer,
                     )
                 }
@@ -229,7 +239,7 @@ fun PosterCard(
                 )
             } else {
                 // Never a fabricated default: an unrated project says so.
-                Text("Not rated yet", style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
+                Text(stringResource(Res.string.store_not_rated), style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
             }
             if (item.sizeBytes() > 0) {
                 Text(
@@ -277,7 +287,10 @@ fun SpotlightCard(
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 18.dp, y = 26.dp),
             )
             Column(Modifier.padding(20.dp)) {
-                Eyebrow("Publisher spotlight", color = c.onSecondaryContainer.copy(alpha = 0.75f))
+                Eyebrow(
+                    stringResource(Res.string.store_publisher_spotlight),
+                    color = c.onSecondaryContainer.copy(alpha = 0.75f),
+                )
                 Row(
                     Modifier.padding(top = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -310,7 +323,7 @@ fun SpotlightCard(
                             if (publisher.verified) {
                                 Symbol(
                                     CaSymbols.verified,
-                                    contentDescription = "Verified publisher",
+                                    contentDescription = stringResource(Res.string.store_verified_publisher),
                                     size = 16.dp,
                                     tint = c.onSecondaryContainer,
                                 )
@@ -364,18 +377,19 @@ fun FollowButton(
     ) {
         Box(Modifier.padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
             Text(
-                if (following) "Following" else "Follow",
+                stringResource(if (following) Res.string.profile_following else Res.string.profile_follow),
                 style = MaterialTheme.typography.labelLarge,
             )
         }
     }
 }
 
+@Composable
 private fun publisherStats(p: UiStorePublisher): String = listOfNotNull(
-    if (p.projectCount == 1) "1 project" else "${p.projectCount} projects",
+    pluralStringResource(Res.plurals.store_projects, p.projectCount, p.projectCount),
     p.installCount.takeIf { it > 0 }?.let { installsLabel(it) },
     p.rating?.let { "★ ${formatRating(it)}" },
-).joinToString(" · ")
+).joinMeta()
 
 /** `12.4 MB`, or `840 KB` below a megabyte. */
 fun formatSizeShort(bytes: Long): String {

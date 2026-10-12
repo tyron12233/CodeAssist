@@ -42,11 +42,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiChartEntry
 import dev.ide.ui.backend.UiChartTab
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.store_chart_live
+import dev.ide.ui.generated.resources.store_chart_updated_hourly
+import dev.ide.ui.generated.resources.store_installs
+import dev.ide.ui.generated.resources.store_installs_new
+import dev.ide.ui.generated.resources.store_kind_community
+import dev.ide.ui.generated.resources.store_kind_sample_app
+import dev.ide.ui.generated.resources.store_kind_template
+import dev.ide.ui.generated.resources.store_likes
+import dev.ide.ui.generated.resources.store_not_rated
+import dev.ide.ui.generated.resources.store_reviews
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
+import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
+import org.jetbrains.compose.resources.PluralStringResource
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Top charts — a ranked, tabbed leaderboard.
@@ -91,8 +106,9 @@ fun LiveDot(modifier: Modifier = Modifier) {
         alpha = a
         scale = s
     }
+    val updatedHourly = stringResource(Res.string.store_chart_updated_hourly)
     Row(
-        modifier.semantics { contentDescription = "Updated hourly" },
+        modifier.semantics { contentDescription = updatedHourly },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -100,7 +116,7 @@ fun LiveDot(modifier: Modifier = Modifier) {
             Modifier.size(7.dp).scale(scale).clip(CircleShape)
                 .background(c.primary.copy(alpha = alpha)),
         )
-        Text("live", style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+        Text(stringResource(Res.string.store_chart_live), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
     }
 }
 
@@ -255,7 +271,8 @@ private fun Movement(entry: UiChartEntry) {
 @Composable
 fun ChartCard(
     entries: List<UiChartEntry>,
-    metaFor: (UiChartEntry) -> String,
+    /** @Composable because the meta line is built from string resources. */
+    metaFor: @Composable (UiChartEntry) -> String,
     /** @Composable because the label is a string resource, and mid-install it is live progress. */
     actionFor: @Composable (UiChartEntry) -> String,
     onOpen: (UiChartEntry) -> Unit,
@@ -301,43 +318,53 @@ fun ChartCard(
  * says what it ranks on in the feed; keying this on the tab name instead would send every new tab down
  * the installs branch and quietly mislabel it.
  */
+@Composable
 fun chartMeta(entry: UiChartEntry, metric: String): String {
     val item = entry.item
     return when (metric) {
         "likes", "most_liked" -> listOfNotNull(
-            item.likes.takeIf { it > 0 }?.let { countLabel(it, "like") },
+            item.likes.takeIf { it > 0 }?.let { countLabel(it, Res.plurals.store_likes) },
             item.language,
-        ).joinToString(" · ").ifBlank { item.category }
-        "rating", "top_rated" -> buildString {
-            append(item.rating.takeIf { it >= 0f }?.let { formatRating(it) } ?: "Not rated yet")
-            if (item.ratingCount > 0) append(" · ").append(countLabel(item.ratingCount, "review"))
-        }
+        ).joinMeta().ifBlank { item.category }
+        "rating", "top_rated" -> listOfNotNull(
+            item.rating.takeIf { it >= 0f }?.let { formatRating(it) } ?: stringResource(Res.string.store_not_rated),
+            item.ratingCount.takeIf { it > 0 }?.let { countLabel(it, Res.plurals.store_reviews) },
+        ).joinMeta()
         // Recency ranks on time, so the row names the kind and language rather than a count that would
         // not explain the ordering.
-        "recency", "new" -> listOfNotNull(kindWord(item), item.language).joinToString(" · ").ifBlank { item.category }
+        "recency", "new" -> listOfNotNull(kindWord(item), item.language).joinMeta().ifBlank { item.category }
         else -> listOfNotNull(
             item.installs.takeIf { it >= 0 }?.let { installsLabel(it) },
             item.language,
-        ).joinToString(" · ").ifBlank { item.category }
+        ).joinMeta().ifBlank { item.category }
     }
 }
 
-private fun kindWord(item: dev.ide.ui.backend.UiStoreItem): String = when (item.kind) {
-    dev.ide.ui.backend.UiStoreItemKind.Template -> "Template"
-    dev.ide.ui.backend.UiStoreItemKind.Sample -> "Sample app"
-    dev.ide.ui.backend.UiStoreItemKind.Community -> "Community"
-}
+@Composable
+private fun kindWord(item: dev.ide.ui.backend.UiStoreItem): String = stringResource(
+    when (item.kind) {
+        dev.ide.ui.backend.UiStoreItemKind.Template -> Res.string.store_kind_template
+        dev.ide.ui.backend.UiStoreItemKind.Sample -> Res.string.store_kind_sample_app
+        dev.ide.ui.backend.UiStoreItemKind.Community -> Res.string.store_kind_community
+    },
+)
 
 /** `48K installs`, and `New` below ten — a real count under ten reads as failure, not novelty. */
-fun installsLabel(installs: Int): String = when {
-    installs < 10 -> "New"
-    installs >= 1_000_000 -> "${installs / 1_000_000}M installs"
-    installs >= 1_000 -> "${installs / 1_000}K installs"
-    else -> "$installs installs"
+@Composable
+fun installsLabel(installs: Int): String {
+    if (installs < 10) return stringResource(Res.string.store_installs_new)
+    val formatted = when {
+        installs >= 1_000_000 -> "${installs / 1_000_000}M"
+        installs >= 1_000 -> "${installs / 1_000}K"
+        else -> installs.toString()
+    }
+    // The plural follows the real count, not the abbreviation, so `1K` still reads as many.
+    return pluralStringResource(Res.plurals.store_installs, installs, formatted)
 }
 
-private fun countLabel(n: Int, noun: String): String {
+@Composable
+private fun countLabel(n: Int, noun: PluralStringResource): String {
     val formatted = if (n >= 1_000) "${n / 1_000},${(n % 1_000).toString().padStart(3, '0')}" else n.toString()
-    return "$formatted ${noun}${if (n == 1) "" else "s"}"
+    return pluralStringResource(noun, n, formatted)
 }
 
