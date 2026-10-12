@@ -44,6 +44,7 @@ import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.CompletionResultSet
+import dev.ide.lang.completion.MemberPopularity
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.java.JavaImportEdits
@@ -383,6 +384,14 @@ class JavaCompletion(
     ) {
         val helper = env.facade.resolveHelper
         fun accessible(m: PsiMember) = helper.isAccessible(m, place, null)
+        // The receiver's own FQN, then its supertypes nearest first: how far up each member is declared, and
+        // which popularity list scores it (see MemberPopularity).
+        val chain = supertypeChain(cls)
+        fun distance(m: PsiMember): Int = chain.indexOf(m.containingClass?.qualifiedName).coerceAtLeast(0)
+        // Emitted grouped (own, inherited, Object), then nearest class first, then alphabetically: the engine's
+        // weighers rank by popularity and these groups, and keep emission order as the final tiebreak, which
+        // used to be class-file declaration order (`TextView a; a.` opened on `setAutoSizeTextTypeWithDefaults`).
+        val memberOrder = compareBy<Pair<PsiMember, Int>>({ it.second }, { distance(it.first) }, { it.first.name })
         // `allMethods`/`allFields` walk the whole supertype graph and report EVERY declaration, so an overridden
         // method (`View.setVisibility` re-declared in TextView and again in Button) and a shadowed field arrive
         // once per level. Only the most-derived one is reachable through this receiver, and the walk is ordered
@@ -392,14 +401,22 @@ class JavaCompletion(
         JavaOverrides.mostDerived(
             cls.allMethods.filter { !it.isConstructor && params.prefixMatches(it.name) },
             JavaOverrides::enumerationKey,
-        ).forEach { m ->
-            if (staticOnly && !m.hasModifierProperty(PsiModifier.STATIC)) return@forEach
-            if (accessible(m)) result.addElement(methodItem(m, callableWeight = callableWeightOf(m, cls)))
-        }
+        ).filter { m -> (!staticOnly || m.hasModifierProperty(PsiModifier.STATIC)) && accessible(m) }
+            .map { m -> m to callableWeightOf(m, cls) }
+            .sortedWith(memberOrder)
+            .forEach { (m, weight) ->
+                result.addElement(
+                    methodItem(m, callableWeight = weight, popularity = MemberPopularity.of(chain, m.name), receiverDistance = distance(m))
+                )
+            }
         JavaOverrides.mostDerived(cls.allFields.filter { params.prefixMatches(it.name) }) { it.name }
-            .forEach { f ->
-                if (staticOnly && !f.hasModifierProperty(PsiModifier.STATIC)) return@forEach
-                if (accessible(f)) result.addElement(fieldItem(f, callableWeight = callableWeightOf(f, cls)))
+            .filter { f -> (!staticOnly || f.hasModifierProperty(PsiModifier.STATIC)) && accessible(f) }
+            .map { f -> f to callableWeightOf(f, cls) }
+            .sortedWith(memberOrder)
+            .forEach { (f, weight) ->
+                result.addElement(
+                    fieldItem(f, callableWeight = weight, popularity = MemberPopularity.of(chain, f.name), receiverDistance = distance(f))
+                )
             }
         cls.allInnerClasses.forEach { c ->
             val n = c.name ?: return@forEach
@@ -509,6 +526,20 @@ class JavaCompletion(
                 )
             )
         }
+    }
+
+    /** [cls]'s FQN, then every supertype's, breadth-first so the nearest come first. */
+    private fun supertypeChain(cls: PsiClass): List<String> {
+        val out = LinkedHashSet<String>()
+        val seen = HashSet<PsiClass>()
+        val queue = ArrayDeque<PsiClass>().apply { add(cls) }
+        while (queue.isNotEmpty()) {
+            val c = queue.removeFirst()
+            if (!seen.add(c)) continue
+            c.qualifiedName?.let { out.add(it) }
+            queue.addAll(c.supers)
+        }
+        return out.toList()
     }
 
     /** Callable grouping for a member accessed via `.`: a member declared on the receiver class is closest (0);
@@ -865,7 +896,13 @@ class JavaCompletion(
 
     // --- item construction --------------------------------------------------------------------------------
 
-    private fun methodItem(m: PsiMethod, proximity: Int = 0, callableWeight: Int = 0): CompletionItem {
+    private fun methodItem(
+        m: PsiMethod,
+        proximity: Int = 0,
+        callableWeight: Int = 0,
+        popularity: Int = 0,
+        receiverDistance: Int = 0,
+    ): CompletionItem {
         val hasParams = m.parameterList.parametersCount > 0
         val insert = "${m.name}()"
         val names = paramNames(m)
@@ -878,18 +915,36 @@ class JavaCompletion(
             container = m.containingClass?.name,
             symbol = JavaSymbol(m),
             caret = if (hasParams) CaretAction.At(m.name.length + 1) else CaretAction.AtEnd,
-            relevance = CompletionRelevance(deprecated = m.isDeprecated, proximity = proximity, callableWeight = callableWeight),
+            relevance = CompletionRelevance(
+                deprecated = m.isDeprecated,
+                proximity = proximity,
+                callableWeight = callableWeight,
+                popularity = popularity,
+                receiverDistance = receiverDistance,
+            ),
         )
     }
 
-    private fun fieldItem(f: PsiField, proximity: Int = 0, callableWeight: Int = 0): CompletionItem = CompletionItem(
+    private fun fieldItem(
+        f: PsiField,
+        proximity: Int = 0,
+        callableWeight: Int = 0,
+        popularity: Int = 0,
+        receiverDistance: Int = 0,
+    ): CompletionItem = CompletionItem(
         label = f.name,
         insertText = f.name,
         kind = if (f is com.intellij.psi.PsiEnumConstant) CompletionItemKind.ENUM_CONSTANT else CompletionItemKind.FIELD,
         detail = f.type.presentableText,
         container = f.containingClass?.name,
         symbol = JavaSymbol(f),
-        relevance = CompletionRelevance(deprecated = f.isDeprecated, proximity = proximity, callableWeight = callableWeight),
+        relevance = CompletionRelevance(
+            deprecated = f.isDeprecated,
+            proximity = proximity,
+            callableWeight = callableWeight,
+            popularity = popularity,
+            receiverDistance = receiverDistance,
+        ),
     )
 
     private fun emitClass(c: PsiClass, params: CompletionParams, result: CompletionResultSet, proximity: Int = PROX_TYPE) {

@@ -58,6 +58,7 @@ import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionResultSet
+import dev.ide.lang.completion.MemberPopularity
 import dev.ide.lang.completion.PrefixMatcher
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
@@ -75,6 +76,7 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.SourceIndexBuilder
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
+import dev.ide.lang.resolve.TypeRef
 
 /**
  * Kotlin code completion, using the completion-token technique: splice a dummy identifier at the caret on a
@@ -250,6 +252,10 @@ class KotlinCompletion(
             val packageCompletion = pos.packageCompletion
             val expected = pos.expected
             val nameReference = pos.nameReference
+            val chain = pos.receiverChain
+            // An accessor overload a property doesn't stand for (`setText(Int)` next to `text`) leaves the
+            // popularity to the property, or the overloads crowd the top of the list ahead of it.
+            val properties = pos.properties
             val out = ArrayList<Candidate>(raw.size)
             val seen = HashSet<String>()
             for (s in raw) {
@@ -274,6 +280,13 @@ class KotlinCompletion(
                     boosted = composableContext && s.isComposable,
                     group = memberGroup(s),
                     proximity = proximityOf(s, nameReference),
+                    popularity = when {
+                        chain.isEmpty() -> 0
+                        s.kind == SymbolKind.METHOD && accessedProperty(name) in properties -> MemberPopularity.of(chain, name) / 2
+                        else -> MemberPopularity.of(chain, name)
+                    },
+                    distance = if (chain.isEmpty() || s.isExtension) 0 else distanceIn(chain, s),
+                    lengthKey = if (pos.memberAccess) 0 else name.length,
                 )
             }
             out.sortWith(RANK)
@@ -404,6 +417,11 @@ class KotlinCompletion(
          *  through its qualifier, so it needs NO auto-import (unlike a bare type-reference or a top-level
          *  extension, which do). Gates the import-edit computation below. */
         val memberAccess: Boolean = false,
+        /** For [memberAccess] on a typed receiver: its FQN, then its supertypes nearest first. Ranks members by
+         *  how far up they are declared and scores them against [MemberPopularity]. */
+        val receiverChain: List<String> = emptyList(),
+        /** For [memberAccess]: the Kotlin properties standing for a Java getter (see [gettableProperties]). */
+        val properties: Set<String> = emptySet(),
         /** The completion is a segment of an `import`/`package` directive, so a callable candidate is inserted as
          *  its BARE name (`import a.b.map`), never the call form `map()` — unlike a fully-qualified call in code
          *  (`a.b.map(...)`), where the parens are wanted. */
@@ -508,7 +526,13 @@ class KotlinCompletion(
                 members + resolver.scopeMemberExtensions(offset, recvType, prefix) +
                     resolver.importableSingletonExtensions(recvType, prefix)
             }
-            return PositionResult(raw, memberAccess = true)
+            val properties = gettableProperties(raw)
+            return PositionResult(
+                hideAccessorDuplicates(raw, prefix, properties),
+                memberAccess = true,
+                receiverChain = supertypeChain(recvType),
+                properties = properties.keys,
+            )
         }
         // Receiver is a package/FQN prefix (`java.util.`, `android.`) — complete its sub-packages + the types in
         // it (inserted fully-qualified, so it needs no auto-import). Inside an `import`/`package` directive a
@@ -1082,6 +1106,10 @@ class KotlinCompletion(
         val boosted: Boolean,
         val group: Int,
         val proximity: Int,
+        val popularity: Int,
+        val distance: Int,
+        /** The name-length tiebreak, or 0 on member access, whose members sort alphabetically instead. */
+        val lengthKey: Int,
     ) {
         /** No auto-import needed (already visible) — the in-scope-before-needs-import rank key, computed once. */
         val inScope: Boolean = importEdit.isEmpty()
@@ -1093,6 +1121,8 @@ class KotlinCompletion(
             inScope = inScope,
             deprecated = symbol.isDeprecated,
             proximity = proximity,
+            popularity = popularity,
+            receiverDistance = distance,
         )
     }
 
@@ -1130,6 +1160,106 @@ class KotlinCompletion(
         s.receiverTypeParam != null || s.receiverTypeFqn == "kotlin.Any" -> 3 // universal scope function (T./Any.)
         s.origin.fromSource -> 1                                              // project-source extension
         else -> 2                                                             // library extension on a specific receiver
+    }
+
+    /** [type]'s FQN, then every supertype's, breadth-first so the nearest come first. */
+    private fun supertypeChain(type: KotlinType): List<String> {
+        val out = LinkedHashSet<String>()
+        val queue = ArrayDeque<TypeRef>().apply { add(type) }
+        while (queue.isNotEmpty() && out.size < MAX_CHAIN) {
+            val t = queue.removeFirst()
+            if (out.add(t.qualifiedName)) queue.addAll(t.supertypes())
+        }
+        return out.toList()
+    }
+
+    /** How far up [chain] the member [s] is declared (0 = the receiver's own class); 0 when unknown. */
+    private fun distanceIn(chain: List<String>, s: KotlinSymbol): Int {
+        val owner = s.declaringClassFqn?.replace('$', '.') ?: return 0
+        return chain.indexOf(owner).coerceAtLeast(0)
+    }
+
+    /**
+     * Drops a Java getter or setter that a Kotlin property already stands for, the way IntelliJ does: `a.` on a
+     * `TextView` offers `text`, not `text` and `getText()` and `setText()`. Kept when the user is spelling the
+     * accessor out (a `get`/`set`/`is` prefix), and a setter overload the property can't express (`setText(Int)`)
+     * always stays. Only Java members have such properties, and only on member access.
+     */
+    private fun hideAccessorDuplicates(
+        raw: List<KotlinSymbol>,
+        prefix: String,
+        properties: Map<String, KotlinSymbol>,
+    ): List<KotlinSymbol> {
+        val setterOnly = setterOnlyProperties(raw, properties)
+        val kept = if (setterOnly.isEmpty()) raw else raw.filterNot { it in setterOnly }
+        if (prefix.startsWith("get") || prefix.startsWith("set") || prefix.startsWith("is")) return kept
+        if (properties.isEmpty()) return kept
+        return kept.filterNot { s -> s.kind == SymbolKind.METHOD && !s.isExtension && isAccessorOf(s, properties) }
+    }
+
+    /**
+     * Properties the symbol model derives from a Java SETTER alone (`textColor` from `setTextColor`, `enabled`
+     * from `setEnabled` beside `isEnabled()`). Kotlin has no set-only properties, so `a.textColor = …` does not
+     * compile; offering one would also hide the real `setTextColor(...)` behind it.
+     */
+    private fun setterOnlyProperties(raw: List<KotlinSymbol>, gettable: Map<String, KotlinSymbol>): Set<KotlinSymbol> {
+        val setters = HashSet<String>()
+        for (s in raw) if (s.kind == SymbolKind.METHOD && !s.isExtension && s.paramTypes.size == 1 && s.name.startsWith("set")) setters.add(s.name)
+        if (setters.isEmpty()) return emptySet()
+        val out = HashSet<KotlinSymbol>()
+        for (s in raw) {
+            if (s.kind != SymbolKind.FIELD || s.isExtension || s.origin.fromSource || s.name in gettable || s.name.isEmpty()) continue
+            if ("set" + s.name[0].uppercaseChar() + s.name.substring(1) in setters) out.add(s)
+        }
+        return out
+    }
+
+    /**
+     * The properties among [raw] that stand for a Java getter, by name. Kotlin only makes a property out of a
+     * getter (`getText()` -> `text`), so a property with no getter behind it (`onClickListener`, which View
+     * only has a setter for) must not hide `setOnClickListener`.
+     */
+    private fun gettableProperties(raw: List<KotlinSymbol>): Map<String, KotlinSymbol> {
+        val getters = HashSet<String>()
+        for (s in raw) if (s.kind == SymbolKind.METHOD && !s.isExtension && s.paramTypes.isEmpty()) getters.add(s.name)
+        if (getters.isEmpty()) return emptyMap()
+        val out = HashMap<String, KotlinSymbol>()
+        for (s in raw) {
+            if (s.kind != SymbolKind.FIELD || s.isExtension || s.name in out) continue
+            val n = s.name
+            val getter = if (n.length > 2 && n.startsWith("is") && n[2].isUpperCase()) n else "get" + n[0].uppercaseChar() + n.substring(1)
+            if (getter in getters) out[n] = s
+        }
+        return out
+    }
+
+    /** The Kotlin property a Java accessor name stands for (`getText`/`setText` -> `text`, `isShown` -> itself),
+     *  or null when [name] isn't an accessor's. */
+    private fun accessedProperty(name: String): String? {
+        fun decap(rest: String) = rest.takeIf { it.isNotEmpty() && it[0].isUpperCase() }?.let { it[0].lowercaseChar() + it.substring(1) }
+        return when {
+            name.startsWith("get") || name.startsWith("set") -> decap(name.substring(3))
+            name.length > 2 && name.startsWith("is") && name[2].isUpperCase() -> name
+            else -> null
+        }
+    }
+
+    private fun isAccessorOf(m: KotlinSymbol, properties: Map<String, KotlinSymbol>): Boolean {
+        val n = m.name
+        fun propertyName(stripped: String): String? =
+            stripped.takeIf { it.isNotEmpty() && it[0].isUpperCase() }?.let { it[0].lowercaseChar() + it.substring(1) }
+        return when {
+            m.paramTypes.isEmpty() && n.startsWith("get") -> propertyName(n.substring(3))?.let { it in properties } == true
+            m.paramTypes.isEmpty() && n.startsWith("is") -> n in properties
+            m.paramTypes.size == 1 && n.startsWith("set") -> {
+                val stripped = n.substring(3)
+                val property = propertyName(stripped)?.let { properties[it] } ?: properties["is$stripped"] ?: return false
+                val propertyType = (property.type as? KotlinType)?.qualifiedName
+                val paramType = (m.paramTypes[0] as? KotlinType)?.qualifiedName
+                propertyType != null && propertyType == paramType
+            }
+            else -> false
+        }
     }
 
     /** Whether a candidate's (return/declared) type is assignable to the [expected] type — boosts it in [rank]. */
@@ -1349,8 +1479,8 @@ class KotlinCompletion(
          * every key is compared as a primitive `Int` (booleans as 0/1, "true"/in-scope first) so a comparison
          * neither boxes nor walks a lambda array — the sort runs N·log N times over the candidate set, so that
          * per-compare overhead dominated the span. Key order is identical to the old `compareBy`:
-         *   expected-type match → match grade → @Composable boost → member group → in-scope → proximity →
-         *   name length → name. Each Candidate precomputes its keys, so this only reads fields.
+         *   expected-type match → match grade → @Composable boost → popularity → member group → receiver
+         *   distance → in-scope → proximity → name length (not on member access, which is alphabetical) → name. Each Candidate precomputes its keys, so this only reads fields.
          */
         val RANK = Comparator<Candidate> { a, b ->
             var c = (if (a.fitsExpected) 0 else 1) - (if (b.fitsExpected) 0 else 1)
@@ -1359,7 +1489,11 @@ class KotlinCompletion(
             if (c != 0) return@Comparator c
             c = (if (a.boosted) 0 else 1) - (if (b.boosted) 0 else 1)
             if (c != 0) return@Comparator c
+            c = b.popularity - a.popularity
+            if (c != 0) return@Comparator c
             c = a.group - b.group
+            if (c != 0) return@Comparator c
+            c = a.distance - b.distance
             if (c != 0) return@Comparator c
             c = (if (a.inScope) 0 else 1) - (if (b.inScope) 0 else 1)
             if (c != 0) return@Comparator c
@@ -1371,7 +1505,7 @@ class KotlinCompletion(
             if (c != 0) return@Comparator c
             val an = a.symbol.name
             val bn = b.symbol.name
-            c = an.length - bn.length
+            c = a.lengthKey - b.lengthKey
             if (c != 0) return@Comparator c
             an.compareTo(bn)
         }
@@ -1411,6 +1545,9 @@ class KotlinCompletion(
         // Matches the engine's ranked cap (CompletionEngine.MAX_ITEMS) so this rank-aware inner cut never
         // drops a candidate the engine's global ranking would have kept — the engine cap is authoritative.
         const val MAX_ITEMS = 200
+
+        // A receiver's supertype chain is walked for ranking only; past this many types nothing more is learned.
+        const val MAX_CHAIN = 64
 
         // Cap on a type's own companion constants offered at an expected-type slot (`Color` has dozens of
         // named colors) so the popup stays readable; the typed prefix narrows them further.

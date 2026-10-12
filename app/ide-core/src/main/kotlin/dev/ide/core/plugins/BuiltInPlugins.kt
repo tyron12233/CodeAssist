@@ -54,6 +54,7 @@ import dev.ide.core.android.AndroidXmlChecker
 import dev.ide.core.android.AndroidXmlTagChecker
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
+import dev.ide.core.completion.MemberUsageIndex
 import dev.ide.core.completion.PluginManifestCompletion
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.completion.UserLiveTemplateContributor
@@ -96,6 +97,7 @@ import dev.ide.lang.LanguageId
 import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
 import dev.ide.lang.completion.COMPLETION_WEIGHER_EP
 import dev.ide.lang.completion.CompletionContribution
+import dev.ide.lang.completion.ProjectUsageWeigher
 import dev.ide.lang.completion.StatsWeigher
 import dev.ide.lang.java.JavaLanguageBackend
 import dev.ide.lang.java.index.JavaClassLocatorIndex
@@ -620,6 +622,10 @@ private class CompletionBuiltinsPlugin(private val env: ApplicationEnvironment) 
                 env.activeEngine?.completionStats?.countFor(CompletionStats.keyOf(item.label)) ?: 0
             },
         )
+        reg.register(
+            COMPLETION_WEIGHER_EP,
+            ProjectUsageWeigher { item -> env.activeEngine?.memberUsageCount(item.label) ?: 0 },
+        )
     }
 }
 
@@ -658,6 +664,7 @@ internal val BUILT_IN_INDEX_EXTENSIONS: List<dev.ide.index.IndexExtension<*, *>>
     KotlinSourceAnnotationIndex,
     JavaSourceSubtypeIndex,
     JavaSourceAnnotationIndex,
+    MemberUsageIndex,
 )
 
 /** Registers [BUILT_IN_INDEX_EXTENSIONS]. */

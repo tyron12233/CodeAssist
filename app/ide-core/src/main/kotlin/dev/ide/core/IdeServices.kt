@@ -78,6 +78,7 @@ import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionEngine
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.completion.CompletionStats
+import dev.ide.core.completion.MemberUsageIndex
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.gradle.GradleImport
 import dev.ide.core.perf.MB_BYTES
@@ -4139,6 +4140,45 @@ class IdeServices private constructor(
     /** Bump [sourceIndexGeneration] so source-index snapshots ([currentSourceCustomViewScan]) refresh on next use. */
     private fun bumpSourceIndexGeneration() {
         sourceIndexGeneration.incrementAndGet()
+    }
+
+    /**
+     * How many times the project's sources use the member a completion item labeled [label] names, after a `.`
+     * (see [MemberUsageIndex]), for the app-global `platform.projectUsage` weigher. A Kotlin property and its
+     * Java accessors count as one member (`text` also counts `getText`/`setText`, and the reverse), so a Java
+     * project's `setText(...)` calls rank `text` in a Kotlin file. Memoized per [sourceIndexGeneration]:
+     * completion asks for every candidate on every query.
+     */
+    fun memberUsageCount(label: String): Int {
+        val name = label.takeWhile { it.isLetterOrDigit() || it == '_' }
+        if (name.isEmpty()) return 0
+        val gen = sourceIndexGeneration.get()
+        val memo = memberUsageMemo
+        val counts = if (memo.first == gen) memo.second else ConcurrentHashMap<String, Int>().also { memberUsageMemo = gen to it }
+        return memberNameForms(name).sumOf { form ->
+            counts.computeIfAbsent(form) { indexService.exact<Int>(MemberUsageIndex.id, it).sum() }
+        }
+    }
+
+    @Volatile
+    private var memberUsageMemo: Pair<Long, ConcurrentHashMap<String, Int>> = -1L to ConcurrentHashMap()
+
+    /** [name] and the other spellings of the same member: a property's accessors, or an accessor's property. */
+    private fun memberNameForms(name: String): List<String> {
+        fun decap(rest: String) = rest.takeIf { it.isNotEmpty() && it[0].isUpperCase() }?.let { it[0].lowercaseChar() + it.substring(1) }
+        val property = when {
+            name.startsWith("get") -> decap(name.substring(3))
+            name.startsWith("set") -> decap(name.substring(3))
+            else -> null
+        }
+        return when {
+            property != null -> listOf(name, property)
+            name[0].isLowerCase() && !name.startsWith("is") -> {
+                val cap = name[0].uppercaseChar() + name.substring(1)
+                listOf(name, "get$cap", "set$cap")
+            }
+            else -> listOf(name)
+        }
     }
 
     /** Memoized [sourceCustomViewScan], keyed by [sourceIndexGeneration] — so the XML analyzer's custom-view tag

@@ -59,6 +59,33 @@ class StatsWeigher(private val counts: (CompletionItem) -> Int) : CompletionWeig
     }
 }
 
+/**
+ * How often the user's own project already uses a name after a `.` (`view.setVisibility(...)`), so the members
+ * this codebase calls float up on every receiver that has them. The counts live with the host ([counts] is
+ * injected, read from a source index); log-compressed like [StatsWeigher]. Only members and extensions on a
+ * receiver are boosted: the universal scope functions and the `Object` methods are used everywhere, so a
+ * project's habit of calling `let` says nothing about which member of this type it wants.
+ */
+class ProjectUsageWeigher(private val counts: (CompletionItem) -> Int) : CompletionWeigher {
+    override val id = "platform.projectUsage"
+    override val order = 270
+    override fun weigh(item: CompletionItem, params: CompletionParams): Double {
+        val relevance = item.relevance ?: return 0.0
+        if (relevance.callableWeight >= 3) return 0.0
+        val n = counts(item)
+        return if (n <= 0) 0.0 else kotlin.math.ln(1.0 + n.coerceAtMost(1000))
+    }
+}
+
+/** The members most code reaches for on a type (`setText`, `setOnClickListener` on a `TextView`) before its
+ *  long tail, from the bundled [MemberPopularity] table: the prior that works on a project with no history. */
+object PopularityWeigher : CompletionWeigher {
+    override val id = "platform.popularity"
+    override val order = 280
+    override fun weigh(item: CompletionItem, params: CompletionParams): Double =
+        (item.relevance ?: CompletionRelevance.NONE).popularity.toDouble()
+}
+
 /** Callable grouping on a receiver (IntelliJ's `kotlin.callableWeight`): own members over source
  *  extensions over library extensions over universal scope functions over `Object`/`Any` methods. */
 object CallableMetadataWeigher : CompletionWeigher {
@@ -66,6 +93,14 @@ object CallableMetadataWeigher : CompletionWeigher {
     override val order = 300
     override fun weigh(item: CompletionItem, params: CompletionParams): Double =
         -(item.relevance ?: CompletionRelevance.NONE).callableWeight.toDouble()
+}
+
+/** Among a receiver's members, the ones its own class declares before its superclass's, nearest first. */
+object ReceiverDistanceWeigher : CompletionWeigher {
+    override val id = "platform.receiverDistance"
+    override val order = 310
+    override fun weigh(item: CompletionItem, params: CompletionParams): Double =
+        -(item.relevance ?: CompletionRelevance.NONE).receiverDistance.toDouble()
 }
 
 /** In-scope / already-imported candidates over ones whose acceptance must add an import. */
@@ -98,9 +133,9 @@ object DeprecatedWeigher : CompletionWeigher {
         if ((item.relevance ?: CompletionRelevance.NONE).deprecated) 0.0 else 1.0
 }
 
-/** The standard chain in one list, for the engine's built-ins (Stats is host-registered — it needs the
- *  per-project acceptance store). */
+/** The standard chain in one list, for the engine's built-ins (Stats and ProjectUsage are host-registered:
+ *  they need the per-project acceptance store and the source index). */
 val STANDARD_WEIGHERS: List<CompletionWeigher> = listOf(
-    ExpectedTypeWeigher, MatchGradeWeigher, ContextBoostWeigher,
-    CallableMetadataWeigher, NotImportedWeigher, KindWeigher, DeprecatedWeigher,
+    ExpectedTypeWeigher, MatchGradeWeigher, ContextBoostWeigher, PopularityWeigher,
+    CallableMetadataWeigher, ReceiverDistanceWeigher, NotImportedWeigher, KindWeigher, DeprecatedWeigher,
 )
