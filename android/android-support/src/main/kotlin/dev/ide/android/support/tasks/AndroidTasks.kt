@@ -29,6 +29,7 @@ import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.debug
+import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.toolOutput
 import dev.ide.build.engine.warn
 import dev.ide.build.resolveFor
@@ -36,6 +37,7 @@ import dev.ide.lang.jdt.build.javaFailureSummary
 import dev.ide.lang.jdt.build.reportJavaProblems
 import dev.ide.lang.jdt.compile.IncrementalJavaCompiler
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.lang.kotlin.build.KotlinFacet
 import dev.ide.lang.kotlin.build.kotlinFailureSummary
 import dev.ide.lang.kotlin.build.reportKotlinProblems
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
@@ -704,12 +706,27 @@ internal class AndroidKotlinCompileTask(
     private fun kotlinSources(): List<Path> = walk(sourceRoots, ".kt")
     private fun javaSources(): List<Path> = walk(sourceRoots + listOf(genJavaDir) + extraGenDirs, ".java")
 
+    /**
+     * The sources under the roots the `[kotlin]` facet marks common: a KMP module imported for its Android
+     * target compiles `commonMain` and `androidMain` as one, and only naming the common half lets an `expect`
+     * and its `actual` coexist in it (see [KotlinFacet.commonSourceRoots]).
+     */
+    private fun commonSources(kt: List<Path>): List<Path> {
+        val roots = module.facets.get(KotlinFacet.KEY)?.commonSourceRoots.orEmpty()
+        if (roots.isEmpty()) return emptyList()
+        val dirs = roots.map { moduleDir(module).resolve(it).toAbsolutePath().normalize() }
+        return kt.filter { file -> file.toAbsolutePath().normalize().let { path -> dirs.any { path.startsWith(it) } } }
+    }
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
-            filePaths("kotlinSources", kotlinSources())
+            val kt = kotlinSources()
+            filePaths("kotlinSources", kt)
             filePaths("javaSources", javaSources())
             filePaths("classpath", classpath)
             property("level", level)
+            // Which sources are common changes what compiles, so it is an input like the language level.
+            filePaths("commonSources", commonSources(kt))
         }
     override val outputs: TaskOutputs
         get() = TaskOutputsImpl().apply {
@@ -730,6 +747,7 @@ internal class AndroidKotlinCompileTask(
             bootClasspath = bootClasspath,
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
             runtimePluginClasspaths = resolved.runtimeClasspaths,
+            commonSources = commonSources(kt),
         )
         ctx.reportKotlinProblems(r)
         return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))

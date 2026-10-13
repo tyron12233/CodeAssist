@@ -13,9 +13,12 @@ import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
+import dev.ide.lang.kotlin.build.KotlinFacet
+import dev.ide.lang.kotlin.build.KotlinFacetCodec
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.model.BuildSystemId
+import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
@@ -93,6 +96,137 @@ class AndroidKotlinBuildTest {
 
             val apk = AndroidBuildSystem.signedApkPath(store.workspace.projects.single().modules.single(), "debug")
             assertTrue(Files.isRegularFile(apk), "signed APK missing: $apk\n$log")
+        }
+    }
+
+    /**
+     * A Kotlin Multiplatform app as the Gradle import collapses it: `commonMain` and `androidMain` roots in
+     * one `main` set, the manifest and resources under `androidMain`, and the `[kotlin]` facet naming the
+     * common half. The `expect`/`actual` pair compiles only when the Android compile passes those common
+     * sources to K2, which is what this proves.
+     */
+    @Test
+    fun assemblesAKotlinMultiplatformAppWithExpectAndActual() {
+        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
+        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
+        sdk!!
+
+        testEnv("android-kmp") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val store = ProjectModel.open(
+                dir, platform, FacetCodecRegistry().register(AndroidFacetCodec).register(KotlinFacetCodec),
+            )
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.libraryTable.create("kotlin-stdlib")
+                .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(TestJars.kotlinStdlib())); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_8
+                    putFacet(
+                        AndroidFacet(
+                            namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34,
+                            manifest = "src/androidMain/AndroidManifest.xml",
+                        )
+                    )
+                    putFacet(KotlinFacet(commonSourceRoots = listOf("src/commonMain/kotlin")))
+                    addContentRoot("main", "src/commonMain/kotlin", setOf(ContentRole.SOURCE))
+                    addContentRoot("main", "src/androidMain/kotlin", setOf(ContentRole.SOURCE))
+                    addContentRoot("main", "src/androidMain/res", setOf(ContentRole.ANDROID_RES))
+                    addDependency(LibraryDependency(LibraryRef("kotlin-stdlib"), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+            dir.writeSource("app/src/androidMain/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/androidMain/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/commonMain/kotlin/com/example/app/Platform.kt", """
+                package com.example.app
+                expect fun platformName(): String
+                fun greeting(): String = "hello from " + platformName()
+            """)
+            dir.writeSource("app/src/androidMain/kotlin/com/example/app/Platform.android.kt", """
+                package com.example.app
+                actual fun platformName(): String = "android"
+            """)
+            dir.writeSource("app/src/androidMain/kotlin/com/example/app/MainActivity.kt", """
+                package com.example.app
+                import android.app.Activity
+                import android.os.Bundle
+                import android.widget.TextView
+                class MainActivity : Activity() {
+                    override fun onCreate(b: Bundle?) {
+                        super.onCreate(b)
+                        setContentView(TextView(this).apply { text = greeting() })
+                    }
+                }
+            """)
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val build = AndroidBuildSystem.subprocess(sdk, signing, kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler()))
+            val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE)
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                    .execute(build.createBuildGraph(store.workspace.projects.single(), request), SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "KMP android build failed:\n$log")
+
+            val dex = dir.resolve("app/build/intermediates/android/debug/dex-archives/project/com/example/app")
+            for (cls in listOf("PlatformKt.dex", "Platform_androidKt.dex", "MainActivity.dex")) {
+                assertTrue(Files.isRegularFile(dex.resolve(cls)), "$cls was not dexed into the project scope\n$log")
+            }
+            val apk = AndroidBuildSystem.signedApkPath(store.workspace.projects.single().modules.single(), "debug")
+            assertTrue(Files.isRegularFile(apk), "signed APK missing: $apk\n$log")
+        }
+    }
+
+    /**
+     * A source set named for no variant (one added in Module Settings): the Android pipeline compiles it into
+     * every variant, as the JVM pipeline does. Before, no variant included it, so `Greeting` was unresolvable
+     * from `main` and the build failed.
+     */
+    @Test
+    fun compilesASourceSetNamedForNoVariant() {
+        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
+        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
+        sdk!!
+
+        testEnv("android-shared-set") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.libraryTable.create("kotlin-stdlib")
+                .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(TestJars.kotlinStdlib())); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_8
+                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
+                    addContentRoot("generated", "src/generated/kotlin", setOf(ContentRole.SOURCE))
+                    addDependency(LibraryDependency(LibraryRef("kotlin-stdlib"), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/generated/kotlin/com/example/app/Greeting.kt", GREETING)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val build = AndroidBuildSystem.subprocess(sdk, signing, kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler()))
+            val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE)
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                    .execute(build.createBuildGraph(store.workspace.projects.single(), request), SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "build with a shared source set failed:\n$log")
+            val kotlinDex = dir.resolve("app/build/intermediates/android/debug/dex-archives/project/com/example/app/Greeting.dex")
+            assertTrue(Files.isRegularFile(kotlinDex), "the shared set's class was not dexed: $kotlinDex\n$log")
         }
     }
 

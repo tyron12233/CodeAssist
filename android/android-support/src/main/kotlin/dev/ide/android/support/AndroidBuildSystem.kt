@@ -1326,11 +1326,13 @@ class AndroidBuildSystem(
      * The source-set names a variant draws from, for resolving a CONVENTIONAL folder under `src/`. Takes the
      * variant's `configurations` (the unfiltered candidate names) rather than its `activeSourceSets`, so a
      * folder is still found for a source set the model never declared at all (`src/debug/jniLibs` in a module
-     * whose only declared set is `main`). `main` is always a candidate.
+     * whose only declared set is `main`). `main` is always a candidate, followed by the variant's shared sets
+     * (see [AndroidVariants.sharedSourceSets]), which are active in every variant but no variant's configuration.
      */
     private fun sourceSetNames(module: Module, variant: AndroidVariant?): Set<String> =
         LinkedHashSet<String>().apply {
             add("main")
+            if (variant != null) addAll(variant.activeSourceSets.map { it.name }.filter { it !in variant.configurations })
             addAll(
                 variant?.configurations
                     ?: module.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }.map { it.name },

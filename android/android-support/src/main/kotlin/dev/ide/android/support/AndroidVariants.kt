@@ -13,6 +13,11 @@ import dev.ide.model.VariantId
  * resolves which source sets are active: `main`, each selected flavor, the build type, the combined
  * flavor name (multi-dimension), and the flavor+buildType set, keeping only those the module actually
  * declares.
+ *
+ * Plus every [sharedSourceSets] set: one whose name belongs to no variant (a set added in Module Settings,
+ * `commonMain` from an export). Gradle has no such sets, since there a name IS a variant qualifier, but
+ * the model allows them and the JVM pipeline compiles them; leaving them out of every variant compiled them
+ * nowhere, silently.
  */
 object AndroidVariants {
 
@@ -20,10 +25,48 @@ object AndroidVariants {
         val facet = module.facets.get(AndroidFacet.KEY) ?: return emptyList()
         val byName = module.sourceSets.associateBy { it.name }
         val combos = flavorCombinations(facet)
+        val shared = sharedSourceSets(module, facet, combos)
         return facet.buildTypes.flatMap { bt ->
-            combos.map { combo -> variant(module, byName, combo.map { it.name }, bt.name) }
+            combos.map { combo -> variant(module, byName, combo.map { it.name }, bt.name, shared) }
         }
     }
+
+    /**
+     * The non-test source sets every variant compiles besides `main`: those whose name qualifies no variant.
+     *
+     * A name counts as a variant's when it is any flavor, any build type, any combination of them, or a
+     * default build type the facet dropped. The last matters because the module type lays down `debug` and
+     * `release` sets: a facet with only `debug` + `staging` must not start compiling `src/release` into
+     * every variant. Test-named sets (`test`, `androidTest`, `testFixtures`, `testDebug`, …) are excluded
+     * whatever their scope says.
+     */
+    fun sharedSourceSets(module: Module): List<SourceSet> {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return emptyList()
+        return sharedSourceSets(module, facet, flavorCombinations(facet))
+    }
+
+    private fun sharedSourceSets(
+        module: Module,
+        facet: AndroidFacet,
+        combos: List<List<ProductFlavor>>,
+    ): List<SourceSet> {
+        val buildTypes = (facet.buildTypes + AndroidFacet.DEFAULT_BUILD_TYPES).map { it.name }.toSet()
+        val variantNames = HashSet<String>()
+        variantNames += facet.productFlavors.map { it.name }
+        for (bt in buildTypes) for (combo in combos) variantNames += candidateNames(combo.map { it.name }, bt)
+        return module.sourceSets.filter {
+            it.name != MAIN && it.scope != DependencyScope.TEST_IMPLEMENTATION &&
+                it.name !in variantNames && !isTestName(it.name)
+        }
+    }
+
+    private fun isTestName(name: String): Boolean =
+        TEST_PREFIXES.any { prefix ->
+            name == prefix || (name.startsWith(prefix) && name.getOrNull(prefix.length)?.isUpperCase() == true)
+        }
+
+    private const val MAIN = "main"
+    private val TEST_PREFIXES = listOf("androidTest", "testFixtures", "test")
 
     /** Resolve a single variant by its assembled name (e.g. `freeDebug`), or null if unknown. */
     fun select(module: Module, variantName: String): AndroidVariant? =
@@ -124,16 +167,13 @@ object AndroidVariants {
         byName: Map<String, SourceSet>,
         flavorNames: List<String>,
         buildType: String,
+        shared: List<SourceSet>,
     ): AndroidVariant {
         val name = assembleName(flavorNames, buildType)
-        val relevant = LinkedHashSet<String>().apply {
-            add("main")
-            addAll(flavorNames)
-            if (flavorNames.size > 1) add(camel(flavorNames))      // combined multi-flavor source set
-            add(buildType)
-            add(assembleName(flavorNames, buildType))               // flavor(s) + build type
-        }
-        val active = relevant.mapNotNull { byName[it] }
+        val relevant = candidateNames(flavorNames, buildType)
+        // The shared sets sit right after `main` (in the model's order, which is by name), ahead of the
+        // variant's own: where the variant sets overlay `main` (resources), they overlay the shared sets too.
+        val active = listOfNotNull(byName[MAIN]) + shared + relevant.filter { it != MAIN }.mapNotNull { byName[it] }
         return AndroidVariant(
             id = VariantId("${module.id.value}:$name"),
             name = name,
@@ -145,6 +185,17 @@ object AndroidVariants {
             configurations = relevant,
         )
     }
+
+    /** The source-set names one variant draws from: `main`, its flavors, their combination, its build type,
+     *  and flavor(s) + build type. */
+    private fun candidateNames(flavorNames: List<String>, buildType: String): LinkedHashSet<String> =
+        LinkedHashSet<String>().apply {
+            add(MAIN)
+            addAll(flavorNames)
+            if (flavorNames.size > 1) add(camel(flavorNames))      // combined multi-flavor source set
+            add(buildType)
+            add(assembleName(flavorNames, buildType))               // flavor(s) + build type
+        }
 
     /** Cartesian product of one flavor per dimension; a single empty combo when there are no flavors. */
     private fun flavorCombinations(facet: AndroidFacet): List<List<ProductFlavor>> {

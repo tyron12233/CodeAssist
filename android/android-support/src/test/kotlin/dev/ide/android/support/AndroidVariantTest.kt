@@ -13,6 +13,7 @@ import dev.ide.model.impl.ProjectModelStore
 import dev.ide.testkit.testEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import dev.ide.model.impl.open
 
 class AndroidVariantTest {
@@ -59,6 +60,49 @@ class AndroidVariantTest {
 
             assertEquals("freeDebug", AndroidVariants.select(module, "freeDebug")?.name)
             assertEquals(null, AndroidVariants.select(module, "nope"))
+        }
+    }
+
+    /** A set whose name qualifies no variant (one added in Module Settings) is compiled by every variant,
+     *  right after `main`; the JVM pipeline compiles such a set too, and before this no variant did. */
+    @Test
+    fun aSetNamedForNoVariantIsActiveInEveryVariant() {
+        withModule(
+            facet = AndroidFacet(
+                namespace = "com.example.app",
+                compileSdk = 34,
+                flavorDimensions = listOf("tier"),
+                productFlavors = listOf(ProductFlavor("free", dimension = "tier"), ProductFlavor("paid", dimension = "tier")),
+            ),
+            extraSourceSets = listOf("free", "paid", "generated"),
+        ) { module ->
+            val variants = AndroidVariants.compute(module)
+            assertEquals(listOf("main", "generated", "free", "debug"), variants.first { it.name == "freeDebug" }.activeSourceSets.map { it.name })
+            assertEquals(listOf("main", "generated", "paid", "release"), variants.first { it.name == "paidRelease" }.activeSourceSets.map { it.name })
+            assertEquals(listOf("generated"), AndroidVariants.sharedSourceSets(module).map { it.name })
+            // It is no variant's configuration: a `generatedImplementation` dependency still matches nothing.
+            assertTrue(variants.none { "generated" in it.configurations })
+        }
+    }
+
+    /** What must NOT become shared: a default build type the facet dropped (the module type still lays down
+     *  `src/release`), a flavor+build-type set of a build type it dropped, and test-named sets. */
+    @Test
+    fun droppedBuildTypesAndTestSetsAreNeverShared() {
+        withModule(
+            facet = AndroidFacet(
+                namespace = "com.example.app",
+                compileSdk = 34,
+                buildTypes = listOf(BuildType("debug", debuggable = true), BuildType("staging")),
+                flavorDimensions = listOf("tier"),
+                productFlavors = listOf(ProductFlavor("free", dimension = "tier")),
+            ),
+            extraSourceSets = listOf("freeRelease", "testFixtures", "androidTestDebug", "testing", "shared"),
+        ) { module ->
+            // `testing` is not a test set (only `test` followed by an upper-case letter is).
+            assertEquals(listOf("shared", "testing"), AndroidVariants.sharedSourceSets(module).map { it.name })
+            val staging = AndroidVariants.compute(module).first { it.name == "freeStaging" }
+            assertEquals(listOf("main", "shared", "testing"), staging.activeSourceSets.map { it.name })
         }
     }
 
