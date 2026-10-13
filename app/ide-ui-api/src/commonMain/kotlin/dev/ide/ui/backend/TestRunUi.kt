@@ -22,6 +22,9 @@ data class UiTestRun(
     val classFailures: Map<String, String> = emptyMap(),
     val finished: Boolean = false,
     val noTests: Boolean = false,
+    /** How the run was started, so running its tests again starts the same kind: [TestOutput.LOCAL] (the JVM)
+     *  or [TestOutput.INSTRUMENTED] (a device). Announced by the run's first record. */
+    val kind: String = TestOutput.LOCAL,
 ) {
     val passed: Int get() = cases.count { it.status == UiTestStatus.Passed }
     val failed: Int get() = cases.count { it.status == UiTestStatus.Failed } + classFailures.size
@@ -53,33 +56,47 @@ object TestOutput {
     /** Prefixes a gutter mark's action id that is a test Run task id: tapping it starts that run. */
     const val GUTTER_ACTION_PREFIX = "ca.runTests:"
 
+    /** Run kinds, which are also the task-id prefixes: local tests on the JVM, instrumented tests on a device. */
+    const val LOCAL = "test"
+    const val INSTRUMENTED = "androidTest"
+
+    /** The record that opens a run and names its kind (its message). Optional: a run without one is [LOCAL]. */
+    const val RUN = "RUN"
+
     /**
      * The Run task id that runs tests of [module]: all of them when [targets] is empty, else each target, a
      * class FQN or `classFqn#method`. Targets are newline-separated, which no class or method name can hold
      * (Kotlin forbids it even between backticks).
      */
-    fun taskId(module: String, targets: List<String> = emptyList()): String =
-        if (targets.isEmpty()) "test:$module" else "test:$module:" + targets.joinToString("\n")
+    fun taskId(module: String, targets: List<String> = emptyList(), kind: String = LOCAL): String =
+        if (targets.isEmpty()) "$kind:$module" else "$kind:$module:" + targets.joinToString("\n")
 
     /** A [taskId] target for one test. */
     fun target(className: String, method: String? = null): String = if (method == null) className else "$className#$method"
 
     /** [taskId]'s parts: the module and its targets (empty for every test). Null for a non-test id. */
     fun parseTaskId(id: String): Pair<String, List<String>>? {
-        if (!id.startsWith("test:")) return null
-        val rest = id.removePrefix("test:")
+        val kind = kindOf(id) ?: return null
+        val rest = id.removePrefix("$kind:")
         val module = rest.substringBefore(':')
         val targets = rest.substringAfter(':', "").split('\n').filter { it.isNotEmpty() }
         return module to targets
+    }
+
+    /** The kind of test task [id] starts ([LOCAL] or [INSTRUMENTED]), or null for another task. */
+    fun kindOf(id: String): String? = when {
+        id.startsWith("$LOCAL:") -> LOCAL
+        id.startsWith("$INSTRUMENTED:") -> INSTRUMENTED
+        else -> null
     }
 
     /** Runs the same tests as [run] did: one test, one class, or the whole module. */
     fun rerunId(module: String, run: UiTestRun): String {
         val classes = run.cases.map { it.className }.distinct()
         return when {
-            run.cases.size == 1 -> taskId(module, listOf(target(run.cases[0].className, run.cases[0].name)))
-            classes.size == 1 -> taskId(module, classes)
-            else -> taskId(module)
+            run.cases.size == 1 -> taskId(module, listOf(target(run.cases[0].className, run.cases[0].name)), run.kind)
+            classes.size == 1 -> taskId(module, classes, run.kind)
+            else -> taskId(module, kind = run.kind)
         }
     }
 
@@ -87,7 +104,7 @@ object TestOutput {
     fun rerunFailedId(module: String, run: UiTestRun): String? {
         val targets = run.cases.filter { it.status == UiTestStatus.Failed }.map { target(it.className, it.name) } +
             run.classFailures.keys.map { target(it) }
-        return if (targets.isEmpty()) null else taskId(module, targets.distinct())
+        return if (targets.isEmpty()) null else taskId(module, targets.distinct(), run.kind)
     }
 
     fun split(transcript: List<ConsoleChunk>): TestConsoleView {
@@ -175,6 +192,7 @@ object TestOutput {
         var finished = false
         var noTests = false
         var any = false
+        var kind = LOCAL
 
         fun apply(event: String, cls: String, method: String, ms: Long, message: String) {
             any = true
@@ -190,10 +208,11 @@ object TestOutput {
                 "SKIPPED" -> set(UiTestStatus.Skipped)
                 "CLASS_FAILED" -> classFailures[cls] = message
                 "FINISHED" -> { finished = true; noTests = message == "no tests" && cases.isEmpty() }
+                RUN -> kind = message.ifEmpty { LOCAL }
             }
         }
 
-        fun run(): UiTestRun? = if (!any) null else UiTestRun(cases.values.toList(), classFailures, finished, noTests)
+        fun run(): UiTestRun? = if (!any) null else UiTestRun(cases.values.toList(), classFailures, finished, noTests, kind)
     }
 }
 

@@ -94,7 +94,14 @@ internal class Adb(val adb: Path) {
                 lines.forEach { line -> out.appendLine(line); onLine(line) }
             }
         }, "adb-output").apply { isDaemon = true; start() }
-        if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+        val finished = try {
+            process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            // The caller was cancelled (a stopped test run): take the device-side command down with it.
+            process.destroyForcibly()
+            throw e
+        }
+        if (!finished) {
             process.destroyForcibly()
             reader.join(1_000)
             return AdbResult(-1, out.append("adb did not finish within $timeoutSeconds s").toString())

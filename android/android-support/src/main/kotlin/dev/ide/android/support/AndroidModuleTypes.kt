@@ -24,11 +24,27 @@ sealed class AndroidModuleType(
 
     override fun supportedBuildSystems(): Set<BuildSystemId> = setOf(BuildSystemId.NATIVE)
 
-    /** `main` plus one source set per default build type, each with java/res/assets roots. */
+    /**
+     * `main` plus one source set per default build type, each with java/res/assets roots, and the two test sets:
+     * `test` (local unit tests, run on the JVM) and `androidTest` (instrumented tests, run on a device). The test
+     * sets compile into no variant ([AndroidVariants] leaves test-named sets out); they build on their own.
+     */
     override fun defaultSourceSets(): List<SourceSetTemplate> = buildList {
         add(sourceSet("main"))
         AndroidFacet.DEFAULT_BUILD_TYPES.forEach { add(sourceSet(it.name)) }
+        add(testSet("test"))
+        add(testSet("androidTest"))
     }
+
+    private fun testSet(name: String) = SourceSetTemplate(
+        name = name,
+        scope = DependencyScope.TEST_IMPLEMENTATION,
+        roots = linkedMapOf(
+            "src/$name/java" to setOf(ContentRole.SOURCE),
+            "src/$name/kotlin" to setOf(ContentRole.SOURCE),
+            "src/$name/resources" to setOf(ContentRole.RESOURCE),
+        ),
+    )
 
     /** A starter [AndroidFacet] — placeholder namespace/SDK the wizard overrides. */
     override fun defaultFacets(): List<FacetTemplate> = listOf(

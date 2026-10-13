@@ -267,15 +267,18 @@ internal fun BoxScope.AppShortcutsHost(
                 }
                 id == AppCommands.RUN_TESTS -> {
                     // The file's test classes, from the run marks its editor already shows.
-                    val targets = active?.session?.gutterMarks.orEmpty()
+                    val taskIds = active?.session?.gutterMarks.orEmpty()
                         .mapNotNull { it.actionId?.takeIf { a -> a.startsWith(TestOutput.GUTTER_ACTION_PREFIX) } }
-                        .mapNotNull { TestOutput.parseTaskId(it.removePrefix(TestOutput.GUTTER_ACTION_PREFIX)) }
+                        .map { it.removePrefix(TestOutput.GUTTER_ACTION_PREFIX) }
+                    val targets = taskIds.mapNotNull { TestOutput.parseTaskId(it) }
                         .filter { (_, t) -> t.singleOrNull()?.contains('#') == false }
                     val module = targets.firstOrNull()?.first
+                    // Local or instrumented, as the file's own marks run it.
+                    val kind = taskIds.firstNotNullOfOrNull { TestOutput.kindOf(it) } ?: TestOutput.LOCAL
                     if (module == null) toast = noTestsHere
                     else {
                         state.consoleOpen = true
-                        state.requestRun { state.backend.build.runTask(TestOutput.taskId(module, targets.flatMap { it.second }.distinct())) }
+                        state.requestRun { state.backend.build.runTask(TestOutput.taskId(module, targets.flatMap { it.second }.distinct(), kind)) }
                     }
                 }
                 id == AppCommands.BUILD -> {

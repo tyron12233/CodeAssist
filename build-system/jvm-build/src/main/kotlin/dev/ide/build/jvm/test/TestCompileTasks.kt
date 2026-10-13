@@ -47,13 +47,15 @@ class TestKotlinCompileTask(
     private val testClasspath: () -> List<Path> = { testCompileClasspath(module) },
     private val out: Path = testKotlinOutputDir(module),
     private val friends: () -> List<Path> = { listOf(kotlinOutputDir(module)) },
+    private val kotlinSources: () -> List<Path> = { testKotlinSourceFiles(module) },
+    private val javaSources: () -> List<Path> = { testJavaSourceFiles(module) },
 ) : Task {
     private fun classpath(): List<Path> = testClasspath().filter { Files.exists(it) }
 
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
-            filePaths("kotlinSources", testKotlinSourceFiles(module))
-            filePaths("javaSources", testJavaSourceFiles(module))
+            filePaths("kotlinSources", kotlinSources())
+            filePaths("javaSources", javaSources())
             dirPaths("classpathDirs", classpath().filter { Files.isDirectory(it) })
             filePaths("classpathJars", classpath().filter { Files.isRegularFile(it) })
             property("level", levelOf(module.languageLevel))
@@ -64,12 +66,12 @@ class TestKotlinCompileTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         Files.createDirectories(out)
-        val kt = testKotlinSourceFiles(module)
+        val kt = kotlinSources()
         if (kt.isEmpty()) return TaskResult.Success
         val classpath = classpath()
         val resolved = plugins.resolveFor(module, classpath + bootClasspath)
         val r = compiler.compile(
-            kt, testJavaSourceFiles(module), classpath, out, levelOf(module.languageLevel),
+            kt, javaSources(), classpath, out, levelOf(module.languageLevel),
             bootClasspath = bootClasspath,
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
             runtimePluginClasspaths = resolved.runtimeClasspaths,
@@ -88,12 +90,13 @@ class TestJavaCompileTask(
     private val bootClasspath: List<Path>,
     private val testClasspath: () -> List<Path> = { testCompileClasspath(module) + testKotlinOutputDir(module) },
     private val out: Path = testOutputDir(module),
+    private val sources: () -> List<Path> = { testJavaSourceFiles(module) },
 ) : Task {
     private fun classpath(): List<Path> = testClasspath().filter { Files.exists(it) }
 
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
-            filePaths("sources", testJavaSourceFiles(module))
+            filePaths("sources", sources())
             dirPaths("classpathDirs", classpath().filter { Files.isDirectory(it) })
             filePaths("classpathJars", classpath().filter { Files.isRegularFile(it) })
             property("level", levelOf(module.languageLevel))
@@ -103,7 +106,7 @@ class TestJavaCompileTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        val sources = testJavaSourceFiles(module)
+        val sources = sources()
         Files.createDirectories(out)
         if (sources.isEmpty()) return TaskResult.Success
         val r = IncrementalJavaCompiler().compile(sources, classpath(), out, levelOf(module.languageLevel), bootClasspath = bootClasspath)

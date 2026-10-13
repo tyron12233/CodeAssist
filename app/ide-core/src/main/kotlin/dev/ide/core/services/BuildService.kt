@@ -42,9 +42,11 @@ import dev.ide.build.RunWindow
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
+import dev.ide.build.engine.hasAndroidTestSources
 import dev.ide.build.engine.hasTestSources
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaBuildSystem
+import dev.ide.build.jvm.test.TestProtocol
 import dev.ide.build.jvm.test.TestSelector
 import dev.ide.core.applog.AppLogEntry
 import dev.ide.core.applog.AppLogLevel
@@ -697,6 +699,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // active variant.
         for (m in ctx.modules()) {
             if (hasTestSources(m)) add(RunTaskOption("test:${m.name}", "Test ${m.name}", "test"))
+            // Instrumented tests need a device the IDE drives over adb, so only where the installer can.
+            if (m.type.id == "android-app" && ctx.apkInstaller?.runsInstrumentation == true && hasAndroidTestSources(m)) {
+                add(RunTaskOption("${TestOutput.INSTRUMENTED}:${m.name}", "Instrumented tests · ${m.name}", "test"))
+            }
         }
         for (m in ctx.modules().filter { it.type.id == "android-app" }) {
             for (v in AndroidVariants.compute(m)) {
@@ -815,6 +821,59 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                             instanceMain = target.instance
                         ), "> Run $mainClass", onComplete = ::finalizeRunConsole
                     )
+                }
+
+                id.startsWith("${TestOutput.INSTRUMENTED}:") -> {
+                    // androidTest:<module>[:<target>…]: build the app and its test APK, then run them on a device.
+                    val (moduleName, targets) = TestOutput.parseTaskId(id)!!
+                    val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return fail(
+                        "No module '$moduleName'."
+                    )
+                    if (module.type.id != "android-app") return fail(
+                        "Instrumented tests run inside an app; ${module.name} is not an Android application module."
+                    )
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val installer = ctx.apkInstaller?.takeIf { it.runsInstrumentation } ?: return fail(
+                        "Instrumented tests (androidTest) run on a phone or emulator over adb, from the desktop IDE. " +
+                            "Here, run the module's local tests (Test ${module.name})."
+                    )
+                    val android = androidBuild ?: return fail("Android SDK not found.")
+                    val facet = module.facets.get(AndroidFacet.KEY)
+                        ?: return fail("No Android package for '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val variant = ctx.activeVariant(module)
+                    val appId = AndroidVariants.select(module, variant)
+                        ?.let { AndroidVariants.applicationId(facet, it) } ?: facet.namespace
+                    // The runner selects classes and methods, not one run of a parameterized test.
+                    val selected = targets.map { it.substringBefore('[') }.distinct()
+                    val label = when {
+                        selected.size > 1 -> "${selected.size} tests in ${module.name}"
+                        selected.size == 1 -> selected.single().substringAfterLast('.').replace('#', '.')
+                        else -> "Instrumented tests in ${module.name}"
+                    }
+                    val graph = android.createAndroidTestGraph(project, module, variant, buildContext())
+                    val sessionId = runConsoleSeq.incrementAndGet()
+                    val io = RunProgramIo(sessionId, module.name, label)
+                    currentRunIo = io
+                    _runConsole.value = RunConsoleUi(sessionId, module.name, label)
+                    val args = if (selected.isEmpty()) emptyList() else listOf("class" to selected.joinToString(","))
+                    launch(
+                        module.name, graph, "> Instrumented tests $label · $variant", firstBuildDexBanner(module),
+                        onComplete = ::finalizeRunConsole,
+                    ) { log ->
+                        io.started()
+                        io.stdout(TestProtocol.record(TestOutput.RUN, message = TestOutput.INSTRUMENTED))
+                        val results = InstrumentationResults(io::stdout)
+                        val started = installer.runInstrumentation(
+                            AndroidBuildSystem.signedApkPath(module, variant), appId,
+                            AndroidBuildSystem.signedAndroidTestApkPath(module, variant), AndroidBuildSystem.testPackageOf(appId),
+                            AndroidBuildSystem.DEFAULT_TEST_RUNNER, args, null, log, results::line,
+                        )
+                        val problem = results.finish()
+                        problem?.let { io.stdout("\n$it\n") }
+                        io.exited(if (!started || problem != null || results.failed > 0) 1 else 0)
+                    }
                 }
 
                 id.startsWith("test:") -> {

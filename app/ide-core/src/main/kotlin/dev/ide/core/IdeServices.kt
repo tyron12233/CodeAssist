@@ -2485,15 +2485,21 @@ class IdeServices private constructor(
     /**
      * Run marks for the tests in [file] when it sits in a test source root of a module that can run tests: one
      * on each test class (all its tests) and one on each test. A mark's action is the `test:` Run task itself,
-     * prefixed so the editor knows to start it as a run ([TestOutput.GUTTER_ACTION_PREFIX]).
+     * prefixed so the editor knows to start it as a run ([TestOutput.GUTTER_ACTION_PREFIX]). An app's `androidTest`
+     * file gets `androidTest:` marks, where instrumented tests can run (the desktop, over adb).
      */
     private fun testGutterMarks(file: Path, text: String): List<dev.ide.plugin.editor.GutterMark> {
         val name = file.fileName?.toString() ?: return emptyList()
         if (!name.endsWith(".kt") && !name.endsWith(".java")) return emptyList()
         val target = file.toAbsolutePath().normalize()
-        val module = modules().firstOrNull { m ->
-            dev.ide.build.engine.testSourceRootDirs(m).any { target.startsWith(it.toAbsolutePath().normalize()) }
-        } ?: return emptyList()
+        fun under(roots: List<Path>) = roots.any { target.startsWith(it.toAbsolutePath().normalize()) }
+        var kind = TestOutput.LOCAL
+        val module = modules().firstOrNull { m -> under(dev.ide.build.engine.testSourceRootDirs(m)) }
+            ?: modules().firstOrNull { m ->
+                m.type.id == "android-app" && apkInstaller?.runsInstrumentation == true &&
+                    under(dev.ide.build.engine.androidTestSourceRootDirs(m))
+            }?.also { kind = TestOutput.INSTRUMENTED }
+            ?: return emptyList()
         val hits = if (name.endsWith(".kt")) {
             dev.ide.lang.kotlin.index.KotlinTestScan.scan(name, text).map { Triple(it.classFqn, it.method, it.offset) }
         } else {
@@ -2503,7 +2509,7 @@ class IdeServices private constructor(
         val lineStarts = ArrayList<Int>().apply { add(0); text.forEachIndexed { i, c -> if (c == '\n') add(i + 1) } }
         return hits.map { (cls, method, offset) ->
             val line = lineStarts.binarySearch(offset).let { if (it >= 0) it else -it - 2 }
-            val taskId = TestOutput.taskId(module.name, listOf(TestOutput.target(cls, method)))
+            val taskId = TestOutput.taskId(module.name, listOf(TestOutput.target(cls, method)), kind)
             dev.ide.plugin.editor.GutterMark(
                 line = line,
                 iconId = "run",

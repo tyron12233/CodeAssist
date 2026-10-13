@@ -177,7 +177,7 @@ fun RunScreen(
             TestResults(
                 tests = tests!!,
                 running = rc.phase != RunPhase.Finished,
-                onRun = { cls, method -> backend.build.runTask(TestOutput.taskId(rc.moduleName, listOf(TestOutput.target(cls, method)))) },
+                onRun = { cls, method -> backend.build.runTask(TestOutput.taskId(rc.moduleName, listOf(TestOutput.target(cls, method)), tests!!.kind)) },
                 onOpen = openTest,
                 modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
             )

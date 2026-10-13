@@ -25,6 +25,28 @@ fun isTestSourceSet(sourceSet: SourceSet): Boolean =
     !sourceSet.scope.onCompile && !sourceSet.scope.onRuntime && sourceSet.scope.onTest &&
         !sourceSet.name.startsWith("androidTest")
 
+/** An Android module's instrumented-test source set (`androidTest`, `androidTestDebug`, …): test-only like
+ *  [isTestSourceSet], but built into a test APK that runs on a device rather than on the JVM. */
+fun isAndroidTestSourceSet(sourceSet: SourceSet): Boolean =
+    !sourceSet.scope.onCompile && !sourceSet.scope.onRuntime && sourceSet.scope.onTest &&
+        sourceSet.name.startsWith("androidTest")
+
+/** The SOURCE and GENERATED roots of [module]'s instrumented-test source sets that exist on disk. */
+fun androidTestSourceRootDirs(module: Module): List<Path> = collapseNestedRoots(
+    module.sourceSets.filter(::isAndroidTestSourceSet)
+        .flatMap { it.contentRoots }
+        .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
+        .map { Paths.get(it.dir.path) },
+).filter { Files.isDirectory(it) }
+
+/** Whether [module] has any instrumented test source. */
+fun hasAndroidTestSources(module: Module): Boolean =
+    androidTestSourceRootDirs(module).any { root -> filesUnder(listOf(root), ".kt").isNotEmpty() || filesUnder(listOf(root), ".java").isNotEmpty() }
+
+/** The `.java` / `.kt` files under [androidTestSourceRootDirs]. */
+fun androidTestJavaSourceFiles(module: Module): List<Path> = filesUnder(androidTestSourceRootDirs(module), ".java")
+fun androidTestKotlinSourceFiles(module: Module): List<Path> = filesUnder(androidTestSourceRootDirs(module), ".kt")
+
 /** A module's test source roots (SOURCE and GENERATED roots of its test source sets) that exist on disk. */
 fun testSourceRootDirs(module: Module): List<Path> = collapseNestedRoots(
     module.sourceSets.filter(::isTestSourceSet)

@@ -3,6 +3,7 @@ package dev.ide.desktop.run
 import dev.ide.core.ApkInstaller
 import dev.ide.core.InstallTarget
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.nio.file.Path
 
@@ -59,17 +60,56 @@ internal class DesktopApkInstaller(
         val devices = adb.devices().also { known = it }
         val device = pickDevice(devices, target, log) ?: return@withContext false
 
-        log("Installing on ${device.label} (${device.serial})…")
+        if (!install(adb, device, apk, packageName, log)) return@withContext false
+        launch(adb, device, packageName, log)
+        true
+    }
+
+    override val runsInstrumentation: Boolean get() = true
+
+    override suspend fun runInstrumentation(
+        appApk: Path,
+        appPackage: String,
+        testApk: Path,
+        testPackage: String,
+        runner: String,
+        args: List<Pair<String, String>>,
+        target: String?,
+        log: (String) -> Unit,
+        onLine: (String) -> Unit,
+    ): Boolean = runInterruptible(Dispatchers.IO) {
+        val adbPath = locate()
+        if (adbPath == null) {
+            log("adb was not found, so the tests were built but not run.")
+            log("Install Platform tools from Settings > SDK Manager, or set ANDROID_HOME to an Android SDK.")
+            return@runInterruptible false
+        }
+        val adb = Adb(adbPath)
+        val devices = adb.devices().also { known = it }
+        val device = pickDevice(devices, target, log) ?: return@runInterruptible false
+        if (!install(adb, device, appApk, appPackage, log)) return@runInterruptible false
+        if (!install(adb, device, testApk, testPackage, log)) return@runInterruptible false
+        log("Running instrumented tests on ${device.label}…")
+        val command = listOf("-s", device.serial, "shell", "am", "instrument", "-r", "-w") +
+            args.flatMap { (k, v) -> listOf("-e", k, v) } + "$testPackage/$runner"
+        // As long as the tests take: a stuck test is stopped by the user, which interrupts this call.
+        val run = adb.run(*command.toTypedArray(), timeoutSeconds = 6 * 60 * 60, onLine = onLine)
+        if (!run.ok) log("am instrument ended with exit code ${run.exitCode}.")
+        true
+    }
+
+    /** `adb install -r -t` [apk] on [device]; false after saying why it failed. */
+    private fun install(adb: Adb, device: AdbDevice, apk: Path, packageName: String, log: (String) -> Unit): Boolean {
+        log("Installing ${apk.fileName} on ${device.label} (${device.serial})…")
         val install = adb.run("-s", device.serial, "install", "-r", "-t", apk.toString(), timeoutSeconds = 300) { line ->
             if (line.isNotBlank() && !line.startsWith("Performing")) log("  $line")
         }
         if (!install.ok || !install.output.contains("Success")) {
             log("Install failed.")
             installHint(install.output, packageName)?.let(log)
-            return@withContext false
+            return false
         }
-        launch(adb, device, packageName, log)
-        true
+        return true
     }
 
     /** The device to install on, or null after saying why there is none. */

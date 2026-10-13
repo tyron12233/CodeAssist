@@ -22,6 +22,9 @@ import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.tasks.InjectAppLogProviderTask
 import dev.ide.android.support.tasks.InjectCrashlyticsMappingFileIdTask
 import dev.ide.android.support.tasks.InstrumentClassesTask
+import dev.ide.build.engine.androidTestKotlinSourceFiles
+import dev.ide.build.engine.androidTestJavaSourceFiles
+import dev.ide.android.support.tasks.InstrumentationManifestTask
 import dev.ide.android.support.tasks.L8DexTask
 import dev.ide.android.support.tasks.ManifestMergeTask
 import dev.ide.android.support.tasks.MergeJavaResourcesTask
@@ -257,10 +260,25 @@ class AndroidBuildSystem(
         test = TestPlan(module.id, selector, interpreter, programIo),
     )
 
+    /**
+     * Build [module]'s app for [variantName] AND its instrumented test APK (`androidTest` sources), both signed with
+     * the variant's key, for `am instrument` to run on a device: AGP's `assemble<Variant>` plus
+     * `assemble<Variant>AndroidTest`. The test APK is at [signedAndroidTestApkPath], its package [testPackageOf].
+     */
+    fun createAndroidTestGraph(
+        project: Project,
+        module: Module,
+        variantName: String,
+        ctx: BuildContext = BuildContext(env = env(project)),
+    ): TaskGraph = buildGraph(
+        project, BuildRequest(listOf(module.id), VariantSelector(variantName), BuildGoal.ASSEMBLE), ctx,
+        test = null, androidTest = module.id,
+    )
+
     /** A test run riding a compile-only graph: whose tests, which of them, and what runs them. */
     private class TestPlan(val module: ModuleId, val selector: TestSelector, val interpreter: ProgramInterpreter, val io: ProgramIo?)
 
-    private fun buildGraph(project: Project, request: BuildRequest, ctx: BuildContext, test: TestPlan?): TaskGraph {
+    private fun buildGraph(project: Project, request: BuildRequest, ctx: BuildContext, test: TestPlan?, androidTest: ModuleId? = null): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val targets = (if (request.targets.isEmpty()) project.modules.map { it.id } else request.targets)
             .mapNotNull { byId[it] }
@@ -294,7 +312,7 @@ class AndroidBuildSystem(
                 if (registered.add(target.id)) registerAndroidLibrary(tasks, target, byId, withJar = test == null, variant, targetFacet, test)
                 if (test == null) appendAar(tasks, target, variant, targetFacet, config)
             } else {
-                appendApp(tasks, target, variant, request.goal, byId, config, test)
+                appendApp(tasks, target, variant, request.goal, byId, config, test, androidTest)
             }
         }
         // Contributed build logic (BUILD_PLUGIN_EP) lands after every android/java task is registered, so it
@@ -316,6 +334,7 @@ class AndroidBuildSystem(
         byId: Map<ModuleId, Module>,
         config: BuildConfiguration,
         test: TestPlan? = null,
+        androidTest: ModuleId? = null,
     ) {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return
         // The module's compileSdk platform when one is installed, else the build's default android.jar, for
@@ -930,6 +949,87 @@ class AndroidBuildSystem(
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
         val assemble = step("assemble")
         tasks.task(assemble, listOf(sign)) { LifecycleTask(assemble, trackedFiles = listOf(layout.signedApk)) }
+
+        if (androidTest == app.id) {
+            val testRoot = layout.classes.parent.resolve("android-test")
+            val testLibs = AndroidLibraries.resolveInstrumentation(app, layout.explodedAar, variant.configurations)
+            val kotlinOut = testRoot.resolve("kotlin-classes")
+            val javaOut = testRoot.resolve("classes")
+            val testClasspath = (compileClasspath + appProjectClasses + testLibs.compileJars).distinct()
+            val compileTestKotlin = step("compileAndroidTestKotlin")
+            val compileTestJava = step("compileAndroidTestJava")
+            val appCompiles = listOf(compile) + listOfNotNull(compileKotlin.takeIf { appHasKotlin })
+            if (kotlin != null) tasks.task(compileTestKotlin, appCompiles) {
+                TestKotlinCompileTask(
+                    app, compileTestKotlin, bootClasspath, kotlin, plugins,
+                    testClasspath = { testClasspath }, out = kotlinOut, friends = { listOf(layout.kotlinClasses) },
+                    kotlinSources = { androidTestKotlinSourceFiles(app) }, javaSources = { androidTestJavaSourceFiles(app) },
+                )
+            }
+            tasks.task(compileTestJava, appCompiles + listOfNotNull(compileTestKotlin.takeIf { kotlin != null })) {
+                TestJavaCompileTask(
+                    app, compileTestJava, bootClasspath,
+                    testClasspath = { testClasspath + kotlinOut }, out = javaOut, sources = { androidTestJavaSourceFiles(app) },
+                )
+            }
+            // Resources: the test libraries' own (androidx.test's activity themes), linked under the test package.
+            val testPackage = testPackageOf(applicationId)
+            val testNamespace = facet.namespace + ".test"
+            val writeManifest = step("generateAndroidTestManifest")
+            val generatedManifest = testRoot.resolve("generated/AndroidManifest.xml")
+            val mergedTestManifest = testRoot.resolve("merged/AndroidManifest.xml")
+            tasks.task(writeManifest) {
+                InstrumentationManifestTask(
+                    writeManifest, testPackage, applicationId, DEFAULT_TEST_RUNNER,
+                    facet.minSdk, facet.targetSdk, generatedManifest,
+                )
+            }
+            val processTestManifest = step("processAndroidTestManifest")
+            tasks.task(processTestManifest, listOf(writeManifest)) {
+                ManifestMergeTask(
+                    processTestManifest, generatedManifest, testLibs.aarManifests, mapOf("applicationId" to testPackage),
+                    facet.minSdk, facet.targetSdk, mergedTestManifest, testPackage,
+                )
+            }
+            val mergeTestRes = step("mergeAndroidTestResources")
+            tasks.task(mergeTestRes) { MergeResourcesTask(mergeTestRes, testLibs.resDirs, testRoot.resolve("merged-res")) }
+            val compileTestRes = step("compileAndroidTestResources")
+            tasks.task(compileTestRes, listOf(mergeTestRes)) {
+                Aapt2CompileTask(compileTestRes, listOf(testRoot.resolve("merged-res")), testRoot.resolve("compiled-res"), aapt2)
+            }
+            val linkTest = step("linkAndroidTestResources")
+            val testAp = testRoot.resolve("resources.ap_")
+            tasks.task(linkTest, listOf(compileTestRes, processTestManifest)) {
+                Aapt2LinkTask(
+                    linkTest, testRoot.resolve("compiled-res"), mergedTestManifest, androidJar, testNamespace,
+                    testLibs.aarPackages, facet.minSdk, facet.targetSdk, versionCode, versionName,
+                    testRoot.resolve("gen"), testAp, aapt2,
+                )
+            }
+            val testRJar = testRoot.resolve("R.jar")
+            val testR = step("generateAndroidTestRFile")
+            tasks.task(testR, listOf(linkTest)) { GenerateRJarTask(testR, testRoot.resolve("gen"), testRJar) }
+            // Code: the compiled tests in one jar, dexed with the libraries the app does not already carry.
+            val testJar = testRoot.resolve("tests.jar")
+            val jarTests = step("jarAndroidTestClasses")
+            tasks.task(jarTests, listOf(compileTestJava)) { JarTask(jarTests, listOf(kotlinOut, javaOut), testJar) }
+            val dexTests = step("dexAndroidTest")
+            val testDex = testRoot.resolve("dex")
+            tasks.task(dexTests, listOf(jarTests, testR)) {
+                DexExternalLibsTask(dexTests, listOf(testJar, testRJar) + testLibs.dexJars, sdk.androidJar, facet.minSdk, false, testDex, mergeDexer)
+            }
+            val packageTest = step("packageAndroidTest")
+            val unsignedTest = testRoot.resolve("unsigned-androidTest.apk")
+            val signedTest = signedAndroidTestApkPath(app, variant.name)
+            tasks.task(packageTest, listOf(dexTests, linkTest)) {
+                PackageApkTask(packageTest, testAp, listOf(testDex), testLibs.assetsDirs, emptyList(), unsignedTest, packaging = facet.packaging)
+            }
+            // The same key as the app: Android only lets an instrumentation into an app signed like it.
+            val signTest = step("signAndroidTest")
+            tasks.task(signTest, listOf(packageTest)) { SignApkTask(signTest, unsignedTest, signedTest, variantSigning, signer) }
+            val assembleTest = TaskName(":${app.name}:assemble${v}AndroidTest")
+            tasks.task(assembleTest, listOf(signTest, assemble)) { LifecycleTask(assembleTest, trackedFiles = listOf(signedTest)) }
+        }
     }
 
     /**
@@ -1564,6 +1664,17 @@ class AndroidBuildSystem(
 
         /** The signed-APK output path for [module] + [variantName] (matches [Layout.signedApk]) — so a host
          *  can locate the artifact to install after an `assemble`. */
+        /** The default instrumentation runner, as AGP's templates set `testInstrumentationRunner`. */
+        const val DEFAULT_TEST_RUNNER = "androidx.test.runner.AndroidJUnitRunner"
+
+        /** The instrumented test APK's package for an app with id [applicationId] (AGP's `testApplicationId`). */
+        fun testPackageOf(applicationId: String): String = "$applicationId.test"
+
+        /** The signed instrumented test APK for [module] + [variantName] (AGP's `outputs/apk/androidTest/<variant>`). */
+        fun signedAndroidTestApkPath(module: Module, variantName: String): Path =
+            buildDir(module).resolve("outputs").resolve("apk").resolve("androidTest").resolve(variantName)
+                .resolve("${module.name}-$variantName-androidTest.apk")
+
         fun signedApkPath(module: Module, variantName: String): Path {
             val buildDir = buildDir(module)
             return buildDir.resolve("outputs").resolve("apk").resolve(variantName).resolve("${module.name}-$variantName.apk")

@@ -11,6 +11,9 @@ import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 /** A dependency AAR's `aar-metadata.properties` (AGP's `minCompileSdk` etc.), tagged with a display [name]. */
 data class AarMetadataRef(val name: String, val propertiesFile: Path)
@@ -56,12 +59,52 @@ class ResolvedLibraries(
  */
 object AndroidLibraries {
 
-    fun resolve(module: Module, explodeRoot: Path, variant: Set<String>? = null): ResolvedLibraries {
-        val compileRoots = libraryRoots(module, DependencyScope.IMPLEMENTATION, variant)
-        val runtimeRoots = libraryRoots(module, DependencyScope.RUNTIME_ONLY, variant)
-        // `natives` is on no classpath at all: those artifacts are unpacked into the packaged `lib/<abi>/`
-        // and never compiled or dexed against. See [DependencyScope.NATIVES].
-        val nativeRoots = libraryRoots(module, DependencyScope.NATIVES, variant)
+    fun resolve(module: Module, explodeRoot: Path, variant: Set<String>? = null): ResolvedLibraries =
+        classify(
+            compileRoots = libraryRoots(module, DependencyScope.IMPLEMENTATION, variant),
+            runtimeRoots = libraryRoots(module, DependencyScope.RUNTIME_ONLY, variant),
+            // `natives` is on no classpath at all: those artifacts are unpacked into the packaged `lib/<abi>/`
+            // and never compiled or dexed against. See [DependencyScope.NATIVES].
+            nativeRoots = libraryRoots(module, DependencyScope.NATIVES, variant),
+            explodeRoot = explodeRoot,
+        )
+
+    /**
+     * The libraries an instrumented test APK adds to the app it tests: the test-scoped ones the app does not
+     * already ship. The test APK's code is loaded into the app's own process, ahead of the app's, so a second
+     * copy of a library the app has (another version, say) would shadow the app's; AGP leaves those out too.
+     */
+    fun resolveInstrumentation(module: Module, explodeRoot: Path, variant: Set<String>? = null): ResolvedLibraries {
+        val app = resolve(module, explodeRoot, variant)
+        val appRoots = (libraryRoots(module, DependencyScope.IMPLEMENTATION, variant) +
+            libraryRoots(module, DependencyScope.RUNTIME_ONLY, variant)).toSet()
+        val candidates = libraryRoots(module, DependencyScope.TEST_IMPLEMENTATION, variant).filter { it !in appRoots }
+        val tested = classify(candidates, candidates, emptyList(), explodeRoot)
+        val appJars = (app.dexJars + app.compileJars).distinct()
+        fun duplicatesApp(jar: Path) = dedupeJarsForAndroidDex(appJars + jar).size < appJars.size + 1
+        // Then by class: two artifacts with different names can still define the same classes (the old
+        // `kotlinx-coroutines-core` and its `-jvm` successor both arrive through androidx.test), and D8 refuses a
+        // program that defines a class twice. A class the app or an earlier test library has is left out.
+        val seen = HashSet<String>()
+        appJars.forEach { seen += classesIn(it) }
+        val dexJars = tested.dexJars.filterNot(::duplicatesApp).mapNotNull { jar ->
+            val classes = classesIn(jar)
+            val overlap = classes.filterTo(HashSet()) { it in seen }
+            seen += classes
+            when {
+                overlap.isEmpty() -> jar
+                overlap.size == classes.size -> null
+                else -> withoutClasses(jar, overlap, explodeRoot.resolve("instrumentation-dedupe"))
+            }
+        }
+        return ResolvedLibraries(
+            tested.compileJars, dexJars,
+            tested.resDirs, tested.assetsDirs, tested.jniLibDirs, tested.aidlDirs, tested.aarPackages,
+            tested.consumerProguardFiles, tested.aarManifests, tested.aarMetadata, tested.aarSymbols,
+        )
+    }
+
+    private fun classify(compileRoots: List<Path>, runtimeRoots: List<Path>, nativeRoots: List<Path>, explodeRoot: Path): ResolvedLibraries {
 
         val compileJars = ArrayList<Path>()
         val dexJars = ArrayList<Path>()
@@ -151,6 +194,32 @@ object AndroidLibraries {
             natives.warnings,
             artProfiles.distinct(),
         )
+    }
+
+    /** The `.class` entries of [jar], or none when it cannot be read. */
+    private fun classesIn(jar: Path): Set<String> = runCatching {
+        ZipFile(jar.toFile()).use { zip -> zip.entries().asSequence().map { it.name }.filter { it.endsWith(".class") }.toSet() }
+    }.getOrDefault(emptySet())
+
+    /** A copy of [jar] without the [drop] entries, kept under [dir] by the jar's identity so it is written once. */
+    private fun withoutClasses(jar: Path, drop: Set<String>, dir: Path): Path {
+        val key = "${jar.fileName}-${(jar.toAbsolutePath().toString() + Files.size(jar) + Files.getLastModifiedTime(jar).toMillis()).hashCode().toUInt()}-${drop.size}.jar"
+        val out = dir.resolve(key)
+        if (Files.isRegularFile(out)) return out
+        Files.createDirectories(dir)
+        val tmp = Files.createTempFile(dir, "dedupe", ".jar")
+        ZipFile(jar.toFile()).use { zip ->
+            ZipOutputStream(Files.newOutputStream(tmp)).use { zout ->
+                for (entry in zip.entries()) {
+                    if (entry.isDirectory || entry.name in drop) continue
+                    zout.putNextEntry(ZipEntry(entry.name))
+                    zip.getInputStream(entry).use { it.copyTo(zout) }
+                    zout.closeEntry()
+                }
+            }
+        }
+        Files.move(tmp, out, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        return out
     }
 
     private fun libraryRoots(module: Module, scope: DependencyScope, variant: Set<String>?): List<Path> =
