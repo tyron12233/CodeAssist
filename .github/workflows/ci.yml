@@ -6,7 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # 04:00 UTC nightly, for the emulator job below — it is too slow to sit on every push.
+    # 04:00 UTC nightly, for the emulator job below — it is too slow to sit on every push. The other jobs skip
+    # scheduled runs: they already ran on the push that put the commit on main.
     - cron: "0 4 * * *"
 
 # Build and test only the pure-Kotlin/JVM framework. The IDE shells (:ide-ui/:ide-core/:ide-desktop/
@@ -19,14 +20,16 @@ env:
   # MAJOR version. Pin it to match the version the committed baselines were recorded on (JBR 25 locally).
   JAVA_VERSION: "25"
 
+# The nightly gets its own group so it never cancels (or is cancelled by) a push run on main.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ github.event_name == 'schedule' && '-nightly' || '' }}
   cancel-in-progress: true
 
 jobs:
   test:
     name: Framework tests + completion quality
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -217,6 +220,7 @@ jobs:
   ios:
     name: iOS simulator suites
     runs-on: macos-26
+    if: ${{ github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v4
 
