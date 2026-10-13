@@ -5,12 +5,13 @@ on:
     types: [published]
   workflow_dispatch:
 
-# Build the standalone desktop IDE (:ide-desktop) for Windows: an .msi installer and a portable .zip of the same
-# app image. jpackage cannot cross-build, so this runs on a Windows runner. The app bundles its own Java runtime
-# and an Android toolchain (android.jar, aapt2; D8 and apksigner in-process), so it needs nothing installed.
+# Build the standalone desktop IDE (:ide-desktop) for Windows (an .msi installer and a portable .zip of the same
+# app image) and Linux x64 (a .deb and a portable .tar.gz). jpackage cannot cross-build, so each OS has its own
+# runner. The app bundles its own Java runtime and an Android toolchain (android.jar, aapt2; D8 and apksigner
+# in-process), so it needs nothing installed. Linux is x64 only: Google publishes the Linux aapt2 for x86_64 alone.
 #
-# The smoke test proves that claim on the packaged bits: it builds an APK with the app's own runtime and toolchain
-# while every Android SDK location is hidden. On a published release both files are attached to it.
+# The smoke tests prove that claim on the packaged bits: each builds an APK with the app's own runtime and toolchain
+# while every Android SDK location is hidden. On a published release every file is attached to it.
 env:
   # Starts Gradle; the daemon itself runs on the JBR 21 SDK from gradle-daemon-jvm.properties (it has jpackage).
   JAVA_VERSION: "25"
@@ -135,6 +136,127 @@ jobs:
           name: ${{ steps.files.outputs.name }}-windows-x64-portable
           path: app/ide-desktop/build/compose/binaries/main/app/
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
+
+  linux:
+    name: Linux package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used by the release-upload step
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Only for configuring the build, as on Windows; the smoke test hides it.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      # jpackage builds the .deb with dpkg-deb under fakeroot, and refuses to start without both.
+      - name: Install the .deb tooling
+        run: sudo apt-get update -q && sudo apt-get install -y -q fakeroot
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            v="${{ github.event.release.tag_name }}"
+            echo "flag=-PdesktopVersion=${v#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the package and app image
+        run: >
+          ./gradlew :ide-desktop:packageDeb :ide-desktop:createDistributable :build-cli:jar
+          ${{ steps.version.outputs.flag }} --console=plain --stacktrace
+
+      # The Windows smoke test on the Linux image, whose layout differs: the launcher in bin/, the jars and app
+      # resources under lib/app, the runtime under lib/runtime.
+      - name: Smoke test, an APK with no Android SDK
+        run: |
+          set -euo pipefail
+          image=app/ide-desktop/build/compose/binaries/main/app/CodeAssist
+          ls "$image" "$image/lib"
+          test -x "$image/bin/CodeAssist" || { echo "::error::the image has no executable launcher"; exit 1; }
+          java="$image/lib/runtime/bin/java"
+          toolchain="$image/lib/app/resources/android-toolchain"
+          ls -l "$toolchain"
+          # Only present, not executable: jpackage can drop the exec bit, and the app copies aapt2 out to run it then.
+          test -f "$toolchain/aapt2" || { echo "::error::the bundled aapt2 is missing"; exit 1; }
+          cli=$(ls app/build-cli/build/libs/build-cli-*.jar | head -1)
+          cp="$image/lib/app/*:$cli"
+          home="$RUNNER_TEMP/empty-home"; mkdir -p "$home"
+          run() {
+            env -u ANDROID_HOME -u ANDROID_SDK_ROOT "$java" -cp "$cp" \
+              "-Duser.home=$home" \
+              "-Dcodeassist.android.toolchain=$toolchain" \
+              dev.ide.buildcli.MainKt "$@"
+          }
+          for template in android-app compose-app; do
+            dir="$RUNNER_TEMP/smoke-$template"
+            log="$RUNNER_TEMP/smoke-$template.log"
+            cache="$RUNNER_TEMP/deps-cache"
+            { run create --project "$dir" --template "$template" --name SmokeApp --package dev.ide.smoke --cache "$cache" &&
+              run assemble --project "$dir" --cache "$cache"; } 2>&1 | tee "$log"
+            if grep -E "cannot write|indexing .* failed" "$log"; then
+              echo "::error::$template: a write or index pass failed"; exit 1
+            fi
+            apk="$dir/app/build/outputs/apk/debug/app-debug.apk"
+            test -f "$apk" || { echo "::error::$template: the build produced no APK"; exit 1; }
+            echo "$template APK: $(du -h "$apk" | cut -f1)"
+          done
+
+      # A .tar.gz rather than a .zip for the portable build: it keeps the launcher's executable bit.
+      - name: Collect the files
+        id: files
+        run: |
+          set -euo pipefail
+          out=app/ide-desktop/build/compose/binaries/main
+          deb=$(ls "$out"/deb/*.deb | head -1)
+          version=$(dpkg-deb -f "$deb" Version | sed 's/-[0-9]*$//')
+          name="CodeAssist-$version"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          cp "$deb" "dist/$name-linux-x64.deb"
+          tar -C "$out/app" -czf "dist/$name-linux-x64-portable.tar.gz" CodeAssist
+          ls -lh dist
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.files.outputs.name }}-linux-x64-deb
+          path: dist/*.deb
+          if-no-files-found: error
+          compression-level: 0 # a .deb is already compressed
+          retention-days: 30
+
+      # Uploaded as the tarball, not the folder: an artifact zip would drop the executable bits.
+      - name: Upload the portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.files.outputs.name }}-linux-x64-portable
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 30
 
       - name: Attach to the release
