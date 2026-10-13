@@ -276,6 +276,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override fun updateDocument(path: String, text: String) =
         ctx.services.updateDocument(Paths.get(path), text)
 
+    override fun documentLoaded(path: String, text: String) =
+        ctx.services.documentLoaded(Paths.get(path), text)
+
     /**
      * Persist a buffer. A write can fail for reasons the app does not control — the project sits on a tree
      * this process may not write (an SD card, another app's directory, a path the user granted and revoked),

@@ -19,6 +19,7 @@ class ExternalCopyOverOpenTabTest {
     private fun state(): IdeUiState {
         val backend = object : StubBackend() {
             override fun readFile(path: String) = disk[path] ?: ""
+            override fun saveFile(path: String, text: String) { disk[path] = text }
         }
         // Unconfined dispatchers run the async disk reads synchronously here.
         return IdeUiState(backend, mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
@@ -74,5 +75,33 @@ class ExternalCopyOverOpenTabTest {
 
         assertEquals(epoch, state.analysisEpoch)
         assertEquals("fun old() = 1\n", state.active?.text)
+    }
+
+    @Test
+    fun anEditedTabWhoseFileABuildFlushedIsSavedNotChangedOnDisk() {
+        val state = state()
+        runBlocking { state.openSuspend("/p/A.kt", "A.kt") }
+        val a = state.active!!
+        a.session.replaceRange(0, 0, "// mine\n", androidx.compose.ui.text.TextRange(8))
+        disk["/p/A.kt"] = a.text // the pre-build flush wrote the buffer
+
+        state.syncWithDiskOnReturn()
+
+        assertFalse(a.modified, "the file holds the buffer, so the tab is saved")
+        assertFalse(a.staleOnDisk, "and has not diverged from it")
+    }
+
+    @Test
+    fun runningSavesEditedTabsFirst() {
+        val state = state()
+        runBlocking { state.openSuspend("/p/A.kt", "A.kt") }
+        val a = state.active!!
+        a.session.replaceRange(0, 0, "// mine\n", androidx.compose.ui.text.TextRange(8))
+        var ranWith: String? = null
+
+        state.requestRun { ranWith = disk["/p/A.kt"] }
+
+        assertEquals("// mine\nfun old() = 1\n", ranWith, "the run sees the edit on disk")
+        assertFalse(a.modified)
     }
 }

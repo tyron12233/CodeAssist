@@ -540,8 +540,11 @@ class IdeUiState(
      * → [proceedRun]. Otherwise it proceeds straight to [proceedRun].
      */
     fun requestRun(action: () -> Unit) {
-        if (isMobilePlatform && !notifPromptResolved) { notifGate = PendingRun(action); return }
-        proceedRun(action)
+        // Save edited tabs as the run starts, whichever gate it waits on first. The build would flush them
+        // anyway, but behind the tabs' backs: they stayed marked unsaved over a file that matched them.
+        val saveThenRun = { saveAllNow(); action() }
+        if (isMobilePlatform && !notifPromptResolved) { notifGate = PendingRun(saveThenRun); return }
+        proceedRun(saveThenRun)
     }
 
     /**
@@ -769,7 +772,7 @@ class IdeUiState(
         val text = withContext(ioDispatcher) { backend.files.readFile(path) }
         // A second tap on the same row may have opened it while we were reading — focus it, don't duplicate.
         if (focusOpenTab(path)) return
-        backend.editor.updateDocument(path, text)
+        backend.editor.documentLoaded(path, text)
         openFiles.add(OpenFile(path, name, text))
         activeIndex = openFiles.lastIndex
         backend.editor.onFileOpened(path) // a genuinely new tab (focus path returned above), for plugin events
@@ -1074,7 +1077,7 @@ class IdeUiState(
                 val i = openFiles.indexOfFirst { it.tabId == f.tabId }.takeIf { it >= 0 } ?: continue
                 val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
                 openFiles[i] = OpenFile(diskPath, name, text, tabId = f.tabId)
-                backend.editor.updateDocument(diskPath, text)
+                backend.editor.documentLoaded(diskPath, text)
             }
             dedupeTabsByPath()
             loadTree()
@@ -1129,14 +1132,20 @@ class IdeUiState(
                 // Reading it costs one file read per edited tab per sync, which buys the only signal the user
                 // has that their buffer and the file underneath it have parted ways.
                 val disk = readTabText(f.path)
-                f.staleOnDisk = disk != null && disk != f.savedText
+                if (disk != null && disk != f.savedText && disk == f.text) {
+                    // The file already holds the buffer: a build flushed it. That is a save, not a divergence.
+                    f.onSaved(disk)
+                    backend.editor.documentLoaded(f.path, disk)
+                } else {
+                    f.staleOnDisk = disk != null && disk != f.savedText
+                }
                 continue
             }
             val text = readTabText(f.path) ?: continue
             if (text == f.savedText) continue // untouched → preserve session/undo/caret
             if (f !in openFiles || f.modified) continue
             f.applyExternalText(text)
-            backend.editor.updateDocument(f.path, text)
+            backend.editor.documentLoaded(f.path, text)
             changed = true
         }
         return changed
@@ -1246,7 +1255,7 @@ class IdeUiState(
             val i = openFiles.indexOfFirst { it.tabId == f.tabId }.takeIf { it >= 0 } ?: continue
             val name = rebased.substringAfterLast('/').substringAfterLast('\\')
             openFiles[i] = OpenFile(rebased, name, text, tabId = f.tabId)
-            backend.editor.updateDocument(rebased, text)
+            backend.editor.documentLoaded(rebased, text)
         }
         dedupeTabsByPath()
     }
@@ -1281,7 +1290,7 @@ class IdeUiState(
             if (text == f.savedText) continue
             if (f !in openFiles || f.modified) continue
             f.applyExternalText(text)
-            backend.editor.updateDocument(f.path, text)
+            backend.editor.documentLoaded(f.path, text)
         }
     }
 

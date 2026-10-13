@@ -600,8 +600,11 @@ class IdeServices private constructor(
             this@IdeServices.analysisUnavailable.add(language)
         }
 
-        override fun removeOverlay(path: Path) =
-            this@IdeServices.openDocuments.remove(path.toAbsolutePath().normalize())
+        override fun removeOverlay(path: Path): String? {
+            val norm = path.toAbsolutePath().normalize()
+            this@IdeServices.diskBaselines.remove(norm)
+            return this@IdeServices.openDocuments.remove(norm)
+        }
 
         override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
         override fun isValidJavaIdentifier(s: String) = this@IdeServices.isValidJavaIdentifier(s)
@@ -1311,6 +1314,21 @@ class IdeServices private constructor(
     // touching disk — true working copies, not flushed buffers.
     private val openDocuments = ConcurrentHashMap<Path, String>()
 
+    /**
+     * Per overlay, the text it and the file on disk last agreed on: what the editor loaded, saved, or took from
+     * disk. An overlay equal to its baseline holds no unsaved edit, so [flushOpenDocuments] leaves its file
+     * alone, whatever the file now holds. Without it the flush wrote every overlay that differed from disk,
+     * which put a stale tab's old text back over a file copied in from outside, and re-created a file deleted
+     * from outside. An overlay with no baseline (registered by [updateDocument] alone) flushes as before.
+     */
+    private val diskBaselines = ConcurrentHashMap<Path, String>()
+
+    /** [text] is both the overlay for [norm] and what its file holds. */
+    private fun putInStep(norm: Path, text: String) {
+        openDocuments[norm] = text
+        diskBaselines[norm] = text
+    }
+
     /** Called by the editor on every change so cross-file analysis sees the latest text. */
     fun updateDocument(file: Path, text: String) {
         val norm = file.toAbsolutePath().normalize()
@@ -1320,6 +1338,16 @@ class IdeServices private constructor(
         // regenerates `R` from the now-buffer-aware resource repository (its fingerprint includes open res
         // buffers). Cheap cache-drops; the lazy repo rebuild is fingerprint-gated (only when content changed).
         if (changed && isResourcePath(norm)) invalidateSyntheticClasses()
+    }
+
+    /**
+     * The editor (re)loaded [file]'s buffer from disk: [text] is what the file holds, so the buffer has no
+     * unsaved edit. The reload after an outside write must say so, or the overlay reads as edited and the next
+     * build's flush writes it back over the file.
+     */
+    fun documentLoaded(file: Path, text: String) {
+        updateDocument(file, text)
+        diskBaselines[file.toAbsolutePath().normalize()] = text
     }
 
     /**
@@ -1347,7 +1375,9 @@ class IdeServices private constructor(
         val disk = runCatching { norm.readText() }.getOrNull() ?: return
         // replace(), not put(): the tab may have been closed between the containsKey and here, and this must
         // not resurrect an overlay for a file nothing has open.
-        if (openDocuments.replace(norm, disk) == disk) return
+        val previous = openDocuments.replace(norm, disk) ?: return
+        diskBaselines[norm] = disk
+        if (previous == disk) return
         if (isResourcePath(norm)) invalidateSyntheticClasses()
     }
 
@@ -1361,6 +1391,7 @@ class IdeServices private constructor(
      */
     fun documentClosed(file: Path) {
         val norm = file.toAbsolutePath().normalize()
+        diskBaselines.remove(norm)
         if (openDocuments.remove(norm) == null) return
         // Same reason as [updateDocument]: dropping a `res/` buffer changes what the synthetic `R` resolves.
         if (isResourcePath(norm)) invalidateSyntheticClasses()
@@ -1390,6 +1421,7 @@ class IdeServices private constructor(
         val updated = sb.toString()
         updateDocument(path, updated)
         runCatching { path.parent?.let { Files.createDirectories(it) }; path.writeText(updated) }
+            .onSuccess { diskBaselines[path] = updated }
         events.filesMutated(listOf(path), null)
     }
 
@@ -1405,6 +1437,7 @@ class IdeServices private constructor(
         openDocuments[path] = text
         path.parent?.let { Files.createDirectories(it) }
         path.writeText(text)
+        diskBaselines[path] = text
         events.fileChanged(path, text)
     }
 
@@ -1418,10 +1451,16 @@ class IdeServices private constructor(
      * writes when content actually changed. Public so the UI process can flush before a build runs in the
      * separate `:build` daemon — the daemon has no editor buffers of its own, so its own flush is a no-op and
      * it would otherwise compile whatever was last saved to disk (running stale code on an unsaved edit).
+     *
+     * Only a buffer with an unsaved edit (one that differs from its [diskBaselines] entry) is written. A clean
+     * buffer that differs from disk means the FILE changed, from outside the IDE, and the file is newer.
+     * An edited buffer still wins over an outside write: it is what the user sees and is building, and the tab
+     * already flags that the two have diverged.
      */
     fun flushOpenDocuments() {
         for ((path, content) in openDocuments) {
             runCatching {
+                if (diskBaselines[path] == content) return@runCatching
                 // Same guard as save(): an opened binary/oversized file lives in the overlay as placeholder
                 // text (its bytes never differ from that placeholder), so flushing it before a build would
                 // overwrite the real bytes on disk. Skip it — this is the frequent PNG-corruption path.
@@ -1430,6 +1469,7 @@ class IdeServices private constructor(
                     path.parent?.let { Files.createDirectories(it) }
                     path.writeText(content)
                 }
+                diskBaselines[path] = content
             }
         }
     }
@@ -2949,7 +2989,7 @@ class IdeServices private constructor(
     private fun dropOverlaysUnder(root: Path) {
         val r = normPath(root)
         openDocuments.keys.filter { it == r || it.startsWith(r) }
-            .forEach { openDocuments.remove(it) }
+            .forEach { openDocuments.remove(it); diskBaselines.remove(it) }
     }
 
     /** Re-point open-document overlays from [from] (a file or directory) to [to] after a move/rename. */
@@ -2959,6 +2999,7 @@ class IdeServices private constructor(
         for (k in openDocuments.keys.filter { it == f || it.startsWith(f) }) {
             val dest = if (k == f) t else t.resolve(f.relativize(k))
             openDocuments.remove(k)?.let { openDocuments[normPath(dest)] = it }
+            diskBaselines.remove(k)?.let { diskBaselines[normPath(dest)] = it }
         }
     }
 
@@ -3029,8 +3070,9 @@ class IdeServices private constructor(
             val text = openDocuments[key] ?: runCatching { f.readText() }.getOrNull() ?: continue
             val rewrite = (if (isKotlinSource(f)) rewriteKotlinPackage(f, text, newPkg)
             else rewriteJavaPackage(f, text, newPkg)) ?: continue
-            openDocuments[key] = rewrite.updated
             runCatching { f.writeText(rewrite.updated) }
+                .onSuccess { putInStep(key, rewrite.updated) }
+                .onFailure { openDocuments[key] = rewrite.updated }
             if (updateReferences) for (type in rewrite.topLevelNames) {
                 val oldFqn = if (rewrite.oldPkg.isEmpty()) type else "${rewrite.oldPkg}.$type"
                 val newFqn = if (newPkg.isEmpty()) type else "$newPkg.$type"
@@ -3089,8 +3131,9 @@ class IdeServices private constructor(
                 if (isKotlinSource(file)) rewriteKotlinImports(text, renames)
                 else rewriteJavaImports(text, renames)
             if (updated != text) {
-                openDocuments[key] = updated
                 runCatching { file.writeText(updated) }
+                    .onSuccess { putInStep(key, updated) }
+                    .onFailure { openDocuments[key] = updated }
             }
         }
     }
