@@ -49,8 +49,9 @@ class BuiltInParityTest {
     fun `all built-in index extensions are registered`() {
         // The 24 prior producers plus the 5 kotlin.* workspace-index producers added with the per-language
         // index split (class names / packages / package types / go-to-symbol / members over Kotlin source),
-        // plus source.memberUsage, which ranks receiver members by how often the project calls them.
-        assertEquals(30, ext.extensions(INDEX_EP).size)
+        // plus source.memberUsage, which ranks receiver members by how often the project calls them, plus
+        // android.resourceRefs, the files naming each resource (Usages, rename, layout <-> class links).
+        assertEquals(31, ext.extensions(INDEX_EP).size)
     }
 
     @Test

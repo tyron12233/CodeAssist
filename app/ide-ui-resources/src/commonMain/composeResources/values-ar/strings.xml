@@ -1111,6 +1111,9 @@
     <string name="nav_implementations">التطبيقات</string>
     <string name="nav_type_declaration">تصريح النوع</string>
     <string name="nav_super">الأصل</string>
+    <string name="nav_usages">الاستخدامات</string>
+    <string name="nav_related">الملفات المرتبطة</string>
+    <string name="nav_refactor">إعادة الهيكلة</string>
     <string name="nav_none">لم يُعثر على شيء في المصدر.</string>
     <string name="ctxmenu_actions">الإجراءات</string>
     <string name="ctxmenu_intentions">الاقتراحات</string>

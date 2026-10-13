@@ -358,7 +358,9 @@ private fun CodeEditorContent(
         val caret = editorSession.selection.start
         scope.launch {
             val options = runCatching { backend.editor.navigationOptions(path, text, caret) }.getOrDefault(emptyList())
-            navMenu = NavMenuState.Menu(options)
+            // Touch has no rename shortcut, so the menu is where a renameable symbol offers it.
+            val renameable = runCatching { backend.editor.prepareRename(path, text, caret) }.getOrNull()
+            navMenu = NavMenuState.Menu(options, renameable)
             // Resolve the code actions too. Nothing is resolved proactively off a diagnostic line, so
             // without this the menu's Quick fixes / Intentions / Actions sections would be empty exactly
             // where the user opened it to find them.
@@ -712,6 +714,17 @@ private fun CodeEditorContent(
             runCatching { backend.editor.fileStructure(path, editorSession.doc.text) }.getOrDefault(emptyList())
     }
 
+    // Gutter swatches for the colors/drawables the buffer's resource references resolve to (debounced, like the
+    // structure fetch). Only files that can name an Android resource ask.
+    LaunchedEffect(path, editorSession.textRevision, largeFile) {
+        val swatchable = path.endsWith(".xml") || path.endsWith(".kt") || path.endsWith(".java")
+        if (largeFile || !swatchable) { editorSession.applyResourceSwatches(emptyList()); return@LaunchedEffect }
+        delay(400.milliseconds)
+        editorSession.applyResourceSwatches(
+            runCatching { backend.editor.resourceSwatches(path, editorSession.doc.text) }.getOrDefault(emptyList()),
+        )
+    }
+
     LaunchedEffect(path) { runCatching { focus.requestFocus() } }
 
     // ---- per-line diagnostic segments (recomputed per edit — O(diagnostics), they are few) ----
@@ -947,6 +960,8 @@ private fun CodeEditorContent(
             EditorCommands.GO_TO_IMPLEMENTATION -> runNav(UiNavKind.IMPLEMENTATION)
             EditorCommands.GO_TO_TYPE_DECLARATION -> runNav(UiNavKind.TYPE_DECLARATION)
             EditorCommands.GO_TO_SUPER -> runNav(UiNavKind.SUPER)
+            EditorCommands.FIND_USAGES -> runNav(UiNavKind.USAGES)
+            EditorCommands.GO_TO_RELATED -> runNav(UiNavKind.RELATED)
 
             EditorCommands.COMPLETE_CODE -> if (!readOnly) completion.reopen(immediate = true)
 
@@ -1294,6 +1309,15 @@ private fun CodeEditorContent(
             backend = backend,
         )
 
+        ResourceSwatchGutterLayer(
+            session = editorSession,
+            metrics = metrics,
+            vlayout = geometry.vlayout,
+            vOffset = geometry.vOffset,
+            docLength = docLength,
+            onOpen = onNavigate,
+        )
+
         CodeActionsMenuLayer(
             acts = acts,
             engaged = engaged,
@@ -1470,6 +1494,7 @@ private fun CodeEditorContent(
             },
             onAction = { a -> val i = acts.available.indexOf(a); navMenu = null; if (i >= 0) acts.applyAt(i) },
             onPick = { navMenu = null; onNavigate(it.path, it.offset) },
+            onRename = { navMenu = null; startRename() },
             onDismiss = { navMenu = null },
         )
 
@@ -1703,6 +1728,7 @@ private fun NavMenuLayer(
     onOption: (UiNavOption) -> Unit,
     onAction: (UiAction) -> Unit,
     onPick: (UiNavTarget) -> Unit,
+    onRename: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     if (state == null || !engaged) return
@@ -1722,7 +1748,7 @@ private fun NavMenuLayer(
     Popup(popupPositionProvider = positionProvider, onDismissRequest = onDismiss) {
         BoxWithConstraints {
             val width = if (maxWidth < 600.dp) (maxWidth * 0.9f).coerceIn(240.dp, 360.dp) else 360.dp
-            NavMenu(state, actions, width, onOption, onAction, onPick, menu, onMenuAction)
+            NavMenu(state, actions, width, onOption, onAction, onPick, menu, onMenuAction, onRename)
         }
     }
 }

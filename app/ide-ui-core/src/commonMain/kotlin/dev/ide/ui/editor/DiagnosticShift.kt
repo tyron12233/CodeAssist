@@ -4,6 +4,7 @@ import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiGutterMark
 import dev.ide.ui.backend.UiInlayHint
+import dev.ide.ui.backend.UiResourceSwatch
 import dev.ide.ui.backend.UiTextDecoration
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.core.EditSpan
@@ -224,6 +225,15 @@ fun shiftComposePreviews(markers: List<UiComposePreview>, edit: EditSpan, docLen
     return mapPreserving(markers) { m ->
         val offset = mapStart(m.offset, edit).coerceIn(0, docLength)
         if (offset == m.offset) m else m.copy(offset = offset)
+    }
+}
+
+/** Re-map resource swatches across a single [edit], like [shiftComposePreviews]. */
+fun shiftResourceSwatches(swatches: List<UiResourceSwatch>, edit: EditSpan, docLength: Int): List<UiResourceSwatch> {
+    if (swatches.isEmpty() || edit.isNoOp) return swatches
+    return mapPreserving(swatches) { s ->
+        val offset = mapStart(s.offset, edit).coerceIn(0, docLength)
+        if (offset == s.offset) s else s.copy(offset = offset)
     }
 }
 

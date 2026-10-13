@@ -103,6 +103,10 @@ internal interface EngineContext {
     /** The live editor-buffer text for [path] (unsaved edits), or null when the file is not open. */
     fun overlayText(path: Path): String?
 
+    /** Every file with an open editor buffer (the overlay), absolute-normalized. Their unsaved text is what
+     *  the source indexes haven't seen yet, so a query that must be current reads these alongside an index hit. */
+    fun openDocumentPaths(): Set<Path>
+
     /** Persist every open editor buffer to disk (so a build/run sees the latest, unsaved-included, content). */
     fun flushOpenDocuments()
 

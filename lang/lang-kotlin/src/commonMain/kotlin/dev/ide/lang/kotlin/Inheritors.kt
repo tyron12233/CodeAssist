@@ -3,8 +3,10 @@ package dev.ide.lang.kotlin
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 
-/** The source go-to navigation actions (see [KotlinSourceAnalyzer.navigationTargets]). */
-enum class NavKind { DECLARATION, IMPLEMENTATION, TYPE_DECLARATION, SUPER }
+/** The source go-to navigation actions (see [KotlinSourceAnalyzer.navigationTargets]). [USAGES] (the places a
+ *  symbol is referenced) and [RELATED] (a layout's classes, a class's layouts) are answered by the host for
+ *  Android resources; the Kotlin analyzer itself contributes none of them. */
+enum class NavKind { DECLARATION, IMPLEMENTATION, TYPE_DECLARATION, SUPER, USAGES, RELATED }
 
 /** A resolved navigation destination: a project-source [file] + [offset], OR a compiled LIBRARY class (a
  *  [LibraryFile] with a [libraryPath]; the host opens it read-only, fetching decompiled/attached-source text

@@ -92,6 +92,8 @@ internal fun NavKind.toUi(): UiNavKind = when (this) {
     NavKind.IMPLEMENTATION -> UiNavKind.IMPLEMENTATION
     NavKind.TYPE_DECLARATION -> UiNavKind.TYPE_DECLARATION
     NavKind.SUPER -> UiNavKind.SUPER
+    NavKind.USAGES -> UiNavKind.USAGES
+    NavKind.RELATED -> UiNavKind.RELATED
 }
 
 internal fun UiNavKind.toEngine(): NavKind = when (this) {
@@ -99,6 +101,8 @@ internal fun UiNavKind.toEngine(): NavKind = when (this) {
     UiNavKind.IMPLEMENTATION -> NavKind.IMPLEMENTATION
     UiNavKind.TYPE_DECLARATION -> NavKind.TYPE_DECLARATION
     UiNavKind.SUPER -> NavKind.SUPER
+    UiNavKind.USAGES -> NavKind.USAGES
+    UiNavKind.RELATED -> NavKind.RELATED
 }
 
 internal fun QuickDocInfo.toUi(): UiQuickDoc = UiQuickDoc(

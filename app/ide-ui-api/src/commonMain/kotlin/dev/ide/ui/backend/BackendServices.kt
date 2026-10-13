@@ -188,12 +188,13 @@ interface EditorService {
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
 
-    /** Source go-to targets for the symbol at [offset] ([kind]: declaration / implementation / type / super).
-     *  0 → nothing found; 1 → navigate; >1 → the caller shows a picker. Kotlin source only for now. */
+    /** Go-to targets for the symbol at [offset] ([kind]: declaration / implementation / type / super / usages /
+     *  related). 0 → nothing found; 1 → navigate; >1 → the caller shows a picker. Kotlin source, and Android
+     *  resources / XML. */
     suspend fun navigationTargets(path: String, text: String, offset: Int, kind: UiNavKind): List<UiNavTarget> = emptyList()
 
     /** The navigation actions APPLICABLE at [offset] (each with its resolved targets) — so the Go-to menu shows
-     *  only usable actions. Empty when nothing applies. Kotlin source only for now. */
+     *  only usable actions. Empty when nothing applies. Kotlin source, and Android resources / XML. */
     suspend fun navigationOptions(path: String, text: String, offset: Int): List<UiNavOption> = emptyList()
 
     /** The read-only content for a `library://<fqn>` target: attached source, else a decompiled view (full-body
@@ -211,6 +212,10 @@ interface EditorService {
 
     /** Quick documentation (signature + doc comment) for the symbol at [offset], or null. */
     suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = null
+
+    /** Gutter previews of the colors and drawables the buffer's resource references resolve to, at most one per
+     *  line. Empty for files without Android resources. */
+    suspend fun resourceSwatches(path: String, text: String): List<UiResourceSwatch> = emptyList()
 
     /** Expand the selection `[selStart, selEnd)` to the smallest enclosing structural node — one step of a walk
      *  UP the tolerant DOM (word → expression → statement → block → method → class …). Returns that node's

@@ -60,6 +60,19 @@ sealed interface UiProjectIcon {
     data class Drawable(val drawable: UiDrawable) : UiProjectIcon
 }
 
+/**
+ * A gutter preview of the color or drawable a reference on one line resolves to (`@color/x`, `R.drawable.y`, a
+ * `#hex` literal). [offset] anchors it in the buffer; either [color] (`0xAARRGGBB`) or [image] is set.
+ * Tapping it opens [targetPath] at [targetOffset] (the resource's declaration) when there is one.
+ */
+data class UiResourceSwatch(
+    val offset: Int,
+    val color: Long? = null,
+    val image: UiProjectIcon? = null,
+    val targetPath: String? = null,
+    val targetOffset: Int = 0,
+)
+
 data class UiGradient(
     val kind: String, // "linear" | "radial" | "sweep"
     val startColor: Long,

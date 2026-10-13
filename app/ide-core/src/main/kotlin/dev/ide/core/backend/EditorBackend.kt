@@ -21,6 +21,8 @@ import dev.ide.plugin.editor.EditorTopics
 import dev.ide.plugin.editor.InlayKind as PluginInlayKind
 import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.EditorService
+import dev.ide.ui.backend.UiProjectIcon
+import dev.ide.ui.backend.UiResourceSwatch
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
@@ -165,12 +167,14 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     } // re-runs on the next caret move
 
     override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
+        // XML elements reuse the class/field kinds for container/leaf; the outline badges them as elements.
+        val isXml = path.endsWith(".xml")
         ctx.background(op = op("fileStructure", path)) {
             ctx.services.fileStructure(Paths.get(path), text).map {
                 UiFileSymbol(
                     it.name,
                     it.detail,
-                    it.kind.name.lowercase(),
+                    if (isXml) "element" else it.kind.name.lowercase(),
                     it.nameOffset,
                     it.endOffset,
                     it.depth
@@ -217,6 +221,8 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         UiNavKind.IMPLEMENTATION -> dev.ide.lang.kotlin.NavKind.IMPLEMENTATION
         UiNavKind.TYPE_DECLARATION -> dev.ide.lang.kotlin.NavKind.TYPE_DECLARATION
         UiNavKind.SUPER -> dev.ide.lang.kotlin.NavKind.SUPER
+        UiNavKind.USAGES -> dev.ide.lang.kotlin.NavKind.USAGES
+        UiNavKind.RELATED -> dev.ide.lang.kotlin.NavKind.RELATED
     }
 
     private fun fromNavKind(kind: dev.ide.lang.kotlin.NavKind): UiNavKind = when (kind) {
@@ -224,6 +230,8 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         dev.ide.lang.kotlin.NavKind.IMPLEMENTATION -> UiNavKind.IMPLEMENTATION
         dev.ide.lang.kotlin.NavKind.TYPE_DECLARATION -> UiNavKind.TYPE_DECLARATION
         dev.ide.lang.kotlin.NavKind.SUPER -> UiNavKind.SUPER
+        dev.ide.lang.kotlin.NavKind.USAGES -> UiNavKind.USAGES
+        dev.ide.lang.kotlin.NavKind.RELATED -> UiNavKind.RELATED
     }
 
     override suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> =
@@ -249,6 +257,23 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         }
     } catch (_: EngineCanceledException) {
         null
+    }
+
+    override suspend fun resourceSwatches(path: String, text: String): List<UiResourceSwatch> = try {
+        ctx.background(op = op("resourceSwatches", path)) {
+            ctx.services.resourceSwatches(Paths.get(path), text).map { s ->
+                UiResourceSwatch(
+                    offset = s.offset,
+                    color = s.argb,
+                    image = s.drawable?.let { UiProjectIcon.Drawable(DrawableMapping.toUi(it)) }
+                        ?: s.bitmap?.let { UiProjectIcon.Raster(it) },
+                    targetPath = s.target?.first?.toString(),
+                    targetOffset = s.target?.second ?: 0,
+                )
+            }
+        }
+    } catch (_: EngineCanceledException) {
+        emptyList()
     }
 
     override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =

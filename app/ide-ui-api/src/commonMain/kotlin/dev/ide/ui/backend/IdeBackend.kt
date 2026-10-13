@@ -1592,8 +1592,9 @@ data class UiLayoutElement(
 /** A go-to-definition target: open [path] and move the caret to [offset]. */
 data class UiDefinition(val path: String, val offset: Int)
 
-/** The source navigation actions the editor offers (Kotlin sources for now). */
-enum class UiNavKind { DECLARATION, IMPLEMENTATION, TYPE_DECLARATION, SUPER }
+/** The source navigation actions the editor offers. [USAGES] lists where the symbol is referenced; [RELATED]
+ *  pairs a layout with the classes that inflate it, and a class with its layouts. */
+enum class UiNavKind { DECLARATION, IMPLEMENTATION, TYPE_DECLARATION, SUPER, USAGES, RELATED }
 
 /** One navigation destination: open [path] at [offset]. [label] names it in the multi-target picker and
  *  [kind] (a lowercase symbol/declaration kind, e.g. "class"/"method") picks its icon. */

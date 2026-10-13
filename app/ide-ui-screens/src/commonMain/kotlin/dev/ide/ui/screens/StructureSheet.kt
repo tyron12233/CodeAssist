@@ -157,6 +157,7 @@ private fun KindBadge(kind: String) {
         "constructor" -> "c" to MaterialTheme.colorScheme.primary
         "field" -> "f" to Ide.colors.info
         "enum_constant" -> "e" to Ide.colors.success
+        "element" -> "<>" to Ide.colors.info // an XML element
         else -> "•" to MaterialTheme.colorScheme.outline
     }
     Box(

@@ -1058,6 +1058,9 @@
     <string name="nav_implementations">实现</string>
     <string name="nav_type_declaration">类型声明</string>
     <string name="nav_super">父类</string>
+    <string name="nav_usages">用法</string>
+    <string name="nav_related">相关文件</string>
+    <string name="nav_refactor">重构</string>
     <string name="nav_none">源码中未找到。</string>
     <string name="ctxmenu_actions">操作</string>
     <string name="ctxmenu_intentions">意图</string>

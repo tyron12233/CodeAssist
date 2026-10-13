@@ -51,6 +51,8 @@ import dev.ide.ui.generated.resources.nav_declaration
 import dev.ide.ui.generated.resources.nav_go_to
 import dev.ide.ui.generated.resources.nav_implementations
 import dev.ide.ui.generated.resources.nav_super
+import dev.ide.ui.generated.resources.nav_related
+import dev.ide.ui.generated.resources.nav_usages
 import dev.ide.ui.generated.resources.nav_type_declaration
 import dev.ide.ui.generated.resources.rename
 import kotlinx.coroutines.channels.BufferOverflow
@@ -243,6 +245,8 @@ internal fun EditorContextMenu(
                 CaMenuItem(stringResource(Res.string.nav_implementations), onClick = { run { onCommand(EditorCommands.GO_TO_IMPLEMENTATION) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_IMPLEMENTATION) })
                 CaMenuItem(stringResource(Res.string.nav_type_declaration), onClick = { run { onCommand(EditorCommands.GO_TO_TYPE_DECLARATION) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_TYPE_DECLARATION) })
                 CaMenuItem(stringResource(Res.string.nav_super), onClick = { run { onCommand(EditorCommands.GO_TO_SUPER) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_SUPER) })
+                CaMenuItem(stringResource(Res.string.nav_usages), onClick = { run { onCommand(EditorCommands.FIND_USAGES) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.FIND_USAGES) })
+                CaMenuItem(stringResource(Res.string.nav_related), onClick = { run { onCommand(EditorCommands.GO_TO_RELATED) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_RELATED) })
             }
             CaMenuItem(stringResource(Res.string.rename), onClick = { run { onCommand(EditorCommands.RENAME) } }, enabled = !readOnly, modifier = Dense, trailing = { ShortcutHint(EditorCommands.RENAME) })
             CaMenuItem(stringResource(Res.string.edoverlay_quick_documentation), onClick = { run { onCommand(EditorCommands.QUICK_DOC) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.QUICK_DOC) })

@@ -13,6 +13,7 @@ import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.incremental.ReparseResult
 import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
+import dev.ide.lang.resolve.StructureItem
 import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.SymbolFilter
 import dev.ide.lang.resolve.TypeRef
@@ -26,6 +27,7 @@ import dev.ide.lang.xml.highlight.XmlSemanticHighlighter
 import dev.ide.lang.xml.hints.XmlInlayHintService
 import dev.ide.lang.xml.hints.XmlResourceValueResolver
 import dev.ide.lang.xml.signature.XmlSignatureHelp
+import dev.ide.lang.xml.structure.XmlStructure
 import dev.ide.vfs.VirtualFile
 import java.util.concurrent.ConcurrentHashMap
 
@@ -93,6 +95,10 @@ class XmlSourceAnalyzer : SourceAnalyzer {
         val parsed = lastByFile[file.path]
         return AnalysisResult(file, parsed?.diagnostics ?: emptyList())
     }
+
+    /** The element tree, for the outline and the sticky headers (see [XmlStructure]). */
+    override fun fileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> =
+        runCatching { XmlStructure.of(XmlTreeParser.parse(file.path, text)) }.getOrDefault(emptyList())
 
     override fun resolve(node: DomNode): ResolveResult = ResolveResult.Unresolved
     override fun scopeAt(file: VirtualFile, offset: Int): Scope = EmptyScope

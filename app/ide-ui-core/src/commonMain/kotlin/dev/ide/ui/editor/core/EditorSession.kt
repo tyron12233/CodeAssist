@@ -9,6 +9,7 @@ import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiGutterMark
 import dev.ide.ui.backend.UiInlayHint
+import dev.ide.ui.backend.UiResourceSwatch
 import dev.ide.ui.backend.UiTextDecoration
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
@@ -19,6 +20,7 @@ import dev.ide.ui.editor.shiftDiagnostics
 import dev.ide.ui.editor.shiftFoldRegions
 import dev.ide.ui.editor.shiftGutterMarks
 import dev.ide.ui.editor.shiftInlayHints
+import dev.ide.ui.editor.shiftResourceSwatches
 import dev.ide.ui.editor.shiftTextDecorations
 import dev.ide.ui.editor.shiftSemanticTokens
 import kotlin.math.max
@@ -116,6 +118,14 @@ class EditorSession(
      * [applyComposePreviews].
      */
     var previewMarkers by mutableStateOf<List<UiComposePreview>>(emptyList())
+        private set
+
+    /**
+     * Gutter color/drawable swatches for the buffer's resource references, anchored by offset and shifted in
+     * place on each edit like [previewMarkers], so a swatch stays beside its line between debounced refetches.
+     * Host refills via [applyResourceSwatches].
+     */
+    var resourceSwatches by mutableStateOf<List<UiResourceSwatch>>(emptyList())
         private set
 
     /**
@@ -384,6 +394,7 @@ class EditorSession(
         if (diagnostics.isNotEmpty()) diagnostics = shiftDiagnostics(diagnostics, edit, doc)
         if (semanticTokens.isNotEmpty()) semanticTokens = shiftSemanticTokens(semanticTokens, edit, doc.length)
         if (previewMarkers.isNotEmpty()) previewMarkers = shiftComposePreviews(previewMarkers, edit, doc.length)
+        if (resourceSwatches.isNotEmpty()) resourceSwatches = shiftResourceSwatches(resourceSwatches, edit, doc.length)
         if (foldRegions.isNotEmpty()) foldRegions = shiftFoldRegions(foldRegions, edit, doc.length)
         if (inlayHints.isNotEmpty()) inlayHints = shiftInlayHints(inlayHints, edit, doc.length)
         if (textDecorations.isNotEmpty()) textDecorations = shiftTextDecorations(textDecorations, edit, doc.length)
@@ -410,6 +421,11 @@ class EditorSession(
     /** Swap in fresh `@Preview` gutter markers (aligned to the current text). The host calls this debounced. */
     fun applyComposePreviews(result: List<UiComposePreview>) {
         previewMarkers = result
+    }
+
+    /** Swap in fresh resource swatches (aligned to the current text). The editor calls this debounced. */
+    fun applyResourceSwatches(result: List<UiResourceSwatch>) {
+        resourceSwatches = result
     }
 
     /** Swap in fresh inlay hints (aligned to the current text). The host calls this debounced (daemon pass). */

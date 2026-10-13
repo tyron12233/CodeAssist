@@ -62,6 +62,8 @@ val EDITOR_KEY_DEFAULTS: List<EditorKeyDefault> = listOf(
     EditorKeyDefault("editor.goToImplementation", "B", primary = true, alt = true),
     EditorKeyDefault("editor.goToTypeDeclaration", "B", primary = true, shift = true),
     EditorKeyDefault("editor.goToSuper", "U", primary = true),
+    EditorKeyDefault("editor.findUsages", "F7", alt = true),
+    EditorKeyDefault("editor.goToRelated", "Home", primary = true, alt = true),
     EditorKeyDefault("editor.completeCode", "Space", primary = true),
     EditorKeyDefault("editor.parameterInfo", "P", primary = true),
     EditorKeyDefault("editor.rename", "F2"),

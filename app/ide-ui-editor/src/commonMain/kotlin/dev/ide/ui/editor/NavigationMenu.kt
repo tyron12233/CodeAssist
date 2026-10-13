@@ -47,27 +47,32 @@ import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
+import dev.ide.ui.backend.UiRenameTarget
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.codeaction_quick_fixes
 import dev.ide.ui.generated.resources.ctxmenu_actions
 import dev.ide.ui.generated.resources.ctxmenu_intentions
+import dev.ide.ui.generated.resources.edoverlay_rename_kind
 import dev.ide.ui.generated.resources.nav_declaration
 import dev.ide.ui.generated.resources.nav_go_to
 import dev.ide.ui.generated.resources.nav_implementations
 import dev.ide.ui.generated.resources.nav_none
+import dev.ide.ui.generated.resources.nav_refactor
+import dev.ide.ui.generated.resources.nav_related
 import dev.ide.ui.generated.resources.nav_super
 import dev.ide.ui.generated.resources.nav_type_declaration
+import dev.ide.ui.generated.resources.nav_usages
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 /**
  * The editor context menu's state: the action [Menu] (only the navigation actions applicable at the caret,
- * shown alongside the caret's quick-fixes / intentions), or the [Results] of one nav action — a target picker,
- * or (empty) a "nothing found" note.
+ * shown alongside the caret's quick-fixes / intentions, plus Rename when the caret is on a [rename]able
+ * symbol), or the [Results] of one nav action — a target picker, or (empty) a "nothing found" note.
  */
 sealed interface NavMenuState {
-    data class Menu(val options: List<UiNavOption>) : NavMenuState
+    data class Menu(val options: List<UiNavOption>, val rename: UiRenameTarget? = null) : NavMenuState
     data class Results(val targets: List<UiNavTarget>) : NavMenuState
 }
 
@@ -90,6 +95,8 @@ fun NavMenu(
     /** The plugin action tree for this caret (groups render as expandable submenus). */
     menu: UiMenuGroup = UiMenuGroup(),
     onMenuAction: (UiActionItem) -> Unit = {},
+    /** Start renaming the caret's symbol (offered when [NavMenuState.Menu.rename] is set). */
+    onRename: () -> Unit = {},
 ) {
     Column(
         Modifier.width(width)
@@ -102,13 +109,17 @@ fun NavMenu(
                 // Plugin-tier entries (those carrying an actionId) are rendered from [menu] instead, where
                 // their groups survive as submenus. Listing them here too would double every one of them.
                 val intentions = actions.filter { it.kind != UiActionKind.QUICK_FIX && it.actionId == null }
-                if (state.options.isEmpty() && quickFixes.isEmpty() && intentions.isEmpty() && menu.items.isEmpty()) {
+                if (state.options.isEmpty() && state.rename == null && quickFixes.isEmpty() && intentions.isEmpty() && menu.items.isEmpty()) {
                     NothingFound()
                 } else {
                     Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                         if (state.options.isNotEmpty()) {
                             SectionHeader(stringResource(Res.string.nav_go_to))
                             state.options.forEach { opt -> MenuRow(navIcon(opt.kind), navLabel(opt.kind)) { onOption(opt) } }
+                        }
+                        state.rename?.let { r ->
+                            SectionHeader(stringResource(Res.string.nav_refactor))
+                            MenuRow(CaIcons.docText, stringResource(Res.string.edoverlay_rename_kind, r.kind)) { onRename() }
                         }
                         if (quickFixes.isNotEmpty()) {
                             SectionHeader(stringResource(Res.string.codeaction_quick_fixes))
@@ -196,6 +207,8 @@ private fun navLabel(kind: UiNavKind): String = when (kind) {
     UiNavKind.IMPLEMENTATION -> stringResource(Res.string.nav_implementations)
     UiNavKind.TYPE_DECLARATION -> stringResource(Res.string.nav_type_declaration)
     UiNavKind.SUPER -> stringResource(Res.string.nav_super)
+    UiNavKind.USAGES -> stringResource(Res.string.nav_usages)
+    UiNavKind.RELATED -> stringResource(Res.string.nav_related)
 }
 
 private fun navIcon(kind: UiNavKind): ImageVector = when (kind) {
@@ -203,6 +216,8 @@ private fun navIcon(kind: UiNavKind): ImageVector = when (kind) {
     UiNavKind.IMPLEMENTATION -> CaIcons.layers
     UiNavKind.TYPE_DECLARATION -> CaIcons.box
     UiNavKind.SUPER -> CaIcons.pin
+    UiNavKind.USAGES -> CaIcons.search
+    UiNavKind.RELATED -> CaIcons.file
 }
 
 /** An icon for a nav target's [kind] hint (a lowercase symbol/declaration kind from the backend). */
@@ -211,6 +226,8 @@ private fun iconForKind(kind: String): ImageVector = when (kind) {
     "method", "fun", "function", "constructor" -> CaIcons.code
     "field", "property", "val", "var" -> CaIcons.code
     "resource" -> CaIcons.resources
+    "usage" -> CaIcons.search // one place a resource is referenced (the label carries file:line and the line)
+    "file" -> CaIcons.file // a related file (a layout, or a class that inflates one)
     "library" -> CaIcons.box // a compiled library class (opens read-only: decompiled / attached source)
     else -> CaIcons.dot
 }

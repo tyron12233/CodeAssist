@@ -208,6 +208,7 @@ class KotlinEditorFeatures(
         NavKind.TYPE_DECLARATION -> typeDeclarationTargets(symbol)
         NavKind.IMPLEMENTATION -> implementationTargets(typeRefFqn ?: contextTypeFqn(symbol, leaf))
         NavKind.SUPER -> superTargets(symbol, leaf)
+        NavKind.USAGES, NavKind.RELATED -> emptyList()
     }
 
     /** Go to Declaration: a TYPE reference under the caret → its type declaration; else the resolved symbol's

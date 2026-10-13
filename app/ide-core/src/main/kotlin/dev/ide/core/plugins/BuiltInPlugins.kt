@@ -12,6 +12,7 @@ import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.ResourceRepositorySource
 import dev.ide.android.support.index.AndroidResourceIndex
+import dev.ide.android.support.index.AndroidResourceRefIndex
 import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
@@ -668,6 +669,7 @@ internal val BUILT_IN_INDEX_EXTENSIONS: List<dev.ide.index.IndexExtension<*, *>>
     JavaMainIndex,
     KotlinMainIndex,
     AndroidResourceIndex,
+    AndroidResourceRefIndex,
     BinarySubtypeIndex,
     BinaryAnnotationIndex,
     KotlinSourceSubtypeIndex,

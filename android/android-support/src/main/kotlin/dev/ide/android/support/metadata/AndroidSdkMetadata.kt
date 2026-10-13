@@ -66,6 +66,33 @@ class AndroidSdkMetadata(
         return attributesFor(tag, parentTag).firstOrNull { it.name == attributeName }
     }
 
+    /**
+     * What Quick Doc says about attribute [localName] (no `android:`/`app:` prefix): its declared formats and
+     * closed values, and the styleables that list it (`TextView`, `LinearLayout_Layout`, ...). Null when this
+     * metadata doesn't know the attribute.
+     */
+    fun attributeInfo(localName: String): AttributeInfo? {
+        val entry = attrs[localName]
+        val declaredBy = styleables.values.filter { localName in it.attrs }.map { it.name }.sorted()
+        if (entry == null && declaredBy.isEmpty()) return null
+        return AttributeInfo(
+            name = attrPrefix + localName,
+            formats = entry?.formats ?: emptySet(),
+            enumValues = entry?.enumValues ?: emptyList(),
+            flagValues = entry?.flagValues ?: emptyList(),
+            declaredBy = declaredBy,
+        )
+    }
+
+    /** See [attributeInfo]. */
+    data class AttributeInfo(
+        val name: String,
+        val formats: Set<AttrFormat>,
+        val enumValues: List<String>,
+        val flagValues: List<String>,
+        val declaredBy: List<String>,
+    )
+
     /** Whether this metadata describes any widget tag (false for the custom-view side, which only adds attrs). */
     fun hasWidgets(): Boolean = widgetList.isNotEmpty()
 

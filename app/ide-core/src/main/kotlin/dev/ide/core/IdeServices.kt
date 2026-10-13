@@ -91,7 +91,9 @@ import dev.ide.core.project.SampleProject
 import dev.ide.core.sdk.BundledAndroidToolchain
 import dev.ide.core.sdk.SdkManagerService
 import dev.ide.core.sdk.SwingApiStubs
+import dev.ide.core.services.AndroidEditorFeatures
 import dev.ide.core.services.AndroidResourceService
+import dev.ide.core.services.ResourceSwatch
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.ComposePreviewService
@@ -590,6 +592,7 @@ class IdeServices private constructor(
         override fun sourceRoots(module: Module) = this@IdeServices.sourceRoots(module)
         override fun treeRoots(module: Module) = this@IdeServices.treeRoots(module)
         override fun overlayText(path: Path) = this@IdeServices.openDocuments[path]
+        override fun openDocumentPaths(): Set<Path> = this@IdeServices.openDocuments.keys.toSet()
         override fun flushOpenDocuments() = this@IdeServices.flushOpenDocuments()
         override fun ensureKotlinStdlib() = this@IdeServices.ensureKotlinStdlib()
         override fun parse(file: Path, text: String) = this@IdeServices.parse(file, text)
@@ -752,6 +755,18 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped Android resource navigation + preview (go-to-def, drawable/color preview). */
     internal val resources: AndroidResourceService
         get() = store.workspaceContainer.getService(ANDROID_RESOURCE_SERVICE)
+
+    /** Android Go to (declaration variants, usages, related files), Quick Doc, resource rename and gutter
+     *  swatches, over one shared view of the project's resources and sources. */
+    private val androidEditor by lazy {
+        AndroidEditorFeatures(
+            engineContext,
+            sdkMetadata = ::sdkLayoutMetadata,
+            customAttrs = { customAttrsMetadata(it) },
+            // A desktop SDK's platform ships its resources beside android.jar; the device's bundled jar doesn't.
+            frameworkResDir = { previewAndroidJar()?.parent?.resolve("data")?.resolve("res")?.takeIf { Files.isDirectory(it) } },
+        )
+    }
 
     /** WORKSPACE-scoped Java rename refactoring (prepare + apply across the project). */
     internal val refactor: RefactorService
@@ -2557,7 +2572,13 @@ class IdeServices private constructor(
     /** Quick documentation (signature + doc comment) for the symbol at [offset] in [file]'s buffer, or null.
      *  Resolves through the live overlay so cross-file references reach their declaration. */
     fun quickDocAt(file: Path, text: String, offset: Int): dev.ide.lang.resolve.QuickDocInfo? =
-        languageFeatures.quickDocAt(file, text, offset)
+        // An Android attribute or resource (incl. `R.string.x` in code) first: the analyzer would only describe
+        // the generated `R` field.
+        androidEditor.quickDoc.quickDocAt(file, text, offset) ?: languageFeatures.quickDocAt(file, text, offset)
+
+    /** Gutter color/drawable previews for the resource references in [file]'s buffer (res XML or code). */
+    fun resourceSwatches(file: Path, text: String): List<ResourceSwatch> =
+        androidEditor.swatches.swatches(file, text)
 
     /** Diagnostics for [text], bound to [file]'s module (empty if outside the project). */
     fun analyze(file: Path, text: String): AnalysisResult? {
@@ -2722,9 +2743,10 @@ class IdeServices private constructor(
 
     /**
      * Source go-to targets for the symbol at [offset] in [file]'s live buffer ([text]), for the requested
-     * navigation [kind] — Declaration / Implementation(s) / Type Declaration / Super. Kotlin source only;
-     * a [dev.ide.lang.kotlin.NavKind.DECLARATION] that resolves no code symbol falls back to the Android
-     * resource reference under the caret (so ⌘B still jumps `@string/…` / `R.…`). Empty when nothing applies.
+     * navigation [kind]. Code symbols come from the Kotlin analyzer; Android answers the rest: a resource's
+     * every declaration, a class or attribute named in XML, Usages and Related files. A Declaration nothing
+     * else resolves falls back to the resource repository (an unsaved, not yet indexed resource) and then to
+     * plugin declarations. Empty when nothing applies.
      */
     fun navigationTargets(
         file: Path,
@@ -2733,7 +2755,9 @@ class IdeServices private constructor(
         kind: dev.ide.lang.kotlin.NavKind,
     ): List<dev.ide.lang.kotlin.NavTarget> {
         val targets = kotlinEditor.navigationTargets(file, text, offset, kind)
-        if (targets.isNotEmpty() || kind != dev.ide.lang.kotlin.NavKind.DECLARATION) return targets
+        if (targets.isNotEmpty()) return targets
+        val android = androidEditor.navigation.targets(file, text, offset, kind)
+        if (android.isNotEmpty() || kind != dev.ide.lang.kotlin.NavKind.DECLARATION) return android
         return resourceDeclaration(file, text, offset) ?: pluginDeclarations(file, text, offset)
     }
 
@@ -2749,6 +2773,9 @@ class IdeServices private constructor(
         offset: Int,
     ): List<Pair<dev.ide.lang.kotlin.NavKind, List<dev.ide.lang.kotlin.NavTarget>>> {
         val opts = kotlinEditor.navigationOptions(file, text, offset).toMutableList()
+        for ((kind, targets) in androidEditor.navigation.options(file, text, offset)) {
+            if (opts.none { it.first == kind }) opts.add(kind to targets)
+        }
         if (opts.none { it.first == dev.ide.lang.kotlin.NavKind.DECLARATION }) {
             resourceDeclaration(file, text, offset)?.let { opts.add(dev.ide.lang.kotlin.NavKind.DECLARATION to it) }
         }
@@ -3021,20 +3048,22 @@ class IdeServices private constructor(
 
     // ---- rename refactoring ----------------------------------------------------------------------
 
-    /** The renameable symbol under the caret (its current name + a kind label), or null. Java only. */
-    /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable. */
+    /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable: an
+     *  Android resource anywhere it is named, else a Java symbol. */
     fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? =
-        refactor.prepareRename(file, text, offset)
+        androidEditor.rename.prepareRename(file, text, offset) ?: refactor.prepareRename(file, text, offset)
 
     /**
-     * Rename the symbol under the caret to [newName] across the whole project: resolve the target, find every
-     * reference (binding-key match; a file-local symbol stays in its own file, otherwise project `.java` files
-     * are pre-filtered by name then parsed), then apply a multi-file edit to disk + the editor overlay. When a
-     * top-level public type whose name matches its file is renamed, the backing `.java` file is renamed too
-     * (its new path is returned so the editor can reopen it). Re-indexes and invalidates analyzers.
+     * Rename the symbol under the caret to [newName] across the whole project. An Android resource renames
+     * everywhere it is named (XML, `R.x.y`, binding classes, its files). Otherwise a Java symbol: resolve the
+     * target, find every reference (binding-key match; a file-local symbol stays in its own file, otherwise
+     * project `.java` files are pre-filtered by name then parsed), then apply a multi-file edit to disk + the
+     * editor overlay. When a top-level public type whose name matches its file is renamed, the backing `.java`
+     * file is renamed too (its new path is returned so the editor can reopen it). Re-indexes and invalidates
+     * analyzers.
      */
     suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome =
-        refactor.rename(file, text, offset, newName)
+        androidEditor.rename.rename(file, text, offset, newName) ?: refactor.rename(file, text, offset, newName)
 
     /** Every reference to the symbol under [offset] in [file]/[text], project-wide, as (file, range) pairs.
      *  Read-only (Java/JDT); empty when the position is not a resolvable symbol. */

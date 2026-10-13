@@ -42,6 +42,8 @@ object EditorCommands {
     const val GO_TO_IMPLEMENTATION = "editor.goToImplementation"
     const val GO_TO_TYPE_DECLARATION = "editor.goToTypeDeclaration"
     const val GO_TO_SUPER = "editor.goToSuper"
+    const val FIND_USAGES = "editor.findUsages"
+    const val GO_TO_RELATED = "editor.goToRelated"
     const val COMPLETE_CODE = "editor.completeCode"
     const val PARAMETER_INFO = "editor.parameterInfo"
     const val RENAME = "editor.rename"
