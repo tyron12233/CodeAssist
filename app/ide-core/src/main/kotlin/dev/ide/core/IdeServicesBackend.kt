@@ -777,6 +777,21 @@ class IdeServicesBackend(
         }
     }
 
+    /**
+     * Ship what telemetry is pending: the partial perf and frame windows, then the analytics queue. The host calls
+     * this when the app leaves the screen, which on Android is the last moment it reliably gets: the process is
+     * usually killed in the background without [close] ever running, and a window that never fills would never
+     * be sent. Off the caller's thread, because sending is a network call and the caller is the main thread.
+     */
+    fun flushTelemetry() {
+        analyticsScope.launch(Dispatchers.IO) {
+            runCatching { perf.flushAll() }
+            runCatching { frames.flushAll() }
+            runCatching { frameCpu.flushAll() }
+            runCatching { analytics.flush() }
+        }
+    }
+
     fun close() {
         runCatching { Log.removeSink(errorDialogSink) }
         runCatching { analyticsScope.cancel() }
@@ -848,8 +863,14 @@ private fun renderStandaloneLayout(
     )
 }.getOrNull()
 
-/** Frames per [IdeServicesBackend.recordFrame] summary event. */
-private const val FRAME_WINDOW = 600
+/**
+ * Frames per [IdeServicesBackend.recordFrame] summary event. Was 600, which at 60 to 120 fps closed a window every
+ * few seconds of drawing: the two frame metrics were 75% of every analytics event sent, and so most of the
+ * requests and log volume the free Supabase plan meters. A window ten times larger keeps the percentiles (they
+ * only get steadier) and the jank trend by version; partial windows ship when the app leaves the screen
+ * ([IdeServicesBackend.flushTelemetry]).
+ */
+private const val FRAME_WINDOW = 6000
 
 /**
  * How long the editor's engine must sit idle before the Kotlin compiler warm-up starts. Spans the gap between

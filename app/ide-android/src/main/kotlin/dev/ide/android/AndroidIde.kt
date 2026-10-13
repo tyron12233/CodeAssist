@@ -739,6 +739,11 @@ object AndroidIde {
             sink = SupabaseSink(url, key),
             initialConsent = manager.preference("analytics.consent") == "granted",
             queueFile = File(home, "analytics-queue.txt").toPath(),
+            // Fewer, larger requests: every request is a metered log line on the Supabase plan, and the queue is
+            // written to disk on each event, so waiting longer to send loses nothing to a killed process. Leaving
+            // the screen flushes regardless (AndroidMemory).
+            batchSize = 50,
+            flushIntervalMs = 120_000,
         )
         // Bridge the logging facade to analytics: caught ERROR logs become scrubbed `error_logged` events
         // (no messages/paths). No-ops while the service is disabled, and starts working on consent.

@@ -52,6 +52,8 @@ object AndroidMemory {
     fun registerTrimHandler(context: Context, backend: IdeServicesBackend) {
         context.applicationContext.registerComponentCallbacks(object : ComponentCallbacks2 {
             override fun onTrimMemory(level: Int) {
+                // Leaving the screen: the last point the process is sure to be alive, so pending telemetry goes now.
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) backend.flushTelemetry()
                 if (!shouldRelease(level)) return
                 log.info("onTrimMemory($level) tier=${DeviceMemory.tier}: releasing editor caches")
                 backend.releaseMemory(collect = level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)

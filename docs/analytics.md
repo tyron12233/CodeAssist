@@ -147,35 +147,23 @@ create policy "anon_insert_only" on public.events
 
 ### Rollup + prune (stay under the free-tier 500 MB)
 
-Aggregate raw events into a daily table and delete the raw rows older than 30 days. Run daily via
-`pg_cron` (or a scheduled Edge Function).
+Raw events are kept for **7 whole days**; `events_daily` (per day, event, category and app version: distinct
+installs, hits, and duration p50/p95/max) keeps the long-term picture. A daily `pg_cron` job,
+`events-rollup` (`17 3 * * *`, `select public.roll_up_events()`), does both. The live definition is
+`supabase/migrations/20261013000100_analytics_retention.sql`:
 
-```sql
-create table if not exists public.events_daily (
-  day      date not null,
-  event    text not null,
-  category text not null,
-  installs int not null,   -- distinct installs that fired it
-  hits     int not null,   -- total occurrences
-  primary key (day, event, category)
-);
+- It aggregates only days not rolled up yet, plus always the last two completed days. `received_at` is the
+  server's clock, so a day is final once it ends. Missed runs are caught up by the next one, as far back as raw
+  rows exist.
+- It deletes raw rows older than 7 days **on a day boundary**, so the oldest raw day left is always whole.
 
-create or replace function public.roll_up_events() returns void language sql as $$
-  insert into public.events_daily (day, event, category, installs, hits)
-  select date_trunc('day', received_at)::date, event, category,
-         count(distinct install_id), count(*)
-  from public.events
-  where received_at < date_trunc('day', now())
-  group by 1, 2, 3
-  on conflict (day, event, category)
-  do update set installs = excluded.installs, hits = excluded.hits;
+Why it is shaped this way (2026-10-13): the first version re-aggregated every raw row on every run. Its cost
+grew with the table until it hit the database's 2-minute statement timeout, and because the prune shares the
+function, the failed rollup stopped deletions too; `events` reached 414 MB. It also cut raw rows at the run's
+time of day, so the next run re-aggregated a partial oldest day over its complete rollup.
 
-  delete from public.events where received_at < now() - interval '30 days';
-$$;
-
--- with pg_cron:
--- select cron.schedule('events-rollup', '17 3 * * *', $$select public.roll_up_events()$$);
-```
+Deleting rows does not shrink the table on disk; after a large one-off delete, `vacuum full analyze
+public.events` gives the space back (it locks the table for ~30 s; clients retry from their queue).
 
 ## Rotating the endpoint / key
 
