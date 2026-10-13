@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -70,6 +71,24 @@ import dev.ide.ui.generated.resources.palette_section_goto
 import dev.ide.ui.generated.resources.palette_type_to_search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import dev.ide.ui.generated.resources.palette_key_close
+import dev.ide.ui.generated.resources.palette_key_navigate
+import dev.ide.ui.generated.resources.palette_key_open
+import dev.ide.ui.generated.resources.palette_key_scope
+import dev.ide.ui.icons.actionIcon
+import dev.ide.ui.platform.hasHardwareKeyboard
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -80,6 +99,8 @@ class PaletteEntry(
     val sub: String?,
     /** The command's action id, for its shortcut hint; null for a file or a symbol. */
     val actionId: String? = null,
+    /** What the row's leading glyph shows: a command's action icon id, or a file's [dev.ide.ui.icons.TreeIcons] id. */
+    val iconId: String? = null,
     val run: () -> Unit,
 )
 
@@ -102,7 +123,7 @@ enum class PaletteFilter(val labelRes: StringResource, val sections: Set<String>
 }
 
 /**
- * The command palette: drops from the top (glass-thick). One input over commands, files, and — backed
+ * The command palette: drops from the top on an opaque surface. One input over commands, files, and — backed
  * by the index — **Go-to-Symbol** (navigable project declarations) and **Member search** across the
  * classpath, with IntelliJ-style scope tabs (All / Commands / Files / Symbols / Members) to narrow the
  * results. Enter runs the top result; Tab cycles the scope; Esc closes.
@@ -123,8 +144,10 @@ fun CommandPalette(
     onEffects: suspend (List<UiActionEffect>) -> Unit = { },
     /** The scope tab to open on: the go-to shortcuts open it on Files, Symbols, ... */
     initialFilter: PaletteFilter = PaletteFilter.All,
+    /** Text the search field opens with. */
+    initialQuery: String = "",
 ) {
-    var query by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf(initialQuery) }
     var filter by remember(initialFilter) { mutableStateOf(initialFilter) }
     var symbols by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     var members by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
@@ -195,48 +218,85 @@ fun CommandPalette(
     }
 
     val q = query.trim()
+    val root = backend.project.rootPath.replace('\\', '/').trimEnd('/')
+    fun fileEntry(section: String, f: TreeNode) =
+        PaletteEntry(section, f.name, f.filePath?.let { folderOf(it, root) }, iconId = f.iconId) { onOpenFile(f) }
     val allEntries = buildList {
         if (q.isEmpty()) {
             // Engine commands (Run/Stop/Re-index + dex plugins) and UI commands (nav/theme + in-UI plugins).
-            pluginCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { runCommand(cmd.id) }) }
-            uiCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { cmd.perform(uiHost) }) }
-            files.take(12).forEach { f -> add(PaletteEntry("Go to", f.name, null) { onOpenFile(f) }) }
+            pluginCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id, cmd.iconId) { runCommand(cmd.id) }) }
+            uiCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id, cmd.iconId) { cmd.perform(uiHost) }) }
+            files.take(12).forEach { f -> add(fileEntry("Go to", f)) }
         } else {
             symbols.forEach { s ->
-                add(PaletteEntry("Symbols", s.name, s.detail) {
+                add(PaletteEntry("Symbols", s.name, s.detail, iconId = s.kind) {
                     if (s.filePath != null && s.offset != null) onOpenAt(s.filePath!!, s.offset!!)
                 })
             }
-            files.filter { it.name.contains(q, ignoreCase = true) }.take(8)
-                .forEach { f -> add(PaletteEntry("Files", f.name, null) { onOpenFile(f) }) }
-            members.forEach { m -> add(PaletteEntry("Members", m.name, m.detail) {}) }
+            files.filter { it.name.contains(q, ignoreCase = true) }.take(8).forEach { f -> add(fileEntry("Files", f)) }
+            members.forEach { m -> add(PaletteEntry("Members", m.name, m.detail, iconId = m.kind) {}) }
             pluginCommands.filter { it.text.contains(q, ignoreCase = true) }
-                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { runCommand(cmd.id) }) }
+                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id, cmd.iconId) { runCommand(cmd.id) }) }
             uiCommands.filter { it.text.contains(q, ignoreCase = true) }
-                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { cmd.perform(uiHost) }) }
+                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id, cmd.iconId) { cmd.perform(uiHost) }) }
         }
     }
+    // The engine and the UI can each contribute a command of the same name (Re-index); list it once.
     val entries = allEntries.filter { filter.keeps(it.section) }
+        .distinctBy { if (it.section == "Commands") "cmd:" + it.label.lowercase() else it }
+    // How many results each scope tab would show, so the tabs say where the matches are before they are picked.
+    val counts = if (q.isEmpty()) emptyMap() else PaletteFilter.entries.associateWith { f -> allEntries.count { f.keeps(it.section) } }
+
+    // The keyboard selection: Up/Down move it, Enter runs it, the pointer follows hover. Back to the top whenever
+    // the results are recomputed for a new query or scope.
+    var selected by remember { mutableStateOf(0) }
+    LaunchedEffect(q, filter) { selected = 0 }
+    val sel = selected.coerceIn(0, (entries.size - 1).coerceAtLeast(0))
+    // The rows as laid out: a heading opens each run of one section (only when more than one is on show, since a
+    // single section is already named by its tab), so a section's label is written once rather than on every row.
+    val showHeadings = entries.map { it.section }.distinct().size > 1
+    val rows = buildList {
+        var last: String? = null
+        entries.forEachIndexed { i, e ->
+            if (showHeadings && e.section != last) add(PaletteRowItem.Heading(e.section))
+            last = e.section
+            add(PaletteRowItem.Result(e, i))
+        }
+    }
+    val listState = rememberLazyListState()
+    LaunchedEffect(sel, rows.size) {
+        // Back at the top, show the top, heading included.
+        if (sel == 0) { listState.scrollToItem(0); return@LaunchedEffect }
+        val at = rows.indexOfFirst { it is PaletteRowItem.Result && it.index == sel }
+        val visible = listState.layoutInfo.visibleItemsInfo
+        if (at < 0 || visible.isEmpty()) return@LaunchedEffect
+        val first = visible.first().index
+        val last = visible.last().index
+        if (at <= first) listState.scrollToItem(at)
+        else if (at >= last) listState.scrollToItem((at - (last - first) + 1).coerceAtLeast(0))
+    }
 
     // The scrim + drop-from-top entrance are provided by the hosting DropdownOverlay; this is just the
-    // glass body. Adaptive width: full-bleed (minus 12dp margins) on phone, capped at 600 on desktop.
+    // palette body. Adaptive width: full-bleed (minus 12dp margins) on phone, capped at 640 on desktop.
     Column(
         Modifier
             .padding(horizontal = 12.dp)
-            .widthIn(max = 600.dp)
+            .widthIn(max = 640.dp)
             .fillMaxWidth()
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
+            .clip(RoundedCornerShape(Ca.radius.xl))
+            // Opaque: the code behind a translucent palette competed with its results.
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.xl)),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(CaIcons.command, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(CaIcons.search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text(stringResource(Res.string.palette_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(Res.string.palette_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 BasicTextField(
                     value = query,
@@ -248,7 +308,9 @@ fun CommandPalette(
                         if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (ev.key) {
                             Key.Escape -> { onClose(); true }
-                            Key.Enter -> { entries.firstOrNull()?.let { it.run(); onClose() }; true }
+                            Key.Enter -> { entries.getOrNull(sel)?.let { it.run(); onClose() }; true }
+                            Key.DirectionDown -> { if (entries.isNotEmpty()) selected = (sel + 1) % entries.size; true }
+                            Key.DirectionUp -> { if (entries.isNotEmpty()) selected = (sel - 1 + entries.size) % entries.size; true }
                             // Tab cycles the scope (Search-Everywhere style); Shift-Tab steps back.
                             Key.Tab -> {
                                 val all = PaletteFilter.entries
@@ -261,51 +323,92 @@ fun CommandPalette(
                     },
                 )
             }
-            Chip("esc", fill = MaterialTheme.colorScheme.surfaceContainerHighest, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (query.isNotEmpty()) {
+                Icon(
+                    CaIcons.close, null,
+                    Modifier.size(28.dp).clip(RoundedCornerShape(Ca.radius.pill)).clickable { query = "" }.padding(6.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        // The scope tabs: a narrowing lens over the result sections (IntelliJ's All/Classes/Files/… tabs).
-        FilterTabs(filter) { filter = it }
+        // The scope tabs: a narrowing lens over the result sections (IntelliJ's All/Classes/Files/... tabs).
+        FilterTabs(filter, counts) { filter = it }
         Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 
         if (entries.isEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 22.dp)) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 28.dp), contentAlignment = Alignment.Center) {
                 Text(
                     if (q.isEmpty() && filter != PaletteFilter.All) stringResource(Res.string.palette_type_to_search, stringResource(filter.labelRes).lowercase())
                     else stringResource(Res.string.palette_no_matches),
-                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium,
                 )
             }
         } else {
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
-                items(entries) { entry -> PaletteRow(entry, onClose) }
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), state = listState, contentPadding = PaddingValues(vertical = 6.dp)) {
+                items(rows, key = { it.key }) { row ->
+                    when (row) {
+                        is PaletteRowItem.Heading -> SectionHeading(sectionLabel(row.section))
+                        is PaletteRowItem.Result -> PaletteRow(
+                            row.entry, query = q, selected = row.index == sel,
+                            onHover = { selected = row.index }, onClose = onClose,
+                        )
+                    }
+                }
             }
         }
+        if (hasHardwareKeyboard()) KeyHints()
     }
 }
 
-/** The horizontal scope-tab strip: a pill per [PaletteFilter], the active one filled in the accent tint. */
+/** One row of the result list: a section heading, or a result at [index] among the selectable entries. */
+private sealed interface PaletteRowItem {
+    val key: String
+
+    class Heading(val section: String) : PaletteRowItem {
+        override val key get() = "h:$section"
+    }
+
+    class Result(val entry: PaletteEntry, val index: Int) : PaletteRowItem {
+        override val key get() = "r:$index"
+    }
+}
+
+/** The horizontal scope-tab strip: a pill per [PaletteFilter], the active one filled, each with its match count. */
 @Composable
-private fun FilterTabs(active: PaletteFilter, onSelect: (PaletteFilter) -> Unit) {
+private fun FilterTabs(active: PaletteFilter, counts: Map<PaletteFilter, Int>, onSelect: (PaletteFilter) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 10.dp),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PaletteFilter.entries.forEach { f ->
             val selected = f == active
-            Box(
+            val count = counts[f]
+            // A scope with nothing for this query stays clickable but recedes.
+            val empty = count == 0
+            Row(
                 Modifier
                     .clip(RoundedCornerShape(Ca.radius.pill))
-                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .border(1.dp, if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.pill))
                     .clickable { onSelect(f) }
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .alpha(if (empty && !selected) 0.5f else 1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     stringResource(f.labelRes),
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
                 )
+                if (count != null && count > 0) {
+                    Text(
+                        count.toString(),
+                        color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -323,28 +426,116 @@ private fun sectionLabel(section: String): String = when (section) {
 }
 
 @Composable
-private fun PaletteRow(entry: PaletteEntry, onClose: () -> Unit) {
+private fun SectionHeading(label: String) {
+    Text(
+        label,
+        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun PaletteRow(entry: PaletteEntry, query: String, selected: Boolean, onHover: () -> Unit, onClose: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    LaunchedEffect(hovered) { if (hovered) onHover() }
     Row(
         Modifier
             .fillMaxWidth()
-            .height(44.dp)
-            .clickable { entry.run(); onClose() }
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 6.dp)
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(Ca.radius.md))
+            .background(if (selected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else Color.Transparent)
+            .hoverable(interaction)
+            .clickable(interaction, indication = null) { entry.run(); onClose() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.width(64.dp), contentAlignment = Alignment.CenterStart) {
-            Text(sectionLabel(entry.section).uppercase(), color = MaterialTheme.colorScheme.outline, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-        }
-        Text(
-            entry.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-        )
-        if (entry.sub != null) {
-            Spacer(Modifier.width(8.dp))
-            Text(entry.sub, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        EntryIcon(entry)
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                highlighted(entry.label, query, MaterialTheme.colorScheme.primary),
+                color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+            )
+            if (entry.sub != null) {
+                Text(
+                    entry.sub, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
+            }
         }
         entry.actionId?.let { ShortcutHint(it) }
+    }
+}
+
+/** A command's action icon, a file's type badge, or a symbol's kind, in a fixed 20dp slot so labels line up. */
+@Composable
+private fun EntryIcon(entry: PaletteEntry) {
+    Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+        val muted = MaterialTheme.colorScheme.onSurfaceVariant
+        when (entry.section) {
+            "Files", "Go to" -> TemplateGlyph(entry.iconId ?: "file", 16.dp, fallbackTint = muted)
+            "Symbols", "Members" -> Icon(symbolIcon(entry.iconId), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            else -> Icon(if (entry.iconId == null) CaIcons.command else actionIcon(entry.iconId), null, Modifier.size(16.dp), tint = muted)
+        }
+    }
+}
+
+/** A glyph for a symbol kind (`class`, `method`, `field`, ...); anything else reads as code. */
+private fun symbolIcon(kind: String?): ImageVector = when (kind?.lowercase()) {
+    "class", "interface", "enum", "object", "record", "annotation", "type" -> CaIcons.box
+    "method", "function", "constructor" -> CaIcons.braces
+    "field", "property", "variable", "constant" -> CaIcons.dot
+    else -> CaIcons.code
+}
+
+/** [text] with every case-insensitive occurrence of [query] drawn in [color], so the row shows why it matched. */
+private fun highlighted(text: String, query: String, color: Color): AnnotatedString = buildAnnotatedString {
+    if (query.isEmpty()) { append(text); return@buildAnnotatedString }
+    var i = 0
+    while (i < text.length) {
+        val at = text.indexOf(query, i, ignoreCase = true)
+        if (at < 0) { append(text.substring(i)); break }
+        append(text.substring(i, at))
+        withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) { append(text.substring(at, at + query.length)) }
+        i = at + query.length
+    }
+}
+
+/** A file's folder relative to the project root, shown after its name so two `build.gradle`s tell apart. */
+private fun folderOf(path: String, root: String): String {
+    val p = path.replace('\\', '/')
+    val rel = if (root.isNotEmpty() && p.startsWith("$root/")) p.removePrefix("$root/") else p
+    return rel.substringBeforeLast('/', "")
+}
+
+/** The palette's keys, said once at the bottom instead of a lone "esc" chip in the search field. */
+@Composable
+private fun KeyHints() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KeyHint("↑↓", stringResource(Res.string.palette_key_navigate))
+        KeyHint("↵", stringResource(Res.string.palette_key_open))
+        KeyHint("⇥", stringResource(Res.string.palette_key_scope))
+        KeyHint("esc", stringResource(Res.string.palette_key_close))
+    }
+}
+
+@Composable
+private fun KeyHint(key: String, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            Modifier.clip(RoundedCornerShape(5.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+        ) { Text(key, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) }
+        Text(label, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
 

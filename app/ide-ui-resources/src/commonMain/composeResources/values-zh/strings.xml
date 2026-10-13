@@ -954,6 +954,10 @@
     <string name="palette_hint">运行命令，跳转到文件或符号…</string>
     <string name="palette_type_to_search">输入内容以搜索 %1$s…</string>
     <string name="palette_no_matches">没有匹配项</string>
+    <string name="palette_key_navigate">导航</string>
+    <string name="palette_key_open">打开</string>
+    <string name="palette_key_scope">切换范围</string>
+    <string name="palette_key_close">关闭</string>
 
     <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">当前没有运行中的任务。</string>

@@ -496,6 +496,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="palette_hint">Ejecuta un comando, salta a un archivo o símbolo…</string>
     <string name="palette_type_to_search">Escribe para buscar %1$s…</string>
     <string name="palette_no_matches">Sin coincidencias</string>
+    <string name="palette_key_navigate">navegar</string>
+    <string name="palette_key_open">abrir</string>
+    <string name="palette_key_scope">cambiar ámbito</string>
+    <string name="palette_key_close">cerrar</string>
 
     <!-- Run -->
     <string name="run_no_active_run">No hay ninguna ejecución activa.</string>

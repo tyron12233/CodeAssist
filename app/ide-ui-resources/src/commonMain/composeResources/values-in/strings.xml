@@ -443,6 +443,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="palette_hint">Jalankan perintah, lompat ke file atau simbol…</string>
     <string name="palette_type_to_search">Ketik untuk mencari %1$s…</string>
     <string name="palette_no_matches">Tidak ada kecocokan</string>
+    <string name="palette_key_navigate">navigasi</string>
+    <string name="palette_key_open">buka</string>
+    <string name="palette_key_scope">ganti cakupan</string>
+    <string name="palette_key_close">tutup</string>
     <string name="run_no_active_run">Tidak ada proses yang berjalan.</string>
     <string name="run_back">Kembali</string>
     <string name="run_run_again">Jalankan lagi</string>

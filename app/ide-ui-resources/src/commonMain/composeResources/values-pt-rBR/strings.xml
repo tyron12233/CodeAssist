@@ -458,6 +458,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="palette_hint">Execute um comando, vá para um arquivo ou símbolo…</string>
     <string name="palette_type_to_search">Digite para pesquisar %1$s…</string>
     <string name="palette_no_matches">Nenhuma correspondência</string>
+    <string name="palette_key_navigate">navegar</string>
+    <string name="palette_key_open">abrir</string>
+    <string name="palette_key_scope">trocar escopo</string>
+    <string name="palette_key_close">fechar</string>
 
     <!-- run/preview/edoverlay -->
     <string name="run_no_active_run">Nenhuma execução ativa.</string>

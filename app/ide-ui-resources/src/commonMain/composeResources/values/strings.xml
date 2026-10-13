@@ -959,6 +959,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="palette_hint">Run a command, jump to a file or symbol…</string>
     <string name="palette_type_to_search">Type to search %1$s…</string>
     <string name="palette_no_matches">No matches</string>
+    <string name="palette_key_navigate">navigate</string>
+    <string name="palette_key_open">open</string>
+    <string name="palette_key_scope">switch scope</string>
+    <string name="palette_key_close">close</string>
 
     <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">No active run.</string>

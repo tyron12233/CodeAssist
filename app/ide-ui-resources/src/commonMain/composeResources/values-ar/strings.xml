@@ -1004,6 +1004,10 @@
     <string name="palette_hint">شغّل أمرًا، أو انتقل إلى ملف أو رمز…</string>
     <string name="palette_type_to_search">اكتب للبحث في %1$s…</string>
     <string name="palette_no_matches">لا توجد نتائج مطابقة</string>
+    <string name="palette_key_navigate">تنقّل</string>
+    <string name="palette_key_open">فتح</string>
+    <string name="palette_key_scope">تبديل النطاق</string>
+    <string name="palette_key_close">إغلاق</string>
 
     <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">لا يوجد تشغيل نشط.</string>
