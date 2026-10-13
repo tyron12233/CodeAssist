@@ -133,6 +133,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="your_codeassist_files_content">Abre esta carpeta en cualquier administrador de archivos para examinar tus proyectos, agregar íconos o recursos, o editar desde una PC.</string>
     <string name="open_in_the_file_manager">Abrir en administrador de archivos</string>
     <string name="choose_start_point">Elige un punto de partida.</string>
+    <string name="templates_search">Buscar plantillas</string>
+    <string name="templates_all">Todas</string>
+    <string name="templates_no_match">Ninguna plantilla coincide con “%1$s”.</string>
     <string name="backup">Hacer copia de seguridad</string>
     <string name="delete_project">¿Eliminar proyecto?</string>
     <string name="delete_project_content">“%1$s” y todos sus archivos se eliminarán permanentemente. Esto no se puede deshacer.</string>
@@ -371,6 +374,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <!-- Gradle compatibility -->
     <string name="gradle_mode_title">Modo de compatibilidad con Gradle</string>
     <string name="gradle_resync">Volver a sincronizar</string>
+    <string name="gradle_kmp_target">Destino multiplataforma</string>
+    <string name="gradle_kmp_android">Android</string>
+    <string name="gradle_kmp_jvm">Escritorio (JVM)</string>
     <string name="gradle_syncing">Sincronizando desde Gradle…</string>
 
     <!-- SDK sources -->

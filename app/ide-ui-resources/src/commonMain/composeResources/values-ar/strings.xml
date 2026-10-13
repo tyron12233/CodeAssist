@@ -244,6 +244,9 @@
     <string name="your_codeassist_files_content">افتح هذا المجلد في أي مدير ملفات لتصفح مشاريعك، أو إضافة أيقونات أو أصول، أو التعديل من جهاز كمبيوتر.</string>
     <string name="open_in_the_file_manager">الفتح في مدير الملفات</string>
     <string name="choose_start_point">اختر نقطة البداية.</string>
+    <string name="templates_search">ابحث في القوالب</string>
+    <string name="templates_all">الكل</string>
+    <string name="templates_no_match">لا توجد قوالب تطابق “%1$s”.</string>
     <string name="backup">نسخ احتياطي</string>
     <string name="delete_project">حذف المشروع؟</string>
     <string name="delete_project_content">سيتم حذف "%1$s" وجميع ملفاته نهائيًا. لا يمكن التراجع عن هذا.</string>
@@ -566,6 +569,9 @@
     <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">وضع توافق Gradle</string>
     <string name="gradle_resync">إعادة المزامنة</string>
+    <string name="gradle_kmp_target">هدف المنصات المتعددة</string>
+    <string name="gradle_kmp_android">Android</string>
+    <string name="gradle_kmp_jvm">سطح المكتب (JVM)</string>
     <string name="gradle_sync_needed">تغيّرت ملفات البناء منذ آخر مزامنة. أعد المزامنة لتحديث المشروع.</string>
     <string name="gradle_syncing">جاري المزامنة من Gradle…</string>
     <string name="gradle_convert">تحويل</string>

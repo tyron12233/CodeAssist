@@ -212,6 +212,9 @@
     <string name="your_codeassist_files_content">可使用文件管理器打开该目录管理项目（存放在Projects目录的旧版项目也包含在内），可添加图标、资源文件，或在电脑端编辑文件。</string>
     <string name="open_in_the_file_manager">在文件管理器中打开</string>
     <string name="choose_start_point">选择起始位置</string>
+    <string name="templates_search">搜索模板</string>
+    <string name="templates_all">全部</string>
+    <string name="templates_no_match">没有与“%1$s”匹配的模板。</string>
     <string name="backup">备份</string>
     <string name="delete_project">删除项目</string>
     <string name="delete_project_content">“%1$s” 及其所有文件将被永久删除，无法撤销！要执行删除操作吗？</string>
@@ -516,6 +519,9 @@
     <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">Gradle 兼容模式</string>
     <string name="gradle_resync">重新同步</string>
+    <string name="gradle_kmp_target">多平台目标</string>
+    <string name="gradle_kmp_android">Android</string>
+    <string name="gradle_kmp_jvm">桌面 (JVM)</string>
     <string name="gradle_sync_needed">自上次同步以来构建文件已更改。重新同步以更新项目。</string>
     <string name="gradle_syncing">正在从 Gradle 同步…</string>
     <string name="gradle_convert">转换</string>

@@ -67,8 +67,24 @@ class ProjectsHomeScreenSnapshot {
         wideSnapshot("home-wide-tablet.png", many, wDp = 800, hDp = 1100)
     }
 
+    /**
+     * A first desktop run: no projects and the recovery notice up. Both blocks once sat 20dp further in than
+     * the header, the community card and the search row, because the phone list's inset was added on top of
+     * the wide column's own.
+     */
+    @Test
+    fun renderWideEmptyWithRecovery() {
+        wideSnapshot("home-wide-empty-recovery.png", emptyList(), wDp = 1000, hDp = 520, legacyRecovery = true)
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun wideSnapshot(name: String, projects: List<ProjectInfo>, wDp: Int, hDp: Int) {
+    private fun wideSnapshot(
+        name: String,
+        projects: List<ProjectInfo>,
+        wDp: Int,
+        hDp: Int,
+        legacyRecovery: Boolean = false,
+    ) {
         val scene = ImageComposeScene(width = wDp * 2, height = hDp * 2, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 CompositionLocalProvider(LocalAds provides fakeAdController(StubBackend())) {
@@ -86,6 +102,7 @@ class ProjectsHomeScreenSnapshot {
                                     onDeleteProject = {},
                                     onImportProject = {},
                                     onJoinDiscord = {},
+                                    showLegacyRecovery = legacyRecovery,
                                 )
                             },
                             storeContent = {},

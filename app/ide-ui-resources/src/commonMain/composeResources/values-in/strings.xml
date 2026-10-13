@@ -110,6 +110,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="your_codeassist_files_content">Buka folder ini di manajer file mana pun untuk menjelajahi proyek Anda, menambahkan ikon atau aset, atau mengedit dari PC.</string>
     <string name="open_in_the_file_manager">Buka di manajer file</string>
     <string name="choose_start_point">Pilih titik awal.</string>
+    <string name="templates_search">Cari templat</string>
+    <string name="templates_all">Semua</string>
+    <string name="templates_no_match">Tidak ada templat yang cocok dengan “%1$s”.</string>
     <string name="backup">Cadangkan</string>
     <string name="delete_project">Hapus proyek?</string>
     <string name="delete_project_content">“%1$s” dan semua filenya akan dihapus secara permanen. Ini tidak dapat dibatalkan.</string>
@@ -335,6 +338,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="find_all">Semua</string>
     <string name="gradle_mode_title">Mode kompatibilitas Gradle</string>
     <string name="gradle_resync">Sinkron ulang</string>
+    <string name="gradle_kmp_target">Target multiplatform</string>
+    <string name="gradle_kmp_android">Android</string>
+    <string name="gradle_kmp_jvm">Desktop (JVM)</string>
     <string name="gradle_syncing">Menyinkronkan dari Gradle…</string>
     <string name="sources_not_installed">Sumber platform Android (%1$s) belum terpasang. Diperlukan untuk nama parameter &amp; dokumen android.*.</string>
     <string name="sources_download">Unduh</string>

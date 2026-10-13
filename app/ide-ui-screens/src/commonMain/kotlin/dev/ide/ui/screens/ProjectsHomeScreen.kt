@@ -70,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.ProjectInfo
@@ -792,10 +793,10 @@ private fun ImportCard(onClick: () -> Unit) {
 
 /** The dashed empty state: shown for an empty Projects list and for the two not-yet-backed segments. */
 @Composable
-private fun EmptyList() {
+private fun EmptyList(inset: Dp = PhoneListInset, top: Dp = 24.dp) {
     val c = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp)
+        Modifier.fillMaxWidth().padding(start = inset, end = inset, top = top, bottom = 24.dp)
             .dashedBorder(c.outlineVariant, cornerRadius = 28.dp)
             .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -958,13 +959,13 @@ private fun SheetAction(glyph: Char, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LegacyRecoveryNotice(onDismiss: () -> Unit) {
+private fun LegacyRecoveryNotice(onDismiss: () -> Unit, inset: Dp = PhoneListInset, top: Dp = 16.dp) {
     val c = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = c.secondaryContainer,
         contentColor = c.onSecondaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = inset).padding(top = top),
     ) {
         Row(
             Modifier.padding(16.dp),
@@ -991,6 +992,13 @@ private fun LegacyRecoveryNotice(onDismiss: () -> Unit) {
         }
     }
 }
+
+/**
+ * The side inset the phone list gives a full-width block that is not a row (the recovery notice, the empty
+ * state). The wide layout passes 0: its column already pads, and adding this on top set those blocks in
+ * from the header, the community card and the search row above them.
+ */
+private val PhoneListInset = 20.dp
 
 /** Discord's brand colour, used only for the community card's tile and edge. */
 private val DiscordBlurple = Color(0xFF5865F2)
@@ -1197,11 +1205,18 @@ private fun WideProjectsHome(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                ProjectSearchField(query, { query = it }, Modifier.weight(1f, fill = false).widthIn(max = 380.dp))
-                Spacer(Modifier.weight(0.0001f))
+                // The field caps its width; the box takes the rest, so the sort sits at the right edge, under
+                // the header's buttons, rather than wherever the capped field happens to end.
+                Box(Modifier.weight(1f)) {
+                    SearchPill(
+                        query, { query = it }, stringResource(Res.string.home_search_projects),
+                        Modifier.widthIn(max = 380.dp).fillMaxWidth(),
+                    )
+                }
                 SortChooser(sort) { sort = it }
             }
-            if (showLegacyRecovery) LegacyRecoveryNotice(onDismissLegacyRecovery)
+            // Every gap down the wide column is 16dp: the search row already leaves 8 below itself.
+            if (showLegacyRecovery) LegacyRecoveryNotice(onDismissLegacyRecovery, inset = 0.dp, top = 8.dp)
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 24.dp),
@@ -1209,7 +1224,7 @@ private fun WideProjectsHome(
                 if (shown.isEmpty()) {
                     item("empty") {
                         if (projects.isEmpty()) {
-                            EmptyList()
+                            EmptyList(inset = 0.dp, top = if (showLegacyRecovery) 16.dp else 8.dp)
                         } else {
                             Text(
                                 stringResource(Res.string.home_no_match, query.trim()),
@@ -1254,9 +1269,9 @@ private fun HeaderButton(glyph: Char, label: String, primary: Boolean, onClick: 
     }
 }
 
-/** The project list's filter: matches a project's name or its folder path, ignoring case. */
+/** A rounded search field: the project list's filter, and the template gallery's. */
 @Composable
-private fun ProjectSearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun SearchPill(query: String, onQuery: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
     Row(
         modifier.height(40.dp).clip(RoundedCornerShape(50)).background(c.surfaceContainerHigh).padding(horizontal = 14.dp),
@@ -1274,7 +1289,7 @@ private fun ProjectSearchField(query: String, onQuery: (String) -> Unit, modifie
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
-                        Text(stringResource(Res.string.home_search_projects), style = MaterialTheme.typography.bodyMedium, color = c.outline)
+                        Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = c.outline, maxLines = 1)
                     }
                     inner()
                 }

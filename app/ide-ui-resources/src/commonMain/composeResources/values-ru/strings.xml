@@ -110,6 +110,9 @@
     <string name="your_codeassist_files_content">Откройте эту папку в любом файловом менеджере, чтобы просматривать проекты, добавлять иконки или редактировать с ПК.</string>
     <string name="open_in_the_file_manager">Открыть в файловом менеджере</string>
     <string name="choose_start_point">Выберите начальную точку.</string>
+    <string name="templates_search">Поиск шаблонов</string>
+    <string name="templates_all">Все</string>
+    <string name="templates_no_match">Нет шаблонов, соответствующих «%1$s».</string>
     <string name="backup">Создать бэкап</string>
     <string name="delete_project">Удалить проект?</string>
     <string name="delete_project_content">«%1$s» и все его файлы будут удалены навсегда. Это действие нельзя отменить.</string>
@@ -305,6 +308,9 @@
     <string name="find_all">Все</string>
     <string name="gradle_mode_title">Режим совместимости с Gradle</string>
     <string name="gradle_resync">Синхронизировать заново</string>
+    <string name="gradle_kmp_target">Целевая платформа</string>
+    <string name="gradle_kmp_android">Android</string>
+    <string name="gradle_kmp_jvm">Десктоп (JVM)</string>
     <string name="gradle_syncing">Синхронизация из Gradle…</string>
     <string name="sources_not_installed">Исходники платформы Android (%1$s) не установлены. Они нужны для имён параметров android.* и документации.</string>
     <string name="sources_download">Скачать</string>

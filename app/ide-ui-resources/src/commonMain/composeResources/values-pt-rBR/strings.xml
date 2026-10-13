@@ -110,6 +110,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="your_codeassist_files_content">Abra esta pasta em qualquer gerenciador de arquivos para navegar pelos seus projetos, adicionar ícones ou recursos, ou editar pelo PC.</string>
     <string name="open_in_the_file_manager">Abrir no gerenciador de arquivos</string>
     <string name="choose_start_point">Escolha um ponto de partida.</string>
+    <string name="templates_search">Buscar modelos</string>
+    <string name="templates_all">Todos</string>
+    <string name="templates_no_match">Nenhum modelo corresponde a “%1$s”.</string>
     <string name="backup">Fazer backup</string>
     <string name="delete_project">Excluir projeto?</string>
     <string name="delete_project_content">“%1$s” e todos os seus arquivos serão excluídos permanentemente. Isso não pode ser desfeito.</string>
@@ -347,6 +350,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">Modo de compatibilidade com Gradle</string>
     <string name="gradle_resync">Sincronizar novamente</string>
+    <string name="gradle_kmp_target">Destino multiplataforma</string>
+    <string name="gradle_kmp_android">Android</string>
+    <string name="gradle_kmp_jvm">Desktop (JVM)</string>
     <string name="gradle_syncing">Sincronizando a partir do Gradle…</string>
     <string name="sources_not_installed">As fontes da plataforma Android (%1$s) não estão instaladas. Elas são necessárias para os nomes de parâmetros e a documentação de android.*.</string>
     <string name="sources_download">Baixar</string>
