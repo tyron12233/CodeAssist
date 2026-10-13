@@ -381,7 +381,7 @@ class IdeUiState(
 
     /** Which LEFT panel is open (a [LeftPanelId] or a plugin tool-window id), or null when the left sidebar is
      *  collapsed. On desktop this is the docked pane; on mobile it's the panel shown in the push drawer.
-     *  Seeded from the persisted last panel in [init] (desktop opens it; mobile starts collapsed). */
+     *  Starts collapsed; [init] only remembers the persisted last panel for the next time the side is opened. */
     var selectedLeftPanel by mutableStateOf<String?>(null)
     /** The panel to reopen when the left sidebar is toggled back on (survives a collapse). */
     private var lastLeftPanel: String = LeftPanelId.FILES
@@ -459,8 +459,9 @@ class IdeUiState(
         RailDestination.More -> { moreOpen = true }
     }
 
-    // On mobile the console is a space-consuming sheet — start it closed; on desktop it's a persistent pane.
-    var consoleOpen by mutableStateOf(!isMobilePlatform)
+    // Starts closed everywhere: the editor opens with nothing docked around it, and starting a build or run
+    // opens the console when there is output to show.
+    var consoleOpen by mutableStateOf(false)
 
     var paletteOpen by mutableStateOf(false)
 
@@ -650,10 +651,9 @@ class IdeUiState(
         applySettings(backend.settings.settings())
         refreshSymbolKeys()
         loadTreeExpansion()
-        // Restore the last-open left panel: desktop reopens it as a docked pane; mobile starts collapsed but
-        // remembers it for the next time the drawer is toggled on.
+        // Remember the last-open left panel for the next time the side is toggled on. The editor itself opens
+        // with the side collapsed, on desktop as on a phone.
         backend.settings.preference(LEFT_PANEL_PREF)?.let { lastLeftPanel = it }
-        if (!isMobilePlatform) selectedLeftPanel = lastLeftPanel
         // The switch used to live under `sidebar.rightStripe`; carry a hidden stripe over to the Settings key.
         if (backend.settings.preference(RIGHT_STRIPE_PREF) == null && backend.settings.preference(LEGACY_RIGHT_STRIPE_PREF) == "false") {
             setRightStripeShown(false)
