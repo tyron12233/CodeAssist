@@ -759,7 +759,13 @@ class IdeUiState(
      * on [ioDispatcher]; the resulting Compose-state mutations resume on the launching (main) dispatcher.
      */
     suspend fun openSuspend(path: String, name: String) {
-        if (focusOpenTab(path)) return
+        if (focusOpenTab(path)) {
+            // Re-opening is the user saying "show me this file", so give them what is on disk now: a write from
+            // outside the IDE (a file manager copying over it) raises no event, and the tab would keep the old
+            // text until the file was deleted.
+            active?.let { if (syncTabsFromDisk(listOf(it))) analysisEpoch++ }
+            return
+        }
         val text = withContext(ioDispatcher) { backend.files.readFile(path) }
         // A second tap on the same row may have opened it while we were reading — focus it, don't duplicate.
         if (focusOpenTab(path)) return
@@ -1086,29 +1092,54 @@ class IdeUiState(
      */
     fun syncOpenTabsFromDisk() {
         scope.launch {
-            // openFiles can be mutated (a tab opened/closed) while this suspends on disk I/O, so a captured
-            // index goes stale — re-indexing it threw IndexOutOfBounds in the field. Snapshot the targets, then
-            // write each result back at that exact tab's CURRENT index, skipping it if the tab is gone or has
-            // since been edited (so an external write never clobbers in-progress user edits).
-            for (f in openFiles.toList()) {
-                if (f.readOnly) continue
-                if (f.modified) {
-                    // Reading it costs one file read per edited tab per epoch bump, which buys the only
-                    // signal the user has that their buffer and the file underneath it have parted ways.
-                    val disk = readTabText(f.path)
-                    f.staleOnDisk = disk != null && disk != f.savedText
-                    continue
-                }
-                val text = readTabText(f.path) ?: continue
-                if (text == f.savedText) continue // untouched → preserve session/undo/caret
-                if (f !in openFiles || f.modified) continue
-                f.applyExternalText(text)
-                backend.editor.updateDocument(f.path, text)
-            }
+            syncTabsFromDisk(openFiles.toList())
             // The write can change what other files report as well as its own (an agent renaming a function
             // breaks its callers), so every open tab is re-analyzed, the focused one included.
             analysisEpoch++
         }
+    }
+
+    /**
+     * The app is back in front (the user returns from another app, or to the desktop window). Nothing watches
+     * the project directory, so a file copied over from a file manager or written by a terminal raised no
+     * event while the IDE was away; catch the open tabs and the tree up now. Unlike [syncOpenTabsFromDisk],
+     * this re-analyzes only when a tab actually changed, since most returns change nothing.
+     */
+    fun syncWithDiskOnReturn() {
+        scope.launch {
+            if (syncTabsFromDisk(openFiles.toList())) analysisEpoch++
+            loadTree()
+        }
+    }
+
+    /**
+     * Bring each of [tabs] up to its file on disk; true when any buffer took new text. A clean tab reloads in
+     * place (one undoable edit); an edited one is only marked [OpenFile.staleOnDisk], so outside writes never
+     * clobber the user's work.
+     *
+     * openFiles can be mutated (a tab opened/closed) while this suspends on disk I/O, so a captured index goes
+     * stale — re-indexing it threw IndexOutOfBounds in the field. Each tab is re-checked after its read and
+     * skipped if it is gone or has since been edited.
+     */
+    private suspend fun syncTabsFromDisk(tabs: List<OpenFile>): Boolean {
+        var changed = false
+        for (f in tabs) {
+            if (f.readOnly) continue
+            if (f.modified) {
+                // Reading it costs one file read per edited tab per sync, which buys the only signal the user
+                // has that their buffer and the file underneath it have parted ways.
+                val disk = readTabText(f.path)
+                f.staleOnDisk = disk != null && disk != f.savedText
+                continue
+            }
+            val text = readTabText(f.path) ?: continue
+            if (text == f.savedText) continue // untouched → preserve session/undo/caret
+            if (f !in openFiles || f.modified) continue
+            f.applyExternalText(text)
+            backend.editor.updateDocument(f.path, text)
+            changed = true
+        }
+        return changed
     }
 
     /** Read [path]'s disk text off the main thread; null on any I/O error (a deleted/renamed file). */
