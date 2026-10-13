@@ -1291,6 +1291,7 @@ private fun CodeEditorContent(
             docLength = docLength,
             colors = colors,
             onInvoke = acts::invokeGutterAction,
+            backend = backend,
         )
 
         CodeActionsMenuLayer(

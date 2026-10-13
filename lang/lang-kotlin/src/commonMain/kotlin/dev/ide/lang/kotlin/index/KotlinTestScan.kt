@@ -8,7 +8,8 @@ import dev.ide.kotlin.syntax.psi.KtTokens
 
 /**
  * Finds the tests in a `.kt` file from a real parse (no resolution): functions annotated with a test framework's
- * `@Test` in a concrete class, and the classes holding them. What the editor's gutter offers to run.
+ * `@Test` (or `@ParameterizedTest`/`@RepeatedTest`) in a concrete class or a `@Nested` inner class, and the classes
+ * holding them. What the editor's gutter offers to run.
  *
  * An annotation counts when it names one of [TEST_ANNOTATIONS]: fully qualified, imported by name, or through a
  * star import of its package. A bare `@Test` the imports do not explain is left alone, because it could be
@@ -25,6 +26,8 @@ object KotlinTestScan {
         "org.junit.jupiter.api.Test",
         "kotlin.test.Test",
         "org.testng.annotations.Test",
+        "org.junit.jupiter.params.ParameterizedTest",
+        "org.junit.jupiter.api.RepeatedTest",
     )
 
     fun scan(fileName: String, text: String): List<Hit> = testsOf(KotlinMainScan.parse(fileName, text))
@@ -41,9 +44,10 @@ object KotlinTestScan {
     private fun visit(c: KtClass, prefix: String, imports: Imports, out: MutableList<Hit>) {
         val name = c.name ?: return
         val binary = prefix + name
+        // An inner class is a test class only as JUnit 5's `@Nested`, which the runner builds inside its outer one.
         val concrete = !c.isInterface() && !c.isEnum() && !c.isAnnotation() &&
             !c.hasModifier(KtTokens.ABSTRACT_KEYWORD) && !c.hasModifier(KtTokens.SEALED_KEYWORD) &&
-            !c.hasModifier(KtTokens.INNER_KEYWORD)
+            (!c.hasModifier(KtTokens.INNER_KEYWORD) || c.annotationEntries.any { it.shortName?.asString() == "Nested" })
         if (concrete) {
             val tests = c.declarations.filterIsInstance<KtNamedFunction>()
                 .filter { f -> f.receiverTypeReference == null && f.annotationEntries.any { imports.isTest(it) } }

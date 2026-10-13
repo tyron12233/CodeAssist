@@ -196,3 +196,58 @@ object TestOutput {
         fun run(): UiTestRun? = if (!any) null else UiTestRun(cases.values.toList(), classFailures, finished, noTests)
     }
 }
+
+/**
+ * The latest outcome of each test this session, so the editor's gutter can show it beside the test: a test's
+ * own result, and for a class the worst of its tests' (one failure fails the class). Fed from every run's
+ * results ([record]); a later run of a test replaces what an earlier one said. Keyed by module, class and
+ * method, so a run of one test leaves the rest of its class as they were.
+ */
+object TestResultMemory {
+    private var byTest: Map<String, UiTestStatus> = emptyMap()
+    private var recorded: Pair<Int, Int>? = null
+
+    /** Fold the results of console run [runId] (its [tests], from module [module]) in. Cheap to call on every
+     *  update of the same run: an unchanged run is skipped. Returns the current memory. */
+    fun record(runId: Int, module: String, tests: UiTestRun?): Map<String, UiTestStatus> {
+        if (tests == null) return byTest
+        val stamp = runId to tests.cases.sumOf { it.status.ordinal + 1 } + tests.classFailures.size * 31
+        if (stamp == recorded) return byTest
+        recorded = stamp
+        val next = HashMap(byTest)
+        for (c in tests.cases) {
+            when (c.status) {
+                UiTestStatus.Passed, UiTestStatus.Failed, UiTestStatus.Skipped -> next[key(module, c.className, c.name)] = c.status
+                else -> {}
+            }
+        }
+        for (cls in tests.classFailures.keys) next[key(module, cls, null)] = UiTestStatus.Failed
+        byTest = next
+        return next
+    }
+
+    /** What is known of the test or class a [TestOutput.taskId] with a single target names, or null. */
+    fun statusOf(memory: Map<String, UiTestStatus>, taskId: String): UiTestStatus? {
+        val (module, targets) = TestOutput.parseTaskId(taskId) ?: return null
+        val target = targets.singleOrNull() ?: return null
+        if ('#' in target) {
+            val cls = target.substringBefore('#')
+            val method = target.substringAfter('#')
+            // A parameterized test's invocations are recorded as `name[1] …`; the test is as bad as its worst.
+            val own = memory[key(module, cls, method)]
+            val invocations = memory.filterKeys { it.startsWith(key(module, cls, "$method[")) }.values
+            return worst(listOfNotNull(own) + invocations)
+        }
+        val prefix = key(module, target, "")
+        return worst(memory.filterKeys { it.startsWith(prefix) || it == key(module, target, null) }.values)
+    }
+
+    private fun worst(statuses: Collection<UiTestStatus>): UiTestStatus? = when {
+        statuses.isEmpty() -> null
+        UiTestStatus.Failed in statuses -> UiTestStatus.Failed
+        UiTestStatus.Passed in statuses -> UiTestStatus.Passed
+        else -> UiTestStatus.Skipped
+    }
+
+    private fun key(module: String, cls: String, method: String?) = "$module|$cls#${method ?: ""}"
+}

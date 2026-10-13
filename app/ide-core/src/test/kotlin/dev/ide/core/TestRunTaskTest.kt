@@ -21,6 +21,9 @@ import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.TestOutput
+import dev.ide.ui.backend.UiTestRun
+import dev.ide.ui.backend.UiTestCase
+import dev.ide.ui.backend.TestResultMemory
 import dev.ide.ui.backend.UiTestStatus
 import dev.ide.vfs.local.fileFor
 import kotlinx.coroutines.runBlocking
@@ -184,6 +187,31 @@ class TestRunTaskTest {
             assertEquals(12, case.durationMs)
             assertEquals("out1\nout2\n", view.transcript.joinToString("") { it.text }, "cut $cut")
         }
+    }
+
+    @Test
+    fun remembersEachTestsLastOutcomeForTheGutter() {
+        fun run(vararg cases: UiTestCase) = UiTestRun(cases.toList(), finished = true)
+        val a = "com.example.ATest"
+        var memory = TestResultMemory.record(901, "app", run(
+            UiTestCase(a, "one", UiTestStatus.Passed), UiTestCase(a, "two", UiTestStatus.Failed),
+            UiTestCase(a, "param[1] 1", UiTestStatus.Passed), UiTestCase(a, "param[2] 2", UiTestStatus.Failed),
+        ))
+        fun status(target: String) = TestResultMemory.statusOf(memory, TestOutput.taskId("app", listOf(target)))
+        assertEquals(UiTestStatus.Passed, status("$a#one"))
+        assertEquals(UiTestStatus.Failed, status("$a#two"))
+        assertEquals(UiTestStatus.Failed, status("$a#param"), "a parameterized test is as bad as its worst invocation")
+        assertEquals(UiTestStatus.Failed, status(a), "one failure fails the class")
+        assertEquals(null, status("$a#never"))
+        assertEquals(null, TestResultMemory.statusOf(memory, TestOutput.taskId("other", listOf("$a#one"))), "keyed by module")
+
+        // Rerunning just the failures replaces their outcome and leaves the rest of the class alone.
+        memory = TestResultMemory.record(902, "app", run(
+            UiTestCase(a, "two", UiTestStatus.Passed), UiTestCase(a, "param[2] 2", UiTestStatus.Passed),
+        ))
+        assertEquals(UiTestStatus.Passed, status("$a#two"))
+        assertEquals(UiTestStatus.Passed, status(a))
+        assertEquals(UiTestStatus.Passed, status("$a#one"))
     }
 
     private fun await(timeoutMs: Long, cond: () -> Boolean) {

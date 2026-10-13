@@ -1,5 +1,12 @@
 package dev.ide.ui.editor
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.backend.UiTestStatus
+import dev.ide.ui.backend.TestResultMemory
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.generated.resources.tests_run_one
 import dev.ide.ui.generated.resources.tests_run_class
@@ -370,9 +377,13 @@ internal fun PluginGutterMarksLayer(
     docLength: Int,
     colors: CodeAssistColors,
     onInvoke: (actionId: String, line: Int) -> Unit,
+    backend: IdeBackend? = null,
 ) {
     val marks = session.gutterMarks
     if (marks.isEmpty()) return
+    val testResults = if (backend != null && marks.any { it.actionId?.startsWith(TestOutput.GUTTER_ACTION_PREFIX) == true }) {
+        testResults(backend)
+    } else emptyMap()
     val doc = session.doc
     val previewLines = remember(session.previewMarkers, doc) {
         session.previewMarkers.mapTo(HashSet()) { doc.lineForOffset(it.offset.coerceIn(0, docLength)) }
@@ -390,10 +401,13 @@ internal fun PluginGutterMarksLayer(
     }
     for ((line, mark) in byLine) {
         if (line >= doc.lineCount || session.foldModel.isHidden(line)) continue
+        val testStatus = mark.actionId?.takeIf { it.startsWith(TestOutput.GUTTER_ACTION_PREFIX) }
+            ?.let { TestResultMemory.statusOf(testResults, it.removePrefix(TestOutput.GUTTER_ACTION_PREFIX)) }
         key(line, mark.iconId, mark.tint) {
             PluginGutterMark(
                 mark = mark,
                 colors = colors,
+                testStatus = testStatus,
                 onClick = mark.actionId?.let { id -> { onInvoke(id, line) } },
                 modifier = Modifier.offset {
                     IntOffset(
@@ -415,8 +429,10 @@ private fun PluginGutterMark(
     colors: CodeAssistColors,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    testStatus: UiTestStatus? = null,
 ) {
-    val tint = decorationColor(mark.tint, colors)
+    // A test that last failed shows its run mark red, as IntelliJ does, so the failure is visible in the code.
+    val tint = if (testStatus == UiTestStatus.Failed) colors.error else decorationColor(mark.tint, colors)
     Box(
         modifier
             .size(20.dp)
@@ -436,6 +452,43 @@ private fun PluginGutterMark(
             tint = tint,
             modifier = Modifier.size(14.dp),
         )
+        // The last result, as a badge on the run mark: passed, failed, or skipped.
+        if (testStatus == UiTestStatus.Passed || testStatus == UiTestStatus.Failed || testStatus == UiTestStatus.Skipped) {
+            val badgeColor = when (testStatus) {
+                UiTestStatus.Passed -> colors.success
+                UiTestStatus.Failed -> colors.error
+                else -> colors.textTertiary
+            }
+            Box(
+                Modifier.align(Alignment.BottomEnd).size(9.dp)
+                    .background(colors.editorBg, CircleShape).padding(1.dp)
+                    .background(badgeColor, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    when (testStatus) {
+                        UiTestStatus.Passed -> CaIcons.check
+                        UiTestStatus.Failed -> CaIcons.close
+                        else -> CaIcons.minus
+                    },
+                    null, Modifier.size(6.dp), tint = colors.editorBg,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Every test outcome known this session, kept current as the run console's results arrive. Read from its own
+ * composable so a running program's output recomposes the gutter marks and nothing else in the editor.
+ */
+@Composable
+private fun testResults(backend: IdeBackend): Map<String, UiTestStatus> {
+    val console by backend.build.runConsole.collectAsState()
+    val rc = console
+    return remember(rc?.id, rc?.transcript?.size, rc?.transcript?.lastOrNull()?.text?.length, rc?.phase) {
+        if (rc == null) TestResultMemory.record(-1, "", null)
+        else TestResultMemory.record(rc.id, rc.moduleName, TestOutput.split(rc.transcript).tests)
     }
 }
 

@@ -99,7 +99,8 @@ class RunScreenSnapshot {
     private fun testTranscript(finished: Boolean): List<ConsoleChunk> {
         val greeter = "com.example.GreeterTest"
         val calc = "com.example.calc.CalculatorTest"
-        val all = listOf(greeter to "greets by name", greeter to "greets the world", greeter to "seesInternals", calc to "adds", calc to "divides by zero", calc to "parses", calc to "slowPath")
+        val all = listOf(greeter to "greets by name", greeter to "greets the world", greeter to "seesInternals", calc to "adds", calc to "divides by zero", calc to "parses", calc to "slowPath",
+            calc to "squares[1] 2, 4", calc to "squares[2] 3, 9", calc to "squares[3] 4, 15")
         val text = StringBuilder()
         all.forEach { (c, m) -> text.append(record("QUEUED", c, m)) }
         text.append(record("STARTED", greeter, "greets by name")).append("printed by a test\n").append(record("PASSED", greeter, "greets by name", 12))
@@ -111,6 +112,8 @@ class RunScreenSnapshot {
             text.append(record("FAILED", calc, "divides by zero", 8, "org.opentest4j.AssertionFailedError: Expected java.lang.ArithmeticException to be thrown, but nothing was thrown."))
             text.append(record("SKIPPED", calc, "parses", 0, "not on this platform"))
             text.append(record("STARTED", calc, "slowPath")).append(record("PASSED", calc, "slowPath", 1240))
+            text.append(record("PASSED", calc, "squares[1] 2, 4", 2)).append(record("PASSED", calc, "squares[2] 3, 9", 1))
+            text.append(record("FAILED", calc, "squares[3] 4, 15", 1, "org.opentest4j.AssertionFailedError: expected: <15> but was: <16>"))
             text.append(record("FINISHED"))
         }
         return listOf(ConsoleChunk(text.toString(), ConsoleChunkKind.OUTPUT)) +

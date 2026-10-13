@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiTestCase
 import dev.ide.ui.backend.UiTestRun
@@ -123,20 +124,42 @@ internal fun TestResults(
             tests.byClass.entries.sortedBy { (cls, cases) -> if (cases.any { it.status == UiTestStatus.Failed } || cls in tests.classFailures) 0 else 1 }
         }
         var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
+        // Method groups the user opened or closed, against their default (open while running or failed).
+        var toggledGroups by rememberSaveable { mutableStateOf(setOf<String>()) }
         LazyColumn(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
             for ((cls, cases) in groups) {
                 item(key = "c:$cls") {
                     ClassRow(cls, cases, tests.classFailures[cls], running, onRun, onOpen, passColor, failColor)
                 }
-                items(cases, key = { "t:$cls#${it.name}" }) { case ->
-                    val key = "$cls#${case.name}"
-                    TestRow(
-                        case, expanded = key in expanded, running = running,
-                        onToggle = { expanded = if (key in expanded) expanded - key else expanded + key },
-                        onRun = { onRun(cls, case.name) },
-                        onOpen = onOpen?.let { open -> { open(cls, case.name) } },
-                        passColor = passColor, failColor = failColor,
-                    )
+                // A parameterized or repeated test's runs (`add[1] …`) sit under one row for the test.
+                for ((method, runs) in cases.groupBy { it.name.substringBefore('[') }) {
+                    val isGroup = runs.size > 1 || runs.single().name != method
+                    val testCase: @Composable (UiTestCase, Dp) -> Unit = { case, indent ->
+                        val key = "$cls#${case.name}"
+                        TestRow(
+                            case, expanded = key in expanded, running = running,
+                            onToggle = { expanded = if (key in expanded) expanded - key else expanded + key },
+                            onRun = { onRun(cls, case.name) },
+                            onOpen = onOpen?.let { open -> { open(cls, method) } },
+                            passColor = passColor, failColor = failColor, indent = indent,
+                        )
+                    }
+                    if (!isGroup) {
+                        item(key = "t:$cls#${runs.single().name}") { testCase(runs.single(), 30.dp) }
+                        continue
+                    }
+                    val groupKey = "$cls#$method"
+                    val defaultOpen = runs.any { it.status == UiTestStatus.Failed || it.status == UiTestStatus.Running }
+                    val open = defaultOpen != (groupKey in toggledGroups)
+                    item(key = "g:$groupKey") {
+                        MethodGroupRow(
+                            method, runs, open, running,
+                            onToggle = { toggledGroups = if (groupKey in toggledGroups) toggledGroups - groupKey else toggledGroups + groupKey },
+                            onRun = { onRun(cls, method) },
+                            passColor = passColor, failColor = failColor,
+                        )
+                    }
+                    if (open) items(runs, key = { "t:$cls#${it.name}" }) { case -> testCase(case, 52.dp) }
                 }
             }
         }
@@ -252,6 +275,44 @@ private fun ClassRow(
     }
 }
 
+/** One parameterized or repeated test: how its runs went, opening to list them. */
+@Composable
+private fun MethodGroupRow(
+    method: String,
+    runs: List<UiTestCase>,
+    open: Boolean,
+    running: Boolean,
+    onToggle: () -> Unit,
+    onRun: () -> Unit,
+    passColor: Color,
+    failColor: Color,
+) {
+    val status = when {
+        runs.any { it.status == UiTestStatus.Failed } -> UiTestStatus.Failed
+        runs.any { it.status == UiTestStatus.Running } -> UiTestStatus.Running
+        runs.any { it.status == UiTestStatus.Queued } -> UiTestStatus.Queued
+        runs.all { it.status == UiTestStatus.Skipped } -> UiTestStatus.Skipped
+        else -> UiTestStatus.Passed
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 30.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        StatusGlyph(status, passColor, failColor)
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                method, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+            )
+            Icon(if (open) CaIcons.chevronUp else CaIcons.chevronDown, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+        }
+        val passed = runs.count { it.status == UiTestStatus.Passed }
+        Text("$passed/${runs.size}", style = Ide.type.codeSmall, color = MaterialTheme.colorScheme.outline)
+        if (!running) IconButtonCa(CaIcons.play, stringResource(Res.string.tests_run_one), onRun, boxSize = rowIconBox(), iconSize = 13, tint = Ide.colors.run)
+    }
+}
+
 @Composable
 private fun TestRow(
     case: UiTestCase,
@@ -262,13 +323,14 @@ private fun TestRow(
     onOpen: (() -> Unit)?,
     passColor: Color,
     failColor: Color,
+    indent: Dp = 30.dp,
 ) {
     val hasDetail = case.message.isNotEmpty()
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth()
                 .clickable { if (onOpen != null) onOpen() else if (hasDetail) onToggle() }
-                .padding(start = 30.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
+                .padding(start = indent, end = 4.dp, top = 1.dp, bottom = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -289,7 +351,7 @@ private fun TestRow(
             val color = if (case.status == UiTestStatus.Failed) failColor else MaterialTheme.colorScheme.outline
             Box(
                 Modifier.fillMaxWidth()
-                    .padding(start = 54.dp, end = 12.dp, bottom = 4.dp)
+                    .padding(start = indent + 24.dp, end = 12.dp, bottom = 4.dp)
                     .then(if (expanded) Modifier.background(color.copy(alpha = 0.08f), RoundedCornerShape(Ca.radius.sm)).padding(8.dp) else Modifier)
                     .clickable(onClick = onToggle),
             ) {

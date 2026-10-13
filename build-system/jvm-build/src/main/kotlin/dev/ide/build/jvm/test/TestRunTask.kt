@@ -54,7 +54,7 @@ class TestRunTask(
         val dirs = testDirs().filter { Files.isDirectory(it) }
         val classes = TestDiscovery.discover(dirs, classpath)
             .filter(selector::matches)
-            .map { c -> c.copy(tests = c.tests.filter { selector.matches(c, it) }) }
+            .map { c -> c.copy(tests = c.tests.filter { selector.matches(c, it) }.map { it.copy(only = selector.invocationsOf(c, it)) }) }
             .filter { it.tests.isNotEmpty() }
         if (classes.isEmpty()) {
             ctx.logger()("No tests found")

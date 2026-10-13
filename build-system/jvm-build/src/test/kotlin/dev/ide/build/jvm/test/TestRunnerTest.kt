@@ -142,6 +142,59 @@ class TestRunnerTest {
     }
 
     @Test
+    fun runsParameterizedRepeatedAndNestedTests() {
+        val classes = discovered().filter { it.fqn.removePrefix(fixtures).startsWith("ParamFixture") }
+        val (r, output) = run(classes)
+        fun status(method: String) = r.final("ParamFixture", method).event
+        assertEquals(TestProtocol.PASSED, status("positive[1] 1"))
+        assertEquals(TestProtocol.PASSED, status("positive[3] 3"))
+        assertEquals(TestProtocol.PASSED, status("lengths[2] bb"))
+        val tooLong = r.final("ParamFixture", "lengths[3] ccc")
+        assertEquals(TestProtocol.FAILED, tooLong.event)
+        assertTrue("too long: ccc" in tooLong.message, tooLong.message)
+        assertEquals(TestProtocol.PASSED, status("sums[2] 2, 3, 5"))
+        assertEquals(TestProtocol.PASSED, status("sums[3] x, y, 0, 0"))
+        assertEquals(TestProtocol.PASSED, status("converted[1] 1.50, GREEN"))
+        assertEquals(TestProtocol.PASSED, status("colors[1] RED"))
+        assertEquals(TestProtocol.PASSED, status("colors[2] BLUE"))
+        assertTrue(r.none { it.method.startsWith("colors[3]") }, "EnumSource names keep only RED and BLUE")
+        assertEquals(TestProtocol.PASSED, status("blank[1] null"))
+        assertEquals(TestProtocol.PASSED, status("blank[2] \"\""))
+        assertEquals(TestProtocol.PASSED, status("fromMethod[1] 1, n1"))
+        assertEquals(TestProtocol.PASSED, status("fromMethod[2] 2, n2"))
+        assertEquals(TestProtocol.PASSED, status("fromStream[1] 2"))
+        assertEquals(TestProtocol.FAILED, status("fromStream[2] 3"))
+        assertEquals(TestProtocol.PASSED, status("fromStream[3] 4"))
+        assertEquals(TestProtocol.PASSED, status("repeated[3] repetition 3 of 3"))
+        assertEquals(TestProtocol.PASSED, r.final("ParamFixture\$Inner", "seesOuterSetup").event, output)
+        // Fixed invocations are planned up front; a method source's are listed as they run.
+        assertTrue(r.any { it.event == TestProtocol.QUEUED && it.method == "positive[2] 2" })
+    }
+
+    @Test
+    fun runsJunit4ParameterizedAndPlainRunners() {
+        val classes = discovered().filter { it.fqn.removePrefix(fixtures).startsWith("Junit4") && it.fqn != fixtures + "Junit4Fixture" }
+        val (r, _) = run(classes)
+        assertEquals(TestProtocol.PASSED, r.final("Junit4ParamFixture", "doubles[0]").event)
+        assertEquals(TestProtocol.PASSED, r.final("Junit4ParamFixture", "doubles[1]").event)
+        assertEquals(TestProtocol.FAILED, r.final("Junit4ParamFixture", "doubles[2]").event)
+        assertEquals(TestProtocol.PASSED, r.final("Junit4FieldParamFixture", "measures[0]").event)
+        assertEquals(TestProtocol.PASSED, r.final("Junit4FieldParamFixture", "measures[1]").event)
+        assertEquals(TestProtocol.PASSED, r.final("Junit4RunWithFixture", "runs").event)
+    }
+
+    @Test
+    fun runsOneInvocationOfAParameterizedTest() {
+        val selector = TestSelector(fixtures + "ParamFixture", "fromStream[2] 3")
+        val classes = discovered().filter(selector::matches)
+            .map { c -> c.copy(tests = c.tests.filter { selector.matches(c, it) }.map { it.copy(only = selector.invocationsOf(c, it)) }) }
+            .filter { it.tests.isNotEmpty() }
+        val (r, _) = run(classes)
+        val ran = r.filter { it.event == TestProtocol.PASSED || it.event == TestProtocol.FAILED }.map { it.method }
+        assertEquals(listOf("fromStream[2] 3"), ran)
+    }
+
+    @Test
     fun runsOnlyTheSelectedMethod() {
         val selector = TestSelector(fixtures + "JupiterFixture", "passes")
         val classes = discovered().filter(selector::matches).map { c -> c.copy(tests = c.tests.filter(selector::matches)) }

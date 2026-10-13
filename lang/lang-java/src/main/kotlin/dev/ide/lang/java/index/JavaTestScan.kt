@@ -7,7 +7,8 @@ import com.intellij.psi.PsiModifier
 
 /**
  * Finds the tests in a `.java` file from a structural PSI parse (no resolution): methods annotated with a test
- * framework's `@Test` in a concrete class, and the classes holding them. What the editor's gutter offers to run.
+ * framework's `@Test` (or `@ParameterizedTest`/`@RepeatedTest`) in a concrete class, and the classes holding
+ * them. What the editor's gutter offers to run.
  *
  * An annotation counts when it names one of [TEST_ANNOTATIONS]: fully qualified, imported by name, or through
  * an on-demand import of its package; a bare `@Test` the imports do not explain is left alone.
@@ -22,6 +23,8 @@ object JavaTestScan {
         "org.junit.Test",
         "org.junit.jupiter.api.Test",
         "org.testng.annotations.Test",
+        "org.junit.jupiter.params.ParameterizedTest",
+        "org.junit.jupiter.api.RepeatedTest",
     )
 
     fun scan(text: String): List<Hit> = JavaSourceIndexer.parseStructural(text) { testsOf(it) } ?: emptyList()
