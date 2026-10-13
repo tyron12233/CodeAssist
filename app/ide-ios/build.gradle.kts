@@ -22,11 +22,16 @@ val supabaseUrl = (findProperty("SUPABASE_URL") as String?) ?: System.getenv("SU
 val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SUPABASE_KEY")
     ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
 
+// The R2 mirror of the public store files; blank reads Supabase Storage (see supabase/functions/r2-mirror).
+val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
+    ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+
 val generateStoreConfig by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/storeConfig/kotlin")
     // Declared as inputs so a changed endpoint regenerates rather than being served from the build cache.
     inputs.property("url", supabaseUrl)
     inputs.property("key", supabaseKey)
+    inputs.property("media", storeMediaUrl)
     inputs.property("build", project.version.toString())
     outputs.dir(outputDir)
     doLast {
@@ -40,6 +45,7 @@ val generateStoreConfig by tasks.registering {
             internal object StoreConfig {
                 const val SUPABASE_URL: String = "$supabaseUrl"
                 const val SUPABASE_KEY: String = "$supabaseKey"
+                const val STORE_MEDIA_URL: String = "$storeMediaUrl"
                 const val APP_VERSION: String = "${project.version}"
             }
 

@@ -649,6 +649,7 @@ object AndroidIde {
             apiKey = key,
             // Hides catalog items that need a newer IDE than this install.
             appBuild = BuildConfig.VERSION_CODE,
+            mediaBaseUrl = BuildConfig.STORE_MEDIA_URL,
         )
     }
 

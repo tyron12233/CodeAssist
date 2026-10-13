@@ -531,6 +531,14 @@ android {
             ?: "https://codeassist-judge.vercel.app"
         buildConfigField("String", "JUDGE_URL", "\"$judgeUrl\"")
 
+        // Where the store's public files (project zips, screenshots, icons) are mirrored, in Cloudflare R2 (see
+        // supabase/functions/r2-mirror). The app reads there first and falls back to Supabase Storage on any miss,
+        // so blank simply reads Supabase as before. The default is the bucket's r2.dev address until it has a
+        // custom domain (which adds Cloudflare's cache and rate limiting in front of it).
+        val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
+            ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+        buildConfigField("String", "STORE_MEDIA_URL", "\"$storeMediaUrl\"")
+
         // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids
         // below, and `profile` (a local perf build) is forced back to test. The App id reaches the manifest
         // via ${admobAppId}; the native ad-unit id is read from BuildConfig by AndroidAdHost.

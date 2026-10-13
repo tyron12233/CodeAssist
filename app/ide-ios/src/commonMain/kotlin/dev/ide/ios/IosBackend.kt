@@ -164,6 +164,7 @@ class IosBackend(
         // would claim a build that does not exist and change which items the feed offers.
         appBuild = IosBundle.buildNumber(),
         projectsRoot = { projectsRoot },
+        mediaBaseUrl = StoreConfig.STORE_MEDIA_URL,
         cacheRoot = IosFiles.supportDir(),
         preferences = preferences,
         adopt = { dir ->

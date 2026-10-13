@@ -88,6 +88,7 @@ class IosStoreService(
             apiKey: String,
             appBuild: Int?,
             projectsRoot: () -> String,
+            mediaBaseUrl: String = "",
             cacheRoot: String,
             preferences: IosPreferences,
             adopt: (String) -> String?,
@@ -105,7 +106,7 @@ class IosStoreService(
                 ),
             )
             return IosStoreService(
-                source = SupabaseStoreSource(url = url, apiKey = apiKey, appBuild = appBuild),
+                source = SupabaseStoreSource(url = url, apiKey = apiKey, appBuild = appBuild, mediaBaseUrl = mediaBaseUrl),
                 accountService = accounts,
                 submissionService = SupabaseSubmissionService(url, apiKey, accounts),
                 reviewService = SupabaseReviewService(url, apiKey, accounts),
