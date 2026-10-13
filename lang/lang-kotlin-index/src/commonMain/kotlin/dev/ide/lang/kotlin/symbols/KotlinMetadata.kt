@@ -67,6 +67,10 @@ object KotlinMetadata {
          *  its own (it lives in the facade's `@Metadata`), so it is enumerated + resolved through the facade,
          *  unlike a real class. Empty for a class. */
         val typeAliases: List<TypeAliasDecl> = emptyList(),
+        /** For a facade: the Kotlin package its declarations belong to when `@JvmPackageName` moved the class
+         *  elsewhere (`@Metadata(pn = …)`), else null and the package is the `.class` entry's own. kotlin-test's
+         *  JUnit 5 facade is `kotlin/test/junit5/annotations/AnnotationsKt` but declares `kotlin.test.Test`. */
+        val jvmPackageName: String? = null,
     ) {
         /** Just the supertype classifier FQNs — for the supertype walk that doesn't need type arguments. */
         val supertypeFqns: List<String> get() = supertypes.mapNotNull { (it as? KotlinType)?.qualifiedName }
@@ -179,9 +183,9 @@ object KotlinMetadata {
         val composable = composableMethodNames(classFile)
         return when (annotation.kind) {
             KIND_CLASS -> decodeClass(info, ctx, composable)
-            KIND_FILE_FACADE -> decodePackage(info, ctx, null, composable)
+            KIND_FILE_FACADE -> decodePackage(info, ctx, null, composable, annotation.packageName)
             KIND_MULTIFILE_CLASS_PART ->
-                decodePackage(info, ctx, annotation.extraString?.replace('/', '.'), composable)
+                decodePackage(info, ctx, annotation.extraString?.replace('/', '.'), composable, annotation.packageName)
 
             else -> null
         }
@@ -287,6 +291,7 @@ object KotlinMetadata {
         ctx: KotlinTypeContext?,
         facadeFqn: String?,
         composable: Set<String>,
+        jvmPackageName: String?,
     ): Decoded {
         val top = ArrayList<KotlinSymbol>()
         val ext = ArrayList<KotlinSymbol>()
@@ -309,6 +314,7 @@ object KotlinMetadata {
             typeAliases = info.declarations
                 .filter { it.kind == KotlinDeclaration.Kind.TYPE_ALIAS }
                 .map { TypeAliasDecl(it.name, classifierFqn(it.expandedType)) },
+            jvmPackageName = jvmPackageName?.takeIf { it.isNotEmpty() },
         )
     }
 

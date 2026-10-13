@@ -195,6 +195,8 @@ class GradleKmpImportTest {
                 "androidx.activity:activity-compose:1.10.1",
             )) assertEquals(DependencyScope.IMPLEMENTATION, coords[c]?.scope, "$c is a main dependency")
             assertEquals(DependencyScope.TEST_IMPLEMENTATION, coords["org.jetbrains.kotlin:kotlin-test:2.2.0"]?.scope)
+            // The framework the Kotlin plugin adds for `kotlin("test")`, where `kotlin.test.Test` actually lives.
+            assertEquals(DependencyScope.TEST_IMPLEMENTATION, coords["org.jetbrains.kotlin:kotlin-test-junit:2.2.0"]?.scope)
             assertEquals("debug", coords["org.jetbrains.compose.ui:ui-tooling:1.8.2"]?.variant)
             assertTrue(coords.keys.none { "desktop-jvm" in it }, "the desktop source set is not modeled: $coords")
             assertEquals(listOf("shared"), app.moduleDeps.map { it.name })
@@ -413,6 +415,33 @@ class GradleKmpImportTest {
             } finally {
                 manager.dispose()
             }
+        }
+    }
+
+    /** `kotlin("test")` under `useJUnitPlatform()` gets JUnit 5's framework, versionless like the shorthand;
+     *  an explicitly declared framework is left alone. */
+    @Test
+    fun kotlinTestGetsTheFrameworkTheKotlinPluginWouldAdd() {
+        withTempDir("kotlin-test-framework") { tmp ->
+            val proj = tmp.resolve("Jvm")
+            proj.w("settings.gradle.kts", "rootProject.name = \"Jvm\"\ninclude(\":app\", \":lib\")")
+            proj.w("app/build.gradle.kts", """
+                plugins { kotlin("jvm") version "2.2.20" }
+                dependencies { testImplementation(kotlin("test")) }
+                tasks.test { useJUnitPlatform() }
+            """)
+            proj.w("lib/build.gradle.kts", """
+                plugins { kotlin("jvm") version "2.2.20" }
+                dependencies {
+                    testImplementation(kotlin("test"))
+                    testImplementation(kotlin("test-testng"))
+                }
+            """)
+            val modules = assertNotNull(GradleImport.parse(proj)).modules.associateBy { it.name }
+            val app = modules.getValue("app").mavenDeps.associate { it.coordinate to it.scope }
+            assertEquals(DependencyScope.TEST_IMPLEMENTATION, app["org.jetbrains.kotlin:kotlin-test-junit5"], "$app")
+            val lib = modules.getValue("lib").mavenDeps.map { it.coordinate }
+            assertEquals(listOf("org.jetbrains.kotlin:kotlin-test", "org.jetbrains.kotlin:kotlin-test-testng"), lib)
         }
     }
 

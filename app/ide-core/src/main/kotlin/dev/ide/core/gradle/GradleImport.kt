@@ -31,6 +31,8 @@ object GradleImport {
     private val SETTINGS_FILES = listOf("settings.gradle", "settings.gradle.kts")
 
     private const val COMPOSE_MP_PLUGIN = "org.jetbrains.compose"
+    private const val KOTLIN_TEST = "org.jetbrains.kotlin:kotlin-test"
+    private val KOTLIN_TEST_FRAMEWORKS = listOf("junit", "junit5", "testng").map { "$KOTLIN_TEST-$it" }
     /** What `compose.material3` resolves to under every Compose Multiplatform plugin from 1.9.0 on. */
     private const val MATERIAL3_PINNED_VERSION = "1.9.0"
     private const val KMP_ANDROID_LIBRARY_PLUGIN = "com.android.kotlin.multiplatform.library"
@@ -385,7 +387,10 @@ object GradleImport {
             .map { (body, test) ->
                 parseDependencies(body, catalog, vars, name, moduleNames, context.composeVersion, notes, testOnly = test)
             }
-        val maven = parsedDeps.flatMap { it.first }.distinctBy { it.coordinate to it.variant }
+        val maven = withKotlinTestFramework(
+            parsedDeps.flatMap { it.first }.distinctBy { it.coordinate to it.variant },
+            listOf(build) + conventionTexts,
+        )
         val moduleDeps = parsedDeps.flatMap { it.second }.distinctBy { it.name }
         val platforms = parsedDeps.flatMap { it.third }.distinctBy { it.coordinate to it.variant }
         val manifest = KMP_MANIFEST.takeIf { kmp?.platform == GradleKmp.Platform.ANDROID && Files.isRegularFile(dir.resolve(it)) }
@@ -437,6 +442,32 @@ object GradleImport {
             composeResources = if (kmp == null || COMPOSE_MP_PLUGIN !in plugins) null
             else composeResources(build, dir, gradlePath, kmp, context),
         )
+    }
+
+    /**
+     * [deps] plus the test framework the Kotlin Gradle plugin adds for `kotlin("test")`.
+     *
+     * `kotlin-test` on the JVM holds only the assertions: `kotlin.test.Test`, `BeforeTest` and the other
+     * annotations are typealiases in a framework artifact (`kotlin-test-junit`, `-junit5`, `-testng`), which the
+     * plugin requests through a Gradle capability matching the test task's framework. Gradle users never declare
+     * it, so a project read from its scripts had `assertTrue` but an unresolved `@Test`. The framework follows
+     * the scripts the same way the plugin's does: `useJUnitPlatform()` is JUnit 5, `useTestNG()` is TestNG, and
+     * otherwise JUnit 4, the plugin's default for JVM and Android unit tests. An explicitly declared framework
+     * artifact is left alone.
+     */
+    private fun withKotlinTestFramework(deps: List<Dep>, scripts: List<String>): List<Dep> {
+        val base = deps.filter { it.coordinate == KOTLIN_TEST || it.coordinate.startsWith("$KOTLIN_TEST:") }
+        if (base.isEmpty()) return deps
+        if (deps.any { d -> KOTLIN_TEST_FRAMEWORKS.any { d.coordinate == it || d.coordinate.startsWith("$it:") } }) return deps
+        val framework = when {
+            scripts.any { "useJUnitPlatform" in it } -> "$KOTLIN_TEST-junit5"
+            scripts.any { "useTestNG" in it } -> "$KOTLIN_TEST-testng"
+            else -> "$KOTLIN_TEST-junit"
+        }
+        return deps + base.map { d ->
+            val version = d.coordinate.removePrefix(KOTLIN_TEST).removePrefix(":")
+            d.copy(coordinate = if (version.isEmpty()) framework else "$framework:$version")
+        }
     }
 
     /** What a KMP module was imported as, and what was left out, for the sync notes. */

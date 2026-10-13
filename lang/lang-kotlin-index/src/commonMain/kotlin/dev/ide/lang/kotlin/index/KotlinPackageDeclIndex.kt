@@ -41,7 +41,9 @@ import dev.ide.platform.DataWriter
 object KotlinPackageDeclIndex : IndexExtension<String, PkgDecl> {
     override val id = IndexId("kotlin.pkgDecls")
     override val version =
-        3 // v2: + top-level typealiases (classifier entries carrying their facade FQN); v3: + their alias target
+        // v2: + top-level typealiases (classifier entries carrying their facade FQN); v3: + their alias target;
+        // v4: a facade's declarations keyed by its `@JvmPackageName` package, not the `.class` entry's
+        4
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = PkgDeclExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
@@ -76,7 +78,10 @@ object KotlinPackageDeclIndex : IndexExtension<String, PkgDecl> {
             // entry itself (a plain file facade) — that is the `.class` the provider decompiles.
             val entryFqn = unit.removeSuffix(".class").replace('/', '.')
             val facade = decoded.facadeClassFqn ?: entryFqn
-            val pkg = unit.substringBeforeLast('/', "").replace('/', '.')
+            // The Kotlin package, which `@JvmPackageName` can move away from the class's own: kotlin-test's JUnit
+            // facade sits in `kotlin/test/junit5/annotations/` and declares `kotlin.test.Test`. Keyed by the
+            // class path, `import kotlin.test.Test` found nothing even with the framework on the classpath.
+            val pkg = decoded.jvmPackageName ?: unit.substringBeforeLast('/', "").replace('/', '.')
             (decoded.topLevel.asSequence() + decoded.extensions.asSequence()).forEach { s ->
                 out.getOrPut(pkg) { ArrayList() }
                     .add(PkgDecl(s.name, classifier = false, facade = facade))
