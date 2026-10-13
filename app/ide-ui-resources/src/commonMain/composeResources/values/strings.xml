@@ -1301,6 +1301,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sdk_resume">Resume</string>
     <string name="sdk_platforms">Android SDK platforms</string>
     <string name="sdk_platforms_desc">The android.jar a module compiles and completes against, matched to its compileSdk. A module whose platform is not installed uses the default one.</string>
+    <string name="sdk_platform_tools">Platform tools</string>
+    <string name="sdk_platform_tools_desc">adb, which Run uses to install and launch your app on a phone or emulator connected to this computer.</string>
     <string name="sdk_license_title">License agreement</string>
     <string name="sdk_license_accept">Accept</string>
     <string name="sdk_license_decline">Decline</string>

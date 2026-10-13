@@ -1178,4 +1178,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     </plurals>
     <string name="close_project_building">Uma compilação ainda está em andamento.</string>
     <string name="close_project_save_and_close">Salvar e fechar</string>
+    <string name="sdk_platform_tools">Ferramentas da plataforma</string>
+    <string name="sdk_platform_tools_desc">adb, que o Executar usa para instalar e abrir seu app em um celular ou emulador conectado a este computador.</string>
 </resources>

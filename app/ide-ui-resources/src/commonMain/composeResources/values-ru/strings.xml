@@ -1151,4 +1151,6 @@
     </plurals>
     <string name="close_project_building">Сборка ещё выполняется.</string>
     <string name="close_project_save_and_close">Сохранить и закрыть</string>
+    <string name="sdk_platform_tools">Инструменты платформы</string>
+    <string name="sdk_platform_tools_desc">adb: с его помощью «Запуск» устанавливает и открывает приложение на телефоне или эмуляторе, подключённом к этому компьютеру.</string>
 </resources>

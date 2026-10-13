@@ -1988,4 +1988,6 @@
     <string name="block_scope_loading">正在查找此作用域可调用的函数…</string>
     <string name="block_scope_none">此作用域没有可调用的内容。</string>
     <string name="block_lambda_page">Lambda</string>
+    <string name="sdk_platform_tools">平台工具</string>
+    <string name="sdk_platform_tools_desc">adb：“运行”通过它把应用安装并启动到连接此电脑的手机或模拟器上。</string>
 </resources>

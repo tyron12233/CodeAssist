@@ -1286,4 +1286,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="block_scope_loading">Buscando qué se puede llamar aquí…</string>
     <string name="block_scope_none">Este ámbito no añade nada que llamar.</string>
     <string name="block_lambda_page">Lambda</string>
+    <string name="sdk_platform_tools">Herramientas de la plataforma</string>
+    <string name="sdk_platform_tools_desc">adb, que Ejecutar usa para instalar y abrir tu app en un teléfono o emulador conectado a este equipo.</string>
 </resources>

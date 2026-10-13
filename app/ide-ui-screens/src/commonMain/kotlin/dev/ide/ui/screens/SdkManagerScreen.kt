@@ -79,6 +79,8 @@ import dev.ide.ui.generated.resources.sdk_manager_title
 import dev.ide.ui.generated.resources.sdk_no_packages
 import dev.ide.ui.generated.resources.sdk_platforms
 import dev.ide.ui.generated.resources.sdk_platforms_desc
+import dev.ide.ui.generated.resources.sdk_platform_tools
+import dev.ide.ui.generated.resources.sdk_platform_tools_desc
 import dev.ide.ui.generated.resources.sdk_resume
 import dev.ide.ui.generated.resources.sdk_sources_documentation
 import dev.ide.ui.generated.resources.sdk_sources_documentation_desc
@@ -192,8 +194,16 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                 PackageList(platforms.sortedWith(compareByDescending<UiSdkPackage> { platformOrder(it.path) }), state, activeIds)
             }
 
+            // Platform tools (adb), desktop only: what Run uses to install and launch the app on a device.
+            val tools = state.packages.filter { it.category == "PLATFORM_TOOLS" }
+            if (tools.isNotEmpty()) {
+                SectionHeader(stringResource(Res.string.sdk_platform_tools))
+                Text(stringResource(Res.string.sdk_platform_tools_desc), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PackageList(tools, state, activeIds)
+            }
+
             // Android platform sources (the documentation payload). Build tooling is bundled, never downloaded.
-            val sources = state.packages.filter { it.category != "PLATFORMS" }
+            val sources = state.packages.filter { it.category == "SOURCES" }
             SectionHeader(stringResource(Res.string.sdk_android_sources))
             if (state.loading && state.packages.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

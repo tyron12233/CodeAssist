@@ -256,6 +256,40 @@ class AndroidSdkInstallerTest {
         }
     }
 
+    @Test
+    fun platformToolsInstallLeavesAdbRunnable() {
+        assertEquals(AndroidSdkInstaller.Category.PLATFORM_TOOLS, AndroidSdkInstaller.categoryOf("platform-tools"))
+        withTempDir("sdktools") { tmp ->
+            val sdkRoot = tmp.resolve("sdk")
+            val pkg = AndroidSdkInstaller.RepoPackage(
+                "platform-tools", "Android SDK Platform-Tools", "36.0.0",
+                AndroidSdkInstaller.Category.PLATFORM_TOOLS, "https://example.invalid/pt.zip", 3, "android-sdk-license",
+            )
+            val fetcher = object : SdkNetFetcher {
+                override fun fetchText(url: String): String = xml
+                override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean {
+                    ZipOutputStream(Files.newOutputStream(dest)).use { z ->
+                        for (name in listOf("platform-tools/adb", "platform-tools/lib64/libc++.so", "platform-tools/NOTICE.txt")) {
+                            z.putNextEntry(ZipEntry(name)); z.write(byteArrayOf(1)); z.closeEntry()
+                        }
+                    }
+                    return true
+                }
+            }
+
+            assertNull(AndroidSdkInstaller.install(pkg, sdkRoot, tmp.resolve("dl"), fetcher))
+
+            val adb = sdkRoot.resolve("platform-tools").resolve("adb")
+            assertEquals(adb, AndroidSdkInstaller.adbIn(sdkRoot.resolve("platform-tools")))
+            assertTrue("platform-tools" in AndroidSdkInstaller.installedPackages(sdkRoot))
+            if (Files.getFileStore(tmp).supportsFileAttributeView("posix")) {
+                // A zip carries no Unix modes, so without this adb could not be run.
+                assertTrue(Files.isExecutable(adb), "adb is executable after the install")
+                assertTrue(!Files.isExecutable(sdkRoot.resolve("platform-tools").resolve("NOTICE.txt")))
+            }
+        }
+    }
+
     /** A fetcher that "downloads" a one-entry zip (wrapped in a single root dir, as the SDK repo zips are). */
     private fun zipFetcher(entryName: String, content: String) = object : SdkNetFetcher {
         override fun fetchText(url: String): String = xml

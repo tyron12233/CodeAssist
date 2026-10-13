@@ -31,7 +31,8 @@ object AndroidSdkInstaller {
     const val REPO_BASE = "https://dl.google.com/android/repository/"
     private const val REPO_XML = "repository2-3.xml"
 
-    enum class Category { SOURCES, PLATFORMS, OTHER }
+    /** [PLATFORM_TOOLS] is `platform-tools` (adb), a host binary: only a desktop host can run it. */
+    enum class Category { SOURCES, PLATFORMS, PLATFORM_TOOLS, OTHER }
 
     /** The oldest platform offered; older ones predate every minSdk the IDE builds for. */
     const val MIN_PLATFORM = 21
@@ -124,6 +125,11 @@ object AndroidSdkInstaller {
         }
         listDirs("sources", "sources;")
         listDirs("platforms", "platforms;") { dir -> Files.exists(markerFor(dir)) || Files.isRegularFile(dir.resolve("android.jar")) }
+        // A single package rather than a directory of them: `platform-tools` itself.
+        val tools = sdkRoot.resolve("platform-tools")
+        if (Files.isDirectory(tools) && accept(tools) && (Files.exists(markerFor(tools)) || adbIn(tools) != null)) {
+            out += "platform-tools"
+        }
         return out
     }
 
@@ -204,6 +210,7 @@ object AndroidSdkInstaller {
                 Files.createDirectories(installDir.parent)
                 runCatching { if (!Files.exists(marker)) Files.createFile(marker) }
                 placeInto(staging, installDir)
+                if (pkg.category == Category.PLATFORM_TOOLS) markToolsExecutable(installDir)
                 Files.deleteIfExists(marker)
             } finally {
                 deleteRecursively(staging)
@@ -266,6 +273,7 @@ object AndroidSdkInstaller {
 
     fun categoryOf(path: String): Category = when {
         path.startsWith("sources;") -> Category.SOURCES
+        path == "platform-tools" -> Category.PLATFORM_TOOLS
         PLATFORM_PATH.matchEntire(path)?.groupValues?.get(1)?.toInt()?.let { it >= MIN_PLATFORM } == true -> Category.PLATFORMS
         else -> Category.OTHER
     }
@@ -340,6 +348,31 @@ object AndroidSdkInstaller {
 
     /** Place the extracted [staging] content at [installDir], flattening the archive's single root dir
      *  (repo zips wrap their payload in one folder, like `android-14/` or `cmdline-tools/`). */
+    /** The adb executable inside a `platform-tools` dir, or null when it is not there. */
+    fun adbIn(platformTools: Path): Path? =
+        sequenceOf("adb", "adb.exe").map { platformTools.resolve(it) }.firstOrNull { Files.isRegularFile(it) }
+
+    /**
+     * Give the tools back their executable bit. A zip read through [ZipInputStream] carries no Unix modes, so
+     * an extracted `adb` cannot be run. Every top-level file without an extension is a tool (`adb`, `fastboot`,
+     * `sqlite3`…); the libraries and data files beside them keep their modes. A no-op where the file system
+     * has no POSIX permissions (Windows runs `adb.exe` by its extension).
+     */
+    private fun markToolsExecutable(dir: Path) {
+        if (!Files.getFileStore(dir).supportsFileAttributeView("posix")) return
+        Files.list(dir).use { files ->
+            files.filter { Files.isRegularFile(it) && '.' !in it.fileName.toString() }.forEach { tool ->
+                runCatching {
+                    val perms = Files.getPosixFilePermissions(tool).toMutableSet()
+                    perms += java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+                    perms += java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE
+                    perms += java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE
+                    Files.setPosixFilePermissions(tool, perms)
+                }
+            }
+        }
+    }
+
     private fun placeInto(staging: Path, installDir: Path) {
         val roots = Files.list(staging).use { it.collect(Collectors.toList()) }
         val src = if (roots.size == 1 && Files.isDirectory(roots[0])) roots[0] else staging

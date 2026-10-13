@@ -95,7 +95,8 @@ class SdkManagerService(
     private fun fetchRepository(): AndroidSdkInstaller.Repository =
         AndroidSdkInstaller.fetchRepository(fetcher).also { repository = it }
 
-    /** List the installable Android **source** and **platform** packages, each flagged [UiSdkPackage.installed]/
+    /** List the installable Android **source** and **platform** packages (and, on desktop, **platform-tools**
+     *  for adb), each flagged [UiSdkPackage.installed]/
      *  [UiSdkPackage.incomplete] and with its license state. Build-tools and command-line tools never appear
      *  ([AndroidSdkInstaller] fetches no other category). Throws when offline. */
     suspend fun androidPackages(): List<UiSdkPackage> = withContext(Dispatchers.IO) {
@@ -103,7 +104,8 @@ class SdkManagerService(
         val installed = runCatching { AndroidSdkInstaller.installedPackages(root) }.getOrDefault(emptySet())
         val incomplete = runCatching { AndroidSdkInstaller.incompletePackages(root) }.getOrDefault(emptySet())
         val repo = fetchRepository()
-        repo.packages.map {
+        // platform-tools (adb) is a host binary: offered where it can run, which is never on the device.
+        repo.packages.filter { !isAndroidRuntime || it.category != AndroidSdkInstaller.Category.PLATFORM_TOOLS }.map {
             UiSdkPackage(
                 it.path, it.displayName, it.category.name, it.sizeBytes, it.path in installed, it.archiveUrl != null,
                 it.path in incomplete, license = it.license,
@@ -152,7 +154,10 @@ class SdkManagerService(
     fun installAndroidPackage(path: String): String {
         if (jobs.containsKey(path)) return "Already downloading $path."
         val category = AndroidSdkInstaller.categoryOf(path)
-        if (category == AndroidSdkInstaller.Category.OTHER) return "Only SDK sources and platforms can be installed."
+        if (category == AndroidSdkInstaller.Category.OTHER) return "Only SDK sources, platforms and platform tools can be installed."
+        if (category == AndroidSdkInstaller.Category.PLATFORM_TOOLS && isAndroidRuntime) {
+            return "Platform tools run on a computer, not on the phone."
+        }
         launchDownload(path, path) {
             val repo = withContext(Dispatchers.IO) { fetchRepository() }
             val pkg = repo.packages.firstOrNull { it.path == path }

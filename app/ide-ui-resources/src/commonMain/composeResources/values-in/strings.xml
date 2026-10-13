@@ -1101,4 +1101,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     </plurals>
     <string name="close_project_building">Build masih berjalan.</string>
     <string name="close_project_save_and_close">Simpan &amp; tutup</string>
+    <string name="sdk_platform_tools">Alat platform</string>
+    <string name="sdk_platform_tools_desc">adb, yang dipakai Jalankan untuk memasang dan membuka aplikasi Anda di ponsel atau emulator yang terhubung ke komputer ini.</string>
 </resources>

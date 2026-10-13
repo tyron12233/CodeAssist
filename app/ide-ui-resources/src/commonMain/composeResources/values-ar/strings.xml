@@ -2298,4 +2298,6 @@
     <string name="challenge_exponent">الأُس %1$s</string>
     <string name="challenge_legend_yours">حلّك</string>
     <string name="challenge_legend_reference">المرجع</string>
+    <string name="sdk_platform_tools">أدوات المنصة</string>
+    <string name="sdk_platform_tools_desc">adb، الذي يستخدمه «تشغيل» لتثبيت تطبيقك وتشغيله على هاتف أو محاكي متصل بهذا الحاسوب.</string>
 </resources>
