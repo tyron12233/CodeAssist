@@ -306,6 +306,7 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -873,7 +874,7 @@ class IdeServices private constructor(
             // model/classpath/compilers, never the editor index, so that baseline is left free for the dexer/R8.
             memLog.info("build-only engine: skipping editor index")
         } else if (androidTools != null) {
-            openJob = indexScope.launch {
+            openJob = indexScope.launch(start = CoroutineStart.LAZY) {
                 // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track the
                 // project-open memory peak so it can be compared against a build's peak.
                 val openPeak = PeakHeap().also { it.record() }
@@ -896,19 +897,13 @@ class IdeServices private constructor(
                 }
             }
         } else {
-            openJob = indexScope.launch {
+            openJob = indexScope.launch(start = CoroutineStart.LAZY) {
                 runIndexPass(IndexPassTrigger.OPEN)
                 memLog.info("after index build: ${MemSample.now().fmt()}")
             }
         }
-        // Arm the event hub's reactions only now: init's own commits (ensureKotlinStdlib) must not trigger
-        // invalidation over fields that are still initializing (a throwing reaction would abort the commit).
-        events.activate()
-        // This is now the active project for app-level extension callbacks that fire outside any service scope
-        // (the command actions, the synthetic-R provider, the XML resource host — all registered once on the
-        // app registry). Set LAST in init, so the engine is fully constructed before it can be resolved as the
-        // active one. The backend re-asserts this on project swap; an engine clears it (if still itself) on close.
-        env.activeEngine = this
+        // The open job is created LAZY and started, with the event hub and the active-engine handoff, by the
+        // `init` at the END of the class: see there.
     }
 
     /** Heap a new allocation could still claim before hitting the cap (`max - used`) — the headroom before an
@@ -5188,6 +5183,26 @@ class IdeServices private constructor(
             store.save()
             UnrecognizedProjectMarker.write(root, origin)
         }
+    }
+
+    /**
+     * The last of construction, deliberately after every property: Kotlin runs property initializers and `init`
+     * blocks in source order, so anything that can call back into this engine from ANOTHER thread must not
+     * start before the fields below the first `init` exist. The project-open index pass used to be launched
+     * from that first `init` on `Dispatchers.Default`, and a fast worker reached [runIndexPass] while
+     * [indexSyncMutex] (declared ~200 lines later) was still null: an NPE on `Mutex.lock`.
+     */
+    init {
+        // Arm the event hub's reactions only now: init's own commits (ensureKotlinStdlib) must not trigger
+        // invalidation over fields that are still initializing (a throwing reaction would abort the commit, and a
+        // resync reads fields declared late in the class).
+        events.activate()
+        // This is now the active project for app-level extension callbacks that fire outside any service scope
+        // (the command actions, the synthetic-R provider, the XML resource host — all registered once on the
+        // app registry). Set once the engine is fully constructed, so it can't be resolved half-built. The
+        // backend re-asserts this on project swap; an engine clears it (if still itself) on close.
+        env.activeEngine = this
+        openJob?.start()
     }
 }
 
