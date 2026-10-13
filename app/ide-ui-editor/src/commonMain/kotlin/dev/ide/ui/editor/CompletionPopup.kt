@@ -136,7 +136,8 @@ private fun CompletionListPanel(
             .width(width)
             // Clip to the rounded shape so a selected row's full-bleed background doesn't square off the corners.
             .clip(shape)
-            .background(Ide.colors.glassThick, shape)
+            // Opaque, like the command palette: code showing through competed with the suggestions.
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
     ) {
         if (items.isEmpty()) {
@@ -175,7 +176,7 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
     Column(
         modifier
             .heightIn(max = maxHeight)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         // Fixed header: optional Back + the signature, so they stay put while the doc body scrolls.
