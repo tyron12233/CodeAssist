@@ -3,6 +3,7 @@ package dev.ide.desktop
 import dev.ide.ui.ext.AppKeys
 import androidx.compose.material.Button
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,8 @@ fun main(args: Array<String>) {
     // Survive an unexpected exception on the AWT event thread (e.g. the live-preview interpreter crashing deep
     // in Compose's measure/semantics pass on a half-typed buffer) instead of taking the whole IDE down.
     AwtThreadGuard.install()
+    // A program the user runs shares this process, so the OS Quit (Cmd+Q) on its window would quit the IDE.
+    QuitGuard.install()
     // The Android toolchain the app ships (android.jar, the desugar stubs, aapt2), staged into the app resources by
     // the build: Android projects build with no SDK installed. Absent when run from a classpath without them.
     System.getProperty("compose.application.resources.dir")
@@ -80,6 +83,10 @@ fun main(args: Array<String>) {
             // Remembered: the app state is keyed on it, so a new instance on recomposition (the title bar's height
             // changes whenever the editor is left) would start the app over and land back in the editor.
             val fileActions = remember { DesktopFileActions(backend) }
+            DisposableEffect(window) {
+                QuitGuard.ideWindow = window
+                onDispose { if (QuitGuard.ideWindow === window) QuitGuard.ideWindow = null }
+            }
             // IntelliJ-style: the app draws the title bar (the editor's top bar, or a plain strip elsewhere)
             // with the native window controls on top of it.
             CompositionLocalProvider(LocalWindowTitleBar provides rememberJbrWindowTitleBar(window, state)) {

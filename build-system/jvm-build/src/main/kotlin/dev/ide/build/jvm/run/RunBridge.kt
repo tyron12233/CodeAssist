@@ -21,8 +21,10 @@ import java.util.jar.JarFile
  * standard library) but mediates the boundary two ways, so the run-sandbox lives here instead of in bytecode
  * instrumentation:
  *
- *  - **Exit** — `System.exit` / `Runtime.exit` / `Runtime.halt` throw [ControlledExit] instead of terminating
- *    the IDE process; the program interpreter catches it to end the *run* with that code.
+ *  - **Exit**: `System.exit` / `Runtime.exit` / `Runtime.halt` / Kotlin's `exitProcess` throw [ControlledExit]
+ *    instead of terminating the IDE process; the program interpreter catches it to end the *run* with that code.
+ *    Compose for Desktop's `application { }` exits from inside the bridged library, out of reach of that
+ *    interception, so its `exitProcessOnExit` is clamped off instead (see [clampedComposeExit]).
  *  - **Sandbox** — network / file / reflection / process calls consult the permission [Guards] broker before
  *    proceeding, throwing `SecurityException` on denial (ends the run). A curated set, not a hardened sandbox.
  *  - **Windows**: a top-level window the program constructs is recorded in [windows], so a GUI run ends when
@@ -47,8 +49,14 @@ internal class RunBridge(
 
     override fun invokeStatic(owner: String, name: String, descriptor: String, args: List<Any?>): Any? {
         if (owner == "java/lang/System" && name == "exit" && descriptor == "(I)V") throw ControlledExit(args[0] as Int)
+        // `kotlin.system.exitProcess` is bridged like the rest of `kotlin/`, so its `System.exit` would run as
+        // host code where nothing above sees it.
+        if (owner == "kotlin/system/ProcessKt" && name == "exitProcess" && descriptor == "(I)Ljava/lang/Void;") {
+            throw ControlledExit(args[0] as Int)
+        }
         enforceStatic(owner, name, args)
-        return explained(owner) { delegate.invokeStatic(owner, name, descriptor, args) }
+        val callArgs = clampedComposeExit(owner, name, descriptor, args) ?: args
+        return explained(owner) { delegate.invokeStatic(owner, name, descriptor, callArgs) }
     }
 
     override fun invokeVirtual(receiver: Any, name: String, descriptor: String, args: List<Any?>): Any? {
@@ -211,6 +219,47 @@ internal fun clampedCloseOperation(
     if (!isAwtWindow(receiverClass)) return null
     return listOf(DISPOSE_ON_CLOSE)
 }
+
+/**
+ * Rewritten arguments for a Compose for Desktop application entry point (`application { }`,
+ * `singleWindowApplication { }` and its `WithAppScope` form, each also as its `$default` bridge) with
+ * `exitProcessOnExit` forced off, or null to pass the call through untouched.
+ *
+ * Those functions end with `if (exitProcessOnExit) exitProcess(0)` once the last window closes. They are
+ * bridged (`androidx/` runs as the IDE's own Compose), so that exit happens in host code that no interpreted
+ * instruction reaches, and closing the program's window quit the whole IDE. With it off the function just
+ * returns, `main` finishes, and the run ends there, which is what a run wants anyway.
+ *
+ * Every variant takes `exitProcessOnExit` as the boolean just before its trailing content lambda; a `$default`
+ * bridge then appends the default mask and a marker, and the parameter's mask bit is cleared too, or the
+ * default (`true`) would be applied over the `false`.
+ */
+internal fun clampedComposeExit(owner: String, name: String, descriptor: String, args: List<Any?>): List<Any?>? {
+    if (owner != COMPOSE_APPLICATION_FACADE && owner != COMPOSE_WINDOW_FACADE) return null
+    val withDefaults = name.endsWith("\$default")
+    if (name.removeSuffix("\$default") !in COMPOSE_APPLICATION_ENTRIES) return null
+    val tail = if (withDefaults) "ZLkotlin/jvm/functions/Function3;ILjava/lang/Object;)V" else "ZLkotlin/jvm/functions/Function3;)V"
+    if (!descriptor.endsWith(tail)) return null
+    val realParams = if (withDefaults) args.size - 2 else args.size
+    val exitAt = realParams - 2
+    // The interpreter hands a `boolean` over as the JVM stack holds it, an Int 0/1 ([ReflectiveBridge] converts
+    // it for the call), so `false` is written back in whichever form arrived. Only checking for a Boolean
+    // made the clamp a silent no-op on every real run.
+    val off: Any = when (args.getOrNull(exitAt)) {
+        is Boolean -> false
+        is Int -> 0
+        else -> return null
+    }
+    return args.toMutableList().apply {
+        this[exitAt] = off
+        if (withDefaults) this[realParams] = (this[realParams] as Int) and (1 shl exitAt).inv()
+    }
+}
+
+/** `application` lives in `Application.desktop.kt`, `singleWindowApplication` in `Window.desktop.kt`. */
+private const val COMPOSE_APPLICATION_FACADE = "androidx/compose/ui/window/Application_desktopKt"
+private const val COMPOSE_WINDOW_FACADE = "androidx/compose/ui/window/Window_desktopKt"
+private val COMPOSE_APPLICATION_ENTRIES = setOf("application", "singleWindowApplication", "singleWindowApplicationWithAppScope")
 
 /** `javax.swing.WindowConstants.EXIT_ON_CLOSE`. */
 private const val EXIT_ON_CLOSE = 3

@@ -1,6 +1,9 @@
 package dev.ide.build.jvm.run
 
+import dev.ide.build.ControlledExit
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -107,6 +110,63 @@ class RunWindowLifecycleTest {
         assertNull(clampedCloseOperation(frame, "setDefaultCloseOperation", "()V", emptyList()))
     }
 
+    // ---- Compose for Desktop's exit -----------------------------------------------------------------
+
+    private val content: Any = Any() // stands in for the composable content lambda
+
+    @Test fun composeApplicationNeverExitsTheProcess() {
+        assertEquals(
+            listOf(false, content),
+            clampedComposeExit(APP_FACADE, "application", "(ZLkotlin/jvm/functions/Function3;)V", listOf(true, content)),
+        )
+    }
+
+    @Test fun theDefaultBridgeHasTheParameterTakenOutOfItsDefaults() {
+        // `application { }` compiles to `application$default(false, content, 0b1, null)`: bit 0 says "use the
+        // default", which is `true`, so passing false alone would be ignored.
+        assertEquals(
+            listOf(false, content, 0, null),
+            clampedComposeExit(APP_FACADE, "application\$default", "(ZLkotlin/jvm/functions/Function3;ILjava/lang/Object;)V", listOf(false, content, 1, null)),
+        )
+    }
+
+    @Test fun theInterpretersIntBooleansAreClampedToo() {
+        // What a run actually passes: the interpreter keeps a `boolean` as Int 0/1, as on the JVM stack.
+        assertEquals(
+            listOf(0, content, 0, null),
+            clampedComposeExit(APP_FACADE, "application\$default", "(ZLkotlin/jvm/functions/Function3;ILjava/lang/Object;)V", listOf(0, content, 1, null)),
+        )
+        assertEquals(
+            listOf(0, content),
+            clampedComposeExit(APP_FACADE, "application", "(ZLkotlin/jvm/functions/Function3;)V", listOf(1, content)),
+        )
+    }
+
+    @Test fun singleWindowApplicationIsClampedAtItsOwnPosition() {
+        // 14 parameters; exitProcessOnExit is the 13th (index 12), just before the content lambda.
+        val real = MutableList<Any?>(14) { null }.apply { this[1] = true; this[12] = true; this[13] = content }
+        val mask = (1 shl 12) or (1 shl 2) // exitProcessOnExit and `title` both defaulted
+        val out = assertNotNull(
+            clampedComposeExit(WINDOW_FACADE, "singleWindowApplication\$default", SINGLE_WINDOW_DEFAULT, real + listOf(mask, null)),
+        )
+        assertEquals(false, out[12])
+        assertEquals(1 shl 2, out[14], "only that parameter leaves the defaults")
+        assertEquals(true, out[1], "nothing else is touched")
+    }
+
+    @Test fun otherComposeCallsPassThrough() {
+        assertNull(clampedComposeExit(APP_FACADE, "awaitApplication", "(Lkotlin/jvm/functions/Function3;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", listOf(content, null)))
+        assertNull(clampedComposeExit("androidx/compose/ui/window/Other_desktopKt", "application", "(ZLkotlin/jvm/functions/Function3;)V", listOf(true, content)))
+    }
+
+    @Test fun kotlinExitProcessEndsTheRunNotTheProcess() {
+        val bridge = RunBridge(javaClass.classLoader)
+        val exit = assertFailsWith<ControlledExit> {
+            bridge.invokeStatic("kotlin/system/ProcessKt", "exitProcess", "(I)Ljava/lang/Void;", listOf(3))
+        }
+        assertEquals(3, exit.code)
+    }
+
     /** Stands in for a `java.awt.Window`, which a headless JVM cannot instantiate. Matched by name through
      *  [ProgramWindows]'s test seam, and reached through the same reflective calls a real window is. */
     private class StubWindow {
@@ -121,6 +181,12 @@ class RunWindowLifecycleTest {
     }
 
     private companion object {
+        const val APP_FACADE = "androidx/compose/ui/window/Application_desktopKt"
+        const val WINDOW_FACADE = "androidx/compose/ui/window/Window_desktopKt"
+        const val SINGLE_WINDOW_DEFAULT =
+            "(Landroidx/compose/ui/window/WindowState;ZLjava/lang/String;Landroidx/compose/ui/graphics/painter/Painter;" +
+                "Landroidx/compose/ui/window/WindowDecoration;ZZZZZLkotlin/jvm/functions/Function1;" +
+                "Lkotlin/jvm/functions/Function1;ZLkotlin/jvm/functions/Function3;ILjava/lang/Object;)V"
         const val DO_NOTHING_ON_CLOSE = 0
         const val HIDE_ON_CLOSE = 1
         const val DISPOSE_ON_CLOSE = 2
