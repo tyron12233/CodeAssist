@@ -12,6 +12,7 @@ import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.project.ProjectManager
 import dev.ide.core.sdk.BundledAndroidToolchain
+import dev.ide.desktop.store.registerDesktopStore
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.editor.preview.ImageSceneComposer
 import dev.ide.ui.editor.preview.OffscreenPreviewRenderer
@@ -44,11 +45,21 @@ fun main(args: Array<String>) {
             ?: "${System.getProperty("user.home")}/.codeassist/projects",
     )
     val manager = ProjectManager.desktop(projectsRoot)
+    // The online store (catalog, sign-in, publishing). Registered before the backend, which resolves it once.
+    val storeSignIn = registerDesktopStore(manager, projectsRoot.resolveSibling("store-session"))
 
     // Start with no project open: the picker is shown (projectEpoch stays 0), and opening a project from it
     // creates that project's IdeServices on demand. The download cache is still shared across projects via
     // the ProjectManager (sharedCachesRoot = projects-root parent), so deps resolve once.
     val backend = IdeServicesBackend(initial = null, manager = manager)
+    storeSignIn?.onRedirect = { redirect ->
+        backend.store.completeSignIn(redirect)
+        // The browser has the focus now; bring the IDE back, where the sign-in shows up.
+        java.awt.EventQueue.invokeLater {
+            runCatching { java.awt.Desktop.getDesktop().requestForeground(true) }
+            java.awt.Window.getWindows().firstOrNull { it.isVisible }?.toFront()
+        }
+    }
     // Live @Preview rendering on desktop: the interpreter drives Compose for Desktop (see
     // DesktopComposePreviewHost). The backend instance is stable across project switches.
     val previewHost = DesktopComposePreviewHost(backend)

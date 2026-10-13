@@ -14,6 +14,9 @@ dependencies {
     // The shared backend + UI port (ide-core api-exposes :ide-ui). The desktop launcher adds only its
     // Compose-window main() on top. The framework impls come transitively from :ide-core.
     implementation(project(":ide-core"))
+    // The Supabase-backed Projects Store: catalog, sign-in, publishing, reviews, moderation, daily challenges.
+    // ide-core keeps store-impl internal; the launcher is what constructs it (as :ide-android does).
+    implementation(project(":store-impl"))
 
     // The Compose @Preview render surface (the interpreter's render half): on desktop it drives Compose for
     // Desktop, so a @Preview using standard material/foundation composables renders live (the same bridge
@@ -77,6 +80,60 @@ val stageAndroidToolchain = tasks.register<Sync>("stageAndroidToolchain") {
         filePermissions { unix("rwxr-xr-x") }
     }
 }
+
+// The Supabase endpoint and the judge, the same values and override chain (-PSUPABASE_URL or the SUPABASE_URL env
+// var, likewise for the key and JUDGE_URL) :ide-android bakes into BuildConfig and :ide-ios generates, so a rotated
+// key reaches every host the same way. There is no BuildConfig in a JVM module, so it is generated.
+//
+// The publishable key is safe to ship in an open-source client ONLY because row-level security is what actually
+// gates access. An empty URL leaves the store wired but inert (the bundled catalog, no sign-in), which is what a
+// fork with no endpoint of its own should get.
+val supabaseUrl = (findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL")
+    ?: "https://lqlpkeummmmglikumotx.supabase.co"
+val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SUPABASE_KEY")
+    ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
+val judgeUrl = (findProperty("JUDGE_URL") as String?) ?: System.getenv("JUDGE_URL")
+    ?: "https://codeassist-judge.vercel.app"
+// The R2 mirror of the public store files; blank reads Supabase Storage (see supabase/functions/r2-mirror).
+val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
+    ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+// The catalog hides items that need a newer IDE than this one, compared against the Android versionCode: the
+// desktop build ships from the same tree, so it is the same IDE.
+val storeAppBuild: Int = Regex("""versionCode\s*=\s*(\d+)""")
+    .find(rootProject.file("app/ide-android/build.gradle.kts").readText())
+    ?.groupValues?.get(1)?.toInt()
+    ?: error("no versionCode in app/ide-android/build.gradle.kts")
+
+val generateStoreConfig by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/storeConfig/kotlin")
+    // Declared as inputs so a changed endpoint regenerates rather than being served from the build cache.
+    inputs.property("url", supabaseUrl)
+    inputs.property("key", supabaseKey)
+    inputs.property("judge", judgeUrl)
+    inputs.property("media", storeMediaUrl)
+    inputs.property("build", storeAppBuild)
+    outputs.dir(outputDir)
+    doLast {
+        val file = outputDir.get().file("dev/ide/desktop/store/StoreConfig.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            """
+            package dev.ide.desktop.store
+
+            /** Generated from Gradle properties; see app/ide-desktop/build.gradle.kts. Do not edit. */
+            internal object StoreConfig {
+                const val SUPABASE_URL: String = "$supabaseUrl"
+                const val SUPABASE_KEY: String = "$supabaseKey"
+                const val JUDGE_URL: String = "$judgeUrl"
+                const val STORE_MEDIA_URL: String = "$storeMediaUrl"
+                const val APP_BUILD: Int = $storeAppBuild
+            }
+
+            """.trimIndent(),
+        )
+    }
+}
+kotlin.sourceSets.main { kotlin.srcDir(generateStoreConfig) }
 
 // The installer carries the IDE's release version. The Android app's versionName is the one version file, so
 // read it from there; a release build can still pass `-PdesktopVersion=X.Y.Z`.
