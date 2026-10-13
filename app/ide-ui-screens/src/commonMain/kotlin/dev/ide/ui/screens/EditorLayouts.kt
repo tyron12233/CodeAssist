@@ -100,6 +100,7 @@ import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.buildc_build
 import dev.ide.ui.generated.resources.logs_title
+import dev.ide.ui.generated.resources.run
 import dev.ide.ui.generated.resources.edchrome_files
 import dev.ide.ui.generated.resources.edchrome_more
 import dev.ide.ui.generated.resources.sidebar_hide_tool_window_bar
@@ -111,6 +112,9 @@ import dev.ide.ui.platform.hasSystemBack
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.platform.verticalResizeCursor
 import dev.ide.ui.theme.Motion
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -318,6 +322,18 @@ internal fun ExpandedLayout(
     val settingsLabel = stringResource(Res.string.edchrome_settings_and_tools)
     val buildConsoleLabel = stringResource(Res.string.buildc_build)
     val logsLabel = stringResource(Res.string.logs_title)
+    val runLabel = stringResource(Res.string.run)
+    // Only whether a console run exists, not its transcript: the transcript changes many times a second and
+    // would recompose the whole layout.
+    val hasRun by remember(state.backend) { state.backend.build.runConsole.map { it != null }.distinctUntilChanged() }
+        .collectAsState(initial = false)
+    // A run that starts while this layout is on screen opens in the bottom pane rather than full screen. The
+    // flow's current value is skipped, so coming back to the editor doesn't re-open an old run.
+    LaunchedEffect(state.backend) {
+        state.backend.build.runConsole.map { it?.id }.distinctUntilChanged().drop(1).collect { id ->
+            if (id != null) state.showRunOutput()
+        }
+    }
     val hideBarLabel = stringResource(Res.string.sidebar_hide_tool_window_bar)
     // The screens a project is configured from (Modules, Icon Manager, Logs) sit in the stripe's lower group,
     // resolved from the registry like the phone's More sheet that lists them there.
@@ -358,18 +374,31 @@ internal fun ExpandedLayout(
                             // IntelliJ-style its toggle lives at the lower-left of the stripe, lit while it's open.
                             // The bottom tool windows: the build console and the logs share the bottom pane, one at
                             // a time; picking the one on show hides the pane.
-                            RailActionItem(CaIcons.terminal, buildConsoleLabel, active = state.consoleOpen && !state.logsOpen) {
-                                if (state.consoleOpen && !state.logsOpen) {
+                            RailActionItem(CaIcons.terminal, buildConsoleLabel, active = state.consoleOpen && !state.logsOpen && !state.runOpen) {
+                                if (state.consoleOpen && !state.logsOpen && !state.runOpen) {
                                     state.consoleOpen = false
                                 } else {
                                     state.consoleOpen = true
                                     state.closeLogs()
+                                    state.runOpen = false
+                                }
+                            }
+                            // The Run terminal joins them once a console run exists (or while it is on show).
+                            if (hasRun || state.runOpen) {
+                                RailActionItem(CaIcons.play, runLabel, active = state.runOpen && !state.logsOpen) {
+                                    if (state.runOpen && !state.logsOpen) {
+                                        state.runOpen = false
+                                        state.consoleOpen = false
+                                    } else {
+                                        state.showRunOutput()
+                                    }
                                 }
                             }
                             RailActionItem(CaIcons.logs, logsLabel, active = state.logsOpen) {
                                 if (state.logsOpen) {
                                     state.closeLogs()
                                     state.consoleOpen = false
+                                    state.runOpen = false
                                 } else {
                                     state.logsOpen = true
                                 }
@@ -485,7 +514,7 @@ internal fun ExpandedLayout(
                             // The bottom tool window slides up from, and back down into, the bottom edge, with
                             // the same motion as the side panes.
                             AnimatedVisibility(
-                                visible = state.consoleOpen || state.logsOpen,
+                                visible = state.consoleOpen || state.logsOpen || state.runOpen,
                                 enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet), expandFrom = Alignment.Bottom) +
                                     fadeIn(tween(Motion.BASE)),
                                 exit = shrinkVertically(tween(Motion.BASE, easing = Motion.quiet), shrinkTowards = Alignment.Bottom) +
@@ -521,7 +550,15 @@ internal fun ExpandedLayout(
                                                 fileActions = fileActions,
                                                 modifier = Modifier.fillMaxSize(),
                                                 initialSource = state.logsSource,
-                                                onHide = { state.closeLogs(); state.consoleOpen = false },
+                                                onHide = { state.closeLogs(); state.consoleOpen = false; state.runOpen = false },
+                                            )
+                                        } else if (state.runOpen) {
+                                            RunScreen(
+                                                backend = state.backend,
+                                                onBack = {},
+                                                onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
+                                                modifier = Modifier.fillMaxSize(),
+                                                onHide = { state.runOpen = false; state.consoleOpen = false },
                                             )
                                         } else {
                                         // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only

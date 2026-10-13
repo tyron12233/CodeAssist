@@ -62,6 +62,7 @@ import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.CircularProgressIndicator
+import dev.ide.ui.components.HideToolWindowButton
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.copy
@@ -87,8 +88,9 @@ import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The full-screen Run terminal: a console run's program output + an input bar so the user can type when
- * the program reads stdin, plus the build phase (compile/dex) and any compile errors. Talks only to the
+ * The Run terminal: a console run's program output + an input bar so the user can type when
+ * the program reads stdin, plus the build phase (compile/dex) and any compile errors. Full screen on a phone;
+ * on a wide window it is docked in the bottom tool window, which passes [onHide] in place of a back arrow. Talks only to the
  * [IdeBackend] port — program stdio flows through [IdeBackend.runConsole], input back through
  * [IdeBackend.sendRunInput]. The run sandbox's permission prompts are surfaced by the app-wide
  * `PermissionDialog`, which overlays this screen.
@@ -98,15 +100,19 @@ fun RunScreen(
     backend: IdeBackend,
     onBack: () -> Unit,
     onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
+    modifier: Modifier = Modifier.fillMaxSize(),
+    onHide: (() -> Unit)? = null,
 ) {
     val console by backend.build.runConsole.collectAsState()
     val build by backend.build.buildState.collectAsState()
     val rc = console
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    val docked = onHide != null
+    Column(modifier.background(MaterialTheme.colorScheme.background)) {
         RunTopBar(
             console = rc,
             buildFailed = build.status == RunStatus.Failed,
             onBack = onBack,
+            onHide = onHide,
             onStop = { backend.build.stopBuild() },
             onRerun = { backend.build.runBuild() },
         )
@@ -136,14 +142,14 @@ fun RunScreen(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             )
             // The program has finished: idle attention, no workflow to interrupt — a native ad reads as calm here.
-            rc.phase == RunPhase.Finished -> AdSlot(AdPlacement.RUN_RESULT, Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
+            rc.phase == RunPhase.Finished && !docked -> AdSlot(AdPlacement.RUN_RESULT, Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
             else -> Spacer(Modifier.size(12.dp))
         }
     }
 }
 
 @Composable
-private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -> Unit, onStop: () -> Unit, onRerun: () -> Unit) {
+private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -> Unit, onHide: (() -> Unit)?, onStop: () -> Unit, onRerun: () -> Unit) {
     val iconBox = if (touchInput) 42 else 34
     val running = console?.phase == RunPhase.Running || console?.phase == RunPhase.Building
     val clipboard = LocalClipboardManager.current
@@ -152,7 +158,8 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.run_back), onBack, boxSize = iconBox)
+        if (onHide == null) IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.run_back), onBack, boxSize = iconBox)
+        else Spacer(Modifier.size(4.dp))
         Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         val runLabel = stringResource(Res.string.run)
         Column(Modifier.weight(1f)) {
@@ -175,6 +182,7 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
         }
         if (running) IconButtonCa(CaIcons.stop, stringResource(Res.string.stop), onStop, boxSize = iconBox, iconSize = 16, tint = MaterialTheme.colorScheme.error)
         else IconButtonCa(CaIcons.play, stringResource(Res.string.run_run_again), onRerun, boxSize = iconBox, iconSize = 16, tint = Ide.colors.run)
+        if (onHide != null) HideToolWindowButton(onHide)
     }
 }
 

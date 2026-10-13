@@ -311,6 +311,10 @@ class CodeAssistAppState(
     /** The id of the interactive console session the last `run` task opened, or null for build-only tasks. */
     private var runConsoleId: Int? by mutableStateOf(null)
 
+    /** True while the editor is in its wide layout, where a run's terminal docks in the bottom tool window rather
+     *  than replacing the editor with the full-screen Run screen. Reported by the editor screen. */
+    var runDocked: Boolean by mutableStateOf(false)
+
     /** The home-screen Projects Store and bottom nav is unfinished and ships dark: it appears only when its
      *  feature flag is on (or the `feature.projectsStore` preference overrides it). Off = the picker alone. */
     val storeEnabled: Boolean =
@@ -345,11 +349,12 @@ class CodeAssistAppState(
             }
         }
         // Starting a console run (a `run` task) opens a fresh interactive session: keyed on its id, jump to the
-        // full-screen Run terminal. Build/assemble tasks leave the console null and stay in the build console.
+        // full-screen Run terminal, unless the wide editor docks it in its bottom pane. Build/assemble tasks leave
+        // the console null and stay in the build console.
         scope.launch { backend.build.runConsole.collect { runConsoleId = it?.id } }
         scope.launch {
             snapshotFlow { runConsoleId to epoch }.distinctUntilChanged().collect { (id, _) ->
-                if (id != null && screen == Screen.Editor) screen = Screen.Run
+                if (id != null && screen == Screen.Editor && !runDocked) screen = Screen.Run
             }
         }
         // Resume the last project on a cold launch: reopen whatever project was on screen when the app was last

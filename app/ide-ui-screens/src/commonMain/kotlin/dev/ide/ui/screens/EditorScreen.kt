@@ -74,6 +74,8 @@ fun EditorScreen(
     closeProjectConfirm: Boolean = false,
     onCloseProjectConfirmChange: (Boolean) -> Unit = {},
     onOpenRun: () -> Unit = {},
+    /** Told whether the wide layout is on screen, so a run docks in its bottom pane instead of opening full screen. */
+    onRunDockedChange: (Boolean) -> Unit = {},
     fileActions: FileActions = FileActions.None,
 ) {
     // Everything in the editor that leaves the project (the top bar's arrow, the palette) asks first.
@@ -137,9 +139,16 @@ fun EditorScreen(
             isMobilePlatform && state.leftOpen -> state.selectedLeftPanel = null
         }
     }
+    // Mirrors the layout choice below for the overlays outside it (the running-run pill).
+    var wideLayout by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(
+            val wide = maxWidth >= COMPACT_BREAKPOINT
+            LaunchedEffect(wide) {
+                wideLayout = wide
+                onRunDockedChange(wide)
+            }
+            if (!wide) CompactLayout(
                 state,
                 onToggleTheme,
                 onOpenHub,
@@ -257,9 +266,10 @@ fun EditorScreen(
         )
         // While a console run is active but its terminal isn't on screen (the user backed out mid-run), a
         // tappable pill returns to it — the run keeps going in the background until then.
-        RunningIndicator(
+        // Docked (wide layout), the pill brings the bottom pane's Run terminal forward and hides while it shows.
+        if (!(wideLayout && state.runOpen)) RunningIndicator(
             state.backend,
-            onClick = onOpenRun,
+            onClick = { if (wideLayout) state.showRunOutput() else onOpenRun() },
             modifier = Modifier.align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = if (isMobilePlatform) 88.dp else 24.dp),
         )

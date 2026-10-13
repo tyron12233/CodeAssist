@@ -732,6 +732,16 @@ class IdeUiState(
         logsSource = null
     }
 
+    /** Whether a console run's terminal (its output and stdin) is showing in the wide layout's bottom pane, which
+     *  it shares with the build console and the logs. A phone opens the full-screen Run terminal instead. */
+    var runOpen by mutableStateOf(false)
+
+    /** Bring the docked Run terminal to the front of the bottom pane. */
+    fun showRunOutput() {
+        closeLogs()
+        runOpen = true
+    }
+
     /** Whether the indexing-status detail dialog (opened by tapping the top-bar index chip) is showing. */
     var indexDetailOpen by mutableStateOf(false)
 

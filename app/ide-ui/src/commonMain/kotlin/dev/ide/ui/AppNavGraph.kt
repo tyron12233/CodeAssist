@@ -428,6 +428,7 @@ private fun AppRoute(
             closeProjectConfirm = app.confirmCloseProject,
             onCloseProjectConfirmChange = { app.confirmCloseProject = it },
             onOpenRun = { app.navigateTo(Screen.Run) },
+            onRunDockedChange = { app.runDocked = it },
             fileActions = fileActions,
         )
 
