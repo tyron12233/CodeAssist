@@ -74,6 +74,8 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
     suspend fun sync(
         reason: SyncReason = SyncReason.MANUAL,
         progress: ProgressReporter = NoSyncProgress,
+        /** Modules to rebuild from the snapshot instead of refreshing (see [ExternalModelApplier.apply]). */
+        recreate: Set<String> = emptySet(),
     ): ProjectSyncOutcome {
         val importer = importer()
             ?: return ProjectSyncOutcome(false, "No build files to sync from were found.")
@@ -91,7 +93,7 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
             notes(outcome.messages),
         )
 
-        val report = applyToModel(contributeTo(ctx.platform.extensions, importer, request, model), importer)
+        val report = applyToModel(contributeTo(ctx.platform.extensions, importer, request, model), importer, recreate)
         ExternalRepositories.merge(ctx.workspaceRoot, model.repositories)
         record(importer, outcome.messages)
 
@@ -108,11 +110,16 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
      * for an externally-owned project; for an IDE-owned one nothing is removed, since the IDE model is then
      * the source of truth and the snapshot is only additive.
      */
-    private fun applyToModel(model: ExternalProjectModel, importer: ProjectImporter): ExternalModelApplier.Report {
+    private fun applyToModel(
+        model: ExternalProjectModel,
+        importer: ProjectImporter,
+        recreate: Set<String>,
+    ): ExternalModelApplier.Report {
         val report = ExternalModelApplier(ctx.store).apply(
             model,
             defaultLanguageLevel(),
             removeAbsent = importer.ownership == ModelOwnership.EXTERNAL,
+            recreate = recreate,
         )
         ctx.store.save()
         return report

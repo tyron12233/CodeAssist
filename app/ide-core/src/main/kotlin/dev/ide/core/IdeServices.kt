@@ -81,6 +81,7 @@ import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.MemberUsageIndex
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.gradle.GradleImport
+import dev.ide.core.gradle.GradleKmp
 import dev.ide.core.perf.MB_BYTES
 import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
 import dev.ide.core.perf.MemSample
@@ -245,6 +246,7 @@ import dev.ide.model.impl.ExternalModelApplier
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.sync.ProjectImporter
 import dev.ide.model.impl.SdkData
 import dev.ide.model.impl.jdk.CorePlatformProvider
 import dev.ide.model.impl.jdk.JdkSdkProvider
@@ -1961,6 +1963,27 @@ class IdeServices private constructor(
      * declare. Model + persistence only; the caller re-resolves dependencies and re-indexes afterwards.
      */
     internal suspend fun syncFromBuildFiles(): ProjectSyncOutcome = projectSync.sync(SyncReason.MANUAL)
+
+    /**
+     * The target this compatibility-mode project's Kotlin Multiplatform modules are imported for, or null
+     * when no module could be imported as either Android or the JVM. Reads the build scripts.
+     */
+    fun kmpTargetChoice(): GradleKmp.Platform? =
+        if (!isCompatibilityMode()) null else GradleImport.kmpTargetChoice(workspaceRoot)
+
+    /**
+     * Import the multiplatform modules for [platform] from now on, and re-sync. The modules the switch
+     * changes are rebuilt rather than refreshed: a refresh keeps a module's type, merges its source roots and
+     * keeps its facets, so the old target's `androidMain` roots and `[android]` facet would survive it.
+     */
+    internal suspend fun switchKmpTarget(platform: GradleKmp.Platform): ProjectSyncOutcome {
+        fun shapes() = GradleImport.parse(workspaceRoot)?.modules.orEmpty()
+            .associate { it.name to (it.kind to it.kmp?.platform) }
+        val before = shapes()
+        GradleKmp.setPreference(workspaceRoot, platform)
+        val changed = shapes().filter { (name, shape) -> before[name] != shape }.keys
+        return projectSync.sync(SyncReason.MANUAL, recreate = changed)
+    }
 
     /** Convert this compatibility-mode project to a native CodeAssist project (see [GradleImport.convertToNative]).
      *  Pure disk operation — the model is already the source of truth, so nothing needs re-resolving. */
@@ -4994,6 +5017,13 @@ class IdeServices private constructor(
             val templateArgs = TemplateArgs(args)
             template.generate(StoreScaffold(store, languageLevel), templateArgs)
             store.save()
+            // A template may author a foreign build rather than a model (the Kotlin Multiplatform ones write a
+            // Gradle project, which is the only shape a multi-target build has). It then declared no modules,
+            // and the importer that claims what it wrote reads them in, exactly as Import would.
+            if (store.workspace.projects.all { it.modules.isEmpty() }) {
+                ProjectSyncService.importerFor(env.platform.extensions, root)
+                    ?.let { importInto(root, store, it, languageLevel, env) }
+            }
             val services = IdeServices(
                 platform,
                 store,
@@ -5051,6 +5081,21 @@ class IdeServices private constructor(
             val importer = ProjectSyncService.importerFor(env.platform.extensions, root) ?: return false
             val (_, store) = openStore(root, env)
             ensureSdks(store, sdk, root)
+            return importInto(root, store, importer, languageLevel, env)
+        }
+
+        /**
+         * Read [root]'s build files with [importer] into [store] and record the import (marker, repositories,
+         * stamp): what [importExternalProjectAt] does once its store is open, and what [createProjectAt] does
+         * for a template that wrote a foreign build instead of a model.
+         */
+        private fun importInto(
+            root: Path,
+            store: ProjectModelStore,
+            importer: ProjectImporter,
+            languageLevel: LanguageLevel,
+            env: ApplicationEnvironment,
+        ): Boolean {
             val request = SyncRequest(root, NoSyncProgress, SyncReason.IMPORT)
             val outcome = runSync { importer.resolve(request) }
             val rawModel = outcome.model ?: return false

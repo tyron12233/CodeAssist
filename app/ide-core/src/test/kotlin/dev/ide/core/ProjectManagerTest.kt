@@ -125,6 +125,7 @@ class ProjectManagerTest {
                             "java-console", "java-library",
                             "kotlin-console", "kotlin-library",
                             "android-app", "android-library",
+                            "kmp-compose-app", "kmp-library",
                         ),
                     ),
                     "got $ids",

@@ -1,5 +1,8 @@
 package dev.ide.core.backend
 
+import dev.ide.core.IdeServices
+import dev.ide.core.gradle.GradleKmp
+import dev.ide.core.sync.ProjectSyncOutcome
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
 import dev.ide.core.project.ImportableKind
@@ -209,6 +212,9 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
                 "may still fail.",
             notes = runCatching { svc.compatibilityNotes() }.getOrDefault(emptyList()),
             syncNeeded = runCatching { svc.isSyncStale() }.getOrDefault(false),
+            kmpTarget = runCatching { svc.kmpTargetChoice() }
+                .onFailure { log.warn("Couldn't read the Kotlin Multiplatform target choice", it) }
+                .getOrNull()?.name?.lowercase(),
         )
     }
 
@@ -225,22 +231,31 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
 
     override suspend fun syncProject(): UiSyncResult {
         val svc = ctx.servicesOrNull ?: return UiSyncResult(false, "No project is open.")
-        return withContext(Dispatchers.IO) {
-            runCatching {
-                val outcome = svc.syncFromBuildFiles()
-                if (outcome.ok && outcome.modelChanged) {
-                    // The build files (re-)declared the model's dependencies; re-resolve them and rebuild the
-                    // index so new modules/sources and changed classpaths take effect in the open project.
-                    svc.dependencies.retryDependencyResolution()
-                    svc.reindex()
-                }
-                UiSyncResult(outcome.ok, outcome.message, outcome.notes)
-            }.getOrElse { e ->
-                log.error("Project sync failed", e)
-                UiSyncResult(false, e.message ?: "Project sync failed")
-            }
-        }
+        return withContext(Dispatchers.IO) { runSync(svc) { svc.syncFromBuildFiles() } }
     }
+
+    override suspend fun setKmpTarget(target: String): UiSyncResult {
+        val svc = ctx.servicesOrNull ?: return UiSyncResult(false, "No project is open.")
+        val platform = GradleKmp.Platform.values()
+            .firstOrNull { it != GradleKmp.Platform.COMMON_ONLY && it.name.equals(target, ignoreCase = true) }
+            ?: return UiSyncResult(false, "Unknown Kotlin Multiplatform target '$target'.")
+        return withContext(Dispatchers.IO) { runSync(svc) { svc.switchKmpTarget(platform) } }
+    }
+
+    private suspend fun runSync(svc: IdeServices, sync: suspend () -> ProjectSyncOutcome): UiSyncResult =
+        runCatching {
+            val outcome = sync()
+            if (outcome.ok && outcome.modelChanged) {
+                // The build files (re-)declared the model's dependencies; re-resolve them and rebuild the
+                // index so new modules/sources and changed classpaths take effect in the open project.
+                svc.dependencies.retryDependencyResolution()
+                svc.reindex()
+            }
+            UiSyncResult(outcome.ok, outcome.message, outcome.notes)
+        }.getOrElse { e ->
+            log.error("Project sync failed", e)
+            UiSyncResult(false, e.message ?: "Project sync failed")
+        }
 
     override suspend fun convertToNative(): UiConvertResult {
         val svc = ctx.servicesOrNull ?: return UiConvertResult(false, "No project is open.")

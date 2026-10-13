@@ -109,7 +109,7 @@ class GradleModelImportTest {
     }
 
     @Test
-    fun carriesEverySourceSetOfAMultiplatformModule() {
+    fun foldsEverySourceSetOfAMultiplatformAndroidModuleIntoMain() {
         withTempDir("gradle-model-kmp") { dir ->
             write(dir, """
                 {
@@ -144,15 +144,21 @@ class GradleModelImportTest {
                 }
             """)
 
+            Files.createDirectories(dir.resolve("app/ide-ui/src/androidMain"))
+            Files.writeString(dir.resolve("app/ide-ui/src/androidMain/AndroidManifest.xml"), "<manifest/>")
+
             val module = assertNotNull(resolve(dir).model).modules.single()
+            // Folded into `main`, the only name an Android variant compiles, with every root in order.
+            assertEquals(listOf("main"), module.sourceSets.map { it.name })
             assertEquals(
-                listOf("commonMain", "jvmShared", "androidMain"),
-                module.sourceSets.map { it.name },
+                listOf("src/commonMain/kotlin", "src/jvmShared/kotlin", "src/androidMain/kotlin"),
+                module.sourceSets.single().roots.keys.toList(),
                 "every source set of the exported target is declared, in order",
             )
             val android = module.facets.single { it.table == "android" }
             assertEquals("dev.ide.ui", android.values["namespace"])
             assertEquals(false, android.values["isApplication"])
+            assertEquals("src/androidMain/AndroidManifest.xml", android.values["manifest"])
         }
     }
 

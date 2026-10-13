@@ -419,6 +419,13 @@ mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed
   library contributes, so a `debug`- or flavor-only resource or dependency never leaks into the wrong variant.
   Build-variant-scoped dependencies (a `debugImplementation`-style declaration carrying a config qualifier)
   are filtered into the classpath the same way (`Module.classpath(scope, variant)`).
+- **Shared source sets.** A non-test source set whose name qualifies no variant (one added in Module
+  Settings) is compiled by every variant, right after `main`, as the JVM pipeline compiles it
+  (`AndroidVariants.sharedSourceSets`). Gradle has no such sets, since there a set's name is its variant
+  qualifier. A name counts as a variant's when it is a flavor, a build type, any combination of them, or a
+  default build type the facet dropped (the module type still lays down `src/release`, which must not start
+  compiling into every variant once the facet has only `debug` + `staging`). Test-named sets (`test`,
+  `androidTest`, `testFixtures`, `testDebug`, …) never count.
 
 The build/run default variant is the module's **active variant** — persisted per module and shared with the
 editor (which analyzes against that variant's classpath). The Run picker still lists every variant's
@@ -479,6 +486,46 @@ project from its scripts.
   edits the module's `dependencies { }` block (creating it when absent) so the declaration is still there after
   the next sync. Edits are located on a comment-masked copy of the script and applied as a single line
   insertion or deletion, leaving the rest of the file byte-for-byte intact.
+
+### Kotlin Multiplatform modules
+
+A module applying `org.jetbrains.kotlin.multiplatform` is read by **`GradleKmp`**. A CodeAssist module is
+one compilation and a KMP module is several, so the import models ONE target per module: its Android target
+(`androidTarget()`, `android()`, AGP's `androidLibrary { }`) or its JVM target (`jvm()`, `jvm("desktop")`),
+else only its common code. iOS/JS/Wasm targets, and whichever of Android/JVM lost, are named in the sync
+notes as not modeled.
+
+- **Which target.** A module declaring both is imported for the project's preferred platform, kept in
+  `.platform/kmp-target` (`android` or `jvm`). With none recorded it follows the host: Android on a phone,
+  the JVM on the desktop. The compat banner's details offer the choice whenever some module has both
+  (`ProjectService.setKmpTarget`). Switching rebuilds the modules whose shape changed rather than refreshing
+  them (`ExternalModelApplier.apply(recreate = …)`): a refresh keeps a module's type, merges its source roots
+  and keeps its facets, so the old target's roots and `[android]` facet would survive it.
+
+- **Source sets.** `commonMain`, every set the platform set reaches through `dependsOn` (a hand-made
+  `jvmShared`), and the platform set are collapsed into `main`; `commonTest` and the platform test set into
+  `test`. The name `main` matters: an Android variant compiles `main` plus its build-type and flavor sets
+  and nothing else. Android modules also get `androidMain`'s `res/`, `assets/`, `aidl/`, `jniLibs/` and its
+  `AndroidManifest.xml` (the facet's `manifest`).
+- **`expect`/`actual`.** The sets above the platform one become the `[kotlin]` facet's `commonSourceRoots`.
+  Both the JVM (`KotlinCompileTask`) and Android (`AndroidKotlinCompileTask`) compiles pass those files to
+  K2 as the common fragment; without them K2 rejects the pair as "declared in the same module".
+- **Dependencies.** Only the script's top-level `dependencies { }` plus the modeled sets' blocks are read
+  (`commonMain.dependencies { }`, `val desktopMain by getting { dependencies { } }`, `androidMain { … }`).
+  A test set's declarations are test-scoped whatever configuration they name. The Compose Multiplatform
+  accessors (`compose.runtime`, `compose.components.resources`, `compose.desktop.currentOs`, …) resolve
+  against the `org.jetbrains.compose` plugin version, except where the plugin pins its own: Material 3 at
+  1.9.0 from plugin 1.9 on, the extended icons at 1.7.3 from 1.8 on (read from the published plugin jars,
+  1.6.11 through 1.13.0-alpha02). Type-safe project accessors
+  (`implementation(projects.shared)`) resolve to the included module.
+- **Compose resources.** `src/<set>/composeResources` dirs produce a `[composeResources]` facet, with the
+  package from `compose.resources { packageOfResClass }` or the plugin's default
+  `<group>.<project>.generated.resources`.
+
+For several targets at once, or a model Gradle computes, use `generateNativeModel` (see
+[self-hosting](self-hosting.md)). `GradleModelImporter` folds an exported multiplatform *Android* module the
+same way, into `main`/`test`, and picks up an `androidMain` manifest; exported JVM modules keep their set
+names, which the JVM pipeline compiles whatever they are called.
 
 ### Surfacing compatibility mode
 

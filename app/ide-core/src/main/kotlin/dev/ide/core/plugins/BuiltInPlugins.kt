@@ -82,6 +82,8 @@ import dev.ide.templates.JavaLibModuleType
 import dev.ide.templates.BUILT_IN_KOTLIN_TEMPLATES
 import dev.ide.core.templates.NotesSampleTemplate
 import dev.ide.core.templates.SwingAppTemplate
+import dev.ide.core.templates.KmpComposeAppTemplate
+import dev.ide.core.templates.KmpLibraryTemplate
 import dev.ide.core.templates.SwingCanvasTemplate
 import dev.ide.core.templates.WeatherSampleTemplate
 import dev.ide.index.INDEX_EP
@@ -357,13 +359,14 @@ private class JavaSupportPlugin : Plugin {
 /**
  * Gradle compatibility: the [GradleProjectImporter] that reads a Gradle project's scripts into the project
  * model ([PROJECT_IMPORTER_EP]) and the [GradleBuildFileWriter] that writes dependency declarations back into
- * `build.gradle(.kts)` ([BUILD_FILE_WRITER_EP]). Disabling it leaves Gradle folders unrecognized: they open
+ * `build.gradle(.kts)` ([BUILD_FILE_WRITER_EP]), plus the Kotlin Multiplatform Create-Project templates, which
+ * write Gradle projects for that importer. Disabling it leaves Gradle folders unrecognized: they open
  * as empty native workspaces instead of imported projects.
  */
 private class GradleSupportPlugin : Plugin {
     override val manifest = PluginManifest(
         id = "gradle-support", name = "Gradle Support",
-        description = "Opens Gradle projects by reading their build scripts statically, and writes dependency declarations back to them.",
+        description = "Opens Gradle projects by reading their build scripts statically, writes dependency declarations back to them, and adds the Kotlin Multiplatform project templates.",
     )
 
     override fun register(reg: PluginRegistration) {
@@ -374,6 +377,13 @@ private class GradleSupportPlugin : Plugin {
         // both apply.
         reg.register(PROJECT_IMPORTER_EP, GradleModelImporter())
         reg.register(BUILD_FILE_WRITER_EP, GradleBuildFileWriter())
+        // The Kotlin Multiplatform templates write a Gradle project for the importer above to read in (a
+        // multi-target build has no other shape), so they come and go with it.
+        reg.contributeVia { ext, pid ->
+            val templates = ProjectTemplateRegistry(ext)
+            templates.register(KmpComposeAppTemplate, pid)
+            templates.register(KmpLibraryTemplate, pid)
+        }
     }
 }
 

@@ -7,7 +7,11 @@ import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.BuildType
 import dev.ide.android.support.ProductFlavor
+import dev.ide.build.jvm.compose.ComposeResourcesFacet
+import dev.ide.build.jvm.compose.ComposeResourcesFacetCodec
 import dev.ide.core.gradle.GradleImport
+import dev.ide.lang.kotlin.build.KotlinFacet
+import dev.ide.lang.kotlin.build.KotlinFacetCodec
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.Coordinate
@@ -28,6 +32,7 @@ import dev.ide.model.sync.SyncMessage
 import dev.ide.model.sync.SyncOutcome
 import dev.ide.model.sync.SyncRequest
 import dev.ide.model.sync.SyncSeverity
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -72,25 +77,28 @@ class GradleProjectImporter : ProjectImporter {
         val spec = GradleImport.parse(request.root)
             ?: return SyncOutcome.failed("No Gradle build scripts were found to sync from.")
         val messages = spec.report.notes.map { SyncMessage(SyncSeverity.WARNING, it) }
-        return SyncOutcome(model(spec), messages)
+        return SyncOutcome(model(request.root, spec), messages)
     }
 
     /** The parsed scripts as a snapshot. */
-    private fun model(spec: GradleImport.ProjectSpec): ExternalProjectModel = ExternalProjectModel(
+    private fun model(root: Path, spec: GradleImport.ProjectSpec): ExternalProjectModel = ExternalProjectModel(
         name = spec.name,
         buildSystemId = id,
-        modules = spec.modules.map { module(it) },
+        modules = spec.modules.map { module(root, it) },
         repositories = spec.customRepos.map { ExternalRepository(it.name, it.url) },
     )
 
-    private fun module(spec: GradleImport.ModuleSpec): ExternalModule = ExternalModule(
-        name = spec.name,
-        dirRelPath = spec.dirRel.ifBlank { spec.name },
-        typeId = typeIdFor(spec.kind),
-        sourceSets = sourceSets(spec),
-        dependencies = dependencies(spec),
-        facets = facets(spec),
-    )
+    private fun module(root: Path, spec: GradleImport.ModuleSpec): ExternalModule {
+        val dirRel = spec.dirRel.ifBlank { spec.name }
+        return ExternalModule(
+            name = spec.name,
+            dirRelPath = dirRel,
+            typeId = typeIdFor(spec.kind),
+            sourceSets = sourceSets(spec, root.resolve(dirRel)),
+            dependencies = dependencies(spec),
+            facets = facets(spec),
+        )
+    }
 
     private fun typeIdFor(kind: GradleImport.Kind): String = when (kind) {
         GradleImport.Kind.ANDROID_APP -> "android-app"
@@ -99,9 +107,10 @@ class GradleProjectImporter : ProjectImporter {
     }
 
     /** Android module types supply their own `src/main/{java,kotlin,res,assets}` sets, so only a plain
-     *  JVM module needs its Gradle-convention source roots spelled out. */
-    private fun sourceSets(spec: GradleImport.ModuleSpec): List<ExternalSourceSet> =
-        if (spec.kind != GradleImport.Kind.JAVA) emptyList()
+     *  JVM module needs its Gradle-convention source roots spelled out. A KMP module spells out its own. */
+    private fun sourceSets(spec: GradleImport.ModuleSpec, dir: Path): List<ExternalSourceSet> =
+        if (spec.kmp != null) kmpSourceSets(spec, spec.kmp, dir)
+        else if (spec.kind != GradleImport.Kind.JAVA) emptyList()
         else listOf(
             ExternalSourceSet(
                 name = "main",
@@ -114,6 +123,54 @@ class GradleProjectImporter : ProjectImporter {
             )
         )
 
+    /**
+     * A KMP module's source sets, collapsed: every modeled main set's roots go into `main` and every test
+     * set's into `test`. The names matter to the Android pipeline, whose variants compile `main` plus the
+     * build type and flavor sets and nothing else, so a set kept as `androidMain` would never be built.
+     * The platform-set name survives in the paths, and [kotlinFacet] carries which of them are common.
+     */
+    private fun kmpSourceSets(
+        spec: GradleImport.ModuleSpec,
+        kmp: GradleImport.KmpModule,
+        dir: Path,
+    ): List<ExternalSourceSet> {
+        val android = spec.kind != GradleImport.Kind.JAVA
+        val main = LinkedHashMap<String, Set<ContentRole>>()
+        val test = LinkedHashMap<String, Set<ContentRole>>()
+        for (set in kmp.sourceSets) {
+            val base = "src/${set.name}"
+            val roots = if (set.test) test else main
+            fun add(rel: String, role: ContentRole) {
+                if (Files.isDirectory(dir.resolve(rel))) roots[rel] = setOf(role)
+            }
+            // A main set's Kotlin root is declared even before it exists, so the first file created in a new
+            // project lands in a source root.
+            if (set.test) add("$base/kotlin", ContentRole.SOURCE) else main["$base/kotlin"] = setOf(ContentRole.SOURCE)
+            add("$base/java", ContentRole.SOURCE)
+            add("$base/resources", ContentRole.RESOURCE)
+            if (android && !set.test) {
+                add("$base/res", ContentRole.ANDROID_RES)
+                add("$base/assets", ContentRole.ASSETS)
+                add("$base/aidl", ContentRole.AIDL)
+                add("$base/jniLibs", ContentRole.JNI_LIBS)
+            }
+        }
+        return buildList {
+            add(ExternalSourceSet("main", DependencyScope.IMPLEMENTATION, main))
+            if (test.isNotEmpty()) add(ExternalSourceSet("test", DependencyScope.TEST_IMPLEMENTATION, test))
+            if (spec.composeResources != null) add(
+                // Where the Compose resource generator writes (see GradleModelImporter, which declares the same).
+                ExternalSourceSet(
+                    "composeResources", DependencyScope.IMPLEMENTATION,
+                    linkedMapOf(
+                        ComposeResourcesFacet.GENERATED_KOTLIN_ROOT to setOf(ContentRole.SOURCE),
+                        ComposeResourcesFacet.GENERATED_RESOURCES_ROOT to setOf(ContentRole.RESOURCE),
+                    ),
+                )
+            )
+        }
+    }
+
     private fun dependencies(spec: GradleImport.ModuleSpec): List<ExternalDependency> = buildList {
         for (d in spec.moduleDeps) add(ExternalModuleRef(d.name, d.scope, d.variant))
         for (d in spec.platformDeps) {
@@ -122,13 +179,31 @@ class GradleProjectImporter : ProjectImporter {
         for (d in spec.mavenDeps) add(ExternalLibrary(d.coordinate, d.scope, d.variant))
     }
 
-    /** The `android { }` block as the `[android]` facet table, absent for a plain JVM module. */
-    private fun facets(spec: GradleImport.ModuleSpec): List<ExternalFacet> =
-        if (spec.kind == GradleImport.Kind.JAVA) emptyList()
-        else listOf(ExternalFacet(AndroidFacetCodec.tomlTable, AndroidFacetCodec.encode(androidFacet(spec))))
+    /** The `android { }` block as the `[android]` facet table (absent for a plain JVM module), plus a KMP
+     *  module's `[kotlin]` and `[composeResources]`. */
+    private fun facets(spec: GradleImport.ModuleSpec): List<ExternalFacet> = listOfNotNull(
+        if (spec.kind == GradleImport.Kind.JAVA) null
+        else ExternalFacet(AndroidFacetCodec.tomlTable, AndroidFacetCodec.encode(androidFacet(spec))),
+        kotlinFacet(spec),
+        spec.composeResources?.let {
+            val facet = ComposeResourcesFacet(it.packageName, it.publicResClass, it.dirs)
+            ExternalFacet(ComposeResourcesFacetCodec.tomlTable, ComposeResourcesFacetCodec.encode(facet))
+        },
+    )
+
+    /**
+     * `[kotlin]` for a KMP module whose modeled target sits under common code: the common sets' Kotlin roots,
+     * which is what lets an `expect` in `commonMain` and its `actual` in the platform set compile as one.
+     */
+    private fun kotlinFacet(spec: GradleImport.ModuleSpec): ExternalFacet? {
+        val common = spec.kmp?.sourceSets.orEmpty().filter { it.common }.map { "src/${it.name}/kotlin" }
+        if (common.isEmpty()) return null
+        return ExternalFacet(KotlinFacetCodec.tomlTable, KotlinFacetCodec.encode(KotlinFacet(commonSourceRoots = common)))
+    }
 
     private fun androidFacet(spec: GradleImport.ModuleSpec): AndroidFacet = AndroidFacet(
         namespace = spec.namespace ?: "com.example.${spec.name}",
+        manifest = spec.manifest ?: DEFAULT_MANIFEST,
         compileSdk = spec.compileSdk ?: DEFAULT_COMPILE_SDK,
         minSdk = spec.minSdk ?: DEFAULT_MIN_SDK,
         targetSdk = spec.targetSdk ?: spec.minSdk ?: DEFAULT_MIN_SDK,
@@ -175,5 +250,6 @@ class GradleProjectImporter : ProjectImporter {
          *  convention plugin), so it tracks the newest level the IDE supports rather than lagging it. */
         const val DEFAULT_COMPILE_SDK = AndroidApiLevels.LATEST
         const val DEFAULT_MIN_SDK = 21
+        const val DEFAULT_MANIFEST = "src/main/AndroidManifest.xml"
     }
 }

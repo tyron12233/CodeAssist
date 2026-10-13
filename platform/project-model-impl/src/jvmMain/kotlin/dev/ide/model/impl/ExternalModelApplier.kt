@@ -56,14 +56,20 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
      * [removeAbsent] widens removal to every module the snapshot doesn't declare, which is right when the
      * build files own the whole model ([dev.ide.model.sync.ModelOwnership.EXTERNAL]): unlinking a module from
      * them removes it from the IDE, exactly as it removes it from the build.
+     *
+     * [recreate] names modules to rebuild from the snapshot rather than refresh: a refresh keeps a module's
+     * type, merges its source roots and only adds facets, so a module the build now describes differently
+     * (a multiplatform module imported for another target) would keep what its old shape left behind.
      */
     fun apply(
         model: ExternalProjectModel,
         defaultLanguageLevel: LanguageLevel = LanguageLevel.JAVA_17,
         previous: ExternalProjectModel? = null,
         removeAbsent: Boolean = false,
+        recreate: Set<String> = emptySet(),
     ): Report {
         val created = ensureProject(model)
+        if (recreate.isNotEmpty()) dropForRecreate(recreate, model)
         val project = store.workspace.projects.firstOrNull() ?: return Report(projectCreated = created)
 
         val existing = project.modules.associateBy { it.name }
@@ -96,6 +102,25 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
             throw e
         }
         return Report(created, added, updated, gone)
+    }
+
+    /**
+     * Remove the [names] the snapshot still declares, in a transaction of their own: a module cannot be
+     * removed and re-added under the same name in one, so [apply] then adds them back as new modules.
+     */
+    private fun dropForRecreate(names: Set<String>, model: ExternalProjectModel) {
+        val project = store.workspace.projects.firstOrNull() ?: return
+        val declared = model.modules.mapTo(HashSet()) { it.name }
+        val doomed = project.modules.filter { it.name in names && it.name in declared }
+        if (doomed.isEmpty()) return
+        val tx = project.beginModification()
+        try {
+            for (module in doomed) tx.removeModule(module.id)
+            tx.commit()
+        } catch (e: Throwable) {
+            tx.dispose()
+            throw e
+        }
     }
 
     /** Create the project when the workspace has none; otherwise rebind its build system to the importer's. */

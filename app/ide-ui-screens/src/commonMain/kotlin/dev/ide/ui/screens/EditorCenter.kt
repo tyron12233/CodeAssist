@@ -298,6 +298,8 @@ internal fun EditorCenter(
                             compact = compact,
                             onDismiss = { showCompatBanner = false },
                             onConvert = { showConvertDialog = true },
+                            // Re-read the notes (and the multiplatform target) the sync just rewrote.
+                            onSynced = { compatEpoch++ },
                         )
                     }
                     // Hosted outside the compatInfo guard so it survives the marker being dropped on convert (which

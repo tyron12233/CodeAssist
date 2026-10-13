@@ -83,6 +83,40 @@ class ExternalModelApplierTest {
         assertTrue(facet.preview)
     }
 
+    /**
+     * A refresh keeps a module's type, merges its roots and keeps its facets. A module the build now describes
+     * differently (a multiplatform module imported for another target) is named in `recreate` and rebuilt.
+     */
+    @Test
+    fun recreateRebuildsAModuleInsteadOfMergingIntoIt() {
+        withWorkspace { platform, store ->
+            platform.registerTestTypes()
+            val applier = ExternalModelApplier(store)
+            fun module(type: String, root: String, facets: List<ExternalFacet>) = ExternalModule(
+                name = "app", dirRelPath = "app", typeId = type,
+                sourceSets = listOf(ExternalSourceSet("main", DependencyScope.IMPLEMENTATION, mapOf(root to setOf(ContentRole.SOURCE)))),
+                facets = facets,
+            )
+            applier.apply(snapshot(module("java-lib", "src/androidMain/kotlin", listOf(ExternalFacet("java", mapOf("preview" to true))))))
+
+            // Without it, the old shape survives: that is what a target switch must not leave behind.
+            applier.apply(snapshot(module("java-cli", "src/desktopMain/kotlin", emptyList())))
+            val refreshed = store.workspace.projects.single().modules.single()
+            assertEquals("java-lib", refreshed.type.id)
+            assertTrue(refreshed.sourceSets.single().contentRoots.any { it.dir.path.endsWith("androidMain/kotlin") })
+
+            val report = applier.apply(snapshot(module("java-cli", "src/desktopMain/kotlin", emptyList())), recreate = setOf("app"))
+            val app = store.workspace.projects.single().modules.single()
+            assertEquals("java-cli", app.type.id)
+            assertEquals(
+                listOf("desktopMain/kotlin"),
+                app.sourceSets.single { it.name == "main" }.contentRoots.map { it.dir.path.replace('\\', '/').substringAfter("src/") },
+            )
+            assertEquals(null, app.facets.get(JavaFacet.KEY), "the old shape's facet is gone")
+            assertEquals(listOf("app"), report.added)
+        }
+    }
+
     @Test
     fun secondSyncReplacesDependenciesAndKeepsTheProject() = withWorkspace { platform, store ->
         platform.registerTestTypes()

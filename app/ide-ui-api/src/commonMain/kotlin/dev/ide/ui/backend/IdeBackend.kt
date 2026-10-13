@@ -1352,6 +1352,12 @@ data class UiCompatibilityInfo(
     val notes: List<String> = emptyList(),
     /** True when a watched build file changed since the last sync, so the model is out of date. */
     val syncNeeded: Boolean = false,
+    /**
+     * For a Kotlin Multiplatform project whose modules could be imported for either Android or the JVM:
+     * which one they are, `"android"` or `"jvm"`. Null when the project has no such choice. Changed with
+     * [ProjectService.setKmpTarget].
+     */
+    val kmpTarget: String? = null,
 )
 
 /**

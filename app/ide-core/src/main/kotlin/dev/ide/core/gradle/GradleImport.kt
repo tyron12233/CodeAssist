@@ -29,6 +29,20 @@ import kotlin.io.path.readText
 object GradleImport {
 
     private val SETTINGS_FILES = listOf("settings.gradle", "settings.gradle.kts")
+
+    private const val COMPOSE_MP_PLUGIN = "org.jetbrains.compose"
+    /** What `compose.material3` resolves to under every Compose Multiplatform plugin from 1.9.0 on. */
+    private const val MATERIAL3_PINNED_VERSION = "1.9.0"
+    private const val KMP_ANDROID_LIBRARY_PLUGIN = "com.android.kotlin.multiplatform.library"
+    private val ANDROID_PLUGINS = listOf("com.android.application", "com.android.library", KMP_ANDROID_LIBRARY_PLUGIN)
+    private const val DEFAULT_MANIFEST = "src/main/AndroidManifest.xml"
+    private const val KMP_MANIFEST = "src/androidMain/AndroidManifest.xml"
+    private const val COMPOSE_RESOURCES_DIR = "composeResources"
+    private const val GROUP_ASSIGNMENT = """(?m)^\s*group\s*=\s*['"]([^'"]+)['"]"""
+    /** `compose.material3`, the Compose Multiplatform plugin's dependency accessors (not `libs.….compose.x`). */
+    private val COMPOSE_ACCESSOR = Regex("""(?<![\w.])compose\.([\w.]+)""")
+    /** `projects.feature.home`, Gradle's type-safe project accessors. */
+    private val PROJECTS_ACCESSOR = Regex("""(?<![\w.])projects\.([\w.]+)""")
     private val BUILD_FILES = listOf("build.gradle", "build.gradle.kts")
     private val CATALOG_FILES = listOf("gradle/libs.versions.toml", "libs.versions.toml")
 
@@ -98,6 +112,34 @@ object GradleImport {
         val productFlavors: List<FlavorSpec>,
         /** `androidResources { noCompress … }` (or the older `aaptOptions`): suffixes packaged uncompressed. */
         val noCompress: Set<String> = emptySet(),
+        /** The Kotlin Multiplatform view of the module, null for an ordinary one. */
+        val kmp: KmpModule? = null,
+        /** The manifest relative to the module dir when it is not `src/main/AndroidManifest.xml`. */
+        val manifest: String? = null,
+        /** Compose Multiplatform resources, when the module has `composeResources` dirs to generate `Res` from. */
+        val composeResources: ComposeResourcesSpec? = null,
+    )
+
+    /** The target a KMP module was imported for, the source sets collapsed into its one compilation, and
+     *  the platforms it could have been imported as instead. */
+    data class KmpModule(
+        val platform: GradleKmp.Platform,
+        val sourceSets: List<GradleKmp.SourceSet>,
+        val available: Set<GradleKmp.Platform> = setOf(platform),
+    )
+
+    /** The `Res` class the Compose Gradle plugin would generate: its package, visibility, and source dirs. */
+    data class ComposeResourcesSpec(val packageName: String, val publicResClass: Boolean, val dirs: List<String>)
+
+    /** Project-wide facts a module's parse needs from outside its own script. */
+    private data class ProjectContext(
+        val rootName: String,
+        /** The Compose Multiplatform plugin version, which versions the `compose.*` dependency accessors. */
+        val composeVersion: String?,
+        /** `allprojects { group = … }` / `subprojects { group = … }` in the root script. */
+        val sharedGroup: String?,
+        /** Which target a KMP module declaring both Android and JVM is imported for. */
+        val kmpPreference: GradleKmp.Platform,
     )
 
     /** Human-readable notes on what the tolerant reader could and couldn't extract (surfaced in the UI). */
@@ -134,6 +176,18 @@ object GradleImport {
         }
     }
 
+    /**
+     * The KMP target the project at [root] is imported for, or null when there is nothing to choose: no
+     * module declares both an Android and a JVM target. Reads the scripts, so call it off the main thread.
+     */
+    fun kmpTargetChoice(root: Path): GradleKmp.Platform? {
+        val spec = parse(root) ?: return null
+        val choosable = spec.modules.any { m ->
+            m.kmp?.available?.containsAll(listOf(GradleKmp.Platform.ANDROID, GradleKmp.Platform.JVM)) == true
+        }
+        return if (choosable) GradleKmp.preferredPlatform(root) else null
+    }
+
     /** Parse the Gradle project at [root], or null if it doesn't look importable. */
     fun parse(root: Path): ProjectSpec? {
         if (!isGradleProject(root)) return null
@@ -149,7 +203,17 @@ object GradleImport {
 
         val paths = parseIncludes(settings).ifEmpty { discoverModuleDirs(root) }
         val moduleNames = moduleNames(paths, root)
-        val modules = paths.mapNotNull { parseModule(root, it, catalog, rootVars, conventions, moduleNames, notes) }
+        val context = ProjectContext(
+            rootName = name,
+            composeVersion = catalog.plugins.values.firstOrNull { it.id == COMPOSE_MP_PLUGIN }?.version
+                ?.takeIf { it.isNotBlank() }
+                ?: listOfNotNull(rootBuild, settings).firstNotNullOfOrNull { composePluginVersion(it) },
+            sharedGroup = listOf("allprojects", "subprojects").firstNotNullOfOrNull { block ->
+                GradleScript.blockBody(rootBuild, block)?.let { firstGroup(it, GROUP_ASSIGNMENT) }
+            },
+            kmpPreference = GradleKmp.preferredPlatform(root),
+        )
+        val modules = paths.mapNotNull { parseModule(root, it, catalog, rootVars, conventions, moduleNames, context, notes) }
         if (modules.isEmpty()) return null
         if (!catalog.isEmpty) notes.add("Read a version catalog (gradle/libs.versions.toml).")
         if (conventions.conventions.isNotEmpty())
@@ -212,6 +276,7 @@ object GradleImport {
         rootVars: Map<String, String>,
         conventions: ConventionIndex,
         moduleNames: Map<String, String>,
+        context: ProjectContext,
         notes: MutableList<String>,
     ): ModuleSpec? {
         val dirRel = gradlePath.trim(':').replace(':', '/')
@@ -229,8 +294,8 @@ object GradleImport {
         val plugins = LinkedHashSet(collectPluginIds(build, catalog))
         val androidTexts = ArrayList<String>()
         val depBodies = ArrayList<String>()
+        val conventionTexts = ArrayList<String>()
         GradleScript.blockBody(build, "android")?.let { androidTexts.add(it) }
-        GradleScript.blockBody(build, "dependencies")?.let { depBodies.add(it) }
         run {
             val visited = HashSet<String>()
             val queue = ArrayDeque(plugins.toList())
@@ -246,8 +311,23 @@ object GradleImport {
                 for (p in collectPluginIds(conv.text, catalog)) { plugins.add(p); queue.add(p) }
                 GradleScript.blockBody(conv.text, "android")?.let { androidTexts.add(it) }
                 GradleScript.blockBody(conv.text, "dependencies")?.let { depBodies.add(it) }
+                conventionTexts.add(conv.text)
             }
         }
+
+        // Kotlin Multiplatform. Its script nests a `dependencies { }` inside each source set, so only the
+        // TOP-LEVEL block is the module's own; the source sets' are read per set, once it is known which sets
+        // the modeled target compiles. The `kotlin { }` block may live in a convention plugin instead.
+        val androidPlugin = ANDROID_PLUGINS.any { it in plugins || it in build }
+        val kmp = if (GradleKmp.PLUGIN_ID !in plugins) null else {
+            val kotlinScript = (listOf(build) + conventionTexts)
+                .firstOrNull { text -> GradleScript.childBlocks(text).any { it.name == "kotlin" } } ?: build
+            GradleKmp.parse(kotlinScript, androidPlugin, context.kmpPreference)
+        }
+        val ownDeps = if (kmp != null) GradleScript.childBlocks(build).firstOrNull { it.name == "dependencies" }?.body
+        else GradleScript.blockBody(build, "dependencies")
+        ownDeps?.let { depBodies.add(0, it) }
+        kmp?.androidConfig?.let { androidTexts.add(0, it) }
 
         // Field chain: try each android block (module first, conventions after), then the loose build script.
         val androidSearch = androidTexts + build
@@ -258,11 +338,24 @@ object GradleImport {
         var kind = when {
             "com.android.application" in plugins || "com.android.application" in build -> Kind.ANDROID_APP
             "com.android.library" in plugins || "com.android.library" in build -> Kind.ANDROID_LIB
+            KMP_ANDROID_LIBRARY_PLUGIN in plugins || KMP_ANDROID_LIBRARY_PLUGIN in build -> Kind.ANDROID_LIB
             else -> Kind.JAVA
+        }
+        if (kmp != null) {
+            // The modeled target decides: a KMP module imported for its JVM (or common) code is a JVM module
+            // whatever else the script applies, and one imported for Android needs the Android pipeline even
+            // when its plugin was applied somewhere the reader cannot see.
+            if (kmp.platform != GradleKmp.Platform.ANDROID) kind = Kind.JAVA
+            else if (kind == Kind.JAVA) {
+                kind = Kind.ANDROID_LIB
+                notes.add("$name: declares an Android target but no Android Gradle plugin was found in the readable " +
+                    "scripts; imported it as an Android library. SDK levels may be incomplete.")
+            }
+            notes.add(kmpNote(name, kmp))
         }
         // Kind fallback: a module whose Android plugin is applied via an unreadable (imperative) convention
         // plugin looks like plain Java. Infer an Android module from a manifest / res dir so it isn't lost.
-        if (kind == Kind.JAVA) {
+        if (kind == Kind.JAVA && kmp == null) {
             val manifest = dir.resolve("src/main/AndroidManifest.xml")
             val hasManifest = Files.exists(manifest)
             if (hasManifest || Files.isDirectory(dir.resolve("src/main/res"))) {
@@ -286,8 +379,16 @@ object GradleImport {
         val parcelize = plugins.any { "parcelize" in it }
         val serialization = plugins.any { "serialization" in it }
 
-        val (maven, moduleDeps, platforms) =
-            parseDependencies(depBodies.joinToString("\n"), catalog, vars, name, moduleNames, notes)
+        // The module's own blocks, then each modeled KMP source set's: a test set's declarations are test-scoped
+        // whatever configuration they name. The first declaration of a coordinate wins, so main beats test.
+        val parsedDeps = (listOf(depBodies.joinToString("\n") to false) + kmp?.dependencyBodies.orEmpty())
+            .map { (body, test) ->
+                parseDependencies(body, catalog, vars, name, moduleNames, context.composeVersion, notes, testOnly = test)
+            }
+        val maven = parsedDeps.flatMap { it.first }.distinctBy { it.coordinate to it.variant }
+        val moduleDeps = parsedDeps.flatMap { it.second }.distinctBy { it.name }
+        val platforms = parsedDeps.flatMap { it.third }.distinctBy { it.coordinate to it.variant }
+        val manifest = KMP_MANIFEST.takeIf { kmp?.platform == GradleKmp.Platform.ANDROID && Files.isRegularFile(dir.resolve(it)) }
 
         if (hasAndroidBlock) noteUnmodeledAndroid(name, androidTexts, notes)
 
@@ -311,7 +412,7 @@ object GradleImport {
             kind = kind,
             namespace = androidStr("""namespace\s*=?\s*['"]([\w.]+)['"]""")
                 ?: androidStr("""applicationId\s*=?\s*['"]([\w.]+)['"]""")
-                ?: manifestPackage(dir),
+                ?: manifestPackage(dir.resolve(manifest ?: DEFAULT_MANIFEST)),
             compileSdk = androidInt("""compileSdk(?:Version)?"""),
             minSdk = androidInt("""minSdk(?:Version)?"""),
             targetSdk = androidInt("""targetSdk(?:Version)?"""),
@@ -331,7 +432,63 @@ object GradleImport {
             buildTypes = buildTypeSpecs,
             productFlavors = flavorSpecs,
             noCompress = androidTexts.flatMapTo(LinkedHashSet()) { parseNoCompress(it, vars) },
+            kmp = kmp?.let { KmpModule(it.platform, it.sourceSets, it.available) },
+            manifest = manifest,
+            composeResources = if (kmp == null || COMPOSE_MP_PLUGIN !in plugins) null
+            else composeResources(build, dir, gradlePath, kmp, context),
         )
+    }
+
+    /** What a KMP module was imported as, and what was left out, for the sync notes. */
+    private fun kmpNote(module: String, kmp: GradleKmp.Spec): String {
+        val sets = kmp.sourceSets.filter { !it.test }.joinToString(" + ") { it.name }
+        val what = when (kmp.platform) {
+            GradleKmp.Platform.ANDROID -> "its Android target ($sets)"
+            GradleKmp.Platform.JVM -> "its JVM target ($sets)"
+            GradleKmp.Platform.COMMON_ONLY -> "only its common code ($sets): it declares no Android or JVM target"
+        }
+        val skipped = if (kmp.skippedTargets.isEmpty()) "" else
+            " Not modeled: ${kmp.skippedTargets.joinToString()}."
+        return "$module: Kotlin Multiplatform module, imported as $what.$skipped"
+    }
+
+    /**
+     * The `Res` class the Compose Gradle plugin would generate for a KMP module: the `composeResources` dirs
+     * of its modeled source sets, and the package from `compose.resources { packageOfResClass = … }` or the
+     * plugin's default, `<group>.<project>.generated.resources`. Null when the module has no such dirs.
+     */
+    private fun composeResources(
+        build: String,
+        dir: Path,
+        gradlePath: String,
+        kmp: GradleKmp.Spec,
+        context: ProjectContext,
+    ): ComposeResourcesSpec? {
+        val dirs = kmp.sourceSets.filter { !it.test }
+            .map { "src/${it.name}/${COMPOSE_RESOURCES_DIR}" }
+            .filter { Files.isDirectory(dir.resolve(it)) }
+        if (dirs.isEmpty()) return null
+        val explicit = firstGroup(build, """packageOfResClass\s*=\s*['"]([\w.]+)['"]""")
+        return ComposeResourcesSpec(
+            packageName = explicit ?: defaultResPackage(build, gradlePath, context),
+            publicResClass = Regex("""publicResClass\s*=\s*true""").containsMatchIn(build),
+            dirs = dirs,
+        )
+    }
+
+    /**
+     * The Compose plugin's default `Res` package. Its parts are Gradle's `project.group`, which a subproject
+     * that sets none inherits as the root project's name plus its parent's path, and `project.name`, each
+     * lower-cased with `-` made `_`.
+     */
+    private fun defaultResPackage(build: String, gradlePath: String, context: ProjectContext): String {
+        val path = gradlePath.trim(':')
+        val parent = path.substringBeforeLast(':', "")
+        val group = firstGroup(build, GROUP_ASSIGNMENT) ?: context.sharedGroup
+            ?: if (path.isEmpty()) "" else context.rootName + if (parent.isEmpty()) "" else "." + parent.replace(':', '.')
+        val project = path.substringAfterLast(':').ifEmpty { context.rootName }
+        fun ident(s: String) = s.lowercase().replace('-', '_').let { if (it.firstOrNull()?.isDigit() == true) "_$it" else it }
+        return (listOf(ident(group), ident(project)).filter { it.isNotBlank() } + "generated.resources").joinToString(".")
     }
 
     /** Merge lists of named specs (module block first), keeping the first occurrence of each name. */
@@ -390,7 +547,10 @@ object GradleImport {
         vars: Map<String, String>,
         module: String,
         moduleNames: Map<String, String>,
+        composeVersion: String?,
         notes: MutableList<String>,
+        /** Every declaration is test-scoped: the block belongs to a KMP test source set (`commonTest`). */
+        testOnly: Boolean = false,
     ): Triple<List<Dep>, List<ModuleDep>, List<PlatformDep>> {
         val maven = LinkedHashMap<String, Dep>()
         val modules = LinkedHashMap<String, ModuleDep>()
@@ -421,6 +581,16 @@ object GradleImport {
                     GradleScript.firstQuoted(text.substringAfter("kotlin"))
                         ?.let { addLib("org.jetbrains.kotlin:kotlin-$it", scope, variant, isPlatform) }
                 }
+                COMPOSE_ACCESSOR.containsMatchIn(text) -> {
+                    val path = COMPOSE_ACCESSOR.find(text)!!.groupValues[1]
+                    val coordinate = composeVersion?.let { composeAccessorCoordinate(path, it) }
+                    if (coordinate != null) addLib(coordinate, scope, variant, isPlatform)
+                    else notes.add(
+                        if (composeVersion == null) "$module: `compose.$path` needs the Compose Multiplatform " +
+                            "plugin's version, which was not found in the readable scripts."
+                        else "$module: unknown Compose Multiplatform accessor `compose.$path`."
+                    )
+                }
                 else -> {
                     // A bare constant reference — `implementation(Deps.okhttp)` — resolved through the
                     // buildSrc/build-logic constants folded into [vars] (see [lookupVar]).
@@ -444,7 +614,8 @@ object GradleImport {
         }
 
         for (st in statements) {
-            val (scope, variant) = scopeAndVariant(st) ?: continue
+            val (declaredScope, variant) = scopeAndVariant(st) ?: continue
+            val scope = if (testOnly) DependencyScope.TEST_IMPLEMENTATION else declaredScope
             val isPlatform = Regex("""\b(?:enforced)?[Pp]latform\s*\(""").containsMatchIn(st)
             // `implementation(composeBom)` where `composeBom = platform(...)` → resolve the BOM reference.
             val soleArg = firstGroup(st, """^[A-Za-z]\w*\s*\(?\s*([A-Za-z_]\w*)\s*\)?\s*$""")
@@ -457,11 +628,83 @@ object GradleImport {
                     val n = moduleNames[normalizeGradlePath(path)] ?: path.trimEnd(':').substringAfterLast(':')
                     if (n.isNotEmpty()) modules.putIfAbsent(n, ModuleDep(n, scope, variant))
                 }
+            } else if (PROJECTS_ACCESSOR.containsMatchIn(st)) {
+                // Type-safe project accessors (`implementation(projects.shared)`), the KMP wizard's default.
+                val accessor = PROJECTS_ACCESSOR.find(st)!!.groupValues[1]
+                val n = moduleByAccessor(accessor, moduleNames)
+                if (n == null) notes.add("$module: no included project matches `projects.$accessor`.")
+                else modules.putIfAbsent(n, ModuleDep(n, scope, variant))
             } else {
                 addRef(st, scope, variant, isPlatform)
             }
         }
         return Triple(maven.values.toList(), modules.values.toList(), platforms.values.toList())
+    }
+
+    /** The module a type-safe accessor names: each path segment camel-cased (`:core:data-api` is
+     *  `core.dataApi`), compared ignoring case as Gradle's own generated accessors are unique that way. */
+    private fun moduleByAccessor(accessor: String, moduleNames: Map<String, String>): String? =
+        moduleNames.entries.firstOrNull { (path, _) ->
+            path.trim(':').split(':').joinToString(".") { camelCase(it) }.equals(accessor, ignoreCase = true)
+        }?.value
+
+    private fun camelCase(segment: String): String =
+        segment.split('-', '_').filter { it.isNotEmpty() }.mapIndexed { i, part ->
+            if (i == 0) part else part.replaceFirstChar { it.uppercaseChar() }
+        }.joinToString("")
+
+    /**
+     * The coordinate behind a Compose Multiplatform plugin accessor (`compose.material3`), versioned by the
+     * plugin as the plugin itself does. Null for one this table does not know.
+     *
+     * Most artifacts carry the plugin's own version. Two do not, as read from the plugin jars on Maven
+     * Central (`ComposeBuildConfig` and `ComposePlugin$Dependencies`, 1.6.11 through 1.13.0-alpha02):
+     * Material 3 is pinned at 1.9.0 from plugin 1.9.0 on, and the extended icons at 1.7.3 from 1.8.0 on.
+     */
+    private fun composeAccessorCoordinate(path: String, version: String): String? = when (path) {
+        "runtime" -> "org.jetbrains.compose.runtime:runtime:$version"
+        "runtimeSaveable" -> "org.jetbrains.compose.runtime:runtime-saveable:$version"
+        "foundation" -> "org.jetbrains.compose.foundation:foundation:$version"
+        "animation" -> "org.jetbrains.compose.animation:animation:$version"
+        "animationGraphics" -> "org.jetbrains.compose.animation:animation-graphics:$version"
+        "material" -> "org.jetbrains.compose.material:material:$version"
+        "material3" -> "org.jetbrains.compose.material3:material3:${material3Version(version)}"
+        "material3AdaptiveNavigationSuite" ->
+            "org.jetbrains.compose.material3:material3-adaptive-navigation-suite:${material3Version(version)}"
+        // Frozen at 1.7.3 when the icons stopped being released with Compose (plugin 1.8).
+        "materialIconsExtended" -> "org.jetbrains.compose.material:material-icons-extended:" +
+            if (versionAtLeast(version, 1, 8)) "1.7.3" else version
+        "ui" -> "org.jetbrains.compose.ui:ui:$version"
+        "uiUtil" -> "org.jetbrains.compose.ui:ui-util:$version"
+        "uiTooling" -> "org.jetbrains.compose.ui:ui-tooling:$version"
+        "preview" -> "org.jetbrains.compose.ui:ui-tooling-preview:$version"
+        "components.resources" -> "org.jetbrains.compose.components:components-resources:$version"
+        "components.uiToolingPreview" -> "org.jetbrains.compose.components:components-ui-tooling-preview:$version"
+        "desktop.common" -> "org.jetbrains.compose.desktop:desktop:$version"
+        "desktop.currentOs" -> "org.jetbrains.compose.desktop:desktop-jvm-${hostOsClassifier()}:$version"
+        else -> null
+    }
+
+    /** Material 3's version under Compose Multiplatform plugin [version] (see [composeAccessorCoordinate]). */
+    private fun material3Version(version: String): String =
+        if (versionAtLeast(version, 1, 9)) MATERIAL3_PINNED_VERSION else version
+
+    private fun versionAtLeast(version: String, major: Int, minor: Int): Boolean {
+        val parts = version.split('.', '-').mapNotNull { it.toIntOrNull() }
+        val (ma, mi) = (parts.getOrNull(0) ?: 0) to (parts.getOrNull(1) ?: 0)
+        return ma > major || (ma == major && mi >= minor)
+    }
+
+    /** `compose.desktop.currentOs`: the Skiko platform of the machine doing the import. */
+    private fun hostOsClassifier(): String {
+        val os = System.getProperty("os.name").orEmpty().lowercase()
+        val arch = System.getProperty("os.arch").orEmpty().lowercase()
+        val cpu = if (arch == "aarch64" || arch == "arm64") "arm64" else "x64"
+        return when {
+            "mac" in os || "darwin" in os -> "macos-$cpu"
+            "win" in os -> "windows-$cpu"
+            else -> "linux-$cpu"
+        }
     }
 
     /** The scope for a dependency statement's leading configuration, plus the build-variant qualifier a
@@ -854,8 +1097,11 @@ object GradleImport {
 
     // --- helpers ---
 
-    private fun manifestPackage(dir: Path): String? =
-        readOrNull(dir.resolve("src/main/AndroidManifest.xml"))?.let { firstGroup(it, """package\s*=\s*"([\w.]+)"""") }
+    private fun manifestPackage(manifest: Path): String? =
+        readOrNull(manifest)?.let { firstGroup(it, """package\s*=\s*"([\w.]+)"""") }
+
+    private fun composePluginVersion(script: String): String? =
+        firstGroup(script, """id\s*\(?\s*['"]$COMPOSE_MP_PLUGIN['"]\s*\)?\s*version\s*\(?\s*['"]([^'"]+)['"]""")
 
     private fun firstGroup(text: String, pattern: String): String? =
         Regex(pattern).find(text)?.groupValues?.get(1)

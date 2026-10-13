@@ -759,6 +759,14 @@ interface ProjectService {
     suspend fun syncProject(): UiSyncResult = UiSyncResult(false, "This project has no build files to sync from.")
 
     /**
+     * Import the open project's Kotlin Multiplatform modules for [target] (`"android"` or `"jvm"`, see
+     * [UiCompatibilityInfo.kmpTarget]) and re-sync, re-resolving and re-indexing like [syncProject]. The
+     * choice is kept with the project. No-op returning `ok = false` when the project has no such choice.
+     */
+    suspend fun setKmpTarget(target: String): UiSyncResult =
+        UiSyncResult(false, "This project has no multiplatform target to choose.")
+
+    /**
      * Convert the open Gradle compatibility-mode project to a native CodeAssist project: the leftover Gradle
      * build files are MOVED to a backup folder and the compatibility marker is dropped, so `module.toml`
      * becomes the sole source of truth (Re-sync no longer applies). The model is unchanged — no re-resolve or
