@@ -7,6 +7,7 @@ import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
 import dev.ide.kotlin.syntax.psi.hasErrorElements
 import dev.ide.kotlin.syntax.psi.siblings
@@ -228,9 +229,15 @@ class KotlinPreviewLowering(
 
         /** Top-level declarations by program key, in declaration order. Functions first; a valued top-level
          *  `val`/`var` (including an extension property — see [KotlinTreeResolver.lowerTopLevelProperty])
-         *  contributes a synthetic zero-arg getter `name/0` unless a function already claimed that key. */
+         *  contributes a synthetic zero-arg getter `name/0` unless a function already claimed that key.
+         *
+         *  An `expect` function is left out: it has no body, and the one to run is its `actual` in the platform
+         *  source set (`androidMain`, `desktopMain`), which the cross-file expander then finds as the only file
+         *  declaring the name. Registered, the bodiless `expect` won the key and a Kotlin Multiplatform preview
+         *  failed on "empty body". (An `expect val` has no initializer, so the property rule already skips it.) */
         private val decls: Map<String, KtDeclaration> = buildMap {
             parsed.ktFile.declarations.filterIsInstance<KtNamedFunction>().forEach { fn ->
+                if (fn.hasModifier(KtTokens.EXPECT_KEYWORD)) return@forEach
                 put("${fn.name}/${fn.valueParameters.size}", fn)
             }
             parsed.ktFile.declarations.filterIsInstance<KtProperty>().forEach { prop ->

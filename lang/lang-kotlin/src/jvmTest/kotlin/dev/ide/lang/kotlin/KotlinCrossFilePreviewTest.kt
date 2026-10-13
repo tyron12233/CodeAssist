@@ -84,6 +84,83 @@ class KotlinCrossFilePreviewTest {
         assertNotNull(model.program["helper/1"], "the cross-file helper function must be merged into the program")
     }
 
+    /**
+     * A Kotlin Multiplatform preview: `greeting()` in commonMain calls `expect fun platformName()`, whose body is
+     * the `actual` in androidMain. The preview must run that `actual`; the `expect` has no body to run.
+     */
+    @Test
+    fun anExpectFunctionRunsItsActual() {
+        for (platform in listOf("androidMain", "desktopMain", "jvmMain")) expectFunctionRunsItsActual(platform)
+    }
+
+    private fun expectFunctionRunsItsActual(platform: String) {
+        val entry = """
+            package com.example.kmp
+            fun caller(): String = greeting()
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "src/commonMain/kotlin/com/example/kmp/Platform.kt" to """
+                    package com.example.kmp
+
+                    expect fun platformName(): String
+
+                    fun greeting(): String = "Hello from " + platformName()
+                """.trimIndent(),
+                "src/$platform/kotlin/com/example/kmp/Platform.platform.kt" to """
+                    package com.example.kmp
+
+                    actual fun platformName(): String = "Android"
+                """.trimIndent(),
+                "src/commonMain/kotlin/com/example/kmp/App.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "src/commonMain/kotlin/com/example/kmp/App.kt", entry)
+        assertTrue(model.program["greeting/0"]?.isComplete == true, "greeting should lower: ${model.program["greeting/0"]}")
+        val platform = assertNotNull(model.program["platformName/0"], "the actual must be merged into the program")
+        assertTrue(platform.isComplete, "platformName should lower completely: ${platform.diagnostics}")
+        assertTrue("Android" in platform.body.toString(), "the actual's body must be the one run: ${platform.body}")
+    }
+
+    /** The class form: `expect class Clock()` in commonMain, `actual class Clock` in androidMain. The preview must
+     *  construct the `actual`, whose members have bodies. */
+    @Test
+    fun anExpectClassConstructsItsActual() {
+        // Each platform set sorts on a different side of `commonMain`, so a file-order accident cannot pass this.
+        for (platform in listOf("androidMain", "desktopMain", "jvmMain")) expectClassConstructsItsActual(platform)
+    }
+
+    private fun expectClassConstructsItsActual(platform: String) {
+        val entry = """
+            package com.example.kmp
+            fun caller(): Long = Clock().now()
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "src/commonMain/kotlin/com/example/kmp/Clock.kt" to """
+                    package com.example.kmp
+
+                    expect class Clock() {
+                        fun now(): Long
+                    }
+                """.trimIndent(),
+                "src/$platform/kotlin/com/example/kmp/Clock.platform.kt" to """
+                    package com.example.kmp
+
+                    actual class Clock actual constructor() {
+                        actual fun now(): Long = 42L
+                    }
+                """.trimIndent(),
+                "src/commonMain/kotlin/com/example/kmp/App.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "src/commonMain/kotlin/com/example/kmp/App.kt", entry)
+        val clock = assertNotNull(model.classes.firstOrNull { it.simpleName == "Clock" }, "Clock must be merged: ${model.classes.map { it.fqn }}")
+        val now = assertNotNull(clock.methods.entries.firstOrNull { it.key.startsWith("now") }?.value, "now() must be lowered: ${clock.methods.keys}")
+        assertTrue(now.isComplete, "$platform: the actual's now() must be the one lowered: ${now.diagnostics}")
+        assertTrue("42" in now.body.toString(), "$platform: the actual's body must be the one run: ${now.body}")
+    }
+
     @Test
     fun aCalleeWhoseFileDoesNotParseIsReportedAsMissing() {
         // The preview gate's "missing code" case. `helper` lives in a sibling file the user is mid-edit in, so
