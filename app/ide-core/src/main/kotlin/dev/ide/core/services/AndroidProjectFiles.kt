@@ -17,6 +17,7 @@ import dev.ide.model.contentRootsFor
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.stream.Collectors
 import kotlin.io.path.readText
 
 /**
@@ -150,7 +151,7 @@ internal class AndroidProjectFiles(private val ctx: EngineContext) {
         if (!Files.isDirectory(root)) return emptyList()
         return runCatching {
             Files.walk(root).use { s ->
-                s.filter { Files.isRegularFile(it) && accept(it) }.map { it.toAbsolutePath().normalize() }.toList()
+                s.filter { Files.isRegularFile(it) && accept(it) }.map { it.toAbsolutePath().normalize() }.collect(Collectors.toList())
             }
         }.getOrDefault(emptyList())
     }

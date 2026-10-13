@@ -10,6 +10,7 @@ import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.writeText
 
 /**
  * The manifest of an instrumented test APK, as AGP generates it (`processDebugAndroidTestManifest`): its own package
@@ -39,7 +40,7 @@ internal class InstrumentationManifestTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         Files.createDirectories(out.parent)
-        Files.writeString(out, manifest(testPackage, targetPackage, runner, minSdk, targetSdk))
+        out.writeText(manifest(testPackage, targetPackage, runner, minSdk, targetSdk))
         return TaskResult.Success
     }
 

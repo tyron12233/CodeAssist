@@ -3,6 +3,8 @@ package dev.ide.core.gradle
 import dev.ide.core.sdk.JdkManager
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /**
  * Reads a Kotlin Multiplatform module's `kotlin { }` block: which targets it declares, which source sets feed
@@ -52,7 +54,7 @@ object GradleKmp {
     fun readPreference(root: Path): Platform? {
         val file = root.resolve(PREFERENCE_FILE)
         if (!Files.isRegularFile(file)) return null
-        val id = runCatching { Files.readString(file).trim() }.getOrNull() ?: return null
+        val id = runCatching { file.readText().trim() }.getOrNull() ?: return null
         return Platform.values().firstOrNull { it != Platform.COMMON_ONLY && it.name.equals(id, ignoreCase = true) }
     }
 
@@ -60,7 +62,7 @@ object GradleKmp {
         require(platform != Platform.COMMON_ONLY) { "only ANDROID or JVM can be preferred" }
         val file = root.resolve(PREFERENCE_FILE)
         Files.createDirectories(file.parent)
-        Files.writeString(file, platform.name.lowercase() + "\n")
+        file.writeText(platform.name.lowercase() + "\n")
     }
 
     /** Android on a phone, where APKs are what gets built and run; the JVM on the desktop, where a desktop app

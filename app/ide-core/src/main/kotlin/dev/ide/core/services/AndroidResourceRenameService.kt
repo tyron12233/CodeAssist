@@ -12,6 +12,7 @@ import dev.ide.core.RenameOutcome
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.stream.Collectors
 import kotlin.io.path.writeText
 
 /**
@@ -129,10 +130,10 @@ internal class AndroidResourceRenameService(
     private fun fileMoves(type: ResourceType, oldName: String, newName: String): List<Pair<Path, Path>> {
         val out = ArrayList<Pair<Path, Path>>()
         for (root in files.resourceRoots()) {
-            val dirs = runCatching { Files.list(root).use { s -> s.filter { Files.isDirectory(it) }.toList() } }.getOrDefault(emptyList())
+            val dirs = runCatching { Files.list(root).use { s -> s.filter { Files.isDirectory(it) }.collect(Collectors.toList()) } }.getOrDefault(emptyList())
             for (dir in dirs.filter { it.fileName.toString().substringBefore('-') == type.rClass }) {
                 val hits = runCatching {
-                    Files.list(dir).use { s -> s.filter { it.fileName.toString().substringBefore('.') == oldName }.toList() }
+                    Files.list(dir).use { s -> s.filter { it.fileName.toString().substringBefore('.') == oldName }.collect(Collectors.toList()) }
                 }.getOrDefault(emptyList())
                 for (f in hits) {
                     val ext = f.fileName.toString().substringAfter('.', "")

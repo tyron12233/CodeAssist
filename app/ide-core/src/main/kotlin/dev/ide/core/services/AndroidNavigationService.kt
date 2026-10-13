@@ -20,6 +20,8 @@ import dev.ide.vfs.local.fileFor
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.stream.Collectors
+import kotlin.io.path.readText
 
 /**
  * Go to for Android: everything the Go to menu offers in a resource XML or manifest, and the resource half of
@@ -108,10 +110,10 @@ internal class AndroidNavigationService(
         val out = ArrayList<NavTarget>()
         val fileTypes = setOf(ResourceType.LAYOUT, ResourceType.DRAWABLE, ResourceType.COLOR, ResourceType.ANIM,
             ResourceType.ANIMATOR, ResourceType.INTERPOLATOR, ResourceType.MENU, ResourceType.XML, ResourceType.MIPMAP)
-        val dirs = runCatching { Files.list(res).use { s -> s.filter { Files.isDirectory(it) }.toList() } }.getOrDefault(emptyList())
+        val dirs = runCatching { Files.list(res).use { s -> s.filter { Files.isDirectory(it) }.collect(Collectors.toList()) } }.getOrDefault(emptyList())
         if (type in fileTypes) {
             for (dir in dirs.filter { it.fileName.toString().substringBefore('-') == type.rClass }.sortedBy { it.fileName.toString().length }) {
-                runCatching { Files.list(dir).use { s -> s.filter { it.fileName.toString().substringBefore('.') == name }.toList() } }
+                runCatching { Files.list(dir).use { s -> s.filter { it.fileName.toString().substringBefore('.') == name }.collect(Collectors.toList()) } }
                     .getOrDefault(emptyList()).forEach { out += NavTarget(ctx.store.vfs.fileFor(it), 0, resourceFileLabel(it), "resource") }
                 if (out.size >= 8) break
             }
@@ -127,12 +129,12 @@ internal class AndroidNavigationService(
                 ResourceType.STYLE -> "styles"
                 else -> type.rClass
             }
-            val candidates = runCatching { Files.list(values).use { s -> s.filter { it.toString().endsWith(".xml") }.toList() } }
+            val candidates = runCatching { Files.list(values).use { s -> s.filter { it.toString().endsWith(".xml") }.collect(Collectors.toList()) } }
                 .getOrDefault(emptyList())
                 .sortedBy { if (it.fileName.toString().startsWith(likely)) 0 else 1 }
             for (f in candidates) {
                 if (out.isNotEmpty()) break
-                val text = runCatching { Files.readString(f) }.getOrNull() ?: continue
+                val text = runCatching { f.readText() }.getOrNull() ?: continue
                 var i = text.indexOf(needle)
                 while (i >= 0) {
                     val tagStart = text.lastIndexOf('<', i)
