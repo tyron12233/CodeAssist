@@ -31,11 +31,26 @@ class SupabaseStoreSource(
     override val appBuild: Int? = null,
     connectTimeoutMs: Int = 10_000,
     readTimeoutMs: Int = 20_000,
+    /**
+     * Where the public buckets are mirrored (Cloudflare R2, see `supabase/functions/r2-mirror`), serving
+     * `<base>/<bucket>/<path>`. Blank reads Supabase directly. Files are tried here first and fetched from
+     * Supabase when the mirror does not have them, fails, or serves bytes that do not match the checksum, so a
+     * mirror that lags or goes down costs egress, never an install.
+     */
+    mediaBaseUrl: String = "",
 ) : StoreCatalogSource {
 
     private val http = StoreHttp(connectTimeoutMs, readTimeoutMs)
     private val base = url.trimEnd('/')
     private val configured = url.isNotBlank() && apiKey.isNotBlank()
+    private val mirror = mediaBaseUrl.trim().trimEnd('/')
+
+    /** Where to fetch a public object from, in order: the mirror (when there is one), then Supabase. */
+    private fun publicSources(bucket: String, path: String): List<Pair<String, Map<String, String>>> = buildList {
+        if (mirror.isNotEmpty()) add("$mirror/$bucket/$path" to emptyMap())
+        // The publishable key is sent to Supabase only, so the request is attributable there.
+        add("$base/storage/v1/object/public/$bucket/$path" to mapOf("apikey" to apiKey))
+    }
 
     override fun configured(): Boolean = configured
 
@@ -108,46 +123,59 @@ class SupabaseStoreSource(
         onProgress: (Float) -> Unit,
     ): StoreResult<Unit> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")
-        val url = "$base/storage/v1/object/public/store-payloads/$storagePath"
-        val reply = http.download(
-            url = url,
-            headers = mapOf("apikey" to apiKey),
-            intoPath = intoPath,
-            expectedBytes = expectedBytes,
-            hash = expectedSha256 != null,
-            onProgress = onProgress,
-        )
-        reply.error?.let { return StoreResult.Unavailable(it) }
-        if (reply.status !in 200..299) {
-            return if (reply.status == 429 || reply.status >= 500) {
-                StoreResult.Unavailable("Download unavailable (HTTP ${reply.status})")
-            } else {
-                StoreResult.Failed("The project could not be downloaded (HTTP ${reply.status})", reply.status)
+        val sources = publicSources("store-payloads", storagePath)
+        var outcome: StoreResult<Unit> = StoreResult.Unavailable("No source to download from")
+        for ((url, headers) in sources) {
+            val reply = http.download(
+                url = url,
+                headers = headers,
+                intoPath = intoPath,
+                expectedBytes = expectedBytes,
+                hash = expectedSha256 != null,
+                onProgress = onProgress,
+            )
+            outcome = when {
+                reply.error != null -> StoreResult.Unavailable(reply.error)
+                reply.status !in 200..299 ->
+                    if (reply.status == 429 || reply.status >= 500) {
+                        StoreResult.Unavailable("Download unavailable (HTTP ${reply.status})")
+                    } else {
+                        StoreResult.Failed("The project could not be downloaded (HTTP ${reply.status})", reply.status)
+                    }
+                expectedSha256 != null && !expectedSha256.equals(reply.sha256, ignoreCase = true) ->
+                    StoreResult.Failed("The download did not match its checksum")
+                else -> StoreResult.Ok(Unit)
             }
-        }
-        if (expectedSha256 != null && !expectedSha256.equals(reply.sha256, ignoreCase = true)) {
+            if (outcome is StoreResult.Ok) break
+            // Whatever this source left behind must not be mistaken for the file by the next one or the caller.
             StoreFs.delete(intoPath)
-            return StoreResult.Failed("The download did not match its checksum")
         }
-        onProgress(1f)
-        return StoreResult.Ok(Unit)
+        if (outcome is StoreResult.Ok) onProgress(1f)
+        return outcome
     }
 
     override fun downloadMedia(storagePath: String, intoPath: String): StoreResult<Unit> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")
-        val url = "$base/storage/v1/object/public/store-media/$storagePath"
-        // Bounded: this writes a remote body to the user's disk, and a screenshot that needs more than
-        // this is not one worth caching. Truncated output is deleted rather than left to decode as garbage.
-        val reply = http.download(
-            url = url,
-            headers = mapOf("apikey" to apiKey),
-            intoPath = intoPath,
-            limitBytes = MAX_MEDIA_BYTES,
-        )
-        reply.error?.let { return StoreResult.Unavailable(it) }
-        if (reply.tooLarge) return StoreResult.Failed("Image is too large", 0)
-        if (reply.status !in 200..299) return StoreResult.Failed("Image unavailable (HTTP ${reply.status})", reply.status)
-        return StoreResult.Ok(Unit)
+        var outcome: StoreResult<Unit> = StoreResult.Unavailable("No source to download from")
+        for ((url, headers) in publicSources("store-media", storagePath)) {
+            // Bounded: this writes a remote body to the user's disk, and a screenshot that needs more than
+            // this is not one worth caching. Truncated output is deleted rather than left to decode as garbage.
+            val reply = http.download(
+                url = url,
+                headers = headers,
+                intoPath = intoPath,
+                limitBytes = MAX_MEDIA_BYTES,
+            )
+            outcome = when {
+                reply.error != null -> StoreResult.Unavailable(reply.error)
+                reply.tooLarge -> StoreResult.Failed("Image is too large", 0)
+                reply.status !in 200..299 -> StoreResult.Failed("Image unavailable (HTTP ${reply.status})", reply.status)
+                else -> StoreResult.Ok(Unit)
+            }
+            if (outcome is StoreResult.Ok) break
+            StoreFs.delete(intoPath)
+        }
+        return outcome
     }
 
     /**
