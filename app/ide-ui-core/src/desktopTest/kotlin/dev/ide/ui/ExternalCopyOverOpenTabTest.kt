@@ -104,4 +104,40 @@ class ExternalCopyOverOpenTabTest {
         assertEquals("// mine\nfun old() = 1\n", ranWith, "the run sees the edit on disk")
         assertFalse(a.modified)
     }
+
+    @Test
+    fun reloadTakesTheFileAndUndoBringsTheEditsBack() {
+        val state = state()
+        runBlocking { state.openSuspend("/p/A.kt", "A.kt") }
+        val a = state.active!!
+        a.session.replaceRange(0, 0, "// mine\n", androidx.compose.ui.text.TextRange(8))
+        disk["/p/A.kt"] = "fun copiedOver() = 3\n"
+        state.syncWithDiskOnReturn()
+        assertTrue(a.staleOnDisk)
+
+        state.reloadFromDisk(a)
+
+        assertEquals("fun copiedOver() = 3\n", a.text)
+        assertFalse(a.modified)
+        assertFalse(a.staleOnDisk)
+        assertTrue(a.session.undo())
+        assertEquals("// mine\nfun old() = 1\n", a.text, "the discarded edits are one undo away")
+        assertTrue(a.modified)
+    }
+
+    @Test
+    fun keepMineSavesTheBufferOverTheFile() {
+        val state = state()
+        runBlocking { state.openSuspend("/p/A.kt", "A.kt") }
+        val a = state.active!!
+        a.session.replaceRange(0, 0, "// mine\n", androidx.compose.ui.text.TextRange(8))
+        disk["/p/A.kt"] = "fun copiedOver() = 3\n"
+        state.syncWithDiskOnReturn()
+
+        state.save(a)
+
+        assertEquals("// mine\nfun old() = 1\n", disk["/p/A.kt"])
+        assertFalse(a.staleOnDisk)
+        assertFalse(a.modified)
+    }
 }

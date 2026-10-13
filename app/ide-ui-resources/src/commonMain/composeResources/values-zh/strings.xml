@@ -541,6 +541,9 @@
     <string name="library_readonly_source">库源码 · 只读</string>
     <string name="library_readonly_decompiled">已反编译 · 只读</string>
     <string name="editor_large_file_notice">大文件：为控制内存，代码智能功能受限</string>
+    <string name="editor_stale_notice">此文件已在磁盘上更改，其中不包含你未保存的编辑。</string>
+    <string name="editor_stale_reload">重新加载</string>
+    <string name="editor_stale_keep">保留我的</string>
     <string name="library_decompile_java">反编译为 Java</string>
     <string name="structure_title">结构</string>
     <string name="structure_filter">筛选…</string>

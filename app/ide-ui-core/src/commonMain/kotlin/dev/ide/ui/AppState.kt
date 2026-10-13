@@ -959,6 +959,20 @@ class IdeUiState(
         session.applyEdits(edits, TextRange(mapOffsetThroughEdits(caretBefore, edits)))
     }
 
+    /**
+     * Settle [file]'s divergence from disk by taking the file, for a tab flagged [OpenFile.staleOnDisk]. Applied
+     * as one edit, so undo puts the user's discarded edits back.
+     */
+    fun reloadFromDisk(file: OpenFile) {
+        scope.launch {
+            val disk = readTabText(file.path) ?: return@launch
+            if (file !in openFiles) return@launch
+            file.applyExternalText(disk)
+            backend.editor.documentLoaded(file.path, disk)
+            analysisEpoch++
+        }
+    }
+
     /** Save the active tab (Cmd/Ctrl-S, toolbar). */
     fun saveActive() { active?.let(::save) }
 

@@ -546,6 +546,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="library_readonly_source">Library source · read-only</string>
     <string name="library_readonly_decompiled">Decompiled · read-only</string>
     <string name="editor_large_file_notice">Large file: code intelligence is limited to keep memory in check</string>
+    <string name="editor_stale_notice">This file changed on disk. Your unsaved edits are not in it.</string>
+    <string name="editor_stale_reload">Reload</string>
+    <string name="editor_stale_keep">Keep mine</string>
     <string name="library_decompile_java">Decompile to Java</string>
     <string name="structure_title">Structure</string>
     <string name="structure_filter">Filter…</string>

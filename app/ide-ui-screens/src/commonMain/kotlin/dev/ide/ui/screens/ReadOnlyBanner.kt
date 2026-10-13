@@ -20,6 +20,9 @@ import dev.ide.ui.OpenFile
 import dev.ide.ui.editor.core.isLarge
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.editor_large_file_notice
+import dev.ide.ui.generated.resources.editor_stale_keep
+import dev.ide.ui.generated.resources.editor_stale_notice
+import dev.ide.ui.generated.resources.editor_stale_reload
 import dev.ide.ui.generated.resources.library_decompile_java
 import dev.ide.ui.generated.resources.library_readonly_decompiled
 import dev.ide.ui.generated.resources.library_readonly_source
@@ -65,5 +68,25 @@ internal fun largeFileNotice(active: OpenFile): EditorNotice? {
         id = "largefile",
         level = NoticeLevel.Info,
         summary = stringResource(Res.string.editor_large_file_notice),
+    )
+}
+
+/**
+ * The file under an edited tab changed on disk (copied over from outside, or written by a tool), so the buffer
+ * and the file have parted ways and only the user can say which one wins. Reload takes the file as one undoable
+ * edit, so undo brings their edits back; Keep mine saves the buffer over the file. Not dismissible: a Run saves
+ * edited tabs, so leaving it unanswered is choosing Keep mine without knowing it.
+ */
+@Composable
+internal fun staleOnDiskNotice(state: IdeUiState, active: OpenFile): EditorNotice? {
+    if (!active.staleOnDisk || !active.modified) return null
+    return EditorNotice(
+        id = "stale",
+        level = NoticeLevel.Warning,
+        summary = stringResource(Res.string.editor_stale_notice),
+        actionLabel = stringResource(Res.string.editor_stale_reload),
+        onAction = { state.reloadFromDisk(active) },
+        secondaryLabel = stringResource(Res.string.editor_stale_keep),
+        onSecondary = { state.save(active) },
     )
 }

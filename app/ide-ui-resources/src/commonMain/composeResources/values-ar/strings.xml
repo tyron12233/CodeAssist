@@ -591,6 +591,9 @@
     <string name="library_readonly_source">مصدر مكتبة · للقراءة فقط</string>
     <string name="library_readonly_decompiled">مُفكَّك · للقراءة فقط</string>
     <string name="editor_large_file_notice">ملف كبير: ذكاء الكود محدود هنا للحفاظ على الذاكرة</string>
+    <string name="editor_stale_notice">تغيّر هذا الملف على القرص، ولا يتضمن تعديلاتك غير المحفوظة.</string>
+    <string name="editor_stale_reload">إعادة التحميل</string>
+    <string name="editor_stale_keep">الاحتفاظ بنسختي</string>
     <string name="library_decompile_java">تفكيك إلى Java</string>
     <string name="structure_title">البنية</string>
     <string name="structure_filter">تصفية…</string>

@@ -51,6 +51,9 @@ internal class EditorNotice(
     val summary: String,
     val actionLabel: String? = null,
     val onAction: (() -> Unit)? = null,
+    /** A second choice, for a notice that is a decision between two outcomes rather than one thing to do. */
+    val secondaryLabel: String? = null,
+    val onSecondary: (() -> Unit)? = null,
     /** Null for a notice that must not be hidden (it describes the file you are looking at right now). */
     val onDismiss: (() -> Unit)? = null,
 )
@@ -131,20 +134,23 @@ private fun NoticeRow(notice: EditorNotice, tint: androidx.compose.ui.graphics.C
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        val label = notice.actionLabel
-        val act = notice.onAction
-        if (label != null && act != null) {
-            Text(
-                label,
-                color = tint,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                modifier = Modifier.clickable(onClick = act).padding(horizontal = 4.dp, vertical = 2.dp),
-            )
-        }
+        NoticeAction(notice.actionLabel, notice.onAction, tint)
+        NoticeAction(notice.secondaryLabel, notice.onSecondary, tint)
         notice.onDismiss?.let { dismiss ->
             IconButtonCa(CaIcons.close, stringResource(Res.string.dismiss), dismiss, boxSize = 28, iconSize = 14)
         }
     }
+}
+
+@Composable
+private fun NoticeAction(label: String?, onClick: (() -> Unit)?, tint: androidx.compose.ui.graphics.Color) {
+    if (label == null || onClick == null) return
+    Text(
+        label,
+        color = tint,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 2.dp),
+    )
 }
