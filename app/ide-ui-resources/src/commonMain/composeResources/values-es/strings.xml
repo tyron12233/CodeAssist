@@ -861,6 +861,14 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="modcfg_no_modules">No hay módulos. Toca + para agregar uno.</string>
     <string name="modcfg_empty_title">Aún no hay módulos</string>
     <string name="modcfg_empty_body">Un módulo es una parte compilable de tu proyecto: una app, una biblioteca o una función.</string>
+    <string name="keymap_hint">Haz clic en un atajo y pulsa las nuevas teclas. Esc cancela; Retroceso lo elimina.</string>
+    <string name="keymap_search">Buscar comandos o teclas</string>
+    <string name="keymap_modified">Modificados</string>
+    <string name="keymap_reset_all">Restablecer todo</string>
+    <string name="keymap_no_results">Ningún comando coincide.</string>
+    <string name="keymap_recording">Pulsa las teclas…</string>
+    <string name="keymap_not_set">Sin asignar</string>
+    <string name="keymap_reset">Restablecer valor predeterminado</string>
     <string name="modcfg_remove_named">Quitar %1$s</string>
     <string name="modcfg_removed">Se quitó %1$s</string>
     <string name="modcfg_build_features_android_only">Las funciones de compilación se aplican solo a módulos Android.</string>

@@ -776,6 +776,14 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="modcfg_no_modules">Tidak ada modul. Ketuk + untuk menambahkan satu.</string>
     <string name="modcfg_empty_title">Belum ada modul</string>
     <string name="modcfg_empty_body">Modul adalah satu bagian proyek yang dapat di-build: aplikasi, library, atau fitur.</string>
+    <string name="keymap_hint">Klik pintasan, lalu tekan tombol baru. Esc membatalkan; Backspace menghapusnya.</string>
+    <string name="keymap_search">Cari perintah atau tombol</string>
+    <string name="keymap_modified">Diubah</string>
+    <string name="keymap_reset_all">Atur ulang semua</string>
+    <string name="keymap_no_results">Tidak ada perintah yang cocok.</string>
+    <string name="keymap_recording">Tekan tombol…</string>
+    <string name="keymap_not_set">Tidak diatur</string>
+    <string name="keymap_reset">Kembalikan ke default</string>
     <string name="modcfg_remove_named">Hapus %1$s</string>
     <string name="modcfg_removed">Menghapus %1$s</string>
     <string name="modcfg_build_features_android_only">Fitur build hanya berlaku untuk modul Android.</string>

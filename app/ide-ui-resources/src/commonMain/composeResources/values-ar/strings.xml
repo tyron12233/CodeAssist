@@ -1458,6 +1458,14 @@
     <string name="modcfg_no_modules">لا توجد وحدات. انقر + لإضافة واحدة.</string>
     <string name="modcfg_empty_title">لا توجد وحدات بعد</string>
     <string name="modcfg_empty_body">الوحدة جزء قابل للبناء من مشروعك: تطبيق أو مكتبة أو ميزة.</string>
+    <string name="keymap_hint">انقر على اختصار ثم اضغط المفاتيح الجديدة. Esc يلغي، وBackspace يزيله.</string>
+    <string name="keymap_search">ابحث عن الأوامر أو المفاتيح</string>
+    <string name="keymap_modified">المعدّلة</string>
+    <string name="keymap_reset_all">إعادة تعيين الكل</string>
+    <string name="keymap_no_results">لا توجد أوامر مطابقة.</string>
+    <string name="keymap_recording">اضغط المفاتيح…</string>
+    <string name="keymap_not_set">غير معيّن</string>
+    <string name="keymap_reset">الاستعادة إلى الافتراضي</string>
     <string name="modcfg_remove_named">إزالة %1$s</string>
     <string name="modcfg_removed">تمت إزالة %1$s</string>
     <string name="modcfg_build_features_android_only">تنطبق ميزات البناء على وحدات Android فقط.</string>

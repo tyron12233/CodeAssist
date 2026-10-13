@@ -1396,6 +1396,14 @@
     <string name="modcfg_no_modules">没有模块，点击 + 添加模块。</string>
     <string name="modcfg_empty_title">还没有模块</string>
     <string name="modcfg_empty_body">模块是项目中可单独构建的部分：应用、库或功能。</string>
+    <string name="keymap_hint">点击一个快捷键，然后按下新的按键。Esc 取消；Backspace 移除。</string>
+    <string name="keymap_search">搜索命令或按键</string>
+    <string name="keymap_modified">已修改</string>
+    <string name="keymap_reset_all">全部重置</string>
+    <string name="keymap_no_results">没有匹配的命令。</string>
+    <string name="keymap_recording">请按下按键…</string>
+    <string name="keymap_not_set">未设置</string>
+    <string name="keymap_reset">恢复默认</string>
     <string name="modcfg_remove_named">移除 %1$s</string>
     <string name="modcfg_removed">已移除 %1$s</string>
     <string name="modcfg_build_features_android_only">构建功能仅适用于 Android 模块。</string>

@@ -731,6 +731,14 @@
     <string name="modcfg_no_modules">Нет модулей. Нажмите +, чтобы добавить.</string>
     <string name="modcfg_empty_title">Модулей пока нет</string>
     <string name="modcfg_empty_body">Модуль: собираемая часть проекта: приложение, библиотека или функция.</string>
+    <string name="keymap_hint">Нажмите на сочетание, затем нажмите новые клавиши. Esc отменяет, Backspace удаляет.</string>
+    <string name="keymap_search">Поиск команд или клавиш</string>
+    <string name="keymap_modified">Изменённые</string>
+    <string name="keymap_reset_all">Сбросить всё</string>
+    <string name="keymap_no_results">Нет подходящих команд.</string>
+    <string name="keymap_recording">Нажмите клавиши…</string>
+    <string name="keymap_not_set">Не задано</string>
+    <string name="keymap_reset">Сбросить по умолчанию</string>
     <string name="modcfg_remove_named">Удалить %1$s</string>
     <string name="modcfg_removed">Удалено: %1$s</string>
     <string name="modcfg_build_features_android_only">Функции сборки применяются только к модулям Android.</string>

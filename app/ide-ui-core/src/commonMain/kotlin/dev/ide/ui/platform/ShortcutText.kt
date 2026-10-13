@@ -38,6 +38,37 @@ fun shortcutText(spec: String, commandKey: Boolean = usesCommandKey): String =
 fun shortcutTextFor(actionId: String): String? =
     KeymapHost.shortcutSpec(APP_COMMAND_EQUIVALENTS[actionId] ?: actionId)?.let { shortcutText(it) }
 
+/**
+ * A shortcut spec as the keys to draw on keycaps, one list per stroke of a chord: the modifiers in this
+ * platform's order, then the key (`⇧` `⌘` `T` on a Mac, `Ctrl` `Shift` `T` elsewhere).
+ */
+fun shortcutKeys(spec: String, commandKey: Boolean = usesCommandKey): List<List<String>> =
+    spec.split(' ').filter { it.isNotEmpty() }.map { stroke ->
+        val parts = stroke.split('+')
+        val mods = parts.dropLast(1).map { it.lowercase() }.toSet()
+        buildList {
+            if (commandKey) {
+                if ("ctrl" in mods) add("⌃")
+                if ("alt" in mods) add("⌥")
+                if ("shift" in mods) add("⇧")
+                if ("primary" in mods || "meta" in mods) add("⌘")
+            } else {
+                if ("primary" in mods || "ctrl" in mods) add("Ctrl")
+                if ("meta" in mods) add("Meta")
+                if ("alt" in mods) add("Alt")
+                if ("shift" in mods) add("Shift")
+            }
+            // The Mac page glyphs (⇞ ⇟) are unreadable at keycap size, so a keycap spells them out.
+            add(
+                when (val key = parts.last()) {
+                    "PageUp" -> "PgUp"
+                    "PageDown" -> "PgDn"
+                    else -> keyText(key, commandKey)
+                },
+            )
+        }
+    }
+
 private fun keyText(name: String, commandKey: Boolean): String = when (name) {
     "Slash" -> "/"
     "Backslash" -> "\\"

@@ -145,14 +145,10 @@ class EditorKeymapPlugin(
                 return SettingControl.Shortcut(
                     key = preferenceKey(actionId),
                     title = title,
-                    description = buildString {
-                        if (others.isNotEmpty()) {
-                            append("Also bound to ")
-                            append(others.joinToString(", ") { titleOf(it) })
-                            append(". ")
-                        }
-                        append("Press a shortcut to change it; Backspace clears it.")
-                    },
+                    // Only a conflict is worth a line under the command; how to record a shortcut is said once,
+                    // at the top of the page, rather than under every row.
+                    description = if (others.isEmpty()) null
+                    else "Also bound to ${others.joinToString(", ") { titleOf(it) }}.",
                     default = default,
                     group = group,
                 )

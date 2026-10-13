@@ -317,6 +317,11 @@ private fun PageContent(
     onStructuralChange: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // A page of nothing but shortcuts is a keymap: a searchable list of commands, not a form.
+    if (page.controls.isNotEmpty() && page.controls.all { it is UiSettingControl.Shortcut }) {
+        KeymapPageContent(page, values, onSet, onStructuralChange, modifier)
+        return
+    }
     val regular = page.controls.filter { !it.advanced }
     val advanced = page.controls.filter { it.advanced }
     // Regular controls grouped by their optional sub-heading (null group first, in declaration order).
