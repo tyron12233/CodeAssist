@@ -815,6 +815,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="modcfg_title_modules">Módulos</string>
     <string name="modcfg_new_module_action">Novo módulo</string>
     <string name="modcfg_no_modules">Nenhum módulo. Toque em + para adicionar um.</string>
+    <string name="modcfg_empty_title">Nenhum módulo ainda</string>
+    <string name="modcfg_empty_body">Um módulo é uma parte compilável do seu projeto: um app, uma biblioteca ou um recurso.</string>
     <string name="modcfg_remove_named">Remover %1$s</string>
     <string name="modcfg_removed">%1$s removido</string>
     <string name="modcfg_build_features_android_only">Os recursos de compilação se aplicam apenas a módulos Android.</string>

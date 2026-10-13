@@ -729,6 +729,8 @@
     <string name="modcfg_title_modules">Модули</string>
     <string name="modcfg_new_module_action">Новый модуль</string>
     <string name="modcfg_no_modules">Нет модулей. Нажмите +, чтобы добавить.</string>
+    <string name="modcfg_empty_title">Модулей пока нет</string>
+    <string name="modcfg_empty_body">Модуль: собираемая часть проекта: приложение, библиотека или функция.</string>
     <string name="modcfg_remove_named">Удалить %1$s</string>
     <string name="modcfg_removed">Удалено: %1$s</string>
     <string name="modcfg_build_features_android_only">Функции сборки применяются только к модулям Android.</string>

@@ -1,14 +1,12 @@
+@file:OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+
 package dev.ide.ui.screens
 
-import dev.ide.ui.itemsKeyed
-import dev.ide.ui.theme.Ide
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -16,17 +14,21 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,77 +38,93 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.backend.UiBuildFeature
-import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiCompilerPlugin
-import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigField
-import dev.ide.ui.backend.UiKeystore
-import dev.ide.ui.backend.UiSigningAssignment
-import dev.ide.ui.backend.UiSigningAssignments
 import dev.ide.ui.backend.UiFacetConfig
+import dev.ide.ui.backend.UiKeystore
 import dev.ide.ui.backend.UiMissingProguardFile
-import dev.ide.ui.backend.UiPackagingOptions
-import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiRunConfig
+import dev.ide.ui.backend.UiSigningAssignment
 import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.DropdownOverlay
-import dev.ide.ui.components.GlassMaterial
-import dev.ide.ui.components.GlassSurface
-import dev.ide.ui.components.IconButtonCa
-import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.add
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.create
+import dev.ide.ui.generated.resources.more
+import dev.ide.ui.generated.resources.remove
+import dev.ide.ui.generated.resources.modcfg_empty_body
+import dev.ide.ui.generated.resources.modcfg_empty_title
 import dev.ide.ui.generated.resources.modcfg_discard
 import dev.ide.ui.generated.resources.modcfg_unsaved_changes
-import dev.ide.ui.generated.resources.remove
 import dev.ide.ui.generated.resources.modcfg_add_placeholder
 import dev.ide.ui.generated.resources.modcfg_add_row
 import dev.ide.ui.generated.resources.modcfg_add_source_root
@@ -149,7 +167,6 @@ import dev.ide.ui.generated.resources.modcfg_run
 import dev.ide.ui.generated.resources.modcfg_run_config_hint
 import dev.ide.ui.generated.resources.modcfg_run_main_class_placeholder
 import dev.ide.ui.generated.resources.modcfg_save
-import dev.ide.ui.generated.resources.modcfg_save_changes
 import dev.ide.ui.generated.resources.modcfg_section_general
 import dev.ide.ui.generated.resources.modcfg_section_source_sets
 import dev.ide.ui.generated.resources.modcfg_signing_android_only
@@ -182,28 +199,51 @@ import dev.ide.ui.generated.resources.modcfg_title_modules
 import dev.ide.ui.generated.resources.modcfg_new_module_action
 import dev.ide.ui.generated.resources.modcfg_type
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
+import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Ide
 import dev.ide.ui.theme.Motion
+import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The tabs of a module's detail view. */
-enum class ModulesTab(val label: StringResource) {
+/**
+ * The tabs of a module's detail view. An [androidOnly] tab configures the Android build, so it is left out for a
+ * module without an Android facet rather than shown as an empty page.
+ */
+enum class ModulesTab(val label: StringResource, val androidOnly: Boolean = false) {
     Settings(Res.string.modcfg_tab_settings),
-    BuildFeatures(Res.string.modcfg_tab_build_features),
-    CompilerPlugins(Res.string.modcfg_tab_compiler_plugins),
-    Packaging(Res.string.modcfg_tab_packaging),
-    Signing(Res.string.modcfg_tab_signing),
+    BuildFeatures(Res.string.modcfg_tab_build_features, androidOnly = true),
+    CompilerPlugins(Res.string.modcfg_tab_compiler_plugins, androidOnly = true),
+    Packaging(Res.string.modcfg_tab_packaging, androidOnly = true),
+    Signing(Res.string.modcfg_tab_signing, androidOnly = true),
     Dependencies(Res.string.modcfg_tab_dependencies),
 }
 
+/** At or above this width the module list and the selected module sit side by side. */
+private val MODULES_TWO_PANE_BREAKPOINT = 840.dp
+
+/** The module list's width in the two-pane layout. */
+private val MODULES_LIST_PANE_WIDTH = 300.dp
+
+/** The widest a module page's content grows; past it the page centres rather than stretching every row. */
+private val MODULE_CONTENT_MAX_WIDTH = 880.dp
+
+/** The content width at which facet fields and the General pickers go two to a row. */
+private val MODULE_TWO_COLUMN_MIN = 600.dp
+
+/** The side gutter that centres a [MODULE_CONTENT_MAX_WIDTH] column in [available] width, never under 16dp. */
+private fun contentGutter(available: Dp): Dp = maxOf(16.dp, (available - MODULE_CONTENT_MAX_WIDTH) / 2)
+
 /**
- * The **Modules** screen. Lists the project's modules first (add / remove); selecting one opens its detail
- * view with two tabs — **Settings** (Java version, source sets, facet config) and **Dependencies** (the
- * per-module dependency manager: libraries, BOMs, module-on-module deps, custom repositories). Facet panels
- * are generic — fields are derived from the facet codec, so a new facet appears without bespoke UI. Talks
- * only to [IdeBackend].
+ * The **Modules** screen. On a phone it is a list of the project's modules that opens one module at a time; on a
+ * wide window the list stays beside the selected module. A module's detail view has a tab per concern: **Settings**
+ * (Java version, platform SDK, source sets, facet config), the Android build tabs, and **Dependencies** (the
+ * per-module dependency manager). Facet panels are generic: fields are derived from the facet codec, so a new facet
+ * appears without bespoke UI. Talks only to [IdeBackend].
  */
 @Composable
 fun ModuleConfigScreen(
@@ -215,124 +255,294 @@ fun ModuleConfigScreen(
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
 ) {
+    val list = rememberModulesListState(backend)
     var selected by remember { mutableStateOf(initialModule) }
-    val module = selected
-    if (module == null) {
-        ModulesList(backend, codeFont, onOpen = { selected = it }, onBack = onBack)
-    } else {
-        ModuleDetail(backend, module, initialTab, codeFont, fileActions, onOpenKeystoreManager, onBack = { selected = null })
+    // Kept at screen level so switching modules in the two-pane layout stays on the same tab.
+    var tab by remember { mutableStateOf(initialTab) }
+    // A module that was just removed cannot stay open.
+    LaunchedEffect(list.modules) {
+        if (list.modules.none { it.name == selected }) selected = null
     }
-}
 
-// ---- shared header ------------------------------------------------------------------------------
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val twoPane = maxWidth >= MODULES_TWO_PANE_BREAKPOINT
+        // Two panes always show a module; a phone shows the list until one is picked.
+        val shown = selected ?: if (twoPane) list.modules.firstOrNull()?.name else null
+        PlatformBackHandler(enabled = !twoPane && selected != null) { selected = null }
 
-@Composable
-private fun ModulesHeader(title: String, icon: ImageVector, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
-    GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
-        Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-            Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            action?.invoke()
+        val detail: @Composable (String, (() -> Unit)?) -> Unit = { name, back ->
+            key(name) {
+                ModuleDetail(
+                    backend, name, list.modules.firstOrNull { it.name == name }?.typeDisplay, tab, { tab = it },
+                    codeFont, fileActions, onOpenKeystoreManager, onBack = back, onRemove = { list.askRemove(name) },
+                )
+            }
         }
+        when {
+            twoPane && list.modules.isEmpty() -> Column(Modifier.fillMaxSize()) {
+                ListPaneHeader(onBack, onNewModule = null)
+                EmptyModules(list::openNewModule, Modifier.weight(1f).fillMaxWidth())
+            }
+            twoPane -> Row(Modifier.fillMaxSize()) {
+                ModulesListPane(list, shown, twoPane = true, onBack, { selected = it }, Modifier.width(MODULES_LIST_PANE_WIDTH).fillMaxHeight())
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Box(Modifier.weight(1f).fillMaxHeight()) { shown?.let { detail(it, null) } }
+            }
+            shown == null -> ModulesListPane(list, null, twoPane = false, onBack, { selected = it }, Modifier.fillMaxSize())
+            else -> detail(shown) { selected = null }
+        }
+
+        NewModuleDialog(
+            visible = list.newModuleOpen,
+            backend = backend,
+            codeFont = codeFont,
+            onDismiss = list::closeNewModule,
+            onCreate = list::createModule,
+        )
+        ConfirmModuleRemove(
+            moduleName = list.pendingRemove,
+            onDismiss = list::cancelRemove,
+            onConfirm = list::confirmRemove,
+        )
+        ConfigToastHost(list.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 // ---- modules list -------------------------------------------------------------------------------
 
+/**
+ * The module list. As the left pane of a wide window it reads like a navigation drawer (the open module is
+ * highlighted, New module sits in the header); on a phone it is the whole page, with a labelled FAB.
+ */
 @Composable
-private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (String) -> Unit, onBack: () -> Unit) {
-    val state = rememberModulesListState(backend)
-
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+private fun ModulesListPane(
+    state: ModulesListState,
+    selected: String?,
+    twoPane: Boolean,
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+    modifier: Modifier,
+) {
+    val container = if (twoPane) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.background
+    Box(modifier.background(container)) {
         Column(Modifier.fillMaxSize()) {
-            ModulesHeader(stringResource(Res.string.modcfg_title_modules), CaIcons.layers, onBack) {
-                IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_new_module_action), onClick = state::openNewModule, active = true)
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            ListPaneHeader(onBack, onNewModule = if (twoPane) state::openNewModule else null)
             if (state.modules.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(Res.string.modcfg_no_modules), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
-                }
+                EmptyModules(state::openNewModule, Modifier.weight(1f).fillMaxWidth())
             } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    // A phone keeps the last row clear of the FAB.
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = if (twoPane) 12.dp else 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (twoPane) 4.dp else 8.dp),
+                ) {
                     itemsKeyed(state.modules, key = { it.name }) { m ->
-                        ModuleListItem(m, onOpen = { onOpen(m.name) }, onRemove = { state.askRemove(m.name) })
+                        ModuleRow(m, selected = m.name == selected, compact = twoPane, onOpen = { onOpen(m.name) }, onRemove = { state.askRemove(m.name) })
                     }
                 }
             }
         }
-        NewModuleDialog(
-            visible = state.newModuleOpen,
-            backend = backend,
-            codeFont = codeFont,
-            onDismiss = state::closeNewModule,
-            onCreate = state::createModule,
-        )
-        ConfirmModuleRemove(
-            moduleName = state.pendingRemove,
-            onDismiss = state::cancelRemove,
-            onConfirm = state::confirmRemove,
-        )
-        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
-    }
-}
-
-@Composable
-private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onOpen)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-        Column(Modifier.weight(1f)) {
-            Text(module.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(module.typeDisplay, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!twoPane && state.modules.isNotEmpty()) {
+            ExtendedFloatingActionButton(
+                text = { Text(stringResource(Res.string.modcfg_new_module_action)) },
+                icon = { Icon(CaIcons.plus, null, Modifier.size(20.dp)) },
+                onClick = state::openNewModule,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            )
         }
-        IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, module.name), onClick = onRemove, boxSize = 30, iconSize = 16, tint = MaterialTheme.colorScheme.outline)
-        Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
-// ---- module detail (Settings | Dependencies) ---------------------------------------------------
-
 @Composable
-private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, fileActions: FileActions, onOpenKeystoreManager: () -> Unit, onBack: () -> Unit) {
-    var tab by remember(moduleName) { mutableStateOf(initialTab) }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize()) {
-            ModulesHeader(moduleName, CaIcons.gear, onBack)
-            ModuleTabRow(tab) { tab = it }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            when (tab) {
-                ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
-                ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
-                ModulesTab.CompilerPlugins -> CompilerPluginsPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
-                ModulesTab.Packaging -> PackagingPane(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
-                ModulesTab.Signing -> SigningPane(backend, moduleName, onOpenKeystoreManager, Modifier.weight(1f).fillMaxWidth())
-                ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, Modifier.weight(1f).fillMaxWidth())
+private fun ListPaneHeader(onBack: () -> Unit, onNewModule: (() -> Unit)?) {
+    Row(
+        Modifier.fillMaxWidth().height(64.dp).padding(start = 4.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        IconButton(onClick = onBack) { Icon(CaIcons.chevronLeft, stringResource(Res.string.back)) }
+        Text(
+            stringResource(Res.string.modcfg_title_modules), color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        if (onNewModule != null) {
+            FilledTonalIconButton(onClick = onNewModule) {
+                Icon(CaIcons.plus, stringResource(Res.string.modcfg_new_module_action), Modifier.size(20.dp))
             }
         }
     }
 }
 
 @Composable
-private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
-    // A real M3 tab strip: scrollable so it never clips on a narrow phone (Settings · Build Features ·
-    // Compiler plugins · Packaging · Signing · Dependencies), with the selected-tab indicator M3 draws for it.
-    PrimaryScrollableTabRow(
-        selectedTabIndex = ModulesTab.entries.indexOf(tab),
-        edgePadding = 12.dp,
-        containerColor = MaterialTheme.colorScheme.surface,
+private fun ModuleRow(module: UiModuleRef, selected: Boolean, compact: Boolean, onOpen: () -> Unit, onRemove: () -> Unit) {
+    val container = when {
+        selected -> MaterialTheme.colorScheme.secondaryContainer
+        compact -> Color.Transparent
+        else -> MaterialTheme.colorScheme.surfaceContainer
+    }
+    val onContainer = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+    Surface(onClick = onOpen, shape = MaterialTheme.shapes.large, color = container, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(start = 12.dp, end = 4.dp, top = if (compact) 8.dp else 12.dp, bottom = if (compact) 8.dp else 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            ModuleTypeTile(module.typeDisplay, if (compact) 36.dp else 44.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    module.name, color = onContainer, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    module.typeDisplay, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                )
+            }
+            ModuleOverflowMenu(onRemove)
+            if (!compact) {
+                Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(6.dp))
+            }
+        }
+    }
+}
+
+/** The module's type as a tonal icon tile, so an app, a library and an Android module tell apart at a glance. */
+@Composable
+private fun ModuleTypeTile(typeDisplay: String, size: Dp) {
+    Box(
+        Modifier.size(size).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(size * 0.3f)),
+        contentAlignment = Alignment.Center,
     ) {
-        ModulesTab.entries.forEach { t ->
+        Icon(moduleTypeIcon(typeDisplay), null, Modifier.size(size * 0.5f), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+    }
+}
+
+/** A glyph for a module type. Keyed on the display name, which is all a [UiModuleRef] carries; it only picks an icon. */
+private fun moduleTypeIcon(typeDisplay: String): ImageVector = when {
+    typeDisplay.contains("Android", ignoreCase = true) -> CaIcons.androidLogo
+    typeDisplay.contains("Library", ignoreCase = true) -> CaIcons.pkg
+    else -> CaIcons.code
+}
+
+/**
+ * Removing a module sits behind a menu: a bare close icon beside the row's chevron was one mis-tap away from the
+ * confirm dialog, and it read as "close" rather than "remove".
+ */
+@Composable
+private fun ModuleOverflowMenu(onRemove: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Symbol(CaSymbols.moreVert, stringResource(Res.string.more), size = 22.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(Res.string.modcfg_remove_module)) },
+                leadingIcon = { Symbol(CaSymbols.delete, null, size = 20.dp, tint = MaterialTheme.colorScheme.error) },
+                colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error),
+                onClick = { open = false; onRemove() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyModules(onCreate: () -> Unit, modifier: Modifier) {
+    Column(
+        modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        Box(Modifier.size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(24.dp)), Alignment.Center) {
+            Icon(CaIcons.layers, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(stringResource(Res.string.modcfg_empty_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(Res.string.modcfg_empty_body), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onCreate) {
+            Icon(CaIcons.plus, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(Res.string.modcfg_new_module_action))
+        }
+    }
+}
+
+// ---- module detail (header + tabs) --------------------------------------------------------------
+
+@Composable
+private fun ModuleDetail(
+    backend: IdeBackend,
+    moduleName: String,
+    typeDisplay: String?,
+    tab: ModulesTab,
+    onSelectTab: (ModulesTab) -> Unit,
+    codeFont: FontFamily,
+    fileActions: FileActions,
+    onOpenKeystoreManager: () -> Unit,
+    onBack: (() -> Unit)?,
+    onRemove: () -> Unit,
+) {
+    val settings = rememberModuleSettingsState(backend, moduleName)
+    // Whether the module builds through the Android pipeline (the build-features pane loads only for one). Unknown
+    // until it answers, and every tab shows meanwhile, so an Android module's tab strip never jumps.
+    val android by produceState<Boolean?>(null, backend, moduleName) {
+        value = runCatching { backend.modules.getBuildFeatures(moduleName) != null }.getOrDefault(true)
+    }
+    val tabs = ModulesTab.entries.filter { !it.androidOnly || android != false }
+    val current = if (tab in tabs) tab else ModulesTab.Settings
+
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val gutter = contentGutter(maxWidth)
+        Column(Modifier.fillMaxSize()) {
+            ModuleDetailHeader(moduleName, settings.config?.typeDisplay ?: typeDisplay.orEmpty(), gutter, onBack, onRemove)
+            ModuleTabRow(tabs, current, gutter, onSelectTab)
+            val pane = Modifier.weight(1f).fillMaxWidth()
+            when (current) {
+                ModulesTab.Settings -> ModuleSettingsTab(backend, settings, codeFont, pane)
+                ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, pane)
+                ModulesTab.CompilerPlugins -> CompilerPluginsPane(backend, moduleName, pane)
+                ModulesTab.Packaging -> PackagingPane(backend, moduleName, codeFont, pane)
+                ModulesTab.Signing -> SigningPane(backend, moduleName, onOpenKeystoreManager, pane)
+                ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, pane)
+            }
+        }
+    }
+}
+
+/** The module's identity: type tile, name, type, and the module actions. Aligned with the page column below it. */
+@Composable
+private fun ModuleDetailHeader(name: String, typeDisplay: String, gutter: Dp, onBack: (() -> Unit)?, onRemove: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+            .padding(start = if (onBack != null) 4.dp else gutter, end = (gutter - 12.dp).coerceAtLeast(4.dp), top = 12.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (onBack != null) IconButton(onClick = onBack) { Icon(CaIcons.chevronLeft, stringResource(Res.string.back)) }
+        ModuleTypeTile(typeDisplay, 44.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (typeDisplay.isNotEmpty()) {
+                Text(typeDisplay, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        ModuleOverflowMenu(onRemove)
+    }
+}
+
+@Composable
+private fun ModuleTabRow(tabs: List<ModulesTab>, tab: ModulesTab, gutter: Dp, onSelect: (ModulesTab) -> Unit) {
+    // Scrollable so it never clips on a narrow phone. Its edge padding lines the first tab's label up with the page
+    // column (a tab pads its label by 16dp itself).
+    PrimaryScrollableTabRow(
+        selectedTabIndex = tabs.indexOf(tab),
+        edgePadding = (gutter - 16.dp).coerceAtLeast(0.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
+    ) {
+        tabs.forEach { t ->
             Tab(
                 selected = t == tab,
                 onClick = { onSelect(t) },
@@ -348,6 +558,37 @@ private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
     }
 }
 
+/**
+ * A module page's scrolling column: centred at [MODULE_CONTENT_MAX_WIDTH] on a wide window, a 16dp gutter on a
+ * phone. The gutters are content padding, so the whole width scrolls. [content] learns whether the column is wide
+ * enough for two fields to a row.
+ */
+@Composable
+private fun ModulePage(modifier: Modifier, content: LazyListScope.(twoColumn: Boolean) -> Unit) {
+    BoxWithConstraints(modifier) {
+        val gutter = contentGutter(maxWidth)
+        val twoColumn = maxWidth - gutter * 2 >= MODULE_TWO_COLUMN_MIN
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = gutter, end = gutter, top = 16.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) { content(twoColumn) }
+    }
+}
+
+/** The empty page of an Android-only pane opened on a module it does not apply to. */
+@Composable
+private fun PaneNotApplicable(message: String) {
+    Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun PaneIntro(text: String) {
+    Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+}
+
 // ---- Build Features (AGP buildFeatures: viewBinding / compose) -----------------------------------
 
 @Composable
@@ -358,29 +599,20 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
         val f = state.model
         when {
             state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
-            f == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text(
-                    stringResource(Res.string.modcfg_build_features_android_only),
-                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            else -> LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item("intro") {
-                    Text(
-                        stringResource(Res.string.modcfg_build_features_intro),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+            f == null -> PaneNotApplicable(stringResource(Res.string.modcfg_build_features_android_only))
+            else -> ModulePage(Modifier.fillMaxSize()) {
+                item("intro") { PaneIntro(stringResource(Res.string.modcfg_build_features_intro)) }
                 itemsKeyed(f.features, key = { it.id }) { feature ->
-                    BuildFeatureRow(
-                        feature = feature,
+                    ToggleCard(
+                        title = feature.title,
+                        description = feature.description,
+                        checked = feature.enabled,
                         working = state.busyId == feature.id,
-                        switchEnabled = state.idle,
-                    ) { enabled -> state.setEnabled(feature.id, enabled) }
+                        enabled = state.idle,
+                        onToggle = { enabled -> state.setEnabled(feature.id, enabled) },
+                    ) {
+                        feature.note?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall) }
+                    }
                 }
             }
         }
@@ -388,21 +620,33 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
     }
 }
 
+/** A switchable entry (a build feature, a compiler plugin): the whole card toggles, and a spinner replaces the switch while it applies. */
 @Composable
-private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
+private fun ToggleCard(
+    title: String,
+    description: String,
+    checked: Boolean,
+    working: Boolean,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    footer: @Composable () -> Unit = {},
+) {
     OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(feature.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-                    Text(feature.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Column(
+            Modifier.fillMaxWidth()
+                .toggleable(value = checked, enabled = enabled && !working, role = Role.Switch, onValueChange = onToggle)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
-                if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-                else Switch(checked = feature.enabled, onCheckedChange = { if (switchEnabled) onToggle(it) }, enabled = switchEnabled)
+                if (working) CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                else Switch(checked = checked, onCheckedChange = null, enabled = enabled)
             }
-            feature.note?.let {
-                Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-            }
+            footer()
         }
     }
 }
@@ -417,23 +661,9 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
         val p = state.model
         when {
             state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
-            p == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text(
-                    stringResource(Res.string.modcfg_compiler_plugins_android_only),
-                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            else -> LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item("intro") {
-                    Text(
-                        stringResource(Res.string.modcfg_compiler_plugins_intro),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+            p == null -> PaneNotApplicable(stringResource(Res.string.modcfg_compiler_plugins_android_only))
+            else -> ModulePage(Modifier.fillMaxSize()) {
+                item("intro") { PaneIntro(stringResource(Res.string.modcfg_compiler_plugins_intro)) }
                 itemsKeyed(p.plugins, key = { it.id }) { plugin ->
                     CompilerPluginRow(
                         plugin = plugin,
@@ -449,27 +679,17 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
 
 @Composable
 private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(plugin.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-                Text(plugin.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            }
-            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-            else Switch(checked = plugin.enabled, onCheckedChange = { if (switchEnabled) onToggle(it) }, enabled = switchEnabled)
-        }
+    ToggleCard(plugin.title, plugin.description, plugin.enabled, working, switchEnabled, onToggle) {
         // "Active on the classpath" badge — the real build behavior, which can differ from the toggle when the
         // runtime came in transitively (a dependency pulling it in applies the plugin even if not toggled here).
         if (plugin.applied) {
-            Text(
-                "● " + stringResource(Res.string.modcfg_compiler_plugin_applied),
-                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(CaIcons.check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(Res.string.modcfg_compiler_plugin_applied), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+            }
         }
         plugin.note?.let {
-            Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-        }
+            Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -484,35 +704,44 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
         val o = state.options
         when {
             state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
-            o == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text(stringResource(Res.string.modcfg_packaging_android_only), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
-            }
-            else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(Res.string.modcfg_packaging_intro), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                Text(stringResource(Res.string.modcfg_packaging_glob_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-
-                SectionCard(stringResource(Res.string.modcfg_packaging_resources)) {
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.resourceExcludes, codeFont)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.resourcePickFirsts, codeFont)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_merge), stringResource(Res.string.modcfg_packaging_merge_desc), state.resourceMerges, codeFont)
-                    DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_excludes), o.defaultResourceExcludes, codeFont)
-                    DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_merges), o.defaultResourceMerges, codeFont)
+            o == null -> PaneNotApplicable(stringResource(Res.string.modcfg_packaging_android_only))
+            else -> ModulePage(Modifier.fillMaxSize()) {
+                item("intro") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PaneIntro(stringResource(Res.string.modcfg_packaging_intro))
+                        Text(stringResource(Res.string.modcfg_packaging_glob_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
-
-                SectionCard(stringResource(Res.string.modcfg_packaging_jni)) {
-                    Text(stringResource(Res.string.modcfg_packaging_jni_note), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.jniExcludes, codeFont)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.jniPickFirsts, codeFont)
+                item("resources") {
+                    SectionCard(stringResource(Res.string.modcfg_packaging_resources)) {
+                        PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.resourceExcludes, codeFont)
+                        PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.resourcePickFirsts, codeFont)
+                        PackagingRuleList(stringResource(Res.string.modcfg_packaging_merge), stringResource(Res.string.modcfg_packaging_merge_desc), state.resourceMerges, codeFont)
+                        DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_excludes), o.defaultResourceExcludes, codeFont)
+                        DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_merges), o.defaultResourceMerges, codeFont)
+                    }
                 }
-
-                SectionCard(stringResource(Res.string.modcfg_packaging_compression)) {
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_no_compress), stringResource(Res.string.modcfg_packaging_no_compress_desc), state.noCompress, codeFont)
-                    DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_no_compress), o.defaultNoCompress, codeFont)
+                item("jni") {
+                    SectionCard(stringResource(Res.string.modcfg_packaging_jni), subtitle = stringResource(Res.string.modcfg_packaging_jni_note)) {
+                        PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.jniExcludes, codeFont)
+                        PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.jniPickFirsts, codeFont)
+                    }
                 }
-
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                    if (state.saving) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-                    PrimaryButton(stringResource(Res.string.modcfg_save), icon = CaIcons.check, onClick = state::save)
+                item("compression") {
+                    SectionCard(stringResource(Res.string.modcfg_packaging_compression)) {
+                        PackagingRuleList(stringResource(Res.string.modcfg_packaging_no_compress), stringResource(Res.string.modcfg_packaging_no_compress_desc), state.noCompress, codeFont)
+                        DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_no_compress), o.defaultNoCompress, codeFont)
+                    }
+                }
+                item("save") {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+                        if (state.saving) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                        Button(onClick = state::save, enabled = !state.saving) {
+                            Icon(CaIcons.check, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(Res.string.modcfg_save))
+                        }
+                    }
                 }
             }
         }
@@ -523,9 +752,9 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
 /** One labelled + described glob-pattern list within a packaging section. */
 @Composable
 private fun PackagingRuleList(label: String, description: String, values: SnapshotStateList<String>, codeFont: FontFamily) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        Text(description, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
+        Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         StringListEditor(values, codeFont)
     }
 }
@@ -536,14 +765,14 @@ private fun DefaultsDisclosure(label: String, patterns: List<String>, codeFont: 
     var open by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
-            Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open },
+            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { open = !open }.padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(if (open) CaIcons.chevronDown else CaIcons.chevronRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
-            Text("$label (${patterns.size})", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+            Icon(if (open) CaIcons.chevronDown else CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$label (${patterns.size})", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
         }
         if (open) patterns.forEach { p ->
-            Text(p, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont), modifier = Modifier.padding(start = 20.dp))
+            Text(p, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), modifier = Modifier.padding(start = 22.dp))
         }
     }
 }
@@ -558,28 +787,15 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
         val d = state.assignments
         when {
             state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
-            d == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text(stringResource(Res.string.modcfg_signing_android_only), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
-            }
-            else -> LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            d == null -> PaneNotApplicable(stringResource(Res.string.modcfg_signing_android_only))
+            else -> ModulePage(Modifier.fillMaxSize()) {
                 item("intro") {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            stringResource(Res.string.modcfg_signing_intro),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Row(
-                            Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
-                                .clickable(remember { MutableInteractionSource() }, null, onClick = onOpenKeystoreManager)
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(CaIcons.key, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text(stringResource(Res.string.modcfg_manage_keystores), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PaneIntro(stringResource(Res.string.modcfg_signing_intro))
+                        FilledTonalButton(onClick = onOpenKeystoreManager) {
+                            Icon(CaIcons.key, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(Res.string.modcfg_manage_keystores))
                         }
                     }
                 }
@@ -588,7 +804,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                 }
                 if (d.keystores.isEmpty()) item("empty") {
                     Text(stringResource(Res.string.modcfg_keystores_empty),
-                        color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+                        color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -598,14 +814,10 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
 
 @Composable
 private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List<UiKeystore>, busy: Boolean, onAssign: (String?) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(assignment.buildType, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-        // The choices: the default debug keystore (null) plus every registered keystore.
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard(assignment.buildType) {
+        // The choices: the default debug keystore (null) plus every registered keystore. They wrap rather than
+        // scroll sideways, so every keystore is visible at once.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SigningPill(stringResource(Res.string.modcfg_debug_default), selected = assignment.keystoreId == null, enabled = !busy) { onAssign(null) }
             keystores.forEach { ks ->
                 SigningPill(ks.name, selected = assignment.keystoreId == ks.id, enabled = !busy) { onAssign(ks.id) }
@@ -628,9 +840,7 @@ private fun SigningPill(label: String, selected: Boolean, enabled: Boolean, onCl
 }
 
 @Composable
-private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont: FontFamily, modifier: Modifier) {
-    val state = rememberModuleSettingsState(backend, moduleName)
-
+private fun ModuleSettingsTab(backend: IdeBackend, state: ModuleSettingsState, codeFont: FontFamily, modifier: Modifier) {
     Box(modifier) {
         ConfigBody(
             state.config, state.loading, codeFont, backend.project.rootPath, state.missingProguard, Modifier.fillMaxSize(),
@@ -640,7 +850,7 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
             onSave = state::applyEdit,
         )
         AddSourceRootDialog(
-            request = if (state.addRootOpen) AddSourceRootRequest(moduleName, state.sourceSets) else null,
+            request = if (state.addRootOpen) AddSourceRootRequest(state.moduleName, state.sourceSets) else null,
             onDismiss = state::closeAddSourceRoot,
             onAdd = state::addSourceRoot,
         )
@@ -676,12 +886,14 @@ private fun ConfirmModuleRemove(moduleName: String?, onDismiss: () -> Unit, onCo
 
 @Composable
 private fun DialogTextButton(label: String, destructive: Boolean, onClick: () -> Unit) {
-    val fill = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHighest
-    val fg = if (destructive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    Box(
-        Modifier.background(fill, RoundedCornerShape(Ca.radius.control)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 9.dp),
-    ) { Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
+    if (destructive) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+        ) { Text(label) }
+    } else {
+        TextButton(onClick = onClick) { Text(label) }
+    }
 }
 
 @Composable
@@ -713,39 +925,40 @@ private fun NewModuleDialog(
                 Spacer(Modifier.height(12.dp))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item("name") {
-                        LabeledField(stringResource(Res.string.modcfg_name)) {
-                            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                if (name.isEmpty()) Text(stringResource(Res.string.modcfg_module_name_placeholder), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
-                                BasicTextField(name, { name = it }, singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
-                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
-                            }
-                        }
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = { Text(stringResource(Res.string.modcfg_name)) },
+                            placeholder = { Text(stringResource(Res.string.modcfg_module_name_placeholder)) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = codeFont),
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                     item("type") {
                         LabeledField(stringResource(Res.string.modcfg_type)) {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 types.forEachIndexed { i, t -> LevelChip(t.displayName, i == typeIdx) { typeIdx = i } }
                             }
                         }
                     }
                     item("level") {
                         LabeledField(stringResource(Res.string.modcfg_java_version)) {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                type.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
-                            }
+                            JavaLevelPicker(type.languageLevels, level) { level = it }
                         }
                     }
-                    itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
+                    itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont, twoColumn = false) }
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Spacer(Modifier.weight(1f))
                     DialogTextButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
-                    PrimaryButton(stringResource(Res.string.create), icon = CaIcons.check, onClick = {
-                        onCreate(name.trim(), type.id, level, forms.associate { it.table to it.toValues() })
-                    })
+                    Button(onClick = { onCreate(name.trim(), type.id, level, forms.associate { it.table to it.toValues() }) }) {
+                        Icon(CaIcons.check, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(Res.string.create))
+                    }
                 }
             }
         }
@@ -772,9 +985,7 @@ private fun ConfigBody(
             isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
             }
-            config == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.modcfg_couldnt_load_config), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
-            }
+            config == null -> PaneNotApplicable(stringResource(Res.string.modcfg_couldnt_load_config))
             else -> ConfigForm(config, codeFont, projectRoot, missingProguard, onAddSourceRoot, onRemoveSourceRoot, onCreateProguard, onSave)
         }
     }
@@ -815,67 +1026,30 @@ private fun ConfigForm(
     )
 
     Column(Modifier.fillMaxSize()) {
-    LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // ---- General ----
-        item("general") {
-            SectionCard(stringResource(Res.string.modcfg_section_general)) {
-                MetaRow(stringResource(Res.string.modcfg_type)) { Chip(config.typeDisplay, fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary) }
-                MetaRow(stringResource(Res.string.modcfg_output)) {
-                    Text(shortenPath(config.outputDir, projectRoot), color = MaterialTheme.colorScheme.outline,
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Spacer(Modifier.height(2.dp))
-                Text(stringResource(Res.string.modcfg_java_version), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
-                }
-                // Platform SDK: the boot classpath the module compiles/completes against. "Auto" follows the
-                // module type (Java → core-Java, Android → the Android SDK); pinning it is how a console module
-                // is kept off android.jar, or a module is targeted at a specific installed platform.
-                if (config.availableSdks.size > 1) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(stringResource(Res.string.modcfg_platform_sdk), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                    Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LevelChip(stringResource(Res.string.modcfg_platform_sdk_auto, config.resolvedSdk), sdk == "") { sdk = "" }
-                        config.availableSdks.forEach { opt -> LevelChip(opt.label, sdk == opt.name) { sdk = opt.name } }
-                    }
-                }
-                config.missingPlatform?.let { mp ->
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        stringResource(Res.string.modcfg_platform_missing, mp.compileSdk, mp.usedLevel),
-                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+        ModulePage(Modifier.weight(1f).fillMaxWidth()) { twoColumn ->
+            // ---- General ----
+            item("general") {
+                GeneralCard(config, level, { level = it }, sdk, { sdk = it }, codeFont, projectRoot, twoColumn)
             }
-        }
 
-        // ---- Run configuration (console Java/Kotlin modules) ----
-        config.runConfig?.let { rc ->
-            item("run") { RunConfigCard(rc, mainClass, codeFont) }
-        }
-
-        // ---- Source sets (add / remove typed roots) ----
-        item("sourceSets") {
-            SectionCard(stringResource(Res.string.modcfg_section_source_sets), action = {
-                IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_add_source_root), onClick = onAddSourceRoot, boxSize = 26, iconSize = 16, active = true)
-            }) {
-                if (config.sourceSets.isEmpty()) {
-                    Text(stringResource(Res.string.modcfg_no_source_sets), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-                }
-                config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont, projectRoot) { root -> onRemoveSourceRoot(ss.name, root) } }
+            // ---- Run configuration (console Java/Kotlin modules) ----
+            config.runConfig?.let { rc ->
+                item("run") { RunConfigCard(rc, mainClass, codeFont) }
             }
+
+            // ---- Minify: referenced-but-missing keep-rule files ----
+            if (missingProguard.isNotEmpty()) {
+                item("proguardMissing") { MissingProguardCard(missingProguard, codeFont, onCreateProguard) }
+            }
+
+            // ---- Source sets (add / remove typed roots) ----
+            item("sourceSets") {
+                SourceSetsCard(config.sourceSets, codeFont, projectRoot, twoColumn, onAddSourceRoot, onRemoveSourceRoot)
+            }
+
+            // ---- Facet panels (generic) ----
+            itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont, twoColumn) }
         }
-
-        // ---- Minify: referenced-but-missing keep-rule files ----
-        if (missingProguard.isNotEmpty()) {
-            item("proguardMissing") { MissingProguardCard(missingProguard, codeFont, onCreateProguard) }
-        }
-
-        // ---- Facet panels (generic) ----
-        itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
-
-    }
         // Pinned, not the last row of the form: the Save button used to sit below every facet panel, so on an
         // Android module you had to scroll past a screenful of fields to discover that your edits needed
         // saving at all. It slides in the moment anything differs from the loaded config and stays put.
@@ -889,22 +1063,143 @@ private fun ConfigForm(
     }
 }
 
+/**
+ * The module's build basics: where it compiles to, its Java level (a segmented choice, since there are only a
+ * handful) and its platform SDK (a menu, since an SDK-rich workspace lists many and their labels are long).
+ */
+@Composable
+private fun GeneralCard(
+    config: UiModuleConfig,
+    level: String,
+    onLevel: (String) -> Unit,
+    sdk: String,
+    onSdk: (String) -> Unit,
+    codeFont: FontFamily,
+    projectRoot: String,
+    twoColumn: Boolean,
+) {
+    SectionCard(stringResource(Res.string.modcfg_section_general)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.modcfg_output), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                shortenPath(config.outputDir, projectRoot), color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        val levelPicker = @Composable { m: Modifier ->
+            LabeledField(stringResource(Res.string.modcfg_java_version), m) { JavaLevelPicker(config.languageLevels, level, onLevel) }
+        }
+        // Platform SDK: the boot classpath the module compiles/completes against. "Auto" follows the module type
+        // (Java → core-Java, Android → the Android SDK); pinning it is how a console module is kept off
+        // android.jar, or a module is targeted at a specific installed platform.
+        val showSdk = config.availableSdks.size > 1
+        val sdkPicker = @Composable { m: Modifier ->
+            val auto = stringResource(Res.string.modcfg_platform_sdk_auto, config.resolvedSdk)
+            val options = listOf("" to auto) + config.availableSdks.map { it.name to it.label }
+            LabeledField(stringResource(Res.string.modcfg_platform_sdk), m) {
+                DropdownField(options.firstOrNull { it.first == sdk }?.second ?: sdk, options, sdk, onSdk)
+            }
+        }
+        if (twoColumn && showSdk) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                levelPicker(Modifier.weight(1f))
+                sdkPicker(Modifier.weight(1f))
+            }
+        } else {
+            levelPicker(Modifier.fillMaxWidth())
+            if (showSdk) sdkPicker(Modifier.fillMaxWidth())
+        }
+        config.missingPlatform?.let { mp ->
+            Notice(stringResource(Res.string.modcfg_platform_missing, mp.compileSdk, mp.usedLevel), error = true)
+        }
+    }
+}
+
+/** The module's Java level as a segmented row ("8 · 11 · 17 · 21"), or a menu when there are too many to fit. */
+@Composable
+private fun JavaLevelPicker(levels: List<String>, selected: String, onSelect: (String) -> Unit) {
+    if (levels.size > 5) {
+        DropdownField(prettyLevel(selected), levels.map { it to prettyLevel(it) }, selected, onSelect)
+        return
+    }
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        levels.forEachIndexed { i, lvl ->
+            SegmentedButton(
+                selected = lvl == selected,
+                onClick = { onSelect(lvl) },
+                shape = SegmentedButtonDefaults.itemShape(i, levels.size),
+                // No check mark: four "Java NN" segments with one have to fit a 360dp phone.
+                icon = {},
+                label = { Text(prettyLevel(lvl), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            )
+        }
+    }
+}
+
+/** A read-only field that opens a menu of [options] (value to label); [value] is the label shown. */
+@Composable
+private fun DropdownField(value: String, options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(Ca.radius.pill),
+            color = Color.Transparent,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().height(40.dp),
+        ) {
+            Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Symbol(CaSymbols.arrowDropDown, null, size = 24.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (key, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    trailingIcon = if (key == selected) ({ Icon(CaIcons.check, null, Modifier.size(18.dp)) }) else null,
+                    onClick = { open = false; onSelect(key) },
+                )
+            }
+        }
+    }
+}
+
+/** An inline warning or error inside a card. */
+@Composable
+private fun Notice(text: String, error: Boolean) {
+    val tint = if (error) MaterialTheme.colorScheme.error else Ide.colors.warning
+    Row(
+        Modifier.fillMaxWidth().background(tint.copy(alpha = 0.12f), MaterialTheme.shapes.small).padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = tint)
+        Text(text, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 /** The pinned unsaved-changes bar: what changed, a way back, and the commit. */
 @Composable
 private fun SaveBar(onDiscard: () -> Unit, onSave: () -> Unit) {
     Surface(tonalElevation = 3.dp, shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                stringResource(Res.string.modcfg_unsaved_changes),
-                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            TextButton(onClick = onDiscard) { Text(stringResource(Res.string.modcfg_discard)) }
-            Button(onClick = onSave) { Text(stringResource(Res.string.modcfg_save)) }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val gutter = contentGutter(maxWidth)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = gutter, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(Res.string.modcfg_unsaved_changes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = onDiscard) { Text(stringResource(Res.string.modcfg_discard)) }
+                Button(onClick = onSave) { Text(stringResource(Res.string.modcfg_save)) }
+            }
         }
     }
 }
@@ -916,38 +1211,23 @@ private fun SaveBar(onDiscard: () -> Unit, onSave: () -> Unit) {
  */
 @Composable
 private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, codeFont: FontFamily) {
-    SectionCard(stringResource(Res.string.modcfg_run)) {
-        Text(
-            stringResource(Res.string.modcfg_run_config_hint),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
-        )
-        Box(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            if (mainClass.value.isEmpty()) {
+    SectionCard(stringResource(Res.string.modcfg_run), subtitle = stringResource(Res.string.modcfg_run_config_hint)) {
+        OutlinedTextField(
+            value = mainClass.value,
+            onValueChange = { mainClass.value = it },
+            singleLine = true,
+            placeholder = {
                 Text(
                     rc.autoDetected?.let { stringResource(Res.string.modcfg_auto_detected, it) } ?: stringResource(Res.string.modcfg_run_main_class_placeholder),
-                    color = MaterialTheme.colorScheme.outline,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-            }
-            BasicTextField(
-                value = mainClass.value,
-                onValueChange = { mainClass.value = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+            },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (rc.detectedMainClasses.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 LevelChip(stringResource(Res.string.modcfg_auto_detect), selected = mainClass.value.isBlank()) { mainClass.value = "" }
                 rc.detectedMainClasses.forEach { fqn ->
                     LevelChip(fqn, selected = mainClass.value.trim() == fqn) { mainClass.value = fqn }
@@ -968,57 +1248,55 @@ private fun MissingProguardCard(
     codeFont: FontFamily,
     onCreate: (entry: String) -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ide.colors.warning.copy(alpha = 0.5f), RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    OutlinedCard(
+        Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, Ide.colors.warning.copy(alpha = 0.5f)),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = Ide.colors.warning)
-            Text(stringResource(Res.string.modcfg_missing_keep_rule_files), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-        }
-        Text(
-            stringResource(Res.string.modcfg_missing_keep_rule_files_content),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
-        )
-        missing.forEach { mf ->
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(mf.entry, color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if (mf.consumer) stringResource(Res.string.modcfg_consumer_suffix, mf.buildType) else mf.buildType,
-                        color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = Ide.colors.warning)
+                Text(stringResource(Res.string.modcfg_missing_keep_rule_files), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+                stringResource(Res.string.modcfg_missing_keep_rule_files_content),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+            )
+            missing.forEach { mf ->
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small).padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(mf.entry, color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (mf.consumer) stringResource(Res.string.modcfg_consumer_suffix, mf.buildType) else mf.buildType,
+                            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+                    }
+                    FilledTonalButton(onClick = { onCreate(mf.entry) }) {
+                        Icon(CaIcons.plus, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(Res.string.create))
+                    }
                 }
-                CreateRuleButton { onCreate(mf.entry) }
             }
         }
     }
 }
 
 @Composable
-private fun CreateRuleButton(onClick: () -> Unit) {
-    Row(
-        Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(CaIcons.plus, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(stringResource(Res.string.create), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
+private fun SectionCard(
+    title: String,
+    subtitle: String? = null,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                // titleSmall in the section colour, not an uppercased micro-label: M3 section headers are
-                // read as headings, and SMALL CAPS at labelSmall is the hardest thing on the screen to scan.
-                Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                }
                 action?.invoke()
             }
             content()
@@ -1026,31 +1304,94 @@ private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null,
     }
 }
 
-/** A compact label · value row used in the General card (label fixed-width so values line up). */
+/**
+ * The module's source sets. A set's roots usually share one folder (`app/src/main/{java,kotlin,res,assets}`), so
+ * that folder is written once and each root is a chip of its own name. Four full paths per set made this the
+ * tallest, noisiest card on the page.
+ */
 @Composable
-private fun MetaRow(label: String, value: @Composable () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
-        Box(Modifier.weight(1f)) { value() }
+private fun SourceSetsCard(
+    sets: List<UiSourceSetInfo>,
+    codeFont: FontFamily,
+    projectRoot: String,
+    wide: Boolean,
+    onAdd: () -> Unit,
+    onRemoveRoot: (sourceSet: String, rootPath: String) -> Unit,
+) {
+    SectionCard(stringResource(Res.string.modcfg_section_source_sets), action = {
+        TextButton(onClick = onAdd) {
+            Icon(CaIcons.plus, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(Res.string.modcfg_add_source_root))
+        }
+    }) {
+        if (sets.isEmpty()) {
+            Text(stringResource(Res.string.modcfg_no_source_sets), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+        }
+        sets.forEachIndexed { i, ss ->
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            SourceSetBlock(ss, codeFont, projectRoot, wide) { root -> onRemoveRoot(ss.name, root) }
+        }
     }
 }
 
 @Composable
-private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily, projectRoot: String, onRemoveRoot: (rootPath: String) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(ss.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Chip(ss.scope.lowercase(), fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary)
+private fun SourceSetBlock(ss: UiSourceSetInfo, codeFont: FontFamily, projectRoot: String, wide: Boolean, onRemoveRoot: (rootPath: String) -> Unit) {
+    val relative = ss.roots.map { it to shortenPath(it, projectRoot) }
+    // The folder every root sits in, when they share one; then a chip only needs the root's own name.
+    val parent = relative.map { it.second.substringBeforeLast('/', "") }.distinct().singleOrNull()?.takeIf { it.isNotEmpty() }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val folder: @Composable (Modifier) -> Unit = { m ->
+            if (parent != null) {
+                Text(
+                    parent, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = m,
+                )
+            }
         }
-        if (ss.roots.isEmpty()) Text(stringResource(Res.string.modcfg_no_roots), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-        ss.roots.forEach { r ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(shortenPath(r, projectRoot), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, shortenPath(r, projectRoot)), onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(ss.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
+            Text(
+                ss.scope.lowercase(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+            // Beside the name when there is room; on a phone it gets a line of its own rather than being cut short.
+            if (wide) folder(Modifier.weight(1f, fill = false))
+        }
+        if (!wide) folder(Modifier)
+        if (ss.roots.isEmpty()) {
+            Text(stringResource(Res.string.modcfg_no_roots), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                relative.forEach { (full, rel) ->
+                    RemovableChip(
+                        label = if (parent != null) rel.substringAfterLast('/') else rel,
+                        removeLabel = stringResource(Res.string.modcfg_remove_named, rel),
+                        codeFont = codeFont,
+                        icon = CaIcons.folder,
+                        onRemove = { onRemoveRoot(full) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A value with its own remove button: a source root, a glob pattern, a list entry. */
+@Composable
+private fun RemovableChip(label: String, removeLabel: String, codeFont: FontFamily, icon: ImageVector? = null, onRemove: () -> Unit) {
+    Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(
+            Modifier.height(32.dp).padding(start = if (icon != null) 8.dp else 12.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (icon != null) Icon(icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(
+                label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge.copy(fontFamily = codeFont),
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 280.dp),
+            )
+            IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
+                Icon(CaIcons.close, removeLabel, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1071,143 +1412,170 @@ private fun shortenPath(full: String, projectRoot: String): String {
 // ---- facet panels (collapsible) -----------------------------------------------------------------
 
 @Composable
-private fun FacetPanel(form: FacetForm, codeFont: FontFamily) {
+private fun FacetPanel(form: FacetForm, codeFont: FontFamily, twoColumn: Boolean) {
     var open by remember(form) { mutableStateOf(true) }
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)),
-    ) {
+    val caret by animateFloatAsState(if (open) 0f else -90f, tween(Motion.FAST), label = "facetCaret")
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
         Row(
-            Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open }.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(CaIcons.box, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(form.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Icon(if (open) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
+            Box(Modifier.size(32.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(10.dp)), Alignment.Center) {
+                Icon(CaIcons.box, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            Text(form.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Icon(CaIcons.chevronDown, null, Modifier.size(20.dp).rotate(caret), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
-            Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                form.fields.forEach { FieldEditor(it, codeFont) }
+            Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
+                FieldGrid(form.fields, codeFont, twoColumn)
+            }
+        }
+    }
+}
+
+/**
+ * A facet's fields laid out by kind: text and number inputs on a grid (two to a row when there is room), the
+ * switches as a grid of toggle rows, then lists and tables at full width. Order within each kind is the codec's.
+ */
+@Composable
+private fun FieldGrid(fields: List<FieldState>, codeFont: FontFamily, twoColumn: Boolean) {
+    val columns = if (twoColumn) 2 else 1
+    val inputs = fields.filter { it is FieldState.TextF || it is FieldState.NumberF }
+    val toggles = fields.filterIsInstance<FieldState.BoolF>()
+    val blocks = fields.filter { it is FieldState.ListF || it is FieldState.TableF }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (inputs.isNotEmpty()) GridRows(inputs, columns) { FieldEditor(it, codeFont, twoColumn) }
+        if (toggles.isNotEmpty()) GridRows(toggles, columns, spacing = 8.dp) { ToggleRow(it) }
+        blocks.forEach { FieldEditor(it, codeFont, twoColumn) }
+    }
+}
+
+/** [items] in rows of [columns] equal cells; a short last row keeps its cells the same width as the rest. */
+@Composable
+private fun <T> GridRows(items: List<T>, columns: Int, spacing: Dp = 12.dp, cell: @Composable (T) -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(spacing)) {
+        items.chunked(columns).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { Box(Modifier.weight(1f)) { cell(it) } }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
 @Composable
-private fun FieldEditor(field: FieldState, codeFont: FontFamily) {
+private fun FieldEditor(field: FieldState, codeFont: FontFamily, twoColumn: Boolean) {
     when (field) {
-        is FieldState.TextF -> LabeledField(field.label) {
-            BoxedTextField(field.value, codeFont)
-        }
-        is FieldState.NumberF -> LabeledField(field.label) {
-            BoxedTextField(field.value, codeFont, numeric = true)
-        }
-        is FieldState.BoolF -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(field.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            ToggleSwitch(field.value.value) { field.value.value = it }
-        }
+        is FieldState.TextF -> BoxedTextField(field.label, field.value, codeFont)
+        is FieldState.NumberF -> BoxedTextField(field.label, field.value, codeFont, numeric = true)
+        is FieldState.BoolF -> ToggleRow(field)
         is FieldState.ListF -> LabeledField(field.label) { StringListEditor(field.values, codeFont) }
-        is FieldState.TableF -> TableListEditor(field, codeFont)
+        is FieldState.TableF -> TableListEditor(field, codeFont, twoColumn)
+    }
+}
+
+/** A switch with its label; the whole row is the touch target. */
+@Composable
+private fun ToggleRow(field: FieldState.BoolF) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .toggleable(value = field.value.value, role = Role.Switch) { field.value.value = it }
+            .padding(start = 16.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(field.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = field.value.value, onCheckedChange = null)
     }
 }
 
 @Composable
-private fun LabeledField(label: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+private fun LabeledField(label: String, modifier: Modifier = Modifier.fillMaxWidth(), content: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
         content()
     }
 }
 
+/** An M3 outlined field with its label inside the outline, so a grid of them stays compact. */
 @Composable
-private fun BoxedTextField(state: MutableState<String>, codeFont: FontFamily, numeric: Boolean = false) {
+private fun BoxedTextField(label: String, state: MutableState<String>, codeFont: FontFamily, numeric: Boolean = false) {
     OutlinedTextField(
         value = state.value,
         onValueChange = { state.value = if (numeric) it.filter { c -> c.isDigit() } else it },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         singleLine = true,
         keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = codeFont),
         shape = MaterialTheme.shapes.small,
         modifier = Modifier.fillMaxWidth(),
     )
 }
 
-@Composable
-private fun ToggleSwitch(on: Boolean, onToggle: (Boolean) -> Unit) {
-    Switch(checked = on, onCheckedChange = onToggle)
-}
-
+/** An editable list of strings: the entries as removable chips, then a field that adds one (Enter or +). */
 @Composable
 private fun StringListEditor(values: SnapshotStateList<String>, codeFont: FontFamily) {
     var draft by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        values.forEachIndexed { i, v ->
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(v, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), modifier = Modifier.weight(1f),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { values.removeAt(i) }, boxSize = 24, iconSize = 14, tint = MaterialTheme.colorScheme.outline)
+    val add = { if (draft.isNotBlank()) { values.add(draft.trim()); draft = "" } }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (values.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                values.forEachIndexed { i, v ->
+                    RemovableChip(v, stringResource(Res.string.modcfg_remove_named, v), codeFont, onRemove = { values.removeAt(i) })
+                }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
-            ) {
-                if (draft.isEmpty()) Text(stringResource(Res.string.modcfg_add_placeholder), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-                BasicTextField(draft, { draft = it }, singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
-            }
-            IconButtonCa(CaIcons.plus, stringResource(Res.string.add), { if (draft.isNotBlank()) { values.add(draft.trim()); draft = "" } }, boxSize = 30, iconSize = 16, active = true)
-        }
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            singleLine = true,
+            placeholder = { Text(stringResource(Res.string.modcfg_add_placeholder)) },
+            trailingIcon = {
+                IconButton(onClick = add, enabled = draft.isNotBlank()) { Icon(CaIcons.plus, stringResource(Res.string.add), Modifier.size(20.dp)) }
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { add() }),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 @Composable
-private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily) {
+private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily, twoColumn: Boolean) {
     // Highlight the just-added row briefly so it's obvious a new item appeared (it animates in at the bottom).
     var justAdded by remember { mutableStateOf(-1) }
     LaunchedEffect(justAdded) { if (justAdded >= 0) { delay(1600); justAdded = -1 } }
     val singular = field.label.lowercase().removeSuffix("s")
 
-    Column(Modifier.fillMaxWidth().animateContentSize(tween(Motion.BASE, easing = Motion.spring)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(field.label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-        if (field.rows.isEmpty()) Text(stringResource(Res.string.modcfg_no_rows_yet, "${singular}s"), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+    Column(Modifier.fillMaxWidth().animateContentSize(tween(Motion.BASE, easing = Motion.spring)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(field.label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+        if (field.rows.isEmpty()) Text(stringResource(Res.string.modcfg_no_rows_yet, "${singular}s"), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         field.rows.forEachIndexed { i, row ->
             val isNew = i == justAdded
-            val borderColor by animateColorAsState(if (isNew) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, tween(Motion.SLOW), label = "newRowBorder")
+            val borderColor by animateColorAsState(if (isNew) MaterialTheme.colorScheme.primary else Color.Transparent, tween(Motion.SLOW), label = "newRowBorder")
             Column(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
-                    .border(if (isNew) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(Ca.radius.md)).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.medium)
+                    .border(1.5.dp, borderColor, MaterialTheme.shapes.medium).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(rowTitle(row, i), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(rowTitle(row, i), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                     if (isNew) Chip(stringResource(Res.string.modcfg_new_badge), fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary)
-                    IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }, boxSize = 24, iconSize = 14, tint = MaterialTheme.colorScheme.outline)
+                    IconButton(onClick = { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }) {
+                        Symbol(CaSymbols.delete, stringResource(Res.string.remove), size = 20.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                row.forEach { FieldEditor(it, codeFont) }
+                Box(Modifier.padding(end = 8.dp)) { FieldGrid(row, codeFont, twoColumn) }
             }
         }
-        AddRowButton(stringResource(Res.string.modcfg_add_row, singular)) { field.rows.add(cloneTemplateRow(field)); justAdded = field.rows.lastIndex }
-    }
-}
-
-/** A full-width, clearly-labelled add button for the inline-table editor (build types / product flavors). */
-@Composable
-private fun AddRowButton(label: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.md))
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.width(6.dp))
-        Text(label, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        OutlinedButton(onClick = { field.rows.add(cloneTemplateRow(field)); justAdded = field.rows.lastIndex }, modifier = Modifier.fillMaxWidth()) {
+            Icon(CaIcons.plus, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(Res.string.modcfg_add_row, singular))
+        }
     }
 }
 

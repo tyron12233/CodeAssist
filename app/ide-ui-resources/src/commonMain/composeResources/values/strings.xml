@@ -1411,6 +1411,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_title_modules">Modules</string>
     <string name="modcfg_new_module_action">New module</string>
     <string name="modcfg_no_modules">No modules. Tap + to add one.</string>
+    <string name="modcfg_empty_title">No modules yet</string>
+    <string name="modcfg_empty_body">A module is one buildable part of your project: an app, a library or a feature.</string>
     <string name="modcfg_remove_named">Remove %1$s</string>
     <string name="modcfg_removed">Removed %1$s</string>
     <string name="modcfg_build_features_android_only">Build features apply to Android modules only.</string>

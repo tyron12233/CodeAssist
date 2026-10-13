@@ -774,6 +774,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="modcfg_title_modules">Modul</string>
     <string name="modcfg_new_module_action">Modul baru</string>
     <string name="modcfg_no_modules">Tidak ada modul. Ketuk + untuk menambahkan satu.</string>
+    <string name="modcfg_empty_title">Belum ada modul</string>
+    <string name="modcfg_empty_body">Modul adalah satu bagian proyek yang dapat di-build: aplikasi, library, atau fitur.</string>
     <string name="modcfg_remove_named">Hapus %1$s</string>
     <string name="modcfg_removed">Menghapus %1$s</string>
     <string name="modcfg_build_features_android_only">Fitur build hanya berlaku untuk modul Android.</string>

@@ -1394,6 +1394,8 @@
     <string name="modcfg_title_modules">模块</string>
     <string name="modcfg_new_module_action">新建模块</string>
     <string name="modcfg_no_modules">没有模块，点击 + 添加模块。</string>
+    <string name="modcfg_empty_title">还没有模块</string>
+    <string name="modcfg_empty_body">模块是项目中可单独构建的部分：应用、库或功能。</string>
     <string name="modcfg_remove_named">移除 %1$s</string>
     <string name="modcfg_removed">已移除 %1$s</string>
     <string name="modcfg_build_features_android_only">构建功能仅适用于 Android 模块。</string>
