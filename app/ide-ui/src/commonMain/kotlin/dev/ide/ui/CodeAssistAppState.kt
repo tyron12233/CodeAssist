@@ -368,15 +368,17 @@ class CodeAssistAppState(
             val exists = withContext(ioDispatcher) { backend.projects.projects().any { it.rootPath == last } }
             if (exists) backend.projects.openProject(last)
         }
-        // Track which project (if any) is on screen for the resume above: clear it on the picker (so quitting
-        // from the picker reopens to the picker), otherwise record the active project's root while any of its
-        // screens is shown (Editor, Settings, Run, Dependencies). Compares against the in-memory mirror so it
-        // writes only on a real picker to project transition, never per navigation.
+        // Track which project (if any) the user has open, for the resume above. Entering the editor (or its Run
+        // screen, which only an open project has) records the project; the picker, where closing a project
+        // lands, clears it; every other screen leaves it as it was. Closing keeps the engine loaded (epoch > 0),
+        // so recording on "any screen but the picker" re-recorded a CLOSED project the moment the user went on
+        // to New Project, Settings or the Store, and the next launch reopened it. Compares against the
+        // in-memory mirror so it writes only on a real change, never per navigation.
         scope.launch {
             snapshotFlow { screen to epoch }.distinctUntilChanged().collect { (current, projectEpoch) ->
                 val target = when {
                     current == Screen.Projects -> ""
-                    projectEpoch > 0 -> backend.project.rootPath
+                    (current == Screen.Editor || current == Screen.Run) && projectEpoch > 0 -> backend.project.rootPath
                     else -> return@collect
                 }
                 if (target != lastPersistedProject) {

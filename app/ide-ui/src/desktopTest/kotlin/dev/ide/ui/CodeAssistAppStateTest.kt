@@ -1,5 +1,6 @@
 package dev.ide.ui
 
+import androidx.compose.runtime.snapshots.Snapshot
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.ext.ScreenBackRegistry
 import dev.ide.ui.ext.ScreenContribution
@@ -207,6 +208,33 @@ class CodeAssistAppStateTest {
 
         assertEquals(listOf("/ws/app"), backend.opened)
         assertEquals(Screen.Editor, app.screen)
+    }
+
+    /**
+     * A closed project stays closed. Closing lands on the picker but keeps the engine loaded, and going on to
+     * any other screen (New Project, Settings, the Store) used to record the closed project again, so the next
+     * launch reopened it.
+     */
+    @Test
+    fun aClosedProjectIsNotReopenedAfterVisitingOtherScreens() = runTest {
+        val backend = AppBackend(settledPrefs() + ("session.lastProject" to "/ws/app")).apply { analyticsConsent = false }
+        val app = appState(backend)
+        settleResume(backend)
+        Snapshot.sendApplyNotifications()
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+        assertTrue(backend.prefs["session.lastProject"].orEmpty().isNotBlank(), "the open project is recorded")
+
+        // Each step is its own frame, as in the app: snapshotFlow only sees a state once it has been applied.
+        fun go(next: Screen) {
+            app.navigateTo(next)
+            Snapshot.sendApplyNotifications()
+            advanceUntilIdle()
+        }
+        go(Screen.Projects) // Close project
+        assertEquals("", backend.prefs["session.lastProject"], "closing clears it")
+        for (next in listOf(Screen.CreateProject, Screen.Settings, Screen.Projects, Screen.StoreItem)) go(next)
+        assertEquals("", backend.prefs["session.lastProject"], "the closed project is not recorded again")
     }
 
     /** With "Reopen last project on launch" off, a cold launch stays on the picker. */
