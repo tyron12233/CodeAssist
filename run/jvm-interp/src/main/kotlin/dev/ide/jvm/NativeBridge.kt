@@ -71,6 +71,19 @@ class ReflectiveBridge(
     private fun loadClass(internal: String): Class<*> =
         classCache.getOrPut(internal) { Class.forName(internal.replace('/', '.'), false, loader) }
 
+    /**
+     * The class a bridged member access names, as the program sees it: one the host does not have is a
+     * [NoClassDefFoundError] thrown INTO the program, which is what a JVM throws for a missing referenced class
+     * and what an interpreted `catch (Throwable)` can catch. As a raw [ClassNotFoundException] it escaped every
+     * handler and ended the run (one test touching an absent `android.*` class took the whole test run down).
+     */
+    private fun loadReferenced(internal: String): Class<*> =
+        try {
+            loadClass(internal)
+        } catch (e: ClassNotFoundException) {
+            throw VmException(NoClassDefFoundError(internal.replace('/', '.')).apply { initCause(e) })
+        }
+
     /** Whether [internal] is loadable on the host at all — false for a project-only type (e.g. a newer Compose
      *  class the bundled runtime lacks) that is interpreted, never bridged. */
     private fun classLoadable(internal: String): Boolean =
@@ -162,7 +175,7 @@ class ReflectiveBridge(
 
     override fun invokeStatic(owner: String, name: String, descriptor: String, args: List<Any?>): Any? {
         rejectVmObjects(args)
-        val m = resolveMethod(loadClass(owner), name, descriptor) ?: throw VmUnsupportedException("no static $owner.$name$descriptor")
+        val m = resolveMethod(loadReferenced(owner), name, descriptor) ?: throw VmUnsupportedException("no static $owner.$name$descriptor")
         return marshalOut(invoked { m.invoke(null, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
     }
 
@@ -179,7 +192,7 @@ class ReflectiveBridge(
 
     override fun construct(owner: String, descriptor: String, args: List<Any?>): Any {
         rejectVmObjects(args)
-        val ctor = resolveConstructor(loadClass(owner), descriptor)
+        val ctor = resolveConstructor(loadReferenced(owner), descriptor)
             ?: return missingConstructor?.invoke(owner, descriptor, args)
                 ?: throw VmUnsupportedException("no constructor $owner$descriptor")
         return invoked { ctor.newInstance(*marshalArgs(descriptor, args)) }!!
@@ -211,10 +224,10 @@ class ReflectiveBridge(
         if (t is UndeclaredThrowableException) t.undeclaredThrowable ?: t else t
 
     override fun getStatic(owner: String, name: String, descriptor: String): Any? =
-        marshalOut(resolveField(loadClass(owner), name).get(null), descriptor)
+        marshalOut(resolveField(loadReferenced(owner), name).get(null), descriptor)
 
     override fun putStatic(owner: String, name: String, descriptor: String, value: Any?) {
-        resolveField(loadClass(owner), name).set(null, marshalIn(value, descriptor))
+        resolveField(loadReferenced(owner), name).set(null, marshalIn(value, descriptor))
     }
 
     override fun getField(receiver: Any, name: String, descriptor: String): Any? =

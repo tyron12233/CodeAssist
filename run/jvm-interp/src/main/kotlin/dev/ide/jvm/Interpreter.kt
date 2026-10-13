@@ -518,7 +518,11 @@ internal class Interpreter(private val vm: Vm) {
     }
 
     private fun matchesCatch(thrown: Any?, catchType: String): Boolean = when (thrown) {
-        is VmObject -> vm.isSubtype(thrown.vmClass, catchType)
+        // The real half of the hierarchy too, as `instanceof` checks it: an interpreted exception extending a
+        // bridged one (opentest4j's `AssertionFailedError extends AssertionError`, a program's
+        // `MyException : RuntimeException`) is caught by `catch (Throwable)` / `catch (Exception)`, which name
+        // only real ancestors that [Vm.isSubtype]'s by-name walk never reaches.
+        is VmObject -> vm.isSubtype(thrown.vmClass, catchType) || vm.isRealInstance(thrown.vmClass, catchType)
         is Throwable -> runCatching {
             Class.forName(
                 catchType.replace('/', '.'),
