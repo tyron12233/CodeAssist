@@ -693,16 +693,22 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         for (m in ctx.modules().filter { it.type.id == "android-app" }) {
             for (v in AndroidVariants.compute(m)) {
                 val cap = v.name.replaceFirstChar { it.uppercase() }
-                // On device, the android Run builds + installs + launches; on desktop it stops at assemble.
-                if (ctx.apkInstaller != null) add(
-                    RunTaskOption(
-                        "androidRun:${m.name}:${v.name}",
-                        if (PluginProject.isPluginModule(m)) "Install plugin $cap · ${m.name}"
-                        else "Run $cap · ${m.name}",
-                        "android",
+                // On device, the android Run builds + installs + launches. On desktop it does the same onto a
+                // device over adb, one entry per connected device, and the assemble task stays beside them.
+                val installer = ctx.apkInstaller
+                if (installer != null) {
+                    val action = if (PluginProject.isPluginModule(m)) "Install plugin" else "Run"
+                    val targets = if (installer.choosesTarget) installer.targets() else emptyList()
+                    if (targets.isEmpty()) add(
+                        RunTaskOption("androidRun:${m.name}:${v.name}", "$action $cap · ${m.name}", "android")
                     )
-                )
-                else add(
+                    for (t in targets) add(
+                        RunTaskOption(
+                            "androidRun:${m.name}:${v.name}:${t.id}", "$action $cap · ${m.name} · ${t.label}", "android",
+                        )
+                    )
+                }
+                if (installer == null || installer.choosesTarget) add(
                     RunTaskOption(
                         "assemble:${m.name}:${v.name}", "assemble$cap · ${m.name}", "android"
                     )
@@ -936,7 +942,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 }
 
                 id.startsWith("androidRun:") -> {
-                    val parts = id.removePrefix("androidRun:").split(":")
+                    // module:variant[:target]. Limit 3, because a target can be a network adb serial
+                    // (`192.168.1.5:5555`) with a colon of its own.
+                    val parts = id.removePrefix("androidRun:").split(":", limit = 3)
+                    val target = parts.getOrNull(2)
                     val module = ctx.modules().firstOrNull { it.name == parts[0] }
                         ?: return fail("No module '${parts[0]}'.")
                     val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
@@ -975,7 +984,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         "> $label $variant · ${module.name}",
                         firstBuildDexBanner(module)
                     ) { log ->
-                        installer.installAndLaunch(apk, launchPkg, log)
+                        installer.installAndLaunch(apk, launchPkg, target, log)
                         if (isPlugin) {
                             log("")
                             log("Installed as a plugin. Plugins load at startup, so this build is not live")

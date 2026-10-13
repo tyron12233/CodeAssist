@@ -910,7 +910,12 @@ class ProjectManager private constructor(
         private const val CONSENTED_PLUGINS_KEY = "plugins.consented"
 
         /** Desktop host: an installed Android SDK if present (so `android.*` resolves), else a detected JDK; Java 17. */
-        fun desktop(projectsRoot: Path, legacyDataDirs: List<Path> = emptyList()): ProjectManager =
+        fun desktop(
+            projectsRoot: Path,
+            legacyDataDirs: List<Path> = emptyList(),
+            /** Installs onto a connected device over adb, so the android Run works from the desktop too. */
+            apkInstaller: ApkInstaller? = null,
+        ): ProjectManager =
             ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,
@@ -919,6 +924,7 @@ class ProjectManager private constructor(
                 LanguageLevel.JAVA_17,
                 androidTools = null,
                 legacyDataDirs = legacyDataDirs,
+                apkInstaller = apkInstaller,
             )
 
         /**

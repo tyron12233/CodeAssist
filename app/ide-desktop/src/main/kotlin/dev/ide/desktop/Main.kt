@@ -12,6 +12,7 @@ import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.project.ProjectManager
 import dev.ide.core.sdk.BundledAndroidToolchain
+import dev.ide.desktop.run.DesktopApkInstaller
 import dev.ide.desktop.store.registerDesktopStore
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.editor.preview.ImageSceneComposer
@@ -44,7 +45,8 @@ fun main(args: Array<String>) {
         System.getProperty("codeassist.projects.root")
             ?: "${System.getProperty("user.home")}/.codeassist/projects",
     )
-    val manager = ProjectManager.desktop(projectsRoot)
+    // Android Run installs and opens the app on a connected device over adb (found, not bundled).
+    val manager = ProjectManager.desktop(projectsRoot, apkInstaller = DesktopApkInstaller())
     // The online store (catalog, sign-in, publishing). Registered before the backend, which resolves it once.
     val storeSignIn = registerDesktopStore(manager, projectsRoot.resolveSibling("store-session"))
 
