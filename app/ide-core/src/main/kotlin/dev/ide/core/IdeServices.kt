@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.ui.backend.TestOutput
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.AnalysisEvent
@@ -2473,8 +2474,44 @@ class IdeServices private constructor(
             override val text: String = text
             override val languageId: String? = languageFor(file).id.takeIf { it.isNotBlank() }
         }
-        return decorationCollector.collect(ctx) { providerId, error ->
+        val collected = decorationCollector.collect(ctx) { providerId, error ->
             decorationLog.warn("editor decoration provider '$providerId' failed on $file", error)
+        }
+        val tests = runCatching { testGutterMarks(file, text) }.getOrDefault(emptyList())
+        if (tests.isEmpty()) return collected
+        return dev.ide.plugin.editor.EditorDecorations(collected.ranges, collected.gutter + tests, collected.inlays)
+    }
+
+    /**
+     * Run marks for the tests in [file] when it sits in a test source root of a module that can run tests: one
+     * on each test class (all its tests) and one on each test. A mark's action is the `test:` Run task itself,
+     * prefixed so the editor knows to start it as a run ([TestOutput.GUTTER_ACTION_PREFIX]).
+     */
+    private fun testGutterMarks(file: Path, text: String): List<dev.ide.plugin.editor.GutterMark> {
+        val name = file.fileName?.toString() ?: return emptyList()
+        if (!name.endsWith(".kt") && !name.endsWith(".java")) return emptyList()
+        val target = file.toAbsolutePath().normalize()
+        val module = modules().firstOrNull { m ->
+            dev.ide.build.engine.testSourceRootDirs(m).any { target.startsWith(it.toAbsolutePath().normalize()) }
+        } ?: return emptyList()
+        val hits = if (name.endsWith(".kt")) {
+            dev.ide.lang.kotlin.index.KotlinTestScan.scan(name, text).map { Triple(it.classFqn, it.method, it.offset) }
+        } else {
+            dev.ide.lang.java.index.JavaTestScan.scan(text).map { Triple(it.classFqn, it.method, it.offset) }
+        }
+        if (hits.isEmpty()) return emptyList()
+        val lineStarts = ArrayList<Int>().apply { add(0); text.forEachIndexed { i, c -> if (c == '\n') add(i + 1) } }
+        return hits.map { (cls, method, offset) ->
+            val line = lineStarts.binarySearch(offset).let { if (it >= 0) it else -it - 2 }
+            val taskId = TestOutput.taskId(module.name, listOf(TestOutput.target(cls, method)))
+            dev.ide.plugin.editor.GutterMark(
+                line = line,
+                iconId = "run",
+                tint = dev.ide.plugin.editor.DecorationTint.Success,
+                tooltip = if (method == null) "Run all tests in ${cls.substringAfterLast('.')}" else "Run $method",
+                actionId = TestOutput.GUTTER_ACTION_PREFIX + taskId,
+                order = 100,
+            )
         }
     }
 

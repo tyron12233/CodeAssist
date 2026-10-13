@@ -19,6 +19,10 @@ import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.moduleClosure
+import dev.ide.build.engine.testModuleDeps
+import dev.ide.build.Lifecycle
+import dev.ide.build.jvm.test.TestRunTask
+import dev.ide.build.jvm.test.TestSelector
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.BuildSystemId
@@ -108,6 +112,30 @@ class JavaBuildSystem(
         tasks.register(runName) {
             InterpretExecTask(runName, mainClass, { runtimeClasspath(module) }, interpreter, programArgs, instanceMain, programIo)
         }.configure { dependsOn(TaskName(":${module.name}:classes")) }
+        return tasks.build()
+    }
+
+    /**
+     * Build what [module]'s tests need and run the ones [selector] names: the main closure of [module] and of its
+     * `testImplementation project(…)` modules, [module]'s test compilation, then a `test` task interpreting the
+     * generated runner (see [TestRunTask]) with results streamed to [programIo].
+     */
+    fun createTestGraph(
+        project: Project,
+        module: Module,
+        selector: TestSelector,
+        interpreter: ProgramInterpreter,
+        programIo: ProgramIo? = null,
+    ): TaskGraph {
+        val byId = project.modules.associateBy { it.id }
+        val tasks = DefaultTaskContainer()
+        val java = JavaPlugin(bootClasspathFor, kotlin, plugins, generators)
+        val roots = listOf(module.id) + testModuleDeps(module, byId).map { it.id }
+        for (m in moduleClosure(roots, byId)) java.registerModule(tasks, m, byId, withJar = false)
+        java.registerTests(tasks, module, byId)
+        val test = Lifecycle.test(module.name)
+        tasks.register(test) { TestRunTask(test, module, selector, interpreter, programIo) }
+            .configure { dependsOn(Lifecycle.testClasses(module.name)) }
         return tasks.build()
     }
 

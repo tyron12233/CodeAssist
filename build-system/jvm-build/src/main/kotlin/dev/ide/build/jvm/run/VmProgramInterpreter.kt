@@ -64,6 +64,13 @@ class VmProgramInterpreter(
     private val peerFactory: PeerFactory = AsmPeerFactory(),
 ) : ProgramInterpreter {
 
+    /** [InterpretPolicy.DEFAULT], also interpreting the request's [InterpretRunRequest.interpretPrefixes]. */
+    private fun policyFor(request: InterpretRunRequest): InterpretPolicy {
+        val extra = request.interpretPrefixes
+        if (extra.isEmpty()) return InterpretPolicy.DEFAULT
+        return InterpretPolicy { name -> extra.any { name.startsWith(it) } || InterpretPolicy.DEFAULT.interpret(name) }
+    }
+
     override suspend fun run(request: InterpretRunRequest, io: ProgramIo): Int = withContext(Dispatchers.IO) {
         val jars = ArrayList<JarFile>()
         val source = classpathSource(request.classpath, jars)
@@ -72,7 +79,7 @@ class VmProgramInterpreter(
         // producers report into the same tracker.
         val windows = ProgramWindows()
         val bridge = RunBridge(javaClass.classLoader, windows, request.classpath)
-        val vm = Vm(source, InterpretPolicy.DEFAULT, bridge, WindowTrackingPeers(peerFactory, windows), SPAWNED_STACK_BYTES)
+        val vm = Vm(source, policyFor(request), bridge, WindowTrackingPeers(peerFactory, windows), SPAWNED_STACK_BYTES)
         val outcome = Outcome()
         // A dedicated group so every Thread the program starts (a real host thread, created by the creating
         // thread) inherits it and can be interrupted together on Stop, and so what those threads throw is

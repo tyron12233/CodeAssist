@@ -1,5 +1,10 @@
 package dev.ide.ui.editor
 
+import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.generated.resources.tests_run_one
+import dev.ide.ui.generated.resources.tests_run_class
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.backend.TestOutput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -418,9 +423,16 @@ private fun PluginGutterMark(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
+        // A test's run mark is the host's own, so its label is localized here rather than sent as text.
+        val testTarget = mark.actionId?.takeIf { it.startsWith(TestOutput.GUTTER_ACTION_PREFIX) }
+            ?.let { TestOutput.parseTaskId(it.removePrefix(TestOutput.GUTTER_ACTION_PREFIX))?.second?.singleOrNull() }
         Icon(
             actionIcon(mark.iconId),
-            contentDescription = mark.tooltip,
+            contentDescription = when {
+                testTarget == null -> mark.tooltip
+                '#' in testTarget -> stringResource(Res.string.tests_run_one)
+                else -> stringResource(Res.string.tests_run_class)
+            },
             tint = tint,
             modifier = Modifier.size(14.dp),
         )

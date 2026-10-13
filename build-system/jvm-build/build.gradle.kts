@@ -15,10 +15,21 @@ dependencies {
     implementation(project(":lang-jdt")) // JdtCompileTask (ecj) — constructed internally
     api(project(":jvm-interp"))     // the bytecode VM: VmProgramInterpreter runs a module's compiled program
     implementation(libs.kotlinx.coroutines.core) // VmProgramInterpreter runs the program on a cancellable coroutine
+    // A test run reads the compiled tests' annotations and GENERATES the runner class that calls them (test/).
+    implementation(libs.ow2.asm)
+    implementation(libs.ow2.asm.tree)
 
     // Builds a real workspace and compiles/runs it through the real ecj/K2, exactly as the host wires it.
     testImplementation(project(":project-model-impl"))
     testImplementation(project(":bench-support")) // opt-in regression suite: build-at-scale benchmark
     testImplementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.kotlinx.coroutines.test)
+    // The test runner's fixtures are JUnit 4 classes too (JUnit 5 + kotlin.test come with the shared test stack).
+    testImplementation(libs.junit4)
+}
+
+// `test/fixtures` holds tests FOR the IDE's test runner, several failing on purpose; the module's own test task
+// must not pick them up as its tests.
+tasks.named<Test>("test") {
+    filter { excludeTestsMatching("dev.ide.build.jvm.test.fixtures.*") }
 }

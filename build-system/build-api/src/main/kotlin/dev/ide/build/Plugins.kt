@@ -183,6 +183,20 @@ object Lifecycle {
     /** The module's jar. */
     fun jar(moduleName: String) = TaskName(":$moduleName:jar")
 
+    /** Test sources compiled, Kotlin then Java, into the module's test output (never its main output). */
+    fun compileTestKotlin(moduleName: String) = TaskName(":$moduleName:compileTestKotlin")
+
+    fun compileTestJava(moduleName: String) = TaskName(":$moduleName:compileTestJava")
+
+    /** Test resources copied into the test output. */
+    fun processTestResources(moduleName: String) = TaskName(":$moduleName:processTestResources")
+
+    /** Everything a test run needs compiled and in place. */
+    fun testClasses(moduleName: String) = TaskName(":$moduleName:testClasses")
+
+    /** The module's tests, run. */
+    fun test(moduleName: String) = TaskName(":$moduleName:test")
+
     /**
      * The module's build products, complete: the last aggregate in the graph. A plugin's own final task
      * belongs on this one (`tasks.named(assemble(m)).configure { dependsOn(mine) }`). Android pipelines

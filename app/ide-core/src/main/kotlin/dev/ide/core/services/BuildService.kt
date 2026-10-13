@@ -42,8 +42,10 @@ import dev.ide.build.RunWindow
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
+import dev.ide.build.engine.hasTestSources
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaBuildSystem
+import dev.ide.build.jvm.test.TestSelector
 import dev.ide.core.applog.AppLogEntry
 import dev.ide.core.applog.AppLogLevel
 import dev.ide.core.applog.AppLogSnapshot
@@ -80,6 +82,7 @@ import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
+import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunFrameUi
 import dev.ide.ui.backend.RunPhase
@@ -690,6 +693,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             )
             add(RunTaskOption("build:${m.name}", "Build ${m.name}", "build"))
         }
+        // Every module with tests can run them: a console module on its own output, an Android one against its
+        // active variant.
+        for (m in ctx.modules()) {
+            if (hasTestSources(m)) add(RunTaskOption("test:${m.name}", "Test ${m.name}", "test"))
+        }
         for (m in ctx.modules().filter { it.type.id == "android-app" }) {
             for (v in AndroidVariants.compute(m)) {
                 val cap = v.name.replaceFirstChar { it.uppercase() }
@@ -807,6 +815,48 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                             instanceMain = target.instance
                         ), "> Run $mainClass", onComplete = ::finalizeRunConsole
                     )
+                }
+
+                id.startsWith("test:") -> {
+                    // test:<module>[:<target>…], targets (newline-separated) being `classFqn` or `classFqn#method`
+                    val (moduleName, targets) = TestOutput.parseTaskId(id)!!
+                    val selectors = targets.map { t ->
+                        if ('#' in t) TestSelector(t.substringBefore('#'), t.substringAfter('#')) else TestSelector(t)
+                    }
+                    val selector = when (selectors.size) {
+                        0 -> TestSelector.ALL
+                        1 -> selectors.single()
+                        else -> TestSelector(anyOf = selectors)
+                    }
+                    val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return fail(
+                        "No module '$moduleName'."
+                    )
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val label = when {
+                        selectors.size > 1 -> "${selectors.size} tests in ${module.name}"
+                        selector.method != null -> "${selector.classFqn!!.substringAfterLast('.')}.${selector.method}"
+                        selector.classFqn != null -> selector.classFqn!!.substringAfterLast('.')
+                        else -> "Tests in ${module.name}"
+                    }
+                    // A test run is a console run whose program is the generated runner: its result records
+                    // ride the same transcript, and the Run screen splits them out (TestOutput).
+                    val sessionId = runConsoleSeq.incrementAndGet()
+                    val io = RunProgramIo(sessionId, module.name, label)
+                    currentRunIo = io
+                    _runConsole.value = RunConsoleUi(sessionId, module.name, label)
+                    // An Android module's local unit tests build against its active variant's output.
+                    val graph = if (isConsoleRunModule(module)) {
+                        buildSystem.createTestGraph(project, module, selector, ctx.programInterpreter, io)
+                    } else {
+                        val android = androidBuild ?: run {
+                            finalizeRunConsole(succeeded = false)
+                            return fail("Android SDK (platform + build-tools) not found — install one to run an Android module's tests.")
+                        }
+                        android.createTestGraph(project, module, ctx.activeVariant(module), selector, ctx.programInterpreter, io, buildContext())
+                    }
+                    launch(module.name, graph, "> Test $label", onComplete = ::finalizeRunConsole)
                 }
 
                 id.startsWith("assemble:") -> {

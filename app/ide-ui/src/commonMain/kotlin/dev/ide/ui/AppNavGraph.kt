@@ -441,6 +441,10 @@ private fun AppRoute(
                     app.navigateTo(Screen.Editor)
                 }
             },
+            onOpenSource = { path, offset ->
+                state.openAt(path, offset)
+                app.navigateTo(Screen.Editor)
+            },
         )
 
         Screen.ModuleConfig -> ModuleConfigScreen(

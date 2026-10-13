@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.generated.resources.tests_none_in_file
+import dev.ide.ui.backend.TestOutput
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -95,6 +97,7 @@ internal fun BoxScope.AppShortcutsHost(
     val openSettings by rememberUpdatedState(onOpenSettings)
     val newFile by rememberUpdatedState(onNewFile)
     val noBuildTask = stringResource(Res.string.shortcut_no_build_task)
+    val noTestsHere = stringResource(Res.string.tests_none_in_file)
     val nothingToReopen = stringResource(Res.string.shortcut_nothing_to_reopen)
 
     fun focusEditor() { state.editorFocusEpoch++ }
@@ -261,6 +264,19 @@ internal fun BoxScope.AppShortcutsHost(
                     if (!state.backend.build.supported()) return@Runner false
                     state.consoleOpen = true
                     state.requestRun { state.backend.build.runBuild() }
+                }
+                id == AppCommands.RUN_TESTS -> {
+                    // The file's test classes, from the run marks its editor already shows.
+                    val targets = active?.session?.gutterMarks.orEmpty()
+                        .mapNotNull { it.actionId?.takeIf { a -> a.startsWith(TestOutput.GUTTER_ACTION_PREFIX) } }
+                        .mapNotNull { TestOutput.parseTaskId(it.removePrefix(TestOutput.GUTTER_ACTION_PREFIX)) }
+                        .filter { (_, t) -> t.singleOrNull()?.contains('#') == false }
+                    val module = targets.firstOrNull()?.first
+                    if (module == null) toast = noTestsHere
+                    else {
+                        state.consoleOpen = true
+                        state.requestRun { state.backend.build.runTask(TestOutput.taskId(module, targets.flatMap { it.second }.distinct())) }
+                    }
                 }
                 id == AppCommands.BUILD -> {
                     if (!state.backend.build.supported()) return@Runner false

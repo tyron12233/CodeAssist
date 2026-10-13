@@ -559,6 +559,7 @@ internal fun ExpandedLayout(
                                                 onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
                                                 modifier = Modifier.fillMaxSize(),
                                                 onHide = { state.runOpen = false; state.consoleOpen = false },
+                                                onOpenSource = { path, offset -> state.openAt(path, offset) },
                                             )
                                         } else {
                                         // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only

@@ -166,6 +166,8 @@ androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "a
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+# JUnit 4, only as a compile-time fixture for the IDE's own test runner (jvm-build tests); nothing runs it.
+junit4 = { module = "junit:junit", version = "4.13.2" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 android-r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 android-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }

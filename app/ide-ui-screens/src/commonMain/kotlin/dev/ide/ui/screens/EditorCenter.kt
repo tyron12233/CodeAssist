@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.theme.Ide
@@ -390,7 +391,12 @@ internal fun EditorCenter(
                                 // place and writes a closed file through. Dropped here until it was wired up.
                                 onOtherFileEdits = { edits -> state.applyWorkspaceEdits(edits) },
                                 onEditorAction = { actionId, selStart, selEnd ->
-                                    state.dispatchAction(
+                                    // A test's gutter mark carries its Run task: start it like a pick from Run.
+                                    if (actionId.startsWith(TestOutput.GUTTER_ACTION_PREFIX)) {
+                                        val task = actionId.removePrefix(TestOutput.GUTTER_ACTION_PREFIX)
+                                        state.consoleOpen = true
+                                        state.requestRun { state.backend.build.runTask(task) }
+                                    } else state.dispatchAction(
                                         actionId,
                                         UiActionContext(
                                             place = UiActionPlaces.EDITOR,

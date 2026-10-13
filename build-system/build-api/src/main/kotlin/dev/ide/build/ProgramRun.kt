@@ -125,13 +125,32 @@ fun interface ProgramInterpreter {
  * directories plus the dependency/library jars, exactly as a JVM would receive it, with no dexing. [mainClass]
  * is the entry-point FQN; [instanceMain] is true when it has no static `main` (a `class T { fun main() }`), so
  * the interpreter constructs the class before calling it. [args] are the program arguments.
+ *
+ * [interpretPrefixes] are internal-name prefixes to INTERPRET from [classpath] although the interpreter would
+ * otherwise run them as the host's own classes: `kotlin/test/` for a test run, since kotlin-test sits under the
+ * bridged `kotlin/` namespace but is not part of the host, so its assertions could not load at all.
  */
 class InterpretRunRequest(
     val classpath: List<Path>,
     val mainClass: String,
     val instanceMain: Boolean = false,
     val args: List<String> = emptyList(),
-)
+) {
+    var interpretPrefixes: List<String> = emptyList()
+        private set
+
+    // The primary constructor keeps its original shape (and so its default-arguments overload), which plugins
+    // compiled before [interpretPrefixes] link against; the new field arrives through this one.
+    constructor(
+        classpath: List<Path>,
+        mainClass: String,
+        instanceMain: Boolean = false,
+        args: List<String> = emptyList(),
+        interpretPrefixes: List<String>,
+    ) : this(classpath, mainClass, instanceMain, args) {
+        this.interpretPrefixes = interpretPrefixes
+    }
+}
 
 /**
  * `run`: interpret the module's compiled program on the bytecode VM — the sole console-run task (the desktop

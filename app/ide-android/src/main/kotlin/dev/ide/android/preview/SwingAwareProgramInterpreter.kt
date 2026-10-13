@@ -35,7 +35,9 @@ class SwingAwareProgramInterpreter(
     private val log = Log.logger("ide.run.swing")
 
     override suspend fun run(request: InterpretRunRequest, io: ProgramIo): Int {
-        if (!usesSwing(request.classpath)) return console.run(request, io)
+        // A request that interprets namespaces itself (a test run's `kotlin/test/`) stays here: the windowed path
+        // starts the program from its classpath and main class alone, and a test run has no window to show.
+        if (request.interpretPrefixes.isNotEmpty() || !usesSwing(request.classpath)) return console.run(request, io)
         log.info("running ${request.mainClass} as a windowed program in :preview")
         return runWindowed(request, io)
     }

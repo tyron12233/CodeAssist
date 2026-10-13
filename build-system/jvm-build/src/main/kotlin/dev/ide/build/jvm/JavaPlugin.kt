@@ -23,6 +23,13 @@ import dev.ide.build.engine.libJars
 import dev.ide.build.engine.moduleClosure
 import dev.ide.build.engine.resourceRoots
 import dev.ide.build.engine.resourcesDir
+import dev.ide.build.engine.testKotlinOutputDir
+import dev.ide.build.engine.testModuleDeps
+import dev.ide.build.engine.testOutputDir
+import dev.ide.build.engine.testResourceRoots
+import dev.ide.build.engine.testResourcesDir
+import dev.ide.build.jvm.test.TestJavaCompileTask
+import dev.ide.build.jvm.test.TestKotlinCompileTask
 import dev.ide.lang.jdt.build.JdtCompileTask
 import dev.ide.lang.kotlin.build.KotlinCompileTask
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
@@ -140,5 +147,32 @@ class JavaPlugin(
         val assemble = Lifecycle.assemble(module.name)
         tasks.register(assemble) { LifecycleTask(assemble, trackedFiles = listOfNotNull(jar?.let { jarPath(module) })) }
             .configure { dependsOn(jar ?: classes) }
+    }
+
+    /**
+     * Register [module]'s TEST compilation after its main chain (which must already be registered, as must the
+     * modules [testModuleDeps] names): `compileTestKotlin` → `compileTestJava`, `processTestResources`, and the
+     * `testClasses` aggregate a test run depends on. The test output is separate from the main output, so a test
+     * build never touches what `classes` produced.
+     */
+    fun registerTests(tasks: TaskContainer, module: Module, byId: Map<ModuleId, Module>) {
+        val bootClasspath = bootClasspathFor(module)
+        val upstream = listOf(Lifecycle.classes(module.name)) + testModuleDeps(module, byId).map { Lifecycle.classes(it.name) }
+        val compileKotlin = Lifecycle.compileTestKotlin(module.name)
+        if (kotlin != null) {
+            tasks.register(compileKotlin) { TestKotlinCompileTask(module, compileKotlin, bootClasspath, kotlin, plugins) }
+                .configure { upstream.forEach { dependsOn(it) } }
+        }
+        val compileJava = Lifecycle.compileTestJava(module.name)
+        tasks.register(compileJava) { TestJavaCompileTask(module, compileJava, bootClasspath) }.configure {
+            upstream.forEach { dependsOn(it) }
+            if (kotlin != null) dependsOn(compileKotlin)
+        }
+        val resources = Lifecycle.processTestResources(module.name)
+        tasks.register(resources) { ProcessResourcesTask(resources, testResourceRoots(module), testResourcesDir(module)) }
+        val testClasses = Lifecycle.testClasses(module.name)
+        tasks.register(testClasses) {
+            LifecycleTask(testClasses, trackedDirs = listOf(testKotlinOutputDir(module), testOutputDir(module), testResourcesDir(module)))
+        }.configure { dependsOn(compileJava, resources) }
     }
 }

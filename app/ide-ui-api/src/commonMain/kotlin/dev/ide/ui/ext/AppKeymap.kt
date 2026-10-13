@@ -47,6 +47,7 @@ object AppCommands {
     const val FOCUS_EDITOR = "app.focusEditor"
 
     const val RUN = "app.run"
+    const val RUN_TESTS = "app.runTests"
     const val BUILD = "app.build"
     const val STOP = "app.stop"
     const val SAVE_ALL = "app.saveAll"
@@ -107,6 +108,7 @@ val APP_KEY_DEFAULTS: List<AppKeyDefault> = buildList {
 
     val run = "Run & project"
     add(AppCommands.RUN, "Run", run, "shift+F10")
+    add(AppCommands.RUN_TESTS, "Run tests in this file", run, "ctrl+shift+F10")
     add(AppCommands.BUILD, "Build", run, "primary+F9")
     add(AppCommands.STOP, "Stop", run, "primary+F2")
     add(AppCommands.SAVE_ALL, "Save all", run, "primary+shift+S")

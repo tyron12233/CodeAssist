@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +56,10 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildState
+import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
+import dev.ide.ui.backend.TestOutput
+import dev.ide.ui.backend.UiTestRun
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunPhase
@@ -82,9 +88,13 @@ import dev.ide.ui.generated.resources.run_send
 import dev.ide.ui.generated.resources.run_stopped
 import dev.ide.ui.generated.resources.run_type_input
 import dev.ide.ui.generated.resources.stop
+import dev.ide.ui.generated.resources.tests_failed
+import dev.ide.ui.generated.resources.tests_none_found
+import dev.ide.ui.generated.resources.tests_passed
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -95,6 +105,7 @@ import org.jetbrains.compose.resources.stringResource
  * [IdeBackend.sendRunInput]. The run sandbox's permission prompts are surfaced by the app-wide
  * `PermissionDialog`, which overlays this screen.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RunScreen(
     backend: IdeBackend,
@@ -102,11 +113,20 @@ fun RunScreen(
     onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
     modifier: Modifier = Modifier.fillMaxSize(),
     onHide: (() -> Unit)? = null,
+    onOpenSource: ((path: String, offset: Int) -> Unit)? = null,
 ) {
     val console by backend.build.runConsole.collectAsState()
     val build by backend.build.buildState.collectAsState()
     val rc = console
     val docked = onHide != null
+    // A test run's result records ride its transcript; split them out once per transcript change.
+    val split = remember(rc?.transcript) { rc?.let { TestOutput.split(it.transcript) } }
+    val tests = split?.tests
+    var view by remember(rc?.id) { mutableStateOf(RunView.Tests) }
+    val scope = rememberCoroutineScope()
+    val openTest: ((String, String?) -> Unit)? = onOpenSource?.let { open ->
+        { cls, method -> scope.launch { locateTest(backend, cls, method)?.let { (path, offset) -> open(path, offset) } } }
+    }
     Column(modifier.background(MaterialTheme.colorScheme.background)) {
         RunTopBar(
             console = rc,
@@ -114,7 +134,12 @@ fun RunScreen(
             onBack = onBack,
             onHide = onHide,
             onStop = { backend.build.stopBuild() },
-            onRerun = { backend.build.runBuild() },
+            onRerun = {
+                if (rc != null && tests != null) backend.build.runTask(TestOutput.rerunId(rc.moduleName, tests))
+                else backend.build.runBuild()
+            },
+            tests = tests,
+            shownTranscript = split?.transcript.orEmpty(),
         )
         if (rc == null) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -134,9 +159,33 @@ fun RunScreen(
                 modifier = Modifier.weight(1f),
             )
         }
-        Transcript(rc, Modifier.weight(1f).padding(horizontal = 14.dp))
+        val showTests = tests != null && view == RunView.Tests
+        if (tests != null) {
+            val rerunFailed = TestOutput.rerunFailedId(rc.moduleName, tests)?.takeIf { rc.phase == RunPhase.Finished }
+            // Rerun failed sits at the far end, and wraps under the switch on a narrow phone.
+            FlowRow(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                RunViewTabs(view, tests, { view = it })
+                if (rerunFailed != null) RerunFailedButton { backend.build.runTask(rerunFailed) }
+            }
+        }
+        if (showTests) {
+            TestResults(
+                tests = tests!!,
+                running = rc.phase != RunPhase.Finished,
+                onRun = { cls, method -> backend.build.runTask(TestOutput.taskId(rc.moduleName, listOf(TestOutput.target(cls, method)))) },
+                onOpen = openTest,
+                modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
+            )
+        } else {
+            Transcript(split?.transcript.orEmpty(), rc.phase, Modifier.weight(1f).padding(horizontal = 14.dp))
+        }
         when {
-            rc.acceptsInput -> InputBar(
+            rc.acceptsInput && !showTests -> InputBar(
                 onSend = { backend.build.sendRunInput(it) },
                 onEof = { backend.build.closeRunInput() },
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -149,7 +198,16 @@ fun RunScreen(
 }
 
 @Composable
-private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -> Unit, onHide: (() -> Unit)?, onStop: () -> Unit, onRerun: () -> Unit) {
+private fun RunTopBar(
+    console: RunConsoleUi?,
+    buildFailed: Boolean,
+    onBack: () -> Unit,
+    onHide: (() -> Unit)?,
+    onStop: () -> Unit,
+    onRerun: () -> Unit,
+    tests: UiTestRun?,
+    shownTranscript: List<ConsoleChunk>,
+) {
     val iconBox = if (touchInput) 42 else 34
     val running = console?.phase == RunPhase.Running || console?.phase == RunPhase.Building
     val clipboard = LocalClipboardManager.current
@@ -172,11 +230,11 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (console != null) RunStatusPill(console, buildFailed)
-        if (console != null && console.transcript.isNotEmpty()) {
+        if (console != null) RunStatusPill(console, buildFailed, tests)
+        if (console != null && shownTranscript.isNotEmpty()) {
             IconButtonCa(
                 CaIcons.copy, stringResource(Res.string.copy),
-                onClick = { clipboard.setText(AnnotatedString(clipForClipboard(console.transcript.joinToString("") { it.text }))) },
+                onClick = { clipboard.setText(AnnotatedString(clipForClipboard(shownTranscript.joinToString("") { it.text }))) },
                 boxSize = iconBox, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -187,10 +245,16 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
 }
 
 @Composable
-private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean) {
+private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean, tests: UiTestRun?) {
     val (text, color) = when (console.phase) {
         RunPhase.Building -> stringResource(Res.string.run_building) to MaterialTheme.colorScheme.primary
         RunPhase.Running -> stringResource(Res.string.run_running) to Ide.colors.run
+        // A finished test run reads as its outcome, not as the runner's exit code.
+        RunPhase.Finished if tests != null && tests.finished -> when {
+            tests.failed > 0 -> stringResource(Res.string.tests_failed, tests.failed) to MaterialTheme.colorScheme.error
+            tests.noTests -> stringResource(Res.string.tests_none_found) to MaterialTheme.colorScheme.onSurfaceVariant
+            else -> stringResource(Res.string.tests_passed, tests.passed) to Ide.colors.run
+        }
         RunPhase.Finished -> when (val c = console.exitCode) {
             0 -> stringResource(Res.string.run_exit_code, 0) to Ide.colors.run
             null -> if (buildFailed) stringResource(Res.string.run_failed) to MaterialTheme.colorScheme.error else stringResource(Res.string.run_stopped) to MaterialTheme.colorScheme.onSurfaceVariant
@@ -250,9 +314,9 @@ private fun ProblemRow(d: BuildDiagnosticUi, onOpen: (BuildDiagnosticUi) -> Unit
 }
 
 @Composable
-private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
+private fun Transcript(transcript: List<ConsoleChunk>, phase: RunPhase, modifier: Modifier) {
     val scroll = rememberScrollState()
-    val total = console.transcript.sumOf { it.text.length }
+    val total = transcript.sumOf { it.text.length }
     // Follow the tail as output (and echoed input) arrives.
     LaunchedEffect(total) { scroll.scrollTo(scroll.maxValue) }
     // Theme-aware transcript colors so they read on BOTH the dark and the light [consoleBg]. (OUTPUT used to be
@@ -261,9 +325,9 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
     val outputColor = MaterialTheme.colorScheme.onSurface
     val inputColor = MaterialTheme.colorScheme.primary
     val systemColor = MaterialTheme.colorScheme.outline
-    val text = remember(total, console.transcript.size, outputColor, inputColor, systemColor) {
+    val text = remember(total, transcript.size, outputColor, inputColor, systemColor) {
         buildAnnotatedString {
-            for (chunk in console.transcript) {
+            for (chunk in transcript) {
                 val color = when (chunk.kind) {
                     ConsoleChunkKind.OUTPUT -> outputColor
                     ConsoleChunkKind.INPUT -> inputColor
@@ -280,15 +344,34 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
             .verticalScroll(scroll)
             .padding(12.dp),
     ) {
-        if (console.transcript.isEmpty()) {
+        if (transcript.isEmpty()) {
             Text(
-                if (console.phase == RunPhase.Building) stringResource(Res.string.run_building) else stringResource(Res.string.run_no_output),
+                if (phase == RunPhase.Building) stringResource(Res.string.run_building) else stringResource(Res.string.run_no_output),
                 color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall,
             )
         } else {
             SelectionContainer { Text(text, style = Ide.type.codeSmall) }
         }
     }
+}
+
+/**
+ * Where test [method] of class [cls] (or the class itself) is declared, through the project's symbol search: the
+ * class whose package matches, then the method in that class's file. Null when the search finds neither.
+ */
+private suspend fun locateTest(backend: IdeBackend, cls: String, method: String?): Pair<String, Int>? {
+    val simple = cls.substringAfterLast('.')
+    val pkgDir = "/" + cls.substringBeforeLast('.', "").replace('.', '/') + "/"
+    val classes = runCatching { backend.search.searchSymbols(simple, 50) }.getOrDefault(emptyList())
+        .filter { it.name == simple && it.filePath != null }
+    val classHit = classes.firstOrNull { pkgDir == "//" || it.filePath!!.replace('\\', '/').contains(pkgDir) } ?: classes.firstOrNull()
+        ?: return null
+    val methodHit = method?.let { m ->
+        runCatching { backend.search.searchSymbols(m, 50) }.getOrDefault(emptyList())
+            .firstOrNull { it.name == m && it.filePath == classHit.filePath && it.offset != null }
+    }
+    val hit = methodHit ?: classHit
+    return hit.filePath!! to (hit.offset ?: 0)
 }
 
 /**
