@@ -276,6 +276,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edview_open_a_file_from_navigator">Open a file from the navigator</string>
     <string name="edview_no_file_open_title">No file open</string>
     <string name="edview_no_file_open_hint">Select a file from the navigator to start editing</string>
+    <string name="edview_action_search">Search everywhere</string>
+    <string name="edview_action_go_to_file">Go to file</string>
+    <string name="edview_action_recent">Recent files</string>
+    <string name="edview_action_find">Find in files</string>
+    <string name="edview_action_new_file">New file</string>
+    <string name="edview_action_project">Project files</string>
+    <string name="edview_recent_title">Recently opened</string>
 
     <!-- tabs (TabsStrip context menu; "Close" reuses the shared `close` string) -->
     <string name="tab_close_others">Close Others</string>

@@ -171,6 +171,13 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="edview_open_a_file_from_navigator">Abra um arquivo pelo navegador</string>
     <string name="edview_no_file_open_title">Nenhum arquivo aberto</string>
     <string name="edview_no_file_open_hint">Selecione um arquivo no navegador para começar a editar</string>
+    <string name="edview_action_search">Pesquisar em tudo</string>
+    <string name="edview_action_go_to_file">Ir para arquivo</string>
+    <string name="edview_action_recent">Arquivos recentes</string>
+    <string name="edview_action_find">Localizar nos arquivos</string>
+    <string name="edview_action_new_file">Novo arquivo</string>
+    <string name="edview_action_project">Arquivos do projeto</string>
+    <string name="edview_recent_title">Abertos recentemente</string>
 
     <!-- tabs -->
     <string name="tab_close_others">Fechar outras</string>

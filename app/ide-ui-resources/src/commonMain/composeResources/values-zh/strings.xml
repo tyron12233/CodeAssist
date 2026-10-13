@@ -272,6 +272,13 @@
     <string name="edview_open_a_file_from_navigator">从导航栏打开文件</string>
     <string name="edview_no_file_open_title">还没打开任何文件</string>
     <string name="edview_no_file_open_hint">在导航栏选择文件即可开始编辑</string>
+    <string name="edview_action_search">全局搜索</string>
+    <string name="edview_action_go_to_file">转到文件</string>
+    <string name="edview_action_recent">最近的文件</string>
+    <string name="edview_action_find">在文件中查找</string>
+    <string name="edview_action_new_file">新建文件</string>
+    <string name="edview_action_project">项目文件</string>
+    <string name="edview_recent_title">最近打开</string>
 
     <!-- tabs (TabsStrip context menu; "Close" reuses the shared `close` string) -->
     <string name="tab_close_others">选择其他</string>

@@ -174,6 +174,13 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="edview_open_a_file_from_navigator">Buka file dari navigator</string>
     <string name="edview_no_file_open_title">Tidak ada file terbuka</string>
     <string name="edview_no_file_open_hint">Pilih file dari navigator untuk mulai mengedit</string>
+    <string name="edview_action_search">Cari di mana saja</string>
+    <string name="edview_action_go_to_file">Buka file</string>
+    <string name="edview_action_recent">File terbaru</string>
+    <string name="edview_action_find">Cari di file</string>
+    <string name="edview_action_new_file">File baru</string>
+    <string name="edview_action_project">File proyek</string>
+    <string name="edview_recent_title">Baru dibuka</string>
     <string name="tab_close_others">Tutup Lainnya</string>
     <string name="tab_close_to_the_right">Tutup ke Kanan</string>
     <string name="tab_close_to_the_left">Tutup ke Kiri</string>

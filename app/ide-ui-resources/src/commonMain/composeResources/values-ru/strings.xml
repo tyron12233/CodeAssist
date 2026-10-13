@@ -147,6 +147,13 @@
     <string name="edview_open_a_file_from_navigator">Откройте файл из навигатора</string>
     <string name="edview_no_file_open_title">Нет открытых файлов</string>
     <string name="edview_no_file_open_hint">Выберите файл в навигаторе, чтобы начать редактирование</string>
+    <string name="edview_action_search">Искать везде</string>
+    <string name="edview_action_go_to_file">Перейти к файлу</string>
+    <string name="edview_action_recent">Недавние файлы</string>
+    <string name="edview_action_find">Найти в файлах</string>
+    <string name="edview_action_new_file">Новый файл</string>
+    <string name="edview_action_project">Файлы проекта</string>
+    <string name="edview_recent_title">Недавно открытые</string>
     <string name="tab_close_others">Закрыть другие</string>
     <string name="tab_close_to_the_right">Закрыть справа</string>
     <string name="tab_close_to_the_left">Закрыть слева</string>

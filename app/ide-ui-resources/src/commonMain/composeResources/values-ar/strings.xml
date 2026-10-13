@@ -313,6 +313,13 @@
     <string name="edview_open_a_file_from_navigator">افتح ملفًا من المتصفح</string>
     <string name="edview_no_file_open_title">لا يوجد ملف مفتوح</string>
     <string name="edview_no_file_open_hint">اختر ملفًا من المتصفح لبدء التحرير</string>
+    <string name="edview_action_search">البحث في كل مكان</string>
+    <string name="edview_action_go_to_file">الانتقال إلى ملف</string>
+    <string name="edview_action_recent">الملفات الأخيرة</string>
+    <string name="edview_action_find">البحث في الملفات</string>
+    <string name="edview_action_new_file">ملف جديد</string>
+    <string name="edview_action_project">ملفات المشروع</string>
+    <string name="edview_recent_title">المفتوحة مؤخرًا</string>
 
     <!-- tabs (TabsStrip context menu; "Close" reuses the shared `close` string) -->
     <string name="tab_close_others">إغلاق البقية</string>

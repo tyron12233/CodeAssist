@@ -38,6 +38,7 @@ import dev.ide.ui.generated.resources.show_details
 import dev.ide.ui.generated.resources.gradle_mode_title
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.components.NoOpenFilesView
+import dev.ide.ui.components.RecentFileEntry
 import dev.ide.ui.components.TabsStrip
 import dev.ide.ui.editor.BlockEditor
 import dev.ide.ui.editor.CodeEditor
@@ -494,7 +495,17 @@ internal fun EditorCenter(
                             }
                         }
                     } else {
-                        NoOpenFilesView(Modifier.weight(1f).fillMaxWidth())
+                        // The files used this session, newest first, so closing every tab is one tap from undone.
+                        val root = state.backend.project.rootPath.replace('\\', '/').trimEnd('/')
+                        val recent = state.recentPaths.take(5).map { path ->
+                            val rel = path.replace('\\', '/').let { if (root.isNotEmpty() && it.startsWith("$root/")) it.removePrefix("$root/") else it }
+                            RecentFileEntry(path, state.recentName(path), rel.substringBeforeLast('/', ""))
+                        }
+                        NoOpenFilesView(
+                            Modifier.weight(1f).fillMaxWidth(),
+                            recentFiles = recent,
+                            onOpenRecent = { state.open(it.path, it.name) },
+                        )
                     }
                 }
             }

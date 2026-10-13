@@ -311,15 +311,13 @@ class IdeUiState(
         launch { syncExternalWrites() }
     }
 
-    // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
-    // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
-    // launch: `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
-    // another tab change lands within the debounce window.
+    // Reopen the tabs from the last session with this project. A first open starts on the empty editor, which
+    // offers the ways in, rather than on whichever file a walk of the tree happened to reach first. Then persist
+    // tab changes (debounced) so they reopen next launch: `drop(1)` skips the just-restored state, and
+    // `collectLatest` cancels the pending write when another tab change lands within the debounce window.
     private suspend fun restoreAndPersistTabs() {
         ensureTreeLoaded() // build the real file tree off the main thread before it's shown / walked
-        if (!restoreTabs()) {
-            defaultFile()?.let { node -> node.filePath?.let { open(it, node.name) } }
-        }
+        restoreTabs()
         snapshotFlow {
             // Re-emit when the tab set, the active tab, OR any tab's caret / scroll / view mode changes, so the
             // persisted session records where the user is, not only which files are open.
@@ -969,7 +967,7 @@ class IdeUiState(
      * each restored to where the user left it: its view mode, caret, and scroll position. Files that no longer
      * exist on disk are skipped. Returns true when the previous session was HANDLED — either tabs were
      * restored, or the project was opened before and deliberately left with no tabs (a persisted-but-empty
-     * session) — so the caller only falls back to [defaultFile] on a genuine first open (no session yet).
+     * session); false on a genuine first open (no session yet).
      */
     suspend fun restoreTabs(): Boolean {
         val saved = backend.projects.openTabs()
@@ -1016,16 +1014,6 @@ class IdeUiState(
             },
             newActive.coerceAtLeast(0),
         )
-    }
-
-    /** Pick a sensible first file: a `Main.java`, else the first source file in the tree. */
-    fun defaultFile(): TreeNode? {
-        val all = ArrayList<TreeNode>()
-        fun walk(n: TreeNode) { if (n.filePath != null) all.add(n); n.children.forEach(::walk) }
-        walk(tree)
-        return all.firstOrNull { it.name == "Main.java" }
-            ?: all.firstOrNull { it.name.endsWith(".java") }
-            ?: all.firstOrNull()
     }
 
     /** Re-read the workspace tree from the backend (after a file is created/removed), off the main thread. */

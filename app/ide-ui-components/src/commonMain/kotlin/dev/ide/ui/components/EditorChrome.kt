@@ -4,6 +4,16 @@ import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.platform.claimWindowTitleBar
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.ext.AppCommands
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextAlign
+import dev.ide.ui.ext.AppCommandHost
+import dev.ide.ui.generated.resources.edview_action_search
+import dev.ide.ui.generated.resources.edview_action_go_to_file
+import dev.ide.ui.generated.resources.edview_action_recent
+import dev.ide.ui.generated.resources.edview_action_find
+import dev.ide.ui.generated.resources.edview_action_new_file
+import dev.ide.ui.generated.resources.edview_action_project
+import dev.ide.ui.generated.resources.edview_recent_title
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
@@ -1367,15 +1377,26 @@ internal class OpenTabDecorationContext(
     override val warningCount get() = diagnostics.count { it.severity == UiSeverity.Warning }
 }
 
-/** The editor's empty state — shown in place of the code canvas when no tab is open: a muted glyph, a short
- *  title, and a hint, centered. Nicer than a bare line of text.
+/** A recently used file offered on the empty editor: its [path], display [name], and [folder] relative to the project. */
+class RecentFileEntry(val path: String, val name: String, val folder: String)
+
+/**
+ * The editor's empty state, shown in place of the code canvas when no tab is open: a start page with the ways
+ * into the project (search everywhere, go to file, recent files, find in files, a new file, the project tree),
+ * each with its shortcut, and the files used recently this session. The actions run the same app commands
+ * their shortcuts do, so a tap on a phone and a key on a desktop go through one path.
  *
- *  A rightward swipe anywhere here opens the navigator: the view is a horizontal scroll that consumes nothing
- *  (same `reverseDirection` config the editor uses), so the drag leaks to the compact layout's [PushDrawer]
- *  nested-scroll exactly as swiping the editor at its horizontal start does — finger-following, then settling.
- *  Where there's no drawer (the expanded layout) it's an inert no-op. */
+ * A rightward swipe anywhere here opens the navigator: the view is a horizontal scroll that consumes nothing
+ * (same `reverseDirection` config the editor uses), so the drag leaks to the compact layout's [PushDrawer]
+ * nested-scroll exactly as swiping the editor at its horizontal start does — finger-following, then settling.
+ * Where there's no drawer (the expanded layout) it's an inert no-op.
+ */
 @Composable
-fun NoOpenFilesView(modifier: Modifier = Modifier) {
+fun NoOpenFilesView(
+    modifier: Modifier = Modifier,
+    recentFiles: List<RecentFileEntry> = emptyList(),
+    onOpenRecent: (RecentFileEntry) -> Unit = {},
+) {
     val drawerSwipe = rememberScrollableState { 0f }
     Box(
         modifier
@@ -1383,27 +1404,80 @@ fun NoOpenFilesView(modifier: Modifier = Modifier) {
             .scrollable(drawerSwipe, Orientation.Horizontal, reverseDirection = true),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp).widthIn(max = 440.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Box(
-                Modifier.size(64.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)),
+                Modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(18.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.docText, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.outline)
+                Icon(CaIcons.docText, null, Modifier.size(26.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Spacer(Modifier.height(16.dp))
             Text(
                 stringResource(Res.string.edview_no_file_open_title),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(Res.string.edview_no_file_open_hint),
-                color = MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
             )
+            Spacer(Modifier.height(24.dp))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                StartAction(CaIcons.search, stringResource(Res.string.edview_action_search), AppCommands.SEARCH_EVERYWHERE)
+                StartAction(CaIcons.file, stringResource(Res.string.edview_action_go_to_file), AppCommands.GO_TO_FILE)
+                StartAction(CaIcons.clock, stringResource(Res.string.edview_action_recent), AppCommands.RECENT_FILES)
+                StartAction(CaIcons.code, stringResource(Res.string.edview_action_find), AppCommands.FIND_IN_FILES)
+                StartAction(CaIcons.plus, stringResource(Res.string.edview_action_new_file), AppCommands.NEW_FILE)
+                StartAction(CaIcons.folder, stringResource(Res.string.edview_action_project), AppCommands.TOGGLE_PROJECT)
+            }
+            if (recentFiles.isNotEmpty()) {
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    stringResource(Res.string.edview_recent_title),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+                recentFiles.forEach { f ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Ca.radius.md))
+                            .clickable { onOpenRecent(f) }.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                            TemplateGlyph(fileIconId(f.name), 16.dp, fallbackTint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(f.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            f.folder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+/** One way into the project: a glyph, its name, and its shortcut; tapping it runs the app command [actionId]. */
+@Composable
+private fun StartAction(icon: ImageVector, label: String, actionId: String) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Ca.radius.md))
+            .clickable { AppCommandHost.run(actionId) }.padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        ShortcutHint(actionId)
     }
 }
 

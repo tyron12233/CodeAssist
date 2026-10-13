@@ -185,6 +185,13 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="edview_open_a_file_from_navigator">Abre un archivo desde el navegador</string>
     <string name="edview_no_file_open_title">Ningún archivo abierto</string>
     <string name="edview_no_file_open_hint">Selecciona un archivo en el navegador para empezar a editar</string>
+    <string name="edview_action_search">Buscar en todo</string>
+    <string name="edview_action_go_to_file">Ir a archivo</string>
+    <string name="edview_action_recent">Archivos recientes</string>
+    <string name="edview_action_find">Buscar en archivos</string>
+    <string name="edview_action_new_file">Nuevo archivo</string>
+    <string name="edview_action_project">Archivos del proyecto</string>
+    <string name="edview_recent_title">Abiertos recientemente</string>
 
     <!-- Tabs -->
     <string name="tab_close_others">Cerrar las demás</string>
