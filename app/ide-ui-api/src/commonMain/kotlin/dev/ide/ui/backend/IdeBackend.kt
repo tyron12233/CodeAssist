@@ -2004,6 +2004,8 @@ data class UiSettings(
     val customAccentColor: Long = 0xFF8B5CF6L,
     /** Keep tool window header actions always visible (off = only while the tool window is hovered or active). */
     val alwaysShowToolWindowActions: Boolean = false,
+    /** Open a run's terminal full screen instead of docking it in the wide layout. */
+    val runFullScreen: Boolean = false,
     val editorFontScale: Float = 1f,
     /** "jetbrains" (bundled JetBrains Mono) | "monospace" (system monospace). */
     val codeFont: String = "jetbrains",

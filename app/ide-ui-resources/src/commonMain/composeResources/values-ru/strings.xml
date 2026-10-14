@@ -269,6 +269,15 @@
     <string name="edchrome_more">Ещё</string>
     <string name="sidebar_hide_tool_window_bar">Скрыть панель инструментов</string>
     <string name="toolwindow_hide">Скрыть</string>
+    <string name="toolwindow_maximize">Развернуть</string>
+    <string name="toolwindow_restore">Восстановить</string>
+    <string name="toolwindow_move_to">Переместить</string>
+    <string name="toolwindow_options">Параметры окна</string>
+    <string name="toolwindow_dock_bottom">Вниз</string>
+    <string name="toolwindow_dock_left">Влево</string>
+    <string name="toolwindow_dock_right">Вправо</string>
+    <string name="zen_mode">Режим дзен</string>
+    <string name="zen_exit">Выйти из режима дзен</string>
     <string name="edchrome_settings_and_tools">Настройки и инструменты</string>
     <string name="edchrome_toggle_navigator">Переключить навигатор</string>
     <string name="edchrome_find_replace">Найти / заменить</string>

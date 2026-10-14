@@ -327,6 +327,15 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="edchrome_more">Más</string>
     <string name="sidebar_hide_tool_window_bar">Ocultar barra de ventanas de herramientas</string>
     <string name="toolwindow_hide">Ocultar</string>
+    <string name="toolwindow_maximize">Maximizar</string>
+    <string name="toolwindow_restore">Restaurar</string>
+    <string name="toolwindow_move_to">Mover a</string>
+    <string name="toolwindow_options">Opciones de ventana</string>
+    <string name="toolwindow_dock_bottom">Abajo</string>
+    <string name="toolwindow_dock_left">Izquierda</string>
+    <string name="toolwindow_dock_right">Derecha</string>
+    <string name="zen_mode">Modo zen</string>
+    <string name="zen_exit">Salir del modo zen</string>
     <string name="edchrome_settings_and_tools">Configuración y herramientas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
     <string name="edchrome_find_replace">Buscar / reemplazar</string>

@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdPlacement
@@ -32,6 +33,20 @@ fun AdSlot(placement: AdPlacement, modifier: Modifier = Modifier) {
     val ads = LocalAds.current ?: return
     if (!ads.adsActive) return
     ads.host.NativeAd(placement, modifier)
+}
+
+/**
+ * The height a pane needs before it carries a footer ad ([AdSlot] pinned under its content). The ad card takes
+ * ~180dp, so in a shorter pane (any pane of a phone in landscape, a pane dragged small) it would leave the
+ * content itself almost no room; there the footer stays empty.
+ */
+val AdFooterMinPaneHeight = 520.dp
+
+/** A footer [AdSlot] for a pane [paneHeight] tall: nothing when the pane is shorter than [AdFooterMinPaneHeight]. */
+@Composable
+fun FooterAdSlot(placement: AdPlacement, paneHeight: Dp, modifier: Modifier = Modifier) {
+    if (paneHeight < AdFooterMinPaneHeight) return
+    AdSlot(placement, modifier)
 }
 
 /**

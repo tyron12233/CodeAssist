@@ -31,6 +31,7 @@ class SettingsStore(
             accentColor = get(key("appearance.accentColor"))?.trim()?.toLongOrNull() ?: d.accentColor,
             alwaysShowToolWindowActions = bool("appearance.toolWindowActions", d.alwaysShowToolWindowActions),
             rightToolWindowBar = bool("appearance.rightToolWindowBar", d.rightToolWindowBar),
+            runFullScreen = bool("appearance.runFullScreen", d.runFullScreen),
             // Stored as an integer percent (100 = 1.0×) so the generic IntSlider and this typed view agree.
             editorFontScale = (int("editor.fontScale", (d.editorFontScale * 100).toInt()) / 100f).coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE),
             codeFont = oneOf("editor.codeFont", d.codeFont, IdeSettings.CODE_FONT_JETBRAINS, IdeSettings.CODE_FONT_MONOSPACE),
@@ -136,6 +137,7 @@ class SettingsStore(
         put("appearance.accentColor", s.accentColor.toString())
         put("appearance.toolWindowActions", s.alwaysShowToolWindowActions.toString())
         put("appearance.rightToolWindowBar", s.rightToolWindowBar.toString())
+        put("appearance.runFullScreen", s.runFullScreen.toString())
         put("editor.fontScale", (s.editorFontScale * 100).toInt().toString())
         put("editor.codeFont", s.codeFont)
         put("editor.fontLigatures", s.fontLigatures.toString())

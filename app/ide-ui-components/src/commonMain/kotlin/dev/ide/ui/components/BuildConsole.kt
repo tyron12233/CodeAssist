@@ -20,6 +20,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -211,7 +212,9 @@ fun BuildConsole(
         )
     }
     CompositionLocalProvider(LocalWideConsole provides wide) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (wide) 6.dp else 10.dp)) {
+    BoxWithConstraints(modifier) {
+    val paneHeight = maxHeight
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (wide) 6.dp else 10.dp)) {
         Header(
             buildState, errors, warnings, tab, activePluginTab != null, canRun, onRun, onStop, onCollapse,
             inlineTabs = if (wide) tabs else null,
@@ -256,8 +259,10 @@ fun BuildConsole(
             }
         }
         // A compact native ad in the console footer, only while nothing is building — a natural pause, never
-        // over a running build. Renders nothing unless ads are active.
-        if (!running) AdSlot(AdPlacement.BUILD_CONSOLE)
+        // over a running build — and only in a console tall enough to spare the room. Renders nothing unless ads
+        // are active.
+        if (!running) FooterAdSlot(AdPlacement.BUILD_CONSOLE, paneHeight)
+    }
     }
     }
 }
@@ -386,6 +391,7 @@ private fun Header(
             iconSize = 16,
             tint = Ide.colors.run
         )
+        ToolWindowPaneButtons()
         HideToolWindowButton(onCollapse)
         }
     }

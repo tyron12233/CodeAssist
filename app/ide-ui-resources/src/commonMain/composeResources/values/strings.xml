@@ -473,6 +473,15 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edchrome_more">More</string>
     <string name="sidebar_hide_tool_window_bar">Hide tool window bar</string>
     <string name="toolwindow_hide">Hide</string>
+    <string name="toolwindow_maximize">Maximize</string>
+    <string name="toolwindow_restore">Restore</string>
+    <string name="toolwindow_move_to">Move to</string>
+    <string name="toolwindow_options">Window options</string>
+    <string name="toolwindow_dock_bottom">Bottom</string>
+    <string name="toolwindow_dock_left">Left</string>
+    <string name="toolwindow_dock_right">Right</string>
+    <string name="zen_mode">Zen mode</string>
+    <string name="zen_exit">Exit zen mode</string>
     <string name="edchrome_settings_and_tools">Settings &amp; Tools</string>
     <string name="edchrome_toggle_navigator">Toggle navigator</string>
     <string name="edchrome_find_replace">Find / replace</string>

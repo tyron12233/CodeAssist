@@ -188,6 +188,11 @@ object BuiltInSettingsPages {
                 default = d.rightToolWindowBar,
             ),
             SettingControl.Toggle(
+                "runFullScreen", "Full-screen Run output",
+                "Open a running program's output full screen, as on a phone in portrait. Off docks it beside the editor on wide screens and phones in landscape",
+                default = d.runFullScreen,
+            ),
+            SettingControl.Toggle(
                 REOPEN_LAST_PROJECT, "Reopen last project on launch",
                 "Open the project you were working on when the app starts. Off starts on the project list instead",
                 default = true, group = "Startup",

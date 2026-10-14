@@ -12,3 +12,11 @@ import androidx.compose.runtime.Composable
  */
 @Composable
 expect fun PlatformSystemBars(darkTheme: Boolean)
+
+/**
+ * Hide the status and navigation bars while [hidden] (zen mode), bringing them back when it turns false or
+ * the caller leaves the composition. A swipe in from the edge shows them for a moment, as in any immersive app.
+ * Android only; the desktop and iOS hosts have no bars the app hides, so their actuals do nothing.
+ */
+@Composable
+expect fun HideSystemBars(hidden: Boolean)

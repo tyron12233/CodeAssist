@@ -28,6 +28,11 @@ import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.theme.CodeAssistTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.ide.ui.ToolWindowSide
+import dev.ide.ui.components.ToolWindowPaneControls
+import dev.ide.ui.components.LocalToolWindowPaneControls
+import dev.ide.ui.components.ToolWindowFrame
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.skia.EncodedImageFormat
@@ -61,6 +66,17 @@ class RunScreenSnapshot {
             ),
         )
         snapshot("run-running.png", 460, 900, FakeBackend(rc, BuildState(status = RunStatus.Running)))
+    }
+
+    /** Docked beside the editor on a phone in landscape: a one-line header with the console pane controls. */
+    @Test
+    fun renderDockedLandscape() {
+        val rc = RunConsoleUi(
+            id = 4, moduleName = "lib", mainClass = "com.example.mylibrary.Loops",
+            phase = RunPhase.Running, acceptsInput = true,
+            transcript = listOf(ConsoleChunk("Enter your grade to compute, enter [-1] to stop: ", ConsoleChunkKind.OUTPUT)),
+        )
+        snapshot("run-docked-landscape.png", 840, 600, FakeBackend(rc, BuildState(status = RunStatus.Running)), docked = true)
     }
 
     @Test
@@ -140,7 +156,18 @@ class RunScreenSnapshot {
         val scene = ImageComposeScene(width = w, height = h, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    RunScreen(backend, onBack = {}, onHide = if (docked) ({}) else null, onOpenSource = { _, _ -> })
+                    if (docked) {
+                        // As the wide layout docks it: the console pane's controls, actions always shown.
+                        ToolWindowFrame(active = true, alwaysShowActions = true, onActivate = {}) {
+                            CompositionLocalProvider(
+                                LocalToolWindowPaneControls provides ToolWindowPaneControls(false, {}, ToolWindowSide.Right, {}),
+                            ) {
+                                RunScreen(backend, onBack = {}, onHide = {}, onOpenSource = { _, _ -> })
+                            }
+                        }
+                    } else {
+                        RunScreen(backend, onBack = {}, onHide = null, onOpenSource = { _, _ -> })
+                    }
                 }
             }
         }

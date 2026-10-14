@@ -1,5 +1,9 @@
 package dev.ide.ui.components
 
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import dev.ide.ui.platform.verticalResizeCursor
+import dev.ide.ui.ToolWindowSide
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -105,6 +109,9 @@ class SidebarPanel(
     val title: String,
     val icon: ImageVector,
     val order: Int = 1000,
+    /** The panel draws its own header (title, controls, hide button), so the pane draws none: the build
+     *  console, the Run terminal and the logs, which have headers of their own wherever they show. */
+    val ownHeader: Boolean = false,
     val content: @Composable () -> Unit,
 )
 
@@ -207,6 +214,10 @@ fun ActivityRail(
     header: @Composable (ColumnScope.() -> Unit)? = null,
     footer: @Composable (ColumnScope.() -> Unit)? = null,
     menu: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
+    /** The tool windows docked at the bottom, in a group of their own above the [footer] (IntelliJ keeps them
+     *  at the foot of the left stripe). Tapping one calls [onSelect] too. */
+    bottomPanels: List<SidebarPanel> = emptyList(),
+    bottomSelectedId: String? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalRailSide provides side) {
@@ -216,6 +227,8 @@ fun ActivityRail(
                 Modifier.width(ToolStripeWidth).fillMaxHeight()
                     // The top bar's colour, so bar and stripes read as one frame around the editor.
                     .background(MaterialTheme.colorScheme.surfaceContainer)
+                    // Dropping a dragged tool window anywhere on the stripe docks it on this side.
+                    .toolWindowDropZone(if (side == RailSide.Left) ToolWindowSide.Left else ToolWindowSide.Right)
                     .secondaryClickable(enabled = menu != null) { menuOpen = true },
             ) {
                 // Below the buttons, so a long-press only reaches it on the stripe's empty area.
@@ -238,15 +251,38 @@ fun ActivityRail(
                         ) {
                             header?.invoke(this)
                             panels.forEach { panel ->
-                                StripeButton(panel.icon, withShortcut(panel.title, panel.id), active = panel.id == selectedId) { onSelect(panel.id) }
+                                StripeButton(
+                                    panel.icon, withShortcut(panel.title, panel.id), active = panel.id == selectedId,
+                                    drag = DraggedToolWindow(panel.id, panel.title, panel.icon),
+                                ) { onSelect(panel.id) }
                             }
                         }
-                        if (footer != null) {
+                        val dragging = LocalToolWindowDrag.current?.dragging != null
+                        if (footer != null || bottomPanels.isNotEmpty()) {
                             Column(
                                 Modifier.padding(top = StripeGap),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(StripeGap),
-                            ) { footer() }
+                            ) {
+                                // The bottom group is also where a window is dropped to dock it at the bottom, so it
+                                // keeps a button's worth of room while a drag is on, even when empty.
+                                if (side == RailSide.Left && (bottomPanels.isNotEmpty() || dragging)) {
+                                    Column(
+                                        Modifier.heightIn(min = if (dragging) StripeButtonSize * 2 else 0.dp)
+                                            .toolWindowDropZone(ToolWindowSide.Bottom),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(StripeGap, Alignment.Bottom),
+                                    ) {
+                                        bottomPanels.forEach { panel ->
+                                            StripeButton(
+                                                panel.icon, withShortcut(panel.title, panel.id), active = panel.id == bottomSelectedId,
+                                                drag = DraggedToolWindow(panel.id, panel.title, panel.icon),
+                                            ) { onSelect(panel.id) }
+                                        }
+                                    }
+                                }
+                                footer?.invoke(this)
+                            }
                         }
                     }
                 }
@@ -273,7 +309,13 @@ fun RailDivider() {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StripeButton(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+private fun StripeButton(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    drag: DraggedToolWindow? = null,
+    onClick: () -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     val tooltip = rememberTooltipState()
     val scope = rememberCoroutineScope()
@@ -297,6 +339,8 @@ private fun StripeButton(icon: ImageVector, label: String, active: Boolean, onCl
                     },
                     MaterialTheme.shapes.small,
                 )
+                // Outside the click, so a drag that gets going cancels the tap.
+                .toolWindowDragSource(drag) { tooltip.dismiss() }
                 .combinedClickable(
                     interactionSource = interaction,
                     indication = null,
@@ -367,6 +411,8 @@ fun SidebarPane(
     active: Boolean = false,
     alwaysShowActions: Boolean = true,
     onActivate: () -> Unit = {},
+    /** Maximize and "Move to" for the window on show, in its header (the wide layout). */
+    controls: ToolWindowPaneControls? = null,
 ) {
     // Each panel's own saveable state, held here rather than inside the pane: the pane's content is disposed
     // when the pane collapses or another panel is selected, so this is what brings a panel back scrolled to
@@ -398,8 +444,11 @@ fun SidebarPane(
                     .then(if (floating) Modifier.shadow(12.dp) else Modifier),
             ) {
                 ToolWindowSurface(Modifier.fillMaxSize()) {
+                    CompositionLocalProvider(LocalToolWindowPaneControls provides controls) {
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val paneHeight = maxHeight
                     Column(Modifier.fillMaxSize()) {
-                        if (display != null) ToolWindowHeader(display.title, headerSlots.of(display.id), onHide)
+                        if (display != null && !display.ownHeader) ToolWindowHeader(display.title, headerSlots.of(display.id), onHide)
                         // Key on the stable id (not the panel object, which the host rebuilds every recomposition) so
                         // the switch animation fires only on a real panel change — not on every incidental recompose
                         // (e.g. while the IME inset animates), which would otherwise restart the transition per frame.
@@ -424,9 +473,12 @@ fun SidebarPane(
                         }
                         // A native ad pinned to the foot of the LEFT tool pane — below the tool content, off the
                         // editor canvas entirely. AdSlot self-collapses when ads are inactive (desktop / ads off).
-                        if (side == RailSide.Left) {
-                            AdSlot(AdPlacement.SIDEBAR, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+                        // Not under a window that has a footer ad of its own (the build console).
+                        if (side == RailSide.Left && display?.ownHeader != true) {
+                            FooterAdSlot(AdPlacement.SIDEBAR, paneHeight, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
                         }
+                    }
+                    }
                     }
                 }
                 if (onResize != null) {
@@ -450,6 +502,73 @@ fun SidebarPane(
     }
 }
 
+/**
+ * The bottom pane: the tool window docked below the editor, [paneHeight] tall, sliding up from and back into
+ * the bottom edge. Like [SidebarPane] it heads the window with a [ToolWindowHeader] (unless the window draws
+ * its own), keeps each window's saveable state, and keeps showing the last window through the collapse. Its
+ * top edge is a splitter: dragging it reports the change in height (positive = taller) to [onResize].
+ */
+@Composable
+fun BottomPane(
+    panels: List<SidebarPanel>,
+    selectedId: String?,
+    paneHeight: Dp,
+    modifier: Modifier = Modifier,
+    onResize: ((Dp) -> Unit)? = null,
+    onResizeEnd: () -> Unit = {},
+    onHide: (() -> Unit)? = null,
+    active: Boolean = false,
+    alwaysShowActions: Boolean = true,
+    onActivate: () -> Unit = {},
+    controls: ToolWindowPaneControls? = null,
+) {
+    val panelState = rememberSaveableStateHolder()
+    val headerSlots = rememberToolWindowHeaderSlots()
+    var displayId by remember { mutableStateOf(selectedId) }
+    LaunchedEffect(selectedId) { if (selectedId != null) displayId = selectedId }
+    val display = panels.firstOrNull { it.id == selectedId } ?: panels.firstOrNull { it.id == displayId }
+    AnimatedVisibility(
+        visible = selectedId != null && display != null,
+        enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet), expandFrom = Alignment.Bottom) +
+            fadeIn(tween(Motion.BASE)),
+        exit = shrinkVertically(tween(Motion.BASE, easing = Motion.quiet), shrinkTowards = Alignment.Bottom) +
+            fadeOut(tween(Motion.BASE / 2)),
+        modifier = modifier,
+    ) {
+        Column {
+            // A 1dp line inside a slightly taller grab strip, with a resize cursor on hover (desktop).
+            val density = LocalDensity.current
+            Box(
+                Modifier.fillMaxWidth().height(if (touchInput) 8.dp else 5.dp)
+                    .then(
+                        if (onResize == null) Modifier
+                        else Modifier.verticalResizeCursor().draggable(
+                            orientation = Orientation.Vertical,
+                            state = rememberDraggableState { dy -> onResize(with(density) { (-dy).toDp() }) },
+                            onDragStopped = { onResizeEnd() },
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            }
+            ToolWindowFrame(active = active, alwaysShowActions = alwaysShowActions, onActivate = onActivate) {
+                ToolWindowSurface(Modifier.fillMaxWidth().height(paneHeight)) {
+                    CompositionLocalProvider(LocalToolWindowPaneControls provides controls) {
+                        Column(Modifier.fillMaxSize()) {
+                            if (display != null && !display.ownHeader) ToolWindowHeader(display.title, headerSlots.of(display.id), onHide)
+                            PanelContent(
+                                display, panelState, Modifier.weight(1f).fillMaxWidth(),
+                                headerSlot = display?.id?.let(headerSlots::of),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** A 1px full-height separator between the pane and the editor. */
 @Composable
 fun SidebarDivider() {
@@ -461,7 +580,7 @@ fun SidebarDivider() {
  *  reflects whether the console is open). [label] is its tooltip. */
 @Composable
 fun RailActionItem(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
-    StripeButton(icon, label, active, onClick)
+    StripeButton(icon, label, active, onClick = onClick)
 }
 
 /**

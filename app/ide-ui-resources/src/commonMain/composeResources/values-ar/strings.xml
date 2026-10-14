@@ -512,6 +512,16 @@
     <string name="edchrome_more">المزيد</string>
     <string name="sidebar_hide_tool_window_bar">إخفاء شريط نوافذ الأدوات</string>
     <string name="toolwindow_hide">إخفاء</string>
+    <string name="toolwindow_maximize">تكبير</string>
+    <string name="toolwindow_restore">استعادة</string>
+    <string name="toolwindow_move_to">نقل إلى</string>
+    <string name="toolwindow_options">خيارات النافذة</string>
+    <string name="toolwindow_dock_bottom">الأسفل</string>
+    <!-- "Left"/"Right" name the stripes' sides, which mirror in this right-to-left layout: the left side is on the right. -->
+    <string name="toolwindow_dock_left">اليمين</string>
+    <string name="toolwindow_dock_right">اليسار</string>
+    <string name="zen_mode">وضع التركيز</string>
+    <string name="zen_exit">الخروج من وضع التركيز</string>
     <string name="edchrome_settings_and_tools">الإعدادات والأدوات</string>
     <string name="edchrome_toggle_navigator">تبديل المتصفح</string>
     <string name="edchrome_find_replace">بحث / استبدال</string>

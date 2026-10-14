@@ -8,6 +8,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import dev.ide.ui.ToolWindowIds
+import dev.ide.ui.ToolWindowSide
+import dev.ide.ui.components.BottomPane
+import dev.ide.ui.components.LocalToolWindowDrag
+import dev.ide.ui.components.ToolWindowDragGhost
+import dev.ide.ui.components.ToolWindowDragState
+import dev.ide.ui.components.ToolWindowDropTargets
+import dev.ide.ui.components.ToolWindowPaneControls
+import dev.ide.ui.platform.horizontalResizeCursor
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -21,6 +35,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,7 +89,7 @@ import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.ActivityRail
-import dev.ide.ui.components.AdSlot
+import dev.ide.ui.components.FooterAdSlot
 import dev.ide.ui.components.BuildConsole
 import dev.ide.ui.components.BuildDock
 import dev.ide.ui.components.DockBarHeight
@@ -127,6 +142,16 @@ private const val DOCK_HINT_PREF = "dock.swipeHint.seen"
 private val FloatingPanesBelow = 880.dp
 /** The editor width docked panes must leave free; past it they stop growing. */
 private val MinEditorWidth = 360.dp
+
+/** The editor width docked panes leave free in a narrow centre column (a phone in landscape). */
+private val MinEditorWidthNarrow = 240.dp
+/** The bottom pane's splitter, its smallest height (a header and an input bar), and the editor lines it leaves
+ *  when dragged as far as it goes. The maximize button takes the rest. */
+private val BottomSplitterSize = 8.dp
+private val MinBottomPaneHeight = 120.dp
+private val MinEditorHeight = 64.dp
+/** From this width the build console lays out with its tabs in its header, as below the editor. */
+private val RoomyConsoleWidth = 480.dp
 
 /**
  * Open a file tapped in the tree. An `.apk` the IDE built goes to the platform package installer (or reveal
@@ -289,9 +314,13 @@ private fun FilesPanelContent(
 
 /**
  * Wide-window layout: the top bar across the full width, and below it left stripe · left pane · editor ·
- * (console) · right pane · right stripe.
- * Both rails are data-driven (built-in + plugin tool windows); the right rail lays down nothing when no
- * plugin contributes a RIGHT tool window. Destination sheets + command palette overlay on top.
+ * right pane · right stripe, with the bottom pane under the editor and the side panes.
+ *
+ * Every tool window docks on a side (see [IdeUiState.sideOf]) and each side shows one at a time, IntelliJ
+ * style: the left stripe lists the left windows at the top and the bottom ones at its foot, the right stripe
+ * the right ones. A window moves to another side by dragging its stripe button (onto a stripe, or onto the
+ * targets shown over the editor during the drag) or from "Move to" in its header. Destination sheets and the
+ * command palette overlay on top.
  */
 @Composable
 internal fun ExpandedLayout(
@@ -311,6 +340,8 @@ internal fun ExpandedLayout(
     onOpenModuleConfig: (String?) -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
+    /** Opens the full-screen Run terminal, where the Appearance setting puts runs instead of a pane. */
+    onOpenRun: () -> Unit = {},
 ) {
     val leftPanels = buildLeftPanels(
         state, fileActions, indexStatus.building,
@@ -320,20 +351,37 @@ internal fun ExpandedLayout(
     val rightPanels = pluginPanels(ToolWindowAnchor.RIGHT, state.backend, state.active?.path)
     val moreLabel = stringResource(Res.string.edchrome_more)
     val settingsLabel = stringResource(Res.string.edchrome_settings_and_tools)
-    val buildConsoleLabel = stringResource(Res.string.buildc_build)
-    val logsLabel = stringResource(Res.string.logs_title)
-    val runLabel = stringResource(Res.string.run)
     // Only whether a console run exists, not its transcript: the transcript changes many times a second and
     // would recompose the whole layout.
     val hasRun by remember(state.backend) { state.backend.build.runConsole.map { it != null }.distinctUntilChanged() }
         .collectAsState(initial = false)
-    // A run that starts while this layout is on screen opens in the bottom pane rather than full screen. The
-    // flow's current value is skipped, so coming back to the editor doesn't re-open an old run.
+    // A run that starts while this layout is on screen opens in its pane rather than full screen, unless the
+    // Appearance setting asks for full screen (the app navigates there itself). The flow's current value is
+    // skipped, so coming back to the editor doesn't re-open an old run.
     LaunchedEffect(state.backend) {
         state.backend.build.runConsole.map { it?.id }.distinctUntilChanged().drop(1).collect { id ->
-            if (id != null) state.showRunOutput()
+            if (id != null && !state.runFullScreen) state.showRunOutput()
         }
     }
+    val windows = leftPanels + rightPanels + consoleWindows(state, buildState, indexStatus, fileActions, hasRun || state.runOpen)
+    val leftWindows = windows.filter { state.sideOf(it.id) == ToolWindowSide.Left }
+    val rightWindows = windows.filter { state.sideOf(it.id) == ToolWindowSide.Right }
+    val bottomWindows = windows.filter { state.sideOf(it.id) == ToolWindowSide.Bottom }
+    // A maximized pane goes back to its size once its side collapses, so it never reopens over the editor.
+    val maximizedShown = state.maximizedSide?.let { state.shownOn(it) }
+    LaunchedEffect(maximizedShown) { if (maximizedShown == null) state.maximizedSide = null }
+    // The logs viewer forgets its source filter when it closes; Run opens full screen when the setting says so.
+    val toggle: (String) -> Unit = { id ->
+        when {
+            id == ToolWindowIds.RUN && state.runFullScreen -> onOpenRun()
+            id == ToolWindowIds.LOGS && state.logsOpen -> state.closeLogs()
+            else -> state.toggleToolWindow(id)
+        }
+    }
+    val hideSide: (ToolWindowSide) -> Unit = { side ->
+        if (state.shownOn(side) == ToolWindowIds.LOGS) state.closeLogs() else state.hideSide(side)
+    }
+    val drag = remember(state) { ToolWindowDragState { id, side -> state.moveToolWindow(id, side) } }
     val hideBarLabel = stringResource(Res.string.sidebar_hide_tool_window_bar)
     // The screens a project is configured from (Modules, Icon Manager, Logs) sit in the stripe's lower group,
     // resolved from the registry like the phone's More sheet that lists them there.
@@ -347,62 +395,24 @@ internal fun ExpandedLayout(
     // Settings & Tools is left out: it is the stripe's own gear.
     val pluginMoreActions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, stripeHost)
         .filter { UiActionPlaces.TOOL_STRIPE !in it.places && it.id != "ui.hub" }
-    // Floating panes overlay the editor, so only one side is open at a time; set by the centre column below.
-    var floatPanes by remember { mutableStateOf(false) }
-    // Whichever side opened last wins, however it was opened (stripe, top bar, command palette).
-    LaunchedEffect(floatPanes, state.selectedLeftPanel) {
-        if (floatPanes && state.leftOpen) state.selectedRightPanel = null
-    }
-    LaunchedEffect(floatPanes, state.selectedRightPanel) {
-        if (floatPanes && state.selectedRightPanel != null) state.selectedLeftPanel = null
-    }
+    CompositionLocalProvider(LocalToolWindowDrag provides drag) {
     Box(Modifier.fillMaxSize()) {
-        // The top bar spans the whole window (IntelliJ's main toolbar); the stripes, panes, editor and console
-        // all sit below it, laid out here around the editor body EditorCenter hands back.
+        // The top bar spans the whole window (IntelliJ's main toolbar); the stripes, panes and editor all sit
+        // below it, laid out here around the editor body EditorCenter hands back.
         EditorCenter(state, indexStatus, compact = false, Modifier.fillMaxSize(), onCloseProject) { editorBody ->
             Column(Modifier.fillMaxSize()) {
-                // One hairline under the bar, across the stripes too, like IntelliJ's main toolbar border.
-                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                // One hairline under the bar, across the stripes too, like IntelliJ's main toolbar border. Zen mode
+                // has no bar and no stripes.
+                if (!state.zenMode) Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    ActivityRail(
-                        panels = leftPanels,
-                        selectedId = state.selectedLeftPanel,
-                        onSelect = { state.toggleLeftPanel(it) },
+                    if (!state.zenMode) ActivityRail(
+                        panels = leftWindows,
+                        selectedId = state.shownOn(ToolWindowSide.Left),
+                        onSelect = toggle,
                         side = RailSide.Left,
+                        bottomPanels = bottomWindows,
+                        bottomSelectedId = state.shownOn(ToolWindowSide.Bottom),
                         footer = {
-                            // The build console is a BOTTOM tool window (docked below the editor, see the centre column);
-                            // IntelliJ-style its toggle lives at the lower-left of the stripe, lit while it's open.
-                            // The bottom tool windows: the build console and the logs share the bottom pane, one at
-                            // a time; picking the one on show hides the pane.
-                            RailActionItem(CaIcons.terminal, buildConsoleLabel, active = state.consoleOpen && !state.logsOpen && !state.runOpen) {
-                                if (state.consoleOpen && !state.logsOpen && !state.runOpen) {
-                                    state.consoleOpen = false
-                                } else {
-                                    state.consoleOpen = true
-                                    state.closeLogs()
-                                    state.runOpen = false
-                                }
-                            }
-                            // The Run terminal joins them once a console run exists (or while it is on show).
-                            if (hasRun || state.runOpen) {
-                                RailActionItem(CaIcons.play, runLabel, active = state.runOpen && !state.logsOpen) {
-                                    if (state.runOpen && !state.logsOpen) {
-                                        state.runOpen = false
-                                        state.consoleOpen = false
-                                    } else {
-                                        state.showRunOutput()
-                                    }
-                                }
-                            }
-                            RailActionItem(CaIcons.logs, logsLabel, active = state.logsOpen) {
-                                if (state.logsOpen) {
-                                    state.closeLogs()
-                                    state.consoleOpen = false
-                                    state.runOpen = false
-                                } else {
-                                    state.logsOpen = true
-                                }
-                            }
                             RailDivider()
                             stripeActions.forEach { a ->
                                 RailActionItem(actionIcon(a.iconId), localizedUiActionText(a)) { a.perform(stripeHost) }
@@ -411,188 +421,20 @@ internal fun ExpandedLayout(
                             RailActionItem(CaIcons.gear, settingsLabel, onClick = onOpenHub)
                         },
                     )
-                    // Centre column spanning the width between the two stripes: the editor (with the left/right tool panes)
-                    // on top, and the build console docked along the BOTTOM (IntelliJ bottom tool window) rather than as a
-                    // right-edge pane. The stripes stay full-height, so their footer buttons — including the console toggle
-                    // — sit in the lower corners. The divider above the console drags to resize it.
+                    // Centre column spanning the width between the two stripes: the side panes and the editor, and
+                    // the bottom pane under them. The stripes stay full-height, so the bottom group and the footer
+                    // sit in the lower corner.
                     BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
-                        val density = LocalDensity.current
-                        val minConsole = 140.dp
-                        val maxConsole = (maxHeight - 200.dp).coerceAtLeast(minConsole)
-                        var consoleHeight by remember { mutableStateOf(300.dp) }
-                        val consoleH = consoleHeight.coerceIn(minConsole, maxConsole)
-                        val floating = maxWidth < FloatingPanesBelow
-                        SideEffect { floatPanes = floating }
-                        val leftOpen = state.leftOpen
-                        val rightOpen = state.selectedRightPanel != null && rightPanels.isNotEmpty()
-                        // Docked: each pane keeps its dragged width but never squeezes the editor below MinEditorWidth.
-                        // Floating: a pane may cover most of the editor, never all of it.
-                        val rightMax: Dp
-                        val leftMax: Dp
-                        if (floating) {
-                            rightMax = (maxWidth * 0.85f).coerceAtLeast(MinPaneWidth)
-                            leftMax = rightMax
-                        } else {
-                            rightMax = (maxWidth - MinEditorWidth - if (leftOpen) MinPaneWidth else 0.dp).coerceAtLeast(MinPaneWidth)
-                            val rightUsed = if (rightOpen) state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax) else 0.dp
-                            leftMax = (maxWidth - MinEditorWidth - rightUsed).coerceAtLeast(MinPaneWidth)
-                        }
-                        val leftW = state.leftPaneWidth.dp.coerceIn(MinPaneWidth, leftMax)
-                        val rightW = state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax)
-                        // Drag deltas accumulate onto the stored width, first pulled into range so a width saved in a
-                        // larger window starts moving at once instead of after the excess is dragged off.
-                        val onResizeLeft: (Dp) -> Unit = { d ->
-                            state.leftPaneWidth = state.leftPaneWidth.coerceIn(MinPaneWidth.value, leftMax.value) + d.value
-                        }
-                        val onResizeRight: (Dp) -> Unit = { d ->
-                            state.rightPaneWidth = state.rightPaneWidth.coerceIn(MinPaneWidth.value, rightMax.value) + d.value
-                        }
-                        Column(Modifier.fillMaxSize()) {
-                            Box(Modifier.weight(1f).fillMaxWidth()) {
-                                Row(Modifier.fillMaxSize()) {
-                                    if (!floating) {
-                                        SidebarPane(
-                                            leftPanels, state.selectedLeftPanel, RailSide.Left, paneWidth = leftW,
-                                            onResize = onResizeLeft, onResizeEnd = { state.savePaneWidths() },
-                                            onHide = { state.selectedLeftPanel = null },
-                                            active = state.activeToolWindow != null && state.activeToolWindow == state.selectedLeftPanel,
-                                            alwaysShowActions = state.alwaysShowToolWindowActions,
-                                            onActivate = { state.activeToolWindow = state.selectedLeftPanel },
-                                        )
-                                    }
-                                    Box(Modifier.weight(1f).fillMaxHeight().onPress { state.activeToolWindow = null }) { editorBody() }
-                                    // Right-edge tool-window pane. Fully plugin-derived: nothing lays down when no plugin
-                                    // contributes a RIGHT tool window (the AI chat is one such plugin).
-                                    if (!floating) {
-                                        SidebarPane(
-                                            rightPanels, state.selectedRightPanel, RailSide.Right, paneWidth = rightW,
-                                            onResize = onResizeRight, onResizeEnd = { state.savePaneWidths() },
-                                            onHide = { state.selectedRightPanel = null },
-                                            active = state.activeToolWindow != null && state.activeToolWindow == state.selectedRightPanel,
-                                            alwaysShowActions = state.alwaysShowToolWindowActions,
-                                            onActivate = { state.activeToolWindow = state.selectedRightPanel },
-                                        )
-                                    }
-                                }
-                                if (floating) {
-                                    // Tapping the dimmed editor closes the floating pane.
-                                    val scrimAlpha by animateFloatAsState(
-                                        if (leftOpen || rightOpen) 0.32f else 0f,
-                                        tween(Motion.BASE),
-                                        label = "paneScrim",
-                                    )
-                                    if (scrimAlpha > 0f) {
-                                        Box(
-                                            Modifier.fillMaxSize()
-                                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = scrimAlpha))
-                                                .clickable(remember { MutableInteractionSource() }, indication = null) {
-                                                    state.selectedLeftPanel = null
-                                                    state.selectedRightPanel = null
-                                                },
-                                        )
-                                    }
-                                    SidebarPane(
-                                        leftPanels, state.selectedLeftPanel, RailSide.Left, Modifier.align(Alignment.CenterStart),
-                                        paneWidth = leftW, floating = true,
-                                        onResize = onResizeLeft, onResizeEnd = { state.savePaneWidths() },
-                                        onHide = { state.selectedLeftPanel = null },
-                                        active = state.activeToolWindow != null && state.activeToolWindow == state.selectedLeftPanel,
-                                        alwaysShowActions = state.alwaysShowToolWindowActions,
-                                        onActivate = { state.activeToolWindow = state.selectedLeftPanel },
-                                    )
-                                    SidebarPane(
-                                        rightPanels, state.selectedRightPanel, RailSide.Right, Modifier.align(Alignment.CenterEnd),
-                                        paneWidth = rightW, floating = true,
-                                        onResize = onResizeRight, onResizeEnd = { state.savePaneWidths() },
-                                        onHide = { state.selectedRightPanel = null },
-                                        active = state.activeToolWindow != null && state.activeToolWindow == state.selectedRightPanel,
-                                        alwaysShowActions = state.alwaysShowToolWindowActions,
-                                        onActivate = { state.activeToolWindow = state.selectedRightPanel },
-                                    )
-                                }
-                            }
-                            // The bottom tool window slides up from, and back down into, the bottom edge, with
-                            // the same motion as the side panes.
-                            AnimatedVisibility(
-                                visible = state.consoleOpen || state.logsOpen || state.runOpen,
-                                enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet), expandFrom = Alignment.Bottom) +
-                                    fadeIn(tween(Motion.BASE)),
-                                exit = shrinkVertically(tween(Motion.BASE, easing = Motion.quiet), shrinkTowards = Alignment.Bottom) +
-                                    fadeOut(tween(Motion.BASE / 2)),
-                            ) {
-                                Column {
-                                    // Resize grip: a thin 1dp splitter line with a slightly taller invisible grab strip and a
-                                    // vertical-resize cursor on hover (desktop). The console is bottom-anchored, so dragging
-                                    // this top edge UP grows it.
-                                    Box(
-                                        Modifier.fillMaxWidth().height(5.dp)
-                                            .verticalResizeCursor()
-                                            .draggable(
-                                                orientation = Orientation.Vertical,
-                                                state = rememberDraggableState { dy ->
-                                                    consoleHeight = (consoleH - with(density) { dy.toDp() })
-                                                        .coerceIn(minConsole, maxConsole)
-                                                },
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                                    }
-                                    ToolWindowFrame(
-                                        active = state.activeToolWindow == IdeUiState.CONSOLE_TOOL_WINDOW,
-                                        alwaysShowActions = state.alwaysShowToolWindowActions,
-                                        onActivate = { state.activeToolWindow = IdeUiState.CONSOLE_TOOL_WINDOW },
-                                    ) {
-                                    ToolWindowSurface(Modifier.fillMaxWidth().height(consoleH)) {
-                                        if (state.logsOpen) {
-                                            LogsScreen(
-                                                backend = state.backend,
-                                                fileActions = fileActions,
-                                                modifier = Modifier.fillMaxSize(),
-                                                initialSource = state.logsSource,
-                                                onHide = { state.closeLogs(); state.consoleOpen = false; state.runOpen = false },
-                                            )
-                                        } else if (state.runOpen) {
-                                            RunScreen(
-                                                backend = state.backend,
-                                                onBack = {},
-                                                onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
-                                                modifier = Modifier.fillMaxSize(),
-                                                onHide = { state.runOpen = false; state.consoleOpen = false },
-                                                onOpenSource = { path, offset -> state.openAt(path, offset) },
-                                            )
-                                        } else {
-                                        // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only
-                                        // the console subtree, not the whole editor layout.
-                                        val appLog by state.backend.build.appLog.collectAsState()
-                                        BuildConsole(
-                                            buildState = buildState,
-                                            indexStatus = indexStatus,
-                                            onRun = { state.requestRun { state.backend.build.runBuild() } },
-                                            canRun = state.backend.build.supported(),
-                                            onStop = { state.backend.build.stopBuild() },
-                                            onCollapse = { state.consoleOpen = false },
-                                            modifier = Modifier.fillMaxSize(),
-                                            wide = true,
-                                            onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
-                                            backend = state.backend,
-                                            activeFilePath = state.active?.path,
-                                            appLog = appLog,
-                                        )
-                                        }
-                                    }
-                                    }
-                                }
-                            }
-                        }
+                        ToolWindowPanes(state, windows, editorBody, hideSide, maxWidth, maxHeight)
+                        ToolWindowDropTargets()
                     }
-                    // The right stripe shows whenever a plugin contributes a RIGHT tool window, unless the user hid it;
-                    // the top bar then carries a toggle for the primary one, and Settings > Appearance brings the stripe back.
-                    if (rightPanels.isNotEmpty() && state.rightStripeVisible) {
+                    // The right stripe shows while a window docks on the right, unless the user hid it (Settings >
+                    // Appearance brings it back). During a drag it shows anyway, as a place to drop on.
+                    if (!state.zenMode && ((rightWindows.isNotEmpty() && state.rightStripeVisible) || drag.dragging != null)) {
                         ActivityRail(
-                            panels = rightPanels,
-                            selectedId = state.selectedRightPanel,
-                            onSelect = { state.toggleRightPanel(it) },
+                            panels = rightWindows,
+                            selectedId = state.shownOn(ToolWindowSide.Right),
+                            onSelect = toggle,
                             side = RailSide.Right,
                             menu = { dismiss ->
                                 DropdownMenuItem(
@@ -607,6 +449,200 @@ internal fun ExpandedLayout(
         }
         DestinationSheets(state, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions, logsAsSheet = false)
         PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject)
+        ToolWindowDragGhost()
+    }
+    }
+}
+
+/**
+ * The three panes around the editor in the wide layout's centre column ([width] x [height]): left and right
+ * beside the editor, bottom under them, each showing the window docked on that side.
+ *
+ * Below [FloatingPanesBelow] the side panes float over the editor (IntelliJ's "Undock" mode) so a phone in
+ * landscape keeps the editor full width; one side at a time then. The console windows are the exception: they
+ * stay docked beside the editor, since being watched while the code is edited is what they are for.
+ */
+@Composable
+private fun ToolWindowPanes(
+    state: IdeUiState,
+    windows: List<SidebarPanel>,
+    editorBody: @Composable () -> Unit,
+    hideSide: (ToolWindowSide) -> Unit,
+    width: Dp,
+    height: Dp,
+) {
+    val leftId = state.shownOn(ToolWindowSide.Left)
+    val rightId = state.shownOn(ToolWindowSide.Right)
+    val bottomId = state.shownOn(ToolWindowSide.Bottom)
+    val maximized = state.maximizedSide?.takeIf { state.shownOn(it) != null }
+    val narrow = width < FloatingPanesBelow
+    // Whether a side floats follows the window on it, and the last one while it animates out.
+    var lastLeft by remember { mutableStateOf(leftId) }
+    var lastRight by remember { mutableStateOf(rightId) }
+    SideEffect {
+        if (leftId != null) lastLeft = leftId
+        if (rightId != null) lastRight = rightId
+    }
+    fun floats(id: String?, side: ToolWindowSide) = narrow && maximized != side && id !in ToolWindowIds.BOTTOM
+    val leftFloats = floats(leftId ?: lastLeft, ToolWindowSide.Left)
+    val rightFloats = floats(rightId ?: lastRight, ToolWindowSide.Right)
+    // Floating panes overlay the editor, so only one is open at a time: whichever opened last wins, however it
+    // was opened (stripe, top bar, command palette).
+    LaunchedEffect(leftId) { if (leftId != null && leftFloats && rightFloats && rightId != null) hideSide(ToolWindowSide.Right) }
+    LaunchedEffect(rightId) { if (rightId != null && leftFloats && rightFloats && leftId != null) hideSide(ToolWindowSide.Left) }
+
+    val editorMin = if (narrow) MinEditorWidthNarrow else MinEditorWidth
+    val leftDocked = leftId != null && !leftFloats
+    val rightDocked = rightId != null && !rightFloats
+    // Docked: each pane keeps its dragged width but never squeezes the editor below editorMin. Floating: a pane
+    // may cover most of the editor, never all of it.
+    val rightMax = if (rightFloats) (width * 0.85f).coerceAtLeast(MinPaneWidth)
+        else (width - editorMin - if (leftDocked) MinPaneWidth else 0.dp).coerceAtLeast(MinPaneWidth)
+    val rightUsed = if (rightDocked) state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax) else 0.dp
+    val leftMax = if (leftFloats) (width * 0.85f).coerceAtLeast(MinPaneWidth)
+        else (width - editorMin - rightUsed).coerceAtLeast(MinPaneWidth)
+    val leftW = if (maximized == ToolWindowSide.Left) width else state.leftPaneWidth.dp.coerceIn(MinPaneWidth, leftMax)
+    val rightW = if (maximized == ToolWindowSide.Right) width else state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax)
+    // Below the editor: the pane leaves the editor a few lines (a phone in landscape has ~300dp here).
+    val bottomMax = (height - BottomSplitterSize - MinEditorHeight).coerceAtLeast(MinBottomPaneHeight)
+    val bottomH = if (maximized == ToolWindowSide.Bottom) height - BottomSplitterSize
+        else state.bottomPaneHeight.dp.coerceIn(MinBottomPaneHeight, bottomMax)
+    // Drag deltas accumulate onto the stored size, first pulled into range so a size saved in a larger window
+    // starts moving at once instead of after the excess is dragged off.
+    val onResizeLeft: ((Dp) -> Unit)? = if (maximized != null) null else ({ d ->
+        state.leftPaneWidth = state.leftPaneWidth.coerceIn(MinPaneWidth.value, leftMax.value) + d.value
+    })
+    val onResizeRight: ((Dp) -> Unit)? = if (maximized != null) null else ({ d ->
+        state.rightPaneWidth = state.rightPaneWidth.coerceIn(MinPaneWidth.value, rightMax.value) + d.value
+    })
+    val onResizeBottom: ((Dp) -> Unit)? = if (maximized != null) null else ({ d ->
+        state.bottomPaneHeight = state.bottomPaneHeight.coerceIn(MinBottomPaneHeight.value, bottomMax.value) + d.value
+    })
+    fun controls(side: ToolWindowSide) = ToolWindowPaneControls(
+        maximized = maximized == side,
+        onToggleMaximized = { state.maximizedSide = if (maximized == side) null else side },
+        side = side,
+        onMove = { to -> state.shownOn(side)?.let { state.moveToolWindow(it, to) } },
+    )
+    @Composable
+    fun sidePane(side: ToolWindowSide, floating: Boolean, modifier: Modifier = Modifier) {
+        val id = state.shownOn(side)
+        val rail = if (side == ToolWindowSide.Left) RailSide.Left else RailSide.Right
+        SidebarPane(
+            windows, id, rail, modifier,
+            paneWidth = if (side == ToolWindowSide.Left) leftW else rightW,
+            floating = floating,
+            onResize = if (side == ToolWindowSide.Left) onResizeLeft else onResizeRight,
+            onResizeEnd = { state.savePaneWidths() },
+            onHide = { hideSide(side) },
+            active = id != null && state.activeToolWindow == id,
+            alwaysShowActions = state.alwaysShowToolWindowActions,
+            onActivate = { state.activeToolWindow = state.shownOn(side) },
+            // A floating pane is a narrow window's quick look over the editor: its header keeps to the window's
+            // own controls (its stripe button still drags it to another side).
+            controls = if (floating) null else controls(side),
+        )
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            if (!leftFloats && (maximized == null || maximized == ToolWindowSide.Left)) sidePane(ToolWindowSide.Left, floating = false)
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                Box(Modifier.fillMaxSize().onPress { state.activeToolWindow = null }) { editorBody() }
+                if (leftFloats || rightFloats) {
+                    // Tapping the dimmed editor closes the floating pane.
+                    val floatingOpen = (leftFloats && leftId != null) || (rightFloats && rightId != null)
+                    val scrimAlpha by animateFloatAsState(if (floatingOpen) 0.32f else 0f, tween(Motion.BASE), label = "paneScrim")
+                    if (scrimAlpha > 0f) {
+                        Box(
+                            Modifier.fillMaxSize()
+                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = scrimAlpha))
+                                .clickable(remember { MutableInteractionSource() }, indication = null) {
+                                    if (leftFloats) hideSide(ToolWindowSide.Left)
+                                    if (rightFloats) hideSide(ToolWindowSide.Right)
+                                },
+                        )
+                    }
+                    if (leftFloats) sidePane(ToolWindowSide.Left, floating = true, Modifier.align(Alignment.CenterStart))
+                    if (rightFloats) sidePane(ToolWindowSide.Right, floating = true, Modifier.align(Alignment.CenterEnd))
+                }
+            }
+            if (!rightFloats && (maximized == null || maximized == ToolWindowSide.Right)) sidePane(ToolWindowSide.Right, floating = false)
+        }
+        if (maximized == null || maximized == ToolWindowSide.Bottom) {
+            BottomPane(
+                windows, bottomId, bottomH,
+                onResize = onResizeBottom,
+                onResizeEnd = { state.savePaneWidths() },
+                onHide = { hideSide(ToolWindowSide.Bottom) },
+                active = bottomId != null && state.activeToolWindow == bottomId,
+                alwaysShowActions = state.alwaysShowToolWindowActions,
+                onActivate = { state.activeToolWindow = state.shownOn(ToolWindowSide.Bottom) },
+                controls = controls(ToolWindowSide.Bottom),
+            )
+        }
+    }
+}
+
+/**
+ * The console tool windows as dockable panels: the build console, the Run terminal (once a run exists, given
+ * as [withRun]) and the logs. Each draws its own header, with its hide button and the pane controls, so a pane
+ * draws none above them. The build console takes its phone layout in a pane narrower than [RoomyConsoleWidth].
+ */
+@Composable
+private fun consoleWindows(
+    state: IdeUiState,
+    buildState: BuildState,
+    indexStatus: IndexUiStatus,
+    fileActions: FileActions,
+    withRun: Boolean,
+): List<SidebarPanel> {
+    val buildLabel = stringResource(Res.string.buildc_build)
+    val runLabel = stringResource(Res.string.run)
+    val logsLabel = stringResource(Res.string.logs_title)
+    return buildList {
+        add(SidebarPanel(ToolWindowIds.BUILD, buildLabel, CaIcons.terminal, order = 10, ownHeader = true) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val roomy = maxWidth >= RoomyConsoleWidth
+                // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only the
+                // console, not the whole editor layout.
+                val appLog by state.backend.build.appLog.collectAsState()
+                BuildConsole(
+                    buildState = buildState,
+                    indexStatus = indexStatus,
+                    onRun = { state.requestRun { state.backend.build.runBuild() } },
+                    canRun = state.backend.build.supported(),
+                    onStop = { state.backend.build.stopBuild() },
+                    onCollapse = { state.consoleOpen = false },
+                    modifier = if (roomy) Modifier.fillMaxSize() else Modifier.fillMaxSize().padding(10.dp),
+                    wide = roomy,
+                    onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
+                    backend = state.backend,
+                    activeFilePath = state.active?.path,
+                    appLog = appLog,
+                )
+            }
+        })
+        if (withRun) {
+            add(SidebarPanel(ToolWindowIds.RUN, runLabel, CaIcons.play, order = 20, ownHeader = true) {
+                RunScreen(
+                    backend = state.backend,
+                    onBack = {},
+                    onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
+                    modifier = Modifier.fillMaxSize(),
+                    onHide = { state.runOpen = false },
+                    onOpenSource = { path, offset -> state.openAt(path, offset) },
+                )
+            })
+        }
+        add(SidebarPanel(ToolWindowIds.LOGS, logsLabel, CaIcons.logs, order = 30, ownHeader = true) {
+            LogsScreen(
+                backend = state.backend,
+                fileActions = fileActions,
+                modifier = Modifier.fillMaxSize(),
+                initialSource = state.logsSource,
+                onHide = { state.closeLogs() },
+            )
+        })
     }
 }
 
@@ -688,6 +724,8 @@ internal fun CompactLayout(
             onProgress = { navProgress = it },
             drawerContent = {
                 ToolWindowSurface(Modifier.fillMaxSize()) {
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val drawerHeight = maxHeight
                     Column(Modifier.fillMaxSize()) {
                         ToolWindowSwitcherHeader(
                             panels = leftPanels,
@@ -711,8 +749,10 @@ internal fun CompactLayout(
                             )
                         }
                         // A native ad pinned to the foot of the left drawer, below the tool content (mirrors the
-                        // desktop SidebarPane footer). Self-collapses when ads are inactive.
-                        AdSlot(AdPlacement.SIDEBAR, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+                        // desktop SidebarPane footer). Self-collapses when ads are inactive, or the drawer is short
+                        // (a small phone in landscape).
+                        FooterAdSlot(AdPlacement.SIDEBAR, drawerHeight, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+                    }
                     }
                 }
             },
@@ -743,8 +783,9 @@ internal fun CompactLayout(
                             onHideKeyboard = if (hasSystemBack) null else ({ state.active?.session?.ime?.hide() }),
                         )
                     }
-                    // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it.
-                    if (!keyboardOpen) androidx.compose.foundation.layout.Spacer(Modifier.height(DockBarHeight))
+                    // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it. Zen mode hides
+                    // the bar, unless the console is pulled up.
+                    if (!keyboardOpen && !state.zenMode) androidx.compose.foundation.layout.Spacer(Modifier.height(DockBarHeight))
                 }
                 // The bottom nav is the collapsed face of the build dock: swipe it up (or tap its build
                 // chip / the top-bar console toggle) and it expands into the build console.
@@ -752,7 +793,7 @@ internal fun CompactLayout(
                     open = state.consoleOpen,
                     onOpenChange = { state.consoleOpen = it },
                     buildState = buildState,
-                    hidden = keyboardOpen && !state.consoleOpen,
+                    hidden = (keyboardOpen || state.zenMode) && !state.consoleOpen,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     hint = dockHint,
                     onHintShown = {

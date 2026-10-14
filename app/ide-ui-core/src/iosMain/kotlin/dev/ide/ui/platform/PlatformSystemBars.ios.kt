@@ -8,3 +8,7 @@ import androidx.compose.runtime.Composable
 @Composable
 actual fun PlatformSystemBars(darkTheme: Boolean) {
 }
+
+@Composable
+actual fun HideSystemBars(hidden: Boolean) {
+}

@@ -174,6 +174,8 @@ object CaIcons {
     val sidebar = mirroring("sidebar", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M9.5 5v14"))
     val panelRight = mirroring("panel-right", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M15 5v14"))
     val split = build("split", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M12 5v14"))
+    /** A window with a pane along its foot: a tool window docked below the editor. */
+    val panelBottom = build("panel-bottom", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M3.5 14h17"))
     val layers = build("layers", s("M12 4l8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4"))
     val code = build("code", s("M9 8l-4 4 4 4M15 8l4 4-4 4"))
     val eye = build("eye", s("M2.5 12s3.4-6.3 9.5-6.3S21.5 12 21.5 12 18.1 18.3 12 18.3 2.5 12 2.5 12z"), circle(12f, 12f, 2.7f))

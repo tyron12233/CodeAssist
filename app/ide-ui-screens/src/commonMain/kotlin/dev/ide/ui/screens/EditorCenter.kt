@@ -42,6 +42,24 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.components.NoOpenFilesView
 import dev.ide.ui.components.RecentFileEntry
 import dev.ide.ui.components.TabsStrip
+import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.generated.resources.zen_exit
+import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.touchInput
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.ui.unit.dp
 import dev.ide.ui.editor.BlockEditor
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.engine.DaemonPass
@@ -175,7 +193,8 @@ internal fun EditorCenter(
     val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
     Box(modifier) {
         Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
-            EditorTopBar(
+            // Zen mode drops the bar; the tabs strip carries its way out.
+            if (!state.zenMode) EditorTopBar(
                 projectName = project.name,
                 indexStatus = indexStatus,
                 onToggleNav = { state.toggleLeftSidebar() },
@@ -233,6 +252,7 @@ internal fun EditorCenter(
                     }
                 },
                 compact = compact,
+                onZenMode = { state.setZen(true) },
             )
             // Everything under the top bar: the editor proper. A wide layout lays it out between its tool-window
             // stripes and panes (via [frame]) so the bar spans the whole window above them, IntelliJ-style.
@@ -339,10 +359,11 @@ internal fun EditorCenter(
                         onCloseToLeft = { state.closeToLeft(it) },
                         onCloseAll = { state.closeAll() },
                         backend = state.backend,
+                        trailing = if (state.zenMode) ({ ZenExitButton { state.setZen(false) } }) else null,
                     )
                     if (active != null) {
                         EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
-                        BreadcrumbBar(state, active, hasPreview)
+                        if (!state.zenMode) BreadcrumbBar(state, active, hasPreview)
                         // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
                         // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
                         // The editor is covered when an app-level overlay sits on top of it: the command palette or a
@@ -528,6 +549,23 @@ internal fun EditorCenter(
                 if (frame != null) frame(editorBody) else editorBody()
             }
         }
+    }
+}
+
+/** Zen mode's way out, at the end of the tabs strip: clear of the screen edge's back-gesture zone, which would
+ *  otherwise take the tap once the system bars are hidden. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ZenExitButton(onExit: () -> Unit) {
+    val label = stringResource(Res.string.zen_exit)
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
+        state = rememberTooltipState(),
+        enableUserInput = !touchInput,
+        modifier = Modifier.windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.End)).padding(end = 6.dp),
+    ) {
+        IconButtonCa(CaIcons.collapse, label, onExit, boxSize = 30, iconSize = 16)
     }
 }
 

@@ -16,6 +16,8 @@ import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.ext.ViewModeRegistry
+import dev.ide.ui.ext.ToolWindowRegistry
+import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.backend.UiSourceRootRole
@@ -376,19 +378,99 @@ class IdeUiState(
         }
     }
 
-    // ---- sidebar panels (the LEFT + RIGHT activity rails) ----
-    // Both sides are a list of `SidebarPanel`s (built-in + plugin tool windows); the rail shows one icon per
-    // panel and selects which one is docked. `null` = that side is collapsed.
+    // ---- tool windows ----
+    // Every tool window (the built-in Files/Search/Structure, the plugin ones, and Build/Run/Logs) sits on one
+    // side of the editor: Left, Right or Bottom. Each has a natural side and may be moved to another, IntelliJ
+    // style, and each side shows one window at a time. The per-group properties below (selectedLeftPanel,
+    // consoleOpen, ...) are views over that, so the phone layout and the commands keep their own vocabulary.
 
-    /** Which LEFT panel is open (a [LeftPanelId] or a plugin tool-window id), or null when the left sidebar is
-     *  collapsed. On desktop this is the docked pane; on mobile it's the panel shown in the push drawer.
-     *  Starts collapsed; [init] only remembers the persisted last panel for the next time the side is opened. */
-    var selectedLeftPanel by mutableStateOf<String?>(null)
+    /** The window showing on each side; a side with no entry is collapsed. */
+    private val shownAt = mutableStateMapOf<ToolWindowSide, String>()
+    /** Windows the user moved off their natural side. */
+    private val movedTo = mutableStateMapOf<String, ToolWindowSide>()
+
+    /** Where a window lives when nobody moved it: the console windows at the bottom, a plugin's RIGHT tool
+     *  window on the right, everything else on the left. */
+    fun naturalSide(id: String): ToolWindowSide = when {
+        id in ToolWindowIds.BOTTOM -> ToolWindowSide.Bottom
+        ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).any { it.id == id } -> ToolWindowSide.Right
+        else -> ToolWindowSide.Left
+    }
+
+    /** The side [id] docks on: where the user moved it, else its natural side. */
+    fun sideOf(id: String): ToolWindowSide = movedTo[id] ?: naturalSide(id)
+
+    /** The window showing on [side], or null when that side is collapsed. */
+    fun shownOn(side: ToolWindowSide): String? = shownAt[side]
+
+    fun isToolWindowShown(id: String): Boolean = shownAt[sideOf(id)] == id
+
+    /** Show [id] on its side, in place of whichever window was showing there. */
+    fun showToolWindow(id: String) {
+        shownAt[sideOf(id)] = id
+        if (naturalSide(id) == ToolWindowSide.Left && id !in ToolWindowIds.BOTTOM) rememberLeft(id)
+    }
+
+    fun hideToolWindow(id: String) {
+        val side = sideOf(id)
+        if (shownAt[side] == id) shownAt.remove(side)
+    }
+
+    /** A stripe button: show [id], or hide it when it is the one showing. */
+    fun toggleToolWindow(id: String) = if (isToolWindowShown(id)) hideToolWindow(id) else showToolWindow(id)
+
+    fun hideSide(side: ToolWindowSide) { shownAt.remove(side) }
+
+    /** Dock [id] on [side] from now on (remembered across launches) and show it there. */
+    fun moveToolWindow(id: String, side: ToolWindowSide) {
+        hideToolWindow(id)
+        if (side == naturalSide(id)) movedTo.remove(id) else movedTo[id] = side
+        backend.settings.setPreference(
+            TOOL_WINDOW_SIDES_PREF,
+            movedTo.entries.joinToString(",") { (k, v) -> "$k=${v.name}" },
+        )
+        if (maximizedSide != null && maximizedSide != side) maximizedSide = null
+        shownAt[side] = id
+    }
+
+    /** What is showing on each side, to put back later with [restoreToolWindows]. */
+    fun shownToolWindows(): Map<ToolWindowSide, String> = shownAt.toMap()
+
+    fun hideAllToolWindows() {
+        shownAt.clear()
+        maximizedSide = null
+    }
+
+    /** Put back what [shownToolWindows] returned, on the sides that are still empty and for windows that have
+     *  not moved since. */
+    fun restoreToolWindows(saved: Map<ToolWindowSide, String>) {
+        saved.forEach { (side, id) -> if (shownAt[side] == null && sideOf(id) == side) shownAt[side] = id }
+    }
+
+    /** The side whose pane fills the room the editor shares with the panes, or null. Not remembered. */
+    var maximizedSide by mutableStateOf<ToolWindowSide?>(null)
+
+    /** The showing window of a natural group (the left panels, the right panels), wherever it docks now. */
+    private fun shownOfGroup(group: ToolWindowSide): String? =
+        shownAt[group]?.takeIf { naturalSide(it) == group } ?: shownAt.values.firstOrNull { naturalSide(it) == group }
+
+    private fun hideGroup(group: ToolWindowSide) {
+        shownAt.entries.filter { naturalSide(it.value) == group }.map { it.key }.forEach { shownAt.remove(it) }
+    }
+
+    /** Which LEFT panel is open (a [LeftPanelId] or a plugin tool-window id), or null when none is. On a phone
+     *  it is the panel in the push drawer. Starts collapsed; [init] only remembers the persisted last panel for
+     *  the next time the side is opened. */
+    var selectedLeftPanel: String?
+        get() = shownOfGroup(ToolWindowSide.Left)
+        set(value) { if (value == null) hideGroup(ToolWindowSide.Left) else showToolWindow(value) }
     /** The panel to reopen when the left sidebar is toggled back on (survives a collapse). */
     private var lastLeftPanel: String = LeftPanelId.FILES
-    /** Which RIGHT panel is open (a plugin tool-window id — e.g. the AI chat), or null when collapsed. Right
+    /** Which RIGHT panel is open (a plugin tool-window id, e.g. the AI chat), or null when none is. Right
      *  panels are fully plugin-derived; a disabled plugin contributes nothing and leaves no rail icon. */
-    var selectedRightPanel by mutableStateOf<String?>(null)
+    var selectedRightPanel: String?
+        get() = shownOfGroup(ToolWindowSide.Right)
+        set(value) { if (value == null) hideGroup(ToolWindowSide.Right) else showToolWindow(value) }
 
     /** True while the left sidebar is showing a panel (drives the top-bar toggle glyph, the compact push
      *  drawer's open state, and the back handler). */
@@ -406,7 +488,11 @@ class IdeUiState(
     fun openLeftSidebar() { if (!leftOpen) rememberAndSelectLeft(lastLeftPanel) }
 
     private fun rememberAndSelectLeft(id: String) {
-        selectedLeftPanel = id
+        showToolWindow(id)
+    }
+
+    private fun rememberLeft(id: String) {
+        if (lastLeftPanel == id) return
         lastLeftPanel = id
         backend.settings.setPreference(LEFT_PANEL_PREF, id)
     }
@@ -439,10 +525,40 @@ class IdeUiState(
     var alwaysShowToolWindowActions by mutableStateOf(false)
         private set
 
-    /** Persist both pane widths (called when a splitter drag ends, not per frame). */
+    /** Persist the pane sizes (called when a splitter drag ends, not per frame). */
     fun savePaneWidths() {
         backend.settings.setPreference(LEFT_PANE_WIDTH_PREF, leftPaneWidth.toString())
         backend.settings.setPreference(RIGHT_PANE_WIDTH_PREF, rightPaneWidth.toString())
+        backend.settings.setPreference(BOTTOM_PANE_HEIGHT_PREF, bottomPaneHeight.toString())
+    }
+
+    /** The bottom pane's height in dp, as last dragged. The layout clamps it to the room it has. */
+    var bottomPaneHeight by mutableStateOf(DEFAULT_BOTTOM_PANE_HEIGHT)
+
+    /** Open a run's terminal full screen even where the wide layout could dock it (the Appearance setting). */
+    var runFullScreen by mutableStateOf(false)
+        private set
+
+    /**
+     * Zen mode: the editor alone, its tabs kept. The top bar, the tool window stripes and the breadcrumb row go,
+     * and on a phone the system bars and the bottom nav too. The tool windows open when it starts are hidden
+     * and come back when it ends. Not remembered across launches.
+     */
+    var zenMode by mutableStateOf(false)
+        private set
+    private var beforeZen: Map<ToolWindowSide, String> = emptyMap()
+
+    fun setZen(on: Boolean) {
+        if (on == zenMode) return
+        if (on) {
+            beforeZen = shownToolWindows()
+            hideAllToolWindows()
+        } else {
+            // A window opened during zen mode keeps its side; the others come back.
+            restoreToolWindows(beforeZen)
+            beforeZen = emptyMap()
+        }
+        zenMode = on
     }
 
     /** The bottom-nav slot that reflects the current state (or null when none of its slots is active). */
@@ -462,7 +578,9 @@ class IdeUiState(
 
     // Starts closed everywhere: the editor opens with nothing docked around it, and starting a build or run
     // opens the console when there is output to show.
-    var consoleOpen by mutableStateOf(false)
+    var consoleOpen: Boolean
+        get() = isToolWindowShown(ToolWindowIds.BUILD)
+        set(value) { if (value) showToolWindow(ToolWindowIds.BUILD) else hideToolWindow(ToolWindowIds.BUILD) }
 
     var paletteOpen by mutableStateOf(false)
 
@@ -696,6 +814,12 @@ class IdeUiState(
         rightStripeVisible = readRightStripe()
         backend.settings.preference(LEFT_PANE_WIDTH_PREF)?.toFloatOrNull()?.let { leftPaneWidth = it }
         backend.settings.preference(RIGHT_PANE_WIDTH_PREF)?.toFloatOrNull()?.let { rightPaneWidth = it }
+        backend.settings.preference(BOTTOM_PANE_HEIGHT_PREF)?.toFloatOrNull()?.let { bottomPaneHeight = it }
+        backend.settings.preference(TOOL_WINDOW_SIDES_PREF)?.split(',')?.forEach { entry ->
+            val id = entry.substringBefore('=', "")
+            val side = ToolWindowSide.entries.firstOrNull { it.name == entry.substringAfter('=', "") }
+            if (id.isNotEmpty() && side != null) movedTo[id] = side
+        }
     }
 
     /**
@@ -727,6 +851,7 @@ class IdeUiState(
     /** Push persisted IDE settings into the live editor-pref fields (called on creation + on each settings change). */
     fun applySettings(s: UiSettings) {
         alwaysShowToolWindowActions = s.alwaysShowToolWindowActions
+        runFullScreen = s.runFullScreen
         rightStripeVisible = readRightStripe()
         inlayHintsEnabled = s.inlayHints
         editorFontScale = s.editorFontScale
@@ -754,7 +879,9 @@ class IdeUiState(
 
     /** Whether the Logs viewer (editor & analysis logs) is showing: a bottom tool window in the wide layout,
      *  sharing the bottom pane with the build console, and a sheet on the phone. */
-    var logsOpen by mutableStateOf(false)
+    var logsOpen: Boolean
+        get() = isToolWindowShown(ToolWindowIds.LOGS)
+        set(value) { if (value) showToolWindow(ToolWindowIds.LOGS) else hideToolWindow(ToolWindowIds.LOGS) }
 
     /** The plugin id the Logs viewer should open filtered to, set when it is opened from a plugin's row.
      *  Cleared when the viewer closes, so opening Logs again shows everything. */
@@ -767,7 +894,9 @@ class IdeUiState(
 
     /** Whether a console run's terminal (its output and stdin) is showing in the wide layout's bottom pane, which
      *  it shares with the build console and the logs. A phone opens the full-screen Run terminal instead. */
-    var runOpen by mutableStateOf(false)
+    var runOpen: Boolean
+        get() = isToolWindowShown(ToolWindowIds.RUN)
+        set(value) { if (value) showToolWindow(ToolWindowIds.RUN) else hideToolWindow(ToolWindowIds.RUN) }
 
     /** Bring the docked Run terminal to the front of the bottom pane. */
     fun showRunOutput() {
@@ -1414,7 +1543,26 @@ class IdeUiState(
         const val RIGHT_PANE_WIDTH_PREF = "sidebar.rightWidth"
         const val DEFAULT_LEFT_PANE_WIDTH = 280f
         const val DEFAULT_RIGHT_PANE_WIDTH = 380f
+
+        /** App preference: the bottom pane's height in dp, as last dragged. */
+        const val BOTTOM_PANE_HEIGHT_PREF = "sidebar.bottomHeight"
+        const val DEFAULT_BOTTOM_PANE_HEIGHT = 300f
+
+        /** App preference: the tool windows moved off their natural side, as `id=Side` pairs. */
+        const val TOOL_WINDOW_SIDES_PREF = "sidebar.toolWindowSides"
     }
+}
+
+/** The side of the editor a tool window docks on. Left and Right follow the tool window stripes, so they are
+ *  the start and end sides and swap in a right-to-left layout. */
+enum class ToolWindowSide { Left, Right, Bottom }
+
+/** The ids of the tool windows that are not sidebar panels: the console windows, which start at the bottom. */
+object ToolWindowIds {
+    const val BUILD = "build"
+    const val RUN = "run"
+    const val LOGS = "logs"
+    val BOTTOM: Set<String> = setOf(BUILD, RUN, LOGS)
 }
 
 /** A run the user is trying to start while a build/program is already running (see [IdeUiState.requestRun]). */

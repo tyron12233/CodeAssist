@@ -41,7 +41,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.ToolWindowSide
+import androidx.compose.ui.graphics.vector.ImageVector
+import dev.ide.ui.generated.resources.toolwindow_dock_bottom
+import dev.ide.ui.generated.resources.toolwindow_dock_left
+import dev.ide.ui.generated.resources.toolwindow_dock_right
 import dev.ide.ui.generated.resources.toolwindow_hide
+import dev.ide.ui.generated.resources.toolwindow_maximize
+import dev.ide.ui.generated.resources.toolwindow_move_to
+import dev.ide.ui.generated.resources.toolwindow_options
+import dev.ide.ui.generated.resources.toolwindow_restore
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.touchInput
 import org.jetbrains.compose.resources.stringResource
@@ -141,15 +150,28 @@ fun ToolWindowHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        titleContent()
-        slot?.leading?.invoke(this)
-        if (!titleFills) Spacer(Modifier.weight(1f))
+        if (titleFills) {
+            titleContent()
+            slot?.leading?.invoke(this)
+        } else {
+            // The title side takes what the end buttons leave and gives way first, so in a narrow pane the hide
+            // button is never pushed off the edge.
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                titleContent()
+                slot?.leading?.invoke(this)
+            }
+        }
         Row(
             Modifier.toolWindowActionsAlpha(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             slot?.actions?.invoke(this)
+            ToolWindowPaneButtons()
             if (onHide != null) HideToolWindowButton(onHide)
         }
     }
@@ -267,4 +289,83 @@ fun HideToolWindowButton(onHide: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         IconButtonCa(CaIcons.minus, label, onHide, boxSize = 28, iconSize = 16)
     }
+}
+
+/**
+ * The window controls of a docked tool window in the wide layout: maximize its pane over the editor, and move
+ * it to another side. The pane's host provides them through [LocalToolWindowPaneControls]; the host-drawn
+ * [ToolWindowHeader] shows them, and a window that draws its own header (the build console, the Run terminal,
+ * the logs) puts [ToolWindowPaneButtons] before its hide button. Nothing shows where no host provides them
+ * (a phone's drawer or sheet, the full-screen Run).
+ */
+@Stable
+class ToolWindowPaneControls(
+    val maximized: Boolean,
+    val onToggleMaximized: () -> Unit,
+    val side: ToolWindowSide,
+    val onMove: (ToolWindowSide) -> Unit,
+)
+
+val LocalToolWindowPaneControls = compositionLocalOf<ToolWindowPaneControls?> { null }
+
+/**
+ * The docked tool window's window menu, one button so it fits a narrow pane's header: maximize (or restore) the
+ * pane, and move the window to another side. Its icon shows the side the window is on. Nothing where no host
+ * provides [LocalToolWindowPaneControls].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ToolWindowPaneButtons(boxSize: Int = 28) {
+    val controls = LocalToolWindowPaneControls.current ?: return
+    var open by remember { mutableStateOf(false) }
+    val label = stringResource(Res.string.toolwindow_options)
+    Box {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
+            state = rememberTooltipState(),
+            enableUserInput = !touchInput,
+        ) {
+            IconButtonCa(sideIcon(controls.side), label, { open = true }, boxSize = boxSize, iconSize = 16, active = open)
+        }
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            CaMenuItem(
+                label = stringResource(if (controls.maximized) Res.string.toolwindow_restore else Res.string.toolwindow_maximize),
+                onClick = { open = false; controls.onToggleMaximized() },
+                icon = if (controls.maximized) CaIcons.collapse else CaIcons.expand,
+            )
+            Text(
+                stringResource(Res.string.toolwindow_move_to),
+                Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+            ToolWindowSide.entries.forEach { side ->
+                CaMenuItem(
+                    label = sideLabel(side),
+                    onClick = { open = false; if (side != controls.side) controls.onMove(side) },
+                    icon = sideIcon(side),
+                    selected = side == controls.side,
+                    trailing = if (side == controls.side) ({ CaMenuCheck() }) else null,
+                )
+            }
+        }
+    }
+}
+
+/** The name of a side, as the "Move to" menu and the drop targets show it. */
+@Composable
+fun sideLabel(side: ToolWindowSide): String = stringResource(
+    when (side) {
+        ToolWindowSide.Left -> Res.string.toolwindow_dock_left
+        ToolWindowSide.Right -> Res.string.toolwindow_dock_right
+        ToolWindowSide.Bottom -> Res.string.toolwindow_dock_bottom
+    },
+)
+
+/** A window with a pane on that side. The side ones mirror with the stripes in a right-to-left layout. */
+fun sideIcon(side: ToolWindowSide): ImageVector = when (side) {
+    ToolWindowSide.Left -> CaIcons.sidebar
+    ToolWindowSide.Right -> CaIcons.panelRight
+    ToolWindowSide.Bottom -> CaIcons.panelBottom
 }

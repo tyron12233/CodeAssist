@@ -45,6 +45,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLogEntry
 import dev.ide.ui.components.HideToolWindowButton
+import dev.ide.ui.components.ToolWindowPaneButtons
 import dev.ide.ui.components.PeekTimestampReveal
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.logs_copy_all
@@ -120,6 +121,7 @@ fun LogsScreen(
                 if (fileActions.canShare) {
                     HeaderAction(CaIcons.share, stringResource(Res.string.share)) { state.export(fileActions::share) }
                 }
+                ToolWindowPaneButtons()
                 if (onHide != null) HideToolWindowButton(onHide)
             }
 

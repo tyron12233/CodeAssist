@@ -69,6 +69,7 @@ import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.HideToolWindowButton
+import dev.ide.ui.components.ToolWindowPaneButtons
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.copy
@@ -211,8 +212,11 @@ private fun RunTopBar(
     val iconBox = if (touchInput) 42 else 34
     val running = console?.phase == RunPhase.Running || console?.phase == RunPhase.Building
     val clipboard = LocalClipboardManager.current
+    // Docked, the pane shares the screen with the editor (a phone in landscape has ~300dp for both), so the
+    // header keeps to one line: the main class follows the module name instead of going under it.
+    val docked = onHide != null
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = if (docked) 2.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -220,14 +224,27 @@ private fun RunTopBar(
         else Spacer(Modifier.size(4.dp))
         Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         val runLabel = stringResource(Res.string.run)
-        Column(Modifier.weight(1f)) {
+        val title: @Composable () -> Unit = {
             Text(
                 console?.moduleName?.ifEmpty { runLabel } ?: runLabel,
                 style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
+        }
+        val mainClass: @Composable (Modifier) -> Unit = { mod ->
             console?.mainClass?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(it, mod, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (docked) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                title()
+                mainClass(Modifier.weight(1f, fill = false))
+            }
+        } else {
+            Column(Modifier.weight(1f)) {
+                title()
+                mainClass(Modifier)
             }
         }
         if (console != null) RunStatusPill(console, buildFailed, tests)
@@ -240,6 +257,7 @@ private fun RunTopBar(
         }
         if (running) IconButtonCa(CaIcons.stop, stringResource(Res.string.stop), onStop, boxSize = iconBox, iconSize = 16, tint = MaterialTheme.colorScheme.error)
         else IconButtonCa(CaIcons.play, stringResource(Res.string.run_run_again), onRerun, boxSize = iconBox, iconSize = 16, tint = Ide.colors.run)
+        ToolWindowPaneButtons(boxSize = iconBox)
         if (onHide != null) HideToolWindowButton(onHide)
     }
 }

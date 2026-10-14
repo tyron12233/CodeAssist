@@ -303,6 +303,15 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="edchrome_more">Mais</string>
     <string name="sidebar_hide_tool_window_bar">Ocultar barra de janelas de ferramentas</string>
     <string name="toolwindow_hide">Ocultar</string>
+    <string name="toolwindow_maximize">Maximizar</string>
+    <string name="toolwindow_restore">Restaurar</string>
+    <string name="toolwindow_move_to">Mover para</string>
+    <string name="toolwindow_options">Opções da janela</string>
+    <string name="toolwindow_dock_bottom">Embaixo</string>
+    <string name="toolwindow_dock_left">Esquerda</string>
+    <string name="toolwindow_dock_right">Direita</string>
+    <string name="zen_mode">Modo zen</string>
+    <string name="zen_exit">Sair do modo zen</string>
     <string name="edchrome_settings_and_tools">Configurações e ferramentas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
     <string name="edchrome_find_replace">Localizar / substituir</string>

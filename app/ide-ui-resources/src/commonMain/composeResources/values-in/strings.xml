@@ -296,6 +296,15 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>
     <string name="toolwindow_hide">Sembunyikan</string>
+    <string name="toolwindow_maximize">Maksimalkan</string>
+    <string name="toolwindow_restore">Pulihkan</string>
+    <string name="toolwindow_move_to">Pindahkan ke</string>
+    <string name="toolwindow_options">Opsi jendela</string>
+    <string name="toolwindow_dock_bottom">Bawah</string>
+    <string name="toolwindow_dock_left">Kiri</string>
+    <string name="toolwindow_dock_right">Kanan</string>
+    <string name="zen_mode">Mode zen</string>
+    <string name="zen_exit">Keluar dari mode zen</string>
     <string name="edchrome_settings_and_tools">Setelan &amp; Alat</string>
     <string name="edchrome_toggle_navigator">Alihkan navigator</string>
     <string name="edchrome_find_replace">Cari / ganti</string>

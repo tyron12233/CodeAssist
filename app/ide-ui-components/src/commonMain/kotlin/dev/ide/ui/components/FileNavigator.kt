@@ -436,11 +436,16 @@ private fun ScopeDropdown(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            // One line, shortened when a narrow pane's header has no room for all of it, so the chip keeps its
+            // shape and its chevron.
             Text(
                 mode.label(),
+                Modifier.weight(1f, fill = false),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Icon(
                 CaIcons.chevronDown,

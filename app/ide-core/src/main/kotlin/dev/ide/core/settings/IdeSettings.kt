@@ -27,6 +27,9 @@ data class IdeSettings(
     /** Show the tool window stripe along the right edge of a wide window (it can also be hidden from its own
      *  context menu; the top bar then carries the primary right tool window's toggle). */
     val rightToolWindowBar: Boolean = true,
+    /** Open a program's Run terminal full screen, as on a phone, instead of docking it beside the editor on a
+     *  wide window (a tablet, a phone in landscape, the desktop). */
+    val runFullScreen: Boolean = false,
 
     // ---- editor ----
     /** Code-font zoom, 1.0 = the theme's default size (also driven live by pinch / Ctrl-+ / Ctrl--). */

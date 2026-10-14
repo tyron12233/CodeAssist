@@ -45,6 +45,7 @@ object AppCommands {
     const val TOGGLE_CONSOLE = "app.toggleConsole"
     const val HIDE_ALL_TOOL_WINDOWS = "app.hideAllToolWindows"
     const val FOCUS_EDITOR = "app.focusEditor"
+    const val TOGGLE_ZEN = "app.toggleZenMode"
 
     const val RUN = "app.run"
     const val RUN_TESTS = "app.runTests"
@@ -105,6 +106,7 @@ val APP_KEY_DEFAULTS: List<AppKeyDefault> = buildList {
     add(AppCommands.TOGGLE_CONSOLE, "Console", panels, "alt+4")
     add(AppCommands.HIDE_ALL_TOOL_WINDOWS, "Hide all tool windows", panels, "primary+shift+F12")
     add(AppCommands.FOCUS_EDITOR, "Back to the editor (or press Escape)", panels)
+    add(AppCommands.TOGGLE_ZEN, "Zen mode", panels)
 
     val run = "Run & project"
     add(AppCommands.RUN, "Run", run, "shift+F10")

@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -108,6 +109,7 @@ import dev.ide.ui.generated.resources.edchrome_build_console
 import dev.ide.ui.generated.resources.edchrome_build_variant
 import dev.ide.ui.generated.resources.edchrome_command_palette
 import dev.ide.ui.generated.resources.edchrome_compose_preview
+import dev.ide.ui.generated.resources.zen_mode
 import dev.ide.ui.generated.resources.edchrome_empty_dependencies
 import dev.ide.ui.generated.resources.edchrome_find_replace
 import dev.ide.ui.generated.resources.edchrome_gradle_compat
@@ -222,6 +224,8 @@ fun EditorTopBar(
     pluginActions: List<UiActionItem> = emptyList(),
     onPluginAction: (String) -> Unit = {},
     compact: Boolean = false,
+    /** Enters zen mode from the ⋯ menu; null leaves the item out. */
+    onZenMode: (() -> Unit)? = null,
 ) {
     val dim = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     // On a desktop window with a custom title bar, the wide bar IS the title bar (IntelliJ's main toolbar):
@@ -304,6 +308,7 @@ fun EditorTopBar(
                     activeVariant = activeVariant,
                     variants = variants,
                     onPickVariant = onPickVariant,
+                    onZenMode = onZenMode,
                 )
             } else {
                 // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only on touch (no
@@ -340,6 +345,7 @@ fun EditorTopBar(
                         variants = variants,
                         onPickVariant = onPickVariant,
                         editOnly = true,
+                        onZenMode = onZenMode,
                     )
                 }
             }
@@ -464,6 +470,7 @@ private fun EditorOverflowMenu(
     /** The wide bar's menu: only the file's edit actions and inlay hints, since everything else is inline there
      *  or has its own place (the stripe's console toggle, the breadcrumb row's view switch). */
     editOnly: Boolean = false,
+    onZenMode: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     // The variant list scans the module, so it's fetched only when its submenu opens. Both the menu and the
@@ -495,6 +502,9 @@ private fun EditorOverflowMenu(
             }
             if (showPreview && !editOnly) OverflowItem(CaIcons.image, stringResource(Res.string.edchrome_compose_preview)) {
                 open = false; onPreview()
+            }
+            if (hasActiveFile && onZenMode != null) OverflowItem(CaIcons.expand, stringResource(Res.string.zen_mode)) {
+                open = false; onZenMode()
             }
             // The build-variant (flavor) switcher — a flyout submenu of the module's variants, shown only for an
             // Android module (a non-null active variant). Picking one closes the whole menu.
@@ -1120,6 +1130,8 @@ fun TabsStrip(
     /** The strip's scroll position, hoistable by the host; it is also what the active tab is scrolled into
      *  view on. */
     state: LazyListState = rememberLazyListState(),
+    /** Controls pinned at the strip's trailing end, after the overflow chevron (zen mode's exit). */
+    trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     if (openFiles.isEmpty()) return
 
@@ -1175,6 +1187,7 @@ fun TabsStrip(
             Box(Modifier.fillMaxHeight(0.55f).width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             TabsOverflowMenu(openFiles, activeIndex, backend, onSelect)
         }
+        trailing?.invoke(this)
     }
     // a hairline under the tabs
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))

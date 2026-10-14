@@ -492,6 +492,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         },
         customAccentColor = accentColor,
         alwaysShowToolWindowActions = alwaysShowToolWindowActions,
+        runFullScreen = runFullScreen,
         editorFontScale = editorFontScale,
         codeFont = codeFont,
         fontLigatures = fontLigatures,

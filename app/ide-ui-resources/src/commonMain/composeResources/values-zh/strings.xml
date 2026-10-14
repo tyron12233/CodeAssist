@@ -468,6 +468,15 @@
     <string name="edchrome_more">更多</string>
     <string name="sidebar_hide_tool_window_bar">隐藏工具窗口栏</string>
     <string name="toolwindow_hide">隐藏</string>
+    <string name="toolwindow_maximize">最大化</string>
+    <string name="toolwindow_restore">还原</string>
+    <string name="toolwindow_move_to">移动到</string>
+    <string name="toolwindow_options">窗口选项</string>
+    <string name="toolwindow_dock_bottom">底部</string>
+    <string name="toolwindow_dock_left">左侧</string>
+    <string name="toolwindow_dock_right">右侧</string>
+    <string name="zen_mode">禅模式</string>
+    <string name="zen_exit">退出禅模式</string>
     <string name="edchrome_settings_and_tools">设置与工具</string>
     <string name="edchrome_toggle_navigator">切换导航器</string>
     <string name="edchrome_find_replace">查找 / 替换</string>
