@@ -326,6 +326,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     </plurals>
     <string name="edchrome_search_tasks">Pesquisar tarefas…</string>
     <string name="edchrome_nothing_to_run">Nada para executar</string>
+    <string name="run_choose_task">Escolher o que executar</string>
     <string name="edchrome_no_matching_tasks">Nenhuma tarefa correspondente</string>
     <string name="edchrome_build_variant">Variante de compilação</string>
     <string name="edchrome_no_variants">Nenhuma variante</string>
@@ -497,6 +498,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="tests_rerun_failed">Repetir falhas</string>
     <string name="tests_run_one">Executar teste</string>
     <string name="tests_run_class">Executar todos os testes da classe</string>
+    <string name="run_main_gutter">Executar main()</string>
     <string name="tests_none_found">Nenhum teste encontrado</string>
     <string name="tests_none_in_file">Nenhum teste neste arquivo</string>
     <string name="tests_class_failed">A classe falhou: %1$s</string>

@@ -10,7 +10,9 @@ import dev.ide.ui.backend.TestResultMemory
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.generated.resources.tests_run_one
 import dev.ide.ui.generated.resources.tests_run_class
+import dev.ide.ui.generated.resources.run_main_gutter
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.TestOutput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -445,6 +447,7 @@ private fun PluginGutterMark(
         Icon(
             actionIcon(mark.iconId),
             contentDescription = when {
+                mark.actionId?.startsWith(RunGutter.ACTION_PREFIX) == true -> stringResource(Res.string.run_main_gutter)
                 testTarget == null -> mark.tooltip
                 '#' in testTarget -> stringResource(Res.string.tests_run_one)
                 else -> stringResource(Res.string.tests_run_class)

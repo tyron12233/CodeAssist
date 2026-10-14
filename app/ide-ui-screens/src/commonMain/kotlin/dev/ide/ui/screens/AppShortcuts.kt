@@ -262,8 +262,13 @@ internal fun BoxScope.AppShortcutsHost(
 
                 id == AppCommands.RUN -> {
                     if (!state.backend.build.supported()) return@Runner false
-                    state.consoleOpen = true
-                    state.requestRun { state.backend.build.runBuild() }
+                    // What the Run button runs: the task last picked or started from the gutter, else the default.
+                    val selected = state.selectedRunTask
+                    if (selected != null) state.startRun(selected)
+                    else {
+                        state.consoleOpen = true
+                        state.requestRun { state.backend.build.runBuild() }
+                    }
                 }
                 id == AppCommands.RUN_TESTS -> {
                     // The file's test classes, from the run marks its editor already shows.

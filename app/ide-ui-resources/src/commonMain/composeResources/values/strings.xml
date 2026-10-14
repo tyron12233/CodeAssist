@@ -500,6 +500,7 @@ We never collect your code, file or project names, which features you use, or an
     </plurals>
     <string name="edchrome_search_tasks">Search tasks…</string>
     <string name="edchrome_nothing_to_run">Nothing to run</string>
+    <string name="run_choose_task">Choose what to run</string>
     <string name="edchrome_no_matching_tasks">No matching tasks</string>
     <string name="edchrome_build_variant">Build variant</string>
     <string name="edchrome_no_variants">No variants</string>
@@ -1001,6 +1002,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="tests_rerun_failed">Rerun failed</string>
     <string name="tests_run_one">Run test</string>
     <string name="tests_run_class">Run all tests in class</string>
+    <string name="run_main_gutter">Run main()</string>
     <string name="tests_none_found">No tests found</string>
     <string name="tests_none_in_file">No tests in this file</string>
     <string name="tests_class_failed">Class failed: %1$s</string>

@@ -60,33 +60,42 @@ object KotlinMainScan {
     fun scan(fileName: String, text: String): List<Pair<String, Boolean>> = mainsOf(parse(fileName, text))
 
     /** Each hit: the class FQN to launch, paired with whether it must be invoked on an instance (no static main). */
-    fun mainsOf(kt: KtFile?): List<Pair<String, Boolean>> {
+    fun mainsOf(kt: KtFile?): List<Pair<String, Boolean>> = hitsOf(kt).map { it.fqn to it.instance }.distinct()
+
+    /** One `main` the scan found: the class FQN to launch, whether it must be invoked on an instance, and [offset],
+     *  where the function's name starts (what the editor's gutter run mark sits beside). */
+    data class Hit(val fqn: String, val instance: Boolean, val offset: Int)
+
+    /** [mainsOf] with each `main`'s position, for the editor's run marks. */
+    fun hits(fileName: String, text: String): List<Hit> = hitsOf(parse(fileName, text))
+
+    fun hitsOf(kt: KtFile?): List<Hit> {
         if (kt == null) return emptyList()
         val facade = facadeFqName(kt)
-        val out = LinkedHashSet<Pair<String, Boolean>>()
+        val out = ArrayList<Hit>()
+        fun add(fqn: String, instance: Boolean, f: KtNamedFunction) = out.add(Hit(fqn, instance, (f.nameIdentifier ?: f).textOffset))
         for (d in kt.declarations) when (d) {
-            is KtNamedFunction -> if (isMainFun(d)) out.add(facade to false)
+            is KtNamedFunction -> if (isMainFun(d)) add(facade, false, d)
             is KtObjectDeclaration -> {           // top-level object O { @JvmStatic fun main }
-                if (d.declarations.any { it is KtNamedFunction && isMainFun(it) && hasJvmStatic(it) }) {
-                    d.fqName?.asString()?.let { out.add(it to false) }
-                }
+                val fqn = d.fqName?.asString()
+                if (fqn != null) d.declarations.filterIsInstance<KtNamedFunction>()
+                    .firstOrNull { isMainFun(it) && hasJvmStatic(it) }?.let { add(fqn, false, it) }
             }
             is KtClass -> {
                 val fqn = d.fqName?.asString()
                 if (fqn != null) {
                     // instance main: a concrete, instantiable class with a no-arg constructor.
-                    if (isInstantiable(d) && hasNoArgCtor(d) &&
-                        d.declarations.any { it is KtNamedFunction && isMainFun(it) && !hasJvmStatic(it) && !it.hasModifier(KtTokens.PRIVATE_KEYWORD) }
-                    ) out.add(fqn to true)
+                    if (isInstantiable(d) && hasNoArgCtor(d)) d.declarations.filterIsInstance<KtNamedFunction>()
+                        .firstOrNull { isMainFun(it) && !hasJvmStatic(it) && !it.hasModifier(KtTokens.PRIVATE_KEYWORD) }
+                        ?.let { add(fqn, true, it) }
                     // @JvmStatic main in the class's companion → a static method on the class.
                     val companion = d.declarations.filterIsInstance<KtObjectDeclaration>().firstOrNull { it.isCompanion() }
-                    if (companion != null && companion.declarations.any { it is KtNamedFunction && isMainFun(it) && hasJvmStatic(it) }) {
-                        out.add(fqn to false)
-                    }
+                    companion?.declarations?.filterIsInstance<KtNamedFunction>()
+                        ?.firstOrNull { isMainFun(it) && hasJvmStatic(it) }?.let { add(fqn, false, it) }
                 }
             }
         }
-        return out.toList()
+        return out
     }
 
     /** A non-extension `main` taking no parameters or a single `Array<String>` — the JVM entry-point shapes. */

@@ -138,6 +138,7 @@ import dev.ide.ui.generated.resources.edview_no_file_open_title
 import dev.ide.ui.generated.resources.redo
 import dev.ide.ui.generated.resources.retry
 import dev.ide.ui.generated.resources.run
+import dev.ide.ui.generated.resources.run_choose_task
 import dev.ide.ui.generated.resources.save
 import dev.ide.ui.generated.resources.tab_close_all
 import dev.ide.ui.generated.resources.tab_close_others
@@ -179,6 +180,8 @@ fun EditorTopBar(
     onOpenPalette: () -> Unit,
     runTasks: () -> List<RunTaskOption> = { emptyList() },
     onPickTask: (RunTaskOption) -> Unit = {},
+    /** What a plain Run starts (the last task picked or run from the gutter); null makes Run open the picker. */
+    selectedRunTask: RunTaskOption? = null,
     /** The active build variant to show in the switcher chip, or null to hide it (non-Android project). */
     activeVariant: String? = null,
     variants: () -> List<String> = { emptyList() },
@@ -281,7 +284,7 @@ fun EditorTopBar(
                     IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
                 }
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
-                RunControl(runTasks, onPickTask, compact = true)
+                RunControl(runTasks, onPickTask, selectedRunTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
                     hasActiveFile = hasActiveFile,
@@ -312,7 +315,7 @@ fun EditorTopBar(
                 }
                 IconButtonCa(CaIcons.command, stringResource(Res.string.edchrome_command_palette), onOpenPalette)
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
-                RunCluster(activeVariant, variants, onPickVariant, runTasks, onPickTask)
+                RunCluster(activeVariant, variants, onPickVariant, runTasks, onPickTask, selectedRunTask)
                 if (rightToolInBar && rightToolIconId != null) {
                     IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, active = rightToolOpen)
                 }
@@ -799,6 +802,7 @@ private fun RunCluster(
     onPickVariant: (String) -> Unit,
     runTasks: () -> List<RunTaskOption>,
     onPickTask: (RunTaskOption) -> Unit,
+    selected: RunTaskOption?,
 ) {
     Row(
         Modifier.clip(RoundedCornerShape(Ca.radius.sm)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -808,14 +812,20 @@ private fun RunCluster(
             VariantChip(activeVariant, variants, onPickVariant, compact = false)
             Box(Modifier.width(1.dp).height(18.dp).background(MaterialTheme.colorScheme.outlineVariant))
         }
-        RunControl(runTasks, onPickTask, compact = false)
+        RunControl(runTasks, onPickTask, selected, compact = false)
     }
 }
 
+/**
+ * Run, and the picker of what to run. With nothing [selected] yet the button opens the picker; once a task has run
+ * (picked here or started from an editor run mark) the button runs it again, IntelliJ's selected configuration, and
+ * a chevron beside it opens the picker.
+ */
 @Composable
 private fun RunControl(
     tasks: () -> List<RunTaskOption>,
     onPickTask: (RunTaskOption) -> Unit,
+    selected: RunTaskOption?,
     compact: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -824,30 +834,58 @@ private fun RunControl(
     val interaction = remember { MutableInteractionSource() }
     val keyboard = LocalSoftwareKeyboardController.current
     Box {
-        // The Run button opens the task dropdown directly — no separate chevron, no filled background. The task
-        // list is resolved lazily here (it scans sources), not on every recomposition. `keyboard.hide()` drops
-        // any editor keyboard so the task list isn't covered; the search field stays unfocusable until tapped
-        // (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open.
-        val openMenu = { keyboard?.hide(); query = ""; items = tasks(); open = true }
+        // The task list is resolved lazily here (it scans sources), not on every recomposition. `keyboard.hide()`
+        // drops any editor keyboard so the task list isn't covered; the search field stays unfocusable until
+        // tapped (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open. A
+        // selected task the picker no longer lists (a gutter run of one `main`) stays on top, so it can be re-picked.
+        val openMenu = {
+            keyboard?.hide(); query = ""
+            val listed = tasks()
+            items = if (selected == null || listed.any { it.id == selected.id }) listed else listOf(selected) + listed
+            open = true
+        }
+        val runSelected = { if (selected != null) { keyboard?.hide(); onPickTask(selected) } else openMenu() }
+        val runLabel = stringResource(Res.string.run)
+        val chooseLabel = stringResource(Res.string.run_choose_task)
         if (compact) {
-            IconButtonCa(CaIcons.play, stringResource(Res.string.run), onClick = openMenu, tint = MaterialTheme.colorScheme.primary)
-        } else {
-            Row(
-                Modifier.height(34.dp)
-                    .clip(RoundedCornerShape(Ca.radius.sm))
-                    .pressScale(interaction)
-                    .clickable(interaction, indication = null, onClick = openMenu)
-                    .padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(CaIcons.play, stringResource(Res.string.run), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.run),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButtonCa(
+                    CaIcons.play,
+                    if (selected != null) "$runLabel ${selected.label}" else runLabel,
+                    onClick = runSelected,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
+                if (selected != null) {
+                    IconButtonCa(CaIcons.chevronDown, chooseLabel, onClick = openMenu, iconSize = 14, boxSize = 34,
+                        modifier = Modifier.width(18.dp))
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.height(34.dp)
+                        .clip(RoundedCornerShape(Ca.radius.sm))
+                        .pressScale(interaction)
+                        .clickable(interaction, indication = null, onClick = runSelected)
+                        .padding(start = 10.dp, end = if (selected != null) 4.dp else 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(CaIcons.play, runLabel, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        selected?.label ?: runLabel,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 180.dp),
+                    )
+                }
+                if (selected != null) {
+                    IconButtonCa(CaIcons.chevronDown, chooseLabel, onClick = openMenu, iconSize = 16, boxSize = 34,
+                        modifier = Modifier.width(26.dp), tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
         CaDropdownMenu(
@@ -903,6 +941,7 @@ private fun RunControl(
                             label = task.label,
                             onClick = { open = false; onPickTask(task) },
                             supporting = task.group,
+                            selected = task.id == selected?.id,
                             // Accented rather than the usual row tint: the glyph is what says "this runs".
                             leading = {
                                 Icon(

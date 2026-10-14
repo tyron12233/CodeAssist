@@ -86,6 +86,7 @@ import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
 import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.backend.RunConsoleUi
+import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.RunFrameUi
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
@@ -793,11 +794,17 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         try {
             when {
                 id.startsWith("run:") -> {
-                    val moduleName = id.removePrefix("run:")
+                    // run:<module> launches the module's configured or first-found main; run:<module>:<class>
+                    // (an editor gutter mark) launches that class's.
+                    val moduleName = id.removePrefix("run:").substringBefore(':')
                     val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return fail(
                         "No module '$moduleName'."
                     )
-                    val target = runnableMainFor(module)
+                    val target = RunGutter.mainClassOf(id)?.let { cls ->
+                        // The flag from detection when it knows the class; a static launch otherwise (the index
+                        // can trail an edit, and the VM falls back to an instance main itself).
+                        MainClassDetection.detect(ctx, module).firstOrNull { it.mainClass == cls } ?: RunTarget(cls, instance = false)
+                    } ?: runnableMainFor(module)
                         ?: return fail("No runnable main() found for ${module.name}. Set one in Module Settings ▸ Run.")
                     val mainClass = target.mainClass
                     unresolvedBlocker(module)?.let { return fail(it) }

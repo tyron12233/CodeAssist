@@ -22,17 +22,26 @@ object JavaMainScan {
 
     /** Each hit: the class FQN to launch (`.`-package with `$`-nested binary name) paired with whether it must
      *  be invoked on an instance (no static `main`). */
-    fun mainsOf(psi: PsiJavaFile?): List<Pair<String, Boolean>> {
+    fun mainsOf(psi: PsiJavaFile?): List<Pair<String, Boolean>> = hitsOf(psi).map { it.fqn to it.instance }.distinct()
+
+    /** One `main` the scan found: the class to launch, whether it must be invoked on an instance, and [offset],
+     *  where the method's name starts (what the editor's gutter run mark sits beside). */
+    data class Hit(val fqn: String, val instance: Boolean, val offset: Int)
+
+    /** [scan] with each `main`'s position, for the editor's run marks. */
+    fun hits(text: String): List<Hit> = JavaSourceIndexer.parseStructural(text) { hitsOf(it) } ?: emptyList()
+
+    fun hitsOf(psi: PsiJavaFile?): List<Hit> {
         if (psi == null) return emptyList()
         val pkg = psi.packageName.ifEmpty { null }
-        val out = LinkedHashSet<Pair<String, Boolean>>()
+        val out = ArrayList<Hit>()
         psi.classes.forEach { visit(it, pkg, null, topLevel = true, out) }
-        return out.toList()
+        return out
     }
 
     private fun visit(
         cls: PsiClass, pkg: String?, enclosingBinary: String?, topLevel: Boolean,
-        out: MutableSet<Pair<String, Boolean>>,
+        out: MutableList<Hit>,
     ) {
         val name = cls.name ?: return
         val binary = when {
@@ -40,6 +49,7 @@ object JavaMainScan {
             pkg.isNullOrEmpty() -> name
             else -> "$pkg.$name"
         }
+        fun hit(m: PsiMethod, instance: Boolean) = Hit(binary, instance, (m.nameIdentifier ?: m).textOffset)
         // OWN members only (see [ownMethodsSafe]): the scan runs on the PomModel-less index host, where reading
         // a record's augmented members would throw. A record has no `main`, so this loses nothing.
         val methods = cls.ownMethodsSafe()
@@ -47,7 +57,7 @@ object JavaMainScan {
         for (m in methods) {
             if (m.isConstructor || m.name != "main" || !isVoid(m)) continue
             if (m.hasModifierProperty(PsiModifier.STATIC) && m.hasModifierProperty(PsiModifier.PUBLIC) && isStringArrayParams(m)) {
-                out.add(binary to false); staticFound = true
+                out.add(hit(m, instance = false)); staticFound = true
             }
         }
         if (topLevel && !staticFound && !cls.isInterface && !cls.hasModifierProperty(PsiModifier.ABSTRACT) && hasNoArgCtor(cls)) {
@@ -56,7 +66,7 @@ object JavaMainScan {
                 if (m.hasModifierProperty(PsiModifier.STATIC) || m.hasModifierProperty(PsiModifier.ABSTRACT) ||
                     m.hasModifierProperty(PsiModifier.PRIVATE)
                 ) continue
-                if (m.parameterList.isEmpty || isStringArrayParams(m)) { out.add(binary to true); break }
+                if (m.parameterList.isEmpty || isStringArrayParams(m)) { out.add(hit(m, instance = true)); break }
             }
         }
         cls.ownInnerClassesSafe().forEach { visit(it, pkg, binary, topLevel = false, out) }

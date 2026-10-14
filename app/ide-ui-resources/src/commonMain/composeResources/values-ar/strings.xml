@@ -545,6 +545,7 @@
     </plurals>
     <string name="edchrome_search_tasks">البحث في المهام…</string>
     <string name="edchrome_nothing_to_run">لا شيء لتشغيله</string>
+    <string name="run_choose_task">اختر ما تريد تشغيله</string>
     <string name="edchrome_no_matching_tasks">لا توجد مهام مطابقة</string>
     <string name="edchrome_build_variant">متغيّر البناء</string>
     <string name="edchrome_no_variants">لا توجد متغيرات</string>
@@ -1046,6 +1047,7 @@
     <string name="tests_rerun_failed">إعادة تشغيل الفاشلة</string>
     <string name="tests_run_one">تشغيل الاختبار</string>
     <string name="tests_run_class">تشغيل كل اختبارات الصنف</string>
+    <string name="run_main_gutter">تشغيل main()</string>
     <string name="tests_none_found">لم يتم العثور على اختبارات</string>
     <string name="tests_none_in_file">لا توجد اختبارات في هذا الملف</string>
     <string name="tests_class_failed">فشل الصنف: %1$s</string>

@@ -346,6 +346,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="edchrome_show_unresolved_dependencies">Mostrar dependencias sin resolver</string>
     <string name="edchrome_search_tasks">Buscar tareas…</string>
     <string name="edchrome_nothing_to_run">Nada que ejecutar</string>
+    <string name="run_choose_task">Elegir qué ejecutar</string>
     <string name="edchrome_no_matching_tasks">No hay tareas coincidentes</string>
     <string name="edchrome_build_variant">Variante de compilación</string>
     <string name="edchrome_no_variants">Sin variantes</string>
@@ -535,6 +536,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="tests_rerun_failed">Repetir fallidas</string>
     <string name="tests_run_one">Ejecutar prueba</string>
     <string name="tests_run_class">Ejecutar todas las pruebas de la clase</string>
+    <string name="run_main_gutter">Ejecutar main()</string>
     <string name="tests_none_found">No se encontraron pruebas</string>
     <string name="tests_none_in_file">No hay pruebas en este archivo</string>
     <string name="tests_class_failed">La clase falló: %1$s</string>

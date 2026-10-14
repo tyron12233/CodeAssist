@@ -288,6 +288,7 @@
     <string name="edchrome_show_unresolved_dependencies">Показать неразрешённые зависимости</string>
     <string name="edchrome_search_tasks">Поиск задач…</string>
     <string name="edchrome_nothing_to_run">Нечего запускать</string>
+    <string name="run_choose_task">Выбрать, что запустить</string>
     <string name="edchrome_no_matching_tasks">Нет подходящих задач</string>
     <string name="edchrome_build_variant">Вариант сборки</string>
     <string name="edchrome_no_variants">Нет вариантов</string>
@@ -447,6 +448,7 @@
     <string name="tests_rerun_failed">Перезапустить упавшие</string>
     <string name="tests_run_one">Запустить тест</string>
     <string name="tests_run_class">Запустить все тесты класса</string>
+    <string name="run_main_gutter">Запустить main()</string>
     <string name="tests_none_found">Тесты не найдены</string>
     <string name="tests_none_in_file">В этом файле нет тестов</string>
     <string name="tests_class_failed">Ошибка класса: %1$s</string>

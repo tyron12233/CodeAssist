@@ -55,4 +55,20 @@ class KotlinMainScanTest {
     @Test fun extensionMainIgnored() {
         assertTrue(KotlinMainScan.scan("Ext.kt", "package com.example\nfun String.main() {}").isEmpty())
     }
+
+    @Test fun hitsPointAtEachMainsName() {
+        val text = """
+            package com.example
+
+            fun main() {}
+
+            object Tool { @JvmStatic fun main(args: Array<String>) {} }
+
+            class Host { companion object { @JvmStatic fun main() {} } }
+        """.trimIndent()
+        val hits = KotlinMainScan.hits("App.kt", text)
+        assertEquals(listOf("com.example.AppKt", "com.example.Tool", "com.example.Host"), hits.map { it.fqn })
+        hits.forEach { assertEquals("main", text.substring(it.offset, it.offset + 4)) }
+        assertEquals(3, hits.map { text.substring(0, it.offset).count { c -> c == '\n' } }.distinct().size)
+    }
 }

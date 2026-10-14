@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
@@ -182,7 +183,8 @@ internal fun EditorCenter(
                 navFraction = navFraction ?: { easedNav },
                 onOpenPalette = { state.paletteOpen = true },
                 runTasks = { state.backend.build.runTasks() },
-                onPickTask = { state.consoleOpen = true; state.requestRun { state.backend.build.runTask(it.id) } },
+                onPickTask = { state.startRun(it) },
+                selectedRunTask = state.selectedRunTask,
                 activeVariant = activeVariant,
                 variants = {
                     variantModule?.let { state.backend.build.listVariants(it) } ?: emptyList()
@@ -391,12 +393,16 @@ internal fun EditorCenter(
                                 // place and writes a closed file through. Dropped here until it was wired up.
                                 onOtherFileEdits = { edits -> state.applyWorkspaceEdits(edits) },
                                 onEditorAction = { actionId, selStart, selEnd ->
-                                    // A test's gutter mark carries its Run task: start it like a pick from Run.
-                                    if (actionId.startsWith(TestOutput.GUTTER_ACTION_PREFIX)) {
-                                        val task = actionId.removePrefix(TestOutput.GUTTER_ACTION_PREFIX)
-                                        state.consoleOpen = true
-                                        state.requestRun { state.backend.build.runTask(task) }
-                                    } else state.dispatchAction(
+                                    // A run mark (a test, a `main`) carries its Run task: start it like a pick from
+                                    // Run, which also makes it the Run button's task.
+                                    val runTask = when {
+                                        actionId.startsWith(TestOutput.GUTTER_ACTION_PREFIX) ->
+                                            actionId.removePrefix(TestOutput.GUTTER_ACTION_PREFIX)
+                                        actionId.startsWith(RunGutter.ACTION_PREFIX) -> actionId.removePrefix(RunGutter.ACTION_PREFIX)
+                                        else -> null
+                                    }
+                                    if (runTask != null) state.startRun(RunGutter.option(runTask))
+                                    else state.dispatchAction(
                                         actionId,
                                         UiActionContext(
                                             place = UiActionPlaces.EDITOR,

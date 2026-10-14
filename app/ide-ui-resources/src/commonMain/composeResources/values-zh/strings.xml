@@ -495,6 +495,7 @@
     </plurals>
     <string name="edchrome_search_tasks">搜索任务…</string>
     <string name="edchrome_nothing_to_run">没有可运行的内容</string>
+    <string name="run_choose_task">选择要运行的内容</string>
     <string name="edchrome_no_matching_tasks">没有匹配的任务</string>
     <string name="edchrome_build_variant">构建变体</string>
     <string name="edchrome_no_variants">没有构建变体</string>
@@ -996,6 +997,7 @@
     <string name="tests_rerun_failed">重新运行失败的测试</string>
     <string name="tests_run_one">运行测试</string>
     <string name="tests_run_class">运行类中的所有测试</string>
+    <string name="run_main_gutter">运行 main()</string>
     <string name="tests_none_found">未找到测试</string>
     <string name="tests_none_in_file">此文件中没有测试</string>
     <string name="tests_class_failed">类失败：%1$s</string>

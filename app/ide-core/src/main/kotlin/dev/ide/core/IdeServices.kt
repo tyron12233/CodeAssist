@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.TestOutput
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
@@ -2487,9 +2488,44 @@ class IdeServices private constructor(
         val collected = decorationCollector.collect(ctx) { providerId, error ->
             decorationLog.warn("editor decoration provider '$providerId' failed on $file", error)
         }
-        val tests = runCatching { testGutterMarks(file, text) }.getOrDefault(emptyList())
-        if (tests.isEmpty()) return collected
-        return dev.ide.plugin.editor.EditorDecorations(collected.ranges, collected.gutter + tests, collected.inlays)
+        val runs = runCatching { testGutterMarks(file, text) }.getOrDefault(emptyList()) +
+            runCatching { mainGutterMarks(file, text) }.getOrDefault(emptyList())
+        if (runs.isEmpty()) return collected
+        return dev.ide.plugin.editor.EditorDecorations(collected.ranges, collected.gutter + runs, collected.inlays)
+    }
+
+    /**
+     * Run marks beside each `main` in [file] when it sits in a main (not test) source root of a console module:
+     * the same entry points the Run picker detects, each running its own class rather than the module's default.
+     * A mark's action is that `run:` task, prefixed ([RunGutter.ACTION_PREFIX]) so the editor starts it as a run.
+     */
+    private fun mainGutterMarks(file: Path, text: String): List<dev.ide.plugin.editor.GutterMark> {
+        val name = file.fileName?.toString() ?: return emptyList()
+        if (!name.endsWith(".kt") && !name.endsWith(".java")) return emptyList()
+        val target = file.toAbsolutePath().normalize()
+        fun under(roots: List<Path>) = roots.any { target.startsWith(it.toAbsolutePath().normalize()) }
+        val module = modules().firstOrNull { m ->
+            dev.ide.core.services.isConsoleRunModule(m) && under(sourceRoots(m)) &&
+                !under(dev.ide.build.engine.testSourceRootDirs(m))
+        } ?: return emptyList()
+        val hits = if (name.endsWith(".kt")) {
+            dev.ide.lang.kotlin.index.KotlinMainScan.hits(name, text).map { it.fqn to it.offset }
+        } else {
+            dev.ide.lang.java.index.JavaMainScan.hits(text).map { it.fqn to it.offset }
+        }
+        if (hits.isEmpty()) return emptyList()
+        val lineStarts = ArrayList<Int>().apply { add(0); text.forEachIndexed { i, c -> if (c == '\n') add(i + 1) } }
+        return hits.map { (fqn, offset) ->
+            val line = lineStarts.binarySearch(offset).let { if (it >= 0) it else -it - 2 }
+            dev.ide.plugin.editor.GutterMark(
+                line = line,
+                iconId = "run",
+                tint = dev.ide.plugin.editor.DecorationTint.Success,
+                tooltip = "Run ${fqn.substringAfterLast('.').substringAfterLast('$')}",
+                actionId = RunGutter.ACTION_PREFIX + RunGutter.mainTaskId(module.name, fqn),
+                order = 100,
+            )
+        }
     }
 
     /**

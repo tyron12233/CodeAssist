@@ -318,6 +318,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     </plurals>
     <string name="edchrome_search_tasks">Cari tugas…</string>
     <string name="edchrome_nothing_to_run">Tidak ada yang dijalankan</string>
+    <string name="run_choose_task">Pilih yang akan dijalankan</string>
     <string name="edchrome_no_matching_tasks">Tidak ada tugas yang cocok</string>
     <string name="edchrome_build_variant">Varian build</string>
     <string name="edchrome_no_variants">Tidak ada varian</string>
@@ -480,6 +481,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="tests_rerun_failed">Ulangi yang gagal</string>
     <string name="tests_run_one">Jalankan tes</string>
     <string name="tests_run_class">Jalankan semua tes di kelas</string>
+    <string name="run_main_gutter">Jalankan main()</string>
     <string name="tests_none_found">Tidak ada tes ditemukan</string>
     <string name="tests_none_in_file">Tidak ada tes di file ini</string>
     <string name="tests_class_failed">Kelas gagal: %1$s</string>

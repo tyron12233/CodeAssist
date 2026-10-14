@@ -12,6 +12,7 @@ import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.RunStatus
+import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.ext.ViewModeRegistry
@@ -520,6 +521,37 @@ class IdeUiState(
     }
     /** Whether the "More" actions sheet is showing (rail footer / bottom-nav More). */
     var moreOpen by mutableStateOf(false)
+
+    /**
+     * The Run button's task, IntelliJ's selected configuration: the last one started from the Run picker or from
+     * an editor run mark, so the plain Run (button or shortcut) starts it again. Null until something has run in
+     * this project; remembered per project across launches.
+     */
+    var selectedRunTask by mutableStateOf(readSelectedRunTask())
+        private set
+
+    /** Make [task] the Run button's task (see [selectedRunTask]). */
+    fun selectRunTask(task: RunTaskOption) {
+        selectedRunTask = task
+        // A multi-target test id holds newlines; such a run came from the Run screen, not a pick worth keeping.
+        if ('\n' !in task.id) runCatching {
+            backend.settings.setPreference(selectedRunTaskPref(), listOf(task.id, task.label, task.group).joinToString("\t"))
+        }
+    }
+
+    /** Start [task], picked from Run or tapped in the gutter: it becomes [selectedRunTask], and the console opens. */
+    fun startRun(task: RunTaskOption) {
+        selectRunTask(task)
+        consoleOpen = true
+        requestRun { backend.build.runTask(task.id) }
+    }
+
+    private fun selectedRunTaskPref() = SELECTED_RUN_TASK_PREF_PREFIX + backend.project.rootPath
+
+    private fun readSelectedRunTask(): RunTaskOption? = runCatching {
+        val parts = backend.settings.preference(selectedRunTaskPref())?.split('\t') ?: return@runCatching null
+        if (parts.size == 3 && parts[0].isNotEmpty()) RunTaskOption(parts[0], parts[1], parts[2]) else null
+    }.getOrNull()
 
     // ---- run-conflict gate: guard a new Run while a build/program is already running ----
 
@@ -1356,6 +1388,9 @@ class IdeUiState(
         /** App preference: "true" once the user checks "don't ask again" on the run-conflict dialog — future
          *  runs then stop the current build/program and start automatically, without prompting. */
         const val RUN_CONFLICT_ALWAYS_STOP_PREF = "run.conflict.alwaysStop"
+
+        /** App preference, suffixed with a project's root path: its [selectedRunTask] as `id\tlabel\tgroup`. */
+        const val SELECTED_RUN_TASK_PREF_PREFIX = "run.selected."
 
         /** App preference: "true" once the first-build notification-permission prompt has been shown (see
          *  `BuildNotificationGate`), so later builds don't re-prompt. Re-request from Settings → Build Runtime. */
