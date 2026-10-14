@@ -1,9 +1,11 @@
 package dev.ide.core.keymap
 
+import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SETTINGS_PAGE_EP
 import dev.ide.platform.settings.SettingControl
 import dev.ide.platform.settings.SettingsPage
 import dev.ide.platform.settings.SettingsScope
+import dev.ide.platform.settings.settingsKey
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
@@ -14,6 +16,7 @@ import dev.ide.plugin.keymap.KeyContext
 import dev.ide.plugin.keymap.KeyPress
 import dev.ide.plugin.keymap.Shortcut
 import dev.ide.ui.ext.APP_KEY_DEFAULTS
+import dev.ide.ui.ext.AppKeys
 import dev.ide.ui.ext.EDITOR_KEY_DEFAULTS
 import dev.ide.ui.ext.displayShortcut
 import dev.ide.ui.ext.KeymapHost
@@ -28,8 +31,9 @@ import dev.ide.ui.ext.KeymapHost
  * bindings so a plugin can see what is taken and the user can change one; one table read from two directions
  * is the only arrangement where those cannot drift.
  *
- * A user's rebinding is a preference, `keymap.<actionId>`, holding a shortcut spec. It is application-scoped
- * on purpose: a keymap is a property of the person typing, not of the project open.
+ * A user's rebinding is a preference holding a shortcut spec, saved by the Settings page under its own key
+ * (`settings.keymap.keymap.<actionId>`); `keymap.<actionId>` is read too. It is application-scoped on purpose:
+ * a keymap is a property of the person typing, not of the project open.
  */
 class EditorKeymapPlugin(
     private val preference: (String) -> String?,
@@ -99,6 +103,7 @@ class EditorKeymapPlugin(
         reg.onDispose { specs.dispose() }
 
         reg.register(SETTINGS_PAGE_EP, KeymapSettingsPage(resolver))
+        AppKeys.doubleShiftEnabled = preference(settingsKey(PAGE_ID, DOUBLE_SHIFT))?.toBooleanStrictOrNull() ?: true
 
         val conflicts = resolver.conflicts()
         if (conflicts.isNotEmpty()) {
@@ -112,7 +117,9 @@ class EditorKeymapPlugin(
     private fun userBindings(): Map<String, String> {
         val out = LinkedHashMap<String, String>()
         for ((actionId, spec) in defaultSpecs()) {
-            val stored = preference(preferenceKey(actionId)) ?: continue
+            val stored = preference(settingsKey(PAGE_ID, preferenceKey(actionId)))
+                ?: preference(preferenceKey(actionId))
+                ?: continue
             // A stored value equal to the default is not an override; skipping it keeps the resolver's
             // override list to what the user actually changed.
             if (stored == spec) continue
@@ -122,7 +129,7 @@ class EditorKeymapPlugin(
     }
 
     /**
-     * The Settings page: one recorder per command.
+     * The Settings page: the double-Shift switch, then one recorder per command.
      *
      * [SettingControl.Shortcut] records the shortcut by having the user press it, and stores the spec, so what
      * the recorder writes and what a plugin declares in a `KeyBinding` are one syntax. A command whose
@@ -130,7 +137,7 @@ class EditorKeymapPlugin(
      * commands should keep a key.
      */
     private inner class KeymapSettingsPage(private val resolver: KeymapResolver) : SettingsPage {
-        override val id = "keymap"
+        override val id = PAGE_ID
         override val title = "Keymap"
         override val iconId = "keyboard"
         override val scope = SettingsScope.APPLICATION
@@ -153,12 +160,25 @@ class EditorKeymapPlugin(
                     group = group,
                 )
             }
-            return APP_KEY_DEFAULTS.map { control(it.actionId, it.title, it.specs.firstOrNull().orEmpty(), it.group) } +
+            val doubleShift = SettingControl.Toggle(
+                key = DOUBLE_SHIFT,
+                title = "Press Shift twice for Search Everywhere",
+                description = "Only a physical keyboard's Shift counts.",
+                default = true,
+            )
+            return listOf(doubleShift) + APP_KEY_DEFAULTS.map { control(it.actionId, it.title, it.specs.firstOrNull().orEmpty(), it.group) } +
                 EDITOR_KEY_DEFAULTS.map { control(it.actionId, commandTitle(it.actionId), it.spec, "Editor") }
+        }
+
+        override fun onChanged(key: String, values: PreferenceReader) {
+            if (key == DOUBLE_SHIFT) AppKeys.doubleShiftEnabled = values.raw(key)?.toBooleanStrictOrNull() ?: true
         }
     }
 
     private companion object {
+        const val PAGE_ID = "keymap"
+        const val DOUBLE_SHIFT = "doubleShift"
+
         fun preferenceKey(actionId: String) = "keymap.$actionId"
 
         /** Every bindable command's default spec (the first, for an app command with aliases; "" for none). */

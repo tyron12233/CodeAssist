@@ -6,11 +6,13 @@ import dev.ide.plugin.keymap.KeyBinding
 import dev.ide.plugin.keymap.KeyContext
 import dev.ide.plugin.keymap.Shortcut
 import dev.ide.ui.ext.APP_KEY_DEFAULTS
+import dev.ide.ui.ext.AppKeys
 import dev.ide.ui.ext.EDITOR_KEY_DEFAULTS
 import dev.ide.ui.ext.KeymapHost
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -31,6 +33,7 @@ class KeymapE2ETest {
     fun cleanUp() {
         env?.close()
         env = null
+        AppKeys.doubleShiftEnabled = true
         assertTrue(!KeymapHost.isInstalled, "closing the environment must uninstall the keymap")
     }
 
@@ -85,6 +88,29 @@ class KeymapE2ETest {
 
         // The default is genuinely gone, rather than both keys working.
         assertIs<KeymapHost.Outcome.None>(KeymapHost.resolve("L", ctrl = true, alt = true, inEditor = true))
+    }
+
+    @Test
+    fun aShortcutRecordedOnTheSettingsPageRebindsTheCommand() {
+        // What the Settings page writes: the generic settings key for page `keymap`, control `keymap.<id>`.
+        start(mapOf("settings.keymap.keymap.app.searchEverywhere" to "primary+shift+P"))
+
+        val rebound = KeymapHost.resolve("P", ctrl = true, shift = true, inEditor = false)
+        assertEquals("app.searchEverywhere", assertIs<KeymapHost.Outcome.Command>(rebound).actionId)
+    }
+
+    @Test
+    fun theDoubleShiftSwitchFollowsItsSetting() {
+        val environment = start(mapOf("settings.keymap.doubleShift" to "false"))
+        assertFalse(AppKeys.doubleShiftEnabled, "the stored setting applies at load")
+
+        val page = environment.platform.extensions
+            .extensions(dev.ide.platform.settings.SETTINGS_PAGE_EP)
+            .single { it.id == "keymap" }
+        page.onChanged("doubleShift", object : dev.ide.platform.settings.PreferenceReader {
+            override fun raw(key: String) = "true"
+        })
+        assertTrue(AppKeys.doubleShiftEnabled, "turning it back on applies without a restart")
     }
 
     @Test
@@ -166,9 +192,11 @@ class KeymapE2ETest {
             .single { it.id == "keymap" }
 
         val controls = page.controls()
-        assertEquals(EDITOR_KEY_DEFAULTS.size + APP_KEY_DEFAULTS.size, controls.size, "one row per bindable command")
+        assertIs<dev.ide.platform.settings.SettingControl.Toggle>(controls.first(), "the double-Shift switch")
+        val commands = controls.drop(1)
+        assertEquals(EDITOR_KEY_DEFAULTS.size + APP_KEY_DEFAULTS.size, commands.size, "one row per bindable command")
         assertTrue(
-            controls.all { it is dev.ide.platform.settings.SettingControl.Shortcut },
+            commands.all { it is dev.ide.platform.settings.SettingControl.Shortcut },
             "each row records a shortcut rather than asking the user to type a spec",
         )
         val reformat = controls

@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettingsPage
+import dev.ide.ui.components.SettingsToggleRow
 import dev.ide.ui.ext.keymapKeyName
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.keymap_hint
@@ -95,6 +96,7 @@ internal fun KeymapPageContent(
     var query by remember { mutableStateOf("") }
     var modifiedOnly by remember { mutableStateOf(false) }
     val shortcuts = page.controls.filterIsInstance<UiSettingControl.Shortcut>()
+    val toggles = page.controls.filterIsInstance<UiSettingControl.Toggle>()
     // A STORED blank is a shortcut the user cleared, so a stored value is used as-is rather than falling back to
     // the control's value when it is empty; the value already carries the default for an unset key.
     fun current(c: UiSettingControl.Shortcut): String = values["${page.id}.${c.key}"] ?: c.value
@@ -144,6 +146,20 @@ internal fun KeymapPageContent(
                                 modified.forEach { onSet(page.id, it.key, it.defaultValue) }
                                 onStructuralChange()
                             }) { Text(stringResource(Res.string.keymap_reset_all)) }
+                        }
+                    }
+                }
+            }
+            if (toggles.isNotEmpty() && q.isEmpty() && !modifiedOnly) {
+                item("toggles") {
+                    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+                        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            toggles.forEach { c ->
+                                val on = values["${page.id}.${c.key}"]?.toBooleanStrictOrNull() ?: c.value
+                                SettingsToggleRow(localizedControlTitle(page.id, c), localizedControlDescription(page.id, c), on) {
+                                    onSet(page.id, c.key, it.toString()); onStructuralChange()
+                                }
+                            }
                         }
                     }
                 }

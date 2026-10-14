@@ -49,6 +49,7 @@ class AppKeysTest {
     fun reset() {
         registration?.dispose()
         AppCommandHost.interceptor = null
+        AppKeys.doubleShiftEnabled = true
     }
 
     @Test
@@ -72,6 +73,14 @@ class AppKeysTest {
         press(scene, Key.ShiftLeft)
         press(scene, Key.ShiftLeft)
         assertEquals(listOf(AppCommands.SEARCH_EVERYWHERE), ran)
+    }
+
+    @Test
+    fun shiftTwiceDoesNothingWhenSwitchedOff() = withScene { scene ->
+        AppKeys.doubleShiftEnabled = false
+        press(scene, Key.ShiftLeft)
+        press(scene, Key.ShiftLeft)
+        assertTrue(ran.isEmpty(), "ran $ran")
     }
 
     @Test

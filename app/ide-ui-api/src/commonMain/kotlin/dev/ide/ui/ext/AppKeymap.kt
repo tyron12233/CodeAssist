@@ -235,6 +235,9 @@ object AppKeys {
 
     // ---- double Shift: Search Everywhere, as in IntelliJ ----
 
+    /** Whether two taps of Shift open Search Everywhere. The Keymap settings page sets it; main thread only. */
+    var doubleShiftEnabled = true
+
     private var shiftDownAt: TimeSource.Monotonic.ValueTimeMark? = null
     private var shiftClean = false
     private var lastShiftTapAt: TimeSource.Monotonic.ValueTimeMark? = null
@@ -245,8 +248,12 @@ object AppKeys {
      * Two taps of Shift alone, close together, open Search Everywhere. A tap is a press and release with no
      * other key between and not held long, so typing a capital, Shift+arrow selection and Shift-clicks never
      * count. Never consumes: the editor and the text fields still see every Shift.
+     *
+     * Only a physical keyboard's Shift counts. Some touch keyboards send their Shift key to the app as key
+     * events, and double-tapping it is how they turn on caps lock, which must not open a search.
      */
     private fun trackDoubleShift(ev: KeyEvent) {
+        if (!doubleShiftEnabled || ev.isFromSoftKeyboard()) return
         val now = TimeSource.Monotonic.markNow()
         if (!isShift(ev.key)) {
             if (ev.type == KeyEventType.KeyDown) { shiftClean = false; lastShiftTapAt = null }
@@ -276,3 +283,6 @@ object AppKeys {
 
     private const val DOUBLE_SHIFT_MS = 400L
 }
+
+/** Whether [this] came from an on-screen keyboard rather than a physical one. */
+internal expect fun KeyEvent.isFromSoftKeyboard(): Boolean
