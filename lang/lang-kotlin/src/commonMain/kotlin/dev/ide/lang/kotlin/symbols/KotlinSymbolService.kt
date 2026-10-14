@@ -1222,6 +1222,11 @@ class KotlinSymbolService(
                 owner = owner.substringBeforeLast('.', "").ifEmpty { null }
             }
         }
+        // 1b. The same, for a nested type a LIBRARY supertype declares: `Result` inside a `Worker` subclass is
+        //     `ListenableWorker.Result`. It shadows every file-level step below too, the default imports included,
+        //     so it must run here: probed last (as step 9 still does for the enclosing chain), `kotlin.Result`
+        //     won and every `return Result.success(data)` read as a type mismatch.
+        if (enclosingClassFqn != null) inheritedLibraryNestedType(simple, enclosingClassFqn)?.let { return it }
         // 2. A SAME-PACKAGE source class of that name, when nothing imports the name explicitly. The built-ins
         //    below reach a file through the OUTERMOST scope there is -- the implicit `kotlin.*` /
         //    `kotlin.collections.*` star imports -- so anything declared nearer than that shadows them, and a
@@ -1318,6 +1323,29 @@ class KotlinSymbolService(
         // `androidx.activity.ComponentActivity`, then its members/extensions completing as if imported). The
         // name is returned verbatim so callers can detect "unresolved" via `isKnownType` (false for a bare name).
         return simple
+    }
+
+    /**
+     * A nested type named [simple] that a LIBRARY supertype of [enclosingClassFqn] (or of one of its outer
+     * classes) declares, by its dot-form FQN; null when none does. Source supertypes are left to step 1 of
+     * [resolveTypeNameUncached], which reads them from the model.
+     *
+     * Each probe is a [typeShape] lookup, whose misses are memoized per FQN: `androidx.activity.ComponentActivity.
+     * String` is probed once for the session, however many Activity subclasses resolve `String`. The result is
+     * memoized again per enclosing class by [resolveTypeName].
+     */
+    private fun inheritedLibraryNestedType(simple: String, enclosingClassFqn: String): String? {
+        val classes = model().classByFqn
+        var owner: String? = enclosingClassFqn
+        while (!owner.isNullOrEmpty()) {
+            for (sup in kotlinSupertypesMemo(owner)) {
+                if (sup in classes || sup == "kotlin.Any" || sup == "java.lang.Object") continue
+                val cand = "${sup.replace('$', '.')}.$simple"
+                if (typeShape(cand) != null) return cand
+            }
+            owner = owner.substringBeforeLast('.', "").ifEmpty { null }
+        }
+        return null
     }
 
     // --- members / supertypes / extensions (KotlinTypeContext) ---
