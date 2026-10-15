@@ -72,4 +72,8 @@
         <item quantity="many">%1$d arquivos alterados</item>
         <item quantity="other">%1$d arquivos alterados</item>
     </plurals>
+    <string name="chat_backup_key">Chave reserva %1$d</string>
+    <string name="chat_add_backup_key">Adicionar chave reserva</string>
+    <string name="chat_remove_key">Remover chave</string>
+    <string name="chat_backup_keys_hint">As chaves reserva são usadas em ordem quando a chave anterior atinge um limite de uso ou de taxa, ou é rejeitada. A primeira chave volta a ser usada quando o limite dela é redefinido.</string>
 </resources>

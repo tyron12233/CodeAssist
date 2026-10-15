@@ -74,4 +74,8 @@
         <item quantity="many">изменено %1$d файлов</item>
         <item quantity="other">изменено %1$d файла</item>
     </plurals>
+    <string name="chat_backup_key">Резервный ключ %1$d</string>
+    <string name="chat_add_backup_key">Добавить резервный ключ</string>
+    <string name="chat_remove_key">Удалить ключ</string>
+    <string name="chat_backup_keys_hint">Резервные ключи используются по порядку, когда предыдущий ключ упирается в лимит запросов или использования либо отклоняется. Первый ключ снова используется, когда его лимит сбросится.</string>
 </resources>

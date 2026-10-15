@@ -239,6 +239,24 @@ written through a `SecretStore` seam. The default implementation persists to the
 encrypted-at-rest implementation (Android EncryptedSharedPreferences, desktop keychain) is a later
 drop-in behind the same interface. The key field renders masked.
 
+### Backup keys
+
+Each provider, the custom gateway included, takes any number of backup keys after its main key
+(`settings.ai.<keyField>.backups`, one per line; edited in the key manager). `AgentBackend` wraps the
+provider's client in a `KeyFailoverClient` over an `ApiKeyPool` (agent-impl `KeyFailover.kt`):
+
+- Each request goes to the first key, in the user's order, that is not sitting out. Failover, not round robin:
+  a primary key is always preferred once it is usable again.
+- A refusal before any output (`RATE_LIMIT`, `DAILY_LIMIT`, `QUOTA`, `MODEL_NOT_ON_PLAN`, `AUTH`) benches that
+  key and resends the same request on the next one. A rate limit benches it for the provider's retry delay
+  (60s if none); a daily, billing or plan limit for an hour; a rejected key until the keys are edited. Other
+  errors would fail on every key and pass straight through, and nothing is resent once output has streamed.
+- When every key is out, a short rate limit on the first key back comes back as one `RATE_LIMIT` carrying
+  that wait, so `AgentLoop` waits it out as usual. Otherwise the turn fails with "All N API keys for this
+  provider are unavailable (...)", counting the keys by reason.
+- One pool per provider + model + key list, kept for the session, so benched keys stay benched across loop
+  rebuilds. With one key the client is a pass-through and errors are unchanged.
+
 ## Chat UI
 
 `AgentService` (added to `IdeBackend`) exposes `chatState: StateFlow<AgentChatState>`, `send`, `stop`,

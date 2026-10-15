@@ -68,4 +68,8 @@
     <plurals name="chat_files_changed">
         <item quantity="other">%1$d file diubah</item>
     </plurals>
+    <string name="chat_backup_key">Kunci cadangan %1$d</string>
+    <string name="chat_add_backup_key">Tambah kunci cadangan</string>
+    <string name="chat_remove_key">Hapus kunci</string>
+    <string name="chat_backup_keys_hint">Kunci cadangan dicoba berurutan saat kunci sebelumnya mencapai batas penggunaan atau batas laju, atau ditolak. Kunci pertama dipakai lagi setelah batasnya direset.</string>
 </resources>

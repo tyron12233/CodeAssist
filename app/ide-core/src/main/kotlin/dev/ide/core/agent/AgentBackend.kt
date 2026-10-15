@@ -18,10 +18,12 @@ import dev.ide.agent.ToolSpec
 import dev.ide.agent.WriteRequest
 import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
+import dev.ide.agent.impl.ApiKeyPool
 import dev.ide.agent.impl.CheckpointWorkspace
 import dev.ide.agent.impl.LlmErrorKind
 import dev.ide.agent.impl.RequestPacer
 import dev.ide.agent.impl.HistoryCompactor
+import dev.ide.agent.impl.KeyFailoverClient
 import dev.ide.agent.impl.OkHttpLlmTransport
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
@@ -249,10 +251,15 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         /** An optional additional CA certificate (PEM) to trust for a custom endpoint behind a private/regional
          *  CA (e.g. GigaChat's Russian Trusted Root CA). Only the custom [GATEWAY] endpoint uses it. */
         val caCertificatePem: String? = null,
+        /** Keys tried in order after [apiKey] when it hits a limit or is rejected. */
+        val backupKeys: List<String> = emptyList(),
     ) {
+        /** Every key, the main one first. */
+        val keys: List<String> get() = (listOfNotNull(apiKey) + backupKeys).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
         /** A custom gateway is often a local server (Ollama, LM Studio) that takes no key; its URL is what it needs. */
         val ready: Boolean
-            get() = if (selectedId == GATEWAY) !baseUrl.isNullOrBlank() else !apiKey.isNullOrBlank()
+            get() = if (selectedId == GATEWAY) !baseUrl.isNullOrBlank() else keys.isNotEmpty()
     }
 
     private fun resolveConfig(): ResolvedConfig {
@@ -265,6 +272,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 model = pref("gatewayModel").orEmpty(),
                 baseUrl = pref("gatewayBaseUrl"),
                 caCertificatePem = pref("gatewayCaCert"),
+                backupKeys = backupKeys(GATEWAY),
             )
         }
         val provider = registry.provider(selected)
@@ -274,8 +282,13 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             apiKey = pref(keyField(selected)),
             model = chosenModel(selected) ?: preferredModels[selected] ?: provider?.defaultModel.orEmpty(),
             baseUrl = null,
+            backupKeys = backupKeys(selected),
         )
     }
+
+    /** [providerId]'s backup keys, stored one per line beside its main key. */
+    private fun backupKeys(providerId: String): List<String> =
+        pref("${keyField(providerId)}.backups")?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
     /**
      * The model the user picked for [providerId], or null to let the provider choose. Picks are stored per
@@ -321,9 +334,19 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun pacerFor(cfg: ResolvedConfig, model: String): RequestPacer {
         val rpm = prefInt("rpm")?.takeIf { it > 0 }
         val tpm = prefInt("tpmK")?.takeIf { it > 0 }?.let { it * 1_000L }
-        val key = "${cfg.selectedId}|${cfg.apiKey.hashCode()}|$model|$rpm|$tpm"
+        val key = "${cfg.selectedId}|${cfg.keys.hashCode()}|$model|$rpm|$tpm"
         return pacers.getOrPut(key) { RequestPacer(rpm, tpm) }
     }
+
+    /**
+     * One key pool per provider + model + key list, kept for the session so a key that hit its limit stays out of
+     * rotation across loop rebuilds. Per model because providers count most limits per model; editing the keys
+     * gives a fresh pool, which is also how a rejected key gets another chance.
+     */
+    private val keyPools = ConcurrentHashMap<String, ApiKeyPool>()
+
+    private fun keyPoolFor(cfg: ResolvedConfig, model: String): ApiKeyPool =
+        keyPools.getOrPut("${cfg.selectedId}|$model|${cfg.keys.hashCode()}") { ApiKeyPool(cfg.keys) }
 
     private fun keyField(providerId: String): String = when (providerId) {
         "openai" -> "openaiKey"
@@ -349,10 +372,15 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 p.models.map { UiAgentModel(it.id, it.displayName) },
                 p.defaultModel,
                 apiKey = pref(keyField(p.id)).orEmpty(),
+                backupKeys = backupKeys(p.id),
             )
         }
         // A synthetic "Custom gateway" entry (OpenAI-compatible endpoint); its client is the OpenAI provider.
-        val gateway = UiAgentProvider(GATEWAY, "Custom gateway", emptyList(), "", apiKey = pref("gatewayKey").orEmpty())
+        val gateway = UiAgentProvider(
+            GATEWAY, "Custom gateway", emptyList(), "",
+            apiKey = pref("gatewayKey").orEmpty(),
+            backupKeys = backupKeys(GATEWAY),
+        )
         val configured = cfg.ready
         return UiAgentConfig(
             providers = builtins + gateway,
@@ -387,6 +415,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         resetLoop()
     }
 
+    override fun setProviderBackupKeys(providerId: String, keys: List<String>) {
+        val joined = keys.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+        ctx.manager?.setPreference("settings.$AI_PAGE.${keyField(providerId)}.backups", joined)
+        resetLoop()
+    }
+
     override fun setGateway(baseUrl: String, model: String, caCert: String) {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayBaseUrl", baseUrl)
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayModel", model)
@@ -397,7 +431,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     override fun refreshModels() {
         val cfg = resolveConfig()
         val provider = registry.provider(cfg.clientProviderId) ?: return
-        val key = cfg.apiKey.orEmpty()
+        val key = cfg.keys.firstOrNull().orEmpty()
         if (!cfg.ready) {
             _models.value = provider.models.map { UiAgentModel(it.id, it.displayName) }
             return
@@ -511,7 +545,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val effort = pref("reasoningEffort")?.takeIf { it != REASONING_EFFORT_DEFAULT }
         val pacer = pacerFor(cfg, model)
         val clientSignature =
-            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}"
+            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.keys.hashCode()}|${cfg.caCertificatePem.hashCode()}"
         val signature = "$clientSignature|$maxIterations|$maxTokens|$thinkingBudget|$webSearch|$effort|${System.identityHashCode(pacer)}"
         val existing = loop
         if (existing != null && loopSignature == signature) return existing
@@ -519,7 +553,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val restored = pendingHistory
         val carried = restored ?: existing?.snapshot()
         val modelChanged = restored != null || (loopClientSignature != null && loopClientSignature != clientSignature)
-        val client = provider.client(ProviderConfig(cfg.apiKey.orEmpty(), cfg.baseUrl, cfg.caCertificatePem))
+        val client = KeyFailoverClient(keyPoolFor(cfg, model)) { key ->
+            provider.client(ProviderConfig(key, cfg.baseUrl, cfg.caCertificatePem))
+        }
         val built = AgentLoop(
             client, model, tools, gate, ::systemPrompt,
             sessionContext = ::sessionContext,

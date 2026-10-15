@@ -42,8 +42,11 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.chat_add_backup_key
 import dev.ide.agent.ui.generated.resources.chat_api_key
 import dev.ide.agent.ui.generated.resources.chat_api_key_optional
+import dev.ide.agent.ui.generated.resources.chat_backup_key
+import dev.ide.agent.ui.generated.resources.chat_backup_keys_hint
 import dev.ide.agent.ui.generated.resources.chat_base_url
 import dev.ide.agent.ui.generated.resources.chat_ca_cert
 import dev.ide.agent.ui.generated.resources.chat_ca_cert_hint
@@ -55,6 +58,7 @@ import dev.ide.agent.ui.generated.resources.chat_hide
 import dev.ide.agent.ui.generated.resources.chat_model
 import dev.ide.agent.ui.generated.resources.chat_providers_subtitle
 import dev.ide.agent.ui.generated.resources.chat_providers_title
+import dev.ide.agent.ui.generated.resources.chat_remove_key
 import dev.ide.agent.ui.generated.resources.chat_show
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
@@ -106,6 +110,7 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                         gatewayCaCert = cfg.gatewayCaCert,
                         onSelect = { backend.agent.selectProvider(provider.id); cfg = backend.agent.config() },
                         onSetKey = { backend.agent.setProviderKey(provider.id, it) },
+                        onSetBackupKeys = { backend.agent.setProviderBackupKeys(provider.id, it) },
                         onSetGateway = { url, model, ca -> backend.agent.setGateway(url, model, ca) },
                     )
                 }
@@ -124,15 +129,17 @@ private fun ProviderCard(
     gatewayCaCert: String,
     onSelect: () -> Unit,
     onSetKey: (String) -> Unit,
+    onSetBackupKeys: (List<String>) -> Unit,
     onSetGateway: (String, String, String) -> Unit,
 ) {
     val isGateway = provider.id == "gateway"
     var key by remember(provider.id) { mutableStateOf(provider.apiKey) }
+    var backups by remember(provider.id) { mutableStateOf(provider.backupKeys) }
     var baseUrl by remember(provider.id) { mutableStateOf(oneLine(gatewayBaseUrl)) }
     var model by remember(provider.id) { mutableStateOf(gatewayModel) }
     var caCert by remember(provider.id) { mutableStateOf(gatewayCaCert) }
     // A gateway is often a local server that takes no key, so its URL alone makes it usable.
-    val hasKey = if (isGateway) baseUrl.isNotBlank() else key.isNotBlank()
+    val hasKey = if (isGateway) baseUrl.isNotBlank() else key.isNotBlank() || backups.any { it.isNotBlank() }
     val shape = RoundedCornerShape(Ca.radius.md)
     val scheme = MaterialTheme.colorScheme
     // A selected card is a tonal container, so its text and its radio dot take the container's own content
@@ -167,6 +174,7 @@ private fun ProviderCard(
         }
         if (selected) {
             SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key)) { key = it; onSetKey(it) }
+            BackupKeys(backups) { backups = it; onSetBackupKeys(it) }
             if (isGateway) {
                 // A single-line field shows only the first line of a multi-line paste, so a pasted "URL + key" block
                 // looked like a clean URL while the rest still went into requests. Flatten it so all of it is visible.
@@ -177,6 +185,38 @@ private fun ProviderCard(
                 Text(stringResource(Res.string.chat_gateway_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
             }
         }
+    }
+}
+
+/**
+ * The keys tried after the main one, in order, when a key hits a rate or usage limit or is rejected. Each row is a
+ * masked field with a remove button; there is no cap on how many.
+ */
+@Composable
+private fun BackupKeys(keys: List<String>, onChange: (List<String>) -> Unit) {
+    keys.forEachIndexed { i, value ->
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.weight(1f)) {
+                SecretField(value, stringResource(Res.string.chat_backup_key, i + 1)) { v ->
+                    onChange(keys.mapIndexed { j, old -> if (j == i) v else old })
+                }
+            }
+            IconButtonCa(
+                CaIcons.close, stringResource(Res.string.chat_remove_key),
+                { onChange(keys.filterIndexed { j, _ -> j != i }) },
+                iconSize = 14, boxSize = 30,
+            )
+        }
+    }
+    Text(
+        stringResource(Res.string.chat_add_backup_key),
+        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill))
+            .clickable { onChange(keys + "") }
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    )
+    if (keys.isNotEmpty()) {
+        Text(stringResource(Res.string.chat_backup_keys_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
     }
 }
 

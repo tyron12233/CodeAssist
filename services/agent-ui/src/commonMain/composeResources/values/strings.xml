@@ -72,4 +72,8 @@
         <item quantity="one">%1$d file changed</item>
         <item quantity="other">%1$d files changed</item>
     </plurals>
+    <string name="chat_backup_key">Backup key %1$d</string>
+    <string name="chat_add_backup_key">Add backup key</string>
+    <string name="chat_remove_key">Remove key</string>
+    <string name="chat_backup_keys_hint">Backup keys are tried in order when the key before them hits a rate or usage limit or is rejected. The first key is used again once its limit resets.</string>
 </resources>

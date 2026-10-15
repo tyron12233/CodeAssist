@@ -72,4 +72,8 @@
         <item quantity="many">%1$d archivos cambiados</item>
         <item quantity="other">%1$d archivos cambiados</item>
     </plurals>
+    <string name="chat_backup_key">Clave de respaldo %1$d</string>
+    <string name="chat_add_backup_key">Añadir clave de respaldo</string>
+    <string name="chat_remove_key">Quitar clave</string>
+    <string name="chat_backup_keys_hint">Las claves de respaldo se prueban en orden cuando la clave anterior alcanza un límite de uso o de frecuencia, o es rechazada. La primera clave se vuelve a usar cuando su límite se restablece.</string>
 </resources>

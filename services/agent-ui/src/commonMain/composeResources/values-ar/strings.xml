@@ -80,4 +80,8 @@
         <item quantity="many">%1$d ملفًا معدّلًا</item>
         <item quantity="other">%1$d ملف معدّل</item>
     </plurals>
+    <string name="chat_backup_key">مفتاح احتياطي %1$d</string>
+    <string name="chat_add_backup_key">إضافة مفتاح احتياطي</string>
+    <string name="chat_remove_key">إزالة المفتاح</string>
+    <string name="chat_backup_keys_hint">تُجرَّب المفاتيح الاحتياطية بالترتيب عندما يبلغ المفتاح السابق حد الاستخدام أو حد المعدل، أو يُرفض. يُستخدم المفتاح الأول مجددًا عند إعادة ضبط حده.</string>
 </resources>

@@ -182,6 +182,7 @@ class ChatDrawerSnapshot {
                     UiAgentProvider(
                         "anthropic", "Anthropic (Claude)",
                         listOf(UiAgentModel("claude-opus-5", "Claude Opus 5")), "claude-opus-5", "sk-live",
+                        backupKeys = listOf("sk-backup-1", "sk-backup-2"),
                     ),
                 ),
                 selectedProvider = "anthropic",

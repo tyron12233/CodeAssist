@@ -1770,6 +1770,9 @@ interface AgentService {
     /** Store the API key for [providerId] (a built-in id or "gateway"). Blank clears it. */
     fun setProviderKey(providerId: String, key: String)
 
+    /** Store [providerId]'s backup keys, in the order they are tried after the main key. Blank entries are dropped. */
+    fun setProviderBackupKeys(providerId: String, keys: List<String>) {}
+
     /** Configure the custom OpenAI-compatible gateway (base URL + model name, and an optional extra CA
      *  certificate PEM to trust for an endpoint behind a private/regional CA — blank = system trust only). */
     fun setGateway(baseUrl: String, model: String, caCert: String)

@@ -70,4 +70,8 @@
     <plurals name="chat_files_changed">
         <item quantity="other">已更改 %1$d 个文件</item>
     </plurals>
+    <string name="chat_backup_key">备用密钥 %1$d</string>
+    <string name="chat_add_backup_key">添加备用密钥</string>
+    <string name="chat_remove_key">移除密钥</string>
+    <string name="chat_backup_keys_hint">当前一个密钥达到速率或用量限制，或被拒绝时，会按顺序尝试备用密钥。第一个密钥的限制重置后会重新使用它。</string>
 </resources>

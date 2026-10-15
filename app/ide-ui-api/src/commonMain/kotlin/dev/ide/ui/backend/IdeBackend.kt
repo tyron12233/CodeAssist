@@ -865,6 +865,8 @@ data class UiAgentProvider(
     val defaultModel: String,
     /** The user's stored API key for this provider (shown masked + editable in the key manager). */
     val apiKey: String = "",
+    /** Further keys, tried in order when [apiKey] (or the key before) hits a limit or is rejected. */
+    val backupKeys: List<String> = emptyList(),
 )
 
 /** Provider/model selection and permission mode, for the chat drawer header, key manager, and settings. */
