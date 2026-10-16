@@ -61,9 +61,11 @@ import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettingsPage
 import dev.ide.ui.components.SettingsToggleRow
 import dev.ide.ui.ext.keymapKeyName
+import dev.ide.ui.ext.recordedShortcutSpec
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.keymap_hint
 import dev.ide.ui.generated.resources.keymap_modified
+import dev.ide.ui.generated.resources.keymap_needs_modifier
 import dev.ide.ui.generated.resources.keymap_no_results
 import dev.ide.ui.generated.resources.keymap_not_set
 import dev.ide.ui.generated.resources.keymap_recording
@@ -73,6 +75,7 @@ import dev.ide.ui.generated.resources.keymap_search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.shortcutKeys
 import dev.ide.ui.platform.shortcutText
+import dev.ide.ui.platform.usesCommandKey
 import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
@@ -236,15 +239,30 @@ private fun KeymapRow(
 }
 
 /**
- * A shortcut drawn as keycaps that records a new one when clicked: the next key pressed with a modifier becomes
- * the value. A bare key is ignored (it is a letter the user wants to type), Escape cancels, Backspace clears, and
- * clicking elsewhere stops recording.
+ * A shortcut drawn as keycaps that records a new one when clicked: the next press [recordedShortcutSpec] accepts
+ * becomes the value. A key that types text needs Ctrl, Alt or Meta (it is a letter the user wants to type); a
+ * function key records bare. Escape cancels, Backspace clears, and clicking elsewhere stops recording.
+ *
+ * While recording it answers every press, so a keyboard that works is never mistaken for one the app cannot
+ * hear: held modifiers show as keycaps (`Ctrl` `…`), and a key that needs a modifier says so.
  */
 @Composable
 private fun ShortcutRecorder(spec: String, onRecord: (String) -> Unit) {
     var recording by remember { mutableStateOf(false) }
+    // The modifiers held right now, as a spec prefix (`primary+alt+`), and whether the last press was refused.
+    var held by remember { mutableStateOf("") }
+    var refused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    LaunchedEffect(recording) { if (recording) runCatching { focus.requestFocus() } }
+    LaunchedEffect(recording) {
+        held = ""
+        refused = false
+        if (recording) runCatching { focus.requestFocus() }
+    }
+    fun heldOf(ev: androidx.compose.ui.input.key.KeyEvent): String = buildString {
+        if (ev.isCtrlPressed || ev.isMetaPressed) append("primary+")
+        if (ev.isAltPressed) append("alt+")
+        if (ev.isShiftPressed) append("shift+")
+    }
     val shape = RoundedCornerShape(10.dp)
     val description = if (spec.isEmpty()) stringResource(Res.string.keymap_not_set) else shortcutText(spec)
     Box(
@@ -253,7 +271,13 @@ private fun ShortcutRecorder(spec: String, onRecord: (String) -> Unit) {
             .onFocusChanged { if (!it.isFocused) recording = false }
             .focusable()
             .onPreviewKeyEvent { ev ->
-                if (!recording || ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (!recording) return@onPreviewKeyEvent false
+                if (ev.type == KeyEventType.KeyUp) {
+                    // A modifier let go: drop it from the keycaps. Not consumed; nothing else waits on it here.
+                    held = heldOf(ev)
+                    return@onPreviewKeyEvent false
+                }
+                if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (ev.key) {
                     Key.Escape -> recording = false
                     Key.Backspace, Key.Delete -> {
@@ -261,10 +285,18 @@ private fun ShortcutRecorder(spec: String, onRecord: (String) -> Unit) {
                         onRecord("")
                     }
                     else -> {
-                        val name = keymapKeyName(ev.key)
-                        if (name != null && (ev.isCtrlPressed || ev.isMetaPressed || ev.isAltPressed)) {
-                            recording = false
-                            onRecord(recordedSpec(name, ev.isCtrlPressed || ev.isMetaPressed, ev.isAltPressed, ev.isShiftPressed))
+                        val recorded = recordedShortcutSpec(ev.key, ev.isCtrlPressed, ev.isMetaPressed, ev.isAltPressed, ev.isShiftPressed)
+                        when {
+                            recorded != null -> {
+                                recording = false
+                                onRecord(recorded)
+                            }
+                            // No name: a modifier going down (or a key no shortcut can use), so show what is held.
+                            keymapKeyName(ev.key) == null -> {
+                                held = heldOf(ev)
+                                if (held.isNotEmpty()) refused = false
+                            }
+                            else -> refused = true
                         }
                     }
                 }
@@ -282,6 +314,13 @@ private fun ShortcutRecorder(spec: String, onRecord: (String) -> Unit) {
         contentAlignment = Alignment.CenterEnd,
     ) {
         when {
+            recording && held.isNotEmpty() -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                shortcutKeys(held + "…").single().forEach { Keycap(it) }
+            }
+            recording && refused -> Text(
+                stringResource(Res.string.keymap_needs_modifier, if (usesCommandKey) "⌘ / ⌥" else "Ctrl / Alt"),
+                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
+            )
             recording -> Text(stringResource(Res.string.keymap_recording), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
             spec.isEmpty() -> Text(stringResource(Res.string.keymap_not_set), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelLarge)
             else -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -306,12 +345,4 @@ private fun Keycap(label: String) {
     ) {
         Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
-}
-
-/** The canonical spec for a recorded press; `primary` so the binding means Command on a Mac and Control elsewhere. */
-private fun recordedSpec(key: String, primary: Boolean, alt: Boolean, shift: Boolean): String = buildString {
-    if (primary) append("primary+")
-    if (alt) append("alt+")
-    if (shift) append("shift+")
-    append(key)
 }

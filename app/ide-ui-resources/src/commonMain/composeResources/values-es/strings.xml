@@ -911,6 +911,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="keymap_reset_all">Restablecer todo</string>
     <string name="keymap_no_results">Ningún comando coincide.</string>
     <string name="keymap_recording">Pulsa las teclas…</string>
+    <string name="keymap_needs_modifier">Mantén %1$s junto con esa tecla</string>
     <string name="keymap_not_set">Sin asignar</string>
     <string name="keymap_reset">Restablecer valor predeterminado</string>
     <string name="modcfg_remove_named">Quitar %1$s</string>

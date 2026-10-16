@@ -1515,6 +1515,7 @@
     <string name="keymap_reset_all">إعادة تعيين الكل</string>
     <string name="keymap_no_results">لا توجد أوامر مطابقة.</string>
     <string name="keymap_recording">اضغط المفاتيح…</string>
+    <string name="keymap_needs_modifier">اضغط مع هذا المفتاح على %1$s</string>
     <string name="keymap_not_set">غير معيّن</string>
     <string name="keymap_reset">الاستعادة إلى الافتراضي</string>
     <string name="modcfg_remove_named">إزالة %1$s</string>

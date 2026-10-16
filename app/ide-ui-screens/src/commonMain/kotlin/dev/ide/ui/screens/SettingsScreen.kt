@@ -64,7 +64,6 @@ import dev.ide.ui.components.SettingsColorRow
 import dev.ide.ui.components.SettingsSliderRow
 import dev.ide.ui.components.SettingsShortcutRow
 import dev.ide.ui.ext.displayShortcut
-import dev.ide.ui.ext.keymapKeyName
 import dev.ide.ui.components.SettingsTextRow
 import dev.ide.ui.components.SettingsToggleRow
 import dev.ide.ui.generated.resources.Res
@@ -317,8 +316,11 @@ private fun PageContent(
     onStructuralChange: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // A page of nothing but shortcuts is a keymap: a searchable list of commands, not a form.
-    if (page.controls.isNotEmpty() && page.controls.all { it is UiSettingControl.Shortcut }) {
+    // A page of shortcuts is a keymap: a searchable list of commands, not a form. It may carry switches too
+    // (double-Shift search), which the keymap draws above the list; any other control makes it a form.
+    if (page.controls.any { it is UiSettingControl.Shortcut } &&
+        page.controls.all { it is UiSettingControl.Shortcut || it is UiSettingControl.Toggle }
+    ) {
         KeymapPageContent(page, values, onSet, onStructuralChange, modifier)
         return
     }
@@ -394,7 +396,6 @@ private fun ControlRow(
                 description = description,
                 display = if (current.isEmpty()) "" else displayShortcut(current),
                 isDefault = current == c.defaultValue,
-                keyNameOf = ::keymapKeyName,
                 onRecord = { spec -> onSet(pageId, c.key, spec); onStructuralChange() },
                 onReset = { onSet(pageId, c.key, c.defaultValue); onStructuralChange() },
             )

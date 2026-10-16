@@ -867,6 +867,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="keymap_reset_all">Redefinir tudo</string>
     <string name="keymap_no_results">Nenhum comando corresponde.</string>
     <string name="keymap_recording">Pressione as teclas…</string>
+    <string name="keymap_needs_modifier">Segure %1$s junto com essa tecla</string>
     <string name="keymap_not_set">Não definido</string>
     <string name="keymap_reset">Restaurar padrão</string>
     <string name="modcfg_remove_named">Remover %1$s</string>

@@ -1471,6 +1471,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="keymap_reset_all">Reset all</string>
     <string name="keymap_no_results">No commands match.</string>
     <string name="keymap_recording">Press keys…</string>
+    <string name="keymap_needs_modifier">Hold %1$s with that key</string>
     <string name="keymap_not_set">Not set</string>
     <string name="keymap_reset">Reset to default</string>
     <string name="modcfg_remove_named">Remove %1$s</string>

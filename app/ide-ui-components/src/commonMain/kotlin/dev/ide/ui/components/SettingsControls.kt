@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.ext.recordedShortcutSpec
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.color_hue
@@ -67,6 +68,9 @@ import dev.ide.ui.generated.resources.color_lightness
 import dev.ide.ui.generated.resources.color_opacity
 import dev.ide.ui.generated.resources.color_picker_title
 import dev.ide.ui.generated.resources.color_saturation
+import dev.ide.ui.generated.resources.keymap_not_set
+import dev.ide.ui.generated.resources.keymap_recording
+import dev.ide.ui.generated.resources.keymap_reset
 import dev.ide.ui.generated.resources.save
 import dev.ide.ui.generated.resources.settings_advanced
 import dev.ide.ui.icons.CaIcons
@@ -234,13 +238,13 @@ fun SettingsTextRow(
  *
  * Three details that make it usable rather than merely functional:
  *
- *  - a press with NO modifier is ignored while recording, because `L` on its own is a letter the user wants
- *    to type, and binding it would take the letter away everywhere;
+ *  - a key that types text needs Ctrl, Alt or Meta, because `L` on its own is a letter the user wants to
+ *    type, and binding it would take the letter away everywhere (a function key records bare; the rule is
+ *    [recordedShortcutSpec], shared with the Keymap page);
  *  - Escape cancels, so an armed row can always be backed out of without binding Escape itself;
  *  - Backspace clears the shortcut, which is the one destructive act a recorder needs and cannot record.
  *
- * [onRecord] receives a spec (`primary+alt+L`) or the empty string when the shortcut is cleared. [keyNameOf]
- * turns a toolkit key into the keymap's canonical name, passed in so this component stays free of the keymap.
+ * [onRecord] receives a spec (`primary+alt+L`) or the empty string when the shortcut is cleared.
  */
 @Composable
 fun SettingsShortcutRow(
@@ -248,7 +252,6 @@ fun SettingsShortcutRow(
     description: String?,
     display: String,
     isDefault: Boolean,
-    keyNameOf: (Key) -> String?,
     onRecord: (String) -> Unit,
     onReset: () -> Unit,
 ) {
@@ -266,15 +269,15 @@ fun SettingsShortcutRow(
                 }.padding(horizontal = 8.dp, vertical = 6.dp),
             ) {
                 Text(
-                    "Reset",
+                    stringResource(Res.string.keymap_reset),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
         val label = when {
-            recording -> "Press a shortcut"
-            display.isEmpty() -> "None"
+            recording -> stringResource(Res.string.keymap_recording)
+            display.isEmpty() -> stringResource(Res.string.keymap_not_set)
             else -> display
         }
         Box(
@@ -295,13 +298,11 @@ fun SettingsShortcutRow(
                             true
                         }
                         else -> {
-                            val name = keyNameOf(ev.key)
-                            val modified = ev.isCtrlPressed || ev.isMetaPressed || ev.isAltPressed
-                            // A bare letter is text the user wants to type; taking it as a shortcut would
-                            // remove it from the keyboard. Shift alone is not enough for the same reason.
-                            if (name == null || !modified) return@onPreviewKeyEvent true
+                            val spec = recordedShortcutSpec(
+                                ev.key, ev.isCtrlPressed, ev.isMetaPressed, ev.isAltPressed, ev.isShiftPressed,
+                            ) ?: return@onPreviewKeyEvent true
                             recording = false
-                            onRecord(specOf(name, ev.isCtrlPressed || ev.isMetaPressed, ev.isAltPressed, ev.isShiftPressed))
+                            onRecord(spec)
                             true
                         }
                     }
@@ -330,19 +331,6 @@ fun SettingsShortcutRow(
     }
 }
 
-/**
- * The canonical spec for a recorded press.
- *
- * `primary` rather than the physical modifier that was held: the shortcut should mean Command on macOS and
- * Control elsewhere, which is what the rest of the keymap means by it, so a keymap recorded on one platform
- * still reads correctly on the other.
- */
-private fun specOf(key: String, primary: Boolean, alt: Boolean, shift: Boolean): String = buildString {
-    if (primary) append("primary+")
-    if (alt) append("alt+")
-    if (shift) append("shift+")
-    append(key)
-}
 
 /** An action setting: label/description on the left, a button on the right. */
 @Composable

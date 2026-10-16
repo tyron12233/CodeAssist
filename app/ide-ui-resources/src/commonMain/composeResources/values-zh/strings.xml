@@ -1452,6 +1452,7 @@
     <string name="keymap_reset_all">全部重置</string>
     <string name="keymap_no_results">没有匹配的命令。</string>
     <string name="keymap_recording">请按下按键…</string>
+    <string name="keymap_needs_modifier">请同时按住 %1$s</string>
     <string name="keymap_not_set">未设置</string>
     <string name="keymap_reset">恢复默认</string>
     <string name="modcfg_remove_named">移除 %1$s</string>

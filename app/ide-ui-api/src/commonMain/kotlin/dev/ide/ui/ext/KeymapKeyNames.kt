@@ -55,3 +55,29 @@ private val KEY_NAMES: Map<Key, String> = buildMap {
     put(Key.Grave, "Backtick")
     put(Key.LeftBracket, "LeftBracket"); put(Key.RightBracket, "RightBracket")
 }
+
+/** Keys that type nothing and move nothing, so binding one bare (F5) or with only Shift (Shift+F10) takes
+ *  nothing away from the keyboard. */
+private val NON_TYPING_KEYS: Set<String> = (1..12).map { "F$it" }.toSet() + setOf("Insert", "Menu")
+
+/**
+ * What a press records as in a shortcut recorder: the keymap spec (`primary+alt+L`), or null when the press
+ * cannot be a shortcut. A key that types or moves something (a letter, a digit, Space, Enter, Tab, an arrow)
+ * needs Ctrl, Alt or Meta, because bound bare or with only Shift it would stop typing or moving the caret
+ * everywhere. A key that does neither (F1 to F12, Insert, Menu) records bare or with any modifiers, which is
+ * how F5 or Shift+F10 is bound. Ctrl and Meta both record as `primary`, so a binding means Command on a Mac
+ * and Control elsewhere. Null for a modifier on its own too, since it has no [keymapKeyName].
+ *
+ * The one rule both recorders apply, so the Keymap page and a plugin's shortcut setting accept the same keys.
+ */
+fun recordedShortcutSpec(key: Key, ctrl: Boolean, meta: Boolean, alt: Boolean, shift: Boolean): String? {
+    val name = keymapKeyName(key) ?: return null
+    val primary = ctrl || meta
+    if (!primary && !alt && name !in NON_TYPING_KEYS) return null
+    return buildString {
+        if (primary) append("primary+")
+        if (alt) append("alt+")
+        if (shift) append("shift+")
+        append(name)
+    }
+}

@@ -781,6 +781,7 @@
     <string name="keymap_reset_all">Сбросить всё</string>
     <string name="keymap_no_results">Нет подходящих команд.</string>
     <string name="keymap_recording">Нажмите клавиши…</string>
+    <string name="keymap_needs_modifier">Удерживайте %1$s вместе с этой клавишей</string>
     <string name="keymap_not_set">Не задано</string>
     <string name="keymap_reset">Сбросить по умолчанию</string>
     <string name="modcfg_remove_named">Удалить %1$s</string>

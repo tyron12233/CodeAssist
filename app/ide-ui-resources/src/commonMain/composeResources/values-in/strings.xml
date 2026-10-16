@@ -826,6 +826,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="keymap_reset_all">Atur ulang semua</string>
     <string name="keymap_no_results">Tidak ada perintah yang cocok.</string>
     <string name="keymap_recording">Tekan tombol…</string>
+    <string name="keymap_needs_modifier">Tahan %1$s bersama tombol itu</string>
     <string name="keymap_not_set">Tidak diatur</string>
     <string name="keymap_reset">Kembalikan ke default</string>
     <string name="modcfg_remove_named">Hapus %1$s</string>
