@@ -305,6 +305,7 @@ internal fun EditorCenter(
                                 ),
                             )
                         }
+                        autoDisabledInspectionsNotice(state)?.let(::add)
                         androidSourcesNotice(state)?.let(::add)
                         active?.let { file ->
                             staleOnDiskNotice(state, file)?.let(::add)

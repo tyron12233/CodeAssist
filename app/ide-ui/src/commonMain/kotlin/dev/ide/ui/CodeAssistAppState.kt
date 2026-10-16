@@ -471,6 +471,12 @@ class CodeAssistAppState(
         screen = Screen.Settings
     }
 
+    /** Open settings page [id] straight from [from] (an editor notice, say): Back leads through the hub to [from]. */
+    fun openSettingsPageFrom(from: Screen, id: String) {
+        hubReturn = from
+        openSettingsPage(id)
+    }
+
     /** Open the Keystore Manager, remembering its Back destination and whether it was reached with a project
      *  open (which gates the per-project signing assignment row). */
     fun openKeystoreManager(returnTo: Screen, inProject: Boolean) {

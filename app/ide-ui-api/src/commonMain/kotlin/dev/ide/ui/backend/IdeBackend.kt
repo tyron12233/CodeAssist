@@ -2130,6 +2130,29 @@ data class UiInspection(
 )
 
 /**
+ * An installed plugin's inspection that CodeAssist switched off for this session because it slowed the editor
+ * down or kept failing. Every inspection runs on the thread that also produces the compiler's errors and code
+ * completion, so one that keeps running over its time budget is taken off it. It stays off until the user turns
+ * it back on ([SettingsService.reenableInspection]), switches it off or on in the inspection settings, or
+ * restarts.
+ */
+data class UiAutoDisabledInspection(
+    /** The inspection's id, as in [UiInspection.id]. */
+    val id: String,
+    val displayName: String,
+    /** The contributing plugin's name. */
+    val pluginName: String,
+    /** True when it ran over its budget; false when it kept throwing. */
+    val slow: Boolean,
+    /** The pass that tipped it over, in ms (0 when it was failing). */
+    val tookMs: Long,
+    /** The per-pass budget it was held to, in ms. */
+    val budgetMs: Long,
+    /** How many times it has been switched off this session; above 1, turning it back on did not help. */
+    val times: Int,
+)
+
+/**
  * One category in the Settings screen, rendered generically from [controls] — built-in and plugin pages are
  * identical here. [scope] is "app" (IDE-wide) or "project". [inspectionsSection] true appends the per-
  * inspection enable/severity list (the Analysis page). [iconId] resolves through the UI icon registry.

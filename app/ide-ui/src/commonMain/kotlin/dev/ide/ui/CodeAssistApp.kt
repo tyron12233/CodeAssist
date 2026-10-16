@@ -146,6 +146,7 @@ fun CodeAssistApp(
             LocalAds provides app.adController,
             LocalHostFileActions provides fileActions,
             LocalPluginNavigator provides app::openPluginScreen,
+            LocalSettingsPageOpener provides { id -> app.openSettingsPageFrom(app.screen, id) },
             // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
             // user on the editor to see it. Guarded on a project being open (`epoch > 0`), since a tab over
             // nothing is not a state the shell has.

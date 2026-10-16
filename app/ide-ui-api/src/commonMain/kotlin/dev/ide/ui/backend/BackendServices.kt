@@ -1543,6 +1543,12 @@ interface SettingsService {
     /** Enable/disable inspection [id] and set its severity. */
     fun setInspection(id: String, enabled: Boolean, severity: UiSeverity) {}
 
+    /** The installed plugins' inspections CodeAssist switched off this session, oldest first. */
+    val autoDisabledInspections: StateFlow<List<UiAutoDisabledInspection>> get() = MutableStateFlow(emptyList())
+
+    /** Turn the auto-disabled inspection [id] back on. Re-run analysis afterwards to bring its findings back. */
+    fun reenableInspection(id: String) {}
+
     /** Read an app-global preference, or null if unset. */
     fun preference(key: String): String? = null
 

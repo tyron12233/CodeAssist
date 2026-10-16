@@ -48,6 +48,9 @@ data class QuarantinedAnalyzer(
     val tookMs: Long,
     /** The budget it was held to, in ms. */
     val budgetMs: Long,
+    /** How many times it has been dropped this session, this one included: above 1, turning it back on did not
+     *  help, which a host can say instead of offering the same choice again. */
+    val times: Int = 1,
 ) {
     enum class Cause {
         /** Ran over its tier's budget on [AnalyzerBudget.strikes] consecutive passes. */
@@ -68,8 +71,8 @@ data class QuarantinedAnalyzer(
  * pass inside budget clears the count.
  *
  * Quarantine is a *runtime* state, deliberately not written into the user's [dev.ide.analysis.AnalysisProfile]:
- * the user never turned this check off, the IDE did, and a profile change (or a reload of the plugin)
- * gives it a clean slate via [clear].
+ * the user never turned this check off, the IDE did. It ends when the host [release]s it (the user turning it
+ * back on), when the user switches that check off or on themselves, or with the session.
  *
  * Built-in analyzers are never quarantined. A slow built-in is our own bug to fix, and half the IDE's
  * diagnostics would be silently missing if the watchdog could switch the Kotlin or JDT analyzers off.
@@ -86,6 +89,10 @@ internal class AnalyzerWatchdog(
 
     /** Every analyzer quarantined this session, in the order they were dropped. */
     val quarantined = CopyOnWriteArrayList<QuarantinedAnalyzer>()
+
+    /** Times each analyzer was dropped this session. Survives [release] and [clear] on purpose: it is what tells
+     *  a second drop from a first. */
+    private val drops = ConcurrentHashMap<AnalyzerId, Int>()
 
     fun isQuarantined(id: AnalyzerId): Boolean = id in quarantinedIds
 
@@ -104,7 +111,16 @@ internal class AnalyzerWatchdog(
         strike(analyzer, plugin, QuarantinedAnalyzer.Cause.FAILING, tookMs = 0, budgetMs = budget.forTier(analyzer.tier))
     }
 
-    /** Forget every strike and release every quarantine (profile change / plugins reloaded). */
+    /** Put [id] back on the pass with no strikes against it. False when it was not quarantined. */
+    fun release(id: AnalyzerId): Boolean {
+        strikes.remove(id)
+        if (id !in quarantinedIds) return false
+        quarantinedIds = quarantinedIds - id
+        quarantined.removeAll { it.analyzer == id }
+        return true
+    }
+
+    /** Forget every strike and release every quarantine. */
     fun clear() {
         strikes.clear()
         quarantinedIds = emptySet()
@@ -116,7 +132,8 @@ internal class AnalyzerWatchdog(
     ) {
         val count = strikes.merge(analyzer.id, 1, Int::plus) ?: 1
         if (count < budget.strikes || isQuarantined(analyzer.id)) return
-        val report = QuarantinedAnalyzer(analyzer.id, analyzer.displayName, plugin, cause, tookMs, budgetMs)
+        val times = drops.merge(analyzer.id, 1, Int::plus) ?: 1
+        val report = QuarantinedAnalyzer(analyzer.id, analyzer.displayName, plugin, cause, tookMs, budgetMs, times)
         quarantinedIds = quarantinedIds + analyzer.id
         quarantined += report
         strikes.remove(analyzer.id)

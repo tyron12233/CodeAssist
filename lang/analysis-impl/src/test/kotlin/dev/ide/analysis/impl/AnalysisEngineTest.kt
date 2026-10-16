@@ -561,28 +561,92 @@ class AnalysisEngineTest {
         }
     }
 
+    /** A plugin analyzer 200ms per pass, far over the 25ms SYNTAX budget, and an engine holding it to it. */
+    private class SlowPlugin {
+        val file = FakeFile("/src/Main.java")
+        val clock = FakeClock()
+        val plugin = PluginAnalyzer(AnalyzerId("slow")) { sink ->
+            clock.advanceMs(200)
+            sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "slow")
+        }
+    }
+
+    private fun slowEngine(slow: SlowPlugin) = engine(
+        analyzers = listOf(slow.plugin), env = env(target(slow.file, "class Main {}")),
+        externalAnalyzers = mapOf(slow.plugin.id to PluginId("acme")), nanoTime = slow.clock::read,
+    )
+
     @Test
-    fun configureReleasesTheQuarantine() {
+    fun theHostIsToldWhenAnAnalyzerIsDropped() {
         runBlocking {
-            val file = FakeFile("/src/Main.java")
-            val target = target(file, "class Main {}")
-            val clock = FakeClock()
-            val plugin = PluginAnalyzer(AnalyzerId("slow")) { sink ->
-                clock.advanceMs(200)
-                sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "slow")
-            }
-            val engine = engine(
-                analyzers = listOf(plugin), env = env(target),
-                externalAnalyzers = mapOf(plugin.id to PluginId("acme")), nanoTime = clock::read,
-            )
-            repeat(4) { engine.analyzeNow(file) }
-            assertEquals(3, plugin.invocations)
+            val slow = SlowPlugin()
+            val engine = slowEngine(slow)
+            val told = mutableListOf<QuarantinedAnalyzer>()
+            engine.addQuarantineListener { told += it }
 
+            repeat(2) { engine.analyzeNow(slow.file) }
+            assertTrue(told.isEmpty(), "two strikes are not a verdict yet")
+            engine.analyzeNow(slow.file)
+
+            val report = told.single()
+            assertEquals(AnalyzerId("slow"), report.analyzer)
+            assertEquals(1, report.times)
+            assertEquals(listOf(report), engine.quarantinedAnalyzers)
+        }
+    }
+
+    @Test
+    fun releasingAQuarantinePutsTheAnalyzerBackAndCountsTheNextDrop() {
+        runBlocking {
+            val slow = SlowPlugin()
+            val engine = slowEngine(slow)
+            val told = mutableListOf<QuarantinedAnalyzer>()
+            engine.addQuarantineListener { told += it }
+            repeat(4) { engine.analyzeNow(slow.file) }
+            assertEquals(3, slow.plugin.invocations)
+
+            assertTrue(engine.releaseQuarantine(AnalyzerId("slow")))
+            assertTrue(engine.quarantinedAnalyzers.isEmpty())
+            engine.analyzeNow(slow.file)
+            assertEquals(4, slow.plugin.invocations, "released: it runs again")
+
+            // Still slow, so it earns the quarantine back after a full run of strikes, and the report says this is
+            // the second time.
+            repeat(3) { engine.analyzeNow(slow.file) }
+            assertEquals(6, slow.plugin.invocations)
+            assertEquals(listOf(1, 2), told.map { it.times })
+            assertEquals(false, engine.releaseQuarantine(AnalyzerId("other")), "nothing to release")
+        }
+    }
+
+    @Test
+    fun anUnrelatedProfileChangeLeavesTheQuarantineAlone() {
+        runBlocking {
+            val slow = SlowPlugin()
+            val engine = slowEngine(slow)
+            repeat(3) { engine.analyzeNow(slow.file) }
+
+            // The user changes some other check's severity.
+            engine.configure(AnalysisProfile(emptySet(), mapOf(AnalyzerId("other") to Severity.ERROR)))
+
+            assertEquals(1, engine.quarantinedAnalyzers.size, "tweaking another check is not turning this one back on")
+            engine.analyzeNow(slow.file)
+            assertEquals(3, slow.plugin.invocations)
+        }
+    }
+
+    @Test
+    fun switchingTheCheckOffAndOnEndsTheQuarantine() {
+        runBlocking {
+            val slow = SlowPlugin()
+            val engine = slowEngine(slow)
+            repeat(3) { engine.analyzeNow(slow.file) }
+
+            engine.configure(AnalysisProfile(setOf(AnalyzerId("slow")), emptyMap()))
+            assertTrue(engine.quarantinedAnalyzers.isEmpty(), "off by the user's choice now, nothing left to report")
             engine.configure(AnalysisProfile.DEFAULT)
-
-            assertTrue(engine.quarantinedAnalyzers.isEmpty(), "the user revisiting the profile is the way back")
-            engine.analyzeNow(file)
-            assertEquals(4, plugin.invocations, "released: it runs again (and can earn the quarantine back)")
+            engine.analyzeNow(slow.file)
+            assertEquals(4, slow.plugin.invocations, "switched back on, it gets a fresh run")
         }
     }
 

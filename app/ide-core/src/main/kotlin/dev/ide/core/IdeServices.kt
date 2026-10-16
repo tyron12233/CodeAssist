@@ -1768,6 +1768,38 @@ class IdeServices private constructor(
         inspectionProfileState = next
         persistInspectionProfile(next)
         analysisEngine.configure(next)
+        // Switching a check off or on ends its quarantine, if it had one.
+        publishQuarantined()
+    }
+
+    private val autoDisabledState = MutableStateFlow<List<dev.ide.ui.backend.UiAutoDisabledInspection>>(emptyList())
+
+    /**
+     * The installed plugins' analyzers the engine switched off this session for being too slow or failing, oldest
+     * first. Shown to the user, who otherwise just sees a check stop reporting; an entry goes away when it is
+     * turned back on ([releaseQuarantinedAnalyzer]) or the user switches that check off or on.
+     */
+    val autoDisabledInspections: StateFlow<List<dev.ide.ui.backend.UiAutoDisabledInspection>> get() = autoDisabledState
+
+    /** Put the switched-off analyzer [id] back to work. The caller re-runs analysis to bring its findings back. */
+    fun releaseQuarantinedAnalyzer(id: AnalyzerId) {
+        analysisEngine.releaseQuarantine(id)
+        publishQuarantined()
+    }
+
+    private fun publishQuarantined() {
+        val names = env.pluginCatalog.all.associate { it.id to it.name }
+        autoDisabledState.value = analysisEngine.quarantinedAnalyzers.map { q ->
+            dev.ide.ui.backend.UiAutoDisabledInspection(
+                id = q.analyzer.value,
+                displayName = q.displayName,
+                pluginName = names[q.plugin.value] ?: q.plugin.value,
+                slow = q.cause == dev.ide.analysis.impl.QuarantinedAnalyzer.Cause.SLOW,
+                tookMs = q.tookMs,
+                budgetMs = q.budgetMs,
+                times = q.times,
+            )
+        }
     }
 
     private val projectSettingsFile: Path get() = store.rootPath.resolve(".platform/settings.properties")
@@ -2706,6 +2738,7 @@ class IdeServices private constructor(
             // the engine's single final-publish point (AnalysisEngine.notify → its listeners); the bus is a
             // pass-through, so a plugin sees exactly what the editor does. See [AnalysisTopics.ANALYSIS].
             engine.addListener { file, diagnostics -> publishAnalysis(AnalysisEvent(file.path, diagnostics)) }
+            engine.addQuarantineListener { publishQuarantined() }
         }
     }
 

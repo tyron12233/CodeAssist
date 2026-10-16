@@ -313,6 +313,26 @@ class IdeUiState(
         launch { publishSelection() }
         launch { persistTreeExpansion() }
         launch { syncExternalWrites() }
+        launch { reanalyzeWhenInspectionsReturn() }
+    }
+
+    /**
+     * Notices about auto-disabled inspections the user closed, keyed by inspection and drop (`id#times`), so a
+     * later drop of the same one is news again. Held here rather than in the editor's composition, which is left
+     * every time Settings opens.
+     */
+    var dismissedInspectionNotices by mutableStateOf(emptySet<String>())
+
+    // An inspection CodeAssist switched off has no findings in the open tabs. When one is turned back on (from the
+    // editor notice, or from Settings while the editor is not even on screen) or the user switches it off or on,
+    // it leaves the list; re-run analysis then, so its findings come back without waiting for the next edit.
+    private suspend fun reanalyzeWhenInspectionsReturn() {
+        var previous = emptySet<String>()
+        backend.settings.autoDisabledInspections.collect { list ->
+            val ids = list.mapTo(HashSet()) { it.id }
+            if ((previous - ids).isNotEmpty()) reanalyzeOpenFiles()
+            previous = ids
+        }
     }
 
     // Reopen the tabs from the last session with this project. A first open starts on the empty editor, which

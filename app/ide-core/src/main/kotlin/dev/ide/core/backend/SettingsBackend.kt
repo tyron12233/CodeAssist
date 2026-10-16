@@ -18,6 +18,7 @@ import dev.ide.platform.settings.SettingsScope
 import dev.ide.platform.settings.settingsKey
 import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.UiAccent
+import dev.ide.ui.backend.UiAutoDisabledInspection
 import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.backend.UiInspection
 import dev.ide.ui.backend.UiPluginChange
@@ -30,6 +31,7 @@ import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.backend.UiSettingsPage
 import dev.ide.ui.backend.UiSeverity
 import kotlin.io.path.writeText
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -265,6 +267,13 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     override fun setInspection(id: String, enabled: Boolean, severity: UiSeverity) {
         ctx.servicesOrNull?.setInspection(AnalyzerId(id), enabled, severity.toDomSeverity())
+    }
+
+    override val autoDisabledInspections: StateFlow<List<UiAutoDisabledInspection>> =
+        ctx.engineFlow(emptyList()) { it.autoDisabledInspections }
+
+    override fun reenableInspection(id: String) {
+        ctx.servicesOrNull?.releaseQuarantinedAnalyzer(AnalyzerId(id))
     }
 
     // --- settings helpers ---

@@ -26,3 +26,9 @@ val LocalPluginNavigator = staticCompositionLocalOf<(String) -> Unit> { {} }
  * ask the host for, since tabs and the caret belong to the editor state, not the backend. Default no-op.
  */
 val LocalPluginFileOpener = staticCompositionLocalOf<(String, Int) -> Unit> { { _, _ -> } }
+
+/**
+ * Open one Settings page by id, with Back returning to where it was opened from: how a notice in the editor
+ * takes the user to the setting it is about. Default no-op.
+ */
+val LocalSettingsPageOpener = staticCompositionLocalOf<(String) -> Unit> { {} }

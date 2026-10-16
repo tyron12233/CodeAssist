@@ -742,6 +742,18 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="settings_all_settings">Todas las opciones</string>
     <string name="settings_backup_ready">Copia de seguridad lista</string>
     <string name="settings_inspections_for_language">Inspecciones de %1$s</string>
+    <string name="insp_off_slow">Desactivada por ralentizar el editor: «%1$s» de %2$s</string>
+    <string name="insp_off_failing">Desactivada tras fallar varias veces: «%1$s» de %2$s</string>
+    <string name="insp_off_again_slow">Desactivada de nuevo, sigue siendo lenta: «%1$s» de %2$s</string>
+    <string name="insp_off_again_failing">Desactivada de nuevo, sigue fallando: «%1$s» de %2$s</string>
+    <plurals name="insp_off_many">
+        <item quantity="one">Se desactivó %1$d inspección de un plugin por ralentizar el editor</item>
+        <item quantity="other">Se desactivaron %1$d inspecciones de plugins por ralentizar el editor</item>
+    </plurals>
+    <string name="insp_turn_back_on">Volver a activar</string>
+    <string name="insp_keep_off">Dejarla desactivada</string>
+    <string name="insp_row_off_slow">Desactivada en esta sesión: tardó %1$d ms por análisis, por encima de su límite de %2$d ms. Las inspecciones se ejecutan en el mismo hilo que la detección de errores y el autocompletado, así que una lenta hace que escribir vaya con retraso.</string>
+    <string name="insp_row_off_failing">Desactivada en esta sesión tras fallar varias veces.</string>
     <string name="settings_advanced">Avanzado</string>
     <string name="settings_code_style">Estilo de código</string>
     <string name="settings_code_style_subtitle">Perfiles de formato por lenguaje y vista previa en vivo</string>

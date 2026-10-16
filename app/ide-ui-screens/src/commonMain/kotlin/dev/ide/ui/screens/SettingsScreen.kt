@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiAutoDisabledInspection
 import dev.ide.ui.backend.UiInspection
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettingsPage
@@ -71,6 +73,9 @@ import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.build_notif_enabled
 import dev.ide.ui.generated.resources.settings_all_settings
 import dev.ide.ui.generated.resources.settings_backup_ready
+import dev.ide.ui.generated.resources.insp_row_off_slow
+import dev.ide.ui.generated.resources.insp_row_off_failing
+import dev.ide.ui.generated.resources.insp_turn_back_on
 import dev.ide.ui.generated.resources.settings_inspections_for_language
 import dev.ide.ui.generated.resources.settings_no_settings_available
 import dev.ide.ui.generated.resources.settings_title
@@ -408,13 +413,18 @@ private fun ControlRow(
 @Composable
 private fun InspectionsCard(backend: IdeBackend) {
     var inspections by remember { mutableStateOf(backend.settings.inspections()) }
+    val autoOff by backend.settings.autoDisabledInspections.collectAsState()
     if (inspections.isEmpty()) return
     val byLang = inspections.groupBy { it.language }.toList().sortedBy { it.first }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         byLang.forEach { (lang, list) ->
             SettingsCard(stringResource(Res.string.settings_inspections_for_language, lang)) {
                 list.forEach { insp ->
-                    InspectionRow(insp) { enabled, severity ->
+                    InspectionRow(
+                        insp,
+                        autoOff = autoOff.firstOrNull { it.id == insp.id },
+                        onTurnBackOn = { backend.settings.reenableInspection(insp.id) },
+                    ) { enabled, severity ->
                         backend.settings.setInspection(insp.id, enabled, severity)
                         inspections = backend.settings.inspections()
                     }
@@ -425,7 +435,14 @@ private fun InspectionsCard(backend: IdeBackend) {
 }
 
 @Composable
-private fun InspectionRow(insp: UiInspection, onChange: (Boolean, UiSeverity) -> Unit) {
+private fun InspectionRow(
+    insp: UiInspection,
+    /** Set when CodeAssist switched this (installed plugin's) inspection off for the session. Its switch still
+     *  reads on, since the user never turned it off, so the row says why it is not running. */
+    autoOff: UiAutoDisabledInspection?,
+    onTurnBackOn: () -> Unit,
+    onChange: (Boolean, UiSeverity) -> Unit,
+) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -433,6 +450,18 @@ private fun InspectionRow(insp: UiInspection, onChange: (Boolean, UiSeverity) ->
                 Text(insp.tier, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
             }
             CaSwitch(insp.enabled) { onChange(it, insp.severity) }
+        }
+        if (autoOff != null && insp.enabled) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (autoOff.slow) stringResource(Res.string.insp_row_off_slow, autoOff.tookMs, autoOff.budgetMs)
+                    else stringResource(Res.string.insp_row_off_failing),
+                    color = Ide.colors.warning,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onTurnBackOn) { Text(stringResource(Res.string.insp_turn_back_on)) }
+            }
         }
         if (insp.enabled) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

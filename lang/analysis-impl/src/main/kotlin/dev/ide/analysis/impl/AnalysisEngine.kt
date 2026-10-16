@@ -98,13 +98,32 @@ class AnalysisEngine(
             when (report.cause) {
                 QuarantinedAnalyzer.Cause.SLOW ->
                     "'${report.displayName}' took ${report.tookMs}ms per pass (budget ${report.budgetMs}ms) and was " +
-                        "turned off for this session; re-enable it in the inspection settings"
+                        "turned off for this session; turn it back on from the editor notice or the inspection settings"
                 QuarantinedAnalyzer.Cause.FAILING ->
                     "'${report.displayName}' failed repeatedly and was turned off for this session; " +
-                        "re-enable it in the inspection settings"
+                        "turn it back on from the editor notice or the inspection settings"
             }
         )
+        for (listener in quarantineListeners) listener(report)
     }
+
+    private val quarantineListeners = CopyOnWriteArrayList<(QuarantinedAnalyzer) -> Unit>()
+
+    /**
+     * Called with each analyzer the watchdog takes off the pass, on the analysis thread, as it happens. The
+     * engine itself only logs it; a host shows it to the user, who otherwise sees a check stop reporting with
+     * no explanation.
+     */
+    fun addQuarantineListener(listener: (QuarantinedAnalyzer) -> Unit): Disposable {
+        quarantineListeners.add(listener)
+        return Disposable { quarantineListeners.remove(listener) }
+    }
+
+    /**
+     * Put the quarantined analyzer [id] back on the pass, with no strikes against it: the user chose to have it
+     * run again. It is dropped again after another run of bad passes. False when it was not quarantined.
+     */
+    fun releaseQuarantine(id: AnalyzerId): Boolean = watchdog.release(id)
 
     /** Loggers attributed to the contributing plugin, so the Logs viewer can filter by it. */
     private val pluginLoggers = ConcurrentHashMap<String, Logger>()
@@ -114,8 +133,8 @@ class AnalysisEngine(
 
     /**
      * The third-party analyzers the watchdog has taken off the pass this session, oldest first. A host
-     * surfaces these so a plugin that degrades the editor is attributable rather than anonymous; the list
-     * empties on [configure].
+     * surfaces these so a plugin that degrades the editor is attributable rather than anonymous; an entry
+     * leaves on [releaseQuarantine], or on [configure] when the user switches that check off or on.
      */
     val quarantinedAnalyzers: List<QuarantinedAnalyzer> get() = watchdog.quarantined.toList()
 
@@ -241,11 +260,13 @@ class AnalysisEngine(
     }
 
     override fun configure(profile: AnalysisProfile) {
+        val previous = this.profile
         this.profile = profile
-        // A profile change is the user revisiting which checks run, so it is also their way back: every
-        // quarantine and every strike is released here, and an analyzer the watchdog dropped gets a fresh
-        // chance to behave (after a plugin update, say). It re-earns the quarantine soon enough if not.
-        watchdog.clear()
+        // A quarantine ends when the user switches that check off or on themselves: off, it is their choice now and
+        // nothing is left to report; on again, it gets a fresh run. Any other profile change (another check's
+        // severity, say) leaves it alone, or tweaking an unrelated setting would quietly put a slow analyzer back
+        // on the typing path. The explicit way back is [releaseQuarantine].
+        for (id in (previous.disabled - profile.disabled) + (profile.disabled - previous.disabled)) watchdog.release(id)
         // The engine does not retain the open-file set; the host re-triggers analysis (analyzeNow /
         // fileChanged) for visible files after a profile change.
     }
