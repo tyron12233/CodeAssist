@@ -45,6 +45,7 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.edscreen_project_root
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.HideSystemBars
+import dev.ide.ui.platform.hiddenSystemBarsWidth
 import dev.ide.ui.platform.isMobilePlatform
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
@@ -157,8 +158,12 @@ fun EditorScreen(
     // Mirrors the layout choice below for the overlays outside it (the running-run pill).
     var wideLayout by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
+        // Measured as if every system bar showed. In zen mode Android brings the navigation bar back while the
+        // keyboard is up, and on a phone near the breakpoint in landscape the lost width flipped the layout as the
+        // keyboard opened; the editor was rebuilt, which closed the keyboard and hid the bar again.
+        val hiddenBars = hiddenSystemBarsWidth()
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            val wide = maxWidth >= COMPACT_BREAKPOINT
+            val wide = maxWidth - hiddenBars >= COMPACT_BREAKPOINT
             LaunchedEffect(wide, state.runFullScreen) {
                 wideLayout = wide
                 onRunDockedChange(wide && !state.runFullScreen)

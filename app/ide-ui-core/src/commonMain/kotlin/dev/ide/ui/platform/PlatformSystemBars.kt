@@ -1,6 +1,7 @@
 package dev.ide.ui.platform
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 
 /**
  * Match the platform's system-bar (status / navigation bar) ICON appearance to the app theme: DARK icons on a
@@ -20,3 +21,15 @@ expect fun PlatformSystemBars(darkTheme: Boolean)
  */
 @Composable
 expect fun HideSystemBars(hidden: Boolean)
+
+/**
+ * The width the hidden system bars give back to the window right now: the left and right system-bar insets the
+ * window has with every bar shown, less the ones it has. Nonzero only while bars on a side are hidden (zen mode
+ * with the navigation bar on the side, in landscape).
+ *
+ * A layout chosen by width subtracts this so it does not depend on whether those bars happen to show. Android
+ * shows the navigation bar again while the soft keyboard is up, even in immersive mode, so a width measured
+ * inside the bars changes as the keyboard opens and closes. Android only; elsewhere it is zero.
+ */
+@Composable
+expect fun hiddenSystemBarsWidth(): Dp

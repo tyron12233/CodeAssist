@@ -1,10 +1,18 @@
 package dev.ide.ui.platform
 
 import android.app.Activity
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -39,4 +47,14 @@ actual fun HideSystemBars(hidden: Boolean) {
             if (hidden) controller.show(WindowInsetsCompat.Type.systemBars())
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+actual fun hiddenSystemBarsWidth(): Dp {
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    fun WindowInsets.horizontal() = getLeft(density, direction) + getRight(density, direction)
+    val hiddenPx = WindowInsets.systemBarsIgnoringVisibility.horizontal() - WindowInsets.systemBars.horizontal()
+    return if (hiddenPx <= 0) 0.dp else with(density) { hiddenPx.toDp() }
 }
