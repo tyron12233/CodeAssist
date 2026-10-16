@@ -1,7 +1,9 @@
 package dev.ide.core
 
 import dev.ide.testkit.withTempDir
+import dev.ide.core.gradle.GradleProjectExport
 import dev.ide.model.ModuleDependency
+import dev.ide.ui.backend.RunStatus
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -45,6 +47,53 @@ class ModuleManagementTest {
             assertFalse(ide.moduleService.createModule("1bad name", "java-lib", null, emptyMap()).success, "invalid name rejected")
         }
         dir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun aModuleCreatedInAParentDirectoryBuildsAndExportsAsANestedProject() = withTempDir("ide-nestedmod") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val r = ide.moduleService.createModule("common", "java-lib", "JAVA_17", emptyMap(), parentDir = "shared/")
+            assertTrue(r.success, r.message)
+            val common = ide.modules().first { it.name == "common" }
+            assertEquals(dir.resolve("shared/common"), ide.moduleRoot(common), "the module lives under its parent")
+            assertTrue(Files.isDirectory(dir.resolve("shared/common/src/main/java")), "its sources are laid down there")
+            assertTrue(Files.isRegularFile(dir.resolve("shared/common/module.toml")), "and so is its module.toml")
+            assertFalse(Files.exists(dir.resolve("common")), "nothing is created at the project root")
+
+            // The same directory twice, a parent that climbs out, and a hidden one are all refused.
+            assertFalse(ide.moduleService.createModule("other", "java-lib", null, emptyMap(), parentDir = "../x").success)
+            assertFalse(ide.moduleService.createModule("other", "java-lib", null, emptyMap(), parentDir = ".platform").success)
+            assertFalse(ide.moduleService.createModule("other", "java-lib", null, emptyMap(), parentDir = "a//b").success)
+
+            // It is an ordinary module: the app can depend on it, and the build compiles and runs through it.
+            Files.createDirectories(dir.resolve("shared/common/src/main/java/com/example/common"))
+            Files.writeString(
+                dir.resolve("shared/common/src/main/java/com/example/common/Shout.java"),
+                "package com.example.common;\npublic class Shout { public static String it() { return \"FROM SHARED/COMMON\"; } }\n",
+            )
+            assertTrue(ide.dependencies.addModuleDependency("app", "common", "implementation").success)
+            val app = ide.modules().first { it.name == "app" }
+            ide.updateDocument(
+                ide.sourceRoots(app).first().resolve("com/example/app/Main.java"),
+                "package com.example.app;\npublic class Main { public static void main(String[] a) { " +
+                    "System.out.println(com.example.common.Shout.it()); } }",
+            )
+            ide.build.runBuild()
+            val deadline = System.currentTimeMillis() + 60_000
+            while (ide.build.buildState.value.status == RunStatus.Running && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            val state = ide.build.buildState.value
+            assertEquals(RunStatus.Succeeded, state.status, "log:\n${state.log.joinToString("\n")}")
+            val transcript = ide.build.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
+            assertTrue("FROM SHARED/COMMON" in transcript, "the nested module's class ran:\n$transcript")
+
+            val files = GradleProjectExport.render(dir).files
+            assertTrue("""include(":shared:common")""" in files.getValue("settings.gradle.kts"), "Gradle sees the nesting")
+            assertTrue("shared/common/build.gradle.kts" in files, "with the build file in the module's directory")
+        }
+        IdeServices.open(dir).use { reopened ->
+            val common = reopened.modules().first { it.name == "common" }
+            assertEquals(dir.resolve("shared/common"), reopened.moduleRoot(common), "the directory survives a reopen")
+        }
     }
 
     @Test

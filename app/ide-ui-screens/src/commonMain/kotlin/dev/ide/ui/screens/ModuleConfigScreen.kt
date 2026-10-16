@@ -149,6 +149,10 @@ import dev.ide.ui.generated.resources.modcfg_missing_keep_rule_files
 import dev.ide.ui.generated.resources.modcfg_missing_keep_rule_files_content
 import dev.ide.ui.generated.resources.modcfg_module_name_placeholder
 import dev.ide.ui.generated.resources.modcfg_name
+import dev.ide.ui.generated.resources.modcfg_module_location
+import dev.ide.ui.generated.resources.modcfg_parent_dir
+import dev.ide.ui.generated.resources.modcfg_parent_dir_hint
+import dev.ide.ui.generated.resources.modcfg_parent_dir_placeholder
 import dev.ide.ui.generated.resources.modcfg_new_badge
 import dev.ide.ui.generated.resources.modcfg_new_module
 import dev.ide.ui.generated.resources.modcfg_no_module_types
@@ -906,7 +910,7 @@ private fun NewModuleDialog(
     backend: IdeBackend,
     codeFont: FontFamily,
     onDismiss: () -> Unit,
-    onCreate: (name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>) -> Unit,
+    onCreate: (name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>, parentDir: String) -> Unit,
 ) {
     DropdownOverlay(visible = visible, onDismiss = onDismiss, topPadding = 56.dp) {
         val types = remember { backend.modules.availableModuleTypes() }
@@ -919,6 +923,9 @@ private fun NewModuleDialog(
                 Text(stringResource(Res.string.modcfg_no_module_types), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             } else {
                 var name by remember { mutableStateOf("") }
+                // Where the module goes, relative to the project root: blank is the root itself, `core` puts
+                // `common` at `core/common`. The backend validates it; this only normalises what is shown.
+                var parentDir by remember { mutableStateOf("") }
                 var typeIdx by remember { mutableStateOf(0) }
                 val type = types[typeIdx.coerceIn(0, types.lastIndex)]
                 var level by remember(type.id) { mutableStateOf(type.defaultLanguageLevel) }
@@ -934,6 +941,27 @@ private fun NewModuleDialog(
                             onValueChange = { name = it },
                             label = { Text(stringResource(Res.string.modcfg_name)) },
                             placeholder = { Text(stringResource(Res.string.modcfg_module_name_placeholder)) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = codeFont),
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    item("parentDir") {
+                        val parent = parentDir.trim().replace('\\', '/').trim('/')
+                        val location = listOf(parent, name.trim()).filter { it.isNotEmpty() }.joinToString("/")
+                        OutlinedTextField(
+                            value = parentDir,
+                            onValueChange = { parentDir = it },
+                            label = { Text(stringResource(Res.string.modcfg_parent_dir)) },
+                            placeholder = { Text(stringResource(Res.string.modcfg_parent_dir_placeholder)) },
+                            supportingText = {
+                                Text(
+                                    if (name.isBlank()) stringResource(Res.string.modcfg_parent_dir_hint)
+                                    else stringResource(Res.string.modcfg_module_location, "$location/"),
+                                )
+                            },
+                            leadingIcon = { Icon(CaIcons.folder, null, Modifier.size(18.dp)) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = codeFont),
                             shape = MaterialTheme.shapes.small,
@@ -958,7 +986,7 @@ private fun NewModuleDialog(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Spacer(Modifier.weight(1f))
                     DialogTextButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
-                    Button(onClick = { onCreate(name.trim(), type.id, level, forms.associate { it.table to it.toValues() }) }) {
+                    Button(onClick = { onCreate(name.trim(), type.id, level, forms.associate { it.table to it.toValues() }, parentDir.trim()) }) {
                         Icon(CaIcons.check, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(Res.string.create))

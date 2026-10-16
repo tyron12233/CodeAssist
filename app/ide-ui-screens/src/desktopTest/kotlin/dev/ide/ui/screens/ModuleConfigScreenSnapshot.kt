@@ -17,6 +17,7 @@ import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleRef
+import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSdkOption
 import dev.ide.ui.backend.UiSourceSetInfo
@@ -84,6 +85,10 @@ class ModuleConfigScreenSnapshot {
 
     private inner class FakeBackend(private val moduleRefs: List<UiModuleRef> = MODULES) : StubBackend() {
         override fun configurableModules(): List<UiModuleRef> = moduleRefs
+        override fun availableModuleTypes(): List<UiModuleTypeOption> = listOf(
+            UiModuleTypeOption("java-lib", "Java Library", listOf("JAVA_11", "JAVA_17", "JAVA_21"), "JAVA_17", emptyList()),
+            UiModuleTypeOption("android-lib", "Android Library", listOf("JAVA_11", "JAVA_17"), "JAVA_17", emptyList()),
+        )
         override suspend fun getModuleConfig(moduleName: String): UiModuleConfig = if (moduleName == "cli") javaConfig else androidConfig
         override suspend fun getBuildFeatures(moduleName: String): UiBuildFeatures? =
             if (moduleName == "cli") null else UiBuildFeatures(moduleName, listOf(UiBuildFeature("viewBinding", "View binding", "Generate binding classes", false)))
@@ -102,6 +107,12 @@ class ModuleConfigScreenSnapshot {
     @Test
     fun phoneSettings() {
         render("modules-phone-settings.png", PHONE_W, PHONE_H, FakeBackend(), initialModule = "app")
+    }
+
+    /** The New-module dialog carries a parent-directory field and says where the module will land. */
+    @Test
+    fun phoneNewModuleDialog() {
+        render("modules-phone-new.png", PHONE_W, PHONE_H, FakeBackend(emptyList()), initialModule = null, click = NEW_MODULE_PHONE_EMPTY)
     }
 
     /** A console module has no Android facet: only Settings and Dependencies, plus the Run card. */
@@ -166,6 +177,9 @@ class ModuleConfigScreenSnapshot {
             UiModuleRef("core", "Android Library"),
             UiModuleRef("cli", "Java Application"),
         )
+
+        /** The empty list's "New module" button on the phone viewport. */
+        val NEW_MODULE_PHONE_EMPTY = Offset(411f, 1143f)
 
         /** 411 x 890 dp at 2x: a typical phone. */
         const val PHONE_W = 822

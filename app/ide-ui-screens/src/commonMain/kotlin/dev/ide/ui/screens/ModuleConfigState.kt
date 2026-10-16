@@ -95,9 +95,10 @@ internal class ModulesListState(
         typeId: String,
         languageLevel: String?,
         facetValues: Map<String, Map<String, Any?>>,
+        parentDir: String,
     ) {
         scope.launch {
-            val result = backend.modules.createModule(name, typeId, languageLevel, facetValues)
+            val result = backend.modules.createModule(name, typeId, languageLevel, facetValues, parentDir)
             if (report(result)) {
                 newModuleOpen = false
                 reload()

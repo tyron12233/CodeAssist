@@ -837,6 +837,10 @@
     <string name="modcfg_new_module">Новый модуль</string>
     <string name="modcfg_name">Имя</string>
     <string name="modcfg_module_name_placeholder">например feature, core</string>
+    <string name="modcfg_parent_dir">Родительская папка</string>
+    <string name="modcfg_parent_dir_placeholder">Корень проекта или, например, core, feature</string>
+    <string name="modcfg_parent_dir_hint">Оставьте пустым, чтобы создать модуль в корне проекта</string>
+    <string name="modcfg_module_location">Будет создан в %1$s</string>
     <string name="modcfg_type">Тип</string>
     <string name="modcfg_java_version">Версия Java</string>
     <string name="modcfg_couldnt_load_config">Не удалось загрузить конфигурацию модуля.</string>

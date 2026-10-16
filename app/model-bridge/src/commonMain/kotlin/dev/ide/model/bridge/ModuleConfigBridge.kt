@@ -314,6 +314,10 @@ class ModuleConfigBridge(
     /**
      * Create module [name] of [typeId] in the first open project, with its source-set directories on disk.
      *
+     * The module's directory is [parentDir]`/`[name] under the project root, or [name] alone when
+     * [parentDir] is blank: `core` + `common` lands in `core/common`, which the Gradle export writes as
+     * `:core:common`. The module NAME stays [name], so it is still what dependencies and the screen use.
+     *
      * The type's own [dev.ide.model.ModuleType.defaultSourceSets] are used when it declares any, and
      * [fallbackSourceDir] otherwise: a type that describes its layout should not have one invented for it,
      * and a type that declares none (the plain `java-lib` the built-in templates use) still needs somewhere
@@ -328,6 +332,7 @@ class ModuleConfigBridge(
         languageLevel: String?,
         facetValues: Map<String, Map<String, Any?>>,
         fallbackSourceDir: String = DEFAULT_SOURCE_DIR,
+        parentDir: String = "",
     ): UiConfigResult {
         val moduleName = name.trim()
         if (!isValidModuleName(moduleName)) return UiConfigResult(
@@ -336,10 +341,17 @@ class ModuleConfigBridge(
         if (modules().any { it.name == moduleName }) {
             return UiConfigResult(false, "A module named '$moduleName' already exists.")
         }
+        val parent = normalizeParentDir(parentDir) ?: return UiConfigResult(
+            false, "Invalid directory. Use folder names separated by '/', such as core or features/home.",
+        )
+        val dirRelPath = if (parent.isEmpty()) moduleName else "$parent/$moduleName"
         val type = store.moduleTypes.byId(typeId)
             ?: return UiConfigResult(false, "Unknown module type '$typeId'.")
         val project = store.workspace.projects.firstOrNull()
             ?: return UiConfigResult(false, "No project to add a module to.")
+        project.modules.firstOrNull { it.dirRelPath().equals(dirRelPath, ignoreCase = true) }?.let { owner ->
+            return UiConfigResult(false, "Module '${owner.name}' already uses the directory '$dirRelPath'.")
+        }
         val level = languageLevel?.let { requested ->
             LanguageLevel.values().firstOrNull { it.name == requested }
                 ?: return UiConfigResult(false, "Unknown language level '$requested'.")
@@ -356,6 +368,7 @@ class ModuleConfigBridge(
         return runCatching {
             project.beginModification().apply {
                 addModule(moduleName, type).apply {
+                    this.dirRelPath = dirRelPath
                     this.languageLevel = level ?: LanguageLevel.JAVA_17
                     sourceSets.forEach { addSourceSet(it) }
                     facetValues.forEach { (table, values) -> putFacetData(FacetData(table, values)) }
@@ -367,7 +380,7 @@ class ModuleConfigBridge(
                 val primary = created.sourceSets.filter { it.name == "main" }.ifEmpty { created.sourceSets }
                 primary.flatMap { materializedRoots(it) }.forEach { createDirectories(it.dir.path) }
             }
-            UiConfigResult(true, "Created $moduleName")
+            UiConfigResult(true, if (parent.isEmpty()) "Created $moduleName" else "Created $moduleName in $parent")
         }.getOrElse { UiConfigResult(false, "Could not create the module: ${it.message}") }
     }
 
@@ -420,6 +433,29 @@ class ModuleConfigBridge(
 
     private fun isValidModuleName(name: String): Boolean =
         name.isNotEmpty() && name.first().isLetter() && name.all { it.isLetterOrDigit() || it == '-' || it == '_' }
+
+    /**
+     * [raw] as a project-relative folder path (`core`, `features/home`), `""` for the project root, or null
+     * when it is not one: absolute, climbing out with `..`, or a segment Gradle could not turn into a project
+     * path. Separators may be either slash and may lead or trail.
+     */
+    private fun normalizeParentDir(raw: String): String? {
+        val trimmed = raw.trim().replace('\\', '/').trim('/')
+        if (trimmed.isEmpty()) return ""
+        val segments = trimmed.split('/')
+        val valid = segments.all { seg ->
+            seg.isNotEmpty() && seg != "." && seg != ".." && !seg.startsWith('.') &&
+                seg.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' }
+        }
+        // `C:` and the like: a drive letter is a colon, which the segment check already refuses.
+        return if (valid) segments.joinToString("/") else null
+    }
+
+    /** This module's directory relative to its project root, the form `createModule` compares against. */
+    private fun Module.dirRelPath(): String {
+        val root = projectOf(this)?.rootDir?.path?.replace('\\', '/')?.trimEnd('/') ?: return name
+        return dir.path.replace('\\', '/').removePrefix(root).trim('/')
+    }
 
     companion object {
         /** Where a module created with no type-declared layout puts its sources. */

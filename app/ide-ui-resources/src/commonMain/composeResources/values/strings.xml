@@ -1525,6 +1525,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_new_module">New module</string>
     <string name="modcfg_name">Name</string>
     <string name="modcfg_module_name_placeholder">e.g. feature, core</string>
+    <string name="modcfg_parent_dir">Parent directory</string>
+    <string name="modcfg_parent_dir_placeholder">Project root, or e.g. core, feature</string>
+    <string name="modcfg_parent_dir_hint">Leave empty to create it in the project root</string>
+    <string name="modcfg_module_location">Created at %1$s</string>
     <string name="modcfg_type">Type</string>
     <string name="modcfg_java_version">Java version</string>
     <string name="modcfg_couldnt_load_config">Couldn't load module configuration.</string>

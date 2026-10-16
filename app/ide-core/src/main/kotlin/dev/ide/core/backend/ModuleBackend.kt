@@ -83,9 +83,10 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
         name: String,
         typeId: String,
         languageLevel: String?,
-        facetValues: Map<String, Map<String, Any?>>
+        facetValues: Map<String, Map<String, Any?>>,
+        parentDir: String,
     ): UiConfigResult = withContext(Dispatchers.IO) {
-        ctx.services.moduleService.createModule(name, typeId, languageLevel, facetValues)
+        ctx.services.moduleService.createModule(name, typeId, languageLevel, facetValues, parentDir)
             .also { if (it.success) ctx.bumpFileSystemEpoch() }
     }
 

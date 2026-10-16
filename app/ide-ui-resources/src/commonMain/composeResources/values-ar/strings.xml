@@ -1573,6 +1573,10 @@
     <string name="modcfg_new_module">وحدة جديدة</string>
     <string name="modcfg_name">الاسم</string>
     <string name="modcfg_module_name_placeholder">مثلاً feature، core</string>
+    <string name="modcfg_parent_dir">المجلد الأب</string>
+    <string name="modcfg_parent_dir_placeholder">جذر المشروع، أو مثلاً core، feature</string>
+    <string name="modcfg_parent_dir_hint">اتركه فارغاً لإنشائها في جذر المشروع</string>
+    <string name="modcfg_module_location">يُنشأ في %1$s</string>
     <string name="modcfg_type">النوع</string>
     <string name="modcfg_java_version">إصدار Java</string>
     <string name="modcfg_couldnt_load_config">تعذّر تحميل تكوين الوحدة.</string>

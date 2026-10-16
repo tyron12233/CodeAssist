@@ -659,18 +659,22 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
     }
 
     /**
-     * Create a new module [name] of [typeId] with [languageLevel] and [facetValues], laying down the type's
-     * default source-set directories on disk, persisting `module.toml`, and refreshing analyzers/index.
+     * Create a new module [name] of [typeId] with [languageLevel] and [facetValues] in [parentDir]`/`[name]
+     * ([name] alone when [parentDir] is blank), laying down the type's default source-set directories on
+     * disk, persisting `module.toml`, and refreshing analyzers/index.
      */
     fun createModule(
         name: String,
         typeId: String,
         languageLevel: String?,
-        facetValues: Map<String, Map<String, Any?>>
+        facetValues: Map<String, Map<String, Any?>>,
+        parentDir: String = "",
     ): UiConfigResult {
         // `src/main/java` rather than the bridge's Kotlin default: this host compiles Java, and its
         // `JavaPlugin` registers a `compileKotlin` task for any `.kt` under the same root anyway.
-        val result = model.createModule(name, typeId, languageLevel, facetValues, fallbackSourceDir = "src/main/java")
+        val result = model.createModule(
+            name, typeId, languageLevel, facetValues, fallbackSourceDir = "src/main/java", parentDir = parentDir,
+        )
         if (!result.success) return result
         ctx.invalidateAnalyzers()
         ctx.invalidateSyntheticClasses()

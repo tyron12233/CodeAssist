@@ -921,6 +921,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="modcfg_new_module">Novo módulo</string>
     <string name="modcfg_name">Nome</string>
     <string name="modcfg_module_name_placeholder">ex.: feature, core</string>
+    <string name="modcfg_parent_dir">Diretório pai</string>
+    <string name="modcfg_parent_dir_placeholder">Raiz do projeto, ou ex.: core, feature</string>
+    <string name="modcfg_parent_dir_hint">Deixe vazio para criá-lo na raiz do projeto</string>
+    <string name="modcfg_module_location">Criado em %1$s</string>
     <string name="modcfg_type">Tipo</string>
     <string name="modcfg_java_version">Versão do Java</string>
     <string name="modcfg_couldnt_load_config">Não foi possível carregar a configuração do módulo.</string>

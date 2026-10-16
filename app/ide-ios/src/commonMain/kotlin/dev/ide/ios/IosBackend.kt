@@ -1151,10 +1151,11 @@ class IosBackend(
         typeId: String,
         languageLevel: String?,
         facetValues: Map<String, Map<String, Any?>>,
+        parentDir: String,
     ): UiConfigResult {
         val bridge = moduleConfig() ?: return UiConfigResult(false, "Open a project first")
         val result = withContext(ioDispatcher) {
-            bridge.createModule(name, typeId, languageLevel, facetValues)
+            bridge.createModule(name, typeId, languageLevel, facetValues, parentDir = parentDir)
         }
         if (result.success) { bumpFs(); resetAnalysis() }
         return result

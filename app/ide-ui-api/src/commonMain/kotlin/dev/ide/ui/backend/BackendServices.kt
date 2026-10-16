@@ -634,8 +634,17 @@ interface ModuleService {
     /** The module types a new module can be created as. */
     fun availableModuleTypes(): List<UiModuleTypeOption> = emptyList()
 
-    /** Create a new module [name] of [typeId] with [languageLevel] and [facetValues]. */
-    suspend fun createModule(name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>): UiConfigResult =
+    /**
+     * Create a new module [name] of [typeId] with [languageLevel] and [facetValues], in the directory
+     * [parentDir]`/`[name] under the project root ([name] alone when [parentDir] is blank).
+     */
+    suspend fun createModule(
+        name: String,
+        typeId: String,
+        languageLevel: String?,
+        facetValues: Map<String, Map<String, Any?>>,
+        parentDir: String = "",
+    ): UiConfigResult =
         UiConfigResult(false, "Module management not supported by this backend")
 
     /** Remove the module [name] from the project model (its files are left on disk). */

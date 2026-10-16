@@ -879,6 +879,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="modcfg_new_module">Modul baru</string>
     <string name="modcfg_name">Nama</string>
     <string name="modcfg_module_name_placeholder">mis. feature, core</string>
+    <string name="modcfg_parent_dir">Direktori induk</string>
+    <string name="modcfg_parent_dir_placeholder">Root proyek, atau mis. core, feature</string>
+    <string name="modcfg_parent_dir_hint">Biarkan kosong untuk membuatnya di root proyek</string>
+    <string name="modcfg_module_location">Dibuat di %1$s</string>
     <string name="modcfg_type">Tipe</string>
     <string name="modcfg_java_version">Versi Java</string>
     <string name="modcfg_couldnt_load_config">Tidak dapat memuat konfigurasi modul.</string>

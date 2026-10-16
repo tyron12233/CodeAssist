@@ -1505,6 +1505,10 @@
     <string name="modcfg_new_module">新建模块</string>
     <string name="modcfg_name">名称</string>
     <string name="modcfg_module_name_placeholder">例如 feature、core</string>
+    <string name="modcfg_parent_dir">父目录</string>
+    <string name="modcfg_parent_dir_placeholder">项目根目录，或例如 core、feature</string>
+    <string name="modcfg_parent_dir_hint">留空则创建在项目根目录</string>
+    <string name="modcfg_module_location">创建于 %1$s</string>
     <string name="modcfg_type">类型</string>
     <string name="modcfg_java_version">Java 版本</string>
     <string name="modcfg_couldnt_load_config">无法加载模块配置。</string>

@@ -965,6 +965,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="modcfg_new_module">Nuevo módulo</string>
     <string name="modcfg_name">Nombre</string>
     <string name="modcfg_module_name_placeholder">p. ej. feature, core</string>
+    <string name="modcfg_parent_dir">Directorio padre</string>
+    <string name="modcfg_parent_dir_placeholder">Raíz del proyecto, o p. ej. core, feature</string>
+    <string name="modcfg_parent_dir_hint">Déjalo vacío para crearlo en la raíz del proyecto</string>
+    <string name="modcfg_module_location">Se crea en %1$s</string>
     <string name="modcfg_type">Tipo</string>
     <string name="modcfg_java_version">Versión de Java</string>
     <string name="modcfg_couldnt_load_config">No se pudo cargar la configuración del módulo.</string>

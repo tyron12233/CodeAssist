@@ -245,6 +245,29 @@ class ModelBridgeTest {
         assertFalse(bridge.removeModule("core"), "already gone")
     }
 
+    @Test
+    fun aModuleCanBeCreatedInsideAParentDirectory() {
+        val bridge = ModuleConfigBridge(workspace())
+
+        val created = bridge.createModule("common", "java-lib", null, emptyMap(), parentDir = " \\core\\ ")
+        assertTrue(created.success, created.message)
+        assertEquals(dir.resolve("core/common").toString(), assertNotNull(bridge.module("common")).dir.path)
+        assertTrue(dir.resolve("core/common/src/main/kotlin").exists(), "the layout lands under the parent")
+        assertTrue(bridge.createModule("ui", "java-lib", null, emptyMap(), parentDir = "features/home").success)
+        assertTrue(dir.resolve("features/home/ui/src/main/kotlin").exists(), "a parent may be several folders deep")
+
+        val taken = bridge.createModule("COMMON2", "java-lib", null, emptyMap(), parentDir = "core")
+        assertTrue(taken.success, "a different name in the same parent is fine")
+        assertFalse(bridge.createModule("app", "java-lib", null, emptyMap(), parentDir = "core").success, "names stay unique")
+        listOf("..", "core/../..", ".hidden", "a//b", "C:/x", "has space").forEach { bad ->
+            assertFalse(bridge.createModule("m", "java-lib", null, emptyMap(), parentDir = bad).success, "refused: '$bad'")
+        }
+        assertEquals(
+            setOf("app", "common", "ui", "COMMON2"), bridge.configurableModules().map { it.name }.toSet(),
+            "a refused directory creates nothing",
+        )
+    }
+
     // ---- dependencies --------------------------------------------------------------------------------
 
     @Test
