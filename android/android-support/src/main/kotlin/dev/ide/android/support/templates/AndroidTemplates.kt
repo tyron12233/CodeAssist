@@ -53,7 +53,10 @@ internal object AndroidTemplateSupport {
     const val COMPILE_SDK = AndroidApiLevels.LATEST
 
     /** Google's Material Components for Android — the library behind Material You theming + the FAB/Snackbar. */
-    const val MATERIAL_COORDINATE = "com.google.android.material:material:1.12.0"
+    const val MATERIAL_COORDINATE = "com.google.android.material:material:1.14.0"
+
+    /** The lowest minSdk [MATERIAL_COORDINATE] supports (Material 1.14 declares 23). */
+    const val MATERIAL_MIN_SDK = 23
 
     fun isKotlin(args: TemplateArgs): Boolean = args.string("language", "java").equals("kotlin", ignoreCase = true)
 
@@ -246,9 +249,9 @@ object MaterialYouAppTemplate : ProjectTemplate {
 
     override fun parameters(): List<TemplateParameter> = listOf(
         AndroidTemplateSupport.languageParam,
-        // Material Components requires minSdk 21; drop the lower options the plain app template offers.
+        // Material Components requires minSdk 23; drop the lower options the plain app template offers.
         AndroidTemplateSupport.minSdkParam.copy(
-            options = AndroidTemplateSupport.minSdkParam.options.filter { it.value.toInt() >= 21 },
+            options = AndroidTemplateSupport.minSdkParam.options.filter { it.value.toInt() >= AndroidTemplateSupport.MATERIAL_MIN_SDK },
             defaultIndex = 0,
         ),
         AndroidTemplateSupport.targetSdkParam,
@@ -259,7 +262,7 @@ object MaterialYouAppTemplate : ProjectTemplate {
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
-        val minSdk = args.int("minSdk", 21)
+        val minSdk = args.int("minSdk", AndroidTemplateSupport.MATERIAL_MIN_SDK)
         val targetSdk = args.int("targetSdk", AndroidTemplateSupport.COMPILE_SDK)
         val kotlin = AndroidTemplateSupport.isKotlin(args)
         scaffold.workspace.beginModification().apply {

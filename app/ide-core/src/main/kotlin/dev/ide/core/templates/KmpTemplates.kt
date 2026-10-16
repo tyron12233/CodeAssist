@@ -98,14 +98,14 @@ internal object KmpTemplateSupport {
      */
     private val CATALOG = """
         [versions]
-        agp = "8.7.3"
-        android-compileSdk = "35"
+        agp = "${dev.ide.core.gradle.GradleProjectExport.AGP_VERSION}"
+        android-compileSdk = "36"
         android-minSdk = "24"
-        android-targetSdk = "35"
-        androidx-activityCompose = "1.10.1"
+        android-targetSdk = "36"
+        androidx-activityCompose = "1.13.0"
         composeMultiplatform = "1.11.1"
         kotlin = "2.2.20"
-        kotlinx-coroutines = "1.10.2"
+        kotlinx-coroutines = "1.11.0"
 
         [libraries]
         kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

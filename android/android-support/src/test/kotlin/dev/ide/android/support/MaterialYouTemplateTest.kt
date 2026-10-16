@@ -38,7 +38,7 @@ class MaterialYouTemplateTest {
         val minSdk = MaterialYouAppTemplate.parameters()
             .filterIsInstance<dev.ide.model.template.TemplateParameter.Choice>()
             .first { it.key == "minSdk" }
-        assertTrue(minSdk.options.all { it.value.toInt() >= 21 }, "Material requires minSdk >= 21")
+        assertTrue(minSdk.options.all { it.value.toInt() >= 23 }, "Material requires minSdk >= 23")
     }
 
     @Test

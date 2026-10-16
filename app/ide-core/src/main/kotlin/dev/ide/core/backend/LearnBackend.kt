@@ -465,7 +465,7 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
         const val COMPOSE_PREPARE_WAIT_MS = 180_000L
 
         /** The coroutines runtime for interactive coroutine lessons (matches the app's catalog version). */
-        const val COROUTINES_COORD = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
+        const val COROUTINES_COORD = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0"
 
         /** The `androidx.compose.*` set the Compose scratch resolves so a `@Composable` lowers (`Text`/`Column`/
          *  `Button` resolve to real FQNs the call resolver's top-level-function index finds — the same AARs the
@@ -474,11 +474,11 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
          *  device's bundled Compose. Attaches only because the scratch is an ANDROID module (`android-library`);
          *  `activity-compose` is omitted — a preview never needs an Activity. */
         val COMPOSE_COORDS = listOf(
-            "androidx.compose.runtime:runtime:1.7.5",
-            "androidx.compose.ui:ui:1.7.5",
-            "androidx.compose.foundation:foundation:1.7.5",
-            "androidx.compose.material3:material3:1.3.1",
-            "androidx.compose.ui:ui-tooling-preview:1.7.5",
+            "androidx.compose.runtime:runtime:1.11.2",
+            "androidx.compose.ui:ui:1.11.2",
+            "androidx.compose.foundation:foundation:1.11.2",
+            "androidx.compose.material3:material3:1.4.0",
+            "androidx.compose.ui:ui-tooling-preview:1.11.2",
         )
     }
 }

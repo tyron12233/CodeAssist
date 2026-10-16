@@ -15,7 +15,7 @@ import dev.ide.platform.log.Log
 /**
  * A Jetpack Compose application: one `app` module (android-app) whose UI is built in Compose, with
  * `@Composable` functions and `@Preview`s that the editor can render through the on-device Compose
- * interpreter (see `docs/compose-interpreter.md`). Kotlin-only; Compose requires minSdk 21.
+ * interpreter (see `docs/compose-interpreter.md`). Kotlin-only; Compose requires minSdk 23.
  *
  * The starter screen is a `Greeting` composable shown via `setContent`, plus two `@Preview` composables — a
  * single `Text` and a `Column` of `Text`s — to showcase the editor Preview button on both a leaf and a
@@ -31,9 +31,11 @@ object JetpackComposeAppTemplate : ProjectTemplate {
     private val log = Log.logger("Jetpack Compose Template Generator")
 
     override fun parameters(): List<TemplateParameter> = listOf(
-        // Compose requires minSdk 21+; drop the lower options.
+        // Compose requires minSdk 23+; drop the lower options.
         AndroidTemplateSupport.minSdkParam.copy(
-            options = AndroidTemplateSupport.minSdkParam.options.filter { it.value.toInt() >= 21 },
+            options = AndroidTemplateSupport.minSdkParam.options.filter {
+                it.value.toInt() >= dev.ide.android.support.AndroidFeatureDependencies.COMPOSE_MIN_SDK
+            },
             defaultIndex = 0,
         ),
         AndroidTemplateSupport.targetSdkParam,
@@ -44,7 +46,7 @@ object JetpackComposeAppTemplate : ProjectTemplate {
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
-        val minSdk = args.int("minSdk", 21)
+        val minSdk = args.int("minSdk", dev.ide.android.support.AndroidFeatureDependencies.COMPOSE_MIN_SDK)
         val targetSdk = args.int("targetSdk", AndroidTemplateSupport.COMPILE_SDK)
         scaffold.workspace.beginModification().apply {
             addProject(args.name, BuildSystemId.NATIVE, scaffold.rootDir)

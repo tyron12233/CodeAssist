@@ -11,14 +11,20 @@ object AndroidFeatureDependencies {
     /** The ViewBinding runtime — `androidx.viewbinding.ViewBinding`, which every generated binding implements. */
     val VIEW_BINDING: List<String> = listOf("androidx.databinding:viewbinding:8.7.3")
 
-    /** The Compose runtime + preview tooling (the set the Jetpack Compose template declares). */
+    /** The Compose runtime + preview tooling (the set the Jetpack Compose template declares). Kept on the
+     *  versions the IDE itself builds with (`libs.versions.toml` `androidxCompose`, `androidxComposeMaterial3`,
+     *  `activityCompose`), since @Preview renders against the IDE's bundled Compose. These need minSdk
+     *  [COMPOSE_MIN_SDK] and compileSdk 36. */
     val COMPOSE: List<String> = listOf(
-        "androidx.activity:activity-compose:1.9.3",
-        "androidx.compose.ui:ui:1.7.5",
-        "androidx.compose.foundation:foundation:1.7.5",
-        "androidx.compose.material3:material3:1.3.1",
-        "androidx.compose.ui:ui-tooling-preview:1.7.5",
+        "androidx.activity:activity-compose:1.13.0",
+        "androidx.compose.ui:ui:1.11.2",
+        "androidx.compose.foundation:foundation:1.11.2",
+        "androidx.compose.material3:material3:1.4.0",
+        "androidx.compose.ui:ui-tooling-preview:1.11.2",
     )
+
+    /** The lowest minSdk [COMPOSE] supports: activity-compose 1.13 and Compose ui/foundation 1.11 declare 23. */
+    const val COMPOSE_MIN_SDK = 23
 
     /** The kotlin-parcelize runtime — carries the `@Parcelize`/`Parceler` annotations. Adding it puts the
      *  `@Parcelize` marker on the classpath, which is what activates the bundled parcelize compiler plugin. */
