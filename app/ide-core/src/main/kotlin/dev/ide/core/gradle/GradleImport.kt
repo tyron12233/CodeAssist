@@ -31,6 +31,9 @@ object GradleImport {
     private val SETTINGS_FILES = listOf("settings.gradle", "settings.gradle.kts")
 
     private const val COMPOSE_MP_PLUGIN = "org.jetbrains.compose"
+    private const val KOTLIN_GROUP = "org.jetbrains.kotlin:"
+    private const val KOTLIN_PLUGIN_NAMESPACE = "org.jetbrains.kotlin"
+    private const val KOTLIN_GRADLE_PLUGIN = "org.jetbrains.kotlin:kotlin-gradle-plugin"
     private const val KOTLIN_TEST = "org.jetbrains.kotlin:kotlin-test"
     private val KOTLIN_TEST_FRAMEWORKS = listOf("junit", "junit5", "testng").map { "$KOTLIN_TEST-$it" }
     /** What `compose.material3` resolves to under every Compose Multiplatform plugin from 1.9.0 on. */
@@ -138,6 +141,8 @@ object GradleImport {
         val rootName: String,
         /** The Compose Multiplatform plugin version, which versions the `compose.*` dependency accessors. */
         val composeVersion: String?,
+        /** The Kotlin Gradle plugin version, which versions a versionless `org.jetbrains.kotlin` dependency. */
+        val kotlinVersion: String?,
         /** `allprojects { group = … }` / `subprojects { group = … }` in the root script. */
         val sharedGroup: String?,
         /** Which target a KMP module declaring both Android and JVM is imported for. */
@@ -210,6 +215,7 @@ object GradleImport {
             composeVersion = catalog.plugins.values.firstOrNull { it.id == COMPOSE_MP_PLUGIN }?.version
                 ?.takeIf { it.isNotBlank() }
                 ?: listOfNotNull(rootBuild, settings).firstNotNullOfOrNull { composePluginVersion(it) },
+            kotlinVersion = projectKotlinVersion(root, catalog, rootBuild, settings, rootVars),
             sharedGroup = listOf("allprojects", "subprojects").firstNotNullOfOrNull { block ->
                 GradleScript.blockBody(rootBuild, block)?.let { firstGroup(it, GROUP_ASSIGNMENT) }
             },
@@ -383,9 +389,10 @@ object GradleImport {
 
         // The module's own blocks, then each modeled KMP source set's: a test set's declarations are test-scoped
         // whatever configuration they name. The first declaration of a coordinate wins, so main beats test.
+        val kotlinVersion = context.kotlinVersion ?: kotlinPluginVersion(build, vars)
         val parsedDeps = (listOf(depBodies.joinToString("\n") to false) + kmp?.dependencyBodies.orEmpty())
             .map { (body, test) ->
-                parseDependencies(body, catalog, vars, name, moduleNames, context.composeVersion, notes, testOnly = test)
+                parseDependencies(body, catalog, vars, name, moduleNames, context.composeVersion, kotlinVersion, notes, testOnly = test)
             }
         val maven = withKotlinTestFramework(
             parsedDeps.flatMap { it.first }.distinctBy { it.coordinate to it.variant },
@@ -579,6 +586,7 @@ object GradleImport {
         module: String,
         moduleNames: Map<String, String>,
         composeVersion: String?,
+        kotlinVersion: String?,
         notes: MutableList<String>,
         /** Every declaration is test-scoped: the block belongs to a KMP test source set (`commonTest`). */
         testOnly: Boolean = false,
@@ -587,7 +595,12 @@ object GradleImport {
         val modules = LinkedHashMap<String, ModuleDep>()
         val platforms = LinkedHashMap<String, PlatformDep>()
 
-        fun addLib(coord: String, scope: DependencyScope, variant: String?, isPlatform: Boolean) {
+        fun addLib(declared: String, scope: DependencyScope, variant: String?, isPlatform: Boolean) {
+            // The Kotlin Gradle plugin versions every `org.jetbrains.kotlin` module declared without one
+            // (`kotlin("test")`, a catalog entry with no version) at its own version. Left versionless, nothing
+            // here supplies one and the dependency could not be resolved.
+            val coord = if (kotlinVersion != null && declared.startsWith(KOTLIN_GROUP) && declared.count { it == ':' } == 1)
+                "$declared:$kotlinVersion" else declared
             if (isPlatform) platforms.putIfAbsent("$coord|$variant", PlatformDep(coord, scope, variant))
             else maven.putIfAbsent("$coord|$variant", Dep(coord, scope, variant))
         }
@@ -1130,6 +1143,39 @@ object GradleImport {
 
     private fun manifestPackage(manifest: Path): String? =
         readOrNull(manifest)?.let { firstGroup(it, """package\s*=\s*"([\w.]+)"""") }
+
+    /**
+     * The Kotlin Gradle plugin version the whole build applies: a catalog plugin from the plugin's
+     * `org.jetbrains.kotlin` namespace, a `kotlin("x") version "v"` / `id("org.jetbrains.kotlin.x") version "v"`
+     * in the root or settings script, or a `kotlin-gradle-plugin` classpath dependency in the root `buildscript`
+     * or the build-logic/buildSrc build that applies it through convention plugins. Null when none is readable;
+     * a module that applies the plugin with a version of its own is read in [parseModule].
+     */
+    private fun projectKotlinVersion(
+        root: Path,
+        catalog: GradleVersionCatalog,
+        rootBuild: String,
+        settings: String?,
+        vars: Map<String, String>,
+    ): String? {
+        catalog.plugins.values.firstOrNull { it.id.startsWith("$KOTLIN_PLUGIN_NAMESPACE.") && it.version.isNotBlank() }
+            ?.let { return it.version }
+        catalog.libraries.values.firstOrNull { "${it.group}:${it.name}" == KOTLIN_GRADLE_PLUGIN && it.version.isNotBlank() }
+            ?.let { return it.version }
+        listOfNotNull(rootBuild, settings).firstNotNullOfOrNull { kotlinPluginVersion(it, vars) }?.let { return it }
+        return listOf("buildSrc", "build-logic").firstNotNullOfOrNull { dir ->
+            BUILD_FILES.firstNotNullOfOrNull { readStripped(root.resolve(dir).resolve(it)) }?.let { kotlinPluginVersion(it, vars) }
+        }
+    }
+
+    /** The Kotlin Gradle plugin version one script applies or puts on its build classpath, or null. */
+    private fun kotlinPluginVersion(script: String, vars: Map<String, String>): String? {
+        val version = firstGroup(script, """\bkotlin\s*\(\s*['"][\w.\-]+['"]\s*\)\s*version\s*\(?\s*['"]([^'"]+)['"]""")
+            ?: firstGroup(script, """id\s*\(?\s*['"]${Regex.escape(KOTLIN_PLUGIN_NAMESPACE)}\.[\w.\-]+['"]\s*\)?\s*version\s*\(?\s*['"]([^'"]+)['"]""")
+            ?: firstGroup(script, """['"]${Regex.escape(KOTLIN_GRADLE_PLUGIN)}:([^'":]+)['"]""")
+            ?: return null
+        return interpolate(version, vars).takeIf { it.isNotBlank() && '$' !in it }
+    }
 
     private fun composePluginVersion(script: String): String? =
         firstGroup(script, """id\s*\(?\s*['"]$COMPOSE_MP_PLUGIN['"]\s*\)?\s*version\s*\(?\s*['"]([^'"]+)['"]""")

@@ -418,8 +418,8 @@ class GradleKmpImportTest {
         }
     }
 
-    /** `kotlin("test")` under `useJUnitPlatform()` gets JUnit 5's framework, versionless like the shorthand;
-     *  an explicitly declared framework is left alone. */
+    /** `kotlin("test")` under `useJUnitPlatform()` gets JUnit 5's framework, at the Kotlin plugin's version like
+     *  the shorthand; an explicitly declared framework is left alone. */
     @Test
     fun kotlinTestGetsTheFrameworkTheKotlinPluginWouldAdd() {
         withTempDir("kotlin-test-framework") { tmp ->
@@ -439,9 +439,48 @@ class GradleKmpImportTest {
             """)
             val modules = assertNotNull(GradleImport.parse(proj)).modules.associateBy { it.name }
             val app = modules.getValue("app").mavenDeps.associate { it.coordinate to it.scope }
-            assertEquals(DependencyScope.TEST_IMPLEMENTATION, app["org.jetbrains.kotlin:kotlin-test-junit5"], "$app")
+            assertEquals(DependencyScope.TEST_IMPLEMENTATION, app["org.jetbrains.kotlin:kotlin-test-junit5:2.2.20"], "$app")
             val lib = modules.getValue("lib").mavenDeps.map { it.coordinate }
-            assertEquals(listOf("org.jetbrains.kotlin:kotlin-test", "org.jetbrains.kotlin:kotlin-test-testng"), lib)
+            assertEquals(listOf("org.jetbrains.kotlin:kotlin-test:2.2.20", "org.jetbrains.kotlin:kotlin-test-testng:2.2.20"), lib)
+        }
+    }
+
+    /**
+     * Android Studio's Compose Multiplatform template applies the Kotlin plugin through a catalog alias in the
+     * root script and declares `kotlin("test")` with no version, which Gradle fills in from the plugin. Imported
+     * versionless, `kotlin-test` and the framework added for it could not be resolved.
+     */
+    @Test
+    fun versionlessKotlinDependenciesTakeTheKotlinPluginsVersion() {
+        withTempDir("kotlin-versionless") { tmp ->
+            val proj = tmp.resolve("Cmp")
+            proj.w("settings.gradle.kts", "rootProject.name = \"Cmp\"\ninclude(\":sharedUI\")")
+            proj.w("build.gradle.kts", """
+                plugins { alias(libs.plugins.kotlinMultiplatform) apply false }
+            """)
+            proj.w("gradle/libs.versions.toml", """
+                [versions]
+                kotlin = "2.2.21"
+                [libraries]
+                kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
+                [plugins]
+                kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+            """)
+            proj.w("sharedUI/build.gradle.kts", """
+                plugins { alias(libs.plugins.kotlinMultiplatform) }
+                kotlin {
+                    jvm()
+                    sourceSets {
+                        commonMain.dependencies { implementation(libs.kotlin.reflect) }
+                        commonTest.dependencies { implementation(kotlin("test")) }
+                    }
+                }
+            """)
+            proj.dir("sharedUI/src/commonMain/kotlin")
+            val deps = assertNotNull(GradleImport.parse(proj)).modules.single().mavenDeps.associate { it.coordinate to it.scope }
+            assertEquals(DependencyScope.IMPLEMENTATION, deps["org.jetbrains.kotlin:kotlin-reflect:2.2.21"], "$deps")
+            assertEquals(DependencyScope.TEST_IMPLEMENTATION, deps["org.jetbrains.kotlin:kotlin-test:2.2.21"], "$deps")
+            assertEquals(DependencyScope.TEST_IMPLEMENTATION, deps["org.jetbrains.kotlin:kotlin-test-junit:2.2.21"], "$deps")
         }
     }
 
