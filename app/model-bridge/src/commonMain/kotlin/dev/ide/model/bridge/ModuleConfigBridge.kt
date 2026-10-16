@@ -12,6 +12,7 @@ import dev.ide.model.SdkRef
 import dev.ide.model.SdkResolution
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.impl.setSourceSetScope
 import dev.ide.platform.createDirectories
 import dev.ide.platform.resolvePath
 import dev.ide.ui.backend.UiConfigField
@@ -24,6 +25,7 @@ import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiSdkOption
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiSourceSetInfo
+import dev.ide.ui.backend.UiSourceSetScope
 
 /**
  * The Module Settings screen's questions, answered from the project model alone.
@@ -164,6 +166,25 @@ class ModuleConfigBridge(
                 module(module.id).addSourceSet(SourceSetTemplate(name, DependencyScope.IMPLEMENTATION, emptyMap()))
                 commit()
             }
+            store.save()
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Give [sourceSetName] of [moduleName] the [scope] that makes it main code or tests, and persist
+     * `module.toml`. False when the module or set cannot be resolved, or the set already has that scope.
+     */
+    fun setSourceSetScope(moduleName: String, sourceSetName: String, scope: DependencyScope): Boolean {
+        val module = module(moduleName) ?: return false
+        val project = projectOf(module) ?: return false
+        return runCatching {
+            val tx = project.beginModification()
+            if (!tx.module(module.id).setSourceSetScope(sourceSetName, scope)) {
+                tx.dispose()
+                return@runCatching false
+            }
+            tx.commit()
             store.save()
             true
         }.getOrDefault(false)
@@ -405,6 +426,11 @@ class ModuleConfigBridge(
         const val DEFAULT_SOURCE_DIR = "src/main/kotlin"
 
         /** The [ContentRole] a UI role names. Total, so a new role breaks this rather than defaulting. */
+        fun scopeOf(scope: UiSourceSetScope): DependencyScope = when (scope) {
+            UiSourceSetScope.Main -> DependencyScope.IMPLEMENTATION
+            UiSourceSetScope.Test -> DependencyScope.TEST_IMPLEMENTATION
+        }
+
         fun roleOf(role: UiSourceRootRole): ContentRole = when (role) {
             UiSourceRootRole.Source -> ContentRole.SOURCE
             UiSourceRootRole.Resource -> ContentRole.RESOURCE

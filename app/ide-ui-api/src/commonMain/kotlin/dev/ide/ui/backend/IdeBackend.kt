@@ -1387,6 +1387,28 @@ enum class TreeViewMode { Project, AllFiles }
 enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl, JniLibs }
 
 /**
+ * What a source set holds, which decides how it builds: [Main] code goes into the module's output, [Test] code
+ * is compiled apart from it against the test classpath and is what the test runner discovers. Maps to the
+ * set's `scope` in `module.toml` (`IMPLEMENTATION` / `TEST_IMPLEMENTATION`).
+ */
+enum class UiSourceSetScope {
+    Main, Test;
+
+    companion object {
+        /** The persisted scope name a [UiSourceSetInfo] carries, read as Main or Test. */
+        fun of(scopeName: String): UiSourceSetScope =
+            if (scopeName.equals("TEST_IMPLEMENTATION", ignoreCase = true)) Test else Main
+
+        /** The scope a new set named [setName] most likely wants: `test`, `testDebug`, `androidTest`,
+         *  `commonTest`, `integrationTest` are tests, anything else is main code. */
+        fun suggestedFor(setName: String): UiSourceSetScope {
+            val n = setName.trim()
+            return if (n.startsWith("test") || n.endsWith("Test") || n.startsWith("androidTest")) Test else Main
+        }
+    }
+}
+
+/**
  * A typed source-file template the file-tree "New" submenu can scaffold. The prefix names the language
  * (Java → `.java`, Kotlin → `.kt`); the backend prepends the package resolved from the target directory.
  */

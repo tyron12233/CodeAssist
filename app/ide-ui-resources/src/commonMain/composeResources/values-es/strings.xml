@@ -658,6 +658,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="newfile_set_name_hint">p. ej. test  ·  debug</string>
     <string name="newfile_custom_folder_hint">p. ej. proto  ·  templates</string>
     <string name="newfile_treat_as">Tratar como</string>
+    <string name="source_scope_label">Contiene</string>
+    <string name="source_scope_main">Código principal</string>
+    <string name="source_scope_test">Pruebas</string>
+    <string name="source_scope_change">Cambiar el contenido de %1$s</string>
     <string name="newfile_created_at">Creado en %1$s</string>
 
     <!-- File operations -->

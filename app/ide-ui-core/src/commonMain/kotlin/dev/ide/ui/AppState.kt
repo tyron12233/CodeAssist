@@ -21,6 +21,7 @@ import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiSourceSetScope
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
@@ -1492,9 +1493,17 @@ class IdeUiState(
     /** Source-set names declared on [moduleName] (for the Add-Source-Root selector). */
     fun moduleSourceSets(moduleName: String): List<String> = backend.modules.moduleSourceSets(moduleName)
 
-    /** Add a typed source root to [moduleName] and refresh the tree. Returns true on success. */
-    fun addSourceRoot(moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole): Boolean {
+    /**
+     * Add a typed source root to [moduleName] and refresh the tree. Returns true on success. [newSetScope] is
+     * what a set the root creates contains (a new set is main code until told otherwise); null leaves the
+     * set as it is.
+     */
+    fun addSourceRoot(
+        moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole,
+        newSetScope: UiSourceSetScope? = null,
+    ): Boolean {
         val created = backend.modules.addSourceRoot(moduleName, sourceSetName, dirName, role) != null
+        if (created && newSetScope != null) backend.modules.setSourceSetScope(moduleName, sourceSetName, newSetScope)
         if (created) refreshTree()
         return created
     }

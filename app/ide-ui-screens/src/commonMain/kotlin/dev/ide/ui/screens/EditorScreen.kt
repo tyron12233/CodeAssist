@@ -235,9 +235,9 @@ fun EditorScreen(
                 )
             },
             onDismiss = { state.addSourceRootModule = null },
-            onAdd = { module, set, dirName, role ->
+            onAdd = { module, set, dirName, role, newSetScope ->
                 state.addSourceRoot(
-                    module, set, dirName, role
+                    module, set, dirName, role, newSetScope
                 )
             },
         )

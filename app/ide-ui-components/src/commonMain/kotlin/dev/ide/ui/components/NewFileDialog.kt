@@ -44,6 +44,7 @@ import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiSourceSetScope
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.add
 import dev.ide.ui.generated.resources.cancel
@@ -106,6 +107,9 @@ import dev.ide.ui.generated.resources.newfile_source_set
 import dev.ide.ui.generated.resources.newfile_title
 import dev.ide.ui.generated.resources.newfile_to
 import dev.ide.ui.generated.resources.newfile_treat_as
+import dev.ide.ui.generated.resources.source_scope_label
+import dev.ide.ui.generated.resources.source_scope_main
+import dev.ide.ui.generated.resources.source_scope_test
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -681,17 +685,25 @@ private fun roleLabel(role: UiSourceRootRole): StringResource = when (role) {
     UiSourceRootRole.JniLibs -> Res.string.newfile_preset_jni_libs
 }
 
+/** The label a [UiSourceSetScope] is shown with, in this dialog and on the module settings page. */
+fun sourceScopeLabel(scope: UiSourceSetScope): StringResource = when (scope) {
+    UiSourceSetScope.Main -> Res.string.source_scope_main
+    UiSourceSetScope.Test -> Res.string.source_scope_test
+}
+
 /**
  * The Add-Source-Root dialog: pick a target source set (an existing one or a new name) and a kind. A preset
  * fixes the folder name + role (Java→`java`/sources, Resources→`resources`/resources, …); **Custom** reveals
- * a free folder-name field + an explicit role picker. Hands `(module, set, dirName, role)` to [onAdd];
+ * a free folder-name field + an explicit role picker. A NEW set also picks what it contains, main code or
+ * tests, suggested from its name until the user chooses (`test` → Tests); an existing set keeps its own.
+ * Hands `(module, set, dirName, role, newSetScope)` to [onAdd], `newSetScope` null for an existing set;
  * [dev.ide.ui.AppState.addSourceRoot] places it at `src/<set>/<dirName>` and refreshes the tree.
  */
 @Composable
 fun AddSourceRootDialog(
     request: AddSourceRootRequest?,
     onDismiss: () -> Unit,
-    onAdd: (moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole) -> Unit,
+    onAdd: (moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole, newSetScope: UiSourceSetScope?) -> Unit,
 ) {
     var shown by remember { mutableStateOf<AddSourceRootRequest?>(null) }
     if (request != null) shown = request
@@ -704,9 +716,10 @@ fun AddSourceRootDialog(
 private fun AddSourceRootPanel(
     req: AddSourceRootRequest,
     onDismiss: () -> Unit,
-    onAdd: (String, String, String, UiSourceRootRole) -> Unit,
+    onAdd: (String, String, String, UiSourceRootRole, UiSourceSetScope?) -> Unit,
 ) {
     var preset by remember(req) { mutableStateOf(RootPreset.Java) }
+    var chosenScope by remember(req) { mutableStateOf<UiSourceSetScope?>(null) }
     var customRole by remember(req) { mutableStateOf(UiSourceRootRole.Source) }
     var customName by remember(req) { mutableStateOf("") }
     var newSet by remember(req) { mutableStateOf(req.sourceSets.isEmpty()) }
@@ -721,10 +734,12 @@ private fun AddSourceRootPanel(
     val nameOk = dirName.isNotEmpty() && dirName.none { it in illegal }
     val setOk = effectiveSet.isNotEmpty() && effectiveSet.none { it in illegal }
     val valid = nameOk && setOk
+    val isNewSet = newSet && effectiveSet !in req.sourceSets
+    val scope = chosenScope ?: UiSourceSetScope.suggestedFor(effectiveSet)
 
     fun submit() {
         if (!valid) return
-        onAdd(req.moduleName, effectiveSet, dirName, role)
+        onAdd(req.moduleName, effectiveSet, dirName, role, if (isNewSet) scope else null)
         onDismiss()
     }
 
@@ -759,6 +774,13 @@ private fun AddSourceRootPanel(
                 onSubmit = ::submit,
                 onCancel = onDismiss,
             )
+            Spacer8()
+            FieldLabel(stringResource(Res.string.source_scope_label))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                UiSourceSetScope.entries.forEach { s ->
+                    SelectChip(stringResource(sourceScopeLabel(s)), selected = s == scope, onClick = { chosenScope = s })
+                }
+            }
         }
         Spacer12()
 

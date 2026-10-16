@@ -614,6 +614,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="newfile_set_name_hint">ex.: test  ·  debug</string>
     <string name="newfile_custom_folder_hint">ex.: proto  ·  templates</string>
     <string name="newfile_treat_as">Tratar como</string>
+    <string name="source_scope_label">Contém</string>
+    <string name="source_scope_main">Código principal</string>
+    <string name="source_scope_test">Testes</string>
+    <string name="source_scope_change">Alterar o conteúdo de %1$s</string>
     <string name="newfile_created_at">Criado em %1$s</string>
 
     <!-- dialogs: FileOperationsDialogs -->

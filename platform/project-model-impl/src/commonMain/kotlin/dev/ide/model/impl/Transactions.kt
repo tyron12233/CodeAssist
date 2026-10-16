@@ -249,6 +249,15 @@ internal class ModuleBuilder(
         }
     }
 
+    /** Give the [sourceSetName] set [scope]. False when there is no such set or it already has that scope. */
+    fun setSourceSetScope(sourceSetName: String, scope: DependencyScope): Boolean {
+        val idx = sourceSets.indexOfFirst { it.name == sourceSetName }
+        if (idx < 0 || sourceSets[idx].scope == scope) return false
+        sourceSets[idx] = sourceSets[idx].copy(scope = scope)
+        sourceSetsChanged = true
+        return true
+    }
+
     /** Append [dirRelPath] to the set at [idx], merging [roles] into a root with the same path if present. */
     private fun mergeRoot(idx: Int, dirRelPath: String, roles: Set<ContentRole>) {
         val ss = sourceSets[idx]
@@ -316,3 +325,15 @@ private fun requireTomlValue(table: String, key: String, value: Any?) {
         )
     }
 }
+
+/**
+ * Give an existing source set a new [scope], which decides what it builds into: a test-only scope
+ * ([DependencyScope.TEST_IMPLEMENTATION]) makes it a test set, compiled apart from the main output against the
+ * test classpath. A new set takes its scope from the [SourceSetTemplate] it is added with.
+ *
+ * Not a member of [ModifiableModule]: that interface is published plugin SPI, and changing it waits for an
+ * SPI release. False when this module did not come from a transaction of this store, when it has no such set,
+ * or when the set already has [scope].
+ */
+fun ModifiableModule.setSourceSetScope(sourceSetName: String, scope: DependencyScope): Boolean =
+    (this as? ModuleBuilder)?.setSourceSetScope(sourceSetName, scope) ?: false

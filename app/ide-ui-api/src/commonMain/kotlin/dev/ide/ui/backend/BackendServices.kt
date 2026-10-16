@@ -557,6 +557,9 @@ interface ModuleService {
     /** Create an empty source set [name] on [moduleName]. */
     fun addSourceSet(moduleName: String, name: String): Boolean = false
 
+    /** Make [sourceSetName] of [moduleName] hold main code or tests. True when the model changed. */
+    fun setSourceSetScope(moduleName: String, sourceSetName: String, scope: UiSourceSetScope): Boolean = false
+
     /** Modules whose configuration can be edited. */
     fun configurableModules(): List<UiModuleRef> = emptyList()
 

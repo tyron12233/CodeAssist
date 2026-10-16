@@ -558,6 +558,10 @@
     <string name="newfile_set_name_hint">например test  ·  debug</string>
     <string name="newfile_custom_folder_hint">например proto  ·  templates</string>
     <string name="newfile_treat_as">Рассматривать как</string>
+    <string name="source_scope_label">Содержит</string>
+    <string name="source_scope_main">Основной код</string>
+    <string name="source_scope_test">Тесты</string>
+    <string name="source_scope_change">Изменить содержимое %1$s</string>
     <string name="newfile_created_at">Создано в %1$s</string>
     <string name="fileop_rename_title">Переименовать «%1$s»</string>
     <string name="fileop_new_name">Новое имя</string>

@@ -2,6 +2,7 @@ package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
 import dev.ide.model.ContentRole
+import dev.ide.model.bridge.ModuleConfigBridge
 import dev.ide.ui.backend.ModuleService
 import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiCompilerPlugins
@@ -14,6 +15,7 @@ import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiPackagingOptions
 import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiSourceSetScope
 import dev.ide.ui.backend.UiToolchainWarning
 import java.nio.file.Paths
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +64,12 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
 
     override fun addSourceSet(moduleName: String, name: String): Boolean {
         val ok = ctx.services.moduleService.addSourceSet(moduleName, name.trim())
+        if (ok) ctx.bumpFileSystemEpoch()
+        return ok
+    }
+
+    override fun setSourceSetScope(moduleName: String, sourceSetName: String, scope: UiSourceSetScope): Boolean {
+        val ok = ctx.services.moduleService.setSourceSetScope(moduleName, sourceSetName, ModuleConfigBridge.scopeOf(scope))
         if (ok) ctx.bumpFileSystemEpoch()
         return ok
     }

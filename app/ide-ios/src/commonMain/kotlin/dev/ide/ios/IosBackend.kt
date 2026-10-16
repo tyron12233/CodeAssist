@@ -50,6 +50,7 @@ import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRepository
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiSourceSetScope
 import dev.ide.ui.backend.UiTextRange
 import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.lang.dom.Severity
@@ -1126,6 +1127,14 @@ class IosBackend(
 
     override fun addSourceSet(moduleName: String, name: String): Boolean =
         moduleConfig()?.addSourceSet(moduleName, name) ?: false
+
+    override fun setSourceSetScope(moduleName: String, sourceSetName: String, scope: UiSourceSetScope): Boolean {
+        val changed = moduleConfig()
+            ?.setSourceSetScope(moduleName, sourceSetName, ModuleConfigBridge.scopeOf(scope)) ?: false
+        // Main and test sources are analyzed against different classpaths, so the analysis starts over.
+        if (changed) { bumpFs(); resetAnalysis() }
+        return changed
+    }
 
     /**
      * What a NEW module here can be, which is narrower than what an opened one can be: the Android types

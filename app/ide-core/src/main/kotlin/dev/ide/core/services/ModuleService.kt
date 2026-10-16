@@ -795,6 +795,17 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         model.addSourceSet(moduleName, name)
 
     /**
+     * Give [sourceSetName] of [moduleName] a new [scope]: a test-only scope makes it a test set, built apart
+     * from the main output, so the analyzers and the index re-read the module. True on a model change.
+     */
+    fun setSourceSetScope(moduleName: String, sourceSetName: String, scope: DependencyScope): Boolean {
+        if (!model.setSourceSetScope(moduleName, sourceSetName, scope)) return false
+        ctx.invalidateAnalyzers()
+        ctx.resyncIndex()
+        return true
+    }
+
+    /**
      * If [newDir] is a conventionally-named folder (`resources`/`java`/`kotlin`/`res`/`assets`/`aidl`)
      * created directly under a source-set base (the parent of an existing content root), register it as the
      * matching typed content root and return true. Conservative: a folder named `java` anywhere else stays

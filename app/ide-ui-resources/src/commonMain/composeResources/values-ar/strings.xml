@@ -1188,6 +1188,10 @@
     <string name="newfile_set_name_hint">مثلاً test  ·  debug</string>
     <string name="newfile_custom_folder_hint">مثلاً proto  ·  templates</string>
     <string name="newfile_treat_as">معاملته كـ</string>
+    <string name="source_scope_label">يحتوي على</string>
+    <string name="source_scope_main">الشيفرة الرئيسية</string>
+    <string name="source_scope_test">الاختبارات</string>
+    <string name="source_scope_change">تغيير محتوى %1$s</string>
     <string name="newfile_created_at">أُنشئ في %1$s</string>
 
     <!-- dialogs: FileOperationsDialogs -->

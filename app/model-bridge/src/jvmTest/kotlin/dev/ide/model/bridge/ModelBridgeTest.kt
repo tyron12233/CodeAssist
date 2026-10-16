@@ -16,6 +16,7 @@ import dev.ide.platform.impl.PlatformCore
 import dev.ide.templates.JavaLibModuleType
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiModuleConfigEdit
+import dev.ide.ui.backend.UiSourceSetScope
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.exists
@@ -192,6 +193,37 @@ class ModelBridgeTest {
 
         assertTrue(bridge.removeSourceRoot("app", "main", created), "and it can be unmarked by its full path")
         assertTrue(Path.of(created).exists(), "the model forgot it; the directory is still the user's")
+    }
+
+    @Test
+    fun aNewSourceSetCanBeMadeATestSetAndItIsSaved() {
+        val bridge = ModuleConfigBridge(workspace())
+        assertNotNull(bridge.addSourceRoot("app", "test", "kotlin", setOf(ContentRole.SOURCE)))
+        fun scopeOf(set: String) = bridge.moduleConfig("app")!!.sourceSets.single { it.name == set }.scope
+        assertEquals("IMPLEMENTATION", scopeOf("test"), "a root's own new set starts as main code")
+
+        assertTrue(bridge.setSourceSetScope("app", "test", ModuleConfigBridge.scopeOf(UiSourceSetScope.Test)))
+        assertEquals("TEST_IMPLEMENTATION", scopeOf("test"))
+        assertEquals("IMPLEMENTATION", scopeOf("main"), "only the named set changes")
+        val toml = dir.resolve("app/module.toml").toFile().readText()
+        assertTrue(Regex("""scope\s*=\s*"TEST_IMPLEMENTATION"""").containsMatchIn(toml), "persisted:\n$toml")
+
+        assertFalse(bridge.setSourceSetScope("app", "test", DependencyScope.TEST_IMPLEMENTATION), "already a test set")
+        assertFalse(bridge.setSourceSetScope("app", "nope", DependencyScope.TEST_IMPLEMENTATION), "no such set")
+        assertTrue(bridge.setSourceSetScope("app", "test", DependencyScope.IMPLEMENTATION), "and back again")
+        assertEquals("IMPLEMENTATION", scopeOf("test"))
+    }
+
+    @Test
+    fun aSetsNameSuggestsWhetherItHoldsTests() {
+        listOf("test", "testDebug", "androidTest", "commonTest", "integrationTest").forEach {
+            assertEquals(UiSourceSetScope.Test, UiSourceSetScope.suggestedFor(it), it)
+        }
+        listOf("main", "debug", "jvmMain", "contest", "mytesting").forEach {
+            assertEquals(UiSourceSetScope.Main, UiSourceSetScope.suggestedFor(it), it)
+        }
+        assertEquals(UiSourceSetScope.Test, UiSourceSetScope.of("TEST_IMPLEMENTATION"))
+        assertEquals(UiSourceSetScope.Main, UiSourceSetScope.of("API"))
     }
 
     @Test

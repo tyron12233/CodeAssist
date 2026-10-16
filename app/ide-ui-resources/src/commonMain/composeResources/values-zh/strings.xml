@@ -1134,6 +1134,10 @@
     <string name="newfile_set_name_hint">例如 test  ·  debug</string>
     <string name="newfile_custom_folder_hint">例如 proto  ·  templates</string>
     <string name="newfile_treat_as">视为</string>
+    <string name="source_scope_label">包含</string>
+    <string name="source_scope_main">主代码</string>
+    <string name="source_scope_test">测试</string>
+    <string name="source_scope_change">更改 %1$s 的内容类型</string>
     <string name="newfile_created_at">创建于 %1$s</string>
 
     <!-- dialogs: FileOperationsDialogs -->

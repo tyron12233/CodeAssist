@@ -1145,6 +1145,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="newfile_set_name_hint">e.g. test  ·  debug</string>
     <string name="newfile_custom_folder_hint">e.g. proto  ·  templates</string>
     <string name="newfile_treat_as">Treat as</string>
+    <string name="source_scope_label">Contains</string>
+    <string name="source_scope_main">Main code</string>
+    <string name="source_scope_test">Tests</string>
+    <string name="source_scope_change">Change what %1$s contains</string>
     <string name="newfile_created_at">Created at %1$s</string>
 
     <!-- dialogs: FileOperationsDialogs -->
