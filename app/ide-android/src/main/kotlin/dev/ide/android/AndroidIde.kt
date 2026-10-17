@@ -78,7 +78,7 @@ object AndroidIde {
         // most once; non-destructive.
         runCatching { manager.importLegacyProjects() }
 
-        val analytics = buildAnalytics(manager, home)
+        val analytics = buildAnalytics(context, manager, home)
 
         // Crash breadcrumb: the 32-bit-ART SIGSEGV is a native fault, uncatchable in-process — so read what the
         // engine was doing if the PREVIOUS process died natively (via the OS exit reason), THEN arm the file for
@@ -714,12 +714,18 @@ object AndroidIde {
     }
 
     private fun buildAnalytics(
-        manager: ProjectManager, home: File
+        context: Context, manager: ProjectManager, home: File
     ): dev.ide.analytics.AnalyticsService {
         // One shared Supabase project; the analytics sink and the store catalog read the same pair.
         val url = BuildConfig.SUPABASE_URL
         val key = BuildConfig.SUPABASE_KEY
         if (url.isBlank() || key.isBlank()) return dev.ide.analytics.NoopAnalyticsService
+
+        // Report only from a package signed with one of the build's allowed certificates. The no-op service also
+        // hides the consent prompt and the toggle, so a fork's users are never asked to send us data.
+        val signer = signingCertSha256(context)?.let(dev.ide.analytics.Signers::short).orEmpty()
+        val allowed = BuildConfig.ANALYTICS_SIGNERS.split(',').map(String::trim).filter(String::isNotEmpty)
+        if (!dev.ide.analytics.Signers.mayReport(signer, allowed)) return dev.ide.analytics.NoopAnalyticsService
 
         val installId = manager.preference("analytics.install.id") ?: UUID.randomUUID().toString()
             .also { manager.setPreference("analytics.install.id", it) }
@@ -731,6 +737,8 @@ object AndroidIde {
             deviceManufacturer = Build.MANUFACTURER ?: "",
             abi = Build.SUPPORTED_ABIS?.firstOrNull() ?: "",
             locale = Locale.getDefault().toLanguageTag(),
+            appId = context.packageName,
+            signer = signer,
         )
         val service = DefaultAnalyticsService(
             installId = installId,
@@ -750,6 +758,25 @@ object AndroidIde {
         addSink(AnalyticsLogSink(service))
         return service
     }
+
+    /**
+     * SHA-256 (hex) of the certificate that signed the installed package, or null when the package manager will
+     * not say. This is the digest `apksigner verify --print-certs` and Play Console's app-integrity page print.
+     * The current signer, not the oldest in a rotation lineage.
+     */
+    private fun signingCertSha256(context: Context): String? = runCatching {
+        val pm = context.packageManager
+        val certs = if (Build.VERSION.SDK_INT >= 28) {
+            pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNATURES).signatures
+        }
+        val cert = certs?.firstOrNull() ?: return null
+        java.security.MessageDigest.getInstance("SHA-256").digest(cert.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+    }.getOrNull()
 
     /** Provision just the bundled `android.jar` for a process that needs only it (the `:preview` render
      *  daemon), without the full [createProjectManager] engine setup. Idempotent (marker-guarded copy). */

@@ -160,4 +160,27 @@ class AnalyticsTest {
         assertFalse(e.props.values.joinToString(" ").contains("/Users/"), "no paths forwarded")
         svc.close()
     }
+
+    @Test
+    fun signerFingerprintsCompareInTheStoredForm() {
+        // apksigner prints lowercase hex, Play Console uppercase with colons; both name the same certificate.
+        val play = "13:61:A1:AB:FB:B2:42:8B:27:1F:2A:69:8F:F5:95:24:E1:F1:5F:68:D1:6B:56:83:93:43:B1:4B:20:5A:92:F0"
+        assertEquals("1361a1abfbb2428b", dev.ide.analytics.Signers.short(play))
+        val allowed = listOf("1361a1abfbb2428b", "a81bf1e053d77f4d")
+        assertTrue(dev.ide.analytics.Signers.mayReport("1361a1abfbb2428b271f2a698ff59524", allowed))
+        assertFalse(dev.ide.analytics.Signers.mayReport("0123456789abcdef0123", allowed), "another signer")
+        assertFalse(dev.ide.analytics.Signers.mayReport("", allowed), "an unknown signer never matches a list")
+        assertTrue(dev.ide.analytics.Signers.mayReport("", emptyList()), "no list = no restriction")
+    }
+
+    @Test
+    fun theInsertBodyCarriesTheOriginAndNullWhenUnknown() {
+        val event = AnalyticsEvent(Events.COLD_START, EventCategory.PERFORMANCE, mapOf("duration_ms" to "5"))
+        val labelled = device.copy(appId = "com.tyron.code", signer = "1361a1abfbb2428b")
+        val body = SupabaseSink.body(EventBatch("i", "s", labelled, listOf(event)))
+        assertTrue(body.contains("\"app_id\":\"com.tyron.code\""), body)
+        assertTrue(body.contains("\"signer\":\"1361a1abfbb2428b\""), body)
+        val unknown = SupabaseSink.body(EventBatch("i", "s", device, listOf(event)))
+        assertTrue(unknown.contains("\"app_id\":null") && unknown.contains("\"signer\":null"), unknown)
+    }
 }

@@ -23,6 +23,10 @@ data class AnalyticsEvent(
  * Device/environment facts attached to every shipped batch (stored as columns, not inside an event).
  * Gathered once per launch by the host. Carries nothing that identifies a person — no ad id, no IMEI,
  * no account, no precise location.
+ *
+ * [appId] and [signer] say which build sent the row: the application id, and [Signers.short] of the
+ * certificate that signed the installed package. Anyone can build this repo with the default endpoint, so
+ * without them a fork that keeps our version names is indistinguishable from a release. Blank = unknown.
  */
 data class DeviceInfo(
     val appVersion: String,
@@ -32,7 +36,32 @@ data class DeviceInfo(
     val deviceManufacturer: String,
     val abi: String,
     val locale: String,
+    val appId: String = "",
+    val signer: String = "",
 )
+
+/**
+ * Signing-certificate fingerprints, as the analytics backend stores and compares them: the first
+ * [SHORT_LENGTH] hex characters of the certificate's SHA-256, lowercase. 64 bits is far more than enough to
+ * tell a handful of signers apart, and keeps the column small on a table that takes a row per perf window.
+ */
+object Signers {
+    const val SHORT_LENGTH = 16
+
+    /** [sha256Hex] (any case, colons allowed, as `apksigner` or Play Console print it) in the stored form. */
+    fun short(sha256Hex: String): String =
+        sha256Hex.filter { it != ':' && !it.isWhitespace() }.lowercase().take(SHORT_LENGTH)
+
+    /**
+     * True when this build may report: [allowed] is empty (the build set no restriction, e.g. a fork pointed at
+     * its own endpoint), or [signer] is one of them. An unknown signer (blank) never matches a non-empty list.
+     */
+    fun mayReport(signer: String, allowed: Collection<String>): Boolean {
+        if (allowed.isEmpty()) return true
+        val mine = short(signer)
+        return mine.isNotEmpty() && allowed.any { short(it) == mine }
+    }
+}
 
 /**
  * A batch of events ready to ship, with the shared identity/device context the backend stores as columns.

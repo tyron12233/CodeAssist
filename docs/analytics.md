@@ -35,7 +35,9 @@ analytics-impl DefaultAnalyticsService (durable batch buffer) ──► Supabase
 We collect **performance metrics only** — no feature-usage tracking (nothing about which screens, files,
 or features you open). Every shipped row carries the install id, session id, and the device/environment
 context as columns: app version + build, OS API level, device model + manufacturer, CPU ABI, and locale —
-so a timing can be attributed to an app version / device.
+so a timing can be attributed to an app version / device. Since the release after 3.30.1 it also carries
+which build sent it: `app_id` (the application id) and `signer` (the first 16 hex characters of the
+SHA-256 of the certificate that signed the installed APK). See "Builds that are not ours" below.
 
 Events (the `event` column), by category:
 
@@ -131,7 +133,9 @@ create table public.events (
   device_manufacturer  text,
   abi                  text,
   locale               text,
-  props                jsonb not null default '{}'
+  props                jsonb not null default '{}',
+  app_id               text,  -- added 2026-10-17 (migration 20261017000100_analytics_origin)
+  signer               text   -- added 2026-10-17
 );
 
 create index events_received_at_idx on public.events (received_at);
@@ -164,6 +168,33 @@ time of day, so the next run re-aggregated a partial oldest day over its complet
 
 Deleting rows does not shrink the table on disk; after a large one-off delete, `vacuum full analyze
 public.events` gives the space back (it locks the table for ~30 s; clients retry from their queue).
+
+## Builds that are not ours
+
+The endpoint and publishable key are build defaults, so any build of this repo that leaves them alone would
+report here. One did: a fork versioned 4.0.0 to 4.1.15 (from 2026-09-18), running our code under its own
+version names. Its users agreed to share data with that fork, not with us, and a fork that kept our version
+names would blend into our crash rates. Two layers keep them out:
+
+- **The client only reports from our certificates.** `BuildConfig.ANALYTICS_SIGNERS` lists the allowed
+  signers; against our endpoint it defaults to the Google Play app signing key (`1361a1abfbb2428b`, installs
+  from Play) and the upload key (`a81bf1e053d77f4d`, the APKs on GitHub Releases). A package signed with
+  anything else gets the no-op service, which also hides the consent prompt and the toggle
+  (`AndroidIde.buildAnalytics`, `Signers.mayReport`). A build pointed at its own endpoint gets no restriction.
+  Debug builds carry the debug certificate, so to test analytics on one, build with `-PANALYTICS_SIGNERS=`
+  (empty = any signer).
+- **The rollup leaves out a labelled row from another signer.** `analytics_signers` holds the same list, and
+  `roll_up_events()` skips rows whose `signer` is set and not listed
+  (`supabase/migrations/20261017000100_analytics_origin.sql`). Rows from clients that predate the columns have
+  no signer and are still counted. The dashboard's `crashsweep.mjs` also sets aside rows with a version newer
+  than the newest release tag.
+
+If the app signing key ever changes (a Play key upgrade), add the new fingerprint to both lists BEFORE
+shipping a release signed with it, or that release reports nothing. The fingerprint is on Play Console's app
+integrity page, or `apksigner verify --print-certs` for an APK.
+
+The `app_id`/`signer` columns had to exist before a client sending them shipped: PostgREST rejects an unknown
+column with a 400, and `SupabaseSink` drops a batch on any 4xx. Any future column follows the same order.
 
 ## Rotating the endpoint / key
 

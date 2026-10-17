@@ -516,12 +516,28 @@ android {
         // tables. An empty URL leaves both features wired but inert (analytics falls back to the no-op
         // service; the store falls back to the bundled catalog), so a fork can build with no endpoint.
         // Analytics collection still never happens without the user's explicit consent.
+        val defaultSupabaseUrl = "https://lqlpkeummmmglikumotx.supabase.co"
         val supabaseUrl = (findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL")
-            ?: "https://lqlpkeummmmglikumotx.supabase.co"
+            ?: defaultSupabaseUrl
         val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SUPABASE_KEY")
             ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
+
+        // The signing certificates allowed to send analytics, comma-separated SHA-256 prefixes (dev.ide.analytics
+        // .Signers). Against our own endpoint the default is our two release certificates, so a fork that keeps
+        // the endpoint default sends us nothing: its users agreed to share data with that fork, not with us, and
+        // its rows would blend into our crash rates. A build pointed at its own endpoint gets no restriction.
+        // Debug builds carry the debug certificate, so they report only with -PANALYTICS_SIGNERS= (empty = any).
+        // The server keeps the same list in `analytics_signers` (supabase/migrations/20261017000100_analytics_origin.sql).
+        val analyticsSigners = (findProperty("ANALYTICS_SIGNERS") as String?) ?: System.getenv("ANALYTICS_SIGNERS")
+            ?: if (supabaseUrl == defaultSupabaseUrl) {
+                listOf(
+                    "1361a1abfbb2428b", // Google Play app signing key: installs from Play
+                    "a81bf1e053d77f4d", // upload key (CN=tyron scott): the APKs on GitHub Releases
+                ).joinToString(",")
+            } else ""
+        buildConfigField("String", "ANALYTICS_SIGNERS", "\"$analyticsSigners\"")
 
         // Where the daily-challenge judge is deployed. Separate from the Supabase pair because it is a
         // separate service: Supabase holds the problems and the leaderboard, and the judge is the only

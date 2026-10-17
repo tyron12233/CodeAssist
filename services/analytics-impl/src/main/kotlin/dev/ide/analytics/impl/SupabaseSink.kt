@@ -32,24 +32,7 @@ class SupabaseSink(
 
     override fun send(batch: EventBatch): Boolean {
         if (!configured || batch.events.isEmpty()) return true // nothing to do / not wired → don't retain
-        val body = batch.events.joinToString(",", "[", "]") { e ->
-            Json.obj(
-                listOf(
-                    "install_id" to batch.installId,
-                    "session_id" to batch.sessionId,
-                    "event" to e.name,
-                    "category" to e.category.name.lowercase(),
-                    "app_version" to batch.device.appVersion,
-                    "app_build" to batch.device.appBuild,
-                    "os_api" to batch.device.osApi,
-                    "device_model" to batch.device.deviceModel,
-                    "device_manufacturer" to batch.device.deviceManufacturer,
-                    "abi" to batch.device.abi,
-                    "locale" to batch.device.locale,
-                    "props" to e.props, // jsonb column
-                )
-            )
-        }
+        val body = body(batch)
         return try {
             val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -72,6 +55,35 @@ class SupabaseSink(
             }
         } catch (_: Exception) {
             false // network/I/O failure → keep the batch, retry on the next tick
+        }
+    }
+
+    internal companion object {
+        /**
+         * The PostgREST insert body: a JSON array, one object per event. Every column named here must exist on
+         * the table before a client sending it ships, since an unknown column is a 400 and a 4xx drops the batch
+         * (`app_id`/`signer`: supabase/migrations/20261017000100_analytics_origin.sql). A blank origin is sent
+         * as null, the same as a client that predates the columns.
+         */
+        fun body(batch: EventBatch): String = batch.events.joinToString(",", "[", "]") { e ->
+            Json.obj(
+                listOf(
+                    "install_id" to batch.installId,
+                    "session_id" to batch.sessionId,
+                    "event" to e.name,
+                    "category" to e.category.name.lowercase(),
+                    "app_version" to batch.device.appVersion,
+                    "app_build" to batch.device.appBuild,
+                    "os_api" to batch.device.osApi,
+                    "device_model" to batch.device.deviceModel,
+                    "device_manufacturer" to batch.device.deviceManufacturer,
+                    "abi" to batch.device.abi,
+                    "locale" to batch.device.locale,
+                    "app_id" to batch.device.appId.ifBlank { null },
+                    "signer" to batch.device.signer.ifBlank { null },
+                    "props" to e.props, // jsonb column
+                )
+            )
         }
     }
 }
