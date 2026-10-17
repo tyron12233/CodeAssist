@@ -498,6 +498,8 @@ class BuildDaemonService : Service() {
         log.info("daemon(pid=${Process.myPid()}): service created in :build process")
         // Leave the error behind if this process dies of one, so the UI can say what it was.
         DaemonCrashNote.install(this)
+        // Builds here record the APKs they sign, and the installer here checks them (BuiltApks).
+        dev.ide.android.AndroidIde.initBuiltApks(this)
         // The engine's ApkInstaller runs in THIS process; after an install it asks the bridge to launch the
         // app in the UI process (where a foreground activity makes the launch legal). Forward over the live
         // callback; returning false (no UI bound) makes the installer fall back to launching locally.

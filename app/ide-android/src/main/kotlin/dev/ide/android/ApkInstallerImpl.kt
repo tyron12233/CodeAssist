@@ -35,6 +35,11 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
 
     override suspend fun installAndLaunch(apk: Path, packageName: String, log: (String) -> Unit): Boolean = withContext(Dispatchers.IO) {
         if (!Files.exists(apk)) { log("APK not found: $apk"); return@withContext false }
+        // Only an APK this IDE's build signed, byte for byte: never one that came from a download or a clone.
+        if (!dev.ide.android.support.BuiltApks.isRecorded(apk)) {
+            log("Not installing ${apk.fileName}: CodeAssist installs only APKs its own build made. Build the app again to install it.")
+            return@withContext false
+        }
         val pm = context.packageManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !pm.canRequestPackageInstalls()) {
             if (!requestInstallPermission(log)) return@withContext false

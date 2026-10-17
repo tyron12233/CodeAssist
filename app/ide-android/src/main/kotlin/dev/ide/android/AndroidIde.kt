@@ -63,6 +63,7 @@ object AndroidIde {
         // background index concurrency to stop provoking the 32-bit-ART torn-reference SIGSEGV (see RuntimeInfo).
         // `android.os.Process.is64Bit()` reports THIS process, not merely device capability (API 23+; minSdk 26).
         dev.ide.platform.RuntimeInfo.set32Bit(!android.os.Process.is64Bit())
+        initBuiltApks(context)
 
         // App-specific EXTERNAL storage (Android/data/<pkg>/files/codeassist)
         val home = appHomeDir(context).apply { mkdirs() }
@@ -810,6 +811,15 @@ object AndroidIde {
     /** The whole CodeAssist app directory (`<external-files>/codeassist`): projects, the SDK `android.jar`,
      *  the debug keystore, the kotlinc home, shared caches. This is the root surfaced to file managers. */
     fun appHomeDir(context: Context): File = File(externalHome(context), "codeassist")
+
+    /**
+     * Point [dev.ide.android.support.BuiltApks] at its ledger, in every process that builds or installs (the IDE
+     * and the `:build` daemon). App-private internal storage on purpose: the projects folder lives on external
+     * storage, where clones, imports and the FTP inbox write, and the ledger is what says a file did NOT come
+     * from one of those.
+     */
+    fun initBuiltApks(context: Context) =
+        dev.ide.android.support.BuiltApks.init(File(context.noBackupFilesDir, "built-apks").toPath())
 
     /** The on-disk projects directory (`<external-files>/codeassist/projects`). */
     fun projectsDir(context: Context): File = File(appHomeDir(context), "projects")

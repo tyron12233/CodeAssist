@@ -21,18 +21,34 @@ import java.io.File
  */
 internal class AndroidFileOps(private val activity: ComponentActivity) {
 
-    /** Hand the APK at [path] to the system package installer (the OS install-confirmation UI). Only an APK
-     *  the IDE's build wrote is accepted; see [dev.ide.ui.backend.FileActions.isBuiltApk]. */
-    fun promptInstall(path: String) = runCatching {
-        require(dev.ide.ui.backend.FileActions.isBuiltApk(path)) { "not a build output: $path" }
-        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", File(path))
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        activity.startActivity(intent)
-    }.getOrElse {
-        Toast.makeText(activity, "Couldn't open the installer for ${File(path).name}", Toast.LENGTH_SHORT).show()
+    /**
+     * Hand the APK at [path] to the system package installer (the OS install-confirmation UI). Only an APK the
+     * IDE's own build signed is accepted ([dev.ide.android.support.BuiltApks]): the build-output path alone
+     * proves nothing, since a clone or an import can put any file there. The check hashes the APK, so it runs
+     * off the main thread and the installer opens after it.
+     */
+    fun promptInstall(path: String) {
+        val name = File(path).name
+        Thread({
+            val built = dev.ide.ui.backend.FileActions.isBuiltApk(path) &&
+                dev.ide.android.support.BuiltApks.isRecorded(File(path).toPath())
+            activity.runOnUiThread {
+                if (!built) {
+                    Toast.makeText(activity, "CodeAssist installs only APKs its own build made. Run the app to build it.", Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                runCatching {
+                    val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", File(path))
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    activity.startActivity(intent)
+                }.onFailure {
+                    Toast.makeText(activity, "Couldn't open the installer for $name", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }, "apk-install-check").start()
     }
 
     /** Copy [uri]'s bytes into a new file under [targetDir]; returns the new path or null. */

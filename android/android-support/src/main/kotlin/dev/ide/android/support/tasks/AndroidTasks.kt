@@ -2221,11 +2221,17 @@ internal class SignApkTask(
     private val config: SigningConfig,
     private val signer: ApkSigner,
 ) : Task {
+    // Whether the APK at the output path is one this build recorded (BuiltApks). An unrecorded one (it came with a
+    // clone or an import, or predates the record) flips this input, so the task re-signs and records a fresh APK
+    // instead of reporting up to date over a file the phone will refuse to install. Read once per graph.
+    private val recorded by lazy { dev.ide.android.support.BuiltApks.looksRecorded(signedApk).toString() }
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             filePaths("unsigned", listOf(unsignedApk))
             property("keystore", config.keystore.toString())
             property("alias", config.keyAlias)
+            if (dev.ide.android.support.BuiltApks.enabled) property("recorded", recorded)
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", signedApk) }
 
@@ -2233,6 +2239,8 @@ internal class SignApkTask(
         ctx.checkCanceled()
         val r = signer.sign(unsignedApk, signedApk, config)
         ctx.reportTool("apksigner", r, DiagnosticKind.PACKAGING)
+        // The install points only accept an APK the build recorded (see BuiltApks).
+        if (r.success) dev.ide.android.support.BuiltApks.record(signedApk)
         return if (r.success) TaskResult.Success else TaskResult.Failed("apk signing failed")
     }
 }
