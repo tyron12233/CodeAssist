@@ -11,6 +11,7 @@ import dev.ide.build.SourceGenerator
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 import java.util.zip.ZipFile
 
 /**
@@ -235,7 +236,7 @@ class KspSourceGenerator(
         val kspClass = cl.loadClass("com.google.devtools.ksp.impl.KotlinSymbolProcessing")
         val ctor = kspClass.getConstructor(KSPConfig::class.java, List::class.java, KSPLogger::class.java)
         val instance = ctor.newInstance(config, providers, logger)
-        val exit = kspClass.getMethod("execute").invoke(instance)
+        val exit = withRootLocale { kspClass.getMethod("execute").invoke(instance) }
         return (exit as? Enum<*>)?.name == "OK"
     }
 
@@ -352,4 +353,46 @@ internal fun kspCrashTraceLines(e: Throwable, max: Int, perLevel: Int = 20): Lis
         t = t.cause
     }
     return out
+}
+
+private val localeLock = Any()
+private var localeHolds = 0
+private var savedLocales: Triple<Locale, Locale, Locale>? = null
+
+/**
+ * Run [block] with the JVM's default locale pinned to [Locale.ROOT], restoring the previous defaults
+ * once the last overlapping caller finishes.
+ *
+ * Processors emit SOURCE CODE, and some of them format numeric literals with the default locale: KotlinPoet
+ * (Room's Kotlin codegen) builds `DecimalFormatSymbols()` for every `%L` number, so on a device set to Arabic
+ * the generated `RoomOpenDelegate(1, …)` came out as `RoomOpenDelegate(١, …)` and kotlinc rejected every
+ * generated file. Nothing in the processor accepts a locale, so the default itself has to be neutral for the
+ * duration of the run. It is process-global, hence the hold count: parallel module builds share one pinned
+ * window instead of one run restoring Arabic underneath another.
+ */
+internal fun <T> withRootLocale(block: () -> T): T {
+    synchronized(localeLock) {
+        if (localeHolds++ == 0) {
+            savedLocales = Triple(
+                Locale.getDefault(),
+                Locale.getDefault(Locale.Category.FORMAT),
+                Locale.getDefault(Locale.Category.DISPLAY),
+            )
+            Locale.setDefault(Locale.ROOT)
+        }
+    }
+    try {
+        return block()
+    } finally {
+        synchronized(localeLock) {
+            if (--localeHolds == 0) {
+                savedLocales?.let { (all, format, display) ->
+                    Locale.setDefault(all)
+                    Locale.setDefault(Locale.Category.FORMAT, format)
+                    Locale.setDefault(Locale.Category.DISPLAY, display)
+                }
+                savedLocales = null
+            }
+        }
+    }
 }
