@@ -44,7 +44,7 @@ Events (the `event` column), by category:
 | Category      | Events (props in parens) |
 |---------------|--------|
 | `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — one row per finished full index pass; **plus** `trigger` (why it ran: `open`/`reindex`/`model`/`libraries`/`variant`/`files`/`module`), `scope_ms` (assembling the scope) and `queued_ms` (waiting for an earlier pass), `lib_changed` (`0` for a quiet pass: the classpath was unchanged, so only the source side was updated and no build was announced), `coalesced` (resync requests that joined this pass), the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the parallelism `par_io`/`par_build`, rebuilt-artifact counts by coarse kind `built.<kind>` and `rekeyed.<kind>` (rebuilt under a new key this session; kinds are `jdk`/`bundled`/`sources`/`jar.project_build`/`jar.project`/`jar.cache`/`jar.other`/`res.project`/`res.cache`/`res.other`, never a name or path), the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name, and the time is summed across the threads that ran it. From the release after 3.26.2 every pass is counted; before, passes that finished between two samples of the status flow were missed), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`, plus the window's peak `heap_used_mb`/`heap_max_mb`/`heap_headroom_mb`), `frame_perf` / `frame_cpu_perf` (same summary shape, plus `over_count`; see below) |
-| `crash`       | `app_crash` (scrubbed — see below; also carries the crash-time `heap_*_mb` and always pins at least one `dev.ide.*` frame, walking the cause chain if the top of the stack is all framework code), `error_logged` (a caught ERROR-level failure, scrubbed + throttled) |
+| `crash`       | `app_crash` (scrubbed — see below; also carries the crash-time `heap_*_mb` and always pins at least one `dev.ide.*` frame, walking the cause chain if the top of the stack is all framework code), `error_logged` (a caught ERROR-level failure, scrubbed + throttled), `app_anr` (a previous process the system killed for not responding; see below) |
 
 `frame_perf` and `frame_cpu_perf` summarize drawn frames, counted only in bursts (a frame drawn within
 100ms of the one before it) so that typing, scrolling and animation are measured and the idle caret blink is
@@ -90,6 +90,21 @@ sources are combined:
   applies the same reduction to any path in `abort_msg`. Everything else about the tombstone (register and
   memory dumps, memory maps, log buffers, open file descriptors) is discarded unparsed. `process` says
   which of our processes died: the IDE, or one of the `build` / `preview` children.
+
+An ANR (`app_anr`, from the release after 3.30.2) comes from the same death history. When the system kills the app for not responding
+(`REASON_ANR`), the record's trace is the thread dump ART wrote at the time, and the next launch reports a
+scrubbed summary of it: `anr_kind` (what timed out: `input`, `broadcast`, `service`, `foreground_service`,
+`provider`, `job`, `other`, from the OS description, which is itself not sent), `background` (the OS marked it
+`bg anr`, which Play does not count as user-perceived), `process`, `importance`, `pss_kb`, `rss_kb`,
+`has_trace`, `threads` (how many threads the dump listed), `main_state` and `main_frames` (the main thread's
+ART state and Java stack), `main_native` (its innermost native frames, `libname.so!symbol`), `main_own_frame`
+(the innermost `dev.ide.*` frame anywhere on it), and, when the main thread was blocked on a monitor,
+`lock_holder` / `lock_holder_state` / `lock_holder_frames` / `lock_holder_own_frame` for the thread holding it.
+Java frames are kept only for this app, the platform and the libraries it bundles; any other run of frames
+collapses to `… (n frames)`, as in a crash report. Lock addresses, thread ids, register state and every other
+thread are dropped. Only an ANR that ended the process leaves a record: one the user waited out does not, so
+these rows are a subset of what Play counts. From the release after 3.30.2, a death record from before the current APK
+was installed is skipped (for crashes too), since the event would carry the new version.
 
 One class of record is deliberately dropped rather than reported: the death of a command-line VM the app
 itself forked to run a build tool (`fault_thread` is a `dalvikvm` launcher). To find the heap a device grants

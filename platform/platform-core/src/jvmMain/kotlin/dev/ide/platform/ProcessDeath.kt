@@ -45,6 +45,10 @@ object ProcessDeath {
     /** `ApplicationExitInfo.REASON_CRASH_NATIVE`: a native crash; `status` is the signal. */
     const val REASON_CRASH_NATIVE: Int = 5
 
+    /** `ApplicationExitInfo.REASON_ANR`: killed after it stopped responding; the trace is a thread dump
+     *  ([AnrTrace]). */
+    const val REASON_ANR: Int = 6
+
     /** `ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE`: the system judged the process too costly. */
     const val REASON_EXCESSIVE_RESOURCE_USAGE: Int = 9
 

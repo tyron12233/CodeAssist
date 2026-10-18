@@ -437,6 +437,14 @@ object AndroidIde {
      * as `REASON_SIGNALED`, and all three are the system working, not a fault. They were 74% of the crash rows
      * reported for 3.14.0 (479 of 649, across 63 of the 89 crashing installs), which is what made the headline
      * crash-free rate read ~8 points below the truth.
+     *
+     * A process the system killed for not responding (`REASON_ANR`) is reported too, as `app_anr` rather than
+     * a crash ([reportAnrExit]); its trace is a thread dump ([dev.ide.platform.AnrTrace]). Play counts ANRs
+     * separately and they were the one vital over its threshold. Only an ANR that ENDED the process leaves a
+     * record: one the user waited out does not, so this sees a subset.
+     *
+     * Records from before the current APK was installed are skipped for both kinds: they belong to the
+     * previous version, and the event would carry this one's.
      */
     private fun reportPreviousNativeCrash(
         context: Context,
@@ -451,12 +459,20 @@ object AndroidIde {
             // routinely, and with a window of one their exits hide a native death of the IDE process.
             val reported = manager.preference(PREF_NATIVE_CRASH_REPORTED)?.toLongOrNull() ?: 0L
             val now = System.currentTimeMillis()
+            // A death from before this APK was installed belongs to the previous version, and the event would
+            // carry this one's.
+            val installedAt = runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+            }.getOrDefault(0L)
             val candidates = am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
                 .filter {
                     it.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
-                        it.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
+                        it.reason == android.app.ApplicationExitInfo.REASON_SIGNALED ||
+                        it.reason == android.app.ApplicationExitInfo.REASON_ANR
                 }
-                .filter { it.timestamp > reported && now - it.timestamp < NATIVE_CRASH_MAX_AGE_MS }
+                .filter {
+                    it.timestamp > reported && it.timestamp > installedAt && now - it.timestamp < NATIVE_CRASH_MAX_AGE_MS
+                }
                 .sortedByDescending { it.timestamp }
                 .take(NATIVE_CRASH_SCAN)
             if (candidates.isEmpty()) return
@@ -467,8 +483,16 @@ object AndroidIde {
             // Newest first, so the ones that survive the filter are the most recent; parse each tombstone once
             // and hand it to the reporter rather than re-reading the trace.
             val reportable = ArrayList<Pair<android.app.ApplicationExitInfo, dev.ide.platform.NativeTombstone?>>()
+            val anrs = ArrayList<Pair<android.app.ApplicationExitInfo, dev.ide.platform.AnrTrace?>>()
             for (exit in candidates) {
-                if (reportable.size >= NATIVE_CRASH_MAX_REPORTED) break
+                if (reportable.size + anrs.size >= NATIVE_CRASH_MAX_REPORTED) break
+                if (exit.reason == android.app.ApplicationExitInfo.REASON_ANR) {
+                    // The trace is a thread dump, not a tombstone.
+                    anrs += exit to runCatching {
+                        exit.traceInputStream?.use { dev.ide.platform.AnrTrace.parse(it) }
+                    }.getOrNull()
+                    continue
+                }
                 val tomb = runCatching {
                     exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
                 }.getOrNull()
@@ -491,6 +515,7 @@ object AndroidIde {
                 reportable += exit to tomb
             }
             reportable.asReversed().forEach { (exit, tomb) -> reportNativeExit(exit, tomb, analytics, prev) }
+            anrs.asReversed().forEach { (exit, trace) -> reportAnrExit(exit, trace, analytics, prev) }
         }
     }
 
@@ -708,6 +733,66 @@ object AndroidIde {
                         it.abortMessage?.let { v -> put("abort_msg", v) }
                         it.uptimeSeconds?.let { v -> put("uptime_s", v.toString()) }
                         it.topFrames(5).take(500).ifEmpty { null }?.let { v -> put("native_frames", v) }
+                    }
+                },
+            )
+        )
+    }
+
+    /**
+     * Log and track one process killed for not responding, as `app_anr`, with the scrubbed thread dump: what
+     * the main thread was doing, and which thread held the lock it was waiting for.
+     */
+    private fun reportAnrExit(
+        exit: android.app.ApplicationExitInfo,
+        trace: dev.ide.platform.AnrTrace?,
+        analytics: dev.ide.analytics.AnalyticsService,
+        prev: dev.ide.platform.EngineBreadcrumb.Crumb?,
+    ) {
+        val sinceOp = prev?.let { exit.timestamp - it.epochMillis }
+        val crumb = if (sinceOp != null && sinceOp > -60_000L && sinceOp < 10 * 60_000L) prev else null
+        val main = trace?.main
+        val holder = trace?.lockHolder
+        val kind = dev.ide.platform.AnrTrace.kindOf(exit.description)
+        val background = dev.ide.platform.AnrTrace.isBackground(exit.description)
+
+        Log.logger("ide.crash").warn(
+            "A previous session of '${exit.processName}' was stopped for not responding ($kind" +
+                (if (background) ", in the background" else "") + "). " +
+                (main?.let { "Main thread ${it.state}: ${it.frames.take(4).joinToString(" < ")}. " }
+                    ?: "No thread dump available. ") +
+                (holder?.let { "Waiting on a lock held by '${it.name}' (${it.state}): ${it.frames.take(3).joinToString(" < ")}." }
+                    ?: "")
+        )
+        analytics.track(
+            AnalyticsEvent(
+                Events.APP_ANR,
+                EventCategory.CRASH,
+                buildMap {
+                    put("anr_kind", kind)
+                    put("background", background.toString())
+                    put("process", exit.processName.substringAfter(':', missingDelimiterValue = "main"))
+                    put("importance", exit.importance.toString())
+                    put("pss_kb", exit.pss.toString())
+                    put("rss_kb", exit.rss.toString())
+                    put("has_trace", (trace != null).toString())
+                    trace?.let { put("threads", it.threadCount.toString()) }
+                    main?.let {
+                        put("main_state", it.state)
+                        put("main_frames", it.frames.joinToString("\n").take(1500))
+                        it.nativeFrames.ifEmpty { null }?.let { v -> put("main_native", v.joinToString(" < ").take(500)) }
+                        it.firstOwnFrame?.let { v -> put("main_own_frame", v) }
+                    }
+                    holder?.let {
+                        put("lock_holder", it.name)
+                        put("lock_holder_state", it.state)
+                        put("lock_holder_frames", it.frames.joinToString("\n").take(1500))
+                        it.firstOwnFrame?.let { v -> put("lock_holder_own_frame", v) }
+                    }
+                    crumb?.let {
+                        put("engine_lane", it.op)
+                        put("index_building", it.indexBuilding.toString())
+                        put("since_op_ms", sinceOp.toString())
                     }
                 },
             )

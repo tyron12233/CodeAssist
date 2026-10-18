@@ -136,10 +136,11 @@ object Events {
     // crash / stability
     const val APP_CRASH = "app_crash"       // uncaught exception (fatal path)
     const val ERROR_LOGGED = "error_logged"  // a caught ERROR-level failure (non-fatal, scrubbed)
+    const val APP_ANR = "app_anr"            // a previous process killed for not responding (scrubbed thread dump)
 
     /** The category an event name belongs to. Everything we emit is PERFORMANCE except stability events. */
     fun categoryOf(name: String): EventCategory = when (name) {
-        APP_CRASH, ERROR_LOGGED -> EventCategory.CRASH
+        APP_CRASH, ERROR_LOGGED, APP_ANR -> EventCategory.CRASH
         else -> EventCategory.PERFORMANCE
     }
 }
