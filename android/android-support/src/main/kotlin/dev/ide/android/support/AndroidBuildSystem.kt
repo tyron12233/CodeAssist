@@ -116,6 +116,7 @@ import dev.ide.model.Project
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.io.path.readText
 
 /**
  * The native, Gradle-free Android build system. It turns an
@@ -483,7 +484,7 @@ class AndroidBuildSystem(
         // Its version is the effective one: the DSL's when set, else what the manifest declares.
         val buildConfig = if (facet.buildFeatures.buildConfig) step("generateBuildConfig") else null
         if (buildConfig != null) {
-            val manifestXml = runCatching { Files.readString(moduleDir(app).resolve(facet.manifest)) }.getOrNull()
+            val manifestXml = runCatching { moduleDir(app).resolve(facet.manifest).readText() }.getOrNull()
             fun manifestAttr(name: String) = manifestXml?.let { Regex("""android:$name\s*=\s*"([^"]*)"""").find(it)?.groupValues?.get(1) }
             val fields = BuildConfigs.fields(
                 facet, variant,

@@ -16,6 +16,7 @@ import dev.ide.build.engine.moduleDir
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.writeText
 
 /**
  * Generates a module's Kotlin `BuildConfig` object ([KotlinBuildConfigFacet]) ahead of its compile, on whichever
@@ -57,7 +58,7 @@ class GenerateKotlinBuildConfigTask(
         if (Files.isDirectory(out)) Files.walk(out).use { s -> s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
         val dir = if (facet.packageName.isBlank()) out else out.resolve(facet.packageName.replace('.', '/'))
         Files.createDirectories(dir)
-        Files.writeString(dir.resolve("${facet.className}.kt"), source())
+        dir.resolve("${facet.className}.kt").writeText(source())
         TaskResult.Success as TaskResult
     }.getOrElse { TaskResult.Failed("buildConfig: ${it.message}", it) }
 }

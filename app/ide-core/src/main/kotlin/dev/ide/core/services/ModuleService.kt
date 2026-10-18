@@ -63,6 +63,7 @@ import dev.ide.ui.backend.UiToolchainWarning
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.io.path.writeText
 
 /**
  * WORKSPACE-scoped engine service: module configuration + management — the Module Settings editor (language
@@ -764,7 +765,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         )) runCatching { Files.createDirectories(dir.resolve(rel)) }
         val manifest = dir.resolve("src/androidMain/AndroidManifest.xml")
         if (!Files.exists(manifest)) runCatching {
-            Files.writeString(manifest, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" />\n")
+            manifest.writeText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" />\n")
         }
         ctx.invalidateAnalyzers()
         ctx.invalidateSyntheticClasses()

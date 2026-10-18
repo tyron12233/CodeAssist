@@ -24,6 +24,7 @@ import java.util.Properties
 import java.util.stream.Collectors
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlin.io.path.readText
 
 /**
  * Writes a native CodeAssist project out as a real Gradle project: the model (`workspace.json` +
@@ -634,7 +635,7 @@ object GradleProjectExport {
             s.anyMatch { f ->
                 val name = f.fileName.toString()
                 (name.endsWith(".kt") || name.endsWith(".java")) && Files.isRegularFile(f) &&
-                    runCatching { "BuildConfig" in Files.readString(f) }.getOrDefault(false)
+                    runCatching { "BuildConfig" in f.readText() }.getOrDefault(false)
             }
         }
     }

@@ -52,6 +52,7 @@ import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import java.util.stream.Collectors
 import java.util.zip.ZipFile
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -402,11 +403,11 @@ internal class GenerateLibraryRTask(
      * samples' `shared/src/androidMain/AndroidManifest.xml` failed `generateR` exactly so.
      */
     private fun withPackage(manifest: Path): Path {
-        val xml = Files.readString(manifest)
+        val xml = manifest.readText()
         val fixed = ManifestMergeTask.ensurePackage(xml, packageName)
         if (fixed == xml) return manifest
         synthManifest.parent?.let { Files.createDirectories(it) }
-        Files.writeString(synthManifest, fixed)
+        synthManifest.writeText(fixed)
         return synthManifest
     }
 
