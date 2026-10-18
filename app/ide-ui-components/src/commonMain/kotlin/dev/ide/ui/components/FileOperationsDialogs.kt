@@ -31,7 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
@@ -115,7 +117,11 @@ fun FileOperationDialog(
 private fun RenamePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     // Edit the leaf name on disk: a file's name, or a (possibly compacted) package's deepest directory.
     val current = node.fileOpPath()?.substringAfterLast('/')?.substringAfterLast('\\') ?: node.name
-    var name by remember(node) { mutableStateOf(current) }
+    // Open with the part you'd usually replace already selected, so typing overwrites it.
+    var field by remember(node) {
+        mutableStateOf(TextFieldValue(current, renameSelection(current, isFile = node.kind == NodeKind.File)))
+    }
+    val name = field.text
     val focus = remember { FocusRequester() }
     LaunchedEffect(node) { runCatching { focus.requestFocus() } }
     val valid = name.isNotBlank() && name != current && '/' !in name && '\\' !in name
@@ -123,10 +129,19 @@ private fun RenamePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: (Strin
 
     DialogCard(stringResource(Res.string.fileop_rename_title, node.name)) {
         FieldLabel(stringResource(Res.string.fileop_new_name))
-        DialogField(value = name, onValueChange = { name = it }, placeholder = node.name, focusRequester = focus, onSubmit = ::submit, onCancel = onDismiss)
+        DialogField(value = field, onValueChange = { field = it }, placeholder = node.name, focusRequester = focus, onSubmit = ::submit, onCancel = onDismiss)
         Spacer12()
         ButtonRow(onDismiss, stringResource(Res.string.rename), valid, ::submit)
     }
+}
+
+/**
+ * The initial rename selection for [name]: a file's stem (`Example` of `Example.java`, `build.gradle` of
+ * `build.gradle.kts`), or the whole name for folders/packages and dotfiles like `.gitignore` that have no stem.
+ */
+internal fun renameSelection(name: String, isFile: Boolean): TextRange {
+    val dot = if (isFile) name.lastIndexOf('.') else -1
+    return TextRange(0, if (dot > 0) dot else name.length)
 }
 
 @Composable

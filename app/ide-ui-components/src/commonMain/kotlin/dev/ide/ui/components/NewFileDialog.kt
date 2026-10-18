@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
@@ -840,6 +841,42 @@ internal fun DialogField(
     onSubmit: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    DialogFieldFrame(value.isEmpty(), placeholder) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.dialogFieldKeys(focusRequester, onSubmit, onCancel),
+        )
+    }
+}
+
+/** [DialogField] over a [TextFieldValue], for callers that control the selection (e.g. rename pre-selecting the stem). */
+@Composable
+internal fun DialogField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    placeholder: String,
+    focusRequester: FocusRequester? = null,
+    onSubmit: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    DialogFieldFrame(value.text.isEmpty(), placeholder) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.dialogFieldKeys(focusRequester, onSubmit, onCancel),
+        )
+    }
+}
+
+@Composable
+private fun DialogFieldFrame(empty: Boolean, placeholder: String, field: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -849,27 +886,22 @@ internal fun DialogField(
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
-                .onPreviewKeyEvent { ev ->
-                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (ev.key) {
-                        Key.Escape -> { onCancel(); true }
-                        Key.Enter -> { onSubmit(); true }
-                        else -> false
-                    }
-                },
-        )
+        if (empty) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
+        field()
     }
 }
+
+private fun Modifier.dialogFieldKeys(focusRequester: FocusRequester?, onSubmit: () -> Unit, onCancel: () -> Unit): Modifier =
+    fillMaxWidth()
+        .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+        .onPreviewKeyEvent { ev ->
+            if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            when (ev.key) {
+                Key.Escape -> { onCancel(); true }
+                Key.Enter -> { onSubmit(); true }
+                else -> false
+            }
+        }
 
 @Composable
 private fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit) {
