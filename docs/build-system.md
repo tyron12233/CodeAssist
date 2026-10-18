@@ -520,7 +520,81 @@ notes as not modeled.
   (`implementation(projects.shared)`) resolve to the included module.
 - **Compose resources.** `src/<set>/composeResources` dirs produce a `[composeResources]` facet, with the
   package from `compose.resources { packageOfResClass }` or the plugin's default
-  `<group>.<project>.generated.resources`.
+  `<group>.<project>.generated.resources`. The generator follows the plugin's own rules: names go through
+  `asUnderscoredIdentifier` (`IndieFlower-Regular.ttf` is `Res.font.IndieFlower_Regular`), hidden files are
+  skipped, and strings unescape `\n`, `\t`, `\uXXXX` and `\\` only. The generated accessor root joins the
+  `[kotlin]` facet's `commonSourceRoots`, because the plugin generates `commonMain`'s accessors into
+  `commonMain`; left on the platform side, common code cannot see `Res`. On Android the staged tree ships as
+  **assets** (`assets/composeResources/<pkg>/…`), not Java resources: `Font(resource)` reads only through the
+  `AssetManager`.
+- **Build types.** A `buildTypes { }` naming only `release` keeps AGP's implicit `debug` (and vice versa).
+- **BuildConfig.** AGP's `buildConfigField(type, name, value)` in `defaultConfig`, build types and flavors becomes
+  `[android] buildConfigFields` (each `"<type> <NAME> = <value>"`, editable in Module Settings), and the Android
+  pipeline's `generateBuildConfig` task writes the variant's `<namespace>.BuildConfig` (`BuildConfigs`: `DEBUG`,
+  `APPLICATION_ID` or `LIBRARY_PACKAGE_NAME`, `BUILD_TYPE`, `FLAVOR`, `VERSION_CODE`/`VERSION_NAME`, then the
+  custom fields with build type over flavor over defaultConfig). The editor's synthetic class shows the same
+  fields. Native modules generate it unless `buildConfig = false`; a Gradle import follows AGP (explicit
+  `buildFeatures.buildConfig`, else on when fields are declared or `android.defaults.buildfeatures.buildconfig`
+  or AGP < 8, never for the KMP Android-library plugin). The export writes the fields back with
+  `buildConfig = true`. gmazzo's `com.github.gmazzo.buildconfig` plugin is modeled too: its `buildConfig { }`
+  becomes `[kotlinBuildConfig]` and `KotlinBuildConfigPlugin` generates the Kotlin `object BuildConfig` into a
+  common root before compile (package from `packageName(…)`, else the Android namespace, else the group).
+- **Opt-ins.** `languageSettings { optIn("…") }`, `compilerOptions { optIn.add(…) }` and `-opt-in=…` compiler
+  args become the `[kotlin]` facet's `optIns`, passed to K2 as `-opt-in` by both compile tasks (and over the
+  forked-kotlinc wire on device).
+- **Library manifests without `package`.** A library's `generateR` links a copy of its manifest with the
+  namespace injected, as AGP does (the app's merge already did this).
+- **Library entries are per module.** A declared coordinate's library-table entry is stored as
+  `<coordinate>@module:<id>` (`LibraryVariants`, project-model-api), and every classpath (build, and the
+  editor's `ModuleCompilationContext`) reads a library as its DECLARING module resolved it. One shared entry per
+  coordinate went wrong two ways: an Android and a JVM module resolve it to different artifacts (`ui-android` /
+  `ui-desktop`), so an Android build could be dexed against desktop jars; and the entry holds only the share of
+  the module's graph that declaration claimed, so whichever module resolved last left the other compiling
+  against too little. A resolved-but-empty share is written empty so it shadows a pre-existing shared entry;
+  a project resolved before this keeps reading plain names until its next resolve.
+- **AARs through a library module.** An AAR that a library module declares `implementation` is on the app's
+  runtime classpath only, and its manifest, resources and assets are merged from there, as AGP does. (Without
+  this, Compose resources' `AndroidContextProvider` was dropped and the app crashed at start.)
+
+### Amper projects
+
+`AmperProjectImporter` opens a JetBrains Amper project (`project.yaml` listing modules, one `module.yaml` each)
+from its YAML (read by the small `AmperYaml` subset reader). `jvm/app`/`jvm/lib` become JVM modules,
+`android/app` an Android application, and `kmp/lib` its Android or JVM target by the same preference as a Gradle
+KMP module; `ios/app`, `wasm-js/app` and other products are noted and skipped. `src/` is common code,
+`src@<platform>` and alias dirs (`aliases: - jvmAndAndroid: [jvm, android]`) are layered on, Android keeps
+`res/`, `assets/` and `src/AndroidManifest.xml`, and `composeResources/` feeds the Res generator.
+Dependencies read `$libs.*` (version catalog), Amper's `$compose.*` and `$kotlin.*`, `//module` paths and
+plain coordinates, with `exported`/`compile-only`/`runtime-only`, and `dependencies@<platform>` applies to the
+modeled platform. Verified on JetBrains' `codeviewer` sample (Android APK and desktop build).
+
+To try a project from the wild end to end, `ExternalProjectBuildTest` (opt-in) imports a checkout, resolves
+it and runs a task on CodeAssist's engine:
+`RUN_EXT_BUILD=1 EXT_SRC=<checkout> EXT_KMP_TARGET=android ./gradlew :ide-core:test --tests '*ExternalProjectBuildTest'`.
+
+- **All targets recorded.** A module that can be imported for both Android and the JVM is read both ways, and
+  the `[kotlin]` facet records every target (`targets`, `activeTarget`, `shared`; see "Multiplatform in the native
+  model" below), so Convert to native keeps them.
+
+### Multiplatform in the native model
+
+A CodeAssist module is one compilation, so a multiplatform module is shaped for one target at a time, but its
+`[kotlin]` facet records all of them: what every target shares (`shared` roots, test roots, Compose resource roots)
+and what each adds (`targets`: type, roots, common roots, dependencies, and the facet tables it owns while
+inactive, such as `[android]`). `KmpShapes` is the one implementation, over the importer's `ExternalModule`
+shapes: `describe` folds per-target shapes into the facet, `materialize` reshapes a module for another target
+(type, roots, dependencies swapped, owned facets put away and brought back, common roots recomputed).
+
+- **Switching** a native project (`KmpSwitch`, behind `ProjectService.setKmpTarget`) materializes every
+  multiplatform module and re-applies it with `ExternalModelApplier(recreate = …)`; ids are names, so
+  dependents keep pointing at it. Module Settings shows the choice as a "Kotlin Multiplatform" card. A
+  Gradle-compat project still switches by re-reading its scripts.
+- **Creating one:** the Compose Multiplatform and KMP library templates have a "Gradle build files" toggle
+  (off: a native project via `KmpNative`, same sources); New Module offers "Kotlin Multiplatform"
+  (`ModuleService.KMP_MODULE_TYPE`); Module Settings' **Add feature** (`ModuleFeatures`) adds Compose
+  resources, a Kotlin BuildConfig, or multiplatform itself to an existing module (its own code stays as the
+  active target's; an Android module's dependencies become its Android target's).
+- The Gradle and Amper importers record both targets the same way.
 
 For several targets at once, or a model Gradle computes, use `generateNativeModel` (see
 [self-hosting](self-hosting.md)). `GradleModelImporter` folds an exported multiplatform *Android* module the

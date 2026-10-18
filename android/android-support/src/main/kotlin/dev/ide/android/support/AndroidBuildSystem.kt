@@ -19,6 +19,7 @@ import dev.ide.android.support.tasks.GenerateAarRJarTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
 import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
+import dev.ide.android.support.tasks.GenerateBuildConfigTask
 import dev.ide.android.support.tasks.InjectAppLogProviderTask
 import dev.ide.android.support.tasks.InjectCrashlyticsMappingFileIdTask
 import dev.ide.android.support.tasks.InstrumentClassesTask
@@ -98,6 +99,7 @@ import dev.ide.build.engine.jarPath
 import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.outputDir
 import dev.ide.build.jvm.JavaPlugin
+import dev.ide.build.jvm.compose.ComposeResourcesFacet
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.BuildSystemId
@@ -477,8 +479,23 @@ class AndroidBuildSystem(
                 )
             }
         }
-        val vbGenDirs = listOfNotNull(viewBinding).map { layout.viewBindingGen }
-        val vbDep = listOfNotNull(viewBinding)
+        // buildFeatures { buildConfig }: `<namespace>.BuildConfig` for this variant, another extra source root.
+        // Its version is the effective one: the DSL's when set, else what the manifest declares.
+        val buildConfig = if (facet.buildFeatures.buildConfig) step("generateBuildConfig") else null
+        if (buildConfig != null) {
+            val manifestXml = runCatching { Files.readString(moduleDir(app).resolve(facet.manifest)) }.getOrNull()
+            fun manifestAttr(name: String) = manifestXml?.let { Regex("""android:$name\s*=\s*"([^"]*)"""").find(it)?.groupValues?.get(1) }
+            val fields = BuildConfigs.fields(
+                facet, variant,
+                versionCode = if (versionCodeAuthoritative) versionCode else manifestAttr("versionCode")?.toIntOrNull() ?: versionCode,
+                versionName = if (versionNameAuthoritative) versionName else manifestAttr("versionName") ?: versionName,
+            )
+            val source = BuildConfigs.render(facet.namespace, fields)
+            tasks.task(buildConfig) { GenerateBuildConfigTask(buildConfig, facet.namespace, source, layout.buildConfigGen) }
+        }
+        val vbGenDirs = listOfNotNull(viewBinding).map { layout.viewBindingGen } +
+            listOfNotNull(buildConfig).map { layout.buildConfigGen }
+        val vbDep = listOfNotNull(viewBinding, buildConfig)
 
         // AIDL: `.aidl` under the variant's aidl roots becomes the Binder interface/Stub/Proxy Java, in a
         // generated root both compile tasks read. There is no `buildFeatures` flag to turn this on (AGP has
@@ -1118,7 +1135,16 @@ class AndroidBuildSystem(
             }
             compileDeps.add(libViewBinding)
         }
-        val libVbGenDirs = listOfNotNull(libViewBinding).map { vbDir }
+        // buildFeatures { buildConfig } for a library: `<namespace>.BuildConfig` with `LIBRARY_PACKAGE_NAME`,
+        // built for the variant the consumer selected. Real code, so it compiles into the library's output.
+        val bcDir = rRoot.resolve("gen-build-config")
+        val libBuildConfig = if (facet.buildFeatures.buildConfig && libVariant != null) TaskName(":${m.name}:generateBuildConfig") else null
+        if (libBuildConfig != null) {
+            val source = BuildConfigs.render(facet.namespace, BuildConfigs.fields(facet, libVariant!!, facet.versionCode, facet.versionName))
+            tasks.task(libBuildConfig) { GenerateBuildConfigTask(libBuildConfig, facet.namespace, source, bcDir) }
+            compileDeps.add(libBuildConfig)
+        }
+        val libVbGenDirs = listOfNotNull(libViewBinding).map { vbDir } + listOfNotNull(libBuildConfig).map { bcDir }
 
         // AIDL for a library: same generation as an app's, and the result is real code. It compiles into the
         // library's own output, so the stubs dex into the AAR/jar. The library's `aidl/` folder is ALSO
@@ -1533,7 +1559,23 @@ class AndroidBuildSystem(
                 if (Files.isDirectory(dir)) add(dir)
             }
         }
-        return out
+        return composeResourcesAsAssets(module, role, out)
+    }
+
+    /**
+     * A module's staged Compose resources ship as ASSETS on Android, as the Compose plugin packages them, rather
+     * than as the Java resources the model declares them as (which is right on the JVM). Strings and drawables
+     * would still load from the APK root through the class loader, but `Font(resource)` reads only through the
+     * `AssetManager`, so a font left there fails at runtime. Done here, not in the importer, so a project imported
+     * before this rule builds correctly without a re-import.
+     */
+    private fun composeResourcesAsAssets(module: Module, role: ContentRole, roots: List<Path>): List<Path> {
+        if (role != ContentRole.RESOURCE && role != ContentRole.ASSETS) return roots
+        if (module.facets.get(ComposeResourcesFacet.KEY) == null) return roots
+        val staged = moduleDir(module).resolve(ComposeResourcesFacet.GENERATED_RESOURCES_ROOT).toAbsolutePath().normalize()
+        val without = roots.filter { it.toAbsolutePath().normalize() != staged }
+        // `listOf`: a Path is an Iterable<Path>, so `without + staged` would add each of its name segments.
+        return if (role == ContentRole.RESOURCE) without else without + listOf(staged)
     }
 
     /**
@@ -1600,6 +1642,7 @@ class AndroidBuildSystem(
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
         val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
+        val buildConfigGen: Path = inter.resolve("gen-build-config")  // <namespace>.BuildConfig
         val aidlGen: Path = inter.resolve("gen-aidl")  // compileAidl output: the Binder interface/Stub/Proxy .java
         // KSP source-generation output root (AGP's build/generated/ksp/<variant>); KSP emits kotlin/ + java/
         // under it, added to the compile source roots so both are compiled + indexed like hand-written code.

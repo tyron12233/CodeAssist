@@ -19,6 +19,17 @@ import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.FacetData
 import dev.ide.model.LanguageLevel
+import dev.ide.model.BuildSystemId
+import dev.ide.model.impl.ExternalModelApplier
+import dev.ide.model.impl.rootPath
+import dev.ide.model.sync.ExternalProjectModel
+import dev.ide.lang.kotlin.build.KotlinFacet
+import dev.ide.core.gradle.GradleKmp
+import dev.ide.core.kmp.KmpNative
+import dev.ide.core.kmp.KmpShapes
+import dev.ide.core.kmp.KmpSwitch
+import dev.ide.core.kmp.ModuleFeatures
+import dev.ide.ui.backend.UiModuleFeature
 import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
@@ -73,7 +84,8 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      * Rebuilt per call because it closes over the store's CURRENT snapshot the same way the reads below do;
      * the store itself is stable for the life of the engine.
      */
-    private val model: ModuleConfigBridge get() = ModuleConfigBridge(ctx.store, setOf(PACKAGING_KEY))
+    // The `[kotlin]` facet's target records are shown as the Kotlin Multiplatform card, not as raw fields.
+    private val model: ModuleConfigBridge get() = ModuleConfigBridge(ctx.store, setOf(PACKAGING_KEY, "targets", "shared", "activeTarget"))
 
     /** Starter body for a created `proguard-rules.pro` — comments only (the bundled defaults carry the
      *  framework keep rules); applied on top of them when the build type has `minifyEnabled = true`. */
@@ -101,7 +113,14 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      */
     fun getModuleConfig(moduleName: String): UiModuleConfig? {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
-        val base = model.moduleConfig(moduleName)?.copy(missingPlatform = missingPlatform(module)) ?: return null
+        val data = ctx.store.data.projects.flatMap { it.modules }.firstOrNull { it.name == moduleName }
+        val kotlin = module.facets.get(KotlinFacet.KEY)
+        val base = model.moduleConfig(moduleName)?.copy(
+            missingPlatform = missingPlatform(module),
+            kmpTargets = kotlin?.targets?.map { it.name }?.takeIf { it.size > 1 }.orEmpty(),
+            kmpActiveTarget = kotlin?.takeIf { it.targets.size > 1 }?.active?.name,
+            addableFeatures = data?.let { ModuleFeatures.addable(it) }.orEmpty().map(::featureOf),
+        ) ?: return null
         // The one field the model cannot answer: which `main` this module would run. Detecting it needs the
         // module's sources analyzed, and running it needs a JVM, so it is added here rather than shared.
         if (!isConsoleRunModule(module)) return base
@@ -160,6 +179,12 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
                     "Generate a type-safe binding class for each layout — a field per view id, plus inflate()/bind(), no findViewById.",
                     bf.viewBinding,
                     note = "Adds the ViewBinding runtime and generates a <Layout>Binding for every layout.",
+                ),
+                UiBuildFeature(
+                    "buildConfig", "BuildConfig",
+                    "Generate <namespace>.BuildConfig: DEBUG, APPLICATION_ID, VERSION_CODE, VERSION_NAME and your buildConfigFields.",
+                    bf.buildConfig,
+                    note = "Custom fields go in buildConfigFields (Settings tab), on defaultConfig, a build type or a flavor.",
                 ),
             ),
         )
@@ -481,6 +506,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
             "viewBinding" -> bf.copy(viewBinding = enabled)
             "compose" -> bf.copy(compose = enabled)
             "parcelize" -> bf.copy(parcelize = enabled)
+            "buildConfig" -> bf.copy(buildConfig = enabled)
             else -> return UiConfigResult(false, "Unknown build feature '$feature'.")
         }
         if (updated == bf) return UiConfigResult(true, "No change.")
@@ -646,7 +672,29 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      * facet panels derived from the type's default facets (so an Android module surfaces namespace/SDK
      * fields). Fields are codec-derived, so a new facet type appears here without bespoke UI.
      */
-    fun availableModuleTypes(): List<UiModuleTypeOption> = model.availableModuleTypes { type ->
+    fun availableModuleTypes(): List<UiModuleTypeOption> = moduleTypeOptions() + kmpModuleOption()
+
+    /** "Kotlin Multiplatform": not a module type of its own but an Android and a desktop target in one module
+     *  (see [KmpNative]), created as whichever type the host builds now. */
+    private fun kmpModuleOption() = UiModuleTypeOption(
+        id = KMP_MODULE_TYPE,
+        displayName = "Kotlin Multiplatform",
+        languageLevels = LanguageLevel.values().map { it.name },
+        defaultLanguageLevel = LanguageLevel.JAVA_17.name,
+        defaultFacets = listOf(
+            UiFacetConfig(
+                KMP_MODULE_TYPE, "Kotlin Multiplatform",
+                listOf(
+                    UiConfigField.Text("namespace", "Package (Android namespace)", "com.example.shared"),
+                    UiConfigField.Bool("application", "Application (APK and desktop window)", false),
+                    UiConfigField.Bool("compose", "Compose Multiplatform", true),
+                    UiConfigField.Bool("composeResources", "Compose resources", false),
+                ),
+            )
+        ),
+    )
+
+    private fun moduleTypeOptions(): List<UiModuleTypeOption> = model.availableModuleTypes { type ->
         // A type's default facets are codec-described, so only a host with the codecs can prefill them.
         type.defaultFacets().mapNotNull { tmpl ->
             val codec = ctx.store.facetCodecs.codecFor(tmpl.key) ?: return@mapNotNull null
@@ -670,6 +718,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         facetValues: Map<String, Map<String, Any?>>,
         parentDir: String = "",
     ): UiConfigResult {
+        if (typeId == KMP_MODULE_TYPE) return createKmpModule(name, languageLevel, facetValues[KMP_MODULE_TYPE].orEmpty(), parentDir)
         // `src/main/java` rather than the bridge's Kotlin default: this host compiles Java, and its
         // `JavaPlugin` registers a `compileKotlin` task for any `.kt` under the same root anyway.
         val result = model.createModule(
@@ -680,6 +729,65 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         ctx.invalidateSyntheticClasses()
         ctx.resyncIndex()
         return result
+    }
+
+    /**
+     * A new multiplatform module (see [kmpModuleOption]): both targets recorded, shaped for the target the other
+     * multiplatform modules are on (else the host's default), its source folders laid down.
+     */
+    private fun createKmpModule(name: String, languageLevel: String?, values: Map<String, Any?>, parentDir: String): UiConfigResult {
+        if (!isValidModuleName(name)) return UiConfigResult(false, "Invalid module name '$name'.")
+        if (ctx.modules().any { it.name == name }) return UiConfigResult(false, "A module named '$name' already exists.")
+        val project = ctx.store.data.projects.firstOrNull() ?: return UiConfigResult(false, "No project is open.")
+        val level = languageLevel?.let { l -> LanguageLevel.values().firstOrNull { it.name == l } } ?: LanguageLevel.JAVA_17
+        val active = KmpSwitch.choice(ctx.store)?.active
+            ?: if (GradleKmp.hostDefault() == GradleKmp.Platform.ANDROID) KmpShapes.ANDROID else KmpShapes.JVM
+        val dirRel = if (parentDir.isBlank()) name else "${parentDir.trim('/')}/$name"
+        val options = KmpNative.Options(
+            name = name, dirRelPath = dirRel,
+            namespace = (values["namespace"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: "com.example.${name.lowercase()}",
+            application = values["application"] as? Boolean ?: false,
+            compose = values["compose"] as? Boolean ?: true,
+            composeResources = values["composeResources"] as? Boolean ?: false,
+            active = active,
+        )
+        ExternalModelApplier(ctx.store).apply(
+            ExternalProjectModel(project.name, BuildSystemId(project.buildSystemId), listOf(KmpNative.module(options))),
+            level, removeAbsent = false,
+        )
+        ctx.store.save()
+        val dir = ctx.store.rootPath.resolve(dirRel)
+        val pkgPath = options.namespace.replace('.', '/')
+        for (rel in listOfNotNull(
+            "src/commonMain/kotlin/$pkgPath", "src/commonTest/kotlin/$pkgPath", "src/androidMain/kotlin/$pkgPath", "src/desktopMain/kotlin/$pkgPath",
+            "src/commonMain/composeResources/drawable".takeIf { options.composeResources },
+        )) runCatching { Files.createDirectories(dir.resolve(rel)) }
+        val manifest = dir.resolve("src/androidMain/AndroidManifest.xml")
+        if (!Files.exists(manifest)) runCatching {
+            Files.writeString(manifest, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" />\n")
+        }
+        ctx.invalidateAnalyzers()
+        ctx.invalidateSyntheticClasses()
+        ctx.resyncIndex()
+        return UiConfigResult(true, "Created multiplatform module '$name' (Android and desktop, shaped for $active).")
+    }
+
+    /** Add [featureId] (see [ModuleFeatures]) to [moduleName]. */
+    fun addModuleFeature(moduleName: String, featureId: String): UiConfigResult {
+        val level = ctx.modules().firstOrNull { it.name == moduleName }?.languageLevel ?: LanguageLevel.JAVA_17
+        val error = ModuleFeatures.add(ctx.store, ctx.store.rootPath, moduleName, featureId, level)
+        if (error != null) return UiConfigResult(false, error)
+        ctx.invalidateAnalyzers()
+        ctx.invalidateSyntheticClasses()
+        ctx.resyncIndex()
+        return UiConfigResult(true, "Added ${featureOf(featureId).title} to '$moduleName'.")
+    }
+
+    private fun featureOf(id: String): UiModuleFeature = when (id) {
+        ModuleFeatures.COMPOSE_RESOURCES -> UiModuleFeature(id, "Compose resources", "Strings, images and fonts in composeResources/, read through a generated Res class.")
+        ModuleFeatures.KOTLIN_BUILD_CONFIG -> UiModuleFeature(id, "BuildConfig (Kotlin)", "A generated BuildConfig object of constants, as the gmazzo buildconfig plugin makes.")
+        ModuleFeatures.MULTIPLATFORM -> UiModuleFeature(id, "Kotlin Multiplatform", "Shared code in commonMain with an Android and a desktop target, switchable.")
+        else -> UiModuleFeature(id, id, "")
     }
 
     /**
@@ -863,6 +971,9 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
     private companion object {
         /** The `[android]` codec key for the packaging block — edited via the Packaging tab, not the Settings fields. */
         const val PACKAGING_KEY = "packaging"
+
+        /** The New Module option for a multiplatform module (see `kmpModuleOption`). */
+        const val KMP_MODULE_TYPE = "kotlin-multiplatform"
 
         /** [UiToolchainWarning.id] prefix for a bundled-KSP-processor runtime mismatch; the suffix is the
          *  catalog processor id, which is what the acceptance is persisted under. */

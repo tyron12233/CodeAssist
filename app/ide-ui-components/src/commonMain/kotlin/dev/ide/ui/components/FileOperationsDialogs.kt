@@ -280,11 +280,7 @@ private fun DirectoryBrowserPanel(
 /** Render a directory-entry icon from its `TreeIcons` id (folder / file-type glyph / letter badge). */
 @Composable
 private fun EntryIcon(iconId: String) {
-    when (val ic = TreeIcons.resolve(iconId)) {
-        is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(17.dp), tint = resolveTint(ic.tint))
-        is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(17.dp), tint = resolveTint(ic.tint))
-        is TreeIcon.Badge -> LetterBadge(ic.text, ic.color, 17)
-    }
+    TreeIconImage(TreeIcons.resolve(iconId), 17)
 }
 
 @Composable

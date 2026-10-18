@@ -38,6 +38,12 @@ data class KotlinCompileRequest(
      * "'expect' and corresponding 'actual' are declared in the same module" and fails.
      */
     val commonSources: List<Path> = emptyList(),
+    /**
+     * Opt-in requirement markers, each passed as `-opt-in=<fqName>`: Gradle's `languageSettings.optIn(…)` /
+     * `compilerOptions.optIn`. A project that opts in module-wide (Material 3's `ExperimentalMaterial3Api` in
+     * the Compose samples) otherwise fails with "This material API is experimental…" on every use.
+     */
+    val optIns: List<String> = emptyList(),
 )
 
 /**

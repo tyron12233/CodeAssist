@@ -174,7 +174,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             kind = NodeKind.Workspace,
             filePath = null,
             iconId = "workspace",
-            children = rawChildren(root, moduleRoots()),
+            children = rawChildren(root, moduleRoots(), rawDirIcons()),
             dirPath = root.toString(),
         )
     }
@@ -184,7 +184,32 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
      * `build/` tree IS shown here (so an APK is locatable) but dimmed IntelliJ-style: once inside a `build/`
      * dir, [excluded] propagates so the whole derived subtree renders muted with the output icon.
      */
-    private fun rawChildren(dir: Path, moduleRoots: Map<Path, String>, excluded: Boolean = false): List<TreeNode> {
+    /**
+     * The icons IntelliJ's Project Files view gives directories that mean something to the model: a module's
+     * directory its module icon, and a source, resource or res root the icon of its role. Keyed by normalized path.
+     */
+    private fun rawDirIcons(): Map<Path, String> {
+        val icons = HashMap<Path, String>()
+        for (module in ctx.services.modules()) {
+            for (info in ctx.services.treeRootsDetailed(module)) {
+                val leaf = info.path.fileName?.toString() ?: ""
+                ctx.services.iconFor(IconTarget.SourceRoot(info.sourceSetName, info.roles, module, leaf))
+                    ?.let { icons.putIfAbsent(info.path.normalize(), it) }
+            }
+            // Last, so a module directory that is also a declared root still shows as the module.
+            ctx.services.moduleRoot(module)?.let { dir ->
+                icons[dir.normalize()] = ctx.services.iconFor(IconTarget.ModuleNode(module)) ?: "module"
+            }
+        }
+        return icons
+    }
+
+    private fun rawChildren(
+        dir: Path,
+        moduleRoots: Map<Path, String>,
+        dirIcons: Map<Path, String> = emptyMap(),
+        excluded: Boolean = false,
+    ): List<TreeNode> {
         val entries = runCatching { Files.list(dir).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
         val dirs = entries.filter { Files.isDirectory(it) && !isDerivedDir(it) }.sortedBy { it.fileName.toString().lowercase() }
         val files = entries.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString().lowercase() }
@@ -195,8 +220,12 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
                 name = d.fileName.toString(),
                 kind = NodeKind.Folder,
                 filePath = null,
-                iconId = if (derived) "build-output" else (ctx.services.iconFor(IconTarget.Directory(d.fileName.toString(), emptySet())) ?: "folder"),
-                children = rawChildren(d, moduleRoots, derived),
+                iconId = when {
+                    derived -> "build-output"
+                    else -> dirIcons[d.normalize()]
+                        ?: ctx.services.iconFor(IconTarget.Directory(d.fileName.toString(), emptySet())) ?: "folder"
+                },
+                children = rawChildren(d, moduleRoots, dirIcons, derived),
                 dirPath = d.toString(),
                 styleHint = if (derived) "excluded" else null,
             )

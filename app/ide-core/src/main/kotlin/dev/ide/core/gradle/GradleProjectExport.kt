@@ -3,6 +3,7 @@ package dev.ide.core.gradle
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.BuildType
+import dev.ide.android.support.BuildConfigField
 import dev.ide.android.support.DefaultProguardFiles
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -519,6 +520,7 @@ object GradleProjectExport {
                     line("versionName = \"${escape(facet.versionName)}\"")
                 }
                 placeholders(facet.manifestPlaceholders)
+                buildConfigFields(facet.buildConfigFields)
             }
             buildTypesBlock(this, module, facet, notes)
             flavorsBlock(this, facet)
@@ -555,6 +557,7 @@ object GradleProjectExport {
                     type.applicationIdSuffix?.let { line("applicationIdSuffix = \"${escape(it)}\"") }
                     type.versionNameSuffix?.let { line("versionNameSuffix = \"${escape(it)}\"") }
                     placeholders(type.manifestPlaceholders)
+                    buildConfigFields(type.buildConfigFields)
                     val signing = type.signingConfig
                     if (signing != null) {
                         line("// Signed with the '${escape(signing)}' keystore in CodeAssist. Add a")
@@ -577,7 +580,7 @@ object GradleProjectExport {
         type.debuggable == (type.name == "debug") && !type.minifyEnabled && !type.shrinkResources &&
             type.proguardFiles.isEmpty() && type.consumerProguardFiles.isEmpty() && type.proguardRules.isEmpty() &&
             type.applicationIdSuffix == null && type.versionNameSuffix == null &&
-            type.manifestPlaceholders.isEmpty() && type.signingConfig == null
+            type.manifestPlaceholders.isEmpty() && type.signingConfig == null && type.buildConfigFields.isEmpty()
 
     private fun proguardArgument(entry: String): String =
         if (DefaultProguardFiles.isDefault(entry)) "getDefaultProguardFile(\"${escape(entry)}\")"
@@ -599,6 +602,7 @@ object GradleProjectExport {
                     flavor.applicationIdSuffix?.let { line("applicationIdSuffix = \"${escape(it)}\"") }
                     flavor.versionName?.let { line("versionName = \"${escape(it)}\"") }
                     placeholders(flavor.manifestPlaceholders)
+                    buildConfigFields(flavor.buildConfigFields)
                 }
             }
         }
@@ -606,11 +610,32 @@ object GradleProjectExport {
 
     private fun buildFeaturesBlock(k: Kts, module: Exported, facet: AndroidFacet) {
         val viewBinding = facet.buildFeatures.viewBinding
-        if (!viewBinding && !module.compose) return
+        // AGP 8 generates BuildConfig only when asked; CodeAssist always does. Asked for whenever the module
+        // declares fields or its code uses the class, so the exported build compiles what this one did.
+        val buildConfig = facet.buildFeatures.buildConfig && (declaresBuildConfigFields(facet) || referencesBuildConfig(module.dir))
+        if (!viewBinding && !module.compose && !buildConfig) return
         k.line()
         k.block("buildFeatures") {
             if (viewBinding) line("viewBinding = true")
             if (module.compose) line("compose = true")
+            if (buildConfig) line("buildConfig = true")
+        }
+    }
+
+    private fun declaresBuildConfigFields(facet: AndroidFacet): Boolean =
+        facet.buildConfigFields.isNotEmpty() || facet.buildTypes.any { it.buildConfigFields.isNotEmpty() } ||
+            facet.productFlavors.any { it.buildConfigFields.isNotEmpty() }
+
+    /** Whether any Java or Kotlin source under the module's `src/` names `BuildConfig`. */
+    private fun referencesBuildConfig(moduleDir: Path): Boolean {
+        val src = moduleDir.resolve("src")
+        if (!Files.isDirectory(src)) return false
+        return Files.walk(src).use { s ->
+            s.anyMatch { f ->
+                val name = f.fileName.toString()
+                (name.endsWith(".kt") || name.endsWith(".java")) && Files.isRegularFile(f) &&
+                    runCatching { "BuildConfig" in Files.readString(f) }.getOrDefault(false)
+            }
         }
     }
 
@@ -1022,6 +1047,12 @@ object GradleProjectExport {
             line("$header {")
             out.append(nested.out)
             line("}")
+        }
+
+        /** `buildConfigField("String", "API_URL", "\"https://…\"")`: the value is the Java expression, escaped
+         *  into a Kotlin string. */
+        fun buildConfigFields(fields: List<BuildConfigField>) {
+            for (f in fields) line("buildConfigField(\"${escape(f.type)}\", \"${escape(f.name)}\", \"${escape(f.value)}\")")
         }
 
         /** `manifestPlaceholders["k"] = "v"`, the form that works in both defaultConfig and a build type. */

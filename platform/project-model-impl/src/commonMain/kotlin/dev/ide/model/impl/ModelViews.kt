@@ -3,6 +3,7 @@ package dev.ide.model.impl
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ClasspathEntry
 import dev.ide.model.ClasspathEntryKind
+import dev.ide.model.LibraryVariants
 import dev.ide.model.ClasspathSnapshot
 import dev.ide.model.ContentRoot
 import dev.ide.model.DependencyScope
@@ -124,7 +125,7 @@ internal class ModuleImpl(
         val visitedModules = hashSetOf(data.id)
         for (entry in data.dependencies) {
             if (directInPhase(scope, entry) && includedInVariant(entry, variant))
-                addEntry(entry, scope, transitive, variant, items, visitedModules)
+                addEntry(entry, data, scope, transitive, variant, items, visitedModules)
         }
         return ClasspathSnapshot.of(MavenClasspath.resolveVersionConflicts(items))
     }
@@ -143,6 +144,8 @@ internal class ModuleImpl(
 
     private fun addEntry(
         entry: OrderEntry,
+        /** The module that declares [entry]: a library is read as THAT module resolved it. */
+        owner: ModuleData,
         scope: DependencyScope,
         transitive: Boolean,
         variant: Set<String>?,
@@ -150,7 +153,7 @@ internal class ModuleImpl(
         visited: MutableSet<String>,
     ) {
         when (entry) {
-            is LibraryDependency -> resolveLibrary(entry.library)?.classesRoots?.forEach { out.add(ClasspathEntry(it, ClasspathEntryKind.LIBRARY)) }
+            is LibraryDependency -> resolveLibrary(entry.library, owner)?.classesRoots?.forEach { out.add(ClasspathEntry(it, ClasspathEntryKind.LIBRARY)) }
             is PlatformDependency -> { /* a BOM is a version source only — no classpath artifact */ }
             is SdkDependency -> resolveSdk(entry.sdk)?.bootClasspath?.forEach { out.add(ClasspathEntry(it, ClasspathEntryKind.SDK_BOOTCLASSPATH)) }
             is ModuleDependency -> {
@@ -163,7 +166,7 @@ internal class ModuleImpl(
                 if (transitive) {
                     for (te in target.module.dependencies) {
                         if (propagates(scope, te) && includedInVariant(te, variant))
-                            addEntry(te, scope, transitive, variant, out, visited)
+                            addEntry(te, target.module, scope, transitive, variant, out, visited)
                     }
                 }
             }
@@ -212,9 +215,12 @@ internal class ModuleImpl(
         return store.vfs.fileFor(store.resolveRel(dir, module.outputRelPath))
     }
 
-    private fun resolveLibrary(ref: LibraryRef): Library? {
-        val libData = store.data.projects.firstNotNullOfOrNull { p -> p.libraries.firstOrNull { it.name == ref.name } }
-            ?: store.data.libraries.firstOrNull { it.name == ref.name }
+    /** The table entry for [ref] as its declaring module, [owner], resolved it (see [LibraryVariants]). */
+    private fun resolveLibrary(ref: LibraryRef, owner: ModuleData): Library? {
+        val libData = LibraryVariants.lookupOrder(ref.name, owner.id).firstNotNullOfOrNull { name ->
+            store.data.projects.firstNotNullOfOrNull { p -> p.libraries.firstOrNull { it.name == name } }
+                ?: store.data.libraries.firstOrNull { it.name == name }
+        }
         return libData?.let { LibraryImpl(it, store) }
     }
 

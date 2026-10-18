@@ -269,10 +269,13 @@ class GradleModelImporter : ProjectImporter {
         if (raw["multiplatform"] as? Boolean != true) return null
         // The common half of the collapsed multiplatform module: every source root of a source set the
         // exporter marked common.
-        val commonRoots = declaredSourceSets(raw)
+        val declared = declaredSourceSets(raw)
             .filter { it.name in commonSourceSetNames(raw) }
             .flatMap { it.roots.keys }
-        if (commonRoots.isEmpty()) return null
+        if (declared.isEmpty()) return null
+        // The generated Res accessors are commonMain's in Gradle, so common code can import them.
+        val commonRoots = if (raw["composeResources"] !is Map<*, *>) declared
+        else declared + ComposeResourcesFacet.GENERATED_KOTLIN_ROOT
         return ExternalFacet(
             KotlinFacetCodec.tomlTable,
             KotlinFacetCodec.encode(KotlinFacet(commonSourceRoots = commonRoots)),

@@ -120,6 +120,7 @@ import dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport
 import dev.ide.build.jvm.compose.ComposeResourcesFacetCodec
 import dev.ide.build.jvm.compose.ComposeResourcesPlugin
 import dev.ide.lang.kotlin.build.KotlinFacetCodec
+import dev.ide.lang.kotlin.build.KotlinFileIconProvider
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.ParcelizeCompilerPlugin
 import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
@@ -367,11 +368,13 @@ private class JavaSupportPlugin : Plugin {
 private class GradleSupportPlugin : Plugin {
     override val manifest = PluginManifest(
         id = "gradle-support", name = "Gradle Support",
-        description = "Opens Gradle projects by reading their build scripts statically, writes dependency declarations back to them, and adds the Kotlin Multiplatform project templates.",
+        description = "Opens Gradle projects by reading their build scripts statically (and JetBrains Amper projects from their YAML), writes dependency declarations back to Gradle scripts, and adds the Kotlin Multiplatform project templates.",
     )
 
     override fun register(reg: PluginRegistration) {
         reg.register(PROJECT_IMPORTER_EP, GradleProjectImporter())
+        // JetBrains Amper (`project.yaml` + `module.yaml`), read the same way: the files stay the source of truth.
+        reg.register(PROJECT_IMPORTER_EP, dev.ide.core.amper.AmperProjectImporter())
         // A build that exported its own configured model (`.platform/gradle-model.json`) is imported from
         // that instead of from its script text, which is the only way a build whose structure is computed
         // rather than declared can be read at all. It detects with a higher confidence, so it wins wherever
@@ -420,11 +423,16 @@ private class KotlinSupportPlugin : Plugin {
         // `[kotlin]` in module.toml: today just `multiplatform`, which decides whether a module's
         // `expect`/`actual` declarations compile at all (see KotlinFacet).
         reg.register(FACET_CODEC_EP, KotlinFacetCodec)
+        // The multiplatform module mark in the project tree.
+        reg.contributeVia { ext, pid -> FileIconRegistry(ext).register(KotlinFileIconProvider, pid) }
         // Compose Multiplatform resources: `[composeResources]` plus the build plugin that generates the
         // `Res` class and stages the resource tree, which the Compose Gradle plugin would otherwise be the
         // only producer of.
         reg.register(FACET_CODEC_EP, ComposeResourcesFacetCodec)
         reg.register(BUILD_PLUGIN_EP, ComposeResourcesPlugin())
+        // gmazzo's `buildConfig { }`: the Kotlin BuildConfig object a KMP/JVM module's code reads.
+        reg.register(FACET_CODEC_EP, dev.ide.build.jvm.buildconfig.KotlinBuildConfigFacetCodec)
+        reg.register(BUILD_PLUGIN_EP, dev.ide.build.jvm.buildconfig.KotlinBuildConfigPlugin())
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, SerializationCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ParcelizeCompilerPlugin)

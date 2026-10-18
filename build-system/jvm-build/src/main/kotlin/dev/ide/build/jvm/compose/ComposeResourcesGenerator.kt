@@ -37,10 +37,14 @@ import kotlin.io.path.writeText
  * One record per line, values base64-encoded UTF-8, and a `ResourceItem`'s offset and size span the whole
  * record line rather than just its value.
  *
- * Android escape sequences are deliberately NOT unescaped: the Gradle plugin does not unescape them either,
- * so a `\'` in a `strings.xml` reaches the UI as a literal backslash-quote under both builds. Matching that
- * exactly matters more than being right about it, because the strings in this repository are already
- * written for the behaviour.
+ * Escapes follow the plugin's `handleSpecialCharacters` exactly: `\n`, `\t`, `\uXXXX` and `\\` are
+ * unescaped, and nothing else is. Android's `\'` and `\"` are NOT, so a `\'` in a `strings.xml` reaches the
+ * UI as a literal backslash-quote under both builds. Matching that exactly matters more than being right
+ * about it, because the strings in this repository are already written for the behaviour.
+ *
+ * Resource names go through the plugin's `asUnderscoredIdentifier` (see [identifierOf]), so a font file
+ * named `IndieFlower-Regular.ttf` is `Res.font.IndieFlower_Regular`, as sources written against the
+ * plugin expect.
  */
 class ComposeResourcesGenerator(
     private val packageName: String,
@@ -77,7 +81,7 @@ class ComposeResourcesGenerator(
         val stageRoot = resourcesDir.resolve(ComposeResourcesFacet.RESOURCE_DIR).resolve(packageName)
         for (root in roots.filter { Files.isDirectory(it) }) {
             val sourceSet = sourceSetNameOf(root)
-            for (dir in Files.list(root).use { it.sorted().collect(Collectors.toList()) }.filter { Files.isDirectory(it) }) {
+            for (dir in listVisible(root).filter { Files.isDirectory(it) }) {
                 val (type, qualifiers) = parseQualifiedDir(dir.name)
                 val outDir = stageRoot.resolve(dir.name)
                 if (type == VALUES) {
@@ -106,12 +110,12 @@ class ComposeResourcesGenerator(
     ): Int {
         var count = 0
         Files.createDirectories(outDir)
-        for (file in Files.list(dir).use { it.sorted().collect(Collectors.toList()) }.filter { Files.isRegularFile(it) }) {
+        for (file in listVisible(dir).filter { Files.isRegularFile(it) }) {
             Files.copy(file, outDir.resolve(file.name), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             count++
             // `files/` is the untyped bucket: reachable through Res.readBytes(path), with no accessor.
             if (type !in ACCESSOR_TYPES) continue
-            val id = ResourceId(type, file.name.substringBeforeLast('.'))
+            val id = ResourceId(type, identifierOf(file.name.substringBeforeLast('.')))
             resources.getOrPut(id) { ArrayList() }
                 .add(Item(qualifiers, "${dir.name}/${file.name}", offset = -1, size = -1))
         }
@@ -127,7 +131,7 @@ class ComposeResourcesGenerator(
         resources: MutableMap<ResourceId, MutableList<Item>>,
     ): Int {
         val records = ArrayList<Record>()
-        for (xml in Files.list(dir).use { it.sorted().collect(Collectors.toList()) }.filter { it.extension == "xml" }) {
+        for (xml in listVisible(dir).filter { it.extension.equals("xml", ignoreCase = true) }) {
             records += ValuesXml.parse(xml.readText(), xml.name) { warnings += it }
         }
         if (records.isEmpty()) return 0
@@ -144,7 +148,7 @@ class ComposeResourcesGenerator(
             val line = "${record.type}|${record.key}|${record.payload}"
             val size = line.toByteArray(Charsets.UTF_8).size
             bytes.append(line).append('\n')
-            resources.getOrPut(ResourceId(record.type, record.key)) { ArrayList() }
+            resources.getOrPut(ResourceId(record.type, identifierOf(record.key))) { ArrayList() }
                 .add(Item(qualifiers, "${dir.name}/$fileName", offset, size))
             offset += size + 1
         }
@@ -160,16 +164,28 @@ class ComposeResourcesGenerator(
      */
     private fun parseQualifiedDir(name: String): Pair<String, List<String>> {
         val parts = name.split('-')
-        val type = parts.first()
-        val qualifiers = parts.drop(1).mapNotNull { part ->
+        val type = parts.first().lowercase()
+        val qualifiers = parts.drop(1).flatMap { part ->
             when {
-                part in DENSITIES -> "DensityQualifier.${part.uppercase()}"
-                part == "light" || part == "dark" -> "ThemeQualifier.${part.uppercase()}"
-                REGION.matches(part) -> "RegionQualifier(\"${part.removePrefix("r")}\")"
-                LANGUAGE.matches(part) -> "LanguageQualifier(\"$part\")"
+                part in DENSITIES -> listOf("DensityQualifier.${part.uppercase()}")
+                part == "light" || part == "dark" -> listOf("ThemeQualifier.${part.uppercase()}")
+                // `b+sr+Latn+RS`: a BCP 47 tag, language then optional script and region.
+                part.startsWith("b+") -> part.removePrefix("b+").split('+').mapIndexedNotNull { i, tag ->
+                    when {
+                        i == 0 && LANGUAGE.matches(tag) -> "LanguageQualifier(\"$tag\")"
+                        SCRIPT.matches(tag) -> "ScriptQualifier(\"$tag\")"
+                        BCP_REGION.matches(tag) -> "RegionQualifier(\"$tag\")"
+                        else -> {
+                            warnings += "compose resources: ignoring malformed BCP 47 subtag '$tag' in '$name'"
+                            null
+                        }
+                    }
+                }
+                REGION.matches(part) -> listOf("RegionQualifier(\"${part.takeLast(2)}\")")
+                LANGUAGE.matches(part) -> listOf("LanguageQualifier(\"$part\")")
                 else -> {
                     warnings += "compose resources: ignoring unrecognized qualifier '$part' in '$name'"
-                    null
+                    emptyList()
                 }
             }
         }
@@ -238,13 +254,13 @@ class ComposeResourcesGenerator(
         appendLine()
         appendLine("package $packageName")
         appendLine()
-        appendLine("import org.jetbrains.compose.resources.DensityQualifier")
-        appendLine("import org.jetbrains.compose.resources.InternalResourceApi")
-        appendLine("import org.jetbrains.compose.resources.LanguageQualifier")
-        appendLine("import org.jetbrains.compose.resources.RegionQualifier")
-        appendLine("import org.jetbrains.compose.resources.ResourceItem")
-        appendLine("import org.jetbrains.compose.resources.ThemeQualifier")
-        appendLine("import org.jetbrains.compose.resources.$resourceType")
+        // Only the qualifier classes this file uses: `ScriptQualifier` exists only in newer components-resources,
+        // and importing a class the module's version lacks fails the compile even when nothing uses it.
+        val qualifierClasses = entries.flatMap { (_, items) -> items.flatMap { it.qualifiers } }
+            .map { it.substringBefore('.').substringBefore('(') }
+            .toSortedSet()
+        val imports = (qualifierClasses + listOf("InternalResourceApi", "ResourceItem", resourceType)).toSortedSet()
+        imports.forEach { appendLine("import org.jetbrains.compose.resources.$it") }
         appendLine()
         appendLine("// Generated by CodeAssist from the module's composeResources roots. Do not edit.")
         appendLine("private const val MD: String = \"$MD\"")
@@ -277,6 +293,11 @@ class ComposeResourcesGenerator(
 
     /** A resource key that collides with a Kotlin keyword still has to be addressable. */
     private fun escapeKey(key: String): String = if (key in KOTLIN_KEYWORDS) "`$key`" else key
+
+    /** Files and directories the plugin sees: sorted, hidden ones (`.DS_Store`) skipped as it skips them. */
+    private fun listVisible(dir: Path): List<Path> = Files.list(dir).use { stream ->
+        stream.filter { !it.name.startsWith('.') && !Files.isHidden(it) }.sorted().collect(Collectors.toList())
+    }
 
     private fun accessorOf(type: String): String = when (type) {
         "string-array" -> "Array"
@@ -313,7 +334,9 @@ class ComposeResourcesGenerator(
 
         val DENSITIES = setOf("ldpi", "mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
         val LANGUAGE = Regex("[a-z]{2,3}")
-        val REGION = Regex("r[A-Z]{2}")
+        val REGION = Regex("r[A-Z]{2}|r[0-9]{3}")
+        val SCRIPT = Regex("[A-Z][a-z]{3}")
+        val BCP_REGION = Regex("[A-Z]{2}|[0-9]{3}")
 
         val KOTLIN_KEYWORDS = setOf(
             "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
@@ -324,12 +347,29 @@ class ComposeResourcesGenerator(
 }
 
 /**
+ * The Kotlin name of a resource, as the Compose plugin's `asUnderscoredIdentifier` derives it: `-` becomes
+ * `_` and a leading digit gets a `_` prefix, so `IndieFlower-Regular.ttf` is `Res.font.IndieFlower_Regular`
+ * and `2048-logo.png` is `Res.drawable._2048_logo`.
+ *
+ * Any other character Kotlin cannot take in a name (a `.` or a space in a file name) also becomes `_`. The
+ * plugin passes those through and generates code that does not compile, so no source can depend on what it
+ * would have done; failing a user's build over a file name helps nobody.
+ */
+internal fun identifierOf(name: String): String {
+    val underscored = buildString(name.length) {
+        for (c in name) append(if (c == '_' || c.isLetterOrDigit()) c else '_')
+    }
+    return if (underscored.firstOrNull()?.isDigit() == true) "_$underscored" else underscored
+}
+
+/**
  * The subset of an Android `res/values` document Compose resources understands: `<string>`, `<string-array>`
  * and `<plurals>`.
  *
  * Hand-rolled rather than run through a DOM parser because this module has no XML dependency and because
- * the shape is fixed: the value of an element is its raw inner text, CDATA unwrapped and the five XML
- * entities resolved, with every other escape left exactly as written (see [ComposeResourcesGenerator]).
+ * the shape is fixed: the value of an element is what the plugin's DOM `textContent` gives (markup dropped,
+ * its text kept, CDATA unwrapped, entities resolved), then the plugin's own escape handling
+ * ([ComposeResourcesGenerator]).
  */
 internal object ValuesXml {
 
@@ -374,16 +414,54 @@ internal object ValuesXml {
     private fun items(inner: String): List<Pair<String?, String>> =
         ITEM.findAll(inner).map { it.groupValues[1].ifEmpty { null } to text(it.groupValues[2]) }.toList()
 
-    /** Inner text: CDATA unwrapped, the five XML entities resolved, nothing else touched. */
-    private fun text(raw: String): String {
-        val cdata = Regex("<!\\[CDATA\\[(.*?)]]>", RegexOption.DOT_MATCHES_ALL)
-        val unwrapped = cdata.replace(raw) { it.groupValues[1] }
-        return unwrapped
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'")
-            .replace("&amp;", "&")
+    private val CDATA = Regex("<!\\[CDATA\\[(.*?)]]>", RegexOption.DOT_MATCHES_ALL)
+    private val TAG = Regex("<[^>]*>")
+    private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|lt|gt|quot|apos|amp);")
+
+    /**
+     * Inner text as DOM `textContent` reads it: CDATA verbatim, and outside it markup dropped (the text of a
+     * `<b>` or `<xliff:g>` kept) and entities resolved. Then the plugin's escapes.
+     */
+    internal fun text(raw: String): String {
+        val out = StringBuilder()
+        var last = 0
+        for (m in CDATA.findAll(raw)) {
+            out.append(markupText(raw.substring(last, m.range.first)))
+            out.append(m.groupValues[1])
+            last = m.range.last + 1
+        }
+        out.append(markupText(raw.substring(last)))
+        return handleSpecialCharacters(out.toString())
+    }
+
+    private fun markupText(part: String): String = ENTITY.replace(TAG.replace(part, "")) { m ->
+        when (val e = m.groupValues[1]) {
+            "lt" -> "<"
+            "gt" -> ">"
+            "quot" -> "\""
+            "apos" -> "'"
+            "amp" -> "&"
+            else -> {
+                val code = if (e.startsWith("#x")) e.drop(2).toInt(16) else e.drop(1).toInt()
+                String(Character.toChars(code))
+            }
+        }
+    }
+
+    /**
+     * The plugin's `handleSpecialCharacters`, rule for rule: `\n`, `\t` and `\uXXXX` are unescaped unless the
+     * backslash is itself escaped, then every `\\` becomes `\`. Nothing else (`\'`, `\"`, `\@`) is touched.
+     */
+    internal fun handleSpecialCharacters(string: String): String {
+        val doubleSlash = Regex("""\\\\""").findAll(string).map { it.range.first }.toSet()
+        return Regex("""\\u[a-fA-F\d]{4}|\\n|\\t""").replace(string) { m ->
+            if (m.range.first - 1 in doubleSlash) m.value
+            else when (m.value) {
+                "\\n" -> "\n"
+                "\\t" -> "\t"
+                else -> m.value.substring(2).toInt(16).toChar().toString()
+            }
+        }.replace("\\\\", "\\")
     }
 
     private fun encode(value: String): String =

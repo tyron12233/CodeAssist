@@ -7,6 +7,9 @@ import dev.ide.model.template.TemplateCategory
 import dev.ide.model.template.TemplateId
 import dev.ide.model.template.TemplateParameter
 import dev.ide.templates.TemplateSupport
+import dev.ide.core.gradle.GradleKmp
+import dev.ide.core.kmp.KmpNative
+import dev.ide.core.kmp.KmpShapes
 
 /**
  * Create-Project templates for Kotlin Multiplatform.
@@ -22,8 +25,16 @@ import dev.ide.templates.TemplateSupport
 internal object KmpTemplateSupport {
 
     const val IOS = "ios"
+    const val GRADLE = "gradle"
 
     val parameters: List<TemplateParameter> = listOf(
+        TemplateParameter.Toggle(
+            key = GRADLE,
+            label = "Gradle build files",
+            default = true,
+            help = "On: a Gradle project that also opens in Android Studio or Fleet. Off: a CodeAssist project " +
+                "(module.toml) with both targets recorded, switchable between Android and desktop here.",
+        ),
         TemplateParameter.Toggle(
             key = IOS,
             label = "Include iOS",
@@ -32,6 +43,29 @@ internal object KmpTemplateSupport {
                 "CodeAssist builds the Android and desktop targets.",
         ),
     )
+
+    /**
+     * The CodeAssist-native form of the project ([GRADLE] off): the project and its one multiplatform module, with
+     * both targets recorded ([KmpNative]) and shaped for the host's default (Android on a phone, desktop here).
+     * The template's sources are written after, the same either way.
+     */
+    fun native(scaffold: ProjectScaffold, args: TemplateArgs, module: String, application: Boolean, jvmSourceSet: String) {
+        scaffold.workspace.beginModification().apply {
+            addProject(args.name, dev.ide.model.BuildSystemId.NATIVE, scaffold.rootDir); commit()
+        }
+        val active = if (GradleKmp.hostDefault() == GradleKmp.Platform.ANDROID) KmpShapes.ANDROID else KmpShapes.JVM
+        val shape = KmpNative.module(
+            KmpNative.Options(
+                name = module, namespace = args.packageName, application = application,
+                compose = application, active = active, jvmSourceSet = jvmSourceSet,
+            )
+        )
+        scaffold.workspace.projects.first { it.name == args.name }.beginModification().apply {
+            KmpNative.applyTo(addModule(module, scaffold.moduleType(shape.typeId)), shape, scaffold.languageLevel)
+            commit()
+        }
+        scaffold.writeText(".gitignore", "build/\n.DS_Store\n")
+    }
 
     /** The root of the Gradle build: settings, the root script, properties, the catalog, and a .gitignore. */
     fun writeRoot(scaffold: ProjectScaffold, args: TemplateArgs, module: String, rootPlugins: List<String>) {
@@ -138,68 +172,72 @@ object KmpComposeAppTemplate : ProjectTemplate {
         val pkg = args.packageName
         val ios = args.bool(KmpTemplateSupport.IOS)
         val m = "composeApp"
-        KmpTemplateSupport.writeRoot(
-            scaffold, args, m,
-            listOf("androidApplication", "composeMultiplatform", "composeCompiler", "kotlinMultiplatform"),
-        )
-        scaffold.writeText(
-            "$m/build.gradle.kts",
-            """
-            |plugins {
-            |    alias(libs.plugins.kotlinMultiplatform)
-            |    alias(libs.plugins.androidApplication)
-            |    alias(libs.plugins.composeMultiplatform)
-            |    alias(libs.plugins.composeCompiler)
-            |}
-            |
-            |kotlin {
-            |    androidTarget()
-            |    jvm("desktop")${KmpTemplateSupport.iosTargets(ios, "ComposeApp")}
-            |
-            |    sourceSets {
-            |        val desktopMain by getting
-            |
-            |        commonMain.dependencies {
-            |            implementation(compose.runtime)
-            |            implementation(compose.foundation)
-            |            implementation(compose.material3)
-            |            implementation(compose.ui)
-            |            implementation(compose.components.uiToolingPreview)
-            |        }
-            |        commonTest.dependencies {
-            |            implementation(libs.kotlin.test)
-            |        }
-            |        androidMain.dependencies {
-            |            implementation(compose.preview)
-            |            implementation(libs.androidx.activity.compose)
-            |        }
-            |        desktopMain.dependencies {
-            |            implementation(compose.desktop.currentOs)
-            |            implementation(libs.kotlinx.coroutines.swing)
-            |        }
-            |    }
-            |}
-            |
-            |android {
-            |    namespace = "$pkg"
-            |    compileSdk = libs.versions.android.compileSdk.get().toInt()
-            |
-            |    defaultConfig {
-            |        applicationId = "$pkg"
-            |        minSdk = libs.versions.android.minSdk.get().toInt()
-            |        targetSdk = libs.versions.android.targetSdk.get().toInt()
-            |        versionCode = 1
-            |        versionName = "1.0"
-            |    }
-            |}
-            |
-            |compose.desktop {
-            |    application {
-            |        mainClass = "$pkg.MainKt"
-            |    }
-            |}
-            """.trimMargin() + "\n",
-        )
+        if (args.bool(KmpTemplateSupport.GRADLE, default = true)) {
+            KmpTemplateSupport.writeRoot(
+                scaffold, args, m,
+                listOf("androidApplication", "composeMultiplatform", "composeCompiler", "kotlinMultiplatform"),
+            )
+            scaffold.writeText(
+                "$m/build.gradle.kts",
+                """
+                |plugins {
+                |    alias(libs.plugins.kotlinMultiplatform)
+                |    alias(libs.plugins.androidApplication)
+                |    alias(libs.plugins.composeMultiplatform)
+                |    alias(libs.plugins.composeCompiler)
+                |}
+                |
+                |kotlin {
+                |    androidTarget()
+                |    jvm("desktop")${KmpTemplateSupport.iosTargets(ios, "ComposeApp")}
+                |
+                |    sourceSets {
+                |        val desktopMain by getting
+                |
+                |        commonMain.dependencies {
+                |            implementation(compose.runtime)
+                |            implementation(compose.foundation)
+                |            implementation(compose.material3)
+                |            implementation(compose.ui)
+                |            implementation(compose.components.uiToolingPreview)
+                |        }
+                |        commonTest.dependencies {
+                |            implementation(libs.kotlin.test)
+                |        }
+                |        androidMain.dependencies {
+                |            implementation(compose.preview)
+                |            implementation(libs.androidx.activity.compose)
+                |        }
+                |        desktopMain.dependencies {
+                |            implementation(compose.desktop.currentOs)
+                |            implementation(libs.kotlinx.coroutines.swing)
+                |        }
+                |    }
+                |}
+                |
+                |android {
+                |    namespace = "$pkg"
+                |    compileSdk = libs.versions.android.compileSdk.get().toInt()
+                |
+                |    defaultConfig {
+                |        applicationId = "$pkg"
+                |        minSdk = libs.versions.android.minSdk.get().toInt()
+                |        targetSdk = libs.versions.android.targetSdk.get().toInt()
+                |        versionCode = 1
+                |        versionName = "1.0"
+                |    }
+                |}
+                |
+                |compose.desktop {
+                |    application {
+                |        mainClass = "$pkg.MainKt"
+                |    }
+                |}
+                """.trimMargin() + "\n",
+            )
+        } else {
+            KmpTemplateSupport.native(scaffold, args, m, application = true, jvmSourceSet = "desktopMain")
+        }
 
         scaffold.writeText(
             KmpTemplateSupport.src(m, "commonMain", pkg, "Platform.kt"),
@@ -408,36 +446,40 @@ object KmpLibraryTemplate : ProjectTemplate {
         val pkg = args.packageName
         val ios = args.bool(KmpTemplateSupport.IOS)
         val m = "shared"
-        KmpTemplateSupport.writeRoot(scaffold, args, m, listOf("androidLibrary", "kotlinMultiplatform"))
-        scaffold.writeText(
-            "$m/build.gradle.kts",
-            """
-            |plugins {
-            |    alias(libs.plugins.kotlinMultiplatform)
-            |    alias(libs.plugins.androidLibrary)
-            |}
-            |
-            |kotlin {
-            |    androidTarget()
-            |    jvm()${KmpTemplateSupport.iosTargets(ios, "Shared")}
-            |
-            |    sourceSets {
-            |        commonTest.dependencies {
-            |            implementation(libs.kotlin.test)
-            |        }
-            |    }
-            |}
-            |
-            |android {
-            |    namespace = "$pkg"
-            |    compileSdk = libs.versions.android.compileSdk.get().toInt()
-            |
-            |    defaultConfig {
-            |        minSdk = libs.versions.android.minSdk.get().toInt()
-            |    }
-            |}
-            """.trimMargin() + "\n",
-        )
+        if (args.bool(KmpTemplateSupport.GRADLE, default = true)) {
+            KmpTemplateSupport.writeRoot(scaffold, args, m, listOf("androidLibrary", "kotlinMultiplatform"))
+            scaffold.writeText(
+                "$m/build.gradle.kts",
+                """
+                |plugins {
+                |    alias(libs.plugins.kotlinMultiplatform)
+                |    alias(libs.plugins.androidLibrary)
+                |}
+                |
+                |kotlin {
+                |    androidTarget()
+                |    jvm()${KmpTemplateSupport.iosTargets(ios, "Shared")}
+                |
+                |    sourceSets {
+                |        commonTest.dependencies {
+                |            implementation(libs.kotlin.test)
+                |        }
+                |    }
+                |}
+                |
+                |android {
+                |    namespace = "$pkg"
+                |    compileSdk = libs.versions.android.compileSdk.get().toInt()
+                |
+                |    defaultConfig {
+                |        minSdk = libs.versions.android.minSdk.get().toInt()
+                |    }
+                |}
+                """.trimMargin() + "\n",
+            )
+        } else {
+            KmpTemplateSupport.native(scaffold, args, m, application = false, jvmSourceSet = "jvmMain")
+        }
         scaffold.writeText(
             KmpTemplateSupport.src(m, "commonMain", pkg, "Platform.kt"),
             """

@@ -180,4 +180,60 @@ class ComposeResourcesGeneratorTest {
             assertContains(res, "get() = emptyMap()")
         }
     }
+
+    /**
+     * Names take the plugin's `asUnderscoredIdentifier`. A font called `IndieFlower-Regular.ttf` used to
+     * generate `Res.font.IndieFlower-Regular`, which does not parse, and broke every template that ships one.
+     */
+    @Test
+    fun resourceNamesBecomeTheIdentifiersThePluginGenerates() {
+        withTempDir("compose-res-names") { dir ->
+            val root = dir.resolve("src/commonMain/composeResources")
+            Files.createDirectories(root.resolve("font"))
+            root.resolve("font/IndieFlower-Regular.ttf").writeText("x")
+            root.resolve("font/.DS_Store").writeText("finder litter")
+            Files.createDirectories(root.resolve("drawable"))
+            root.resolve("drawable/2048-logo.png").writeText("x")
+            Files.createDirectories(root.resolve("values"))
+            root.resolve("values/strings.xml").writeText(
+                """<resources><string name="sign-in">Sign in</string></resources>"""
+            )
+            val kotlinDir = dir.resolve("out/kotlin")
+            val result = ComposeResourcesGenerator("com.example.res", publicResClass = false)
+                .generate(listOf(root), kotlinDir, dir.resolve("out/resources"))
+
+            assertEquals(3, result.resourceCount, "the hidden file is not a resource")
+            val pkg = kotlinDir.resolve("com/example/res")
+            val fonts = pkg.resolve("FontResources.kt").readText()
+            assertContains(fonts, "internal val Res.font.IndieFlower_Regular: FontResource by lazy {")
+            assertContains(fonts, "FontResource(\"font:IndieFlower_Regular\", setOf(")
+            assertContains(fonts, "\"${'$'}{MD}font/IndieFlower-Regular.ttf\"", message = "the path keeps the file's name")
+            assertContains(fonts, "\"IndieFlower_Regular\" to Res.font.IndieFlower_Regular")
+            assertTrue("DS_Store" !in fonts)
+            assertTrue("ScriptQualifier" !in fonts, "an unused qualifier class is not imported: older runtimes lack it")
+            assertContains(pkg.resolve("DrawableResources.kt").readText(), "Res.drawable._2048_logo:")
+            assertContains(pkg.resolve("StringResources.kt").readText(), "Res.string.sign_in:")
+        }
+    }
+
+    @Test
+    fun identifiersMatchThePluginsRule() {
+        assertEquals("IndieFlower_Regular", identifierOf("IndieFlower-Regular"))
+        assertEquals("_2048_logo", identifierOf("2048-logo"))
+        assertEquals("compose_multiplatform", identifierOf("compose-multiplatform"))
+        assertEquals("already_fine", identifierOf("already_fine"))
+        assertEquals("ic_launcher_9", identifierOf("ic_launcher.9"))
+    }
+
+    /** String values read as the plugin's DOM `textContent` + `handleSpecialCharacters` read them. */
+    @Test
+    fun stringValuesUnescapeExactlyWhatThePluginUnescapes() {
+        assertEquals("Line one\nLine two", ValuesXml.text("""Line one\nLine two"""))
+        assertEquals("a\tb", ValuesXml.text("""a\tb"""))
+        assertEquals("\u2026", ValuesXml.text("""\u2026"""))
+        assertEquals("""C:\new""", ValuesXml.text("""C:\\new"""), "an escaped backslash is not an escape")
+        assertEquals("""Don\'t""", ValuesXml.text("""Don\'t"""), "Android's \\' is left alone, as the plugin leaves it")
+        assertEquals("Hello bold world", ValuesXml.text("Hello <b>bold</b> world"), "markup drops, its text stays")
+        assertEquals("<b>kept</b> & 'x' \u00e9", ValuesXml.text("<![CDATA[<b>kept</b>]]> &amp; &apos;x&apos; &#233;"))
+    }
 }

@@ -5,6 +5,7 @@ import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.AndroidSupport
+import dev.ide.android.support.BuildConfigField
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
@@ -96,6 +97,70 @@ class AndroidKotlinBuildTest {
 
             val apk = AndroidBuildSystem.signedApkPath(store.workspace.projects.single().modules.single(), "debug")
             assertTrue(Files.isRegularFile(apk), "signed APK missing: $apk\n$log")
+        }
+    }
+
+    /**
+     * `BuildConfig` is generated for real, not only shown to the editor: Kotlin reads a custom
+     * `buildConfigField` and `DEBUG`, and Java reads `APPLICATION_ID`. Before, the class existed only as the
+     * editor's synthetic one, so this compiled in the editor and failed the build.
+     */
+    @Test
+    fun generatesBuildConfigWithCustomFields() {
+        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
+        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
+        sdk!!
+
+        testEnv("android-buildconfig") { env ->
+            val dir = env.dir
+            val store = ProjectModel.open(dir, env.platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(env.platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(env.platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.libraryTable.create("kotlin-stdlib")
+                .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(TestJars.kotlinStdlib())); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_8
+                    putFacet(
+                        AndroidFacet(
+                            namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34,
+                            buildConfigFields = listOf(BuildConfigField("String", "API_URL", "\"https://api.example.com\"")),
+                        )
+                    )
+                    addDependency(LibraryDependency(LibraryRef("kotlin-stdlib"), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/kotlin/com/example/app/Endpoint.kt", """
+                package com.example.app
+                object Endpoint {
+                    fun url(): String = if (BuildConfig.DEBUG) BuildConfig.API_URL + "?debug" else BuildConfig.API_URL
+                }
+            """)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", """
+                package com.example.app;
+                public class MainActivity extends android.app.Activity {
+                    static final String ID = BuildConfig.APPLICATION_ID + " " + BuildConfig.VERSION_NAME;
+                    static String url() { return Endpoint.INSTANCE.url(); }
+                }
+            """)
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val build = AndroidBuildSystem.subprocess(sdk, signing, kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler()))
+            val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE)
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                    .execute(build.createBuildGraph(store.workspace.projects.single(), request), SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "BuildConfig build failed:\n$log")
+            val generated = dir.resolve("app/build/intermediates/android/debug/gen-build-config/com/example/app/BuildConfig.java")
+            assertTrue(Files.readString(generated).contains("public static final String API_URL = \"https://api.example.com\";"))
+            val dex = dir.resolve("app/build/intermediates/android/debug/dex-archives/project/com/example/app/BuildConfig.dex")
+            assertTrue(Files.isRegularFile(dex), "BuildConfig was not dexed into the app: $dex\n$log")
         }
     }
 

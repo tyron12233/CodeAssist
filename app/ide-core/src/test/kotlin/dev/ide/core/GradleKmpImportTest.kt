@@ -126,6 +126,11 @@ class GradleKmpImportTest {
                     minSdk = libs.versions.android.minSdk.get().toInt()
                     targetSdk = libs.versions.android.compileSdk.get().toInt()
                 }
+                buildTypes {
+                    getByName("release") {
+                        isMinifyEnabled = false
+                    }
+                }
             }
 
             dependencies {
@@ -240,7 +245,16 @@ class GradleKmpImportTest {
             )
 
             val facets = app.facets.associateBy { it.table }
-            assertEquals(listOf("src/commonMain/kotlin"), facets.getValue("kotlin").values["commonSourceRoots"])
+            // The generated Res accessors are commonMain's, as the plugin generates them, so common code sees them.
+            assertEquals(
+                listOf("src/commonMain/kotlin", "build/compose-resources/kotlin"),
+                facets.getValue("kotlin").values["commonSourceRoots"],
+            )
+            // A `buildTypes { }` naming only `release` still leaves AGP's implicit `debug`.
+            assertEquals(
+                listOf("debug", "release"),
+                (facets.getValue("android").values["buildTypes"] as List<*>).map { (it as Map<*, *>)["name"] },
+            )
             assertEquals("src/androidMain/AndroidManifest.xml", facets.getValue("android").values["manifest"])
             assertEquals(
                 "kotlinproject.composeapp.generated.resources",
@@ -311,7 +325,10 @@ class GradleKmpImportTest {
                     assertEquals("android-app", app().type.id)
                     assertTrue("src/androidMain/kotlin" in roots() && "src/desktopMain/kotlin" !in roots(), "${roots()}")
                     assertEquals("src/androidMain/AndroidManifest.xml", app().facets.get(AndroidFacet.KEY)?.manifest)
-                    assertEquals(listOf("src/commonMain/kotlin"), app().facets.get(KotlinFacet.KEY)?.commonSourceRoots)
+                    assertEquals(
+                        listOf("src/commonMain/kotlin", "build/compose-resources/kotlin"),
+                        app().facets.get(KotlinFacet.KEY)?.commonSourceRoots,
+                    )
                     assertEquals("android-lib", it.modules().single { m -> m.name == "shared" }.type.id)
 
                     val toJvm = runBlocking { it.switchKmpTarget(GradleKmp.Platform.JVM) }
@@ -319,6 +336,50 @@ class GradleKmpImportTest {
                     assertEquals("java-lib", app().type.id)
                     assertNull(app().facets.get(AndroidFacet.KEY), "the Android import's facet does not survive")
                     assertTrue("src/androidMain/kotlin" !in roots() && "src/desktopMain/kotlin" in roots(), "${roots()}")
+                }
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    /**
+     * Convert to native keeps every target: the import recorded both shapes in the `[kotlin]` facet, so with the
+     * Gradle files moved aside the module still switches between desktop and Android (and back), getting its
+     * `androidMain` roots and its `[android]` config back from the record rather than from scripts.
+     */
+    @Test
+    fun aConvertedProjectStillSwitchesTargetNatively() {
+        withTempDir("kmp-convert-switch") { tmp ->
+            val source = tmp.resolve("KotlinProject")
+            writeWizardProject(source)
+            val manager = ProjectManager.desktop(tmp.resolve("projects"))
+            try {
+                val ide = assertNotNull(manager.importExternalProject(source))
+                ide.use {
+                    fun app() = it.modules().single { m -> m.name == "composeApp" }
+                    fun roots() = app().sourceSets.single { s -> s.name == "main" }.contentRoots
+                        .map { r -> r.dir.path.replace('\\', '/').substringAfter("composeApp/") }
+                    assertEquals(listOf("jvm", "android"), app().facets.get(KotlinFacet.KEY)?.targets?.map { t -> t.name })
+                    assertTrue(it.convertToNative().ok)
+                    assertTrue(!it.isCompatibilityMode(), "the converted project is native")
+                    assertEquals(listOf("jvm", "android"), it.nativeKmpChoice()?.available)
+
+                    val toAndroid = runBlocking { it.switchKmpTarget(GradleKmp.Platform.ANDROID) }
+                    assertTrue(toAndroid.ok && toAndroid.modelChanged, toAndroid.message)
+                    assertEquals("android-app", app().type.id)
+                    assertTrue("src/androidMain/kotlin" in roots() && "src/desktopMain/kotlin" !in roots(), "${roots()}")
+                    assertEquals("org.example.project", app().facets.get(AndroidFacet.KEY)?.namespace)
+                    assertEquals("src/androidMain/AndroidManifest.xml", app().facets.get(AndroidFacet.KEY)?.manifest)
+                    val libs = app().dependencies.filterIsInstance<LibraryDependency>().map { d -> d.library.name }
+                    assertTrue(libs.any { l -> l.startsWith("androidx.activity:activity-compose") }, "$libs")
+                    assertTrue(libs.none { l -> "desktop-jvm" in l }, "$libs")
+
+                    val toJvm = runBlocking { it.switchKmpTarget(GradleKmp.Platform.JVM) }
+                    assertTrue(toJvm.ok, toJvm.message)
+                    assertEquals("java-lib", app().type.id)
+                    assertNull(app().facets.get(AndroidFacet.KEY))
+                    assertTrue("src/desktopMain/kotlin" in roots() && "src/androidMain/kotlin" !in roots(), "${roots()}")
                 }
             } finally {
                 manager.dispose()
@@ -625,5 +686,32 @@ class GradleKmpImportTest {
         override fun report(fraction: Double, message: String?) {}
         override fun checkCanceled() {}
         override val isCanceled = false
+    }
+
+    /** The forms Gradle scripts opt in with; the `@OptIn` annotation on a DSL call is not one of them. */
+    @Test
+    fun readsModuleWideOptIns() {
+        val script = """
+            kotlin {
+                @OptIn(ExperimentalWasmDsl::class)
+                wasmJs { browser() }
+                sourceSets.all {
+                    languageSettings { optIn("androidx.compose.material3.ExperimentalMaterial3Api") }
+                }
+                compilerOptions {
+                    optIn.add("kotlin.time.ExperimentalTime")
+                    optIn.addAll(listOf("a.B", "c.D"))
+                    freeCompilerArgs.add("-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi")
+                }
+            }
+            // optIn("commented.Out")
+        """
+        assertEquals(
+            listOf(
+                "androidx.compose.material3.ExperimentalMaterial3Api", "kotlin.time.ExperimentalTime", "a.B", "c.D",
+                "kotlinx.coroutines.ExperimentalCoroutinesApi",
+            ),
+            GradleImport.parseOptIns(script),
+        )
     }
 }

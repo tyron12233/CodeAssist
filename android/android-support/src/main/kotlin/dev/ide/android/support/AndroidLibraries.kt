@@ -120,6 +120,7 @@ object AndroidLibraries {
         val artProfiles = ArrayList<Path>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
+        val partsSeen = HashSet<Path>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(AarExtractor.explodeDirName(aar))) }
 
         fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, aidl: Path?, manifest: Path?, proguard: Path?, metadata: Path?, rTxt: Path?, name: String) {
@@ -140,10 +141,10 @@ object AndroidLibraries {
             metadata?.let { aarMetadata.add(AarMetadataRef(name, it)) }
         }
 
-        for (root in compileRoots) when {
+        fun addAar(root: Path) = if (!partsSeen.add(root)) Unit else when {
             isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.aidlDir, it.manifest, it.proguardTxt, it.aarMetadata, it.rTxt, root.fileName.toString()) }
             // A Maven-resolved AAR is stored as its exploded `classes.jar`; its res/assets/jni/manifest/proguard are siblings.
-            isExplodedAar(root) -> root.parent.let { dir ->
+            else -> root.parent.let { dir ->
                 addAarParts(listOf(root), dirOrNull(dir, "res"), dirOrNull(dir, "assets"), dirOrNull(dir, "jni"),
                     dirOrNull(dir, "aidl"),
                     dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
@@ -152,7 +153,22 @@ object AndroidLibraries {
                     dir.resolve("R.txt").takeIf { Files.isRegularFile(it) },
                     dir.fileName?.toString() ?: root.toString())
             }
+        }
+
+        for (root in compileRoots) when {
+            isAar(root) || isExplodedAar(root) -> addAar(root)
             isJar(root) -> compileJars.add(root)
+        }
+        // An AAR on the runtime classpath only (a library MODULE's `implementation` dependency, which is not on
+        // the app's compile classpath) still ships its manifest, resources and assets, as AGP merges them from
+        // the runtime classpath. Leaving them out dropped e.g. Compose resources' `AndroidContextProvider`
+        // from the merged manifest, and the app crashed with "Android context is not initialized". Its code
+        // stays off the compile classpath, as `implementation` intends.
+        val compileSet = compileRoots.toSet()
+        for (root in runtimeRoots) if (root !in compileSet && (isAar(root) || isExplodedAar(root))) {
+            val before = compileJars.size
+            addAar(root)
+            while (compileJars.size > before) compileJars.removeAt(compileJars.size - 1)
         }
         // The runtime set is what gets packaged, so it is also whose Baseline Profile rules apply (AGP reads
         // them from the runtime classpath too).

@@ -368,6 +368,22 @@ internal class ModuleSettingsState(
         }
     }
 
+    /** Reshape the project's multiplatform modules for [target] (`android`/`jvm`), then show the module again. */
+    fun switchTarget(target: String) {
+        scope.launch {
+            val r = backend.projects.setKmpTarget(target)
+            report(UiConfigResult(r.ok, r.message))
+            reload()
+        }
+    }
+
+    /** Turn on [featureId] for this module (see `ModuleService.addModuleFeature`). */
+    fun addFeature(featureId: String) {
+        scope.launch {
+            if (report(backend.modules.addModuleFeature(moduleName, featureId))) reload()
+        }
+    }
+
     /** Create the proguard keep-rule file a build config references but that is missing on disk. */
     fun createProguardFile(entry: String) {
         scope.launch {

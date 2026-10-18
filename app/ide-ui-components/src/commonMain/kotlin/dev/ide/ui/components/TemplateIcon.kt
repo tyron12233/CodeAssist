@@ -109,6 +109,12 @@ fun TemplateGlyph(
             softWrap = false,
             modifier = modifier,
         )
+        is TreeIcon.ModuleFolder -> Icon(
+            icon.closed,
+            contentDescription,
+            modifier.size(size),
+            tint = forceTint ?: icon.badgeColor,
+        )
     }
 }
 

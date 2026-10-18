@@ -246,6 +246,8 @@ import dev.ide.model.ResourceWrite
 import dev.ide.model.SdkResolution
 import dev.ide.model.contentRootsFor
 import dev.ide.model.impl.DefaultFileIconProvider
+import dev.ide.core.kmp.KmpShapes
+import dev.ide.core.kmp.KmpSwitch
 import dev.ide.model.impl.ExternalModelApplier
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectModel
@@ -2016,11 +2018,32 @@ class IdeServices private constructor(
         if (!isCompatibilityMode()) null else GradleImport.kmpTargetChoice(workspaceRoot)
 
     /**
+     * The targets a NATIVE project's multiplatform modules record ([dev.ide.lang.kotlin.build.KotlinFacet.targets])
+     * and the one they are shaped for, or null when there is nothing to switch between (or the project is a Gradle
+     * import, whose choice is [kmpTargetChoice]).
+     */
+    internal fun nativeKmpChoice(): KmpSwitch.Choice? = if (isCompatibilityMode()) null else KmpSwitch.choice(store)
+
+    /**
+     * Reshape a native project's multiplatform modules for [target] from what their facets record (no build
+     * scripts involved), then save. The caller re-resolves dependencies and re-indexes, as after a sync.
+     */
+    internal fun switchNativeKmpTarget(target: String): ProjectSyncOutcome {
+        val level = modules().firstOrNull()?.languageLevel ?: LanguageLevel.JAVA_17
+        val changed = KmpSwitch.switch(store, target, level)
+        if (changed.isEmpty()) return ProjectSyncOutcome(true, "Already on $target.")
+        invalidateAnalyzers()
+        invalidateSyntheticClasses()
+        return ProjectSyncOutcome(true, "Switched ${changed.joinToString()} to $target.", modelChanged = true)
+    }
+
+    /**
      * Import the multiplatform modules for [platform] from now on, and re-sync. The modules the switch
      * changes are rebuilt rather than refreshed: a refresh keeps a module's type, merges its source roots and
      * keeps its facets, so the old target's `androidMain` roots and `[android]` facet would survive it.
      */
     internal suspend fun switchKmpTarget(platform: GradleKmp.Platform): ProjectSyncOutcome {
+        if (!isCompatibilityMode()) return switchNativeKmpTarget(if (platform == GradleKmp.Platform.ANDROID) KmpShapes.ANDROID else KmpShapes.JVM)
         fun shapes() = GradleImport.parse(workspaceRoot)?.modules.orEmpty()
             .associate { it.name to (it.kind to it.kmp?.platform) }
         val before = shapes()

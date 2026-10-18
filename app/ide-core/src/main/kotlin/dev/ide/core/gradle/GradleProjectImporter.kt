@@ -6,8 +6,12 @@ import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.BuildType
+import dev.ide.android.support.BuildConfigField
 import dev.ide.android.support.ProductFlavor
+import dev.ide.build.jvm.buildconfig.KotlinBuildConfigFacet
+import dev.ide.build.jvm.buildconfig.KotlinBuildConfigFacetCodec
 import dev.ide.build.jvm.compose.ComposeResourcesFacet
+import dev.ide.core.kmp.KmpShapes
 import dev.ide.build.jvm.compose.ComposeResourcesFacetCodec
 import dev.ide.core.gradle.GradleImport
 import dev.ide.lang.kotlin.build.KotlinFacet
@@ -77,8 +81,38 @@ class GradleProjectImporter : ProjectImporter {
         val spec = GradleImport.parse(request.root)
             ?: return SyncOutcome.failed("No Gradle build scripts were found to sync from.")
         val messages = spec.report.notes.map { SyncMessage(SyncSeverity.WARNING, it) }
-        return SyncOutcome(model(request.root, spec), messages)
+        return SyncOutcome(withAllTargets(request.root, spec, model(request.root, spec)), messages)
     }
+
+    /**
+     * [model] with every target of each Kotlin Multiplatform module recorded (see [KmpShapes.describe]): a module
+     * that can be imported for Android and for the JVM is read the other way too, so its `[kotlin]` facet holds
+     * both shapes. A native switch, and a project converted to native, can then change target with no scripts
+     * to re-read.
+     */
+    private fun withAllTargets(root: Path, spec: GradleImport.ProjectSpec, model: ExternalProjectModel): ExternalProjectModel {
+        val both = setOf(GradleKmp.Platform.ANDROID, GradleKmp.Platform.JVM)
+        val switchable = spec.modules.filter { it.kmp?.available?.containsAll(both) == true }
+        if (switchable.isEmpty()) return model
+        val others = switchable.map { it.kmp!!.platform }.distinct().associateWith { active ->
+            GradleImport.parse(root, if (active == GradleKmp.Platform.ANDROID) GradleKmp.Platform.JVM else GradleKmp.Platform.ANDROID)
+        }
+        val described = switchable.associate { activeSpec ->
+            val activePlatform = activeSpec.kmp!!.platform
+            val otherSpec = others[activePlatform]?.modules?.firstOrNull { it.name == activeSpec.name }
+            val shapes = listOfNotNull(
+                KmpShapes.Shaped(targetName(activePlatform), platformId(activePlatform), module(root, activeSpec)),
+                otherSpec?.kmp?.let { KmpShapes.Shaped(targetName(it.platform), platformId(it.platform), module(root, otherSpec)) },
+            )
+            activeSpec.name to KmpShapes.describe(shapes, targetName(activePlatform))
+        }
+        return model.copy(modules = model.modules.map { described[it.name] ?: it })
+    }
+
+    private fun platformId(p: GradleKmp.Platform) = if (p == GradleKmp.Platform.ANDROID) KmpShapes.ANDROID else KmpShapes.JVM
+
+    /** A target's name in the model: the platform's, so a project reads the same whatever its scripts call it. */
+    private fun targetName(p: GradleKmp.Platform) = platformId(p)
 
     /** The parsed scripts as a snapshot. */
     private fun model(root: Path, spec: GradleImport.ProjectSpec): ExternalProjectModel = ExternalProjectModel(
@@ -109,6 +143,18 @@ class GradleProjectImporter : ProjectImporter {
     /** Android module types supply their own `src/main/{java,kotlin,res,assets}` sets, so only a plain
      *  JVM module needs its Gradle-convention source roots spelled out. A KMP module spells out its own. */
     private fun sourceSets(spec: GradleImport.ModuleSpec, dir: Path): List<ExternalSourceSet> =
+        baseSourceSets(spec, dir).let { sets ->
+            // gmazzo's BuildConfig object, generated before the compile (KotlinBuildConfigPlugin). Not on a plain
+            // Android module: an empty list keeps that module type's own sets, and a non-empty one would replace
+            // them; such a module has AGP's BuildConfig anyway.
+            if (spec.kotlinBuildConfig == null || sets.isEmpty()) sets
+            else sets + ExternalSourceSet(
+                "buildConfig", DependencyScope.IMPLEMENTATION,
+                linkedMapOf(KotlinBuildConfigFacet.GENERATED_KOTLIN_ROOT to setOf(ContentRole.SOURCE)),
+            )
+        }
+
+    private fun baseSourceSets(spec: GradleImport.ModuleSpec, dir: Path): List<ExternalSourceSet> =
         if (spec.kmp != null) kmpSourceSets(spec, spec.kmp, dir)
         else if (spec.kind != GradleImport.Kind.JAVA) emptyList()
         else listOf(
@@ -189,16 +235,32 @@ class GradleProjectImporter : ProjectImporter {
             val facet = ComposeResourcesFacet(it.packageName, it.publicResClass, it.dirs)
             ExternalFacet(ComposeResourcesFacetCodec.tomlTable, ComposeResourcesFacetCodec.encode(facet))
         },
+        spec.kotlinBuildConfig?.takeIf { spec.kmp != null || spec.kind == GradleImport.Kind.JAVA }?.let { bc ->
+            val facet = KotlinBuildConfigFacet(
+                bc.packageName, bc.className, bc.internalVisibility,
+                bc.fields.map { KotlinBuildConfigFacet.Field(it.type, it.name, it.value) },
+            )
+            ExternalFacet(KotlinBuildConfigFacetCodec.tomlTable, KotlinBuildConfigFacetCodec.encode(facet))
+        },
     )
 
     /**
      * `[kotlin]` for a KMP module whose modeled target sits under common code: the common sets' Kotlin roots,
-     * which is what lets an `expect` in `commonMain` and its `actual` in the platform set compile as one.
+     * which is what lets an `expect` in `commonMain` and its `actual` in the platform set compile as one, plus
+     * the generated Compose resource accessors.
      */
     private fun kotlinFacet(spec: GradleImport.ModuleSpec): ExternalFacet? {
-        val common = spec.kmp?.sourceSets.orEmpty().filter { it.common }.map { "src/${it.name}/kotlin" }
-        if (common.isEmpty()) return null
-        return ExternalFacet(KotlinFacetCodec.tomlTable, KotlinFacetCodec.encode(KotlinFacet(commonSourceRoots = common)))
+        val sets = spec.kmp?.sourceSets.orEmpty().filter { it.common }.map { "src/${it.name}/kotlin" }
+        if (sets.isEmpty() && spec.optIns.isEmpty()) return null
+        // The plugin generates `commonMain`'s Res accessors INTO commonMain, so common code can import them. Left
+        // platform-side, the common half of the compilation cannot see `Res` at all.
+        val common = if (sets.isEmpty()) sets
+        else sets + listOfNotNull(
+            ComposeResourcesFacet.GENERATED_KOTLIN_ROOT.takeIf { spec.composeResources != null },
+            KotlinBuildConfigFacet.GENERATED_KOTLIN_ROOT.takeIf { spec.kotlinBuildConfig != null },
+        )
+        val facet = KotlinFacet(commonSourceRoots = common, optIns = spec.optIns)
+        return ExternalFacet(KotlinFacetCodec.tomlTable, KotlinFacetCodec.encode(facet))
     }
 
     private fun androidFacet(spec: GradleImport.ModuleSpec): AndroidFacet = AndroidFacet(
@@ -212,10 +274,12 @@ class GradleProjectImporter : ProjectImporter {
         versionCode = spec.versionCode ?: AndroidFacet.DEFAULT_VERSION_CODE,
         versionName = spec.versionName ?: AndroidFacet.DEFAULT_VERSION_NAME,
         manifestPlaceholders = spec.manifestPlaceholders,
+        buildConfigFields = spec.buildConfigFields.map(::buildConfigField),
         isApplication = spec.kind == GradleImport.Kind.ANDROID_APP,
         flavorDimensions = spec.flavorDimensions,
-        buildTypes = if (spec.buildTypes.isEmpty()) AndroidFacet.DEFAULT_BUILD_TYPES
-        else spec.buildTypes.map {
+        // AGP always has `debug` and `release`: a `buildTypes { }` naming only `release` configures that one and
+        // leaves `debug` as it was, so the defaults fill in whichever the script does not mention.
+        buildTypes = spec.buildTypes.map {
             BuildType(
                 it.name,
                 debuggable = it.debuggable ?: (it.name == "debug"),
@@ -225,10 +289,17 @@ class GradleProjectImporter : ProjectImporter {
                 applicationIdSuffix = it.applicationIdSuffix,
                 versionNameSuffix = it.versionNameSuffix,
                 manifestPlaceholders = it.manifestPlaceholders,
+                buildConfigFields = it.buildConfigFields.map(::buildConfigField),
             )
+        }.let { declared ->
+            AndroidFacet.DEFAULT_BUILD_TYPES.map { d -> declared.firstOrNull { it.name == d.name } ?: d } +
+                declared.filter { t -> AndroidFacet.DEFAULT_BUILD_TYPES.none { it.name == t.name } }
         },
         productFlavors = spec.productFlavors.map {
-            ProductFlavor(it.name, dimension = it.dimension, manifestPlaceholders = it.manifestPlaceholders)
+            ProductFlavor(
+                it.name, dimension = it.dimension, manifestPlaceholders = it.manifestPlaceholders,
+                buildConfigFields = it.buildConfigFields.map(::buildConfigField),
+            )
         },
         buildFeatures = BuildFeatures(
             viewBinding = spec.viewBinding,
@@ -236,9 +307,12 @@ class GradleProjectImporter : ProjectImporter {
             parcelize = spec.parcelize,
             serialization = spec.serialization,
             kspProcessors = spec.kspProcessors,
+            buildConfig = spec.buildConfig ?: true,
         ),
         packaging = AndroidPackaging(noCompress = spec.noCompress),
     )
+
+    private fun buildConfigField(f: GradleImport.BuildConfigFieldSpec) = BuildConfigField(f.type, f.name, f.value)
 
     /** A declared `group:name[:version[:classifier]]`, or null when the text isn't a coordinate. The
      *  four-part form names a secondary artifact of the module (libGDX's per-ABI `natives-*` jars); it used

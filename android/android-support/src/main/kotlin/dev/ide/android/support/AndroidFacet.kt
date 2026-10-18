@@ -44,6 +44,11 @@ data class AndroidFacet(
      * (see [BuildType.manifestPlaceholders]); [AndroidVariants.manifestPlaceholders] resolves the chain.
      */
     val manifestPlaceholders: Map<String, String> = emptyMap(),
+    /**
+     * `defaultConfig { buildConfigField(…) }`: custom constants in the generated `BuildConfig` class, for every
+     * variant unless a flavor or build type redeclares the name (see [BuildConfigs.fields]).
+     */
+    val buildConfigFields: List<BuildConfigField> = emptyList(),
     /** true == `android-app` (produces an APK); false == `android-lib` (produces an AAR). */
     val isApplication: Boolean = true,
     /** Flavor dimension order; a variant picks one flavor per dimension in this order. */
@@ -148,6 +153,12 @@ data class BuildFeatures(
      * accepting. Persisted per module so the choice survives a reload and reaches the build process.
      */
     val kspRuntimeMismatchAccepted: Set<String> = emptySet(),
+    /**
+     * `buildConfig`: generate `<namespace>.BuildConfig` (`DEBUG`, `APPLICATION_ID`, `VERSION_CODE`, … plus the
+     * [AndroidFacet.buildConfigFields]). On by default, as AGP had it before 8.0 and as the editor has always
+     * assumed; a module that turns it off explicitly (`buildConfig = false`) gets no class.
+     */
+    val buildConfig: Boolean = true,
 ) {
     /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
     val anyEnabled: Boolean
@@ -184,6 +195,8 @@ data class BuildType(
     /** Manifest placeholders for this build type, overriding the same keys from `defaultConfig` and from the
      *  variant's flavors (AGP's precedence). See [AndroidFacet.manifestPlaceholders]. */
     val manifestPlaceholders: Map<String, String> = emptyMap(),
+    /** This build type's `buildConfigField`s, overriding the same names from `defaultConfig` and the flavors. */
+    val buildConfigFields: List<BuildConfigField> = emptyList(),
     /**
      * The id of the signing keystore this build type is signed with, referencing an entry in the global
      * keystore registry (app-home), e.g. `"release"`. Null ⇒ the build's default debug keystore. Only the id
@@ -334,4 +347,23 @@ data class ProductFlavor(
     /** Manifest placeholders for this flavor, overriding the same keys from `defaultConfig` and overridden in
      *  turn by the build type's. See [AndroidFacet.manifestPlaceholders]. */
     val manifestPlaceholders: Map<String, String> = emptyMap(),
+    /** This flavor's `buildConfigField`s, overriding `defaultConfig`'s and overridden by the build type's. */
+    val buildConfigFields: List<BuildConfigField> = emptyList(),
 )
+
+/**
+ * One `buildConfigField(type, name, value)`: a constant in the generated `BuildConfig`. [value] is the Java
+ * expression exactly as AGP takes it, so a string keeps its quotes (`"\"https://api.example.com\""`).
+ */
+data class BuildConfigField(val type: String, val name: String, val value: String) {
+    /** The `module.toml` form, which is also how Module Settings shows it: `String API_URL = "https://…"`. */
+    fun encode(): String = "$type $name = $value"
+
+    companion object {
+        private val FORM = Regex("""^\s*(\S+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$""", RegexOption.DOT_MATCHES_ALL)
+
+        /** The inverse of [encode]; null for text that is not `<type> <NAME> = <value>`. */
+        fun decode(text: String): BuildConfigField? =
+            FORM.find(text)?.let { BuildConfigField(it.groupValues[1], it.groupValues[2], it.groupValues[3]) }
+    }
+}

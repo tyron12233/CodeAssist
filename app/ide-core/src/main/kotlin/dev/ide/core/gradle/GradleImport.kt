@@ -80,12 +80,17 @@ object GradleImport {
         val versionNameSuffix: String? = null,
         val proguardFiles: List<String> = emptyList(),
         val manifestPlaceholders: Map<String, String> = emptyMap(),
+        val buildConfigFields: List<BuildConfigFieldSpec> = emptyList(),
     )
     data class FlavorSpec(
         val name: String,
         val dimension: String?,
         val manifestPlaceholders: Map<String, String> = emptyMap(),
+        val buildConfigFields: List<BuildConfigFieldSpec> = emptyList(),
     )
+
+    /** `buildConfigField(type, name, value)`, [value] being the Java expression AGP writes verbatim. */
+    data class BuildConfigFieldSpec(val type: String, val name: String, val value: String)
 
     /** A custom Maven repository declared in `settings.gradle`/`build.gradle` (name + URL). */
     data class RepoSpec(val name: String, val url: String)
@@ -123,6 +128,22 @@ object GradleImport {
         val manifest: String? = null,
         /** Compose Multiplatform resources, when the module has `composeResources` dirs to generate `Res` from. */
         val composeResources: ComposeResourcesSpec? = null,
+        /** Kotlin opt-in markers the script applies module-wide (see [parseOptIns]). */
+        val optIns: List<String> = emptyList(),
+        /** `defaultConfig`'s `buildConfigField`s. */
+        val buildConfigFields: List<BuildConfigFieldSpec> = emptyList(),
+        /** Whether AGP would generate `BuildConfig` for the module (its `buildFeatures`, its fields, the AGP default). */
+        val buildConfig: Boolean? = null,
+        /** The `com.github.gmazzo.buildconfig` plugin's `buildConfig { }`, when the module applies it. */
+        val kotlinBuildConfig: KotlinBuildConfigSpec? = null,
+    )
+
+    /** gmazzo's Kotlin `BuildConfig` object: where it goes and its constants (Kotlin type, name, Kotlin expression). */
+    data class KotlinBuildConfigSpec(
+        val packageName: String,
+        val className: String,
+        val internalVisibility: Boolean,
+        val fields: List<BuildConfigFieldSpec>,
     )
 
     /** The target a KMP module was imported for, the source sets collapsed into its one compilation, and
@@ -147,6 +168,9 @@ object GradleImport {
         val sharedGroup: String?,
         /** Which target a KMP module declaring both Android and JVM is imported for. */
         val kmpPreference: GradleKmp.Platform,
+        /** Whether AGP generates `BuildConfig` for a module that does not say: before AGP 8 it did, from 8 on it
+         *  does only under `android.defaults.buildfeatures.buildconfig=true`. */
+        val buildConfigByDefault: Boolean = false,
     )
 
     /** Human-readable notes on what the tolerant reader could and couldn't extract (surfaced in the UI). */
@@ -196,7 +220,12 @@ object GradleImport {
     }
 
     /** Parse the Gradle project at [root], or null if it doesn't look importable. */
-    fun parse(root: Path): ProjectSpec? {
+    /**
+     * Read the project at [root]. A Kotlin Multiplatform module declaring both an Android and a JVM target is read
+     * for [kmpPreference] when given, else for the project's preference ([GradleKmp.preferredPlatform]); the
+     * importer reads it both ways to record every target (see `KmpShapes`).
+     */
+    fun parse(root: Path, kmpPreference: GradleKmp.Platform? = null): ProjectSpec? {
         if (!isGradleProject(root)) return null
         val notes = ArrayList<String>()
         val settings = SETTINGS_FILES.firstNotNullOfOrNull { readStripped(root.resolve(it)) }
@@ -219,7 +248,9 @@ object GradleImport {
             sharedGroup = listOf("allprojects", "subprojects").firstNotNullOfOrNull { block ->
                 GradleScript.blockBody(rootBuild, block)?.let { firstGroup(it, GROUP_ASSIGNMENT) }
             },
-            kmpPreference = GradleKmp.preferredPlatform(root),
+            kmpPreference = kmpPreference ?: GradleKmp.preferredPlatform(root),
+            buildConfigByDefault = rootVars["android.defaults.buildfeatures.buildconfig"]?.trim() == "true" ||
+                agpMajorVersion(catalog, rootBuild, settings)?.let { it < 8 } == true,
         )
         val modules = paths.mapNotNull { parseModule(root, it, catalog, rootVars, conventions, moduleNames, context, notes) }
         if (modules.isEmpty()) return null
@@ -323,6 +354,8 @@ object GradleImport {
             }
         }
 
+        noteUnrunCodeGenerators(name, plugins, listOf(build) + conventionTexts, catalog, notes)
+
         // Kotlin Multiplatform. Its script nests a `dependencies { }` inside each source set, so only the
         // TOP-LEVEL block is the module's own; the source sets' are read per set, once it is known which sets
         // the modeled target compiles. The `kotlin { }` block may live in a convention plugin instead.
@@ -386,6 +419,9 @@ object GradleImport {
         }
         val parcelize = plugins.any { "parcelize" in it }
         val serialization = plugins.any { "serialization" in it }
+        val buildConfigFeature = androidTexts.firstNotNullOfOrNull {
+            GradleScript.blockBody(it, "buildFeatures")?.let { bf -> firstGroup(bf, """buildConfig\s*=?\s*(true|false)""") }
+        }?.toBooleanStrictOrNull()
 
         // The module's own blocks, then each modeled KMP source set's: a test set's declarations are test-scoped
         // whatever configuration they name. The first declaration of a coordinate wins, so main beats test.
@@ -418,6 +454,7 @@ object GradleImport {
                 "Module Settings if a dependency's manifest needs them.",
         )
 
+        val defaultBuildConfigFields = defaultConfig?.let { parseBuildConfigFields(it, vars) }.orEmpty()
         return ModuleSpec(
             name = name,
             dirRel = dirRel,
@@ -448,7 +485,142 @@ object GradleImport {
             manifest = manifest,
             composeResources = if (kmp == null || COMPOSE_MP_PLUGIN !in plugins) null
             else composeResources(build, dir, gradlePath, kmp, context),
+            optIns = parseOptIns(build),
+            buildConfigFields = defaultBuildConfigFields,
+            // As AGP decides it: the KMP Android-library plugin never generates one; otherwise the module's own
+            // `buildFeatures.buildConfig`, else on when it declares fields, else the project's default.
+            buildConfig = when {
+                "com.android.kotlin.multiplatform.library" in plugins -> false
+                buildConfigFeature != null -> buildConfigFeature
+                defaultBuildConfigFields.isNotEmpty() || buildTypeSpecs.any { it.buildConfigFields.isNotEmpty() } ||
+                    flavorSpecs.any { it.buildConfigFields.isNotEmpty() } -> true
+                else -> context.buildConfigByDefault
+            },
+            kotlinBuildConfig = if (GMAZZO_BUILD_CONFIG !in plugins) null else parseKotlinBuildConfig(
+                build, vars,
+                fallbackPackage = androidStr("""namespace\s*=?\s*['"]([\w.]+)['"]""") ?: firstGroup(build, GROUP_ASSIGNMENT) ?: "",
+                module = name, notes = notes,
+            ),
         )
+    }
+
+    private const val GMAZZO_BUILD_CONFIG = "com.github.gmazzo.buildconfig"
+
+    /**
+     * The module's top-level `buildConfig { }` (the gmazzo plugin's, not AGP's `buildFeatures.buildConfig`):
+     * `packageName(…)`, `className(…)`, `useKotlinOutput { internalVisibility = false }`, and each
+     * `buildConfigField` in the plugin's forms: `("String", "NAME", "\"value\"")` with a Java type and a code
+     * expression, `<String>("NAME", "value")` and `("NAME", "value" | true | 42 | 42L)` with a typed value. A field
+     * whose value is computed (`provider { … }`) is skipped with a note. With no package given it lands in the
+     * Android namespace, else the project group, as the plugin defaults it.
+     */
+    internal fun parseKotlinBuildConfig(
+        build: String,
+        vars: Map<String, String>,
+        fallbackPackage: String,
+        module: String,
+        notes: MutableList<String>,
+    ): KotlinBuildConfigSpec {
+        val body = GradleScript.childBlocks(build).firstOrNull { it.name == "buildConfig" }?.body.orEmpty()
+        fun setting(key: String) = firstGroup(body, """\b$key\s*(?:\(|=|\.set\()\s*["']([^"']+)["']""")
+        val fields = ArrayList<BuildConfigFieldSpec>()
+        for (st in GradleScript.statements(body).map { it.trim() }.filter { it.startsWith("buildConfigField") }) {
+            val generic = firstGroup(st, """^buildConfigField\s*<\s*([\w.]+)\s*>""")
+            val argsText = st.substringAfter('(', "").substringBeforeLast(')', "")
+            val literals = stringLiterals(argsText).map { (text, interp) -> if (interp) interpolate(text, vars) else text }
+            val field = when {
+                generic == null && literals.size >= 3 -> BuildConfigFieldSpec(kotlinType(literals[0]), literals[1], literals[2])
+                literals.isNotEmpty() -> {
+                    val name = literals[0]
+                    val rest = argsText.substringAfter(',', "").trim()
+                    when {
+                        rest.startsWith("\"") || rest.startsWith("'") ->
+                            BuildConfigFieldSpec(generic ?: "String", name, kotlinString(literals.getOrNull(1) ?: ""))
+                        rest == "true" || rest == "false" -> BuildConfigFieldSpec(generic ?: "Boolean", name, rest)
+                        Regex("""-?\d+""").matches(rest) -> BuildConfigFieldSpec(generic ?: "Int", name, rest)
+                        Regex("""-?\d+[Ll]""").matches(rest) -> BuildConfigFieldSpec(generic ?: "Long", name, rest)
+                        Regex("""-?\d*\.\d+[Ff]?""").matches(rest) ->
+                            BuildConfigFieldSpec(generic ?: if (rest.endsWith("f", true)) "Float" else "Double", name, rest)
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+            if (field == null || !Regex("""[A-Za-z_]\w*""").matches(field.name)) {
+                notes.add("$module: a buildConfigField whose value is computed (`${st.take(60)}`) was skipped; give it a literal value.")
+            } else fields += field
+        }
+        val kotlinOutput = GradleScript.childBlocks(body).firstOrNull { it.name == "useKotlinOutput" }?.body.orEmpty()
+        return KotlinBuildConfigSpec(
+            packageName = setting("packageName") ?: fallbackPackage,
+            className = setting("className") ?: "BuildConfig",
+            internalVisibility = !Regex("""internalVisibility\s*=\s*false""").containsMatchIn(kotlinOutput),
+            fields = fields,
+        )
+    }
+
+    /** A Java type name as Kotlin writes it (`boolean` is `Boolean`); anything else passes through. */
+    private fun kotlinType(java: String): String = when (java.removePrefix("java.lang.")) {
+        "boolean" -> "Boolean"; "int" -> "Int"; "long" -> "Long"; "float" -> "Float"; "double" -> "Double"
+        "char" -> "Char"; "byte" -> "Byte"; "short" -> "Short"; "String" -> "String"
+        else -> java
+    }
+
+    private fun kotlinString(value: String): String =
+        "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$") + "\""
+
+    /**
+     * The `buildConfigField`s directly in [body] (a `defaultConfig`, build-type or flavor block), in both DSLs:
+     * `buildConfigField("String", "API_URL", "\"https://…\"")` and Groovy's `buildConfigField "String", "X", '"y"'`.
+     * Each argument is a string literal unescaped as its DSL would (a Kotlin `\"` is a quote, a Groovy single-quoted
+     * string is taken as written), with `$var` / `${var}` interpolated from the script's values. A field whose
+     * arguments are not three literals (a value computed by a function call) is skipped.
+     */
+    internal fun parseBuildConfigFields(body: String, vars: Map<String, String> = emptyMap()): List<BuildConfigFieldSpec> =
+        GradleScript.statements(body).mapNotNull { st ->
+            val t = st.trim()
+            if (!t.startsWith("buildConfigField")) return@mapNotNull null
+            val args = stringLiterals(t.removePrefix("buildConfigField"))
+            if (args.size < 3) return@mapNotNull null
+            val (type, name, value) = args.take(3).map { (text, interpolates) -> if (interpolates) interpolate(text, vars) else text }
+            if (!Regex("""[A-Za-z_]\w*""").matches(name)) null else BuildConfigFieldSpec(type, name, value)
+        }
+
+    /** The string literals in [text], in order: each one's unescaped content and whether it interpolates. */
+    private fun stringLiterals(text: String): List<Pair<String, Boolean>> {
+        val out = ArrayList<Pair<String, Boolean>>()
+        var i = 0
+        while (i < text.length) {
+            val q = text[i]
+            if (q != '"' && q != '\'') { i++; continue }
+            val sb = StringBuilder()
+            i++
+            while (i < text.length && text[i] != q) {
+                if (text[i] == '\\' && i + 1 < text.length) {
+                    val c = text[i + 1]
+                    sb.append(when (c) { 'n' -> '\n'; 't' -> '\t'; else -> c })
+                    i += 2
+                } else sb.append(text[i++])
+            }
+            out += sb.toString() to (q == '"')
+            i++
+        }
+        return out
+    }
+
+    /**
+     * Module-wide Kotlin opt-ins: `languageSettings { optIn("x") }` (often under `sourceSets.all { }`),
+     * `compilerOptions { optIn.add("x") }` / `optIn.addAll(…)`, and `-opt-in=x` / `-Xopt-in=x` compiler args.
+     * Matched case-sensitively, so the `@OptIn(…)` annotation on a DSL call is not mistaken for one.
+     */
+    internal fun parseOptIns(build: String): List<String> {
+        val text = GradleScript.stripComments(build)
+        val out = LinkedHashSet<String>()
+        for (m in Regex("""\boptIn(?:\.addAll|\.add)?\s*\(([^)]*)\)""").findAll(text)) {
+            Regex("""["']([\w.]+)["']""").findAll(m.groupValues[1]).forEach { out += it.groupValues[1] }
+        }
+        Regex("""["']-X?opt-in=([\w.]+)["']""").findAll(text).forEach { out += it.groupValues[1] }
+        return out.toList()
     }
 
     /**
@@ -705,7 +877,7 @@ object GradleImport {
      * Central (`ComposeBuildConfig` and `ComposePlugin$Dependencies`, 1.6.11 through 1.13.0-alpha02):
      * Material 3 is pinned at 1.9.0 from plugin 1.9.0 on, and the extended icons at 1.7.3 from 1.8.0 on.
      */
-    private fun composeAccessorCoordinate(path: String, version: String): String? = when (path) {
+    internal fun composeAccessorCoordinate(path: String, version: String): String? = when (path) {
         "runtime" -> "org.jetbrains.compose.runtime:runtime:$version"
         "runtimeSaveable" -> "org.jetbrains.compose.runtime:runtime-saveable:$version"
         "foundation" -> "org.jetbrains.compose.foundation:foundation:$version"
@@ -828,11 +1000,61 @@ object GradleImport {
                 versionNameSuffix = firstGroup(b.body, """versionNameSuffix\s*=?\s*['"]([^'"]+)['"]"""),
                 proguardFiles = proguard.toList(),
                 manifestPlaceholders = parseManifestPlaceholders(b.body, vars),
+                buildConfigFields = parseBuildConfigFields(b.body, vars),
             )
         }
     }
 
-    private val UNMODELED_ANDROID = listOf("buildConfigField", "resValue", "abiFilters")
+    private val UNMODELED_ANDROID = listOf("resValue", "abiFilters")
+
+    /**
+     * Gradle plugins that generate code at build time which CodeAssist does not run. The project still imports
+     * and builds while nothing uses that code (a wizard's starter does not), and then fails with an unresolved
+     * reference the moment the user adds a query or a table. Said up front instead.
+     */
+    private val UNRUN_CODEGEN_PLUGINS = mapOf(
+        "com.apollographql.apollo" to "Apollo GraphQL (its query and schema classes)",
+        "com.apollographql.apollo3" to "Apollo GraphQL (its query and schema classes)",
+        "app.cash.sqldelight" to "SQLDelight (the database classes generated from .sq files)",
+        "com.squareup.sqldelight" to "SQLDelight (the database classes generated from .sq files)",
+        "dev.zacsweers.metro" to "Metro (its dependency-injection code)",
+        "com.google.protobuf" to "Protobuf (its message classes)",
+        "com.squareup.wire" to "Wire (its message classes)",
+        "io.realm.kotlin" to "Realm (its model classes)",
+        "de.jensklingenberg.ktorfit" to "Ktorfit (its API implementations)",
+    )
+
+    /** Groups of the KSP processors CodeAssist bundles and runs (see `KspProcessorCatalog`). */
+    private val BUNDLED_KSP_GROUPS = setOf(
+        "androidx.room", "androidx.room3", "com.squareup.moshi", "com.google.dagger", "com.github.bumptech.glide",
+    )
+
+    private fun noteUnrunCodeGenerators(
+        module: String,
+        plugins: Set<String>,
+        scripts: List<String>,
+        catalog: GradleVersionCatalog,
+        notes: MutableList<String>,
+    ) {
+        for (what in plugins.mapNotNull { UNRUN_CODEGEN_PLUGINS[it] }.distinct()) {
+            notes.add("$module: uses $what, which CodeAssist does not generate. Code that refers to it will not compile here.")
+        }
+        // KSP processors, in the two spellings scripts use: `kspAndroid(libs.x)` / `ksp("g:a:v")`, and the
+        // multi-target `with(libs.x) { add("kspAndroid", this) }`.
+        val processors = LinkedHashSet<String>()
+        for (text in scripts.map(GradleScript::stripComments)) {
+            Regex("""\bksp\w*\(\s*(libs\.[\w.]+|["'][^"']+["'])\s*\)""").findAll(text).forEach { processors += it.groupValues[1] }
+            Regex("""with\(\s*(libs\.[\w.]+)\s*\)\s*\{[^}]*add\(\s*["']ksp""").findAll(text).forEach { processors += it.groupValues[1] }
+        }
+        for (ref in processors) {
+            val coordinate = if (ref.startsWith("libs.")) catalog.library(ref.removePrefix("libs."))?.coordinate else ref.trim('"', '\'')
+            val group = coordinate?.substringBefore(':') ?: continue
+            if (group !in BUNDLED_KSP_GROUPS) notes.add(
+                "$module: the KSP processor ${coordinate.substringBeforeLast(':')} is not bundled with CodeAssist, so the " +
+                    "code it generates will not exist here. Room, Moshi, Hilt and Glide are."
+            )
+        }
+    }
 
     /** Note the `android {}` features the model doesn't carry, so a converted project isn't silently missing them. */
     private fun noteUnmodeledAndroid(module: String, androidTexts: List<String>, notes: MutableList<String>) {
@@ -869,6 +1091,7 @@ object GradleImport {
                 b.name,
                 firstGroup(b.body, """dimension\s*=?\s*['"]([\w.\-]+)['"]"""),
                 parseManifestPlaceholders(b.body, vars),
+                parseBuildConfigFields(b.body, vars),
             )
         }
     }
@@ -1175,6 +1398,17 @@ object GradleImport {
             ?: firstGroup(script, """['"]${Regex.escape(KOTLIN_GRADLE_PLUGIN)}:([^'":]+)['"]""")
             ?: return null
         return interpolate(version, vars).takeIf { it.isNotBlank() && '$' !in it }
+    }
+
+    /** The Android Gradle plugin's major version, from the catalog, the plugins block or the build classpath. */
+    private fun agpMajorVersion(catalog: GradleVersionCatalog, rootBuild: String, settings: String?): Int? {
+        val version = catalog.plugins.values.firstOrNull { it.id.startsWith("com.android.") && it.version.isNotBlank() }?.version
+            ?: catalog.libraries.values.firstOrNull { "${it.group}:${it.name}" == "com.android.tools.build:gradle" }?.version
+            ?: listOfNotNull(rootBuild, settings).firstNotNullOfOrNull { script ->
+                firstGroup(script, """id\s*\(?\s*['"]com\.android\.[\w.]+['"]\s*\)?\s*version\s*\(?\s*['"]([^'"]+)['"]""")
+                    ?: firstGroup(script, """['"]com\.android\.tools\.build:gradle:([^'"]+)['"]""")
+            }
+        return version?.substringBefore('.')?.toIntOrNull()
     }
 
     private fun composePluginVersion(script: String): String? =

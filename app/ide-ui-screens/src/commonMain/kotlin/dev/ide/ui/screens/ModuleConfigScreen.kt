@@ -104,6 +104,7 @@ import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiKeystore
 import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiModuleConfig
+import dev.ide.ui.backend.UiModuleFeature
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiRunConfig
@@ -117,6 +118,19 @@ import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.sourceScopeLabel
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.modcfg_kmp_title
+import dev.ide.ui.generated.resources.modcfg_kmp_hint
+import dev.ide.ui.generated.resources.modcfg_kmp_target_android
+import dev.ide.ui.generated.resources.modcfg_kmp_target_jvm
+import dev.ide.ui.generated.resources.modcfg_add_feature
+import dev.ide.ui.generated.resources.modcfg_add_feature_hint
+import dev.ide.ui.generated.resources.modcfg_add
+import dev.ide.ui.generated.resources.modcfg_feature_compose_resources
+import dev.ide.ui.generated.resources.modcfg_feature_compose_resources_hint
+import dev.ide.ui.generated.resources.modcfg_feature_kotlin_build_config
+import dev.ide.ui.generated.resources.modcfg_feature_kotlin_build_config_hint
+import dev.ide.ui.generated.resources.modcfg_feature_multiplatform
+import dev.ide.ui.generated.resources.modcfg_feature_multiplatform_hint
 import dev.ide.ui.generated.resources.add
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.cancel
@@ -856,6 +870,8 @@ private fun ModuleSettingsTab(backend: IdeBackend, state: ModuleSettingsState, c
             onSetSourceSetScope = state::setSourceSetScope,
             onCreateProguard = state::createProguardFile,
             onSave = state::applyEdit,
+            onSwitchTarget = state::switchTarget,
+            onAddFeature = state::addFeature,
         )
         AddSourceRootDialog(
             request = if (state.addRootOpen) AddSourceRootRequest(state.moduleName, state.sourceSets) else null,
@@ -1012,6 +1028,8 @@ private fun ConfigBody(
     onSetSourceSetScope: (sourceSet: String, scope: UiSourceSetScope) -> Unit,
     onCreateProguard: (entry: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
+    onSwitchTarget: (String) -> Unit,
+    onAddFeature: (String) -> Unit,
 ) {
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "cfgBody", modifier = modifier) { isLoading ->
         when {
@@ -1019,7 +1037,7 @@ private fun ConfigBody(
                 CircularProgressIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
             }
             config == null -> PaneNotApplicable(stringResource(Res.string.modcfg_couldnt_load_config))
-            else -> ConfigForm(config, codeFont, projectRoot, missingProguard, onAddSourceRoot, onRemoveSourceRoot, onSetSourceSetScope, onCreateProguard, onSave)
+            else -> ConfigForm(config, codeFont, projectRoot, missingProguard, onAddSourceRoot, onRemoveSourceRoot, onSetSourceSetScope, onCreateProguard, onSave, onSwitchTarget, onAddFeature)
         }
     }
 }
@@ -1035,6 +1053,8 @@ private fun ConfigForm(
     onSetSourceSetScope: (sourceSet: String, scope: UiSourceSetScope) -> Unit,
     onCreateProguard: (entry: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
+    onSwitchTarget: (String) -> Unit,
+    onAddFeature: (String) -> Unit,
 ) {
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save) — and whenever [revision]
     // moves, which is how Discard throws the edits away: everything below is re-derived from `config`.
@@ -1066,6 +1086,11 @@ private fun ConfigForm(
                 GeneralCard(config, level, { level = it }, sdk, { sdk = it }, codeFont, projectRoot, twoColumn)
             }
 
+            // ---- Kotlin Multiplatform: the target the module is shaped for ----
+            if (config.kmpTargets.size > 1) {
+                item("kmp") { KmpTargetCard(config.kmpTargets, config.kmpActiveTarget, onSwitchTarget) }
+            }
+
             // ---- Run configuration (console Java/Kotlin modules) ----
             config.runConfig?.let { rc ->
                 item("run") { RunConfigCard(rc, mainClass, codeFont) }
@@ -1083,6 +1108,11 @@ private fun ConfigForm(
 
             // ---- Facet panels (generic) ----
             itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont, twoColumn) }
+
+            // ---- Features the module can gain ----
+            if (config.addableFeatures.isNotEmpty()) {
+                item("addFeature") { AddFeatureCard(config.addableFeatures, onAddFeature) }
+            }
         }
         // Pinned, not the last row of the form: the Save button used to sit below every facet panel, so on an
         // Android module you had to scroll past a screenful of fields to discover that your edits needed
@@ -1655,6 +1685,58 @@ private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily, twoC
             Text(stringResource(Res.string.modcfg_add_row, singular))
         }
     }
+}
+
+/**
+ * Which target a multiplatform module is built for. A module is one compilation, so it is shaped for one target at
+ * a time; the pills reshape every multiplatform module of the project together (their code stays where it is).
+ */
+@Composable
+private fun KmpTargetCard(targets: List<String>, active: String?, onSwitch: (String) -> Unit) {
+    SectionCard(stringResource(Res.string.modcfg_kmp_title), subtitle = stringResource(Res.string.modcfg_kmp_hint)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (target in targets) {
+                val label = when (target) {
+                    "android" -> stringResource(Res.string.modcfg_kmp_target_android)
+                    "jvm" -> stringResource(Res.string.modcfg_kmp_target_jvm)
+                    else -> target
+                }
+                LevelChip(label, target == active) { if (target != active) onSwitch(target) }
+            }
+        }
+    }
+}
+
+/** What this module can gain (Compose resources, a Kotlin BuildConfig, multiplatform), one row each. */
+@Composable
+private fun AddFeatureCard(features: List<UiModuleFeature>, onAdd: (String) -> Unit) {
+    SectionCard(stringResource(Res.string.modcfg_add_feature), subtitle = stringResource(Res.string.modcfg_add_feature_hint)) {
+        for (feature in features) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(featureTitle(feature), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                    Text(featureDescription(feature), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+                OutlinedButton(onClick = { onAdd(feature.id) }) { Text(stringResource(Res.string.modcfg_add)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun featureTitle(f: UiModuleFeature): String = when (f.id) {
+    "compose-resources" -> stringResource(Res.string.modcfg_feature_compose_resources)
+    "kotlin-build-config" -> stringResource(Res.string.modcfg_feature_kotlin_build_config)
+    "multiplatform" -> stringResource(Res.string.modcfg_feature_multiplatform)
+    else -> f.title
+}
+
+@Composable
+private fun featureDescription(f: UiModuleFeature): String = when (f.id) {
+    "compose-resources" -> stringResource(Res.string.modcfg_feature_compose_resources_hint)
+    "kotlin-build-config" -> stringResource(Res.string.modcfg_feature_kotlin_build_config_hint)
+    "multiplatform" -> stringResource(Res.string.modcfg_feature_multiplatform_hint)
+    else -> f.description
 }
 
 @Composable

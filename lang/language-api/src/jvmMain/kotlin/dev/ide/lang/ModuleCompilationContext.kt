@@ -5,6 +5,7 @@ import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ClasspathSnapshot
 import dev.ide.model.ContentRole
 import dev.ide.model.Library
+import dev.ide.model.LibraryVariants
 import dev.ide.model.LibraryDependency
 import dev.ide.model.MavenClasspath
 import dev.ide.model.Module
@@ -95,7 +96,9 @@ object ModuleCompilationContext {
                 // module dependency doesn't change this module's platform, so SdkDependency is ignored here.
                 is SdkDependency -> { /* handled by SdkResolution.sdkFor above */ }
                 is LibraryDependency -> if (propagate) {
-                    libIndex[entry.library.name]?.let { lib ->
+                    // As the declaring module resolved it, else the shared entry (see LibraryVariants).
+                    LibraryVariants.lookupOrder(entry.library.name, module.id.value)
+                        .firstNotNullOfOrNull { libIndex[it] }?.let { lib ->
                         lib.classesRoots.forEach { libraries.add(ClasspathEntry(it, ClasspathEntryKind.LIBRARY)) }
                         sourceAttachments.addAll(lib.sourcesRoots) // -sources.jars: names + javadoc, not compiled
                     }

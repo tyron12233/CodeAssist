@@ -1339,11 +1339,7 @@ private fun EditorTab(
  *  closed glyph. */
 @Composable
 fun TabFileIcon(name: String) {
-    when (val ic = TreeIcons.resolve(fileIconId(name))) {
-        is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))
-        is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))
-        is TreeIcon.Badge -> LetterBadge(ic.text, ic.color, 15)
-    }
+    TreeIconImage(TreeIcons.resolve(fileIconId(name)), 15)
 }
 
 /**

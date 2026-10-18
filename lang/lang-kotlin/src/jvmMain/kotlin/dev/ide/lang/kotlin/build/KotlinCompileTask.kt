@@ -60,6 +60,8 @@ class KotlinCompileTask(
         }
     }
 
+    private fun optIns(): List<String> = module.facets.get(KotlinFacet.KEY)?.optIns.orEmpty()
+
     private fun upstreamKotlin(): List<Path> = kotlinSiblings(depOutputDirs(module)).filter { Files.isDirectory(it) }
     private fun classpath(): List<Path> = depOutputDirs(module) + upstreamKotlin() + libJars(module)
 
@@ -72,6 +74,7 @@ class KotlinCompileTask(
             property("level", levelOf(module.languageLevel))
             // Which sources are common changes what compiles, so it is an input like the language level.
             filePaths("commonSources", commonSources())
+            property("optIns", optIns().joinToString(","))
         }
     override val outputs: TaskOutputs
         get() = TaskOutputsImpl().apply { dirPath("classes", kotlinOutputDir(module)) }
@@ -90,6 +93,7 @@ class KotlinCompileTask(
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
             runtimePluginClasspaths = resolved.runtimeClasspaths,
             commonSources = commonSources(),
+            optIns = optIns(),
         )
         ctx.reportKotlinProblems(r)
         return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))

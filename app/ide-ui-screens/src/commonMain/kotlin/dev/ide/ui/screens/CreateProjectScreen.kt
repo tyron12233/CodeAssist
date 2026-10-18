@@ -533,6 +533,7 @@ private fun TemplateGlyph(iconId: String) {
             is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(24.dp), tint = resolveTint(ic.tint))
             is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(24.dp), tint = resolveTint(ic.tint))
             is TreeIcon.Badge -> Text(ic.text, color = ic.color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            is TreeIcon.ModuleFolder -> Icon(ic.closed, null, Modifier.size(24.dp), tint = ic.badgeColor)
         }
     }
 }

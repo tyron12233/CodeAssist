@@ -90,6 +90,10 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
             .also { if (it.success) ctx.bumpFileSystemEpoch() }
     }
 
+    override suspend fun addModuleFeature(moduleName: String, featureId: String): UiConfigResult =
+        withContext(Dispatchers.IO) { ctx.services.moduleService.addModuleFeature(moduleName, featureId) }
+            .also { if (it.success) ctx.bumpFileSystemEpoch() }
+
     override fun removeModule(name: String): Boolean =
         ctx.services.moduleService.removeModule(name).also { if (it) ctx.bumpFileSystemEpoch() }
 

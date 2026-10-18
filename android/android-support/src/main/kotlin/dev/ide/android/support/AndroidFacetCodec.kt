@@ -28,6 +28,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         // editable fields from this map, and a key that appears only once it has a value would leave a module
         // with no placeholders yet no field to add the first one in.
         put(PLACEHOLDERS_KEY, encodePlaceholders(facet.manifestPlaceholders))
+        // Always emitted, for the same reason: the tab needs the key to offer the first field.
+        put(BUILD_CONFIG_FIELDS_KEY, facet.buildConfigFields.map { it.encode() })
         if (facet.flavorDimensions.isNotEmpty()) put("flavorDimensions", facet.flavorDimensions)
         put("buildTypes", facet.buildTypes.map { encodeBuildType(it) })
         if (facet.productFlavors.isNotEmpty()) put("productFlavors", facet.productFlavors.map { encodeFlavor(it) })
@@ -39,6 +41,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         if (facet.buildFeatures.compose) put("compose", true)
         if (facet.buildFeatures.parcelize) put("parcelize", true)
         if (facet.buildFeatures.serialization) put("serialization", true)
+        // On by default, so only the opt-out is written.
+        if (!facet.buildFeatures.buildConfig) put("buildConfig", false)
         // Enabled KSP processors (sorted for a deterministic encode); absent when none are on.
         if (facet.buildFeatures.kspProcessors.isNotEmpty()) put("kspProcessors", facet.buildFeatures.kspProcessors.sorted())
         // Runtime-version mismatches the user accepted ("build anyway"): persisted so the build process, which
@@ -60,6 +64,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             versionCode = values.int("versionCode") ?: AndroidFacet.DEFAULT_VERSION_CODE,
             versionName = values["versionName"] as? String ?: AndroidFacet.DEFAULT_VERSION_NAME,
             manifestPlaceholders = decodePlaceholders(values),
+            buildConfigFields = decodeBuildConfigFields(values),
             isApplication = values["isApplication"] as? Boolean ?: true,
             flavorDimensions = values.stringList("flavorDimensions"),
             buildTypes = values.tableList("buildTypes").map { decodeBuildType(it) }
@@ -74,6 +79,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
                 serialization = values["serialization"] as? Boolean ?: false,
                 kspProcessors = values.stringList("kspProcessors").toSet(),
                 kspRuntimeMismatchAccepted = values.stringList("kspRuntimeMismatchAccepted").toSet(),
+                buildConfig = values["buildConfig"] as? Boolean ?: true,
             ),
             packaging = decodePackaging(values.table("packaging")),
         )
@@ -126,6 +132,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         bt.applicationIdSuffix?.let { put("applicationIdSuffix", it) }
         bt.versionNameSuffix?.let { put("versionNameSuffix", it) }
         if (bt.manifestPlaceholders.isNotEmpty()) put(PLACEHOLDERS_KEY, encodePlaceholders(bt.manifestPlaceholders))
+        if (bt.buildConfigFields.isNotEmpty()) put(BUILD_CONFIG_FIELDS_KEY, bt.buildConfigFields.map { it.encode() })
         bt.signingConfig?.let { put("signingConfig", it) }
     }
 
@@ -142,6 +149,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             applicationIdSuffix = t["applicationIdSuffix"] as? String,
             versionNameSuffix = t["versionNameSuffix"] as? String,
             manifestPlaceholders = decodePlaceholders(t),
+            buildConfigFields = decodeBuildConfigFields(t),
             signingConfig = t["signingConfig"] as? String,
         )
     }
@@ -153,6 +161,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         pf.applicationIdSuffix?.let { put("applicationIdSuffix", it) }
         pf.versionName?.let { put("versionName", it) }
         if (pf.manifestPlaceholders.isNotEmpty()) put(PLACEHOLDERS_KEY, encodePlaceholders(pf.manifestPlaceholders))
+        if (pf.buildConfigFields.isNotEmpty()) put(BUILD_CONFIG_FIELDS_KEY, pf.buildConfigFields.map { it.encode() })
     }
 
     private fun decodeFlavor(t: Map<String, Any?>): ProductFlavor = ProductFlavor(
@@ -162,6 +171,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         applicationIdSuffix = t["applicationIdSuffix"] as? String,
         versionName = t["versionName"] as? String,
         manifestPlaceholders = decodePlaceholders(t),
+        buildConfigFields = decodeBuildConfigFields(t),
     )
 
     /**
@@ -182,6 +192,13 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         }.toMap(LinkedHashMap())
 
     private const val PLACEHOLDERS_KEY = "manifestPlaceholders"
+
+    /** `buildConfigFields`: a list of `<type> <NAME> = <value>` strings (see [BuildConfigField.encode]), for the
+     *  same editable-list reason as the placeholders. An entry that does not parse is dropped. */
+    private const val BUILD_CONFIG_FIELDS_KEY = "buildConfigFields"
+
+    private fun decodeBuildConfigFields(t: Map<String, Any?>): List<BuildConfigField> =
+        t.stringList(BUILD_CONFIG_FIELDS_KEY).mapNotNull(BuildConfigField::decode)
 
     private fun Map<String, Any?>.int(key: String): Int? = (this[key] as? Number)?.toInt()
     private fun Map<String, Any?>.stringList(key: String): List<String> =

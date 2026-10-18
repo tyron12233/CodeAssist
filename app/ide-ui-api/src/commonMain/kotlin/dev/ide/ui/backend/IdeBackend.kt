@@ -1032,7 +1032,18 @@ data class UiModuleConfig(
     /** Set when an Android module's compileSdk has no installed platform, so it compiles and completes
      *  against another level; the screen points at the SDK Manager. */
     val missingPlatform: UiMissingPlatform? = null,
+    /**
+     * A Kotlin Multiplatform module's targets (`android`, `jvm`) and the one it is shaped for, when it records more
+     * than one. Switching applies to every multiplatform module of the project (see `ProjectService.setKmpTarget`).
+     */
+    val kmpTargets: List<String> = emptyList(),
+    val kmpActiveTarget: String? = null,
+    /** Features this module does not have yet that Module Settings can add (see `ModuleService.addModuleFeature`). */
+    val addableFeatures: List<UiModuleFeature> = emptyList(),
 )
+
+/** A feature a module can gain from Module Settings: [id] goes back to `addModuleFeature`. */
+data class UiModuleFeature(val id: String, val title: String, val description: String)
 
 /** An Android module's compileSdk ([compileSdk]) is not installed, so it uses the [usedLevel] platform. */
 data class UiMissingPlatform(val compileSdk: Int, val usedLevel: Int)

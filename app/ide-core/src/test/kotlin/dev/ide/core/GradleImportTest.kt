@@ -678,7 +678,9 @@ class GradleImportTest {
             val debug = app.buildTypes.first { it.name == "debug" }
             assertEquals(true, debug.debuggable)
             assertEquals("-dev", debug.versionNameSuffix)
-            assertTrue(spec.report.notes.any { "buildConfigField" in it }, "unmodeled buildConfigField noted")
+            // Modeled now (see GradleBuildConfigImportTest), so imported rather than noted as skipped.
+            assertEquals(listOf(GradleImport.BuildConfigFieldSpec("String", "API_URL", "\"https://x\"")), app.buildConfigFields)
+            assertTrue(spec.report.notes.none { "buildConfigField" in it }, "${spec.report.notes}")
         }
     }
 

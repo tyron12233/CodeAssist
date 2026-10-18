@@ -44,6 +44,7 @@ internal object KotlincWire {
     private const val K_PLUGIN_OPT = "pluginOpt"
     private const val K_RUNTIME_PLUGIN = "rtPlugin"
     private const val K_COMMON_SRC = "commonSrc"
+    private const val K_OPT_IN = "optIn"
 
     // Result keys.
     private const val K_SUCCESS = "success"
@@ -72,6 +73,7 @@ internal object KotlincWire {
         // A multiplatform module's common fragment. Dropping it here would not fail the fork: the compile
         // would simply run without multiplatform mode and reject the module's own `expect` declarations.
         request.commonSources.forEach { sb.line(K_COMMON_SRC, it) }
+        request.optIns.forEach { sb.line(K_OPT_IN, it) }
         file.parent?.let { Files.createDirectories(it) }
         Files.write(file, sb.toString().toByteArray(Charsets.UTF_8))
     }
@@ -93,6 +95,7 @@ internal object KotlincWire {
             runtimePluginClasspaths = fields.all(K_RUNTIME_PLUGIN)
                 .map { cp -> cp.split(UNIT).filter { it.isNotEmpty() }.map(Paths::get) },
             commonSources = fields.paths(K_COMMON_SRC),
+            optIns = fields.all(K_OPT_IN),
         )
     }
 

@@ -63,6 +63,7 @@ class KotlinJvmCompiler(
         pluginOptions = request.pluginOptions,
         runtimePluginClasspaths = request.runtimePluginClasspaths,
         commonSources = request.commonSources,
+        optIns = request.optIns,
     )
 
     /** True on Android's runtime (ART/Dalvik), where there is no host JDK for the compiler to borrow. */
@@ -112,6 +113,8 @@ class KotlinJvmCompiler(
          * [KotlinCompileRequest.commonSources].
          */
         commonSources: List<Path> = emptyList(),
+        /** Opt-in markers for `-opt-in`; see [KotlinCompileRequest.optIns]. */
+        optIns: List<String> = emptyList(),
     ): KotlinCompileResult {
         if (kotlinSources.isEmpty()) return KotlinCompileResult(true, emptyList())
         // Keep the compiler's application environment (and its warm jar FS) alive across builds. Must be set
@@ -136,10 +139,11 @@ class KotlinJvmCompiler(
                 pluginRegistrarClasspaths = (if (compilerPlugins.isNotEmpty()) listOf(compilerPlugins) else emptyList()) + runtimePluginClasspaths,
                 pluginOptions = pluginOptions,
                 commonSources = commonSources,
+                optIns = optIns,
             )
         }
 
-        val args = buildArguments(sourcePaths, fullClasspath, outputDir, jvmTarget, onArt, friendPaths, commonSources).apply {
+        val args = buildArguments(sourcePaths, fullClasspath, outputDir, jvmTarget, onArt, friendPaths, commonSources, optIns).apply {
             // Compiler plugins (e.g. Compose). pluginClasspaths is the `-Xplugin` set; pluginOptions the `-P`
             // `plugin:<id>:<k>=<v>` strings. The plugin jars must exist on disk for kotlinc to read their
             // service descriptors; the host supplies them (bundled assets on ART, resolved jars on desktop).
@@ -187,6 +191,7 @@ class KotlinJvmCompiler(
         pluginRegistrarClasspaths: List<List<Path>>,
         pluginOptions: List<String>,
         commonSources: List<Path> = emptyList(),
+        optIns: List<String> = emptyList(),
     ): KotlinCompileResult {
         val registrars = pluginRegistrarClasspaths.flatMap { loadCompilerPluginRegistrars(it, pluginLoader) }
         val collector = RecordingMessageCollector()
@@ -197,7 +202,7 @@ class KotlinJvmCompiler(
         }
         val args = buildArguments(
             (kotlinSources + javaSources).map { it.toString() }, fullClasspath, outputDir, jvmTarget, onArt,
-            friendPaths, commonSources,
+            friendPaths, commonSources, optIns,
         )
         // GroupingMessageCollector is what the real pipeline wraps the collector in (it defers messages so
         // related diagnostics group up). CRITICAL: unlike `K2JVMCompiler.exec`, driving the phases by hand
@@ -257,7 +262,9 @@ class KotlinJvmCompiler(
         onArt: Boolean,
         friendPaths: List<Path>,
         commonSources: List<Path> = emptyList(),
+        optIns: List<String> = emptyList(),
     ): K2JVMCompilerArguments = K2JVMCompilerArguments().apply {
+        if (optIns.isNotEmpty()) optIn = optIns.toTypedArray()
         freeArgs = sourcePaths
         destination = outputDir.toString()
         if (fullClasspath.isNotEmpty()) classpath = fullClasspath.joinToString(File.pathSeparator) { it.toString() }

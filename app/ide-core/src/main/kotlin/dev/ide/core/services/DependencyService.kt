@@ -40,6 +40,8 @@ import dev.ide.model.sanitizeCoordinate
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
 import dev.ide.model.sync.BuildFileWriter
 import dev.ide.model.sync.WriteOutcome
+import dev.ide.model.Library
+import dev.ide.model.LibraryVariants
 import dev.ide.platform.Disposable
 import dev.ide.platform.ProgressReporter
 import dev.ide.platform.log.Log
@@ -513,9 +515,16 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         )
 
         var changed = false
-        for ((libName, coord) in directs) {
-            val artifacts = partition[libName].orEmpty()
-            if (artifacts.isEmpty()) continue   // primary didn't resolve (offline) → keep any existing closure
+        // Each module's resolution gets its own table entry, so two modules declaring one coordinate (on two
+        // platforms, or with different shares of their graphs) cannot overwrite each other (see LibraryVariants).
+        for ((declaredName, coord) in directs) {
+            val libName = LibraryVariants.scopedName(declaredName, module.id.value)
+            val artifacts = partition[declaredName].orEmpty()
+            // Primary didn't resolve (offline) → keep any existing closure. A primary that resolved with an empty
+            // share (an earlier declaration reached all of it) still gets its entry, written empty: it shadows a
+            // shared entry from before entries were per module, which may hold another module's closure, or
+            // another platform's.
+            if (artifacts.isEmpty() && "${coord.group}:${coord.name}" in failedGAs) continue
             val freshClasses = artifacts.flatMap { listOf(it.classesRoot.path) + it.extraClassesRoots.map { r -> r.path } }.toSet()
             // The whole closure's `-sources.jar`s — direct AND transitive — so go-to-source, real parameter
             // names, and javadoc/KDoc resolve for every type the library can reach, not just the declared
@@ -828,6 +837,10 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         }
     }
 
+    /** [name]'s table entry as [module] resolved it, else the shared one (see LibraryVariants). */
+    private fun findLibrary(module: Module, name: String): Library? =
+        LibraryVariants.lookupOrder(name, module.id.value).firstNotNullOfOrNull { findLibrary(it) }
+
     private fun findLibrary(name: String) = ctx.store.workspace.libraryTable.byName(name)
         ?: ctx.store.workspace.projects.firstNotNullOfOrNull { it.libraryTable.byName(name) }
 
@@ -960,7 +973,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                         // No node for a declared coordinate means "unresolved" only if a resolve actually ran;
                         // with no graph to compare against, defer to the recorded verdict (see `resolveRan`).
                         if (resolveRan || entry.library.name in recordedUnresolved) unresolved += entry.library.name
-                        val lib = findLibrary(entry.library.name)
+                        val lib = findLibrary(module, entry.library.name)
                         val kind =
                             if (lib?.kind == LibraryKind.AAR) UiDepKind.Aar else UiDepKind.Jar
                         val compatible = kind != UiDepKind.Aar || accepts
@@ -982,7 +995,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     }
                 } else {
                     // A local/file-based library (non-coordinate name) — show it, no transitive resolution.
-                    val lib = findLibrary(entry.library.name)
+                    val lib = findLibrary(module, entry.library.name)
                     val kind = if (lib?.kind == LibraryKind.AAR) UiDepKind.Aar else UiDepKind.Jar
                     val compatible = kind != UiDepKind.Aar || accepts
                     val node = UiDependencyNode(
@@ -1641,7 +1654,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return emptyList()
         val accepts = acceptsAar(module)
         val declaredRoots = module.dependencies.filterIsInstance<LibraryDependency>()
-            .mapNotNull { findLibrary(it.library.name) }
+            .mapNotNull { findLibrary(module, it.library.name) }
             .flatMap { it.classesRoots.map { r -> r.path } }.toSet()
         val base = ctx.moduleRoot(module)?.parent ?: ctx.store.rootPath
         if (!Files.isDirectory(base)) return emptyList()

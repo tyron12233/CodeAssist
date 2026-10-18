@@ -649,6 +649,14 @@ interface ModuleService {
 
     /** Remove the module [name] from the project model (its files are left on disk). */
     fun removeModule(name: String): Boolean = false
+
+    /**
+     * Turn on one of the [UiModuleConfig.addableFeatures] for [moduleName] (Compose resources, a Kotlin
+     * `BuildConfig`, Kotlin Multiplatform): the facet with sensible defaults, its source roots, and the
+     * dependencies it needs.
+     */
+    suspend fun addModuleFeature(moduleName: String, featureId: String): UiConfigResult =
+        UiConfigResult(false, "Adding features is not supported by this backend")
 }
 
 // ---------------------------------------------------------------------------

@@ -1070,17 +1070,7 @@ private fun TreeNode.deriveDirSegments(): List<PackageSegment> {
 
 @Composable
 private fun NodeIcon(node: TreeNode, open: Boolean) {
-    when (val ic = TreeIcons.resolve(node.iconId)) {
-        is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(17.dp), tint = resolveTint(ic.tint))
-        is TreeIcon.Folder -> Icon(
-            if (open) ic.open else ic.closed,
-            null,
-            Modifier.size(17.dp),
-            tint = resolveTint(ic.tint)
-        )
-
-        is TreeIcon.Badge -> LetterBadge(ic.text, ic.color, 17)
-    }
+    TreeIconImage(TreeIcons.resolve(node.iconId), 17, open)
 }
 
 @Composable

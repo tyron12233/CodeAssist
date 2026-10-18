@@ -16,6 +16,7 @@ import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiModuleConfig
+import dev.ide.ui.backend.UiModuleFeature
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiRunConfig
@@ -83,13 +84,29 @@ class ModuleConfigScreenSnapshot {
         runConfig = UiRunConfig("", listOf("com.example.cli.Main", "com.example.cli.Tool"), "com.example.cli.Main"),
     )
 
+    /** A Kotlin Multiplatform module: the target card, and features it can still gain. */
+    private val kmpConfig = javaConfig.copy(
+        name = "shared", typeId = "java-lib", typeDisplay = "Java Library", runConfig = null,
+        sourceSets = listOf(UiSourceSetInfo("main", "IMPLEMENTATION", listOf("/project/shared/src/commonMain/kotlin", "/project/shared/src/desktopMain/kotlin"))),
+        kmpTargets = listOf("android", "jvm"),
+        kmpActiveTarget = "jvm",
+        addableFeatures = listOf(
+            UiModuleFeature("compose-resources", "Compose resources", ""),
+            UiModuleFeature("kotlin-build-config", "BuildConfig (Kotlin)", ""),
+        ),
+    )
+
     private inner class FakeBackend(private val moduleRefs: List<UiModuleRef> = MODULES) : StubBackend() {
         override fun configurableModules(): List<UiModuleRef> = moduleRefs
         override fun availableModuleTypes(): List<UiModuleTypeOption> = listOf(
             UiModuleTypeOption("java-lib", "Java Library", listOf("JAVA_11", "JAVA_17", "JAVA_21"), "JAVA_17", emptyList()),
             UiModuleTypeOption("android-lib", "Android Library", listOf("JAVA_11", "JAVA_17"), "JAVA_17", emptyList()),
         )
-        override suspend fun getModuleConfig(moduleName: String): UiModuleConfig = if (moduleName == "cli") javaConfig else androidConfig
+        override suspend fun getModuleConfig(moduleName: String): UiModuleConfig = when (moduleName) {
+            "cli" -> javaConfig
+            "shared" -> kmpConfig
+            else -> androidConfig
+        }
         override suspend fun getBuildFeatures(moduleName: String): UiBuildFeatures? =
             if (moduleName == "cli") null else UiBuildFeatures(moduleName, listOf(UiBuildFeature("viewBinding", "View binding", "Generate binding classes", false)))
     }
@@ -119,6 +136,12 @@ class ModuleConfigScreenSnapshot {
     @Test
     fun phoneJavaModule() {
         render("modules-phone-java.png", PHONE_W, PHONE_H, FakeBackend(), initialModule = "cli")
+    }
+
+    /** A multiplatform module: which target it builds for, and what it can still gain. */
+    @Test
+    fun phoneMultiplatformModule() {
+        render("modules-phone-kmp.png", PHONE_W, 2400, FakeBackend(MODULES + UiModuleRef("shared", "Java Library")), initialModule = "shared")
     }
 
     /** Tall enough to show the whole Settings page, facet grid included. */

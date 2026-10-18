@@ -9,7 +9,8 @@ import dev.ide.model.IconTarget
  * answers for the targets it recognises (the `AndroidManifest.xml`, ProGuard/R8 keep-rule files, `.aidl`
  * interface definitions, the `res`/`assets`/`aidl` source roots, and Android modules) and returns null for
  * everything else so the default provider handles it. The icon ids here (`manifest`, `proguard`, `aidl`,
- * `sourceset.android-res`, `sourceset.assets`, `sourceset.aidl`, `module.android`) are matched by the UI's
+ * `sourceset.android-res`, `sourceset.assets`, `sourceset.aidl`, `module.android.app`, `module.android.lib`) are
+ * matched by the UI's
  * `TreeIcons` registry.
  */
 object AndroidFileIconProvider : FileIconProvider {
@@ -29,8 +30,10 @@ object AndroidFileIconProvider : FileIconProvider {
             ContentRole.AIDL in target.roles -> "sourceset.aidl"
             else -> null
         }
-        is IconTarget.ModuleNode ->
-            if (target.module.facets.get(AndroidFacet.KEY) != null) "module.android" else null
+        // Android Studio's distinction: an application module and a library module look different.
+        is IconTarget.ModuleNode -> target.module.facets.get(AndroidFacet.KEY)?.let { facet ->
+            if (facet.isApplication) "module.android.app" else "module.android.lib"
+        }
         is IconTarget.PackageDir, is IconTarget.Directory -> null
     }
 }

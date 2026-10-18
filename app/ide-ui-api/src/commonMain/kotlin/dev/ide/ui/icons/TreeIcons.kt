@@ -14,6 +14,20 @@ sealed interface TreeIcon {
     data class Folder(val closed: ImageVector, val open: ImageVector, val tint: IconTint = IconTint.Secondary) : TreeIcon
     /** A letter-in-rounded-square badge in a fixed [color] (e.g. "J" for Java). */
     data class Badge(val text: String, val color: Color) : TreeIcon
+    /**
+     * A module: a folder carrying a small square in its bottom-end corner, IntelliJ's module mark, cut out of the
+     * folder so the two never touch. [badgeColor] says what kind of module (IntelliJ blue for a plain one, Android
+     * green, Kotlin purple); [outlinedBadge] draws the square hollow (an Android library, where an app's is
+     * filled). [badgeGlyph], when set, is drawn inside it, though at tree size a glyph reads as a blot.
+     */
+    data class ModuleFolder(
+        val badgeColor: Color,
+        val badgeGlyph: ImageVector? = null,
+        val outlinedBadge: Boolean = false,
+        val closed: ImageVector = CaIcons.folder,
+        val open: ImageVector = CaIcons.folderOpen,
+        val tint: IconTint = IconTint.Secondary,
+    ) : TreeIcon
 }
 
 /**
@@ -60,10 +74,21 @@ object TreeIcons {
     /** Android brand green — android modules, `res/`, and the manifest. */
     private val androidGreen = Color(0xFF3DDC84)
 
+    /** IntelliJ's module-mark blue. */
+    private val moduleBlue = Color(0xFF548AF7)
+
+    /** The Kotlin Multiplatform purple. */
+    private val kotlinPurple = Color(0xFFB45AF2)
+
     init {
         register("workspace", TreeIcon.Glyph(CaIcons.layers, IconTint.Accent))
-        register("module", TreeIcon.Glyph(CaIcons.layers, IconTint.Accent))
+        // Modules, IntelliJ-style: a folder with a corner mark whose color names the kind of module.
+        register("module", TreeIcon.ModuleFolder(moduleBlue))
+        register("module.android.app", TreeIcon.ModuleFolder(androidGreen))
+        // The bare Android mark, which templates and learn tracks name as their tile icon.
         register("module.android", TreeIcon.Glyph(CaIcons.androidLogo, IconTint.Fixed(androidGreen)))
+        register("module.android.lib", TreeIcon.ModuleFolder(androidGreen, outlinedBadge = true))
+        register("module.kmp", TreeIcon.ModuleFolder(kotlinPurple))
         register("sourceset.java", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Accent))
         register("sourceset.kotlin", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Fixed(Color(0xFFCD7EE0))))
         register("sourceset.resources", TreeIcon.Glyph(CaIcons.resources, IconTint.Info))
