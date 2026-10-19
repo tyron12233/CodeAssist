@@ -305,10 +305,15 @@ class KotlinCompletion(
         // A type reference by position, or a type offered into a declaration's RECEIVER slot ([PositionResult.
         // typeInsert]). Either way a generic candidate inserts its `<>`.
         val typePosition = inTypePosition(markerLeaf) || pos.typeInsert
+        // A class name typed as a statement of its own (`System█`, `Toast█` at the start of a line) is nearly
+        // always the head of a member access (`System.out`, `Toast.makeText`), not a constructor call whose
+        // result is thrown away, so only a real value position (an initializer, an argument, a `return`) gets
+        // the `()`.
+        val valuePosition = pos.nameReference && nameRef != null && !isStatement(nameRef)
 
         val symbolItems = candidates.map { c ->
             val (typeParamCount, ctorRequiredArgs) =
-                typeInsertFacts(c.symbol, superTypeEntry, pos.nameReference, typePosition, followingChar)
+                typeInsertFacts(c.symbol, superTypeEntry, valuePosition, typePosition, followingChar)
             KotlinCompletionItems.toItem(
                 c.symbol,
                 c.importEdit,
@@ -1412,13 +1417,16 @@ class KotlinCompletion(
         val fqn = (s.type as? KotlinType)?.qualifiedName ?: return 0 to -1
         val ctorRequiredArgs = when {
             s.kind != SymbolKind.CLASS -> -1                        // only a class completes as a constructor call
-            superTypeEntry -> ctorRequiredArgsOf(fqn)               // a superclass always needs its `()`
+            superTypeEntry -> ctorRequiredArgsOf(fqn, forSubclass = true) // a superclass always needs its `()`
             // A value position (`val v = Foo█`, an argument, a `return`): an instantiable class completes as a
-            // constructor call. Excludes interfaces/abstract/sealed (isNonInstantiableType) and objects (used as
-            // the singleton, not `Object()`), and backs off on an unknown type. Not when a `.` follows — the
-            // user is reaching for a member/companion (`Color.Red`), not constructing.
-            valuePosition && followingChar != '.' &&
-                service.isNonInstantiableType(fqn) == false && !service.isObject(fqn) -> ctorRequiredArgsOf(fqn)
+            // constructor call. Excludes interfaces/abstract/sealed (isNonInstantiableType), objects (used as
+            // the singleton, not `Object()`), classes with no constructor the caller can reach (`System`,
+            // `Math`: private constructors only), and value types nobody constructs (`String`, `Int`), and backs
+            // off on an unknown type. Not when a `.` follows: the user is reaching for a member/companion
+            // (`Color.Red`), not constructing.
+            valuePosition && followingChar != '.' && fqn !in NOT_CONSTRUCTED &&
+                service.isNonInstantiableType(fqn) == false && !service.isObject(fqn) ->
+                ctorRequiredArgsOf(fqn, forSubclass = false)
 
             else -> -1
         }
@@ -1430,12 +1438,14 @@ class KotlinCompletion(
         return typeParamCount to ctorRequiredArgs
     }
 
-    /** The required (non-defaulted, non-vararg) argument count of [fqn]'s cheapest constructor — decides whether
-     *  the caret lands inside the inserted `()`. 0 when the type has no explicit constructor (an implicit no-arg
-     *  one) or none is known yet, so a class still gets its `()`. Reads the source model for a same-project class
-     *  (its constructor shape isn't in the classpath index) and [KotlinSymbolService.constructorsOf] for a
-     *  library binary. */
-    private fun ctorRequiredArgsOf(fqn: String): Int {
+    /** The required (non-defaulted, non-vararg) argument count of [fqn]'s cheapest constructor the completion
+     *  site can call, which decides whether the caret lands inside the inserted `()`. -1 when it can call none
+     *  (`System`, `Math`, a `private constructor` factory class), so the type completes bare. [forSubclass] is a
+     *  supertype-list entry, which may also call a `protected` constructor. 0 when a source class declares no
+     *  constructor (an implicit no-arg one). Reads the source model for a same-project class (its constructor
+     *  shape isn't in the classpath index) and [KotlinSymbolService.constructorsOf] for a library binary, where
+     *  a private constructor is never indexed at all: a Java class whose shape lists none has only private ones. */
+    private fun ctorRequiredArgsOf(fqn: String, forSubclass: Boolean): Int {
         fun required(paramCount: Int, varargIndex: Int, hasDefault: List<Boolean>): Int {
             var req = 0
             for (i in 0 until paramCount) {
@@ -1446,12 +1456,28 @@ class KotlinCompletion(
         }
         service.sourceClass(fqn)?.let { rc ->
             if (rc.constructors.isEmpty()) return 0 // implicit no-arg primary
-            return rc.constructors.minOf { required(it.paramTexts.size, it.varargParamIndex, it.paramHasDefault) }
+            val callable = rc.constructors.filter {
+                it.visibility != "private" && (forSubclass || it.visibility != "protected")
+            }
+            return callable.minOfOrNull { required(it.paramTexts.size, it.varargParamIndex, it.paramHasDefault) } ?: -1
         }
-        val ctors = service.constructorsOf(fqn)
-        if (ctors.isEmpty()) return 0
-        return ctors.minOf { required(it.paramTypes.size, it.varargParamIndex, it.paramHasDefault) }
+        val java = service.isJavaType(fqn)
+        val callable = service.constructorsOf(fqn).filter {
+            val protected = Modifier.PROTECTED in it.modifiers
+            when {
+                Modifier.PRIVATE in it.modifiers || it.isInternal -> false
+                protected -> forSubclass
+                // A Java constructor with no access flag is package-private: out of reach from another package.
+                java -> Modifier.PUBLIC in it.modifiers
+                else -> true
+            }
+        }
+        return callable.minOfOrNull { required(it.paramTypes.size, it.varargParamIndex, it.paramHasDefault) } ?: -1
     }
+
+    /** [nameRef] is a whole statement by itself (`System█` on its own line in a block or lambda body), not part
+     *  of a larger expression whose value is used. */
+    private fun isStatement(nameRef: KtNameReferenceExpression): Boolean = nameRef.parent is KtBlockExpression
 
     private fun inTypePosition(leaf: KtElement?): Boolean = climbTo<KtTypeReference>(leaf) != null
 
@@ -1463,6 +1489,16 @@ class KotlinCompletion(
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.
         const val MARKER = "IntellijIdeaRulezzz"
+
+        /** Value types with a callable constructor that nobody means to call: completing `String` wants the
+         *  type (`String.format`, `String::class`), never `String()`. The boxed Java forms come along because
+         *  a mapped Kotlin type resolves its constructors through them (`kotlin.Int` → `java.lang.Integer`). */
+        val NOT_CONSTRUCTED = setOf(
+            "kotlin.String", "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Char",
+            "kotlin.Boolean", "kotlin.Float", "kotlin.Double",
+            "java.lang.String", "java.lang.Integer", "java.lang.Long", "java.lang.Short", "java.lang.Byte",
+            "java.lang.Character", "java.lang.Boolean", "java.lang.Float", "java.lang.Double",
+        )
 
         /** Standard KDoc block tags offered after `@` inside a `/** */` comment (names without the `@`). */
         val KDOC_TAGS = listOf(

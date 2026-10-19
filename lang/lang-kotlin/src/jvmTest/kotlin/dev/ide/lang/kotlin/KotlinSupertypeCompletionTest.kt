@@ -2,10 +2,13 @@ package dev.ide.lang.kotlin
 
 import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItem
+import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import dev.ide.lang.resolve.Modifier
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Smart TYPE-candidate insertion:
@@ -55,6 +58,37 @@ class KotlinSupertypeCompletionTest {
         assertEquals(CaretAction.At("Person".length + 1), item.caret) // between the parens, ready for `name`
     }
 
+    @Test fun privateConstructorClassStaysBare() =
+        assertEquals("Factory", insertOf("fun f() { val v = Facto| }", "Factory"))
+
+    @Test fun protectedConstructorClassStaysBareAsValue() =
+        assertEquals("Shape", insertOf("fun f() { val v = Shap| }", "Shape"))
+
+    @Test fun protectedConstructorClassIsCallableAsSupertype() =
+        assertEquals("Shape()", insertOf("class Foo : Shap|", "Shape"))
+
+    // A library binary's constructors keep their visibility through the `@Metadata` decode, so a class whose
+    // only constructor is out of reach (`Result`'s `@PublishedApi internal constructor`) completes bare. A Java
+    // binary never indexes a private constructor, so `System`/`Math` list none and complete bare the same way.
+    @Test fun libraryConstructorKeepsItsVisibility() {
+        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = listOf(stdlibJarPath().toString()))
+        val result = service.constructorsOf("kotlin.Result")
+        assertTrue(result.isNotEmpty() && result.all { it.isInternal }, "Result's constructor is internal: $result")
+        val regex = service.constructorsOf("kotlin.text.Regex")
+        assertTrue(regex.any { !it.isInternal && Modifier.PRIVATE !in it.modifiers }, "Regex has public constructors: $regex")
+    }
+
+    @Test fun stringStaysBare() = assertEquals("String", insertOf("fun f() { val v = Strin| }", "String"))
+
+    // ---- statement position: a bare class name heads a member access (`System.out`), not a thrown-away `Foo()` ----
+
+    @Test fun statementClassStaysBare() = assertEquals("Base", insertOf("fun f() { Ba| }", "Base"))
+
+    @Test fun lambdaStatementClassStaysBare() = assertEquals("Base", insertOf("fun f() { run { Ba| } }", "Base"))
+
+    @Test fun argumentClassInsertsConstructorCall() =
+        assertEquals("Base()", insertOf("fun g(b: Base) {}\nfun f() { g(Ba|) }", "Base"))
+
     // ---- type-annotation position ----
 
     @Test fun typeAnnotationClassStaysBare() =
@@ -69,6 +103,8 @@ class KotlinSupertypeCompletionTest {
                 "open class Base\n" +
                 "open class Box<T>\n" +
                 "class Person(val name: String)\n" +
+                "class Factory private constructor()\n" +
+                "open class Shape protected constructor()\n" +
                 "interface Runner\n" +
                 "interface Holder<T>"
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))

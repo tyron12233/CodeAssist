@@ -227,6 +227,9 @@ object KotlinMetadata {
                 type = ctx?.let { KotlinType(classFqn, context = it) },
                 owner = owner,
                 origin = BINARY,
+                // A `private constructor()` (a factory-only class) must not read as callable from outside.
+                modifiers = visibilityMods(declaration.visibility),
+                isInternal = declaration.visibility == KotlinVisibility.INTERNAL,
                 signature = "(" + declaration.parameters.joinToString(", ") { vp ->
                     "${vp.name}: ${typeText(vp.type, classTp)}"
                 } + ")",
