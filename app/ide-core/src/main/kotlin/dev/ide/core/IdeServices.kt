@@ -198,6 +198,7 @@ import dev.ide.lang.kotlin.index.KotlinSourceSubtypeIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
+import dev.ide.lang.kotlin.synthetic.KotlinLightClasses
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
 import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.SourceDocProvider
@@ -687,6 +688,8 @@ class IdeServices private constructor(
             override fun dropJavaBindingCaches() {
                 invalidateAnalyzerCaches(CacheInvalidation.BINDINGS)
             }
+
+            override fun kotlinSourceChanged(path: Path) = this@IdeServices.kotlinSourceChanged(path)
 
             override fun dropOverlaysUnder(root: Path) = this@IdeServices.dropOverlaysUnder(root)
             override fun rekeyOverlays(from: Path, to: Path) =
@@ -1353,7 +1356,9 @@ class IdeServices private constructor(
         // save — drop the synthetic caches + nudge the live Java analyzers so the next analyze/complete
         // regenerates `R` from the now-buffer-aware resource repository (its fingerprint includes open res
         // buffers). Cheap cache-drops; the lazy repo rebuild is fingerprint-gated (only when content changed).
-        if (changed && isResourcePath(norm)) invalidateSyntheticClasses()
+        if (changed && isResourcePath(norm)) invalidateResourceSynthetics()
+        // An unsaved Kotlin edit reaches Java code through the light classes, read from this buffer.
+        if (changed && isKotlinPath(norm)) kotlinLightGeneration.incrementAndGet()
     }
 
     /**
@@ -1394,7 +1399,8 @@ class IdeServices private constructor(
         val previous = openDocuments.replace(norm, disk) ?: return
         diskBaselines[norm] = disk
         if (previous == disk) return
-        if (isResourcePath(norm)) invalidateSyntheticClasses()
+        if (isResourcePath(norm)) invalidateResourceSynthetics()
+        if (isKotlinPath(norm)) kotlinLightGeneration.incrementAndGet()
     }
 
     /**
@@ -1409,8 +1415,10 @@ class IdeServices private constructor(
         val norm = file.toAbsolutePath().normalize()
         diskBaselines.remove(norm)
         if (openDocuments.remove(norm) == null) return
-        // Same reason as [updateDocument]: dropping a `res/` buffer changes what the synthetic `R` resolves.
-        if (isResourcePath(norm)) invalidateSyntheticClasses()
+        // Same reason as [updateDocument]: dropping a `res/` buffer changes what the synthetic `R` resolves,
+        // and dropping a Kotlin buffer puts its light classes back on what disk holds.
+        if (isResourcePath(norm)) invalidateResourceSynthetics()
+        if (isKotlinPath(norm)) kotlinLightGeneration.incrementAndGet()
     }
 
     /** Overlay-preferred current text: the live editor buffer if [file] is open, else its disk content. */
@@ -1507,15 +1515,17 @@ class IdeServices private constructor(
         }
     }.getOrDefault(false)
 
-    // Synthetic ("light") classes (e.g. Android R) contributed via `platform.syntheticClass`, rendered to
-    // Java source and merged into the overlay so they resolve for completion AND analysis like real types.
-    // Cached (the scan walks resource dirs); invalidated when resources change (save/createFile/reindex).
+    // Synthetic classes (e.g. Android R) contributed via `platform.syntheticClass`, rendered to Java source and
+    // merged into the overlay so they resolve for completion AND analysis like real types. Cached (the scan walks
+    // resource dirs); invalidated when resources change (save/createFile/reindex). The Kotlin light classes are
+    // NOT in here: they change with every Kotlin edit, so they are kept incrementally by [kotlinLightClasses].
     @Volatile
     private var syntheticCache: Map<String, CharArray>? = null
 
-    private fun syntheticOverlay(): Map<String, CharArray> {
+    private fun resourceSyntheticOverlay(): Map<String, CharArray> {
         syntheticCache?.let { return it }
         val providers = platform.extensions.extensions(SYNTHETIC_CLASS_EP)
+            .filterNot { it is KotlinSyntheticClassProvider }
         if (providers.isEmpty()) return emptyMap<String, CharArray>().also { syntheticCache = it }
         val out = HashMap<String, CharArray>()
         for (m in modules()) {
@@ -1532,6 +1542,91 @@ class IdeServices private constructor(
         }
         return out.also { syntheticCache = it }
     }
+
+    /**
+     * The Java-visible shapes of every module's Kotlin source, kept per file and read from the open buffer when
+     * there is one, so Java code sees a Kotlin edit before it is saved and a save re-reads one file, not the
+     * project. Bumping [kotlinLightGeneration] is what tells [syntheticOverlay] to look again; it stays a field
+     * read while nothing changed, because the resolver asks for the overlay on every class lookup.
+     */
+    private val kotlinLightClasses = KotlinLightClasses()
+    private val kotlinLightGeneration = AtomicLong()
+
+    /** What [syntheticOverlay] last handed out, with the inputs it was built from. */
+    private class SyntheticSnapshot(
+        val resources: Map<String, CharArray>,
+        val generation: Long,
+        val kotlin: List<List<SyntheticClass>>,
+        val map: Map<String, CharArray>,
+    )
+
+    @Volatile
+    private var syntheticSnapshot: SyntheticSnapshot? = null
+    private val syntheticLock = Any()
+
+    /** fqName -> a light class and its Java text, so an unchanged class keeps the same array (the Java
+     *  environment compares overlay entries by identity first, then by content). */
+    private val lightClassSources = HashMap<String, Pair<SyntheticClass, CharArray>>()
+
+    /**
+     * Every synthetic class as FQN -> Java source: the resource-generated ones plus the Kotlin light classes
+     * (a real Kotlin class wins over a generated one of the same name). Returns the SAME map instance until one
+     * of them changes, and an edit that leaves every light class's shape alone (a function body) changes
+     * nothing, so the Java environment keeps its caches.
+     */
+    private fun syntheticOverlay(): Map<String, CharArray> {
+        val resources = resourceSyntheticOverlay()
+        val generation = kotlinLightGeneration.get()
+        syntheticSnapshot?.let { if (it.resources === resources && it.generation == generation) return it.map }
+        synchronized(syntheticLock) {
+            val last = syntheticSnapshot
+            if (last != null && last.resources === resources && last.generation == generation) return last.map
+            val kotlin = kotlinLightClassLists()
+            val map = if (last != null && last.resources === resources && last.kotlin.size == kotlin.size &&
+                kotlin.indices.all { kotlin[it] === last.kotlin[it] }
+            ) {
+                last.map
+            } else {
+                val out = HashMap<String, CharArray>(resources)
+                val live = HashSet<String>()
+                for (classes in kotlin) for (sc in classes) {
+                    val cached = lightClassSources[sc.fqName]
+                    val chars = if (cached != null && (cached.first === sc || cached.first == sc)) cached.second
+                    else runCatching { SyntheticJavaSource.emit(sc).toCharArray() }.getOrNull() ?: continue
+                    lightClassSources[sc.fqName] = sc to chars
+                    out[sc.fqName] = chars
+                    live += sc.fqName
+                }
+                lightClassSources.keys.retainAll(live)
+                out
+            }
+            return map.also { syntheticSnapshot = SyntheticSnapshot(resources, generation, kotlin, it) }
+        }
+    }
+
+    /** Each module's Kotlin light classes, or nothing when the Kotlin provider isn't installed. */
+    private fun kotlinLightClassLists(): List<List<SyntheticClass>> {
+        if (platform.extensions.extensions(SYNTHETIC_CLASS_EP).none { it is KotlinSyntheticClassProvider }) {
+            return emptyList()
+        }
+        val buffers = kotlinOverlay()
+        return modules().map { m ->
+            runCatching {
+                kotlinLightClasses.classesFor(
+                    m.id.value, KotlinSyntheticClassProvider.kotlinSourceRoots(m), buffers::get,
+                )
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    /** A Kotlin file changed on disk (save, outside write): its light classes are read again on next use. */
+    private fun kotlinSourceChanged(path: Path) {
+        kotlinLightClasses.invalidate(path.toAbsolutePath().normalize().toString())
+        kotlinLightGeneration.incrementAndGet()
+    }
+
+    private fun isKotlinPath(path: Path): Boolean =
+        path.fileName?.toString()?.let { it.endsWith(".kt") || it.endsWith(".kts") } == true
 
     // Structured synthetic classes a KOTLIN file in a module should see (the Kotlin backend resolves them
     // directly, not via rendered Java source). Cached per module, swapped out (fresh list) on invalidation so
@@ -1570,11 +1665,19 @@ class IdeServices private constructor(
             byName.values.toList()
         }
 
-    /** Drop the cached synthetic classes so the next analyze/complete regenerates them (e.g. after a res edit). */
+    /** Drop the cached synthetic classes so the next analyze/complete regenerates them (e.g. after a res edit),
+     *  and list the Kotlin source roots again (files may have come or gone). */
     fun invalidateSyntheticClasses() {
-        // Drop the rendered synthetic R/facade caches. The shared resource repository ([repoCache]) is NOT
-        // dropped here: it is fingerprint-keyed on the res files, so a resource edit invalidates it on its own,
-        // while an unrelated .kt edit (which also calls this) must not throw away the parsed resource set.
+        kotlinLightClasses.rescan()
+        kotlinLightGeneration.incrementAndGet()
+        invalidateResourceSynthetics()
+    }
+
+    /** Drop the resource-generated synthetic classes (R, BuildConfig, ViewBinding) only: what an edit under
+     *  `res/` changes. Leaves the Kotlin light classes alone. */
+    private fun invalidateResourceSynthetics() {
+        // Drop the rendered synthetic R caches. The shared resource repository ([repoCache]) is NOT dropped
+        // here: it is fingerprint-keyed on the res files, so a resource edit invalidates it on its own.
         syntheticCache = null; kotlinSyntheticCache.clear()
         // The lang-java analyzers hold a LIVE IntelliJ env whose facade caches the resolved synthetic `R` by
         // modification count — clearing the ide-core caches above regenerates the R SOURCE, but the Java env

@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Reaction table (matches, and where marked safely widens, the pre-hub inline behavior):
  *  - [FileChanged], single file (an editor save): drop the JDT binding caches; a `res/` file refreshes the
- *    synthetic classes (and re-indexes a `.xml`); a `.kt` refreshes the synthetic facades. Deliberately
+ *    synthetic classes (and re-indexes a `.xml`); a `.kt` re-reads that one file's light classes. Deliberately
  *    LIGHT; this is the hot path, and open-buffer overlays already make the new text visible.
  *  - [FileChanged] batch of 2+ (a refactoring's multi-file edit): the light per-file work (each file is
  *    reindexed), plus a full analyzer invalidation (a cross-file rename changes declared type names, which
@@ -89,6 +89,9 @@ internal class WorkspaceEventHub(
         /** Drop the JDT binding-parse caches on the live module analyzers (a saved edit can change how
          *  OTHER files resolve; the cache keys only on the focal text). */
         fun dropJavaBindingCaches()
+
+        /** A Kotlin source file's content changed on disk: the light classes Java code sees of it are stale. */
+        fun kotlinSourceChanged(path: Path)
 
         /** Remove open-document overlays at/under [root] (after a delete). */
         fun dropOverlaysUnder(root: Path)
@@ -269,7 +272,8 @@ internal class WorkspaceEventHub(
                             // (disposing every module container on each save evicts the warm Kotlin/JDT caches — too
                             // heavy). Consumers that snapshot the index refresh off its generation stamp.
                             reactions.reindexSourceAsync(p)
-                            if (isKotlin(p)) synthetic = true
+                            // Java sees Kotlin through light classes: re-read this one file, not the project.
+                            if (isKotlin(p)) reactions.kotlinSourceChanged(p)
                         }
                     }
 

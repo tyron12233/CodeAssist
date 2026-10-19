@@ -36,6 +36,8 @@ class WorkspaceReactionTest {
         override fun resyncIndex(reason: String) { resyncs++ }
         override fun reindexSourceAsync(path: Path) { reindexed.add(path); calls.add("reindex:$path") }
         override fun dropJavaBindingCaches() { bindingCacheDrops++ }
+        val kotlinChanges = ArrayList<Path>()
+        override fun kotlinSourceChanged(path: Path) { kotlinChanges.add(path) }
         override fun dropOverlaysUnder(root: Path) {}
         override fun rekeyOverlays(from: Path, to: Path) {}
         override fun refreshOverlay(path: Path) { overlaysRefreshed.add(path); calls.add("overlay:$path") }
@@ -87,6 +89,16 @@ class WorkspaceReactionTest {
         assertEquals(1, r.reindexed.size)
         assertEquals(0, r.analyzerInvalidations, "a single save must not evict warm analyzer caches")
         assertEquals(0, r.resyncs)
+    }
+
+    /** A Kotlin save re-reads that file's light classes; it must not drop every synthetic class (R, and the
+     *  light classes of the whole project) the way a resource or membership change does. */
+    @Test
+    fun kotlinSaveRefreshesOnlyThatFilesLightClasses() {
+        val (r, _) = react(listOf(changed("/proj/src/A.kt")))
+        assertEquals(listOf<Path>(Path.of("/proj/src/A.kt")), r.kotlinChanges)
+        assertEquals(0, r.syntheticInvalidations, "a .kt save is not a synthetic-class-wide change")
+        assertEquals(0, r.analyzerInvalidations)
     }
 
     @Test

@@ -86,6 +86,36 @@ class KotlinInteropCompletionTest {
         assertTrue("hello" in items, "Kotlin class instance method 'hello' should complete: $items")
     }
 
+    /** An UNSAVED Kotlin edit reaches Java code: the light classes are read from the open buffer, and the Java
+     *  environment, which already resolved `KtGreeter` once, drops its cached copy when the shape changes. */
+    @Test
+    fun unsavedKotlinEditIsVisibleFromJava() {
+        val s = bootstrapWithKotlin()
+        val kt = root.resolve("core/src/main/java/com/example/core/Greetings.kt")
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { new KtGreeter().; } }"
+        assertTrue("hello" in labels(s, probe, text, "new KtGreeter()."))
+        val edited = kt.toFile().readText()
+            .replace("class KtGreeter { fun hello(): String = \"hi\" }", "class KtGreeter { fun hello(): String = \"hi\"; fun added(n: Int) {} }")
+        s.updateDocument(kt, edited)
+        val items = labels(s, probe, text, "new KtGreeter().")
+        assertTrue("added" in items, "a method added in an unsaved Kotlin buffer should complete from Java: $items")
+    }
+
+    /** A saved Kotlin edit stays visible once its tab is closed (the light classes go back to reading disk). */
+    @Test
+    fun savedKotlinEditIsVisibleFromJavaAfterTheTabCloses() {
+        val s = bootstrapWithKotlin()
+        val kt = root.resolve("core/src/main/java/com/example/core/Greetings.kt")
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { GreetingsKt.; } }"
+        assertTrue("helloWorld" in labels(s, probe, text, "GreetingsKt."))
+        s.save(kt, kt.toFile().readText() + "\nfun savedTopLevel(): Int = 1\n")
+        s.documentClosed(kt)
+        val items = labels(s, probe, text, "GreetingsKt.")
+        assertTrue("savedTopLevel" in items, "a saved top-level fun should be on the facade: $items")
+    }
+
     /** A Kotlin `var` property is visible to Java as BOTH `get<Name>()` and `set<Name>(…)` (the crude facade
      *  only emitted the getter). */
     @Test

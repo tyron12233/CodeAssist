@@ -2,7 +2,6 @@ package dev.ide.lang.kotlin.synthetic
 
 import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.FileContext
-import dev.ide.lang.kotlin.symbols.ModuleSourceModel
 import dev.ide.lang.kotlin.symbols.RawCallable
 import dev.ide.lang.kotlin.symbols.RawClass
 import dev.ide.lang.kotlin.symbols.SourceFile
@@ -16,6 +15,8 @@ import dev.ide.lang.synthetic.SyntheticModifier
 import dev.ide.lang.synthetic.SyntheticParam
 import dev.ide.lang.synthetic.SyntheticTypeKind
 import dev.ide.model.ContentRole
+import dev.ide.model.Module
+import dev.ide.vfs.VirtualFile
 
 /**
  * Makes a module's Kotlin source visible to its Java code (and to JDT-backed completion/analysis) before a
@@ -42,28 +43,55 @@ import dev.ide.model.ContentRole
  */
 class KotlinSyntheticClassProvider : SyntheticClassProvider {
 
+    /** A stateless build from disk, for any host that asks through the extension point. The IDE engine keeps
+     *  an incremental [KotlinLightClasses] instead, which also sees unsaved buffers. */
     override fun classesFor(context: SyntheticClassContext): List<SyntheticClass> {
-        val roots = context.module.sourceSets
+        val roots = kotlinSourceRoots(context.module)
+        if (roots.isEmpty()) return emptyList()
+        val model = runCatching { SourceIndexBuilder.build(roots) }.getOrNull() ?: return emptyList()
+        val classNames = model.classByFqn.keys
+        return model.files.flatMap { LightClassRenderer(it) { fqn -> fqn in classNames }.render() }
+    }
+
+    companion object {
+        /** The roots a module's Kotlin source lives under: its source and generated content roots. */
+        fun kotlinSourceRoots(module: Module): List<VirtualFile> = module.sourceSets
             .flatMap { it.contentRoots }
             .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
             .map { it.dir }
-        if (roots.isEmpty()) return emptyList()
-        val model = runCatching { SourceIndexBuilder.build(roots) }.getOrNull() ?: return emptyList()
-        val types = TypeMapper(model)
+    }
+}
+
+/**
+ * Renders ONE Kotlin file's Java-visible classes: its top-level classes (nested types and companions embedded)
+ * and its `<File>Kt` facade. Everything it reads comes from [file], except whether a type name is a class of
+ * the module, which it asks [isModuleClass]; [lookups] records every such answer, so a caller can tell whether
+ * a change to the module's class set could change this file's output.
+ */
+internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (String) -> Boolean) {
+
+    /** Every module-class question the render asked, with the answer it got. */
+    val lookups = HashMap<String, Boolean>()
+
+    private val types = TypeMapper { fqn -> isModuleClass(fqn).also { lookups[fqn] = it } }
+
+    private val classByFqn: Map<String, RawClass> = file.classes.associateBy { it.fqn }
+
+    fun render(): List<SyntheticClass> {
         val out = ArrayList<SyntheticClass>()
         // Top-level classes only; nested types + companions are embedded in their owner (so `Outer.Inner`
         // resolves), and a companion's members reach Java through the owner's `Companion` field.
-        for (cls in model.classByFqn.values) {
+        for (cls in classByFqn.values) {
             if (cls.isCompanion) continue
             if (cls.fqn.substringBeforeLast('.', "") != cls.ctx.packageName) continue // nested → emitted by its parent
-            out += classFor(cls, model, types)
+            out += classFor(cls)
         }
-        for (file in model.files) facadeClass(file, types)?.let { out += it }
+        facadeClass()?.let { out += it }
         return out
     }
 
     /** The `<File>Kt` file facade: top-level functions/properties (and extensions) as `public static` members. */
-    private fun facadeClass(file: SourceFile, types: TypeMapper): SyntheticClass? {
+    private fun facadeClass(): SyntheticClass? {
         val members = (file.topLevel + file.extensions).filter { it.visibility != "private" }
         if (members.isEmpty()) return null
         val base = file.ctx.path.substringAfterLast('/').substringAfterLast('\\')
@@ -73,7 +101,7 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
         val fqn = if (file.ctx.packageName.isEmpty()) simple else "${file.ctx.packageName}.$simple"
         val methods = ArrayList<SyntheticMethod>()
         val fields = ArrayList<SyntheticField>()
-        members.forEach { val (ms, fs) = emitMember(it, types, static = true); methods += ms; fields += fs }
+        members.forEach { val (ms, fs) = emitMember(it, static = true); methods += ms; fields += fs }
         return SyntheticClass(
             fqName = fqn,
             modifiers = setOf(SyntheticModifier.PUBLIC, SyntheticModifier.FINAL),
@@ -85,7 +113,7 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
 
     /** A `class`/`interface`/`enum`/`object` as the matching Java type, with nested types embedded. [nested]
      *  marks an embedded type (rendered `static`); a top-level type is `public` (objects also `final`). */
-    private fun classFor(cls: RawClass, model: ModuleSourceModel, types: TypeMapper, nested: Boolean = false): SyntheticClass {
+    private fun classFor(cls: RawClass, nested: Boolean = false): SyntheticClass {
         val members = cls.members.filter { it.visibility != "private" && it.receiverText == null }
         // A plain class exposes its constructor(s) so `new Foo(args)` resolves from Java; an
         // object/enum/interface/annotation is never instantiated with `new`.
@@ -93,7 +121,7 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
         val methods = ArrayList<SyntheticMethod>()
         val fields = ArrayList<SyntheticField>()
         if (plainClass) cls.constructors.filter { it.visibility != "private" }.forEach { ctor ->
-            overloadVariants(ctor, types).forEach { ps ->
+            overloadVariants(ctor).forEach { ps ->
                 methods += SyntheticMethod(cls.simpleName, parameters = ps, modifiers = ctorMods(ctor), isConstructor = true)
             }
         }
@@ -101,20 +129,20 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
             // In an `object`, a `@JvmStatic`/`@JvmField` member is a Java static; a companion's members are
             // instance members of the nested `Companion` (their statics are promoted onto the owner below).
             val static = !cls.isCompanion && cls.isObject && (m.jvmStatic || (!m.isFunction && m.jvmField))
-            val (ms, fs) = emitMember(m, types, static); methods += ms; fields += fs
+            val (ms, fs) = emitMember(m, static); methods += ms; fields += fs
         }
         if (cls.isObject && !cls.isCompanion) fields += field("INSTANCE", cls.fqn)
         if (cls.isEnum) cls.enumEntries.forEach { fields += field(it, cls.fqn) } // `Color.RED` etc.
         cls.companionObjectName?.let { comp ->
             fields += field(comp, "${cls.fqn}.$comp")
             // `@JvmStatic`/`@JvmField` companion members are reached from Java as statics on the OWNER class.
-            model.classByFqn["${cls.fqn}.$comp"]?.members
+            classByFqn["${cls.fqn}.$comp"]?.members
                 ?.filter { it.visibility != "private" && it.receiverText == null && (it.jvmStatic || it.jvmField) }
-                ?.forEach { m -> val (ms, fs) = emitMember(m, types, static = true); methods += ms; fields += fs }
+                ?.forEach { m -> val (ms, fs) = emitMember(m, static = true); methods += ms; fields += fs }
         }
-        val children = model.classByFqn.values
+        val children = classByFqn.values
             .filter { it.fqn != cls.fqn && it.fqn.substringBeforeLast('.') == cls.fqn }
-            .map { classFor(it, model, types, nested = true) }
+            .map { classFor(it, nested = true) }
         val kind = when {
             cls.isAnnotation -> SyntheticTypeKind.ANNOTATION
             cls.isInterface -> SyntheticTypeKind.INTERFACE
@@ -145,7 +173,7 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
     /** A callable's Java-visible member(s): a function → its method (renamed by `@JvmName`, with
      *  `@JvmOverloads` variants); a `@JvmField` property → a field; any other property → `get<Name>()` (+
      *  `set<Name>(value)` for a `var`). [static] for file-facade members and `@JvmStatic`/object members. */
-    private fun emitMember(c: RawCallable, types: TypeMapper, static: Boolean): Pair<List<SyntheticMethod>, List<SyntheticField>> {
+    private fun emitMember(c: RawCallable, static: Boolean): Pair<List<SyntheticMethod>, List<SyntheticField>> {
         if (!c.isFunction && c.jvmField) {
             val type = c.returnText?.let { types.javaType(it, c.ctx) } ?: "java.lang.Object"
             val mods = buildSet {
@@ -155,22 +183,22 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
         }
         val mods = if (static) setOf(SyntheticModifier.PUBLIC, SyntheticModifier.STATIC) else setOf(SyntheticModifier.PUBLIC)
         if (c.isFunction) {
-            val ret = functionReturn(c, types)
+            val ret = functionReturn(c)
             val name = c.jvmName ?: c.name
-            return overloadVariants(c, types).map { SyntheticMethod(name, ret, it, mods) } to emptyList()
+            return overloadVariants(c).map { SyntheticMethod(name, ret, it, mods) } to emptyList()
         }
         val cap = c.name.replaceFirstChar { it.uppercaseChar() }
         val type = c.returnText?.let { types.javaType(it, c.ctx) } ?: "java.lang.Object"
         val accessors = ArrayList<SyntheticMethod>()
-        accessors += SyntheticMethod("get$cap", type, receiverParam(c, types), mods)
-        if (c.isVar) accessors += SyntheticMethod("set$cap", "void", receiverParam(c, types) + SyntheticParam("value", type), mods)
+        accessors += SyntheticMethod("get$cap", type, receiverParam(c), mods)
+        if (c.isVar) accessors += SyntheticMethod("set$cap", "void", receiverParam(c) + SyntheticParam("value", type), mods)
         return accessors to emptyList()
     }
 
     /** A function's/constructor's parameter lists: just the full list, unless `@JvmOverloads` — then also the
      *  shorter lists Kotlin generates by dropping trailing defaulted value parameters (one at a time). */
-    private fun overloadVariants(c: RawCallable, types: TypeMapper): List<List<SyntheticParam>> {
-        val receiver = receiverParam(c, types)
+    private fun overloadVariants(c: RawCallable): List<List<SyntheticParam>> {
+        val receiver = receiverParam(c)
         val value = c.paramTexts.mapIndexed { i, (n, t) ->
             val type = types.javaType(t, c.ctx)
             SyntheticParam(n.ifEmpty { "p$i" }, if (i == c.varargParamIndex) "$type[]" else type)
@@ -183,11 +211,11 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
     }
 
     /** An extension's receiver becomes a leading Java parameter (how Kotlin compiles `T.foo()`). */
-    private fun receiverParam(c: RawCallable, types: TypeMapper): List<SyntheticParam> =
+    private fun receiverParam(c: RawCallable): List<SyntheticParam> =
         if (c.receiverText != null) listOf(SyntheticParam("\$receiver", types.javaType(c.receiverText, c.ctx))) else emptyList()
 
     /** A function's Java return type: declared → mapped; expression body → `Object` (inferred); else `void`. */
-    private fun functionReturn(c: RawCallable, types: TypeMapper): String = when {
+    private fun functionReturn(c: RawCallable): String = when {
         c.returnText != null -> types.javaType(c.returnText, c.ctx)
         c.initializerText != null -> "java.lang.Object"
         else -> "void"
@@ -196,8 +224,9 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
     /**
      * Maps a Kotlin type *text* (resolved against its declaration's [FileContext]) to a Java type the
      * synthetic source compiles against. Generics are erased; an unresolved or functional type → `Object`.
+     * [isModuleClass] says whether an FQN is a class declared in the module's Kotlin source.
      */
-    private class TypeMapper(private val model: ModuleSourceModel) {
+    private class TypeMapper(private val isModuleClass: (String) -> Boolean) {
         fun javaType(typeText: String?, ctx: FileContext): String {
             val raw = typeText?.trim().orEmpty()
             if (raw.isEmpty()) return OBJECT
@@ -213,11 +242,11 @@ class KotlinSyntheticClassProvider : SyntheticClassProvider {
             return Builtins.KOTLIN_TO_JAVA[fqn] ?: fqn
         }
 
-        /** Resolve a simple/qualified type name to a Kotlin/Java FQN via the module model + the file's imports. */
+        /** Resolve a simple/qualified type name to a Kotlin/Java FQN via the module's classes + the file's imports. */
         private fun resolve(head: String, ctx: FileContext): String? {
-            if (head in model.classByFqn) return head
+            if (isModuleClass(head)) return head
             val samePkg = if (ctx.packageName.isEmpty()) head else "${ctx.packageName}.$head"
-            if (samePkg in model.classByFqn) return samePkg
+            if (isModuleClass(samePkg)) return samePkg
             ctx.imports.firstOrNull { !it.isStar && it.simpleName == head }?.let { return it.fqn }
             return null
         }
