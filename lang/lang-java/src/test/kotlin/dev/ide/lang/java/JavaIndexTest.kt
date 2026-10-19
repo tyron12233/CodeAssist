@@ -163,7 +163,7 @@ class JavaIndexTest {
         val src = "package com.foo;\npublic class Use {\n" +
             "  public static void main(String[] args) {}\n" +
             "  public int run(String a) { return 0; }\n" +
-            "  int field;\n}"
+            "  int field;\n  private int secret;\n}"
         val input = Input(IndexOrigin.SOURCE, "com/foo/Use.java", t = src, fileId = 7)
 
         val syms = JavaSourceSymbolsIndex.index(input)
@@ -177,8 +177,19 @@ class JavaIndexTest {
             byOwner["com.foo.Use"]?.any { it.name == "run" } == true,
             "public method run under com.foo.Use; got ${byOwner.keys}",
         )
-        // `field` is package-private -> excluded from the public-only membersByOwner index.
-        assertTrue(byOwner["com.foo.Use"]?.none { it.name == "field" } == true, "non-public field excluded")
+        // `field` is package-private: Kotlin in the same package can use it, so it is indexed with its visibility.
+        // A private member is not.
+        val field = byOwner["com.foo.Use"]?.firstOrNull { it.name == "field" }
+        assertEquals("package", field?.let { dev.ide.index.JavaSourceMemberCodec.visibilityOf(it.signature, isMethod = false) })
+        assertTrue(byOwner["com.foo.Use"]?.none { it.name == "secret" } == true, "private field excluded")
+        // One entry carries the type itself; `Use` declares no constructor, so none is listed (the reader adds the
+        // implicit one).
+        val type = byOwner["com.foo.Use"]?.single { it.kind == dev.ide.index.JavaSourceMemberCodec.TYPE }
+        val shape = dev.ide.index.JavaSourceMemberCodec.decodeType(type?.signature ?: "")
+        assertEquals("class", shape?.kind)
+        assertTrue(shape?.supertypes?.firstOrNull().isNullOrEmpty(), "no superclass: the slot is empty (or, with no interfaces, absent)")
+        assertEquals("com.foo", shape?.packageName)
+        assertTrue(byOwner["com.foo.Use"]?.none { it.kind == dev.ide.index.JavaSourceMemberCodec.CONSTRUCTOR } == true)
 
         // Each member carries its encoded SHAPE (parameters + static flag + return type) so the Kotlin backend
         // resolves a same-project call with real arity — the fix for shapeless (0-param) cross-language members.

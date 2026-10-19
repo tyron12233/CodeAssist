@@ -89,6 +89,95 @@ object JavaSourceMemberCodec {
         val parts = signature.split(FIELD)
         return Field(static = parts[0] == "1", type = parts.getOrNull(1)?.ifEmpty { null })
     }
+
+    // --- extended forms: visibility, own type parameters, and the declaring type's shape --------------------
+    // Appended AFTER the fields above, so a decoder of the short forms reads an extended signature unchanged.
+
+    /** The member [kind] of a constructor entry; its signature is a method's, with no return type. */
+    const val CONSTRUCTOR = "constructor"
+
+    /** The member [kind] of the one entry per type that carries its [SourceType] (its name is empty). */
+    const val TYPE = "type"
+
+    /** [encodeMethod] plus the member's [visibility] (`public`/`protected`/`package`) and its own type parameters
+     *  as (name, bound text) pairs, the bound empty when there is none. */
+    fun encodeMethod(
+        static: Boolean,
+        paramNames: List<String>,
+        paramTypes: List<String>,
+        returnType: String?,
+        varargIndex: Int,
+        visibility: String,
+        typeParameters: List<Pair<String, String>>,
+    ): String = encodeMethod(static, paramNames, paramTypes, returnType, varargIndex) +
+        "$FIELD$visibility$FIELD${encodePairs(typeParameters)}"
+
+    /** [encodeField] plus the field's [visibility]. */
+    fun encodeField(static: Boolean, type: String?, visibility: String): String =
+        encodeField(static, type) + "$FIELD$visibility"
+
+    /** The visibility an extended method/constructor ([isMethod]) or field signature carries; `public` for a
+     *  short-form one, which only ever held public members. */
+    fun visibilityOf(signature: String, isMethod: Boolean): String =
+        signature.split(FIELD).getOrNull(if (isMethod) 4 else 2)?.ifEmpty { null } ?: "public"
+
+    /** A method's own type parameters from its extended signature; empty for a short-form one. */
+    fun typeParametersOf(signature: String): List<Pair<String, String>> =
+        decodePairs(signature.split(FIELD).getOrNull(5).orEmpty())
+
+    /**
+     * The declaring type itself, as a resolution-free parse sees it: what it is, its type parameters, its
+     * supertypes AS WRITTEN, and what a name in the file resolves against (the package, the single-type and
+     * on-demand imports, and every type the file declares as a dotted path like `Outer.Inner`).
+     */
+    data class SourceType(
+        /** `class`, `interface`, `enum`, `record` or `annotation`. */
+        val kind: String,
+        val isAbstract: Boolean,
+        val isFinal: Boolean,
+        val typeParameters: List<Pair<String, String>>,
+        /** AS WRITTEN. A class's superclass first (empty when it extends nothing), then its interfaces; for an
+         *  interface, the interfaces it extends. */
+        val supertypes: List<String>,
+        val packageName: String,
+        val imports: List<String>,
+        val starImports: List<String>,
+        val fileTypes: List<String>,
+    )
+
+    fun encodeType(t: SourceType): String = listOf(
+        t.kind,
+        (if (t.isAbstract) "1" else "0") + (if (t.isFinal) "1" else "0"),
+        encodePairs(t.typeParameters),
+        t.supertypes.joinToString(ITEM.toString()),
+        t.packageName,
+        t.imports.joinToString(ITEM.toString()),
+        t.starImports.joinToString(ITEM.toString()),
+        t.fileTypes.joinToString(ITEM.toString()),
+    ).joinToString(FIELD.toString())
+
+    fun decodeType(signature: String): SourceType? {
+        val parts = signature.split(FIELD)
+        if (parts.size < 8) return null
+        fun list(s: String) = if (s.isEmpty()) emptyList() else s.split(ITEM)
+        return SourceType(
+            kind = parts[0],
+            isAbstract = parts[1].getOrNull(0) == '1',
+            isFinal = parts[1].getOrNull(1) == '1',
+            typeParameters = decodePairs(parts[2]),
+            supertypes = list(parts[3]),
+            packageName = parts[4],
+            imports = list(parts[5]),
+            starImports = list(parts[6]),
+            fileTypes = list(parts[7]),
+        )
+    }
+
+    private fun encodePairs(pairs: List<Pair<String, String>>): String =
+        pairs.joinToString(ITEM.toString()) { (a, b) -> "$a$PAIR$b" }
+
+    private fun decodePairs(s: String): List<Pair<String, String>> =
+        if (s.isEmpty()) emptyList() else s.split(ITEM).map { it.substringBefore(PAIR) to it.substringAfter(PAIR, "") }
 }
 
 /**

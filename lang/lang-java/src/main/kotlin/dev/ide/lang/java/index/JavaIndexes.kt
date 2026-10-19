@@ -226,7 +226,7 @@ object JavaMembersIndex : IndexExtension<String, MemberValue> {
  *  and types (not just a name). */
 object JavaMembersByOwnerIndex : IndexExtension<String, MemberValue> {
     override val id = IndexId("java.membersByOwner")
-    override val version = 2
+    override val version = 3
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = MemberExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
@@ -236,18 +236,48 @@ object JavaMembersByOwnerIndex : IndexExtension<String, MemberValue> {
     override fun index(input: IndexInput): Map<String, Collection<MemberValue>> =
         membersFor(JavaSourceIndexer.sharedParsed(input))
 
-    /** The public [parsed] members keyed by owner FQN, with each member's shape encoded into
-     *  [MemberValue.signature]. Shared with the host's LIVE open-buffer provider (ide-core) so a Kotlin file
-     *  sees an UNSAVED Java edit the same way it sees a saved (indexed) one — one producer, one decoder. */
+    /** The non-private [parsed] members keyed by owner FQN, with each member's shape (and visibility) encoded
+     *  into [MemberValue.signature], plus per type one [JavaSourceMemberCodec.TYPE] entry carrying its kind,
+     *  type parameters, supertypes and the file's name-resolution context, and its constructors. Shared with
+     *  the host's LIVE open-buffer provider (ide-core) so a Kotlin file sees an UNSAVED Java edit the same way
+     *  it sees a saved (indexed) one — one producer, one decoder. */
     fun membersFor(parsed: JavaSourceIndexer.Parsed): Map<String, Collection<MemberValue>> {
         val out = HashMap<String, MutableList<MemberValue>>()
+        val pkg = parsed.packageName.orEmpty()
+        fun fqnOf(path: String) = if (pkg.isEmpty()) path else "$pkg.$path"
+        val fileTypes = parsed.types.map { it.path }
+        for (t in parsed.types) {
+            val owner = fqnOf(t.path)
+            val list = out.getOrPut(owner) { ArrayList() }
+            val type = JavaSourceMemberCodec.SourceType(
+                kind = t.kind.name.lowercase(),
+                isAbstract = t.isAbstract,
+                isFinal = t.isFinal,
+                typeParameters = t.typeParameters,
+                supertypes = t.supertypes,
+                packageName = pkg,
+                imports = parsed.imports,
+                starImports = parsed.starImports,
+                fileTypes = fileTypes,
+            )
+            list += MemberValue("", owner, JavaSourceMemberCodec.TYPE, JavaSourceMemberCodec.encodeType(type))
+            // Private constructors too: a class declaring only those has no implicit public one, which the
+            // reader can only tell if it sees them.
+            for (c in t.constructors) {
+                val sig = JavaSourceMemberCodec.encodeMethod(
+                    false, c.paramNames, c.paramTypes, null, c.varargIndex, c.visibility, c.typeParameters,
+                )
+                list += MemberValue(t.path.substringAfterLast('.'), owner, JavaSourceMemberCodec.CONSTRUCTOR, sig)
+            }
+        }
         for (d in parsed.decls) {
-            if ((d.kind != DeclKind.METHOD && d.kind != DeclKind.FIELD) || !d.public) continue
-            val container = d.container ?: continue
-            val owner = if (parsed.packageName.isNullOrEmpty()) container else "${parsed.packageName}.$container"
+            if ((d.kind != DeclKind.METHOD && d.kind != DeclKind.FIELD) || d.visibility == "private") continue
+            val owner = fqnOf(d.owner ?: d.container ?: continue)
             val sig = if (d.kind == DeclKind.METHOD)
-                JavaSourceMemberCodec.encodeMethod(d.static, d.paramNames, d.paramTypes, d.returnType, d.varargIndex)
-            else JavaSourceMemberCodec.encodeField(d.static, d.returnType)
+                JavaSourceMemberCodec.encodeMethod(
+                    d.static, d.paramNames, d.paramTypes, d.returnType, d.varargIndex, d.visibility, d.typeParameters,
+                )
+            else JavaSourceMemberCodec.encodeField(d.static, d.returnType, d.visibility)
             out.getOrPut(owner) { ArrayList() }.add(MemberValue(d.name, owner, d.kind.name.lowercase(), sig))
         }
         return out
