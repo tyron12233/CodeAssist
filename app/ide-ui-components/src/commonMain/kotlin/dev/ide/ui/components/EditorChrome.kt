@@ -930,6 +930,9 @@ private fun RunControl(
                             .focusRequester(searchFocus)
                             .focusProperties { canFocus = searchTapped },
                     )
+                    // Until activated the field can't take focus, yet it still swallows the tap, so the box's
+                    // clickable never saw a tap on the text itself. This shield catches it instead.
+                    if (!searchTapped) Box(Modifier.matchParentSize().clickable { searchTapped = true })
                 }
             }
             val filtered = items.filter {
@@ -944,8 +947,12 @@ private fun RunControl(
             if (filtered.isEmpty()) {
                 CaMenuItem(stringResource(Res.string.edchrome_no_matching_tasks), onClick = {}, enabled = false)
             }
+            // The list scrolls on its own under the pinned search box. Without this the capped Column squeezed the
+            // rows past 320dp to zero height, and the menu's own scroll never saw them.
+            val listScroll = rememberScrollState()
+            LaunchedEffect(query) { listScroll.scrollTo(0) }
             Box(Modifier.heightIn(max = 320.dp)) {
-                Column {
+                Column(Modifier.verticalScroll(listScroll)) {
                     filtered.forEach { task ->
                         CaMenuItem(
                             label = task.label,
