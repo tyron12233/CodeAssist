@@ -5,6 +5,7 @@ import dev.ide.agent.AgentEventSink
 import dev.ide.agent.AgentPermissionGate
 import dev.ide.agent.AgentToolRegistry
 import dev.ide.agent.ContentPart
+import dev.ide.agent.FileChange
 import dev.ide.agent.LlmClient
 import dev.ide.agent.LlmMessage
 import dev.ide.agent.LlmRequest
@@ -15,10 +16,13 @@ import dev.ide.agent.StopReason
 import dev.ide.agent.TokenUsage
 import dev.ide.agent.ToolExecutionResult
 import dev.ide.agent.WriteRequest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Drives one conversation: request -> stream a turn -> if the model called tools, execute them (gating
@@ -90,8 +94,8 @@ class AgentLoop(
         compactor.reset()
     }
 
-    /** The conversation so far, so a rebuilt loop can carry it over (see [restore]). */
-    fun snapshot(): List<LlmMessage> = history.toList()
+    /** The conversation so far, so a rebuilt loop can carry it over (see [restore]), every tool call answered. */
+    fun snapshot(): List<LlmMessage> = pairToolResults(history.toList())
 
     /**
      * Adopts a conversation captured by [snapshot]. Changing a setting rebuilds the loop, and without this the
@@ -104,9 +108,17 @@ class AgentLoop(
     fun restore(messages: List<LlmMessage>, dropThinking: Boolean) {
         history.clear()
         compactor.reset()
-        messages.mapTo(history) { m ->
+        pairToolResults(messages).mapTo(history) { m ->
             if (!dropThinking) m else m.copy(content = m.content.filter { it !is ContentPart.Thinking })
         }
+    }
+
+    /** Answers any tool call left without a result in [history] (see [pairToolResults]) before it is sent. */
+    private fun pairHistory() {
+        val paired = pairToolResults(history)
+        if (paired === history) return
+        history.clear()
+        history += paired
     }
 
     /**
@@ -118,6 +130,8 @@ class AgentLoop(
     private val requestMaxTokens: Int get() = creditCap?.coerceAtMost(maxTokens) ?: maxTokens
 
     suspend fun send(userText: String, sink: AgentEventSink, images: List<ContentPart.Image> = emptyList()) {
+        // Answered before the new message goes in, so an interrupted call's result sits right after the call.
+        pairHistory()
         history += if (images.isEmpty()) LlmMessage.user(userText) else LlmMessage.user(userText, images)
         sink.emit(AgentEvent.UserMessage(userText))
         creditCap = null
@@ -137,6 +151,7 @@ class AgentLoop(
     }
 
     private suspend fun runTurns(sink: AgentEventSink) {
+        pairHistory()
         var iteration = 0
         var rateLimitWaits = 0
         var creditRetries = 0
@@ -193,7 +208,17 @@ class AgentLoop(
                 return
             }
 
-            history += executeCalls(calls, sink)
+            // The calls are in the history now, so each one gets a result even when the run is stopped or fails
+            // part-way: what finished keeps its real result (the model must know what changed), the rest are
+            // marked interrupted. Otherwise the conversation is saved with calls no request can follow.
+            val results = arrayOfNulls<LlmMessage>(calls.size)
+            try {
+                executeCalls(calls, sink, results)
+            } finally {
+                calls.forEachIndexed { i, call ->
+                    history += results[i] ?: LlmMessage.toolResult(call.id, INTERRUPTED_TOOL_RESULT, isError = true)
+                }
+            }
         }
         wrapUp(sink, total)
     }
@@ -234,6 +259,7 @@ class AgentLoop(
      */
     suspend fun compactConversation(sink: AgentEventSink): Boolean {
         if (history.isEmpty()) return false
+        pairHistory()
         val request = LlmRequest(
             model = model,
             system = systemPrompt(),
@@ -321,11 +347,14 @@ class AgentLoop(
      * Runs the turn's tool calls, preserving their order in the returned results. Read-only calls run
      * concurrently (a turn that reads several files pays one file's latency, not the sum); mutating and
      * unknown calls run sequentially afterward so their permission prompts never race and writes stay
-     * ordered and deterministic.
+     * ordered and deterministic. Each result lands in [results] as soon as it is in, so a run stopped part-way
+     * still has the ones that finished.
      */
-    private suspend fun executeCalls(calls: List<ContentPart.ToolUse>, sink: AgentEventSink): List<LlmMessage> {
-        if (calls.size == 1) return listOf(executeCall(calls[0], sink))
-        val results = arrayOfNulls<LlmMessage>(calls.size)
+    private suspend fun executeCalls(calls: List<ContentPart.ToolUse>, sink: AgentEventSink, results: Array<LlmMessage?>) {
+        if (calls.size == 1) {
+            results[0] = executeCall(calls[0], sink)
+            return
+        }
         coroutineScope {
             calls.forEachIndexed { i, call ->
                 val tool = tools.find(call.name)
@@ -337,7 +366,6 @@ class AgentLoop(
         calls.forEachIndexed { i, call ->
             if (results[i] == null) results[i] = executeCall(call, sink)
         }
-        return results.map { it!! }
     }
 
     private suspend fun executeCall(call: ContentPart.ToolUse, sink: AgentEventSink): LlmMessage {
@@ -370,11 +398,16 @@ class AgentLoop(
 
         // Mutating calls run one at a time, so the checkpoint workspace can attribute every write to this call.
         if (tool.mutating) checkpoints?.beginCall(call.id)
-        val result = runCatching { tool.execute(args) }
-            .getOrElse { ToolExecutionResult.error(it.message ?: "tool failed") }
-        if (tool.mutating) {
-            checkpoints?.endCall()?.takeIf { it.isNotEmpty() }?.let { sink.emit(AgentEvent.FilesChanged(call.id, it)) }
+        // Ended even when the run is stopped mid-call, so a later write is not attributed to this call.
+        var changed: List<FileChange>? = null
+        val result = try {
+            // A stop is not the tool failing: let it through, so the call is recorded as interrupted.
+            runCatching { tool.execute(args) }
+                .getOrElse { if (it is CancellationException) throw it else ToolExecutionResult.error(it.message ?: "tool failed") }
+        } finally {
+            if (tool.mutating) changed = withContext(NonCancellable) { checkpoints?.endCall() }
         }
+        changed?.takeIf { it.isNotEmpty() }?.let { sink.emit(AgentEvent.FilesChanged(call.id, it)) }
         result.event?.let { sink.emit(it) }
         sink.emit(AgentEvent.ToolCallFinished(call.id, ok = !result.isError, resultSummary = brief(result.content)))
         return LlmMessage.toolResult(call.id, result.content, result.isError, result.images)
@@ -431,4 +464,44 @@ class AgentLoop(
             return parts
         }
     }
+}
+
+/** The result recorded for a tool call that never returned one (the run was stopped or failed mid-call). */
+internal const val INTERRUPTED_TOOL_RESULT = "Interrupted: the run stopped before this tool call returned a result. It may " +
+    "not have run, or may have run only partly. Check the current state before relying on it or repeating it."
+
+/**
+ * [messages] with every assistant tool call answered, which every provider requires before the next
+ * request: a call with no result gets an [INTERRUPTED_TOOL_RESULT] error result, placed after the results its turn did
+ * get, and a result that answers no call is dropped. Returns [messages] itself when nothing was wrong.
+ *
+ * A history breaks this way when a run is stopped or fails while tools are running. Before this was
+ * enforced, such a conversation was saved as it stood, and every later message in it was refused with
+ * "Missing tool response for tool_call_id(s)", so this also mends conversations saved in that state.
+ */
+internal fun pairToolResults(messages: List<LlmMessage>): List<LlmMessage> {
+    var changed = false
+    val out = ArrayList<LlmMessage>(messages.size)
+    var i = 0
+    while (i < messages.size) {
+        val m = messages[i++]
+        if (m.role == LlmRole.TOOL) {
+            // A result with no call right before it.
+            changed = true
+            continue
+        }
+        out += m
+        val calls = if (m.role == LlmRole.ASSISTANT) m.content.filterIsInstance<ContentPart.ToolUse>() else emptyList()
+        if (calls.isEmpty()) continue
+        val pending = calls.mapTo(LinkedHashSet()) { it.id }
+        while (i < messages.size && messages[i].role == LlmRole.TOOL) {
+            val results = messages[i++]
+            val kept = results.content.filter { it is ContentPart.ToolResultPart && pending.remove(it.toolCallId) }
+            if (kept.size != results.content.size) changed = true
+            if (kept.isNotEmpty()) out += if (kept.size == results.content.size) results else results.copy(content = kept)
+        }
+        if (pending.isNotEmpty()) changed = true
+        pending.forEach { out += LlmMessage.toolResult(it, INTERRUPTED_TOOL_RESULT, isError = true) }
+    }
+    return if (changed) out else messages
 }
