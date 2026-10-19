@@ -181,6 +181,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var javaSourceMemberProvider: (String) -> List<dev.ide.index.MemberValue>? = { null }
 
+    /** Injected by the host: a stamp that moves when the members of a same-project Java SOURCE class may have
+     *  changed, and not for an edit that leaves them alone. See [KotlinSymbolService]. */
+    @Volatile
+    var javaSourceStamp: () -> Long = { 0L }
+
     /** Sync the symbol model to the current live buffers before a query (see [liveOverlayProvider]). */
     private fun refreshOverlay() {
         runCatching { service.setOverlay(liveOverlayProvider()) }
@@ -224,6 +229,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
             syntheticMemberProviders = { syntheticMemberProviders() },
             javaSourceMemberProvider = { javaSourceMemberProvider(it) },
+            javaSourceStamp = { javaSourceStamp() },
             apiContext = { apiContext() },
         )
     }

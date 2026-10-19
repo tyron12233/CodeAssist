@@ -5,6 +5,8 @@ import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -113,5 +115,62 @@ class KotlinSeesJavaSourceTest {
 
         val after = labels(s, "package com.example.core\nfun f() { StringUtils. }", "StringUtils.")
         assertTrue("shout" in after, "an UNSAVED Java edit must reflect in Kotlin completion at once: $after")
+    }
+    private val stringUtilsWithShout = """
+        package com.example.core;
+        public final class StringUtils {
+            private StringUtils() {}
+            public static String repeat(String s, int times) { return s; }
+            public static boolean isBlank(String s) { return s == null; }
+            public static String shout(String s) { return s; }
+        }
+    """.trimIndent()
+
+    private fun unresolvedShout(s: IdeServices, text: String): List<String> =
+        runBlocking { s.analyzeDiagnostics(probe, text) }.map { it.message }.filter { "shout" in it }
+
+    /** A Kotlin file's analysis is cached and reused while its own text is unchanged. A Java edit it depends
+     *  on must still re-judge it: the call flagged before the method existed is clean once it does. */
+    @Test
+    fun javaEditClearsAStaleKotlinDiagnostic() {
+        val s = bootstrap()
+        val text = "package com.example.core\nfun f() { StringUtils.shout(\"x\") }"
+        assertTrue(unresolvedShout(s, text).isNotEmpty(), "sanity: `shout` doesn't exist yet")
+        s.updateDocument(stringUtils, stringUtilsWithShout)
+        val after = unresolvedShout(s, text)
+        assertTrue(after.isEmpty(), "the Java buffer now declares `shout`: $after")
+    }
+
+    /** The same after a save with the tab closed: the members come from the re-indexed file, not a buffer. */
+    @Test
+    fun savedJavaEditClearsAStaleKotlinDiagnostic() {
+        val s = bootstrap()
+        val text = "package com.example.core\nfun f() { StringUtils.shout(\"x\") }"
+        assertTrue(unresolvedShout(s, text).isNotEmpty(), "sanity: `shout` doesn't exist yet")
+        s.save(stringUtils, stringUtilsWithShout)
+        s.documentClosed(stringUtils)
+        val deadline = System.currentTimeMillis() + 30_000
+        var after = unresolvedShout(s, text)
+        while (after.isNotEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100) // the save re-indexes the file off-thread
+            after = unresolvedShout(s, text)
+        }
+        assertTrue(after.isEmpty(), "the saved Java file now declares `shout`: $after")
+    }
+
+    /** The stamp a Kotlin file's cached analysis is keyed on moves only when Java MEMBERS change: an edit inside
+     *  a method body leaves it, and so every Kotlin cache, alone. */
+    @Test
+    fun aJavaBodyEditLeavesTheJavaSourceStampAlone() {
+        val s = bootstrap()
+        val original = stringUtils.toFile().readText()
+        s.updateDocument(stringUtils, original)
+        val before = s.javaSourceStamp()
+        val bodyEdit = original.replace("return sb.toString();", "return sb.toString().trim();")
+        assertNotEquals(original, bodyEdit, "sanity: the body edit applies")
+        s.updateDocument(stringUtils, bodyEdit)
+        assertEquals(before, s.javaSourceStamp(), "a body-only edit must not move the stamp")
+        s.updateDocument(stringUtils, stringUtilsWithShout)
+        assertNotEquals(before, s.javaSourceStamp(), "a new method must move it")
     }
 }

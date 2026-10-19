@@ -614,7 +614,7 @@ class IdeServices private constructor(
         override fun removeOverlay(path: Path): String? {
             val norm = path.toAbsolutePath().normalize()
             this@IdeServices.diskBaselines.remove(norm)
-            return this@IdeServices.openDocuments.remove(norm)
+            return this@IdeServices.openDocuments.remove(norm).also { this@IdeServices.overlayChanged(norm) }
         }
 
         override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
@@ -681,6 +681,7 @@ class IdeServices private constructor(
                         // refresh source-index snapshots (custom-view tag list). XML resource reindexes don't touch
                         // source declarations, so they skip the bump.
                         if (!path.toString().endsWith(".xml")) bumpSourceIndexGeneration()
+                        if (path.toString().endsWith(".java")) javaIndexGeneration.incrementAndGet()
                     }
                 }
             }
@@ -1346,6 +1347,7 @@ class IdeServices private constructor(
     private fun putInStep(norm: Path, text: String) {
         openDocuments[norm] = text
         diskBaselines[norm] = text
+        overlayChanged(norm)
     }
 
     /** Called by the editor on every change so cross-file analysis sees the latest text. */
@@ -1357,8 +1359,9 @@ class IdeServices private constructor(
         // regenerates `R` from the now-buffer-aware resource repository (its fingerprint includes open res
         // buffers). Cheap cache-drops; the lazy repo rebuild is fingerprint-gated (only when content changed).
         if (changed && isResourcePath(norm)) invalidateResourceSynthetics()
-        // An unsaved Kotlin edit reaches Java code through the light classes, read from this buffer.
-        if (changed && isKotlinPath(norm)) kotlinLightGeneration.incrementAndGet()
+        // An unsaved Kotlin edit reaches Java code through the light classes, and an unsaved Java edit reaches
+        // Kotlin code through the buffer members, both read from this overlay.
+        if (changed) overlayChanged(norm)
     }
 
     /**
@@ -1400,7 +1403,7 @@ class IdeServices private constructor(
         diskBaselines[norm] = disk
         if (previous == disk) return
         if (isResourcePath(norm)) invalidateResourceSynthetics()
-        if (isKotlinPath(norm)) kotlinLightGeneration.incrementAndGet()
+        overlayChanged(norm)
     }
 
     /**
@@ -1418,7 +1421,7 @@ class IdeServices private constructor(
         // Same reason as [updateDocument]: dropping a `res/` buffer changes what the synthetic `R` resolves,
         // and dropping a Kotlin buffer puts its light classes back on what disk holds.
         if (isResourcePath(norm)) invalidateResourceSynthetics()
-        if (isKotlinPath(norm)) kotlinLightGeneration.incrementAndGet()
+        overlayChanged(norm)
     }
 
     /** Overlay-preferred current text: the live editor buffer if [file] is open, else its disk content. */
@@ -1459,6 +1462,7 @@ class IdeServices private constructor(
         // destroy the asset (an opened PNG becomes ~150 bytes of text). Leave such a file untouched.
         if (isBinaryOnDisk(path)) return
         openDocuments[path] = text
+        overlayChanged(path)
         path.parent?.let { Files.createDirectories(it) }
         path.writeText(text)
         diskBaselines[path] = text
@@ -1574,7 +1578,7 @@ class IdeServices private constructor(
      * of them changes, and an edit that leaves every light class's shape alone (a function body) changes
      * nothing, so the Java environment keeps its caches.
      */
-    private fun syntheticOverlay(): Map<String, CharArray> {
+    internal fun syntheticOverlay(): Map<String, CharArray> {
         val resources = resourceSyntheticOverlay()
         val generation = kotlinLightGeneration.get()
         syntheticSnapshot?.let { if (it.resources === resources && it.generation == generation) return it.map }
@@ -1772,10 +1776,61 @@ class IdeServices private constructor(
         return out
     }
 
-    // owner FQN -> its public members, parsed from the OPEN `.java` buffers, cached under a content fingerprint
-    // of those buffers so it rebuilds only when a Java buffer actually changed (String hashCodes are cached).
+    /** One open `.java` buffer's members by owner FQN, kept until that buffer's text changes. */
+    private class JavaBufferEntry(val text: String, val members: Map<String, Collection<MemberValue>>)
+
+    /** The members of every open `.java` buffer, merged; [version] moves only when they differ in value. */
+    private class JavaBufferSnapshot(val generation: Long, val members: Map<String, List<MemberValue>>, val version: Long)
+
+    private val javaBufferEntries = HashMap<Path, JavaBufferEntry>()
+    private val javaBufferLock = Any()
+
+    /** Bumped on every change to a `.java` overlay, so [javaBufferSnapshot] is a field read while none changed. */
+    private val javaBufferGeneration = AtomicLong()
+
     @Volatile
-    private var javaBufferMembers: Pair<Int, Map<String, List<MemberValue>>>? = null
+    private var javaBufferSnapshot: JavaBufferSnapshot? = null
+
+    /** Bumped after a saved `.java` file is re-indexed: the members the index serves for it may have changed. */
+    private val javaIndexGeneration = AtomicLong()
+
+    /**
+     * The members declared by the open `.java` buffers. A buffer is parsed again only when its own text changed,
+     * and the merged map keeps its [JavaBufferSnapshot.version] when the re-parse found the same members, which
+     * is the case for any edit inside a method body.
+     */
+    private fun javaBufferSnapshot(): JavaBufferSnapshot {
+        val generation = javaBufferGeneration.get()
+        javaBufferSnapshot?.let { if (it.generation == generation) return it }
+        synchronized(javaBufferLock) {
+            val last = javaBufferSnapshot
+            if (last != null && last.generation == generation) return last
+            val openPaths = HashSet<Path>()
+            var changed = false
+            for ((path, content) in openDocuments) {
+                if (!path.toString().endsWith(".java")) continue
+                openPaths.add(path)
+                val entry = javaBufferEntries[path]
+                if (entry != null && (entry.text === content || entry.text == content)) continue
+                val members = runCatching { JavaMembersByOwnerIndex.membersFor(JavaSourceIndexer.parse(content)) }
+                    .getOrNull() ?: emptyMap()
+                if (entry == null || entry.members != members) changed = true
+                javaBufferEntries[path] = JavaBufferEntry(content, members)
+            }
+            if (javaBufferEntries.keys.retainAll(openPaths)) changed = true
+            val snapshot = if (last != null && !changed) {
+                JavaBufferSnapshot(generation, last.members, last.version)
+            } else {
+                val merged = HashMap<String, MutableList<MemberValue>>()
+                for (entry in javaBufferEntries.values) {
+                    entry.members.forEach { (owner, members) -> merged.getOrPut(owner) { ArrayList() }.addAll(members) }
+                }
+                JavaBufferSnapshot(generation, merged, (last?.version ?: 0L) + 1)
+            }
+            javaBufferSnapshot = snapshot
+            return snapshot
+        }
+    }
 
     /**
      * Members of a currently-OPEN Java SOURCE class [fqn], parsed from its live editor buffer, so a Kotlin file
@@ -1784,22 +1839,18 @@ class IdeServices private constructor(
      * back to the index. Reuses the ONE producer ([JavaMembersByOwnerIndex.membersFor], same shape encoding) so
      * live and saved members decode identically. Wired to [KotlinSourceAnalyzer.javaSourceMemberProvider].
      */
-    private fun javaSourceBufferMembers(fqn: String): List<MemberValue>? {
-        val javaBuffers = openDocuments.entries.filter { it.key.toString().endsWith(".java") }
-        if (javaBuffers.isEmpty()) return null
-        val fingerprint = javaBuffers.fold(1) { acc, e -> acc * 31 + e.key.hashCode() * 31 + e.value.hashCode() }
-        var cached = javaBufferMembers
-        if (cached == null || cached.first != fingerprint) {
-            val map = HashMap<String, MutableList<MemberValue>>()
-            for (e in javaBuffers) {
-                val parsed = runCatching { JavaSourceIndexer.parse(e.value) }.getOrNull() ?: continue
-                JavaMembersByOwnerIndex.membersFor(parsed)
-                    .forEach { (owner, members) -> map.getOrPut(owner) { ArrayList() }.addAll(members) }
-            }
-            cached = fingerprint to map.mapValues { it.value.toList() }
-            javaBufferMembers = cached
+    private fun javaSourceBufferMembers(fqn: String): List<MemberValue>? = javaBufferSnapshot().members[fqn]
+
+    /** Moves when a Java source class's members may have changed: an open buffer's members, or a re-indexed
+     *  save. Wired to [KotlinSourceAnalyzer.javaSourceStamp]. */
+    internal fun javaSourceStamp(): Long = javaBufferSnapshot().version * 1_000_003L + javaIndexGeneration.get()
+
+    /** The overlay for [path] was set, changed or removed: tell whatever reads that kind of buffer to look again. */
+    private fun overlayChanged(path: Path) {
+        when {
+            isKotlinPath(path) -> kotlinLightGeneration.incrementAndGet()
+            path.toString().endsWith(".java") -> javaBufferGeneration.incrementAndGet()
         }
-        return cached.second[fqn]
     }
 
     /** The IDE's stable, path-free index-segment key for a BUNDLED jar (android.jar / desugar stubs / the
@@ -2414,6 +2465,7 @@ class IdeServices private constructor(
                     // buffer, so a Java edit reflects in a calling Kotlin file before save (the mirror of
                     // liveOverlayProvider for the .kt→.java direction).
                     it.javaSourceMemberProvider = ::javaSourceBufferMembers
+                    it.javaSourceStamp = ::javaSourceStamp
                     // Editor support for a compiler plugin's generated members (kotlinx.serialization's
                     // `serializer()`): the contributed providers, or the built-ins when nothing is registered.
                     it.syntheticMemberProviders = {
@@ -3274,7 +3326,7 @@ class IdeServices private constructor(
     private fun dropOverlaysUnder(root: Path) {
         val r = normPath(root)
         openDocuments.keys.filter { it == r || it.startsWith(r) }
-            .forEach { openDocuments.remove(it); diskBaselines.remove(it) }
+            .forEach { openDocuments.remove(it); diskBaselines.remove(it); overlayChanged(it) }
     }
 
     /** Re-point open-document overlays from [from] (a file or directory) to [to] after a move/rename. */
@@ -3285,6 +3337,7 @@ class IdeServices private constructor(
             val dest = if (k == f) t else t.resolve(f.relativize(k))
             openDocuments.remove(k)?.let { openDocuments[normPath(dest)] = it }
             diskBaselines.remove(k)?.let { diskBaselines[normPath(dest)] = it }
+            overlayChanged(k)
         }
     }
 
@@ -3357,7 +3410,7 @@ class IdeServices private constructor(
             else rewriteJavaPackage(f, text, newPkg)) ?: continue
             runCatching { f.writeText(rewrite.updated) }
                 .onSuccess { putInStep(key, rewrite.updated) }
-                .onFailure { openDocuments[key] = rewrite.updated }
+                .onFailure { openDocuments[key] = rewrite.updated; overlayChanged(key) }
             if (updateReferences) for (type in rewrite.topLevelNames) {
                 val oldFqn = if (rewrite.oldPkg.isEmpty()) type else "${rewrite.oldPkg}.$type"
                 val newFqn = if (newPkg.isEmpty()) type else "$newPkg.$type"
@@ -3418,7 +3471,7 @@ class IdeServices private constructor(
             if (updated != text) {
                 runCatching { file.writeText(updated) }
                     .onSuccess { putInStep(key, updated) }
-                    .onFailure { openDocuments[key] = updated }
+                    .onFailure { openDocuments[key] = updated; overlayChanged(key) }
             }
         }
     }
@@ -4929,6 +4982,7 @@ class IdeServices private constructor(
                     sb.replace(s, en, e.newText.toString())
                 }
                 openDocuments[p] = sb.toString()
+                overlayChanged(p)
             }
             return edit
         }

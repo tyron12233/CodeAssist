@@ -8,6 +8,8 @@ import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -100,6 +102,22 @@ class KotlinInteropCompletionTest {
         s.updateDocument(kt, edited)
         val items = labels(s, probe, text, "new KtGreeter().")
         assertTrue("added" in items, "a method added in an unsaved Kotlin buffer should complete from Java: $items")
+    }
+
+    /** An edit inside a Kotlin function body changes no light class, so the overlay the Java environment sees is
+     *  the very same map and none of its caches are dropped. A new member does change it. */
+    @Test
+    fun aKotlinBodyEditLeavesTheJavaOverlayAlone() {
+        val s = bootstrapWithKotlin()
+        val kt = root.resolve("core/src/main/java/com/example/core/Greetings.kt")
+        val original = kt.toFile().readText()
+        val before = s.syntheticOverlay()
+        val bodyEdit = original.replace("println(\"Hello World\")", "println(\"Hello there\")")
+        assertTrue(bodyEdit != original, "sanity: the body edit applies")
+        s.updateDocument(kt, bodyEdit)
+        assertSame(before, s.syntheticOverlay(), "a body-only edit must hand back the same overlay")
+        s.updateDocument(kt, original + "\nfun another() {}\n")
+        assertNotSame(before, s.syntheticOverlay(), "a new top-level fun changes the facade")
     }
 
     /** A saved Kotlin edit stays visible once its tab is closed (the light classes go back to reading disk). */

@@ -97,9 +97,14 @@ class KotlinSymbolService(
      *  via [dev.ide.index.JavaSourceMemberCodec]), parsed from its live editor buffer. Non-null return =
      *  "this fqn is a same-project Java source class, use these members" (an UNSAVED edit is visible before it
      *  is saved + reindexed); null = not an open Java buffer, so the save-driven `java.membersByOwner` index
-     *  answers instead. A same-project Java source class is treated as VOLATILE (never pinned in the classpath
-     *  memos) so both live-buffer and post-save edits show at once. */
+     *  answers instead. A same-project Java source class is never pinned in the session-stable classpath memos:
+     *  it is cached against [javaSourceStamp] instead, so both live-buffer and post-save edits show at once. */
     private val javaSourceMemberProvider: (String) -> List<MemberValue>? = { null },
+    /** Optional: a stamp that moves whenever the members of a project Java SOURCE class may have changed (an
+     *  open buffer's members changed, a buffer closed, a saved `.java` was re-indexed), and stays put for an edit
+     *  that leaves them alone (a method body). It keys the Java-source memo and is part of
+     *  [externalContentStamp], so a Kotlin file's cached analysis is redone when a Java class it uses changes. */
+    private val javaSourceStamp: () -> Long = { 0L },
     /** Optional: the module's API-level context (the Android platform's table, or the JDK's for a JVM module),
      *  for the "Added in API N" / "Since Java N" line of a platform symbol's docs. Null when there is none. */
     private val apiContext: () -> ApiLevelContext? = { null },
@@ -320,6 +325,47 @@ class KotlinSymbolService(
 
     // The same member lists bound to a generic receiver's plain type arguments (see [boundMembersCached]).
     private val classpathBoundMembersMemo = ConcurrentMap<String, List<KotlinSymbol>>()
+
+    // The same member lists for a project Java SOURCE class, which an edit can change, so each entry carries the
+    // [javaSourceStamp] it was computed under and is served only while the stamp is unchanged. Keys are the
+    // sibling memo's key behind a tag naming that memo.
+    private val javaSourceMemo = ConcurrentMap<String, Pair<Long, List<KotlinSymbol>>>()
+
+    @Volatile
+    private var javaSourceMemoStamp = Long.MIN_VALUE
+
+    /** The current [javaSourceStamp]. When it moved, drop what was computed from Java source under the old one:
+     *  [javaSourceMemo], and the source members memo, since a Kotlin class can inherit from a Java source class. */
+    private fun syncJavaSourceStamp(): Long {
+        val stamp = javaSourceStamp()
+        if (stamp != javaSourceMemoStamp) {
+            javaSourceMemo.clear()
+            sourceOwnMembersMemo = ConcurrentMap()
+            javaSourceMemoStamp = stamp
+        }
+        return stamp
+    }
+
+    /**
+     * [memo]'s entry for [key], else [compute]d and cached: in [memo] for a classpath type, or in [javaSourceMemo]
+     * against the current stamp for a project Java source class ([fqn]). The [isJavaSourceType] probe runs only on
+     * a miss.
+     */
+    private fun memoizedMembers(
+        memo: ConcurrentMap<String, List<KotlinSymbol>>,
+        tag: Char,
+        key: String,
+        fqn: String,
+        compute: () -> List<KotlinSymbol>,
+    ): List<KotlinSymbol> {
+        memo[key]?.let { return it }
+        val stamp = syncJavaSourceStamp()
+        val javaKey = "$tag|$key"
+        javaSourceMemo[javaKey]?.let { if (it.first == stamp) return it.second }
+        val result = compute()
+        if (isJavaSourceType(fqn)) javaSourceMemo[javaKey] = stamp to result else memo[key] = result
+        return result
+    }
     @Volatile
     private var sourceOwnMembersMemo = ConcurrentMap<String, List<KotlinSymbol>>()
 
@@ -621,11 +667,17 @@ class KotlinSymbolService(
     /** A stamp over the content versions of every edited source file EXCEPT [exceptPath] — so a file's analyze
      *  cache can tell that a DIFFERENT file (a cross-file dependency) changed and invalidate itself, while its
      *  OWN edits (excluded here, handled by the per-declaration text diff) don't force a full re-analyze. */
-    fun externalContentStamp(exceptPath: String): Long = stateLock.withLock {
+    fun externalContentStamp(exceptPath: String): Long {
+        // Read outside [stateLock]: the host may parse an open Java buffer to answer.
+        val java = javaSourceStamp()
+        return stateLock.withLock { kotlinContentStamp(exceptPath) * 31L + java }
+    }
+
+    private fun kotlinContentStamp(exceptPath: String): Long {
         var h = 0L
         for ((p, v) in fileVersions) if (p != exceptPath) h =
             h * 1_000_003L + (p.hashCode().toLong() * 31L + v)
-        h
+        return h
     }
 
     private fun model(): ModuleSourceModel =
@@ -1447,13 +1499,11 @@ class KotlinSymbolService(
             )
         )
             return membersNamed(typeFqn, typeArgs, name)
-        val key = "$typeFqn $name"
-        checkMembersMemo[key]?.let { return it }
-        val result = membersNamed(typeFqn, emptyList(), name)
-        // A project JAVA SOURCE receiver is volatile too (an edit adds/removes a member) — so a member the user
-        // just typed into the Java class isn't wrongly flagged unresolved. The probe runs only on a memo MISS.
-        if (!isJavaSourceType(typeFqn)) checkMembersMemo[key] = result
-        return result
+        // A project JAVA SOURCE receiver changes on edit, so it is cached against the Java source stamp: a member
+        // the user just typed into the Java class isn't wrongly flagged unresolved.
+        return memoizedMembers(checkMembersMemo, 'c', "$typeFqn $name", typeFqn) {
+            membersNamed(typeFqn, emptyList(), name)
+        }
     }
 
     override fun supertypesOf(typeFqn: String): List<TypeRef> =
@@ -1531,10 +1581,7 @@ class KotlinSymbolService(
             (idx == null || classpathCacheUsable(idx))
         val key = if (cacheable) boundKey(kfqn, typeArgs) else null
         if (key == null) return ownAndInherited(fqn, typeArgs, HashSet())
-        classpathBoundMembersMemo[key]?.let { return it }
-        val members = ownAndInherited(fqn, typeArgs, HashSet())
-        if (!isJavaSourceType(kfqn)) classpathBoundMembersMemo[key] = members
-        return members
+        return memoizedMembers(classpathBoundMembersMemo, 'b', key, kfqn) { ownAndInherited(fqn, typeArgs, HashSet()) }
     }
 
     private fun boundKey(fqn: String, typeArgs: List<TypeRef>): String? {
@@ -1578,12 +1625,9 @@ class KotlinSymbolService(
             // for the owner class — other classes stay cached), like the mid-build partial-shape guard below.
             model().classByFqn.containsKey(kfqn) ->
                 if (isInferringOwner(kfqn)) ownAndInherited(fqn, emptyList(), HashSet())
-                else sourceOwnMembersMemo.getOrPut(kfqn) {
-                    ownAndInherited(
-                        fqn,
-                        emptyList(),
-                        HashSet()
-                    )
+                else {
+                    syncJavaSourceStamp() // a Kotlin class can inherit members from a Java source class
+                    sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
                 }
             // A synthetic class (Android `R`/`BuildConfig`, ViewBinding) is VOLATILE — its members change when
             // resources change — and cheap to enumerate (in-memory). Pinning it in the session-stable classpath
@@ -1596,15 +1640,9 @@ class KotlinSymbolService(
                 emptyList(),
                 HashSet()
             ) // mid-build: don't pin a partial shape
-            else -> {
-                classpathOwnMembersMemo[kfqn]?.let { return it }
-                val members = ownAndInherited(fqn, emptyList(), HashSet())
-                // A project JAVA SOURCE class is VOLATILE — its members change on an edit/save, so it must not be
-                // pinned in the session-stable classpath memo (the same reason a synthetic class isn't). The
-                // [isJavaSourceType] probe runs only here, on a memo MISS. Classpath binaries cache as before.
-                if (!isJavaSourceType(kfqn)) classpathOwnMembersMemo[kfqn] = members
-                members
-            }
+            // A project JAVA SOURCE class's members change on an edit/save, so it is never pinned in the
+            // session-stable classpath memo; [memoizedMembers] caches it against the Java source stamp instead.
+            else -> memoizedMembers(classpathOwnMembersMemo, 'o', kfqn, kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
         }
     }
 
