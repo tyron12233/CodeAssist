@@ -48,6 +48,11 @@ class KotlinInteropCompletionTest {
             class Greeter2 @JvmOverloads constructor(val tag: String = "world") { @JvmName("greetJava") fun greet(): String = "hi" }
             class Overloaded { @JvmOverloads fun box(a: Int, b: Int = 1): Int = a + b }
             class Multi { fun describe(): String = "x"; constructor(a: Int) {}; constructor(a: Int, b: Int) {} }
+            open class KtBase { fun baseCall(): Int = 1 }
+            interface KtNamed { fun label(): String }
+            class KtChild : KtBase(), KtNamed { override fun label(): String = "c" }
+            abstract class KtShape { abstract fun area(): Double }
+            class Names { fun all(): List<String> = emptyList(); fun byId(): Map<Int, String> = emptyMap() }
             """.trimIndent(),
             trim = false,
         )
@@ -132,6 +137,48 @@ class KotlinInteropCompletionTest {
         s.documentClosed(kt)
         val items = labels(s, probe, text, "GreetingsKt.")
         assertTrue("savedTopLevel" in items, "a saved top-level fun should be on the facade: $items")
+    }
+
+    /** A Kotlin class's supertypes reach Java: members inherited from a Kotlin superclass complete on it. */
+    @Test
+    fun inheritedKotlinMembersCompleteFromJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { new KtChild().; } }", "new KtChild().")
+        assertTrue("baseCall" in items, "inherited from KtBase: $items")
+        assertTrue("label" in items, "its own override: $items")
+    }
+
+    /** A Kotlin subclass is assignable to its Kotlin superclass and interface in Java, with no false error. */
+    @Test
+    fun kotlinSubclassIsAssignableInJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { KtBase b = new KtChild(); KtNamed n = new KtChild(); } }"
+        val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
+        assertTrue(errs.isEmpty(), "KtChild is a KtBase and a KtNamed: $errs")
+    }
+
+    /** An abstract Kotlin class can't be instantiated from Java either. */
+    @Test
+    fun abstractKotlinClassIsAbstractInJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { new KtShape(); } }"
+        val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
+        assertTrue(errs.isNotEmpty(), "KtShape is abstract: $errs")
+    }
+
+    /** Generic Kotlin signatures keep their type arguments, so Java sees the element type. */
+    @Test
+    fun genericKotlinReturnTypesKeepTheirArguments() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { new Names().all().get(0).; } }", "get(0).")
+        assertTrue("length" in items, "List<String>.get(0) is a String: $items")
+        val text = "package com.example.core;\nclass Probe { void m() { String s = new Names().byId().get(1); for (String n : new Names().all()) {} } }"
+        val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
+        assertTrue(errs.isEmpty(), "Map<Integer, String>.get is a String, List<String> iterates Strings: $errs")
     }
 
     /** A Kotlin `var` property is visible to Java as BOTH `get<Name>()` and `set<Name>(…)` (the crude facade

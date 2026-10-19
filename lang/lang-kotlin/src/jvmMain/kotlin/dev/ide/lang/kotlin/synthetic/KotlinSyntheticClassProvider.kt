@@ -33,7 +33,11 @@ import dev.ide.vfs.VirtualFile
  *  - an `object` exposes its `INSTANCE`, a companion a `public static final Companion Companion` field,
  *    and nested types are embedded so `Outer.Inner` resolves;
  *  - types are mapped to Java (`String`→`java.lang.String`, non-null `Int`→`int`, `List`→`java.util.List`,
- *    a same-package/imported Kotlin or library type → its FQN); generics are erased to raw types.
+ *    a same-package/imported Kotlin or library type → its FQN), keeping type arguments that map
+ *    (`List<String>` → `java.util.List<java.lang.String>`); a light class declares no type parameters of its
+ *    own, so a reference to a generic class of the module stays raw;
+ *  - the superclass (the supertype written with a constructor call) and interfaces are declared, and an
+ *    `abstract`/`sealed` class is `abstract`.
  *
  * Approximations (these only ever *omit* or *widen*, never invent, so they can't cause false resolution):
  * an unresolved/star-imported or functional type and an inferred return fall back to `java.lang.Object`
@@ -152,11 +156,26 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
             add(SyntheticModifier.PUBLIC)
             if (nested) add(SyntheticModifier.STATIC) // referenceable as `Outer.Inner` without an instance
             if (cls.isObject) add(SyntheticModifier.FINAL)
+            // `abstract`/`sealed`: Java can't instantiate it either.
+            if (cls.isAbstract && kind == SyntheticTypeKind.CLASS) add(SyntheticModifier.ABSTRACT)
         }
+        // What it extends, so Java sees inherited members and can pass it where a supertype is expected. The one
+        // supertype written with a constructor call is the superclass; the rest are interfaces. A supertype that
+        // doesn't resolve is left out rather than guessed.
+        val superClass = cls.superClassText
+            ?.takeIf { kind == SyntheticTypeKind.CLASS }
+            ?.let { types.javaTypeOrNull(it, cls.ctx) }
+            ?.takeIf { it != OBJECT }
+        val interfaces = cls.superTypeTexts
+            .filter { it != cls.superClassText }
+            .mapNotNull { types.javaTypeOrNull(it, cls.ctx) }
+            .filter { it != OBJECT }
         return SyntheticClass(
             fqName = cls.fqn,
             kind = kind,
             modifiers = mods,
+            superClass = superClass,
+            interfaces = interfaces,
             fields = fields,
             methods = methods,
             nestedClasses = children,
@@ -223,23 +242,57 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
 
     /**
      * Maps a Kotlin type *text* (resolved against its declaration's [FileContext]) to a Java type the
-     * synthetic source compiles against. Generics are erased; an unresolved or functional type → `Object`.
-     * [isModuleClass] says whether an FQN is a class declared in the module's Kotlin source.
+     * synthetic source compiles against. Type arguments are kept when every one of them maps (`List<String>` →
+     * `java.util.List<java.lang.String>`, `out T` → `? extends`, `*` → `?`), else the type is left raw; an
+     * unresolved or functional type → `Object`. [isModuleClass] says whether an FQN is a class declared in the
+     * module's Kotlin source.
      */
     private class TypeMapper(private val isModuleClass: (String) -> Boolean) {
-        fun javaType(typeText: String?, ctx: FileContext): String {
+        fun javaType(typeText: String?, ctx: FileContext): String = javaTypeOrNull(typeText, ctx) ?: OBJECT
+
+        /** [javaType], or null when the type doesn't resolve (so a caller can tell `Object` from unknown). */
+        fun javaTypeOrNull(typeText: String?, ctx: FileContext, boxed: Boolean = false): String? {
             val raw = typeText?.trim().orEmpty()
-            if (raw.isEmpty()) return OBJECT
+            if (raw.isEmpty()) return null
             val nullable = raw.endsWith("?")
             val t = (if (nullable) raw.dropLast(1) else raw).trim()
             if (t.startsWith("(") || "->" in t) return OBJECT // function type → opaque
             val head = t.substringBefore('<').trim()
+            val args = if ('<' in t) splitArgs(t.substringAfter('<').substringBeforeLast('>')) else emptyList()
             ARRAYS[head]?.let { return it }
-            if (head == "Array") return "$OBJECT[]"
-            val fqn = WELL_KNOWN[head] ?: resolve(head, ctx) ?: return OBJECT
-            if (fqn == "kotlin.Unit") return "void"
-            PRIMITIVE[fqn]?.let { return if (nullable) Builtins.KOTLIN_TO_JAVA[fqn] ?: OBJECT else it }
-            return Builtins.KOTLIN_TO_JAVA[fqn] ?: fqn
+            if (head == "Array") {
+                val element = args.singleOrNull()?.let { javaTypeOrNull(it.removePrefix("out ").trim(), ctx, boxed = true) }
+                return "${element ?: OBJECT}[]"
+            }
+            val fqn = WELL_KNOWN[head] ?: resolve(head, ctx) ?: return null
+            if (fqn == "kotlin.Unit") return if (boxed) fqn else "void"
+            PRIMITIVE[fqn]?.let { return if (nullable || boxed) Builtins.KOTLIN_TO_JAVA[fqn] ?: OBJECT else it }
+            val java = Builtins.KOTLIN_TO_JAVA[fqn] ?: fqn
+            // A light class declares no type parameters of its own, so a module class is referenced raw.
+            if (args.isEmpty() || isModuleClass(fqn)) return java
+            val mapped = args.map { typeArgument(it, ctx) ?: return java }
+            return "$java<${mapped.joinToString(", ")}>"
+        }
+
+        /** One type argument as Java writes it: a projection becomes a wildcard, a primitive its box. */
+        private fun typeArgument(text: String, ctx: FileContext): String? = when {
+            text == "*" -> "?"
+            text.startsWith("out ") -> javaTypeOrNull(text.removePrefix("out "), ctx, boxed = true)?.let { "? extends $it" }
+            text.startsWith("in ") -> javaTypeOrNull(text.removePrefix("in "), ctx, boxed = true)?.let { "? super $it" }
+            else -> javaTypeOrNull(text, ctx, boxed = true)
+        }
+
+        private fun splitArgs(text: String): List<String> {
+            val out = ArrayList<String>()
+            var depth = 0
+            var start = 0
+            for (i in text.indices) when (text[i]) {
+                '<', '(' -> depth++
+                '>', ')' -> depth--
+                ',' -> if (depth == 0) { out += text.substring(start, i).trim(); start = i + 1 }
+            }
+            text.substring(start).trim().takeIf { it.isNotEmpty() }?.let { out += it }
+            return out
         }
 
         /** Resolve a simple/qualified type name to a Kotlin/Java FQN via the module's classes + the file's imports. */
