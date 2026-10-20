@@ -53,10 +53,23 @@ class KotlinInteropCompletionTest {
             class KtChild : KtBase(), KtNamed { override fun label(): String = "c" }
             abstract class KtShape { abstract fun area(): Double }
             class Names { fun all(): List<String> = emptyList(); fun byId(): Map<Int, String> = emptyMap() }
+            class Clicker { fun onClick(listener: (String) -> Unit) {}; fun transform(f: (Int, Int) -> String): String = f(1, 2) }
+            class Inferred {
+                val title = "hi"
+                val count = 3
+                var enabled = true
+                val ratio = 0.5
+                val child = KtChild()
+                fun describe() = "x"
+                fun total() = 42
+            }
             """.trimIndent(),
             trim = false,
         )
-        s.invalidateSyntheticClasses() // the .kt was written after bootstrap; rebuild the facade overlay
+        // The .kt was written after bootstrap: give the module the stdlib it would have had at open (the light
+        // classes name `kotlin.Unit` / `kotlin.jvm.functions.*`), and rebuild the facade overlay.
+        s.ensureKotlinStdlib()
+        s.invalidateSyntheticClasses()
         awaitIndexReady(s)
         return s
     }
@@ -179,6 +192,29 @@ class KotlinInteropCompletionTest {
         val text = "package com.example.core;\nclass Probe { void m() { String s = new Names().byId().get(1); for (String n : new Names().all()) {} } }"
         val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
         assertTrue(errs.isEmpty(), "Map<Integer, String>.get is a String, List<String> iterates Strings: $errs")
+    }
+
+    /** A Kotlin function-type parameter takes a Java lambda: it is a `kotlin.jvm.functions.FunctionN` to Java. */
+    @Test
+    fun javaLambdaFitsAKotlinFunctionTypeParameter() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { new Clicker().onClick(s -> { s.length(); return null; }); String r = new Clicker().transform((a, b) -> \"\" + (a + b)); } }"
+        val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
+        assertTrue(errs.isEmpty(), "a lambda fits Function1/Function2: $errs")
+    }
+
+    /** A declaration whose type Kotlin infers from a literal or a constructor call has that type in Java, not
+     *  Object: assigning it to the real type is no error. */
+    @Test
+    fun inferredKotlinTypesReachJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { Inferred i = new Inferred(); " +
+            "String t = i.getTitle(); int c = i.getCount(); boolean e = i.getEnabled(); double r = i.getRatio(); " +
+            "KtChild k = i.getChild(); String d = i.describe(); int n = i.total(); } }"
+        val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
+        assertTrue(errs.isEmpty(), "inferred types: $errs")
     }
 
     /** A Kotlin `var` property is visible to Java as BOTH `get<Name>()` and `set<Name>(…)` (the crude facade

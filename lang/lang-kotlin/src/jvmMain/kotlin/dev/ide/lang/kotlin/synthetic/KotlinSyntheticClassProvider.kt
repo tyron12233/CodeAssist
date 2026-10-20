@@ -194,7 +194,7 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
      *  `set<Name>(value)` for a `var`). [static] for file-facade members and `@JvmStatic`/object members. */
     private fun emitMember(c: RawCallable, static: Boolean): Pair<List<SyntheticMethod>, List<SyntheticField>> {
         if (!c.isFunction && c.jvmField) {
-            val type = c.returnText?.let { types.javaType(it, c.ctx) } ?: "java.lang.Object"
+            val type = propertyType(c)
             val mods = buildSet {
                 add(SyntheticModifier.PUBLIC); if (static) add(SyntheticModifier.STATIC); if (!c.isVar) add(SyntheticModifier.FINAL)
             }
@@ -207,7 +207,7 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
             return overloadVariants(c).map { SyntheticMethod(name, ret, it, mods) } to emptyList()
         }
         val cap = c.name.replaceFirstChar { it.uppercaseChar() }
-        val type = c.returnText?.let { types.javaType(it, c.ctx) } ?: "java.lang.Object"
+        val type = propertyType(c)
         val accessors = ArrayList<SyntheticMethod>()
         accessors += SyntheticMethod("get$cap", type, receiverParam(c), mods)
         if (c.isVar) accessors += SyntheticMethod("set$cap", "void", receiverParam(c) + SyntheticParam("value", type), mods)
@@ -233,10 +233,17 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
     private fun receiverParam(c: RawCallable): List<SyntheticParam> =
         if (c.receiverText != null) listOf(SyntheticParam("\$receiver", types.javaType(c.receiverText, c.ctx))) else emptyList()
 
-    /** A function's Java return type: declared → mapped; expression body → `Object` (inferred); else `void`. */
+    /** A property's Java type: declared → mapped; else what its initializer evidently is; else `Object`. */
+    private fun propertyType(c: RawCallable): String =
+        c.returnText?.let { types.javaType(it, c.ctx) }
+            ?: c.initializerText?.let { types.inferredJavaType(it, c.ctx) }
+            ?: OBJECT
+
+    /** A function's Java return type: declared → mapped; expression body → what it evidently is, else `Object`;
+     *  block body → `void`. */
     private fun functionReturn(c: RawCallable): String = when {
         c.returnText != null -> types.javaType(c.returnText, c.ctx)
-        c.initializerText != null -> "java.lang.Object"
+        c.initializerText != null -> types.inferredJavaType(c.initializerText, c.ctx) ?: OBJECT
         else -> "void"
     }
 
@@ -256,7 +263,7 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
             if (raw.isEmpty()) return null
             val nullable = raw.endsWith("?")
             val t = (if (nullable) raw.dropLast(1) else raw).trim()
-            if (t.startsWith("(") || "->" in t) return OBJECT // function type → opaque
+            if (t.startsWith("(") || "->" in t) return functionType(t, ctx)
             val head = t.substringBefore('<').trim()
             val args = if ('<' in t) splitArgs(t.substringAfter('<').substringBeforeLast('>')) else emptyList()
             ARRAYS[head]?.let { return it }
@@ -272,6 +279,86 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
             if (args.isEmpty() || isModuleClass(fqn)) return java
             val mapped = args.map { typeArgument(it, ctx) ?: return java }
             return "$java<${mapped.joinToString(", ")}>"
+        }
+
+        /**
+         * A Kotlin function type as the `kotlin.jvm.functions.FunctionN` interface it compiles to: a receiver is the
+         * first type argument, then the parameters, then the return type (`Unit` as `kotlin.Unit`), so a Java
+         * lambda fits it with typed parameters. A `suspend` or annotated (`@Composable`) one compiles to something
+         * else, and stays `Object`, as does one whose parts don't resolve to a type.
+         */
+        private fun functionType(text: String, ctx: FileContext): String {
+            var f = text.trim()
+            while (f.startsWith("(") && closingParen(f, 0) == f.length - 1) f = f.substring(1, f.length - 1).trim()
+            if (f.startsWith("@") || f.startsWith("suspend")) return OBJECT
+            val arrow = topLevelArrow(f) ?: return OBJECT
+            val left = f.substring(0, arrow).trim()
+            if (!left.endsWith(")")) return OBJECT
+            val open = openingParen(left, left.length - 1) ?: return OBJECT
+            val receiver = left.substring(0, open).trim().removeSuffix(".").trim().ifEmpty { null }
+            val params = splitArgs(left.substring(open + 1, left.length - 1)).map { it.substringAfter(':', it).trim() }
+            val inputs = listOfNotNull(receiver) + params
+            if (inputs.size > 22) return OBJECT
+            val raw = "kotlin.jvm.functions.Function${inputs.size}"
+            val mapped = inputs.map { javaTypeOrNull(it, ctx, boxed = true) ?: return raw }
+            val ret = javaTypeOrNull(f.substring(arrow + 2).trim(), ctx, boxed = true) ?: return raw
+            return "$raw<${(mapped + ret).joinToString(", ")}>"
+        }
+
+        /**
+         * The Java type a declaration with no written type evidently has, from its initializer [expr]: a string,
+         * number, boolean or char literal, a constructor call of a class of the module, or a standard collection
+         * builder. Null for anything else (the caller falls back to `Object`): no real inference happens here.
+         */
+        fun inferredJavaType(expr: String, ctx: FileContext): String? {
+            val e = expr.trim()
+            if (e.startsWith("\"")) return "java.lang.String"
+            if (e == "true" || e == "false") return "boolean"
+            if (e.length >= 3 && e.startsWith("'") && e.endsWith("'")) return "char"
+            if (INT_LITERAL.matches(e)) return if (e.endsWith("L") || e.endsWith("l")) "long" else "int"
+            if (FLOAT_LITERAL.matches(e)) return "float"
+            if (DOUBLE_LITERAL.matches(e)) return "double"
+            // `Head(args)`, with the call's parentheses spanning to the end (not `Head(a).more()`).
+            val open = e.indexOf('(')
+            if (open <= 0 || !e.endsWith(")") || closingParen(e, open) != e.length - 1) return null
+            val head = e.substring(0, open).trim()
+            if (!CALLEE.matches(head)) return null
+            COLLECTION_BUILDERS[head]?.let { return it }
+            if (!head.substringAfterLast('.').first().isUpperCase()) return null
+            // Only a class of the module is known to be a constructor: an imported capitalized name can as well
+            // be a factory function (`Color(0xFF000000)`).
+            val fqn = resolve(head, ctx) ?: return null
+            return fqn.takeIf { isModuleClass(it) }
+        }
+
+        private fun closingParen(text: String, open: Int): Int? {
+            var depth = 0
+            for (i in open until text.length) when (text[i]) {
+                '(' -> depth++
+                ')' -> if (--depth == 0) return i
+            }
+            return null
+        }
+
+        private fun openingParen(text: String, close: Int): Int? {
+            var depth = 0
+            for (i in close downTo 0) when (text[i]) {
+                ')' -> depth++
+                '(' -> if (--depth == 0) return i
+            }
+            return null
+        }
+
+        /** The index of the `->` outside any parentheses or angle brackets. */
+        private fun topLevelArrow(text: String): Int? {
+            var depth = 0
+            for (i in 0 until text.length - 1) when (text[i]) {
+                '(', '<' -> depth++
+                ')' -> depth--
+                '>' -> if (i > 0 && text[i - 1] == '-') { if (depth == 0) return i - 1 } else depth--
+                '-' -> if (depth == 0 && text[i + 1] == '>') return i
+            }
+            return null
         }
 
         /** One type argument as Java writes it: a projection becomes a wildcard, a primitive its box. */
@@ -307,6 +394,21 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
 
     private companion object {
         const val OBJECT = "java.lang.Object"
+
+        val INT_LITERAL = Regex("""-?(0[xX][0-9a-fA-F_]+|0[bB][01_]+|\d[\d_]*)[lL]?""")
+        val DOUBLE_LITERAL = Regex("""-?\d[\d_]*(\.\d[\d_]*([eE][+-]?\d+)?|[eE][+-]?\d+)""")
+        val FLOAT_LITERAL = Regex("""-?\d[\d_]*(\.\d[\d_]*)?([eE][+-]?\d+)?[fF]""")
+        val CALLEE = Regex("""[A-Za-z_][\w.]*""")
+
+        /** The standard collection builders, as the raw Java interface each returns. */
+        val COLLECTION_BUILDERS: Map<String, String> = mapOf(
+            "listOf" to "java.util.List", "emptyList" to "java.util.List", "mutableListOf" to "java.util.List",
+            "arrayListOf" to "java.util.ArrayList", "listOfNotNull" to "java.util.List",
+            "setOf" to "java.util.Set", "emptySet" to "java.util.Set", "mutableSetOf" to "java.util.Set",
+            "hashSetOf" to "java.util.HashSet", "linkedSetOf" to "java.util.LinkedHashSet",
+            "mapOf" to "java.util.Map", "emptyMap" to "java.util.Map", "mutableMapOf" to "java.util.Map",
+            "hashMapOf" to "java.util.HashMap", "linkedMapOf" to "java.util.LinkedHashMap",
+        )
 
         /** Well-known Kotlin simple names → their Kotlin FQN, so the common types map without project resolution. */
         val WELL_KNOWN: Map<String, String> = mapOf(

@@ -107,4 +107,57 @@ class KotlinLightClassesTest {
         assertEquals(parses + 1, light.parseCount, "only the new file is parsed")
         assertNotSame(before, after)
     }
+
+    private fun returnTypes(source: String): Map<String, String> {
+        buffers[path("com/ex/Util.kt")] = source
+        return classes().first { it.fqName == "com.ex.UtilKt" }.methods.associate { it.name to it.returnType }
+    }
+
+    @Test
+    fun aTypeIsInferredOnlyFromWhatTheInitializerEvidentlyIs() {
+        val r = returnTypes(
+            """
+            package com.ex
+            val s = "x"
+            val i = 1_000
+            val l = 3L
+            val d = 1.5
+            val f = 2f
+            val b = false
+            val g = Greeter()
+            val xs = listOf(1)
+            val ident = f
+            val sum = i + 1
+            val chained = Greeter().hello()
+            val call = compute(1)
+            fun compute(n: Int) = n
+            """.trimIndent()
+        )
+        assertEquals("java.lang.String", r["getS"]); assertEquals("int", r["getI"]); assertEquals("long", r["getL"])
+        assertEquals("double", r["getD"]); assertEquals("float", r["getF"]); assertEquals("boolean", r["getB"])
+        assertEquals("com.ex.Greeter", r["getG"], "a constructor call of a module class")
+        assertEquals("java.util.List", r["getXs"])
+        for (name in listOf("getIdent", "getSum", "getChained", "getCall", "compute")) {
+            assertEquals("java.lang.Object", r[name], "$name: not evident from the text, so not guessed")
+        }
+    }
+
+    @Test
+    fun functionTypesBecomeKotlinFunctionInterfaces() {
+        val r = returnTypes(
+            """
+            package com.ex
+            fun a(): (String) -> Unit = TODO()
+            fun b(): ((Int, Int) -> String)? = null
+            fun c(): String.(Int) -> Boolean = TODO()
+            fun d(): suspend () -> Unit = TODO()
+            fun e(): () -> List<String> = TODO()
+            """.trimIndent()
+        )
+        assertEquals("kotlin.jvm.functions.Function1<java.lang.String, kotlin.Unit>", r["a"])
+        assertEquals("kotlin.jvm.functions.Function2<java.lang.Integer, java.lang.Integer, java.lang.String>", r["b"])
+        assertEquals("kotlin.jvm.functions.Function2<java.lang.String, java.lang.Integer, java.lang.Boolean>", r["c"], "the receiver comes first")
+        assertEquals("java.lang.Object", r["d"], "a suspend function type compiles to something else")
+        assertEquals("kotlin.jvm.functions.Function0<java.util.List<java.lang.String>>", r["e"])
+    }
 }
