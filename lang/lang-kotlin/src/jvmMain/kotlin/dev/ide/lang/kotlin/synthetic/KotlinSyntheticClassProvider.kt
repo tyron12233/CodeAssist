@@ -101,7 +101,7 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
         val base = file.ctx.path.substringAfterLast('/').substringAfterLast('\\')
             .removeSuffix(".kts").removeSuffix(".kt")
         if (base.isEmpty()) return null
-        val simple = base.replaceFirstChar { it.uppercaseChar() } + "Kt"
+        val simple = file.jvmName ?: (base.replaceFirstChar { it.uppercaseChar() } + "Kt")
         val fqn = if (file.ctx.packageName.isEmpty()) simple else "${file.ctx.packageName}.$simple"
         val methods = ArrayList<SyntheticMethod>()
         val fields = ArrayList<SyntheticField>()
@@ -132,7 +132,7 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
         for (m in members) {
             // In an `object`, a `@JvmStatic`/`@JvmField` member is a Java static; a companion's members are
             // instance members of the nested `Companion` (their statics are promoted onto the owner below).
-            val static = !cls.isCompanion && cls.isObject && (m.jvmStatic || (!m.isFunction && m.jvmField))
+            val static = !cls.isCompanion && cls.isObject && (m.jvmStatic || (!m.isFunction && (m.jvmField || m.isConst)))
             val (ms, fs) = emitMember(m, static); methods += ms; fields += fs
         }
         if (cls.isObject && !cls.isCompanion) fields += field("INSTANCE", cls.fqn)
@@ -141,7 +141,7 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
             fields += field(comp, "${cls.fqn}.$comp")
             // `@JvmStatic`/`@JvmField` companion members are reached from Java as statics on the OWNER class.
             classByFqn["${cls.fqn}.$comp"]?.members
-                ?.filter { it.visibility != "private" && it.receiverText == null && (it.jvmStatic || it.jvmField) }
+                ?.filter { it.visibility != "private" && it.receiverText == null && (it.jvmStatic || it.jvmField || it.isConst) }
                 ?.forEach { m -> val (ms, fs) = emitMember(m, static = true); methods += ms; fields += fs }
         }
         val children = classByFqn.values
@@ -193,12 +193,15 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
      *  `@JvmOverloads` variants); a `@JvmField` property → a field; any other property → `get<Name>()` (+
      *  `set<Name>(value)` for a `var`). [static] for file-facade members and `@JvmStatic`/object members. */
     private fun emitMember(c: RawCallable, static: Boolean): Pair<List<SyntheticMethod>, List<SyntheticField>> {
-        if (!c.isFunction && c.jvmField) {
+        // A `@JvmField` or `const val` property is a field to Java, with no accessors; a constant keeps its literal
+        // value, so it stays a constant expression (a `case` label) and two constants don't collide.
+        if (!c.isFunction && (c.jvmField || c.isConst)) {
             val type = propertyType(c)
             val mods = buildSet {
                 add(SyntheticModifier.PUBLIC); if (static) add(SyntheticModifier.STATIC); if (!c.isVar) add(SyntheticModifier.FINAL)
             }
-            return emptyList<SyntheticMethod>() to listOf(SyntheticField(c.name, type, mods))
+            val constant = c.initializerText?.trim()?.takeIf { c.isConst && types.isJavaLiteral(it) }
+            return emptyList<SyntheticMethod>() to listOf(SyntheticField(c.name, type, mods, constant))
         }
         val mods = if (static) setOf(SyntheticModifier.PUBLIC, SyntheticModifier.STATIC) else setOf(SyntheticModifier.PUBLIC)
         if (c.isFunction) {
@@ -211,7 +214,9 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
         val accessors = ArrayList<SyntheticMethod>()
         accessors += SyntheticMethod("get$cap", type, receiverParam(c), mods)
         if (c.isVar) accessors += SyntheticMethod("set$cap", "void", receiverParam(c) + SyntheticParam("value", type), mods)
-        return accessors to emptyList()
+        // A `lateinit var` also exposes its backing field.
+        val fields = if (c.isLateinit) listOf(SyntheticField(c.name, type, mods)) else emptyList()
+        return accessors to fields
     }
 
     /** A function's/constructor's parameter lists: just the full list, unless `@JvmOverloads` — then also the
@@ -310,6 +315,11 @@ internal class LightClassRenderer(private val file: SourceFile, isModuleClass: (
          * number, boolean or char literal, a constructor call of a class of the module, or a standard collection
          * builder. Null for anything else (the caller falls back to `Object`): no real inference happens here.
          */
+        /** Whether [text] is a literal Java accepts as written: a string with no template, a number, a boolean. */
+        fun isJavaLiteral(text: String): Boolean =
+            (text.startsWith("\"") && !text.startsWith("\"\"\"") && '$' !in text) || text == "true" || text == "false" ||
+                INT_LITERAL.matches(text) || FLOAT_LITERAL.matches(text) || DOUBLE_LITERAL.matches(text)
+
         fun inferredJavaType(expr: String, ctx: FileContext): String? {
             val e = expr.trim()
             if (e.startsWith("\"")) return "java.lang.String"

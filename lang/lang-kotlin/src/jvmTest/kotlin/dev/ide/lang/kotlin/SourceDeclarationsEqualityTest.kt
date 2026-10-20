@@ -68,7 +68,7 @@ class SourceDeclarationsEqualityTest {
         // sameDeclarations and carried() name each field explicitly. A field added to one of these classes without
         // adding it there would silently count two different declarations as the same, or drop it when a rebuild
         // carries a declaration over; update all of them, then these counts.
-        assertEquals(25, instanceFields(RawCallable::class.java), "RawCallable gained or lost a field: update sameDeclarations and carried")
+        assertEquals(27, instanceFields(RawCallable::class.java), "RawCallable gained or lost a field: update sameDeclarations and carried")
         assertEquals(26, instanceFields(RawClass::class.java), "RawClass gained or lost a field: update sameDeclarations and carried")
         assertEquals(4, instanceFields(TypeAliasDecl::class.java), "TypeAliasDecl gained or lost a field: update sameDeclarations")
     }

@@ -68,9 +68,20 @@ class KotlinInteropCompletionTest {
         )
         // The .kt was written after bootstrap: give the module the stdlib it would have had at open (the light
         // classes name `kotlin.Unit` / `kotlin.jvm.functions.*`), and rebuild the facade overlay.
+        val before = s.indexService.status.stats
         s.ensureKotlinStdlib()
         s.invalidateSyntheticClasses()
-        awaitIndexReady(s)
+        // Adding the stdlib commits the model (more than once), and each commit re-syncs the index in the
+        // background; `ready` can still read true from before a pass starts. Wait for a pass that finished after
+        // this point, then for the index to stay ready and idle for a full second.
+        val deadline = System.currentTimeMillis() + 90_000
+        while (System.currentTimeMillis() < deadline && s.indexService.status.stats === before) Thread.sleep(50)
+        var quietSince = System.currentTimeMillis()
+        while (System.currentTimeMillis() < deadline && System.currentTimeMillis() - quietSince < 1_000) {
+            val st = s.indexService.status
+            if (!st.ready || st.building) quietSince = System.currentTimeMillis()
+            Thread.sleep(50)
+        }
         return s
     }
 
@@ -215,6 +226,32 @@ class KotlinInteropCompletionTest {
             "KtChild k = i.getChild(); String d = i.describe(); int n = i.total(); } }"
         val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
         assertTrue(errs.isEmpty(), "inferred types: $errs")
+    }
+
+    /** `const val` and `lateinit var` are FIELDS to Java, `@file:JvmName` renames the file facade, and an
+     *  `object`'s plain members are reached through `INSTANCE`. */
+    @Test
+    fun kotlinFieldShapesAndRenamedFacadeReachJava() {
+        val s = bootstrapWithKotlin()
+        root.writeSource(
+            "core/src/main/java/com/example/core/Settings.kt",
+            """
+            @file:JvmName("SettingsUtil")
+            package com.example.core
+            const val MAX_ITEMS = 10
+            fun settingsHelper(): Int = 1
+            object Config { const val VERSION = "1"; fun load(): Int = 0 }
+            class Holder { lateinit var name: String; companion object { const val TAG = "h" } }
+            """.trimIndent(),
+            trim = false,
+        )
+        s.invalidateSyntheticClasses()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { " +
+            "int a = SettingsUtil.MAX_ITEMS; int b = SettingsUtil.settingsHelper(); String v = Config.VERSION; " +
+            "int c = Config.INSTANCE.load(); String t = Holder.TAG; String n = new Holder().name; } }"
+        val errs = runBlocking { s.analyzeDiagnostics(probe, text) }.filter { it.severity.name == "ERROR" }.map { it.message }
+        assertTrue(errs.isEmpty(), "$errs")
     }
 
     /** A Kotlin `var` property is visible to Java as BOTH `get<Name>()` and `set<Name>(…)` (the crude facade
