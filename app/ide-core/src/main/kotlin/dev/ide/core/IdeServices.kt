@@ -1214,9 +1214,34 @@ class IdeServices private constructor(
      * [EngineContext.ensureKotlinStdlib].
      */
     fun ensureKotlinStdlib() {
-        val libName = "kotlin-stdlib"
+        provisionKotlinStdlib { moduleHasKotlin(it) }
+    }
+
+    /**
+     * Whether Kotlin is set up for [module]: its compile classpath carries kotlin-stdlib, whether as the bundled
+     * library [ensureKotlinStdlib] adds or as a declared (or transitive) dependency of the build. A Java module
+     * that just got its first `.kt` file is not, until [configureKotlin] or the next build/open provisions it.
+     */
+    fun kotlinConfigured(module: Module): Boolean {
+        if (module.dependencies.any { it is LibraryDependency && it.library.name == KOTLIN_STDLIB }) return true
+        return runCatching {
+            module.classpath(DependencyScope.IMPLEMENTATION).entries.any { it.root.name.startsWith(KOTLIN_STDLIB) }
+        }.getOrDefault(false)
+    }
+
+    /** Set Kotlin up for [module] now: add the bundled kotlin-stdlib to it, as a build would. False when there is
+     *  no stdlib to add (none bundled, none on the host). */
+    fun configureKotlin(module: Module): Boolean {
+        provisionKotlinStdlib { it.id == module.id }
+        return modules().firstOrNull { it.id == module.id }?.let(::kotlinConfigured) == true
+    }
+
+    /** Make sure the `kotlin-stdlib` library exists and points at the bundled jar, and add it to every module
+     *  [wanted] selects that doesn't depend on it yet. */
+    private fun provisionKotlinStdlib(wanted: (Module) -> Boolean) {
+        val libName = KOTLIN_STDLIB
         val kotlinModules = store.workspace.projects.flatMap { p -> p.modules.map { p to it } }
-            .filter { (_, m) -> moduleHasKotlin(m) }
+            .filter { (_, m) -> wanted(m) }
         if (kotlinModules.isEmpty()) return
 
         // Ensure the bundled jar is actually on disk AND the `kotlin-stdlib` library points at it. [extractTo]
@@ -5051,6 +5076,8 @@ class IdeServices private constructor(
     }
 
     companion object {
+        /** The name of the library [ensureKotlinStdlib] adds, and the prefix of a kotlin-stdlib jar. */
+        private const val KOTLIN_STDLIB = "kotlin-stdlib"
         /** Cache subdirs under `.platform/caches` the "Clear caches" action removes — all regenerable, none
          *  shared across projects (the static SDK/library index segments live under the shared caches root). */
         private val CLEARABLE_CACHE_DIRS =

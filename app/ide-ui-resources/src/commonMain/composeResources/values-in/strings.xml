@@ -353,6 +353,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="gradle_kmp_jvm">Desktop (JVM)</string>
     <string name="gradle_syncing">Menyinkronkan dari Gradle…</string>
     <string name="sources_not_installed">Sumber platform Android (%1$s) belum terpasang. Diperlukan untuk nama parameter &amp; dokumen android.*.</string>
+    <string name="kotlin_not_configured">Kotlin belum dikonfigurasi untuk modul %1$s.</string>
+    <string name="kotlin_configure">Konfigurasi Kotlin</string>
+    <string name="kotlin_configuring">Mengonfigurasi…</string>
+    <string name="kotlin_configure_failed">Tidak dapat mengonfigurasi Kotlin: %1$s</string>
     <string name="sources_download">Unduh</string>
     <string name="sources_downloading">Mengunduh…</string>
     <string name="sources_download_failed">Unduhan gagal: %1$s</string>

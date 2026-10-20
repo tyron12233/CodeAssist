@@ -391,6 +391,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- SDK sources -->
     <string name="sources_not_installed">Las fuentes de la plataforma Android (%1$s) no están instaladas. Se necesitan para los nombres de parámetros y la documentación de android.*.</string>
+    <string name="kotlin_not_configured">Kotlin no está configurado para el módulo %1$s.</string>
+    <string name="kotlin_configure">Configurar Kotlin</string>
+    <string name="kotlin_configuring">Configurando…</string>
+    <string name="kotlin_configure_failed">No se pudo configurar Kotlin: %1$s</string>
     <string name="sources_download">Descargar</string>
     <string name="sources_downloading">Descargando…</string>
     <string name="sources_download_failed">Error de descarga: %1$s</string>

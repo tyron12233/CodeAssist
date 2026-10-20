@@ -551,6 +551,10 @@
     <string name="toolchain_warning_accept_note">在版本匹配之前，此模块的构建将持续失败。</string>
     <string name="toolchain_warning_working">处理中…</string>
     <string name="sources_not_installed">尚未安装 Android 平台源码（%1$s）。查看 android.* 参数名称和文档需要安装源码。</string>
+    <string name="kotlin_not_configured">模块 %1$s 尚未配置 Kotlin。</string>
+    <string name="kotlin_configure">配置 Kotlin</string>
+    <string name="kotlin_configuring">正在配置…</string>
+    <string name="kotlin_configure_failed">无法配置 Kotlin：%1$s</string>
     <string name="sources_download">下载</string>
     <string name="sources_downloading">正在下载…</string>
     <string name="sources_download_failed">下载失败：%1$s</string>

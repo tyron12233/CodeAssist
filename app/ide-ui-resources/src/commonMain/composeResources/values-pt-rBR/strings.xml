@@ -365,6 +365,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="gradle_kmp_jvm">Desktop (JVM)</string>
     <string name="gradle_syncing">Sincronizando a partir do Gradle…</string>
     <string name="sources_not_installed">As fontes da plataforma Android (%1$s) não estão instaladas. Elas são necessárias para os nomes de parâmetros e a documentação de android.*.</string>
+    <string name="kotlin_not_configured">O Kotlin não está configurado para o módulo %1$s.</string>
+    <string name="kotlin_configure">Configurar Kotlin</string>
+    <string name="kotlin_configuring">Configurando…</string>
+    <string name="kotlin_configure_failed">Não foi possível configurar o Kotlin: %1$s</string>
     <string name="sources_download">Baixar</string>
     <string name="sources_downloading">Baixando…</string>
     <string name="sources_download_failed">Falha no download: %1$s</string>

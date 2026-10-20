@@ -580,6 +580,16 @@ interface ModuleService {
     suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         UiConfigResult(false, "Build features not supported by this backend")
 
+    /**
+     * Whether the module owning the source file [path] has Kotlin set up: kotlin-stdlib on its classpath. True
+     * when [path] is in no module, or the backend can't tell, so a host never prompts for what it can't do.
+     */
+    suspend fun isKotlinConfigured(path: String): Boolean = true
+
+    /** Set Kotlin up for the module owning the source file [path]: add kotlin-stdlib to its dependencies. */
+    suspend fun configureKotlin(path: String): UiConfigResult =
+        UiConfigResult(false, "Configuring Kotlin is not supported by this backend")
+
     /** The Kotlin compiler plugins available to [moduleName] (Compose, Serialization, Parcelize) with their
      *  enable-state, or null when it is not an Android module. */
     suspend fun getCompilerPlugins(moduleName: String): UiCompilerPlugins? = null

@@ -323,6 +323,10 @@
     <string name="gradle_kmp_jvm">Десктоп (JVM)</string>
     <string name="gradle_syncing">Синхронизация из Gradle…</string>
     <string name="sources_not_installed">Исходники платформы Android (%1$s) не установлены. Они нужны для имён параметров android.* и документации.</string>
+    <string name="kotlin_not_configured">Kotlin не настроен для модуля %1$s.</string>
+    <string name="kotlin_configure">Настроить Kotlin</string>
+    <string name="kotlin_configuring">Настройка…</string>
+    <string name="kotlin_configure_failed">Не удалось настроить Kotlin: %1$s</string>
     <string name="sources_download">Скачать</string>
     <string name="sources_downloading">Скачивание…</string>
     <string name="sources_download_failed">Не удалось скачать: %1$s</string>

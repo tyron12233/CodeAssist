@@ -602,6 +602,10 @@
     <string name="toolchain_warning_accept_note">ستستمر عمليات بناء هذه الوحدة في الفشل إلى أن تتطابق الإصدارات.</string>
     <string name="toolchain_warning_working">جاري العمل…</string>
     <string name="sources_not_installed">لم يتم تثبيت مصادر منصة Android (%1$s). وهي مطلوبة لأسماء معاملات android.* وتوثيقها.</string>
+    <string name="kotlin_not_configured">لم يتم إعداد Kotlin للوحدة %1$s.</string>
+    <string name="kotlin_configure">إعداد Kotlin</string>
+    <string name="kotlin_configuring">جارٍ الإعداد…</string>
+    <string name="kotlin_configure_failed">تعذّر إعداد Kotlin: %1$s</string>
     <string name="sources_download">تنزيل</string>
     <string name="sources_downloading">جاري التنزيل…</string>
     <string name="sources_download_failed">فشل التنزيل: %1$s</string>

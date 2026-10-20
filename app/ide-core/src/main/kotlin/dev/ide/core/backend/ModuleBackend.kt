@@ -120,6 +120,21 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
                 .also { if (it.success) ctx.bumpFileSystemEpoch() }
         }
 
+    override suspend fun isKotlinConfigured(path: String): Boolean = withContext(Dispatchers.IO) {
+        val module = ctx.services.moduleForFile(Paths.get(path)) ?: return@withContext true
+        ctx.services.kotlinConfigured(module)
+    }
+
+    override suspend fun configureKotlin(path: String): UiConfigResult = withContext(Dispatchers.IO) {
+        val module = ctx.services.moduleForFile(Paths.get(path))
+            ?: return@withContext UiConfigResult(false, "The file is not in a module")
+        if (ctx.services.configureKotlin(module)) {
+            ctx.bumpFileSystemEpoch() // the module's dependencies changed: dependents re-read the model
+            UiConfigResult(true, "Kotlin configured for ${module.name}")
+        }
+        else UiConfigResult(false, "No Kotlin standard library is available to add")
+    }
+
     override suspend fun getCompilerPlugins(moduleName: String): UiCompilerPlugins? =
         withContext(Dispatchers.IO) { ctx.services.moduleService.getCompilerPlugins(moduleName) }
 

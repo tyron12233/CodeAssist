@@ -556,6 +556,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="toolchain_warning_accept_note">Builds of this module will keep failing until the versions match.</string>
     <string name="toolchain_warning_working">Working…</string>
     <string name="sources_not_installed">Android platform sources (%1$s) aren't installed. It is needed for android.* parameter names &amp; docs.</string>
+    <string name="kotlin_not_configured">Kotlin isn't configured for module %1$s.</string>
+    <string name="kotlin_configure">Configure Kotlin</string>
+    <string name="kotlin_configuring">Configuring…</string>
+    <string name="kotlin_configure_failed">Couldn't configure Kotlin: %1$s</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
     <string name="sources_download_failed">Download failed: %1$s</string>

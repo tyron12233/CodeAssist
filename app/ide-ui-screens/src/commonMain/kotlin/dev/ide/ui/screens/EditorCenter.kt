@@ -309,6 +309,7 @@ internal fun EditorCenter(
                         androidSourcesNotice(state)?.let(::add)
                         active?.let { file ->
                             staleOnDiskNotice(state, file)?.let(::add)
+                            kotlinNotConfiguredNotice(state, file)?.let(::add)
                             readOnlyNotice(state, file)?.let(::add)
                             largeFileNotice(file)?.let(::add)
                         }
