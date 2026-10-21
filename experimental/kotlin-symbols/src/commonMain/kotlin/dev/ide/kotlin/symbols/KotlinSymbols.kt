@@ -276,6 +276,8 @@ object KotlinSymbols {
         kind = SymbolKind.CONSTRUCTOR,
         type = TypeName(classFqn),
         owner = owner,
+        modifiers = visibilityModifiers(declaration.visibility),
+        isInternal = declaration.visibility == KotlinVisibility.INTERNAL,
         signature = "(" + declaration.parameters.joinToString(", ") {
             "${it.name}: ${typeText(it.type, scope)}"
         } + ")",
