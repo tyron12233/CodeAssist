@@ -3175,7 +3175,7 @@ class IdeServices private constructor(
     /** Where the Kotlin declaration rendered as light class [classFqn]'s [member] is. */
     private fun kotlinLightClassLocation(classFqn: String, member: String?): Pair<Path, Int>? {
         val path = Paths.get(kotlinLightClasses.fileDeclaring(classFqn) ?: return null)
-        val text = openDocuments[path] ?: runCatching { Files.readString(path) }.getOrNull() ?: return null
+        val text = openDocuments[path] ?: runCatching { path.readText() }.getOrNull() ?: return null
         val offset = runCatching {
             dev.ide.lang.kotlin.synthetic.LightClassDeclarations.offsetOf(path.fileName.toString(), text, classFqn, member)
         }.getOrDefault(0)
