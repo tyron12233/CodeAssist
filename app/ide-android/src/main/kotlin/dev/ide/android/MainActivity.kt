@@ -270,7 +270,9 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(engineUp, adConsentResolved.value) {
                 if (!engineUp || !adConsentResolved.value) return@LaunchedEffect
                 delay(ADS_STARTUP_DELAY_MS)
-                if (adConsent.canRequestAds) initAds(applicationContext)
+                // Off the main thread, as the SDK asks: initialize() loads WebView classes and builds package
+                // contexts synchronously before its async part, and that stall showed up in ANR reports.
+                if (adConsent.canRequestAds) withContext(Dispatchers.IO) { initAds(applicationContext) }
                 adHost.start()
             }
 

@@ -736,15 +736,21 @@ class IdeServicesBackend(
 
     /**
      * Install the process-wide uncaught-exception handler ([Thread.setDefaultUncaughtExceptionHandler], so it
-     * covers every thread including the UI thread): surface the non-fatal dialog, report `app_crash`, and
-     * **swallow** (don't chain to the system killer) so the app stays alive where it can. Hosts call this once
-     * at startup. A UI-thread crash unwinds the looper, so after this handler reports it the process still
-     * exits — an honest, reported crash rather than a silently-resumed corrupt state.
+     * covers every thread including the UI thread): report `app_crash`, then either keep the app alive or hand
+     * the crash on to the handler that was installed before this one. Hosts call this once at startup.
+     *
+     * A crash on a thread the app can lose (a worker) is **swallowed** behind the non-fatal dialog. A crash on a
+     * thread [isFatal] names (the UI thread) is chained to the previous handler, which on Android is the system
+     * killer: the throw has already unwound that thread's looper, so the process cannot go on. Swallowing it
+     * there does not end the process either: main returns, the VM waits forever on the non-daemon threads still
+     * running, and the frozen window is reported as an ANR ("Input dispatching timed out") instead of a crash.
      */
-    fun installCrashReporting() {
+    fun installCrashReporting(isFatal: (Thread) -> Boolean = { false }) {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, t ->
+            val fatal = runCatching { isFatal(thread) }.getOrDefault(false)
             runCatching { Log.logger("uncaught").warn("Uncaught exception on ${thread.name}", t) } // ring/console only
-            runCatching { showError("Application error", t.message ?: t.javaClass.simpleName, stackTraceString(t)) }
+            if (!fatal) runCatching { showError("Application error", t.message ?: t.javaClass.simpleName, stackTraceString(t)) }
             runCatching {
                 analytics.track(
                     dev.ide.analytics.AnalyticsEvent(
@@ -756,6 +762,10 @@ class IdeServicesBackend(
                     )
                 )
                 analytics.flush()
+            }
+            if (fatal) {
+                // `track` has already persisted the event to disk, so the next launch sends it if this flush could not.
+                if (previous != null) previous.uncaughtException(thread, t) else kotlin.system.exitProcess(10)
             }
         }
     }

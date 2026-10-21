@@ -29,9 +29,11 @@ interface IBuildDaemon {
     String[] runTasks();
 
     // Launch a specific task / the default build / cancel. Build state streams back via the callback deltas.
+    // Stop is oneway: the UI calls it from the main thread (the Stop button), and a synchronous call waited out
+    // the daemon's cancel there long enough to ANR. Its outcome arrives as a Stopped/Failed delta anyway.
     void runTask(String id);
     void runBuild();
-    void stopBuild();
+    oneway void stopBuild();
 
     // --- Phase 4: interactive run (the program runs in :build; these drive its stdin + the sandbox prompts).
     void sendRunInput(String text);   // feed one line of stdin to the running program

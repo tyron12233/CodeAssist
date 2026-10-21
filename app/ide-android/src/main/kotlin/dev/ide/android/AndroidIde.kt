@@ -150,9 +150,10 @@ object AndroidIde {
                 NotificationManagerCompat.from(appContext).areNotificationsEnabled()
             },
         )
-        // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
-        // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
-        backend.installCrashReporting()
+        // Process-wide uncaught-exception handler: report app_crash, keep the app alive behind the non-fatal
+        // dialog for a worker-thread crash, and let the system kill the process for a main-thread one (its looper
+        // is gone; swallowing it left a frozen process that Play counted as an ANR). See IdeServicesBackend.
+        backend.installCrashReporting(isFatal = { it === android.os.Looper.getMainLooper().thread })
         AndroidMemory.registerTrimHandler(appContext, backend)
         // Plugins load once per process, so applying an installed plugin's change means starting again. Both
         // halves of that are wired here, and only in the UI process: the restart itself, and the watch that
