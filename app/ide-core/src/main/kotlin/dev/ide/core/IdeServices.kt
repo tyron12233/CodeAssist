@@ -2464,6 +2464,7 @@ class IdeServices private constructor(
                     // analyzer also self-detects androidx on its own classpath, so this need not be exhaustive.)
                     it.isAndroidModule =
                         module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
+                    it.javaSourceLocator = { fqn, member -> javaSourceTarget(module, fqn, member) }
                     it.apiContext = { apiLevelContext(module.id) }
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Lowered Compose-preview declarations persist across launches, so the first preview after
@@ -3028,6 +3029,10 @@ class IdeServices private constructor(
     ): List<dev.ide.lang.kotlin.NavTarget> {
         val targets = kotlinEditor.navigationTargets(file, text, offset, kind)
         if (targets.isNotEmpty()) return targets
+        val java = javaNavKind(kind)?.let { k ->
+            javaAnalyzerFor(file)?.let { a -> javaNavTargets(file, a.navigationTargets(store.vfs.fileFor(file), text, offset, k)) }
+        }.orEmpty()
+        if (java.isNotEmpty()) return java
         val android = androidEditor.navigation.targets(file, text, offset, kind)
         if (android.isNotEmpty() || kind != dev.ide.lang.kotlin.NavKind.DECLARATION) return android
         return resourceDeclaration(file, text, offset) ?: pluginDeclarations(file, text, offset)
@@ -3045,6 +3050,10 @@ class IdeServices private constructor(
         offset: Int,
     ): List<Pair<dev.ide.lang.kotlin.NavKind, List<dev.ide.lang.kotlin.NavTarget>>> {
         val opts = kotlinEditor.navigationOptions(file, text, offset).toMutableList()
+        javaAnalyzerFor(file)?.navigationOptions(store.vfs.fileFor(file), text, offset)?.forEach { (k, targets) ->
+            val mapped = javaNavTargets(file, targets)
+            if (mapped.isNotEmpty()) opts.add(fromJavaNavKind(k) to mapped)
+        }
         for ((kind, targets) in androidEditor.navigation.options(file, text, offset)) {
             if (opts.none { it.first == kind }) opts.add(kind to targets)
         }
@@ -3104,6 +3113,74 @@ class IdeServices private constructor(
     }
 
     private val navigationLog by lazy { Log.logger("ide.navigation") }
+
+    /** The Java analyzer of [file]'s module, for a `.java` file in one. */
+    private fun javaAnalyzerFor(file: Path): dev.ide.lang.java.JavaSourceAnalyzer? {
+        if (!file.toString().endsWith(".java")) return null
+        val module = moduleForEditableFile(file) ?: return null
+        return analyzerFor(module) as? dev.ide.lang.java.JavaSourceAnalyzer
+    }
+
+    private fun javaNavKind(kind: dev.ide.lang.kotlin.NavKind): dev.ide.lang.java.navigate.JavaNavKind? = when (kind) {
+        dev.ide.lang.kotlin.NavKind.DECLARATION -> dev.ide.lang.java.navigate.JavaNavKind.DECLARATION
+        dev.ide.lang.kotlin.NavKind.IMPLEMENTATION -> dev.ide.lang.java.navigate.JavaNavKind.IMPLEMENTATION
+        dev.ide.lang.kotlin.NavKind.TYPE_DECLARATION -> dev.ide.lang.java.navigate.JavaNavKind.TYPE_DECLARATION
+        dev.ide.lang.kotlin.NavKind.SUPER -> dev.ide.lang.java.navigate.JavaNavKind.SUPER
+        else -> null
+    }
+
+    private fun fromJavaNavKind(kind: dev.ide.lang.java.navigate.JavaNavKind): dev.ide.lang.kotlin.NavKind = when (kind) {
+        dev.ide.lang.java.navigate.JavaNavKind.DECLARATION -> dev.ide.lang.kotlin.NavKind.DECLARATION
+        dev.ide.lang.java.navigate.JavaNavKind.IMPLEMENTATION -> dev.ide.lang.kotlin.NavKind.IMPLEMENTATION
+        dev.ide.lang.java.navigate.JavaNavKind.TYPE_DECLARATION -> dev.ide.lang.kotlin.NavKind.TYPE_DECLARATION
+        dev.ide.lang.java.navigate.JavaNavKind.SUPER -> dev.ide.lang.kotlin.NavKind.SUPER
+    }
+
+    /**
+     * Java go-to targets as editor destinations. A class with no file in the Java environment is either an open
+     * `.java` buffer (opened at the same offset, since it was resolved from that buffer's text) or a Kotlin light
+     * class (opened at the Kotlin declaration it renders). Anything else generated, like Android `R`, is dropped
+     * here, which lets a Declaration fall through to the resource lookup.
+     */
+    private fun javaNavTargets(
+        from: Path?,
+        targets: List<dev.ide.lang.java.navigate.JavaNavTarget>,
+    ): List<dev.ide.lang.kotlin.NavTarget> = targets.mapNotNull { t ->
+        val (path, offset) = when (val loc = t.location) {
+            is dev.ide.lang.java.navigate.JavaNavLocation.ThisFile -> (from ?: return@mapNotNull null) to loc.offset
+            is dev.ide.lang.java.navigate.JavaNavLocation.SourceFile -> Paths.get(loc.path) to loc.offset
+            is dev.ide.lang.java.navigate.JavaNavLocation.Library -> return@mapNotNull dev.ide.lang.kotlin.NavTarget(
+                dev.ide.lang.kotlin.LibraryFile(dev.ide.lang.kotlin.libraryPath(loc.classFqn, loc.member)), 0, t.label, t.kind,
+            )
+            is dev.ide.lang.java.navigate.JavaNavLocation.Generated ->
+                openJavaBufferDeclaring(loc.topLevelFqn)?.let { it to loc.offset }
+                    ?: kotlinLightClassLocation(loc.classFqn, loc.member)
+                    ?: return@mapNotNull null
+        }
+        dev.ide.lang.kotlin.NavTarget(store.vfs.fileFor(path), offset, t.label, t.kind)
+    }
+
+    /** A Kotlin file's go-to into the project's Java source: the class [fqn] or its [member], resolved by the
+     *  Java analyzer of [module]. */
+    private fun javaSourceTarget(module: Module, fqn: String, member: String?): dev.ide.lang.kotlin.NavTarget? {
+        val java = analyzerFor(module) as? dev.ide.lang.java.JavaSourceAnalyzer ?: return null
+        val target = runCatching { java.declarationOf(fqn, member) }.getOrNull() ?: return null
+        return javaNavTargets(null, listOf(target)).firstOrNull()
+    }
+
+    /** The open `.java` buffer whose top-level class is [fqn]. */
+    private fun openJavaBufferDeclaring(fqn: String): Path? =
+        javaOverlayEntries.entries.firstOrNull { (path, e) -> e.fqcn == fqn && openDocuments.containsKey(path) }?.key
+
+    /** Where the Kotlin declaration rendered as light class [classFqn]'s [member] is. */
+    private fun kotlinLightClassLocation(classFqn: String, member: String?): Pair<Path, Int>? {
+        val path = Paths.get(kotlinLightClasses.fileDeclaring(classFqn) ?: return null)
+        val text = openDocuments[path] ?: runCatching { Files.readString(path) }.getOrNull() ?: return null
+        val offset = runCatching {
+            dev.ide.lang.kotlin.synthetic.LightClassDeclarations.offsetOf(path.fileName.toString(), text, classFqn, member)
+        }.getOrDefault(0)
+        return path to offset
+    }
 
     /**
      * The go-to-declaration targets plugins contribute for [offset] in [file] ([text] = live buffer), through

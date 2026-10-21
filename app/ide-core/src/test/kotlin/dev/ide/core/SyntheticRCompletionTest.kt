@@ -192,6 +192,9 @@ class SyntheticRCompletionTest {
         val javaTarget = s.definitionAt(probe, java, java.indexOf("greeting"))
         assertNotNull(javaTarget, "R.string.greeting should resolve")
         assertTrue(javaTarget!!.first.toString().endsWith(".xml"))
+        // Go to Declaration in the editor resolves R in Java first, and still lands on the resource.
+        val goTo = s.navigationTargets(probe, java, java.indexOf("greeting"), dev.ide.lang.kotlin.NavKind.DECLARATION)
+        assertTrue(goTo.single().file.path.endsWith(".xml"), "R.string.greeting should go to the resource: $goTo")
 
         // A framework reference has no local definition.
         assertNull(s.definitionAt(layout, """<View android:text="@android:string/ok"/>""", 25))

@@ -40,6 +40,9 @@ import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.java.env.JavaEnvironment
+import dev.ide.lang.java.navigate.JavaNavKind
+import dev.ide.lang.java.navigate.JavaNavTarget
+import dev.ide.lang.java.navigate.JavaNavigation
 import dev.ide.lang.java.parse.JavaDomNode
 import dev.ide.lang.java.parse.JavaIncrementalParser
 import dev.ide.lang.java.parse.JavaParsedFile
@@ -219,6 +222,26 @@ class JavaSourceAnalyzer private constructor(
         name: String, text: CharSequence, target: dev.ide.lang.java.rename.JavaRenameTarget,
     ): List<dev.ide.lang.dom.TextRange> =
         IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target) }
+
+    private val navigation by lazy {
+        JavaNavigation(env.facade) { fqn -> subtypeIndexQuery(fqn).map { it.fqn } }
+    }
+
+    /** The editor's parse of exactly [text] when there is one, else a fresh parse. Call under the parse lock. */
+    private fun psiOf(file: VirtualFile, text: CharSequence) =
+        javaIncrementalParser.latestIfText(file.path, text)?.javaFile ?: env.parse(file.name, text)
+
+    /** Go-to targets of [kind] for the symbol at [offset] in [file]'s live [text]. */
+    fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: JavaNavKind): List<JavaNavTarget> =
+        IntellijPsiHost.withParseLock { navigation.targets(psiOf(file, text), offset, kind) }
+
+    /** Where the source class [fqn], or its [member], is declared, for a go-to from another language. */
+    fun declarationOf(fqn: String, member: String?): JavaNavTarget? =
+        IntellijPsiHost.withParseLock { navigation.declarationOf(fqn, member) }
+
+    /** The go-to actions that have a target at [offset], each with its targets. */
+    fun navigationOptions(file: VirtualFile, text: CharSequence, offset: Int): List<Pair<JavaNavKind, List<JavaNavTarget>>> =
+        IntellijPsiHost.withParseLock { navigation.options(psiOf(file, text), offset) }
 
     override val importOrganizer: dev.ide.lang.imports.ImportOrganizerService = JavaImportOrganizer { name, text -> env.parse(name, text) }
     override val folding: FoldingService = JavaFolder(::psiFor)

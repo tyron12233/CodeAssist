@@ -435,6 +435,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     fun declarationLocation(fqn: String): Pair<VirtualFile, Int>? = features.declarationLocation(fqn)
 
+    /** Where a Java source type [fqn], or its member, is declared; set by the host (see
+     *  [KotlinEditorFeatures.javaSourceLocator]). */
+    var javaSourceLocator: (fqn: String, member: String?) -> NavTarget?
+        get() = features.javaSourceLocator
+        set(value) { features.javaSourceLocator = value }
+
     fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: NavKind): List<NavTarget> =
         features.navigationTargets(file, text, offset, kind)
 

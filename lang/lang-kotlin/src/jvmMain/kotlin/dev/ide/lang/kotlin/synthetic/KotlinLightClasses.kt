@@ -146,6 +146,13 @@ class KotlinLightClasses {
         state.result
     }
 
+    /** The path of the Kotlin file whose light classes include [fqn] (nested classes too), among the files
+     *  rendered so far. */
+    fun fileDeclaring(fqn: String): String? = synchronized(lock) {
+        fun declares(c: SyntheticClass): Boolean = c.fqName == fqn || c.nestedClasses.any(::declares)
+        entries.entries.firstOrNull { (_, e) -> e.classes.any(::declares) }?.key
+    }
+
     /** [path]'s content changed on disk (a save, an outside write): read it again on the next [classesFor]. */
     fun invalidate(path: String) {
         synchronized(lock) { entries.remove(path) }

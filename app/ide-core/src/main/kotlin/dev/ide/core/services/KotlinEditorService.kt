@@ -19,6 +19,10 @@ import java.nio.file.Paths
  */
 internal class KotlinEditorService(private val ctx: EngineContext) {
 
+    // The module's Kotlin analyzer parses whatever it is handed, so a Java file read as Kotlin would resolve
+    // `ArrayList` to `kotlin.collections.ArrayList`.
+    private fun isKotlin(file: Path): Boolean = ctx.languageFor(file) == KotlinLanguageBackend.LANGUAGE_ID
+
     private fun kotlinAnalyzer(file: Path): KotlinSourceAnalyzer? {
         val module = ctx.moduleForEditableFile(file) ?: return null
         return ctx.analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer
@@ -49,6 +53,7 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
     /** Source go-to targets ([kind]: declaration / implementation / type / super) for the symbol at [offset] in
      *  [file]'s live buffer. Empty for non-Kotlin files; every target is project source. */
     fun navigationTargets(file: Path, text: String, offset: Int, kind: NavKind): List<NavTarget> {
+        if (!isKotlin(file)) return emptyList()
         val analyzer = kotlinAnalyzer(file) ?: return emptyList()
         return analyzer.navigationTargets(ctx.store.vfs.fileFor(file), text, offset, kind)
     }
@@ -56,6 +61,7 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
     /** The navigation actions applicable at [offset] (each with its resolved source targets). Empty for
      *  non-Kotlin files. */
     fun navigationOptions(file: Path, text: String, offset: Int): List<Pair<NavKind, List<NavTarget>>> {
+        if (!isKotlin(file)) return emptyList()
         val analyzer = kotlinAnalyzer(file) ?: return emptyList()
         return analyzer.navigationOptions(ctx.store.vfs.fileFor(file), text, offset)
     }

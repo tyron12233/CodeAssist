@@ -101,6 +101,12 @@ class KotlinEditorFeatures(
 ) {
 
     /**
+     * Where a type declared in the project's Java source is, or its [member] (a simple name) when given: set by
+     * the host, which owns the Java side. Null when [fqn] is not a Java source type.
+     */
+    var javaSourceLocator: (fqn: String, member: String?) -> NavTarget? = { _, _ -> null }
+
+    /**
      * Gutter "implementations/overrides" markers for [file]'s last parse: one per INHERITABLE type declaration
      * (an interface, or an `open`/`abstract`/`sealed` class — a `final` class / object / enum / annotation is
      * skipped, nothing can extend it) that actually has direct inheritors in the [dev.ide.index.SubtypeIndex].
@@ -222,12 +228,15 @@ class KotlinEditorFeatures(
                 ?: dn.range.start
             return listOf(NavTarget(dn.owner.file, at, symbol.name, symbol.kind.name.lowercase()))
         }
+        val isType = symbol.kind == SymbolKind.CLASS || symbol.kind == SymbolKind.INTERFACE
+        val owner = if (isType) symbol.type?.qualifiedName else (symbol.declaringClassFqn ?: symbol.type?.qualifiedName)
+        val member = if (isType) null else symbol.name
         // A classpath symbol: navigate to the declaring type (a member opens its owner, caret on the member).
         if (!symbol.origin.fromSource) {
-            val isType = symbol.kind == SymbolKind.CLASS || symbol.kind == SymbolKind.INTERFACE
-            val owner = if (isType) symbol.type?.qualifiedName else (symbol.declaringClassFqn ?: symbol.type?.qualifiedName)
-            val member = if (isType) null else symbol.name
             owner?.let { sourceOrLibrary(it, member)?.let { t -> return listOf(t) } }
+        } else {
+            // A source symbol with no Kotlin declaration is a Java one, which the index describes.
+            owner?.let { javaSourceLocator(it, member)?.let { t -> return listOf(t) } }
         }
         val fqn = symbol.type?.qualifiedName ?: return emptyList()
         return listOfNotNull(sourceOrLibrary(fqn))
@@ -284,6 +293,7 @@ class KotlinEditorFeatures(
      *  simple name) refines the caret the host searches for in the opened text. */
     private fun sourceOrLibrary(fqn: String, member: String? = null): NavTarget? {
         declarationLocation(fqn)?.let { (vf, off) -> return NavTarget(vf, off, navLabel(fqn), "class") }
+        javaSourceLocator(fqn, member)?.let { return it }
         // A classpath binary OR a Kotlin built-in (List/Int/String — no `.class`, reconstructed from a stub).
         if (!service.isClasspathType(fqn) && !service.isBuiltinType(fqn)) return null
         return NavTarget(LibraryFile(libraryPath(fqn, member)), 0, navLabel(fqn), "library")
