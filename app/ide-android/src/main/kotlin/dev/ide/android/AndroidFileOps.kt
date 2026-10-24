@@ -214,9 +214,12 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
             ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
     }.getOrNull()
 
-    /** A best-effort content MIME type from the file extension (drives the share-sheet target list). */
+    /**
+     * A best-effort content MIME type from the file extension (drives the share-sheet target list). An `.apk`
+     * goes out as plain bytes, not as a package archive: the share sheet must not offer an installer, since
+     * only [promptInstall] (APKs the IDE's own build signed) may hand an APK to one.
+     */
     private fun mimeFor(path: String): String = when {
-        path.endsWith(".apk") -> "application/vnd.android.package-archive"
         path.endsWith(".${CaprojFormat.EXTENSION}") -> CaprojFormat.MIME
         path.endsWith(".zip") || path.endsWith(".jar") -> "application/zip"
         path.endsWith(".txt") || path.endsWith(".kt") || path.endsWith(".java") || path.endsWith(".xml") -> "text/plain"
