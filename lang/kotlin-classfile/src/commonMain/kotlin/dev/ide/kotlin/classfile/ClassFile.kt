@@ -40,6 +40,14 @@ class ClassMember(
      * conclude that no function in Compose is composable.
      */
     val annotations: List<String> = emptyList(),
+    /**
+     * The parameter names the `LocalVariableTable` debug attribute records, positional with the descriptor.
+     *
+     * This is where javac's default `-g` puts names, so most library jars (and `android.jar`) have them here
+     * and not in `MethodParameters`. Empty unless every parameter has an entry: a method with no body, a jar
+     * built without debug info, or a synthesized parameter the table leaves out.
+     */
+    val debugParameterNames: List<String> = emptyList(),
 ) {
     /** A method's descriptor starts with its parameter list; a field's is a single type. */
     val isMethod: Boolean get() = descriptor.startsWith("(")
@@ -112,6 +120,7 @@ class ClassFile private constructor(
         const val ACC_INTERFACE: Int = 0x0200
         const val ACC_ENUM: Int = 0x4000
         const val ACC_ANNOTATION: Int = 0x2000
+        const val ACC_STATIC: Int = 0x0008
 
         /** Read [bytes], or null when they are not a class file this reader understands. */
         fun read(bytes: ByteArray): ClassFile? = runCatching { Reader(bytes).read() }.getOrNull()
@@ -286,6 +295,7 @@ class ClassFile private constructor(
                 val descriptor = utf8(u2()).orEmpty()
                 var signature: String? = null
                 var parameterNames: List<String> = emptyList()
+                var debugParameterNames: List<String> = emptyList()
                 val annotations = ArrayList<String>()
                 repeat(u2()) {
                     val attribute = utf8(u2())
@@ -294,6 +304,7 @@ class ClassFile private constructor(
                     when (attribute) {
                         "Signature" -> signature = utf8(u2())
                         "MethodParameters" -> parameterNames = readParameterNames()
+                        "Code" -> debugParameterNames = readDebugParameterNames(access, descriptor)
                         "Deprecated" -> access = access or ACC_DEPRECATED
                         "Synthetic" -> access = access or ACC_SYNTHETIC
                         "RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations" ->
@@ -302,7 +313,7 @@ class ClassFile private constructor(
                     at = end
                 }
                 members.add(
-                    ClassMember(access, name, descriptor, signature, parameterNames, annotations),
+                    ClassMember(access, name, descriptor, signature, parameterNames, annotations, debugParameterNames),
                 )
             }
             return members
@@ -323,6 +334,54 @@ class ClassFile private constructor(
                 skip(2) // access flags
                 if (nameIndex == 0) "" else utf8(nameIndex).orEmpty()
             }
+        }
+
+        /**
+         * The parameter names in a `Code` attribute's `LocalVariableTable`. Only that table is read: the
+         * bytecode and the exception table are skipped by their lengths.
+         *
+         * A parameter is the local in its slot that is live from the first instruction. The slots start after
+         * `this` for an instance method, and a `long` or `double` takes two.
+         */
+        private fun readDebugParameterNames(access: Int, descriptor: String): List<String> {
+            val slots = parameterSlots(descriptor, firstSlot = if (access and ACC_STATIC != 0) 0 else 1)
+            if (slots.isEmpty()) return emptyList()
+            skip(4) // max_stack, max_locals
+            skip(u4()) // code
+            skip(u2() * 8) // exception table
+            val names = arrayOfNulls<String>(slots.size)
+            repeat(u2()) {
+                val attribute = utf8(u2())
+                val length = u4()
+                val end = at + length
+                if (attribute == "LocalVariableTable") {
+                    repeat(u2()) {
+                        val startPc = u2()
+                        skip(2) // length
+                        val nameIndex = u2()
+                        skip(2) // descriptor
+                        val slot = slots.indexOf(u2())
+                        if (startPc == 0 && slot >= 0 && names[slot] == null) names[slot] = utf8(nameIndex)
+                    }
+                }
+                at = end
+            }
+            return if (names.all { !it.isNullOrBlank() }) names.map { it!! } else emptyList()
+        }
+
+        /** The local-variable slot of each parameter in a method [descriptor]. */
+        private fun parameterSlots(descriptor: String, firstSlot: Int): List<Int> {
+            val slots = ArrayList<Int>()
+            var slot = firstSlot
+            var i = 1
+            while (i < descriptor.length && descriptor[i] != ')') {
+                slots.add(slot)
+                val wide = descriptor[i] == 'J' || descriptor[i] == 'D'
+                while (descriptor[i] == '[') i++
+                i = if (descriptor[i] == 'L') descriptor.indexOf(';', i) + 1 else i + 1
+                slot += if (wide) 2 else 1
+            }
+            return slots
         }
 
         private fun readInnerClasses(into: MutableList<InnerClassRef>) {

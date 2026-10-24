@@ -2,10 +2,13 @@ package dev.ide.lang.kotlin
 
 import dev.ide.lang.resolve.DocFormat
 import dev.ide.lang.resolve.SourceDocProvider
+import dev.ide.lang.signature.SignatureHelpRequest
+import dev.ide.lang.signature.SignatureHelpTrigger
 import dev.ide.testkit.DiskVirtualFile
 import dev.ide.testkit.caret
 import kotlinx.coroutines.runBlocking
 import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Label
 import org.objectweb.asm.Opcodes
 import java.nio.file.Files
 import java.nio.file.Path
@@ -53,6 +56,41 @@ class KotlinSourceDocEnrichmentTest {
         assertEquals(null, item.documentation)
     }
 
+    // ---- signature help: the parameter-info popup inside a call's parentheses ----
+
+    private fun signatureLabel(code: String): String? = caret(code).let { (clean, offset) ->
+        val doc = SnippetDoc(clean, DiskFile(srcDir.resolve("Use.kt")))
+        runBlocking {
+            analyzer.signatureHelp!!.signatureHelp(SignatureHelpRequest(doc, offset, SignatureHelpTrigger.Explicit))
+        }?.let { it.signatures[it.activeSignature].label }
+    }
+
+    @Test
+    fun aLibraryConstructorShowsItsSourceNames() {
+        // Constructors came straight off the type shape, never enriched, so `NotificationChannel(` read
+        // `(String, CharSequence, Int)` while methods of the same class had their names.
+        val label = signatureLabel("import com.example.Widget\nfun f() { Widget(|) }")
+        assertEquals("Widget(id: String, importance: Int)", label)
+    }
+
+    @Test
+    fun aLibraryMethodShowsItsDebugInfoNamesWithoutSources() {
+        // javac's default `-g` keeps names in the LocalVariableTable only; `ContextCompat.getSystemService(`
+        // read `(Context, Class<T>)` because only `MethodParameters` was consulted.
+        val label = signatureLabel("import com.example.Widget\nfun f() { Widget.make(|) }")
+        assertEquals("make(label: String, size: Int): Widget", label)
+    }
+
+    @Test
+    fun aJavaCallOffersNoNamedArguments() {
+        // Kotlin rejects `make(label = …)` for a Java method, so knowing the names must not turn them into
+        // `label =` completions, for a method or a constructor.
+        val inMethod = complete("import com.example.Widget\nfun f() { Widget.make(|) }").map { it.label }
+        assertTrue(inMethod.none { it.endsWith(" =") }, "no named-argument items; got $inMethod")
+        val inCtor = complete("import com.example.Widget\nfun f() { Widget(|) }").map { it.label }
+        assertTrue(inCtor.none { it.endsWith(" =") }, "no named-argument items; got $inCtor")
+    }
+
     // ---- quick documentation (hover / Ctrl-Q) on a library symbol, which has no PSI to read a doc from ----
 
     private fun quickDoc(code: String) = caret(code).let { (clean, offset) ->
@@ -79,9 +117,12 @@ class KotlinSourceDocEnrichmentTest {
 
         private val provider = object : SourceDocProvider {
             override fun method(declaringFqn: String, methodName: String, arity: Int): SourceDocProvider.MethodDoc? =
-                if (declaringFqn == "com.example.Widget" && methodName == "setText" && arity == 2)
-                    SourceDocProvider.MethodDoc(listOf("message", "flags"), "Sets the widget text.")
-                else null
+                if (declaringFqn != "com.example.Widget" || arity != 2) null
+                else when (methodName) {
+                    "setText" -> SourceDocProvider.MethodDoc(listOf("message", "flags"), "Sets the widget text.")
+                    "Widget" -> SourceDocProvider.MethodDoc(listOf("id", "importance"), null)
+                    else -> null
+                }
 
             override fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? =
                 if (declaringFqn == "com.example.Widget" && methodName == "setText" && arity == 2)
@@ -95,10 +136,29 @@ class KotlinSourceDocEnrichmentTest {
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir, libJars = listOf(stdlibJarPath(), widgetJar())))
             .also { it.sourceDocProvider = provider }
 
-        /** A Java class with a 2-arg `setText(String, int)` and a 1-arg `untouched(String)` — bytecode, no names. */
+        /**
+         * A Java class with a 2-arg `setText(String, int)`, a 1-arg `untouched(String)` and a `(String, int)`
+         * constructor, all bytecode with no names, plus a static `make(String, int)` whose names are only in
+         * its LocalVariableTable (javac's default `-g`).
+         */
         private fun widgetJar(): Path {
             val cw = ClassWriter(0)
             cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "com/example/Widget", null, "java/lang/Object", null)
+            cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(Ljava/lang/String;I)V", null, null).apply {
+                visitCode(); visitInsn(Opcodes.RETURN); visitMaxs(0, 3); visitEnd()
+            }
+            cw.visitMethod(
+                Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC, "make", "(Ljava/lang/String;I)Lcom/example/Widget;", null, null,
+            ).apply {
+                val start = Label()
+                val end = Label()
+                visitCode(); visitLabel(start)
+                visitInsn(Opcodes.ACONST_NULL); visitInsn(Opcodes.ARETURN)
+                visitLabel(end)
+                visitLocalVariable("label", "Ljava/lang/String;", null, start, end, 0)
+                visitLocalVariable("size", "I", null, start, end, 1)
+                visitMaxs(1, 2); visitEnd()
+            }
             cw.visitMethod(Opcodes.ACC_PUBLIC, "setText", "(Ljava/lang/String;I)V", null, null).apply {
                 visitCode(); visitInsn(Opcodes.RETURN); visitMaxs(0, 0); visitEnd()
             }

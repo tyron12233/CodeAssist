@@ -610,10 +610,12 @@ internal fun KotlinResolver.sourceCtorSymbol(
 )
 
 /** The value parameters available for named-argument completion at a [call], distinct by name and with
- *  synthetic bytecode names (`p0`/`p1`) dropped. */
+ *  synthetic bytecode names (`p0`/`p1`) dropped. A Java callee offers none: Kotlin rejects named arguments
+ *  for it, even though its parameter names are known (debug info, sources) for signature help. */
 fun KotlinResolver.callParameters(call: KtCallExpression): List<ParamInfo> {
     val out = LinkedHashMap<String, ParamInfo>()
     for (s in callTargets(call)) {
+        if (isJavaCallable(s)) continue
         s.paramNames.forEachIndexed { i, n ->
             if (n.isNotEmpty() && !isSyntheticParamName(n)) {
                 out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
@@ -658,7 +660,7 @@ fun KotlinResolver.delegationCallParameters(marker: KtElement?): List<ParamInfo>
 private fun KotlinResolver.constructorParams(fqn: String): List<ParamInfo> {
     val out = LinkedHashMap<String, ParamInfo>()
     fun add(symbols: List<KotlinSymbol>) {
-        for (s in symbols) s.paramNames.forEachIndexed { i, n ->
+        for (s in symbols) if (!isJavaCallable(s)) s.paramNames.forEachIndexed { i, n ->
             if (n.isNotEmpty() && !isSyntheticParamName(n)) {
                 out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
             }
@@ -668,6 +670,10 @@ private fun KotlinResolver.constructorParams(fqn: String): List<ParamInfo> {
     service.sourceClass(fqn)?.constructors?.let { ctors -> add(ctors.map { sourceCtorSymbol(it, fqn) }) }
     return out.values.toList()
 }
+
+/** A function or constructor declared in a Java class, which Kotlin calls with positional arguments only. */
+private fun KotlinResolver.isJavaCallable(s: KotlinSymbol): Boolean =
+    s.declaringClassFqn?.let(service::isJavaType) == true
 
 /** ASM surfaces stripped Java parameters as `p0`, `p1`, … — useless as named arguments, so they're hidden. */
 internal fun KotlinResolver.isSyntheticParamName(n: String): Boolean =

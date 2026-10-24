@@ -178,13 +178,18 @@ object JavaBytecode {
             methodBounds = emptyList()
         }
 
-        // Real parameter names when the class was compiled with `-parameters` (the MethodParameters
-        // attribute); `p0`/`p1` otherwise. Positional with the descriptor or not usable at all: javac emits
-        // an entry per descriptor parameter (synthesized/mandated ones included), but a rewritten or
-        // truncated attribute would silently shift every name onto the wrong type.
-        val declared = method.parameterNames
-        val real = declared.size == descriptor.parameterTypes.size && declared.all { it.isNotBlank() }
-        val paramNames = if (real) declared else emptyList()
+        // Real parameter names: the MethodParameters attribute (`-parameters`) first, else the
+        // LocalVariableTable (javac's default `-g`, which most library jars and android.jar carry); `p0`/`p1`
+        // when neither has them. Positional with the descriptor or not usable at all: javac emits an entry per
+        // descriptor parameter (synthesized/mandated ones included), but a rewritten or truncated attribute
+        // would silently shift every name onto the wrong type.
+        fun usable(names: List<String>) =
+            names.size == descriptor.parameterTypes.size && names.all { it.isNotBlank() }
+        val paramNames = when {
+            usable(method.parameterNames) -> method.parameterNames
+            usable(method.debugParameterNames) -> method.debugParameterNames
+            else -> emptyList()
+        }
 
         // The param display keeps `[]` (so a vararg/array param is visible to the arg-count check), and is
         // built from the ERASED descriptor even when a generic signature exists.

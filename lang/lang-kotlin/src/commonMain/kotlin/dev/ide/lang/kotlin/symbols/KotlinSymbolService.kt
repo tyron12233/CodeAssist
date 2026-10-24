@@ -3671,9 +3671,10 @@ class KotlinSymbolService(
     }
 
     /** The constructors declared by a classpath type [fqn] (own shape only — constructors aren't inherited),
-     *  for validating a constructor call's arguments. Served from the `kotlin.typeShape` index when built. */
+     *  for validating a constructor call's arguments. Served from the `kotlin.typeShape` index when built.
+     *  [enrich]ed like members, so signature help and hints show `NotificationChannel(id: String, …)`. */
     fun constructorsOf(fqn: String): List<KotlinSymbol> =
-        typeShape(fqn)?.members?.filter { it.kind == SymbolKind.CONSTRUCTOR } ?: emptyList()
+        typeShape(fqn)?.members?.filter { it.kind == SymbolKind.CONSTRUCTOR }?.map(::enrich) ?: emptyList()
 
     /** A class's own type-parameter names (`Box<T>` → `["T"]`), from the project source model or a classpath
      *  binary's shape. Empty for a non-generic or unknown type. Drives constructor type-argument inference. */
