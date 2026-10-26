@@ -48,9 +48,6 @@ class ForkedKotlinCompiler(
     private val maxHeapMbProvider: () -> Int? = { null },
     /** The "Kotlin compiler VMs" setting: how many workers may run at once. Null/0 → [DEFAULT_WORKERS]. */
     private val workerCountProvider: () -> Int? = { null },
-    /** Android SDK jar, so a worker can dex a runtime compiler plugin (the ART plugin loader). */
-    private val androidJar: Path,
-    private val minApi: Int,
     private val fallback: KotlinCompilerBackend,
 ) : KotlinCompilerBackend {
 
@@ -184,7 +181,7 @@ class ForkedKotlinCompiler(
             return null
         }
         for (xmx in candidates) {
-            val worker = runCatching { Worker.start(launcher, xmx, workRoot, forkClasspath, androidJar, minApi, log) }
+            val worker = runCatching { Worker.start(launcher, xmx, workRoot, forkClasspath, log) }
                 .getOrElse {
                     log.warn("forked-kotlinc: worker at ${xmx}MB failed to start: ${it.message}")
                     null
@@ -289,8 +286,6 @@ class ForkedKotlinCompiler(
                 xmxMb: Int,
                 workRoot: Path,
                 forkClasspath: String,
-                androidJar: Path,
-                minApi: Int,
                 log: Logger,
             ): Worker? {
                 Files.createDirectories(workRoot)
@@ -306,7 +301,6 @@ class ForkedKotlinCompiler(
                 //    reach it, but a NoClassDefFoundError there would kill the VM rather than fail one compile.
                 val tmpDir = workRoot.resolve("tmp")
                 Files.createDirectories(tmpDir)
-                val pluginCache = workRoot.resolve("plugins")
                 val vmArgs = buildList {
                     add("-Xmx${xmxMb}m")
                     add("-Djava.io.tmpdir=$tmpDir")
@@ -318,9 +312,6 @@ class ForkedKotlinCompiler(
                     add("-cp"); add(forkClasspath)
                     add(KotlincWorkerMain::class.java.name)
                     add(KotlincWorkerMain.PROTOCOL_ARG); add(KotlincWire.PROTOCOL_VERSION.toString())
-                    add(KotlincWorkerMain.ANDROID_JAR_ARG); add(androidJar.toString())
-                    add(KotlincWorkerMain.PLUGIN_CACHE_ARG); add(pluginCache.toString())
-                    add(KotlincWorkerMain.MIN_API_ARG); add(minApi.toString())
                     add(KotlincWorkerMain.IDLE_EXIT_ARG); add(IDLE_EXIT_SEC.toString())
                 }
                 val process = ProcessBuilder(cmd).start()

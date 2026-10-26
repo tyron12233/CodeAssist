@@ -52,12 +52,12 @@ The relevant existing machinery, all reused rather than replaced:
   registers a `SettingsPage`; the UI renders typed controls from DTOs and never sees the plugin object. Its doc
   already states "gate third-party pages behind the plugin trust model." This is the exact shape the action
   and menu APIs follow.
-- The **compiler-plugin loader**: `KotlinPluginLoader` (interface) with `DefaultKotlinPluginLoader`
-  (`URLClassLoader`, desktop) and `ArtKotlinPluginLoader` (D8-in-process + `DexClassLoader`, ART). The loader's
-  classloader parent is the app classloader, so a plugin's references to the Kotlin compiler, Compose runtime,
-  and our own API modules resolve through parent delegation. `KotlinPluginLoading.RUNTIME_REGISTRAR` is already
-  the "load a separately-built plugin at runtime and register it programmatically" path. The IDE-plugin loader
-  follows the same parent-delegation rule; it needs no D8 step, because an installed app's APK is already dexed.
+- The **bundled-tool loader**: `KotlinPluginLoader` with `ArtKotlinPluginLoader` (D8-in-process +
+  `DexClassLoader`, ART), now used only for the KSP processors the app bundles. Its classloader parent is the
+  app classloader, so their references to the Kotlin compiler and our own API modules resolve through parent
+  delegation. (Runtime-loaded Kotlin compiler plugins were removed: only the bundled ones run.) The IDE-plugin
+  loader follows the same parent-delegation rule; it needs no D8 step, because an installed app's APK is
+  already dexed.
 - The **only** already-extensible UI piece: `TreeIcons`, a live `mutableStateMapOf` registry. The Compose
   registries below follow its pattern.
 

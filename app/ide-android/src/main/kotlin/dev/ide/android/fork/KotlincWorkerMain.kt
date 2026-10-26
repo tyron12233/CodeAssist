@@ -1,6 +1,5 @@
 package dev.ide.android.fork
 
-import dev.ide.android.ArtKotlinPluginLoader
 import dev.ide.lang.kotlin.compile.KotlinCompileResult
 import dev.ide.lang.kotlin.compile.KotlinDiagnostic
 import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
@@ -41,9 +40,6 @@ import kotlin.system.exitProcess
 object KotlincWorkerMain {
 
     const val PROTOCOL_ARG = "--protocol"
-    const val ANDROID_JAR_ARG = "--android-jar"
-    const val PLUGIN_CACHE_ARG = "--plugin-cache"
-    const val MIN_API_ARG = "--min-api"
     const val IDLE_EXIT_ARG = "--idle-exit-sec"
 
     const val READY = "READY"
@@ -69,7 +65,7 @@ object KotlincWorkerMain {
         val control = PrintStream(FileOutputStream(java.io.FileDescriptor.out), true)
         System.setOut(System.err)
 
-        val compiler = KotlinJvmCompiler(pluginLoader = pluginLoader(opts))
+        val compiler = KotlinJvmCompiler()
         val idleSeconds = opts[IDLE_EXIT_ARG]?.toLongOrNull() ?: 0L
         val activity = Activity()
         if (idleSeconds > 0) startIdleWatchdog(activity, idleSeconds)
@@ -138,20 +134,6 @@ object KotlincWorkerMain {
                     diagnostics = listOf(KotlinDiagnostic(KotlinDiagnosticSeverity.ERROR, threw)),
                 )
             }
-
-    /** The ART plugin loader, so a runtime (non-bundled) Kotlin compiler plugin still loads inside the fork.
-     *  Absent arguments leave the desktop default, which cannot define a jar's classes on ART but is only
-     *  reached when no runtime plugin is in play. */
-    private fun pluginLoader(opts: Map<String, String>): dev.ide.lang.kotlin.compile.KotlinPluginLoader {
-        val androidJar = opts[ANDROID_JAR_ARG]
-        val cache = opts[PLUGIN_CACHE_ARG]
-        val minApi = opts[MIN_API_ARG]?.toIntOrNull()
-        return if (androidJar != null && cache != null && minApi != null) {
-            ArtKotlinPluginLoader(Paths.get(androidJar), Paths.get(cache), minApi)
-        } else {
-            dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
-        }
-    }
 
     /**
      * Last time a command arrived or finished, and whether one is running now, so a long compile is never

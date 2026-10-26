@@ -64,11 +64,11 @@ class IncrementalConsumerEditReproTest {
 
             val ic = IncrementalKotlinCompiler()
             val cp = listOf(stdlib) + runtime
-            val plugins = listOf(listOf(pluginJar!!))
+            val plugins = listOf(pluginJar!!)
 
             val first = ic.compile(
                 listOf(main, src.resolve("demo/Theme.kt")), emptyList(), cp, out,
-                runtimePluginClasspaths = plugins,
+                compilerPlugins = plugins,
             )
             assertTrue(first.success, "initial full compile failed: ${first.messages}")
             assertEquals(IncrementalKotlinCompiler.Mode.FULL, first.mode)
@@ -87,7 +87,7 @@ class IncrementalConsumerEditReproTest {
             )
             val second = ic.compile(
                 listOf(main, src.resolve("demo/Theme.kt")), emptyList(), cp, out,
-                runtimePluginClasspaths = plugins,
+                compilerPlugins = plugins,
             )
             assertTrue(
                 second.success,

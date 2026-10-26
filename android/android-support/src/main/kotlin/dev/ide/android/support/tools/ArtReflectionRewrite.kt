@@ -33,7 +33,7 @@ import java.util.zip.ZipOutputStream
  * `setAccessible(true)` is the faithful equivalent.)
  *
  * Only the ART loaders route through this. The desktop loaders leave jars untouched — a real JVM has
- * `trySetAccessible`, so `DefaultKspProcessorLoader` / `DefaultKotlinPluginLoader` load the original bytes.
+ * `trySetAccessible`, so `DefaultKspProcessorLoader` loads the original bytes.
  */
 object ArtReflectionRewrite {
 

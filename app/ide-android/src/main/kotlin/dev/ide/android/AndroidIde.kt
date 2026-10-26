@@ -253,7 +253,8 @@ object AndroidIde {
         // now INTERPRETED by the real-view runtime's bytecode VM (see AndroidRealViewRuntime / VmViewFactory), so
         // this owned-preview seam stays null.
         val previewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null
-        // Loads runtime (non-bundled) Kotlin compiler plugins on ART: D8-dex the plugin classpath + DexClassLoader.
+        // Loads the BUNDLED KSP processors on ART: D8-dex their jars (shipped in the app) + DexClassLoader. Kotlin
+        // compiler plugins never come through here: only the bundled ones run, dexed into the app.
         val kotlinPluginLoader = ArtKotlinPluginLoader(
             androidJar.toPath(),
             File(context.cacheDir, "kotlinc-plugins").toPath(),
@@ -316,9 +317,7 @@ object AndroidIde {
             modeProvider = { managerRef.get()?.preference(kotlincModeKey)?.trim() },
             maxHeapMbProvider = { managerRef.get()?.preference(kotlincHeapKey)?.trim()?.toIntOrNull() },
             workerCountProvider = { managerRef.get()?.preference(kotlincWorkersKey)?.trim()?.toIntOrNull() },
-            androidJar = androidJar.toPath(),
-            minApi = minOf(Build.VERSION.SDK_INT, 36),
-            fallback = KotlinJvmCompiler(pluginLoader = kotlinPluginLoader),
+            fallback = KotlinJvmCompiler(),
         )
         // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
         // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across

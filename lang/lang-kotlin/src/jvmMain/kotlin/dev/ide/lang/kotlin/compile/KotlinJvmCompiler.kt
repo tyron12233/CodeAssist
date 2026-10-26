@@ -1,28 +1,14 @@
 package dev.ide.lang.kotlin.compile
 
-import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.common.diagnosticsCollector
-import org.jetbrains.kotlin.cli.common.fir.FirDiagnosticsCompilerResultsReporter
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
-import org.jetbrains.kotlin.cli.common.messages.GroupingMessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
-import org.jetbrains.kotlin.cli.pipeline.ArgumentsPipelineArtifact
-import org.jetbrains.kotlin.cli.pipeline.jvm.JvmBackendPipelinePhase
-import org.jetbrains.kotlin.cli.pipeline.jvm.JvmConfigurationPipelinePhase
-import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelinePhase
-import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFrontendPipelinePhase
-import org.jetbrains.kotlin.cli.pipeline.jvm.JvmWriteOutputsPhase
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
-import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
-import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.Services
-import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
-import org.jetbrains.kotlin.util.PerformanceManagerImpl
 import java.io.File
 import java.nio.file.Path
 
@@ -46,10 +32,7 @@ import java.nio.file.Path
  * compile still has a stdlib even when no such dependency is declared. Never the host runtime's jar (absent
  * on ART).
  */
-class KotlinJvmCompiler(
-    /** Loads runtime (non-bundled) plugins' registrars. Desktop default; `:ide-android` injects a D8/dex one. */
-    private val pluginLoader: KotlinPluginLoader = DefaultKotlinPluginLoader,
-) : KotlinCompilerBackend {
+class KotlinJvmCompiler : KotlinCompilerBackend {
 
     override fun compile(request: KotlinCompileRequest): KotlinCompileResult = compile(
         kotlinSources = request.kotlinSources,
@@ -61,7 +44,6 @@ class KotlinJvmCompiler(
         friendPaths = request.friendPaths,
         compilerPlugins = request.compilerPlugins,
         pluginOptions = request.pluginOptions,
-        runtimePluginClasspaths = request.runtimePluginClasspaths,
         commonSources = request.commonSources,
         optIns = request.optIns,
     )
@@ -99,15 +81,6 @@ class KotlinJvmCompiler(
         compilerPlugins: List<Path> = emptyList(),
         pluginOptions: List<String> = emptyList(),
         /**
-         * Classpaths of plugins to load + register **programmatically** (one per plugin), as opposed to the
-         * `-Xplugin` jars in [compilerPlugins]. When non-empty the compile drops to a manual bootstrap that
-         * loads each plugin's `CompilerPluginRegistrar` through [pluginLoader] (a `URLClassLoader` on the
-         * desktop, a D8-dexed `DexClassLoader` on ART) and registers it. The default empty list keeps the
-         * fast, unchanged CLI path. Any [compilerPlugins] jars are folded into this path too (loaded as
-         * registrars) so a mixed compile still applies them.
-         */
-        runtimePluginClasspaths: List<List<Path>> = emptyList(),
-        /**
          * The subset of [kotlinSources] that belongs to the module's COMMON fragments (`commonMain` and any
          * intermediate source set above the platform one). Non-empty turns on multiplatform mode; see
          * [KotlinCompileRequest.commonSources].
@@ -130,18 +103,6 @@ class KotlinJvmCompiler(
         // kotlinc resolves Java sources for interop but only emits Kotlin classes; both are free args.
         val sourcePaths = (kotlinSources + javaSources).map { it.toString() }
         val fullClasspath = (classpath + boot + listOfNotNull(stdlibJar())).distinct()
-
-        // Runtime-loaded plugins can't ride the CLI `-Xplugin` path (it can't define a jar's classes on ART),
-        // so a compile that uses one drops to the programmatic-registration bootstrap below.
-        if (runtimePluginClasspaths.isNotEmpty()) {
-            return compileViaRegistrars(
-                kotlinSources, javaSources, fullClasspath, outputDir, jvmTarget, onArt, friendPaths,
-                pluginRegistrarClasspaths = (if (compilerPlugins.isNotEmpty()) listOf(compilerPlugins) else emptyList()) + runtimePluginClasspaths,
-                pluginOptions = pluginOptions,
-                commonSources = commonSources,
-                optIns = optIns,
-            )
-        }
 
         val args = buildArguments(sourcePaths, fullClasspath, outputDir, jvmTarget, onArt, friendPaths, commonSources, optIns).apply {
             // Compiler plugins (e.g. Compose). pluginClasspaths is the `-Xplugin` set; pluginOptions the `-P`
@@ -166,94 +127,7 @@ class KotlinJvmCompiler(
         )
     }
 
-    /**
-     * The programmatic-registration compile path (used when [compile] is given runtime plugins). The K1
-     * `KotlinToJVMBytecodeCompiler.compileBunchOfSources` entry point this used to wrap no longer exists in
-     * the compiler, so it now drives the K2 CLI pipeline's phases directly - the same phases
-     * `K2JVMCompiler.exec` chains (configuration -> frontend -> fir2ir -> backend -> write), with one
-     * difference: between the configuration and frontend phases the plugins' `CompilerPluginRegistrar`s,
-     * loaded through [pluginLoader], are injected into the configuration. The CLI's own `-Xplugin` loading
-     * cannot do that for a runtime-provided jar on ART (a `URLClassLoader` can't define a jar's classes
-     * there); the [pluginLoader] returns a dexed `DexClassLoader` instead.
-     *
-     * The arguments mirror the CLI path's ([buildArguments]: boot/`-no-jdk`, friend paths, output-file
-     * reporting) so the emitted classes and the source->`.class` mapping match.
-     */
-    @OptIn(ExperimentalCompilerApi::class)
-    private fun compileViaRegistrars(
-        kotlinSources: List<Path>,
-        javaSources: List<Path>,
-        fullClasspath: List<Path>,
-        outputDir: Path,
-        jvmTarget: String,
-        onArt: Boolean,
-        friendPaths: List<Path>,
-        pluginRegistrarClasspaths: List<List<Path>>,
-        pluginOptions: List<String>,
-        commonSources: List<Path> = emptyList(),
-        optIns: List<String> = emptyList(),
-    ): KotlinCompileResult {
-        val registrars = pluginRegistrarClasspaths.flatMap { loadCompilerPluginRegistrars(it, pluginLoader) }
-        val collector = RecordingMessageCollector()
-        if (pluginOptions.isNotEmpty()) {
-            // `-P` options are parsed by each plugin's CommandLineProcessor, which this path doesn't run yet.
-            // No registered plugin uses options today, so surface it rather than silently drop it.
-            collector.report(CompilerMessageSeverity.WARNING, "plugin options ignored on the registrar path: $pluginOptions", null)
-        }
-        val args = buildArguments(
-            (kotlinSources + javaSources).map { it.toString() }, fullClasspath, outputDir, jvmTarget, onArt,
-            friendPaths, commonSources, optIns,
-        )
-        // GroupingMessageCollector is what the real pipeline wraps the collector in (it defers messages so
-        // related diagnostics group up). CRITICAL: unlike `K2JVMCompiler.exec`, driving the phases by hand
-        // does NOT surface the FIR analysis diagnostics — those accumulate in the configuration's
-        // BaseDiagnosticsCollector, and the CLI's `CheckCompilationErrors` step is what renders them to the
-        // message collector and fails the build on an error. We must do the same, or a genuine compile ERROR
-        // (an unresolved reference, a type mismatch) is silently swallowed and the compile "succeeds" with no
-        // output — which strands a wiped output dir just like the incremental stale-manifest bug. Covered by
-        // RegistrarPathErrorReportingTest.
-        val grouping = GroupingMessageCollector(collector, false, false)
-        val disposable = Disposer.newDisposable("kotlin-registrar-compile")
-
-        // Reached by EVERY exit path: render the configuration's accumulated FIR diagnostics into `collector`
-        // (mirrors CheckCompilationErrors → FirDiagnosticsCompilerResultsReporter), flush any grouped messages,
-        // then decide success from whether an error was actually recorded. Renders once per compile.
-        fun finish(config: CompilerConfiguration?, extra: List<String> = emptyList()): KotlinCompileResult {
-            config?.let {
-                FirDiagnosticsCompilerResultsReporter.reportToMessageCollector(it.diagnosticsCollector, collector, false)
-            }
-            runCatching { grouping.flush() }
-            return KotlinCompileResult(
-                !collector.hasErrors(), collector.messages + extra, collector.outputs(),
-                collector.diagnostics + extra.map { internalError(it) },
-            )
-        }
-
-        try {
-            val performanceManager = PerformanceManagerImpl(JvmPlatforms.defaultJvmPlatform, "kotlin-registrar-compile")
-            val argsArtifact = ArgumentsPipelineArtifact(args, Services.EMPTY, disposable, grouping, performanceManager)
-            val configArtifact = JvmConfigurationPipelinePhase.executePhase(argsArtifact)
-                ?: return finish(null, listOf("error: kotlinc rejected the compiler arguments"))
-            registrars.forEach { configArtifact.configuration.add(CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS, it) }
-            val frontend = JvmFrontendPipelinePhase.executePhase(configArtifact)
-                ?: return finish(configArtifact.configuration)
-            // A frontend error (unresolved reference, type mismatch, …) stops before codegen — exactly like the
-            // real pipeline's post-frontend CheckCompilationErrors. The rendering itself happens once, in finish().
-            if (frontend.configuration.diagnosticsCollector.hasErrors) return finish(frontend.configuration)
-            val fir2ir = JvmFir2IrPipelinePhase.executePhase(frontend)
-                ?: return finish(frontend.configuration)
-            val backend = JvmBackendPipelinePhase.executePhase(fir2ir)
-                ?: return finish(fir2ir.configuration)
-            JvmWriteOutputsPhase.executePhase(backend)
-            return finish(backend.configuration)
-        } catch (t: Throwable) {
-            return finish(null, listOf("error: kotlinc threw: ${t.javaClass.name}: ${t.message}"))
-        } finally {
-            Disposer.dispose(disposable)
-        }
-    }
-
-    /** The CLI argument set shared by both compile paths (classpath, target, `-no-jdk`, friend paths). */
+    /** The CLI argument set (classpath, target, `-no-jdk`, friend paths). */
     private fun buildArguments(
         sourcePaths: List<String>,
         fullClasspath: List<Path>,

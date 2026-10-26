@@ -19,8 +19,9 @@ import java.nio.file.Path
  * on the Kotlin language module (which is not published) or on the compiler itself: the interface is plain
  * paths and strings.
  *
- * On ART the plugin's registrar class must additionally be loadable from a dexed classloader (see
- * `docs/kotlin-compiler-plugins-and-codegen.md`); [classpath] is the jar set that path dexes.
+ * The IDE applies only the compiler plugins it BUNDLES (Compose, kotlinx.serialization, Parcelize), whose
+ * registrars are dexed into the app. A contribution from anywhere else is ignored: running a compiler plugin
+ * the app did not ship would mean loading code it did not ship.
  */
 interface KotlinCompilerPlugin {
     /** The plugin's kotlinc CLI id, the prefix of every `-P plugin:<pluginId>:<k>=<v>` option. */
@@ -39,9 +40,7 @@ interface KotlinCompilerPlugin {
      *  classpath (deps + libs + boot), so a classpath probe (Compose: `Composable.class` present) works. */
     fun appliesTo(module: Module, classpath: List<Path>): Boolean
 
-    /** The plugin jar(s). For [KotlinPluginLoading.COMPILE_CLASSPATH] these go to kotlinc as `-Xplugin`; for
-     *  [KotlinPluginLoading.RUNTIME_REGISTRAR] they are the classpath the host's plugin loader loads. May be
-     *  several (e.g. a runner plus its deps). */
+    /** The plugin jar(s), which go to kotlinc as `-Xplugin`. May be several (e.g. a runner plus its deps). */
     fun classpath(module: Module): List<Path>
 
     /** `-P` options already in `<pluginId>:<key>=<value>` form. Empty for a plugin with no configuration. */
@@ -58,9 +57,10 @@ enum class KotlinPluginLoading {
     COMPILE_CLASSPATH,
 
     /**
-     * Loaded at runtime through the host's Kotlin plugin loader (a `URLClassLoader` on the desktop, a
-     * D8-dexed `DexClassLoader` on ART) and registered programmatically. For plugins not bundled into the app.
+     * Was: loaded at runtime through a host plugin loader and registered programmatically, for plugins not
+     * bundled into the app. No longer supported; a plugin declaring it is never applied ([resolveFor] skips it).
      */
+    @Deprecated("Only compiler plugins bundled with the IDE are applied; a runtime-loaded plugin is ignored.")
     RUNTIME_REGISTRAR,
 }
 
@@ -68,10 +68,8 @@ enum class KotlinPluginLoading {
 val KOTLIN_COMPILER_PLUGIN_EP = ExtensionPoint<KotlinCompilerPlugin>("platform.kotlinCompilerPlugin")
 
 /**
- * The applied plugins for a compile, split by loading mode:
- *  - [classpaths]/[options]: the `-Xplugin`/`-P` inputs for [KotlinPluginLoading.COMPILE_CLASSPATH] plugins.
- *  - [runtimeClasspaths]: one classpath per [KotlinPluginLoading.RUNTIME_REGISTRAR] plugin, each loaded and
- *    registered programmatically by the compiler.
+ * The applied plugins for a compile: [classpaths]/[options], the `-Xplugin`/`-P` inputs. [runtimeClasspaths]
+ * is always empty now that runtime-loaded plugins are not supported; it stays for binary compatibility.
  */
 data class ResolvedKotlinPlugins(
     val classpaths: List<Path>,
@@ -85,10 +83,10 @@ fun List<KotlinCompilerPlugin>.resolveFor(module: Module, classpath: List<Path>)
     if (isEmpty()) return ResolvedKotlinPlugins.EMPTY
     val applicable = filter { it.appliesTo(module, classpath) }
     if (applicable.isEmpty()) return ResolvedKotlinPlugins.EMPTY
-    val (runtime, compileClasspath) = applicable.partition { it.loading == KotlinPluginLoading.RUNTIME_REGISTRAR }
+    @Suppress("DEPRECATION")
+    val compileClasspath = applicable.filter { it.loading != KotlinPluginLoading.RUNTIME_REGISTRAR }
     return ResolvedKotlinPlugins(
         classpaths = compileClasspath.flatMap { it.classpath(module) },
         options = compileClasspath.flatMap { it.options(module) },
-        runtimeClasspaths = runtime.map { it.classpath(module) }.filter { it.isNotEmpty() },
     )
 }

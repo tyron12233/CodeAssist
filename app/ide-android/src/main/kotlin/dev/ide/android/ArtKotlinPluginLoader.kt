@@ -16,17 +16,16 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * The ART [KotlinPluginLoader]: dexes a compiler plugin's jars with D8 in-process, then loads the dex
- * through a [DexClassLoader] so the plugin's `CompilerPluginRegistrar` can be instantiated on device. A
- * jar's `.class` bytes can't be defined at runtime on ART (only dex can), which is why the desktop's
- * `DefaultKotlinPluginLoader` (a plain `URLClassLoader` over the jars) doesn't translate; the registration
- * code in `KotlinJvmCompiler` is otherwise identical across the two.
+ * The ART [KotlinPluginLoader], for the KSP processors the app BUNDLES: dexes their jars with D8 in-process,
+ * then loads the dex through a [DexClassLoader]. A jar's `.class` bytes can't be defined at runtime on ART
+ * (only dex can). Kotlin compiler plugins do not come through here: only the bundled ones run, with their
+ * registrars dexed into the app at build time.
  *
  * Content-addressed: the dexed `plugin.jar` is cached under [cacheRoot]/<hash> keyed by the classpath's
- * path+size+mtime, so a plugin is dexed once per version (the D8 pass is the expensive part). The parent is
- * the app classloader, which holds the dexed Kotlin compiler and any plugin registrar already dexed into the
- * app (e.g. Compose), so a registrar referencing those resolves through parent delegation, except for the
- * packages [ToolClassIsolation] pins to the tool's own jars (see [ToolDexClassLoader]).
+ * path+size+mtime, so a processor is dexed once per version (the D8 pass is the expensive part). The parent is
+ * the app classloader, which holds the dexed Kotlin compiler and KSP, so a processor referencing those resolves
+ * through parent delegation, except for the packages [ToolClassIsolation] pins to the tool's own jars (see
+ * [ToolDexClassLoader]).
  */
 class ArtKotlinPluginLoader(
     private val androidJar: Path,

@@ -792,7 +792,6 @@ internal class AndroidKotlinCompileTask(
             kt, javaSources(), classpath, outClasses, level,
             bootClasspath = bootClasspath,
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            runtimePluginClasspaths = resolved.runtimeClasspaths,
             commonSources = commonSources(kt),
             optIns = optIns(),
         )

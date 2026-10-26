@@ -217,9 +217,11 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      *  runtime coords/probe). `blessed()` here is metadata-only — no bundled jars needed to describe a toggle. */
     private val kspProcessors: List<dev.ide.ksp.KspProcessor> = KspProcessorCatalog.blessed().processors
 
-    /** The registered compiler plugins (EP contributions, or the built-ins for direct/test wiring), by id. */
+    /** The registered compiler plugins (EP contributions, or the built-ins for direct/test wiring), by id. Only
+     *  the bundled ones count: the build ignores any other contribution (see BuildService). */
     private fun registeredPlugins(): Map<String, dev.ide.build.KotlinCompilerPlugin> =
         ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
+            .filter { it in BUILTIN_KOTLIN_COMPILER_PLUGINS }
             .ifEmpty { BUILTIN_KOTLIN_COMPILER_PLUGINS }
             .associateBy { it.pluginId }
 

@@ -91,7 +91,6 @@ class KotlinCompileTask(
             kt, sourceFiles(module), classpath, out, levelOf(module.languageLevel),
             bootClasspath = bootClasspath,
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            runtimePluginClasspaths = resolved.runtimeClasspaths,
             commonSources = commonSources(),
             optIns = optIns(),
         )

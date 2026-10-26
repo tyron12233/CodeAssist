@@ -21,6 +21,7 @@ import dev.ide.build.BuildSeverity
 import dev.ide.build.BuildTopics
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
+import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.RunAction
@@ -155,11 +156,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     private val incrementalKotlin = IncrementalKotlinCompiler(ctx.kotlinJvmCompiler)
 
     // Kotlin compiler plugins are contributed through the `platform.kotlinCompilerPlugin` EP and applied
-    // per module by the build's compileKotlin tasks. Compose is contributed by the kotlin-support built-in
-    // plugin (like every other built-in); this service is purely a consumer — it reads the EP. A plugin adds
-    // more by contributing to the EP.
+    // per module by the build's compileKotlin tasks. Compose, serialization and Parcelize are contributed by the
+    // kotlin-support built-in plugin, so switching that plugin off still turns them off. Only those BUNDLED ones
+    // are applied: a contribution from any other plugin is ignored, since running a compiler plugin the app did
+    // not ship means loading code it did not ship.
     private val kotlinCompilerPlugins: List<KotlinCompilerPlugin> =
-        ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
+        ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP).filter { it in BUILTIN_KOTLIN_COMPILER_PLUGINS }
 
     // Build-time source generators contributed through `platform.sourceGenerator` (a KSP runner, ViewBinding
     // emitter, …); the build runs them into a module's GENERATED root ahead of compilation. Empty until a

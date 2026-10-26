@@ -13,12 +13,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Does the runtime-plugin (registrar) compile path report a genuine compile ERROR? The CLI path
- * (`K2JVMCompiler.exec`) does; the manual K2-phase pipeline in [KotlinJvmCompiler.compileViaRegistrars]
- * (used on ART for Compose) must too, or a broken source "compiles" with no output and no diagnostics —
- * which strands a wiped output dir exactly like the incremental stale-manifest bug.
+ * A compile with a bundled compiler plugin applied (Compose, through `-Xplugin`) reports a genuine compile
+ * ERROR just like a plain one, or a broken source "compiles" with no output and no diagnostics, which strands a
+ * wiped output dir exactly like the incremental stale-manifest bug.
  */
-class RegistrarPathErrorReportingTest {
+class CompilerPluginErrorReportingTest {
 
     @BeforeTest
     fun pinParserHost() { parse("package warmup\nfun warmup() {}") }
@@ -33,7 +32,7 @@ class RegistrarPathErrorReportingTest {
     private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 
     @Test
-    fun brokenSourceIsReportedAsFailureOnBothPaths() {
+    fun brokenSourceIsReportedAsFailureWithAndWithoutAPlugin() {
         val pluginJar = ComposeCompilerPlugin.jar()
         assumeTrue(pluginJar != null, "Compose plugin jar not bundled on the test classpath")
         val runtime = composeRuntimeJars()
@@ -44,19 +43,17 @@ class RegistrarPathErrorReportingTest {
             val broken = write(src, "demo/Broken.kt", "package demo\nfun broken(): Int = notARealSymbolAnywhere()\n")
             val cp = listOf(stdlib) + runtime
 
-            // CLI path (no runtime plugins) — the control: this must report failure.
+            // No plugin, the control: this must report failure.
             val cli = KotlinJvmCompiler().compile(listOf(broken), emptyList(), cp, dir.resolve("out-cli"))
-            println("CLI       success=${cli.success} msgs=${cli.messages}")
             assertFalse(cli.success, "CLI path should reject a broken file")
 
-            // Registrar path (Compose plugin loaded programmatically) — the on-device path.
-            val reg = KotlinJvmCompiler().compile(
-                listOf(broken), emptyList(), cp, dir.resolve("out-reg"),
-                runtimePluginClasspaths = listOf(listOf(pluginJar!!)),
+            // With the bundled Compose plugin applied.
+            val withPlugin = KotlinJvmCompiler().compile(
+                listOf(broken), emptyList(), cp, dir.resolve("out-plugin"),
+                compilerPlugins = listOf(pluginJar!!),
             )
-            println("REGISTRAR success=${reg.success} msgs=${reg.messages}")
-            assertFalse(reg.success, "registrar path must also reject a broken file (else it swallows compile errors)")
-            assertTrue(reg.messages.isNotEmpty(), "registrar path must surface the diagnostic, not swallow it")
+            assertFalse(withPlugin.success, "a compile with a plugin must also reject a broken file")
+            assertTrue(withPlugin.messages.isNotEmpty(), "a compile with a plugin must surface the diagnostic")
         }
     }
 }

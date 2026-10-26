@@ -33,7 +33,7 @@ interface ExtensionRegistry {
 | `platform.fileIcon` | Project-tree icon providers (`FileIconProvider`) → string icon ids. | `DefaultFileIconProvider`, `AndroidFileIconProvider`. |
 | `platform.projectTemplate` | Create-Project templates (`ProjectTemplate`) with data-driven parameters. | `java-console`, `java-library`, `android-app`, `android-library`. |
 | `platform.blockMapping` | Block mappings (`BlockMapping`) for the projectional editor. | The Java block mapping. |
-| `platform.kotlinCompilerPlugin` | Kotlin compiler plugins (`KotlinCompilerPlugin`) the build's `compileKotlin` tasks apply per module. | Compose (`ComposeCompilerPlugin`). |
+| `platform.kotlinCompilerPlugin` | Kotlin compiler plugins (`KotlinCompilerPlugin`) the build's `compileKotlin` tasks apply per module. Only the bundled ones are applied; a third-party contribution is ignored. | Compose, serialization, Parcelize. |
 | `platform.iconRepository` | Icon libraries (`IconRepository`) the Icon Manager browses: search, list, and fetch an icon's geometry. | Bundled Material Symbols, remote Material Symbols. |
 | `platform.vcsProvider` | Version-control systems (`VcsProvider`): find a checkout root, open it, initialize one, clone one. | The Git provider (JGit). |
 

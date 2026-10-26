@@ -435,7 +435,9 @@ what running processors on device involves.
 ## 7. Kotlin compiler plugins
 
 A Kotlin compiler plugin is a bytecode transformer that runs inside kotlinc and emits no new source. Compose,
-kotlinx.serialization and Parcelize are the built-in contributors.
+kotlinx.serialization and Parcelize are the built-in contributors, and the only ones the build applies: the
+interface is documented here because the IDE's own plugins use it, but a contribution from a third-party plugin
+is ignored (see below).
 
 ```kotlin
 interface KotlinCompilerPlugin {
@@ -453,20 +455,18 @@ The `compileKotlin` tasks ask every registered plugin whether it applies to the 
 pass is the effective compile classpath, so a probe such as Compose's `androidx.compose.runtime.Composable`
 check works), then feed the union of the applicable plugins' classpaths and options to the compiler.
 
-`loading` decides how the plugin's registrar reaches the compiler. `COMPILE_CLASSPATH` hands the jar to
-kotlinc as `-Xplugin`, which requires the registrar class to be loadable by the compiler itself: on device
-that means it must be dexed into the app, because a jar's bytecode cannot be defined at runtime there.
-`RUNTIME_REGISTRAR` loads the plugin through a `KotlinPluginLoader` (a `URLClassLoader` on the desktop, a
-D8-dexed `DexClassLoader` on ART) and registers it programmatically, which is the path for a plugin that is
-not bundled into the app.
+The IDE applies only the compiler plugins it bundles (Compose, kotlinx.serialization, Parcelize): their jars go
+to kotlinc as `-Xplugin`, and on device their registrar classes are dexed into the app, because a jar's
+bytecode cannot be defined at runtime there. A `KotlinCompilerPlugin` contributed by any other plugin is
+ignored, and `KotlinPluginLoading.RUNTIME_REGISTRAR` (loading a plugin's jars at runtime) is deprecated and
+never applied: running a compiler plugin the app did not ship would mean loading code it did not ship.
 
 `KotlinCompilerPlugin` and `KOTLIN_COMPILER_PLUGIN_EP` live in `build-api`, alongside the rest of the build
 SPI: the interface is plain paths and strings, so contributing one needs neither the Kotlin language module
 nor the compiler. `BUILTIN_KOTLIN_COMPILER_PLUGINS` (Compose, serialization, Parcelize) stays in `lang-kotlin`
 with the implementations.
 
-What you cannot avoid is shipping the plugin jar itself, and on device its registrar has to be loadable from a
-dexed classloader, which is what `KotlinPluginLoading.RUNTIME_REGISTRAR` is for.
+A compiler plugin the IDE does not bundle cannot be added from a plugin; it has to be bundled into the IDE.
 
 Some libraries need both halves: a compiler plugin *and* build-time work that the library's own Gradle plugin
 would normally do. Hilt is the worked example in

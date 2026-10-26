@@ -26,8 +26,6 @@ data class KotlinCompileRequest(
     val compilerPlugins: List<Path> = emptyList(),
     /** `plugin:<id>:<key>=<value>` strings for `-P`. */
     val pluginOptions: List<String> = emptyList(),
-    /** Classpaths of plugins loaded and registered programmatically, one list per plugin. */
-    val runtimePluginClasspaths: List<List<Path>> = emptyList(),
     /**
      * The subset of [kotlinSources] belonging to the module's COMMON fragments — what an imported Kotlin
      * Multiplatform module's `commonMain` (and any intermediate source set above the platform one) holds.

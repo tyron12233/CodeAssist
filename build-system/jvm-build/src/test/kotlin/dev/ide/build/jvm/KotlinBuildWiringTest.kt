@@ -2,6 +2,9 @@ package dev.ide.build.jvm
 
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
+import dev.ide.build.KotlinCompilerPlugin
+import dev.ide.build.KotlinPluginLoading
+import dev.ide.build.resolveFor
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinOutputDir
@@ -11,6 +14,7 @@ import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FacetTemplate
+import dev.ide.model.Module
 import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
 import dev.ide.model.ModuleTypeRegistry
@@ -24,6 +28,7 @@ import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import dev.ide.model.impl.open
 
@@ -61,6 +66,30 @@ class KotlinBuildWiringTest {
         dir.writeSource("app/src/main/java/com/example/Main.java", MAIN, trim = false)
         dir.writeSource("app/src/main/kotlin/com/example/Helper.kt", "package com.example.k\nclass Helper", trim = false)
         return store to store.workspace.projects.single()
+    }
+
+    /** A plugin whose jars would be loaded at runtime is never applied: only bundled compiler plugins run. */
+    @Test
+    @Suppress("DEPRECATION")
+    fun aRuntimeLoadedCompilerPluginIsNeverApplied() {
+        testEnv("kt-runtime-plugin") { env ->
+            val (_, project) = buildWorkspace(env.dir, env.platform)
+            val module = project.modules.single()
+            fun plugin(id: String, how: KotlinPluginLoading) = object : KotlinCompilerPlugin {
+                override val pluginId = id
+                override val loading = how
+                override fun appliesTo(module: Module, classpath: List<Path>) = true
+                override fun classpath(module: Module) = listOf(env.dir.resolve("$id.jar"))
+                override fun options(module: Module) = listOf("$id:k=v")
+            }
+            val resolved = listOf(
+                plugin("bundled", KotlinPluginLoading.COMPILE_CLASSPATH),
+                plugin("downloaded", KotlinPluginLoading.RUNTIME_REGISTRAR),
+            ).resolveFor(module, emptyList())
+            assertEquals(listOf(env.dir.resolve("bundled.jar")), resolved.classpaths)
+            assertEquals(listOf("bundled:k=v"), resolved.options)
+            assertEquals(emptyList(), resolved.runtimeClasspaths)
+        }
     }
 
     @Test

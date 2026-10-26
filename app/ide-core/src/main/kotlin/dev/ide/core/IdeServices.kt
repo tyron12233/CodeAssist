@@ -181,10 +181,8 @@ import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinPackageRewrite
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
-import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
 import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
-import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
 import dev.ide.lang.kotlin.index.BinaryAnnotationIndex
 import dev.ide.lang.kotlin.index.BinarySubtypeIndex
@@ -399,7 +397,6 @@ class IdeServices private constructor(
     private val apkInstaller: ApkInstaller? = env.container.getServiceOrNull(APK_INSTALLER)
     private val appLogChannel: AppLogChannel? = env.container.getServiceOrNull(APP_LOG_CHANNEL)
     private val customViewRuntime: CustomViewRuntime? = env.container.getServiceOrNull(CUSTOM_VIEW_RUNTIME)
-    private val kotlinPluginLoader: KotlinPluginLoader? = env.container.getServiceOrNull(KOTLIN_PLUGIN_LOADER)
 
     /** The host's Kotlin compiler backend (on device: the persistent forked VM). Absent → in-process. */
     private val kotlinCompilerBackend: KotlinCompilerBackend? =
@@ -992,7 +989,7 @@ class IdeServices private constructor(
         // plugin loader — on device the injected D8/dex one (so a runtime Kotlin compiler plugin loads on
         // ART), else the desktop URLClassLoader default.
         store.appContainer.registerServiceIfAbsent(KOTLIN_JVM_COMPILER) {
-            kotlinCompilerBackend ?: KotlinJvmCompiler(pluginLoader = kotlinPluginLoader ?: DefaultKotlinPluginLoader)
+            kotlinCompilerBackend ?: KotlinJvmCompiler()
         }
         // Publish this engine's [EngineContext] on its OWN workspace container, so the app-global service
         // factories (registered once on the app registry) resolve the per-project engine through the scope

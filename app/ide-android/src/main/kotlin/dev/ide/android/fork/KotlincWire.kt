@@ -42,7 +42,6 @@ internal object KotlincWire {
     private const val K_FRIEND = "friend"
     private const val K_PLUGIN = "plugin"
     private const val K_PLUGIN_OPT = "pluginOpt"
-    private const val K_RUNTIME_PLUGIN = "rtPlugin"
     private const val K_COMMON_SRC = "commonSrc"
     private const val K_OPT_IN = "optIn"
 
@@ -69,7 +68,6 @@ internal object KotlincWire {
         request.friendPaths.forEach { sb.line(K_FRIEND, it) }
         request.compilerPlugins.forEach { sb.line(K_PLUGIN, it) }
         request.pluginOptions.forEach { sb.line(K_PLUGIN_OPT, it) }
-        request.runtimePluginClasspaths.forEach { cp -> sb.line(K_RUNTIME_PLUGIN, cp.joinToString(UNIT)) }
         // A multiplatform module's common fragment. Dropping it here would not fail the fork: the compile
         // would simply run without multiplatform mode and reject the module's own `expect` declarations.
         request.commonSources.forEach { sb.line(K_COMMON_SRC, it) }
@@ -92,8 +90,6 @@ internal object KotlincWire {
             friendPaths = fields.paths(K_FRIEND),
             compilerPlugins = fields.paths(K_PLUGIN),
             pluginOptions = fields.all(K_PLUGIN_OPT),
-            runtimePluginClasspaths = fields.all(K_RUNTIME_PLUGIN)
-                .map { cp -> cp.split(UNIT).filter { it.isNotEmpty() }.map(Paths::get) },
             commonSources = fields.paths(K_COMMON_SRC),
             optIns = fields.all(K_OPT_IN),
         )

@@ -273,33 +273,14 @@ shared by both plugins and processors.
    (the built-in implementations stay in lang-kotlin);
    Compose is the reference impl; `pluginOptions` wired end to end; the plugin list is threaded
    `IdeServices` -> build systems -> compile tasks. Compose behaves exactly as before.
-2. **Runtime-dex plugin loading.** Engine [DONE], device wiring staged.
-   - Proven on desktop: `KotlinJvmCompiler` has a programmatic-registration path
-     (`compileViaRegistrars`) selected by `runtimePluginClasspaths`, loading each plugin's
-     `CompilerPluginRegistrar` through a `KotlinPluginLoader`. Since the unshaded-compiler unification
-     (`:kotlin-compiler-deps`, whose `-for-ide` train dropped the K1 `KotlinToJVMBytecodeCompiler`), the
-     path drives the K2 CLI pipeline phases directly: `JvmConfigurationPipelinePhase` builds the config,
-     the loaded registrars are added to `CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS` on it, then
-     `JvmFrontendPipelinePhase -> JvmFir2IrPipelinePhase -> JvmBackendPipelinePhase -> JvmWriteOutputsPhase`
-     run in sequence (the same phases `K2JVMCompiler.exec` chains). The `DefaultKotlinPluginLoader`
-     (`URLClassLoader`) and a real Compose load are verified by `ProgrammaticPluginRegistrationTest`. The
-     path is threaded through `IncrementalKotlinCompiler` and both compile tasks (dormant until a plugin
-     declares `KotlinPluginLoading.RUNTIME_REGISTRAR`).
-   - Key fact: a configuration consumed by the compiler must come from `CompilerConfiguration.create()` /
-     the configuration phase (extension storage registered); a bare `CompilerConfiguration()` now FAILS
-     `createForProduction` with "Extensions storage is not registered". Also
-     `CompilerPluginRegistrar.registerExtensions` is a member-extension on `ExtensionStorage` (can't be
-     `::`-referenced).
-   - The ART `KotlinPluginLoader` is implemented + injected (compile-verified, device-run pending):
-     `ArtKotlinPluginLoader` in `:ide-android` D8-dexes the plugin classpath (content-hash cached under
-     `cacheDir/kotlinc-plugins`), packages the `classes*.dex` into a jar, and loads it via `DexClassLoader`
-     parented to the app classloader. It is threaded `AndroidIde.bootstrap` -> `ProjectManager.onDevice` ->
-     `IdeServices` -> the `KOTLIN_JVM_COMPILER` service (desktop stays `DefaultKotlinPluginLoader`).
-   - Remaining (device, needs an emulator/device): register a real `RUNTIME_REGISTRAR` plugin (e.g.
-     kotlinx-serialization or Parcelize) and run it on device. Caveats to verify there: D8 dexes the plugin
-     jar without a desugaring classpath (its references to the compiler classes resolve at runtime via the
-     parent app classloader, but D8 may warn), and `-P` option processing on the registrar path is not wired
-     yet (no current plugin uses options there).
+2. **Runtime-dex plugin loading.** [REMOVED 2026-10-26] The programmatic-registration compile path
+   (`compileViaRegistrars`, selected by `runtimePluginClasspaths`) and the compiler's runtime plugin loader are
+   gone: the IDE applies only the compiler plugins it bundles, through `-Xplugin` with their registrars dexed
+   into the app. Loading a non-bundled plugin's jars at runtime (D8 + `DexClassLoader` on ART) was loading code
+   the app did not ship, which Google Play's policy forbids. `KotlinPluginLoading.RUNTIME_REGISTRAR` stays in
+   build-api for binary compatibility, deprecated and skipped by `resolveFor`; `BuildService` applies only
+   `BUILTIN_KOTLIN_COMPILER_PLUGINS` from the EP. `ArtKotlinPluginLoader` remains, for the bundled KSP
+   processors only.
 3. **Source generation.** Seam [DONE]; KSP2 desktop feasibility + delivery direction [PROVEN, 2026-07];
    on-device productionization pending.
    - The generic build seam is built + verified: `SourceGenerator` SPI + `SOURCE_GENERATOR_EP` (build-api),

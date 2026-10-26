@@ -74,7 +74,6 @@ class TestKotlinCompileTask(
             kt, javaSources(), classpath, out, levelOf(module.languageLevel),
             bootClasspath = bootClasspath,
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            runtimePluginClasspaths = resolved.runtimeClasspaths,
             friendPaths = friends().filter { Files.isDirectory(it) },
         )
         ctx.reportKotlinProblems(r)
