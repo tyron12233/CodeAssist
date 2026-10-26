@@ -107,6 +107,10 @@ fun smartInsert(
     if ((ch in CLOSE_TO_OPEN || ch in QUOTES) && nextChar == ch) {
         return RangeEdit(pos, pos, "", pos + 1)
     }
+    // 1a. A `.` typed to start a line continues a call chain: move the line to the chain's indent.
+    if (ch == '.' && (language == CodeLanguage.Kotlin || language == CodeLanguage.Java)) {
+        chainDotIndent(text, pos, language)?.let { return it }
+    }
     // 1b. Dedent a typed closing bracket to its opener's indent when it's the first thing on its line — the
     // classic auto-align (typing `}` under `fun foo() {\n    …\n    ` snaps it to the opener's column).
     if (ch in CLOSE_TO_OPEN) {
@@ -126,6 +130,15 @@ fun smartInsert(
         } else {
             RangeEdit(pos, pos, ch.toString(), pos + 1)
         }
+    }
+    // 3a. The third quote in a row. Opening a Kotlin raw string or a Java text block, it closes the triple and
+    // parks the caret inside, as Android Studio does: `""|` → `"""|"""` (Enter then lays it out, see
+    // BraceNewlineHandler). Closing one, or in another language, it goes in alone: pairing it, as 3 would,
+    // leaves a stray quote after the caret (`""|` → `"""|"`).
+    if (ch in QUOTES && text.charOrNull(pos - 1) == ch && text.charOrNull(pos - 2) == ch) {
+        val opensRawString = ch == '"' && (language == CodeLanguage.Kotlin || language == CodeLanguage.Java) &&
+            text.charOrNull(pos - 3) != '"' && shouldAutoClose(nextChar) && !insideRawString(text, pos)
+        return RangeEdit(pos, pos, if (opensRawString) "\"\"\"\"" else ch.toString(), pos + 1)
     }
     // 3. Auto-close quotes (not when finishing an identifier, not in plain text files).
     if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(

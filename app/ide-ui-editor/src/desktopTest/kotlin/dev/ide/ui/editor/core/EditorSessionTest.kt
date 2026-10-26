@@ -58,6 +58,101 @@ class EditorSessionTest {
         assertTypingParity("", 0, '{')
     }
 
+    // ---- triple quotes: a Kotlin raw string / Java text block types and lays out as in Android Studio ----
+
+    private fun typeQuotes(text: String, caret: Int, language: CodeLanguage): EditorSession =
+        session(text, caret, language).apply { repeat(3) { commitText("\"") } }
+
+    private fun enter(text: String, language: CodeLanguage): EditorSession {
+        val caret = text.indexOf('‸')
+        return session(text.removeRange(caret, caret + 1), caret, language).apply { commitText("\n") }
+    }
+
+    /** The document with `‸` marking the caret, for one-glance layout assertions. */
+    private fun EditorSession.withCaret(): String = doc.text.substring(0, selection.start) + "‸" + doc.text.substring(selection.start)
+
+    @Test
+    fun typingAnOpeningTripleQuoteClosesIt() {
+        for (language in listOf(CodeLanguage.Kotlin, CodeLanguage.Java)) {
+            val s = typeQuotes("val s = ", 8, language)
+            assertEquals("val s = \"\"\"‸\"\"\"", s.withCaret(), "$language: the third quote closes the triple")
+            repeat(3) { s.commitText("\"") }
+            assertEquals("val s = \"\"\"\"\"\"‸", s.withCaret(), "$language: typing the closing quotes steps over them")
+        }
+    }
+
+    @Test
+    fun typingAClosingTripleQuoteLeavesNoStrayQuote() {
+        for (language in listOf(CodeLanguage.Kotlin, CodeLanguage.Java)) {
+            // After a space the first quote auto-pairs, the second steps over its partner, the third goes in alone.
+            val afterSpace = typeQuotes("\"\"\"\n    a \n", 10, language)
+            assertEquals("\"\"\"\n    a \"\"\"‸\n", afterSpace.withCaret(), "$language: closing after a space")
+            // After a word the first quote doesn't pair at all; the rest must not leave an extra one either.
+            val afterWord = typeQuotes("f(\"\"\"\n    a)", 11, language)
+            assertEquals("f(\"\"\"\n    a\"\"\"‸)", afterWord.withCaret(), "$language: closing after a word")
+        }
+    }
+
+    @Test
+    fun aPlainEmptyStringStillAutoCloses() {
+        val s = session("val s = ", 8, CodeLanguage.Kotlin)
+        s.commitText("\"")
+        assertEquals("val s = \"‸\"", s.withCaret())
+    }
+
+    @Test
+    fun enterInAnEmptyKotlinRawStringAddsTrimIndent() {
+        assertEquals(
+            "    val s = \"\"\"\n        ‸\n    \"\"\".trimIndent()",
+            enter("    val s = \"\"\"‸\"\"\"", CodeLanguage.Kotlin).withCaret(),
+        )
+        assertEquals(
+            "@Language(\"json\") val s = \"\"\"\n    ‸\n\"\"\".trimIndent()",
+            enter("@Language(\"json\") val s = \"\"\"‸\"\"\"", CodeLanguage.Kotlin).withCaret(),
+            "an annotation on the declaration is not an annotation argument",
+        )
+    }
+
+    @Test
+    fun enterInAnEmptyKotlinRawStringAddsNoCallWhereOneCannotGo() {
+        assertEquals(
+            "val s = \"\"\"\n    ‸\n\"\"\".trimMargin()",
+            enter("val s = \"\"\"‸\"\"\".trimMargin()", CodeLanguage.Kotlin).withCaret(),
+            "a call already follows the string",
+        )
+        assertEquals(
+            "const val S = \"\"\"\n    ‸\n\"\"\"",
+            enter("const val S = \"\"\"‸\"\"\"", CodeLanguage.Kotlin).withCaret(),
+            "a const val takes only a constant",
+        )
+        assertEquals(
+            "@Sql(\"\"\"\n    ‸\n\"\"\")",
+            enter("@Sql(\"\"\"‸\"\"\")", CodeLanguage.Kotlin).withCaret(),
+            "an annotation argument takes only a constant",
+        )
+    }
+
+    @Test
+    fun enterInAnEmptyJavaTextBlockAlignsTheClosingQuotesWithTheContent() {
+        assertEquals(
+            "    String s = \"\"\"\n        ‸\n        \"\"\";",
+            enter("    String s = \"\"\"‸\"\"\";", CodeLanguage.Java).withCaret(),
+        )
+    }
+
+    @Test
+    fun enterInATrimMarginStringContinuesTheMargin() {
+        assertEquals(
+            "val s = \"\"\"\n    |a\n    |‸\n\"\"\".trimMargin()",
+            enter("val s = \"\"\"\n    |a‸\n\"\"\".trimMargin()", CodeLanguage.Kotlin).withCaret(),
+        )
+        assertEquals(
+            "val s = \"\"\"\n    a\n    ‸\n\"\"\".trimIndent()",
+            enter("val s = \"\"\"\n    a‸\n\"\"\".trimIndent()", CodeLanguage.Kotlin).withCaret(),
+            "other raw strings keep the line's indent, as before",
+        )
+    }
+
     /** The smart heuristic: typing `{` before an already-unmatched `}` inserts a lone `{`, not a pair. */
     @Test
     fun typingBraceBeforeUnmatchedCloserDoesNotAutoClose() {
@@ -1373,7 +1468,7 @@ class EditorSessionTest {
     fun enterContinuationIndentsAfterOperator() {
         val s = session("    int x = a +", 15, CodeLanguage.Java)
         val (text, _) = enter(s)
-        assertEquals("    int x = a +\n        ", text) // one level deeper
+        assertEquals("    int x = a +\n            ", text) // Java's continuation indent: two levels (Android Studio's 8)
     }
 
     @Test
@@ -1751,7 +1846,8 @@ class EditorSessionTest {
         val caret = src.indexOf(";")
         val s = session(src, caret, CodeLanguage.Java)
         val (text, _) = enter(s)
-        assertEquals("    String s = \"x\";".substring(0, caret) + "\n    " + ";", text)
+        // No string split; the `;` still belongs to the statement, so it lands at the continuation indent.
+        assertEquals("    String s = \"x\";".substring(0, caret) + "\n            " + ";", text)
     }
 
     @Test

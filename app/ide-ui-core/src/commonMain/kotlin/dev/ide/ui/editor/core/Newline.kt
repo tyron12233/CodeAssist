@@ -121,18 +121,31 @@ private open class BraceNewlineHandler(
     private val caseIndents: Boolean,
     private val stringSplits: Boolean,
     private val rawStrings: Boolean,
+    /** Kotlin: a raw string laid out by Enter gets `.trimIndent()`, and a `.trimMargin()` one keeps its `|`. */
+    private val kotlinRawStrings: Boolean = false,
+    /**
+     * Java: a statement runs until its `;`, so a line without one continues onto the next, and a wrapped line
+     * takes the continuation indent, which is two indent units (Android Studio's 8 for a 4-space file, Google
+     * style's 4 for a 2-space one). Kotlin has no terminator to go by, and its style continues by one unit.
+     */
+    private val javaStatements: Boolean = false,
 ) : NewlineHandler {
 
     override fun onEnter(text: CharSequence, pos: Int): RangeEdit {
         val lineStart = lineStartOf(text, pos)
         val indent = leadingIndent(text, lineStart, pos)
         val unit = detectIndentUnit(text) // respect the document's own indent style (tabs / 2-space / 4-space)
+        val cont = if (javaStatements) unit + unit else unit
 
         if (insideBlockComment(text, pos)) return continueBlockComment(text, pos, lineStart, indent)
 
         // Inside a raw string (Kotlin `"""…"""`, Java text block) the content is literal — keep the current
         // line's indent so `.trimIndent()` margins line up, and apply none of the code rules below.
         if (rawStrings && insideRawString(text, pos)) {
+            if (isEmptyRawString(text, pos)) return layOutEmptyRawString(text, pos, lineStart, indent, unit)
+            if (kotlinRawStrings && marginContinues(text, lineStart, pos)) {
+                return RangeEdit(pos, pos, "\n$indent|", pos + 2 + indent.length)
+            }
             return RangeEdit(pos, pos, "\n" + indent, pos + 1 + indent.length)
         }
 
@@ -225,8 +238,17 @@ private open class BraceNewlineHandler(
         if (!deeper && startsWithLeadingOp(text, pos) && !startsWithLeadingOp(text, lineStart)) {
             var start = pos
             while (start > lineStart && (text[start - 1] == ' ' || text[start - 1] == '\t')) start--
-            val nl = "\n" + indent + unit
+            val nl = "\n" + indent + cont
             return RangeEdit(start, pos, nl, start + nl.length)
+        }
+
+        // The line finishes a statement that started further up: a wrapped Java statement reaching its `;`, or the
+        // one-statement body of a brace-less `if`/`for`/`while`/`else`. The next line goes back to where that
+        // statement started (`if (x)` / `    a()` → Enter → under the `if`).
+        if (!deeper) {
+            statementStartIndent(text, lineStart, pos, code, javaStatements)?.let {
+                return RangeEdit(pos, pos, "\n" + it, pos + 1 + it.length)
+            }
         }
 
         // A completed continuation tail returns to the statement's OWN indent, not the deeper continuation
@@ -246,12 +268,38 @@ private open class BraceNewlineHandler(
         // opener unclosed — `listOf(1, 2,` → next line deeper, but `modifier = foo(),` (balanced) inside an
         // earlier `Column(` → next line stays aligned with it.
         val extra = when {
-            deeper -> unit
-            code.endsWith(",") -> if (openBracketBalance(text, lineStart, pos) > 0) unit else ""
-            isContinuation(text, lineStart, pos) -> unit
+            // A Java call's or array's arguments wrap at the continuation indent; a block's body one level in.
+            deeper -> if (javaStatements && code.lastOrNull().let { it == '(' || it == '[' }) cont else unit
+            code.endsWith(",") -> if (openBracketBalance(text, lineStart, pos) > 0) cont else ""
+            isContinuation(text, lineStart, pos) -> cont
+            javaStatements && javaStatementWraps(text, lineStart, code) -> cont
             else -> ""
         }
         return RangeEdit(pos, pos, "\n" + indent + extra, pos + 1 + indent.length + extra.length)
+    }
+
+    /**
+     * Enter in a just-opened `"""|"""`, laid out the way Android Studio does. Kotlin puts the caret one level in
+     * and the closing quotes back at the line's indent, adding `.trimIndent()` so that indent isn't part of the
+     * value:
+     * ```
+     * val s = """
+     *     |
+     * """.trimIndent()
+     * ```
+     * A Java text block has no trimIndent: its incidental indent is measured against every line, the closing
+     * delimiter's included. So the closing quotes line up with the content, which keeps the content's indent
+     * out of the value.
+     */
+    private fun layOutEmptyRawString(text: CharSequence, pos: Int, lineStart: Int, indent: String, unit: String): RangeEdit {
+        val body = indent + unit
+        val insert = if (kotlinRawStrings) {
+            val trim = if (wantsTrimIndent(text, lineStart, pos)) ".trimIndent()" else ""
+            "\n$body\n$indent\"\"\"$trim"
+        } else {
+            "\n$body\n$body\"\"\""
+        }
+        return RangeEdit(pos, pos + 3, insert, pos + 1 + body.length)
     }
 
     /** One level deeper when the line's code ends with an opener, a Kotlin `->`, or a brace-less header. */
@@ -266,8 +314,8 @@ private open class BraceNewlineHandler(
     }
 }
 
-private val JavaNewlineHandler = BraceNewlineHandler(arrowIndents = false, caseIndents = true, stringSplits = true, rawStrings = true)
-private val KotlinNewlineHandler = BraceNewlineHandler(arrowIndents = true, caseIndents = false, stringSplits = false, rawStrings = true)
+private val JavaNewlineHandler = BraceNewlineHandler(arrowIndents = false, caseIndents = true, stringSplits = true, rawStrings = true, javaStatements = true)
+private val KotlinNewlineHandler = BraceNewlineHandler(arrowIndents = true, caseIndents = false, stringSplits = false, rawStrings = true, kotlinRawStrings = true)
 
 /**
  * The fallback for plain/markup files: continue the current indent, step one deeper after an opening
@@ -467,11 +515,163 @@ private fun continuationTailAnchor(text: CharSequence, lineStart: Int, pos: Int)
 /** High-signal "this statement continues on the next line" operators (excludes `++`/`->`, handled elsewhere). */
 private fun endsWithContinuationOp(code: String): Boolean {
     if (code.isEmpty()) return false
-    if (code.endsWith("++") || code.endsWith("->")) return false
+    if (code.endsWith("++") || code.endsWith("->") || isCaseLabel(code)) return false
     return when (code.last()) {
-        '+', '=', '.', ',', '?' -> true
+        '+', '=', '.', ',', '?', ':' -> true
         else -> code.endsWith("&&") || code.endsWith("||")
     }
+}
+
+/**
+ * Where the next line goes when the line being broken ([code]) FINISHES a statement that started on an earlier
+ * line: the indent of that first line, or null when the statement started on this line (or this line doesn't
+ * finish it). In Java the statement ends at its `;` and started after the last line that was itself complete,
+ * so the walk climbs over unterminated lines (`String s = list` / `.stream()` / `.collect(c);`). Kotlin has no
+ * terminator, so only the brace-less header case applies: a complete line under `if (x)` / `else` / … is that
+ * header's whole body.
+ */
+private fun statementStartIndent(text: CharSequence, lineStart: Int, pos: Int, code: String, java: Boolean): String? {
+    if (code.isEmpty() || openBracketBalance(text, lineStart, pos) != 0) return null
+    if (if (java) !code.endsWith(";") else endsWithContinuationOp(code)) return null
+    val indent = leadingIndent(text, lineStart, pos)
+    var anchor: String? = null
+    var cur = lineStart
+    while (cur > 0) {
+        val prevEnd = cur - 1
+        val prevStart = lineStartOf(text, prevEnd)
+        val prev = text.subSequence(prevStart, codeEnd(text, prevStart, prevEnd)).toString().trim()
+        val header = bracelessControlFlow(prev)
+        if (!header && !(java && javaUnterminated(prev))) break
+        anchor = leadingIndent(text, prevStart, prevEnd)
+        cur = prevStart
+        if (!java) break // Kotlin: the header right above is the whole story
+    }
+    return anchor?.takeIf { it.length < indent.length }
+}
+
+/** A Java code line that doesn't end its statement: no `;`, no block brace, not a case label, not a comment or
+ *  an annotation (which precede a declaration rather than wrap into it). */
+private fun javaUnterminated(code: String): Boolean {
+    if (code.isEmpty() || isCaseLabel(code)) return false
+    if (code.startsWith("@") || code.startsWith("//") || code.startsWith("/*") || code.startsWith("*") || code.endsWith("*/")) return false
+    return code.last() !in ";{}"
+}
+
+/**
+ * Whether Enter after the Java line [code] lands at the continuation indent because the statement goes on: the
+ * line has no `;` yet (`String s = list`, `foo(a)`, `return`), and it's the statement's FIRST line (a statement
+ * already wrapped keeps the indent it has). Only where statements live: in a class body only a field
+ * initializer wraps (`int x = 1`; a method header waits for its `{`), and an array initializer's items don't.
+ */
+private fun javaStatementWraps(text: CharSequence, lineStart: Int, code: String): Boolean {
+    if (!javaUnterminated(code) || code in JAVA_OPEN_HEADERS) return false
+    val head = code.substringBefore('(').trim()
+    if (head in JAVA_PAREN_HEADERS) return false
+    if (lineStart > 0) {
+        val prevStart = lineStartOf(text, lineStart - 1)
+        val prev = text.subSequence(prevStart, codeEnd(text, prevStart, lineStart - 1)).toString().trim()
+        if (javaUnterminated(prev) && !bracelessControlFlow(prev) && prev !in JAVA_OPEN_HEADERS) return false
+    }
+    return when (enclosingJavaBlock(text, lineStart)) {
+        JavaBlock.CODE -> true
+        JavaBlock.CLASS -> hasAssignment(code)
+        JavaBlock.INITIALIZER -> false
+    }
+}
+
+/** Java lines that open a construct whose body follows on the next line, rather than wrapping an expression. */
+private val JAVA_OPEN_HEADERS = setOf("else", "do", "try", "finally")
+private val JAVA_PAREN_HEADERS = setOf("try", "catch", "switch", "synchronized")
+
+private enum class JavaBlock { CODE, CLASS, INITIALIZER }
+
+/**
+ * What the innermost unclosed `{` before [lineStart] opens: a class body (declarations; also the top level), an
+ * array initializer (`= {`), or code (a method, lambda or initializer block). A bounded naive scan, like
+ * [matchingOpenerIndent].
+ */
+private fun enclosingJavaBlock(text: CharSequence, lineStart: Int): JavaBlock {
+    var depth = 0
+    val open = text.scanBackward(lineStart - 1, maxOf(0, lineStart - COMMENT_SCAN_LIMIT)) { _, c ->
+        when (c) {
+            '}' -> { depth++; false }
+            '{' -> if (depth == 0) true else { depth--; false }
+            else -> false
+        }
+    }
+    if (open < 0) return JavaBlock.CLASS
+    val head = text.subSequence(lineStartOf(text, open), open).toString().trim()
+    val before = head.lastOrNull()
+    if (before == '=' || before == ']' || before == ',' || before == '{' || before == '(') return JavaBlock.INITIALIZER
+    val words = head.split(' ', '\t', '<', '(')
+    if (words.any { it in JAVA_TYPE_KEYWORDS } || (head.startsWith("new ") || head.contains(" new ")) && before == ')') {
+        return JavaBlock.CLASS
+    }
+    return JavaBlock.CODE
+}
+
+private val JAVA_TYPE_KEYWORDS = setOf("class", "interface", "enum", "record", "@interface", "extends", "implements")
+
+/** Whether [code] assigns (`=`, `+=`, …), as opposed to only comparing (`==`, `!=`, `<=`, `>=`). */
+private fun hasAssignment(code: String): Boolean {
+    for (i in code.indices) {
+        if (code[i] != '=') continue
+        val prev = code.getOrNull(i - 1)
+        val next = code.getOrNull(i + 1)
+        if (next == '=' || prev == '=' || prev == '!' || prev == '<' || prev == '>') continue
+        return true
+    }
+    return false
+}
+
+/**
+ * The edit for a `.` typed to start a line (or after a lone `?`, for Kotlin's `?.`): it continues a call chain,
+ * so the line moves to the chain's indent as Android Studio does, rather than staying at the statement's. When
+ * the line above is itself a chain link (`.filter { … }`, or the `}` closing one), the new link lines up with
+ * it; otherwise it's the chain's first wrap and goes one continuation indent in. Null when the line above
+ * can't be continued by a `.` (it opens a block or list, ends a statement, or is blank), or the indent is
+ * already right.
+ */
+internal fun chainDotIndent(text: CharSequence, pos: Int, language: CodeLanguage): RangeEdit? {
+    val lineStart = lineStartOf(text, pos)
+    if (lineStart == 0) return null
+    val first = firstNonWsIndex(text, lineStart, pos)
+    val prefix = text.subSequence(first, pos).toString()
+    if (prefix != "" && !(prefix == "?" && language == CodeLanguage.Kotlin)) return null
+    val prevEnd = lineStart - 1
+    val prevStart = lineStartOf(text, prevEnd)
+    val prev = text.subSequence(prevStart, codeEnd(text, prevStart, prevEnd)).toString().trim()
+    if (prev.isEmpty() || prev.startsWith("@") || prev.startsWith("*") || prev.startsWith("/*")) return null
+    if (prev.last() in "{([,;" || prev.endsWith("->") || endsWithContinuationOp(prev)) return null
+    // A line that starts by closing a block (`}` / `})`) belongs to the line that opened it.
+    val closer = firstNonWsIndex(text, prevStart, prevEnd)
+    val anchorStart = if (text[closer] in CLOSE_TO_OPEN) matchingOpenerLineStart(text, closer) ?: prevStart else prevStart
+    val anchorIndent = leadingIndent(text, anchorStart, lineEndFrom(text, anchorStart))
+    val unit = detectIndentUnit(text)
+    val target = if (startsWithChainLink(text, anchorStart)) anchorIndent
+    else anchorIndent + if (language == CodeLanguage.Java) unit + unit else unit
+    if (target == text.subSequence(lineStart, first).toString()) return null
+    val insert = "$target$prefix."
+    return RangeEdit(lineStart, pos, insert, lineStart + insert.length)
+}
+
+/** Whether the line at [lineStart] starts with `.` or `?.` — a link of a wrapped call chain. */
+private fun startsWithChainLink(text: CharSequence, lineStart: Int): Boolean {
+    val i = firstNonWsIndex(text, lineStart, lineEndFrom(text, lineStart))
+    val c = text.charOrNull(i)
+    return c == '.' || (c == '?' && text.charOrNull(i + 1) == '.')
+}
+
+/** The start of the line holding the opener matched by the closer at [closerPos], or null if not found. */
+private fun matchingOpenerLineStart(text: CharSequence, closerPos: Int): Int? {
+    val closer = text[closerPos]
+    val opener = CLOSE_TO_OPEN[closer] ?: return null
+    var depth = 0
+    val found = text.scanBackward(closerPos, maxOf(0, closerPos - COMMENT_SCAN_LIMIT)) { _, c ->
+        if (c == closer) depth++ else if (c == opener) depth--
+        c == opener && depth == 0
+    }
+    return if (found < 0) null else lineStartOf(text, found)
 }
 
 /** Index of the `<` of a start tag the caret is inside (no `>` between it and [pos]), or -1. */
@@ -792,7 +992,7 @@ private fun dropIndentLevel(indent: String, unit: String): String = when {
  * (odd ⇒ inside). Bounded from the start of the buffer; gives up (returns false) past the scan limit so a
  * huge file stays cheap — raw strings far down a long file are rare.
  */
-private fun insideRawString(text: CharSequence, pos: Int): Boolean {
+internal fun insideRawString(text: CharSequence, pos: Int): Boolean {
     if (pos > COMMENT_SCAN_LIMIT) return false
     var i = 0
     var count = 0
@@ -800,6 +1000,59 @@ private fun insideRawString(text: CharSequence, pos: Int): Boolean {
         if (text[i] == '"' && text[i + 1] == '"' && text[i + 2] == '"') { count++; i += 3 } else i++
     }
     return count % 2 == 1
+}
+
+/** The caret sits between the quotes of an empty raw string, `"""|"""`. */
+private fun isEmptyRawString(text: CharSequence, pos: Int): Boolean {
+    for (k in 1..3) if (text.charOrNull(pos - k) != '"' || text.charOrNull(pos + k - 1) != '"') return false
+    return text.charOrNull(pos - 4) != '"' && text.charOrNull(pos + 3) != '"'
+}
+
+/**
+ * Whether a Kotlin raw string laid out on Enter should get `.trimIndent()`: not when a call already follows
+ * its closing quotes (`.trimMargin()`, the user's own `.trimIndent()`), and not where only a constant fits (a
+ * `const val`, an annotation argument), since a call there won't compile.
+ */
+private fun wantsTrimIndent(text: CharSequence, lineStart: Int, pos: Int): Boolean {
+    if (text.charOrNull(pos + 3) == '.') return false
+    val code = text.subSequence(lineStart, pos).toString()
+    if (declaresConstVal(code)) return false
+    // Inside an annotation's arguments: an `@Name(` whose parenthesis is still open at the caret.
+    val at = code.lastIndexOf('@')
+    if (at < 0) return true
+    val args = code.substring(at)
+    return args.indexOf('(') < 0 || args.count { it == '(' } <= args.count { it == ')' }
+}
+
+/** Whether [code] holds the words `const val` (any whitespace between). A plain token walk, not a regex: the
+ *  Enter path runs on every host, and Android's ICU regex engine doesn't match the JDK's in every corner. */
+private fun declaresConstVal(code: String): Boolean {
+    var prev = ""
+    var i = 0
+    while (i < code.length) {
+        if (!isIdentifierPart(code[i])) { i++; continue }
+        val start = i
+        while (i < code.length && isIdentifierPart(code[i])) i++
+        val word = code.substring(start, i)
+        if (prev == "const" && word == "val") return true
+        prev = word
+    }
+    return false
+}
+
+private fun isIdentifierPart(c: Char) = c.isLetterOrDigit() || c == '_'
+
+/**
+ * Whether Enter should carry a `.trimMargin()` raw string's `|` margin onto the new line: the caret's line
+ * starts with `|` and the string's closing quotes are followed by `.trimMargin(`.
+ */
+private fun marginContinues(text: CharSequence, lineStart: Int, pos: Int): Boolean {
+    val first = firstNonWsIndex(text, lineStart, pos)
+    if (first >= pos || text[first] != '|') return false
+    val close = indexBounded(text, "\"\"\"", pos)
+    if (close < 0) return false
+    val after = close + 3
+    return text.subSequence(after, minOf(text.length, after + 12)).toString() == ".trimMargin("
 }
 
 private val MODIFIER_KEYWORDS = setOf(

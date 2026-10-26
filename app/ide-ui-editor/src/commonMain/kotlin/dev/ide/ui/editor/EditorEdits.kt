@@ -95,6 +95,9 @@ fun applySmartEdit(old: TextFieldValue, new: TextFieldValue, language: CodeLangu
         return TextFieldValue(merged, TextRange(pos + 1))
     }
 
+    // 3a. The third quote in a row opens or closes a triple-quoted string, so it goes in alone (no pair).
+    if (ch in QUOTES && text.getOrNull(pos - 1) == ch && text.getOrNull(pos - 2) == ch) return new
+
     // 3. Auto-close quotes (not when finishing an identifier like an apostrophe, not in plain text files).
     if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(text.getOrNull(pos - 1))) {
         val merged = text.substring(0, pos) + ch + ch + text.substring(pos)
