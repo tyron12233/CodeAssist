@@ -195,6 +195,38 @@ class EditorSessionTest {
         assertTrue(!s.tabOut())
     }
 
+    // ---- `;` at the end of a Java call (IntelliJ's semicolon handling) ----
+
+    private fun semicolon(before: String, language: CodeLanguage = CodeLanguage.Java): String {
+        val caret = before.indexOf('‸')
+        val s = session(before.removeRange(caret, caret + 1), caret, language)
+        s.commitText(";")
+        return s.withCaret()
+    }
+
+    @Test
+    fun aSemicolonEndsTheStatementInsteadOfLandingInTheParentheses() {
+        val cases = listOf(
+            "foo(x‸)" to "foo(x);‸",                                  // after the last paren
+            "foo(bar(x‸))" to "foo(bar(x));‸",
+            "foo(x‸);" to "foo(x);‸",                                 // the statement's `;` is already there
+            "foo(x)‸;" to "foo(x);‸",                                 // move over the existing `;`
+            "foo(x‸);  // done" to "foo(x;‸);  // done",              // something after the `;`: as typed
+            "foo(x‸, y)" to "foo(x;‸, y)",                            // more arguments follow: as typed
+            "for (int i = 0‸)" to "for (int i = 0;‸)",                // a for header keeps its own `;`
+            "if (x‸)" to "if (x;‸)",                                  // never `if (x);`
+            "} else if (x‸)" to "} else if (x;‸)",
+            "s = \"a‸\")" to "s = \"a;‸\")",                          // inside a string
+            "// call(‸)" to "// call(;‸)",                            // inside a comment
+        )
+        val wrong = cases.mapNotNull { (before, want) ->
+            val got = semicolon(before)
+            if (got == want) null else "$before → $got (want $want)"
+        }
+        assertTrue(wrong.isEmpty(), wrong.joinToString("\n"))
+        assertEquals("foo(x;‸)", semicolon("foo(x‸)", CodeLanguage.Kotlin), "Kotlin ends statements without `;`")
+    }
+
     /** The smart heuristic: typing `{` before an already-unmatched `}` inserts a lone `{`, not a pair. */
     @Test
     fun typingBraceBeforeUnmatchedCloserDoesNotAutoClose() {
