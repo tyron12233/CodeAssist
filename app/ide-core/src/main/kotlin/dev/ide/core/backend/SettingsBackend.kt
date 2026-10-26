@@ -216,7 +216,8 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     override suspend fun formatStylePreview(languageId: String, style: UiCodeStyle): String =
         withContext(Dispatchers.Default) {
-            ctx.servicesOrNull?.formatStylePreview(languageId, style.toSettings().toFormatStyle()) ?: ""
+            val profile = style.toSettings()
+            ctx.servicesOrNull?.formatStylePreview(languageId, profile.toFormatStyle(), profile.toXmlFormatOptions()) ?: ""
         }
 
     private fun CodeStyleSettings.toUi() = UiCodeStyle(
@@ -232,6 +233,8 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         blankLinesBetweenTypes = blankLinesBetweenTypes, spaceBeforeSemicolon = spaceBeforeSemicolon,
         spaceAroundLambdaArrow = spaceAroundLambdaArrow, spaceAroundTernary = spaceAroundTernary,
         spaceAfterTypeCast = spaceAfterTypeCast, formatComments = formatComments, wrapComments = wrapComments,
+        xmlAndroidConventions = xmlAndroidConventions, xmlWrapAttributes = xmlWrapAttributes,
+        xmlSpaceInEmptyTag = xmlSpaceInEmptyTag, xmlRearrangeAttributes = xmlRearrangeAttributes,
     )
 
     private fun UiCodeStyle.toSettings() = CodeStyleSettings(
@@ -247,6 +250,8 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         blankLinesBetweenTypes = blankLinesBetweenTypes, spaceBeforeSemicolon = spaceBeforeSemicolon,
         spaceAroundLambdaArrow = spaceAroundLambdaArrow, spaceAroundTernary = spaceAroundTernary,
         spaceAfterTypeCast = spaceAfterTypeCast, formatComments = formatComments, wrapComments = wrapComments,
+        xmlAndroidConventions = xmlAndroidConventions, xmlWrapAttributes = xmlWrapAttributes,
+        xmlSpaceInEmptyTag = xmlSpaceInEmptyTag, xmlRearrangeAttributes = xmlRearrangeAttributes,
     )
 
     override fun inspections(): List<UiInspection> {

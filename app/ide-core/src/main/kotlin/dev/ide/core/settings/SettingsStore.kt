@@ -63,7 +63,7 @@ class SettingsStore(
         val d = CodeStyleSettings.default(languageId)
         fun k(name: String) = "codeStyle.$languageId.$name"
         return CodeStyleSettings(
-            preset = oneOf(k("preset"), d.preset, CodeStyleSettings.PRESET_GOOGLE, CodeStyleSettings.PRESET_ANDROID, CodeStyleSettings.PRESET_KOTLIN_OFFICIAL, CodeStyleSettings.PRESET_CUSTOM),
+            preset = oneOf(k("preset"), d.preset, CodeStyleSettings.PRESET_GOOGLE, CodeStyleSettings.PRESET_ANDROID, CodeStyleSettings.PRESET_KOTLIN_OFFICIAL, CodeStyleSettings.PRESET_ANDROID_STUDIO, CodeStyleSettings.PRESET_CUSTOM),
             indentSize = int(k("indentSize"), d.indentSize).coerceIn(CodeStyleSettings.MIN_INDENT, CodeStyleSettings.MAX_INDENT),
             continuationIndent = int(k("continuationIndent"), d.continuationIndent).coerceIn(CodeStyleSettings.MIN_CONTINUATION, CodeStyleSettings.MAX_CONTINUATION),
             maxLineLength = int(k("maxLineLength"), d.maxLineLength).coerceIn(CodeStyleSettings.MIN_LINE_LENGTH, CodeStyleSettings.MAX_LINE_LENGTH),
@@ -90,6 +90,10 @@ class SettingsStore(
             spaceAfterTypeCast = bool(k("spaceAfterTypeCast"), d.spaceAfterTypeCast),
             formatComments = bool(k("formatComments"), d.formatComments),
             wrapComments = bool(k("wrapComments"), d.wrapComments),
+            xmlAndroidConventions = bool(k("xmlAndroidConventions"), d.xmlAndroidConventions),
+            xmlWrapAttributes = wrapOf(k("xmlWrapAttributes"), d.xmlWrapAttributes),
+            xmlSpaceInEmptyTag = bool(k("xmlSpaceInEmptyTag"), d.xmlSpaceInEmptyTag),
+            xmlRearrangeAttributes = bool(k("xmlRearrangeAttributes"), d.xmlRearrangeAttributes),
         )
     }
 
@@ -124,6 +128,10 @@ class SettingsStore(
         p("spaceAfterTypeCast", s.spaceAfterTypeCast.toString())
         p("formatComments", s.formatComments.toString())
         p("wrapComments", s.wrapComments.toString())
+        p("xmlAndroidConventions", s.xmlAndroidConventions.toString())
+        p("xmlWrapAttributes", s.xmlWrapAttributes)
+        p("xmlSpaceInEmptyTag", s.xmlSpaceInEmptyTag.toString())
+        p("xmlRearrangeAttributes", s.xmlRearrangeAttributes.toString())
         setAll(batch)
     }
 

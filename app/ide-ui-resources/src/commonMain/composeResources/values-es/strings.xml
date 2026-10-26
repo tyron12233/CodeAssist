@@ -1078,6 +1078,18 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="codestyle_wrap_never">Nunca</string>
     <string name="codestyle_wrap_if_long">Si es larga</string>
     <string name="codestyle_wrap_one_per_line">Uno por línea</string>
+    <string name="codestyle_lang_xml">XML</string>
+    <string name="codestyle_preset_android_studio">Android Studio</string>
+    <string name="codestyle_xml_note">El formato de XML vuelve a sangrar las etiquetas, ajusta los atributos y ordena el espaciado dentro de las etiquetas. El texto, los valores de atributo y los comentarios se mantienen tal como están escritos.</string>
+    <string name="codestyle_markup">Marcado</string>
+    <string name="codestyle_xml_android_conventions">Reglas de Android por tipo de archivo</string>
+    <string name="codestyle_xml_android_conventions_desc">Los diseños, el manifiesto, los valores y los demás recursos se organizan como en Android Studio</string>
+    <string name="codestyle_xml_wrap_attributes">Ajustar atributos</string>
+    <string name="codestyle_xml_wrap_attributes_desc">Para el XML que las reglas de Android no cubren</string>
+    <string name="codestyle_xml_space_in_empty_tag">Espacio en etiqueta vacía</string>
+    <string name="codestyle_xml_space_in_empty_tag_desc">`&lt;View /&gt;` en lugar de `&lt;View/&gt;`</string>
+    <string name="codestyle_xml_rearrange">Reordenar atributos</string>
+    <string name="codestyle_xml_rearrange_desc">Ordena los atributos como Android Studio al reformatear un archivo completo</string>
 
     <!-- Common verbs / actions -->
     <string name="save">Guardar</string>

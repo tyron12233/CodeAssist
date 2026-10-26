@@ -84,6 +84,12 @@ internal object PsiXmlProjection {
         return root to collectDiagnostics(file)
     }
 
+    /** The raw XML PSI for [text], for passes that need tokens the neutral DOM drops (the formatter). */
+    fun parsePsi(path: String, text: CharSequence): XmlFile {
+        ensureRegistered()
+        return IntellijPsiHost.parse(fileNameFor(path), XMLLanguage.INSTANCE, text) as XmlFile
+    }
+
     /** Append the mapped children of [psi] to [parent], recursing through transparent containers. */
     private fun addChildren(psi: PsiElement, parent: XmlNode, source: CharSequence) {
         var child = psi.firstChild

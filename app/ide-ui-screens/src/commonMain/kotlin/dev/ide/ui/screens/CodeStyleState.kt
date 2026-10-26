@@ -40,6 +40,7 @@ internal class CodeStyleScreenState(
     /** The profile as the controls show it (a preset resolves to its concrete values). */
     val display: UiCodeStyle get() = displayStyle(style)
     val javaOnly: Boolean get() = language == LANG_JAVA
+    val xml: Boolean get() = language == LANG_XML
     val custom: Boolean get() = style.preset == PRESET_CUSTOM
 
     init {

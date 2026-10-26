@@ -1693,6 +1693,18 @@
     <string name="codestyle_wrap_never">أبدًا</string>
     <string name="codestyle_wrap_if_long">إذا كان طويلاً</string>
     <string name="codestyle_wrap_one_per_line">واحد لكل سطر</string>
+    <string name="codestyle_lang_xml">XML</string>
+    <string name="codestyle_preset_android_studio">Android Studio</string>
+    <string name="codestyle_xml_note">يعيد تنسيق XML ضبط المسافات البادئة للوسوم ويلفّ السمات ويرتّب التباعد داخل الوسوم. يبقى النص وقيم السمات والتعليقات كما كُتبت.</string>
+    <string name="codestyle_markup">الترميز</string>
+    <string name="codestyle_xml_android_conventions">قواعد Android حسب نوع الملف</string>
+    <string name="codestyle_xml_android_conventions_desc">تُنسَّق التخطيطات والبيان والقيم والموارد الأخرى بالطريقة التي يتبعها Android Studio</string>
+    <string name="codestyle_xml_wrap_attributes">لف السمات</string>
+    <string name="codestyle_xml_wrap_attributes_desc">لملفات XML التي لا تشملها قواعد Android</string>
+    <string name="codestyle_xml_space_in_empty_tag">مسافة في الوسم الفارغ</string>
+    <string name="codestyle_xml_space_in_empty_tag_desc">`&lt;View /&gt;` بدلاً من `&lt;View/&gt;`</string>
+    <string name="codestyle_xml_rearrange">إعادة ترتيب السمات</string>
+    <string name="codestyle_xml_rearrange_desc">رتّب السمات وفق ترتيب Android Studio عند إعادة تنسيق ملف كامل</string>
 
     <!-- shared common labels (reused across screens) -->
     <string name="save">حفظ</string>

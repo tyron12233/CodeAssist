@@ -14,6 +14,9 @@ import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.jdt.formatting.JdtFormattingService
 import dev.ide.lang.kotlin.KotlinFormatter
+import dev.ide.lang.xml.formatting.XmlFormatOptions
+import dev.ide.lang.xml.formatting.XmlFormatter
+import dev.ide.lang.xml.formatting.XmlFormattingService
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.resolve.StructureItem
 import dev.ide.vfs.local.fileFor
@@ -50,19 +53,42 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
     }
 
     /** Reformat the whole live buffer of [file] to [style]; minimal edits, or empty if the language has no
-     *  formatter / the buffer is already formatted / can't be safely formatted. */
-    fun formatDocument(file: Path, text: String, style: FormatStyle): List<DocumentEdit> {
+     *  formatter / the buffer is already formatted / can't be safely formatted. [xmlOptions] carries the
+     *  XML profile's markup-only settings to the XML formatter. */
+    fun formatDocument(
+        file: Path,
+        text: String,
+        style: FormatStyle,
+        xmlOptions: XmlFormatOptions = XmlFormatOptions(),
+    ): List<DocumentEdit> {
         val service = formattingServiceFor(file) ?: return emptyList()
         val vf = ctx.store.vfs.fileFor(file)
-        return runCatching { runSync { service.format(vf, text, style) } }.getOrDefault(emptyList())
+        return runCatching {
+            runSync {
+                if (service is XmlFormattingService) service.format(vf, text, style, xmlOptions)
+                else service.format(vf, text, style)
+            }
+        }.getOrDefault(emptyList())
     }
 
     /** Reformat only the text overlapping `[start, end)` of [file]'s live buffer. */
-    fun formatRange(file: Path, text: String, start: Int, end: Int, style: FormatStyle): List<DocumentEdit> {
+    fun formatRange(
+        file: Path,
+        text: String,
+        start: Int,
+        end: Int,
+        style: FormatStyle,
+        xmlOptions: XmlFormatOptions = XmlFormatOptions(),
+    ): List<DocumentEdit> {
         val service = formattingServiceFor(file) ?: return emptyList()
         val vf = ctx.store.vfs.fileFor(file)
         val range = TextRange(start, end)
-        return runCatching { runSync { service.formatRange(vf, text, range, style) } }.getOrDefault(emptyList())
+        return runCatching {
+            runSync {
+                if (service is XmlFormattingService) service.formatRange(vf, text, range, style, xmlOptions)
+                else service.formatRange(vf, text, range, style)
+            }
+        }.getOrDefault(emptyList())
     }
 
     /** Reorder + de-duplicate + wildcard-collapse + drop-unused the imports of [file]'s live buffer; minimal
@@ -91,12 +117,19 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
     /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
      *  Style screen's live preview. Module-independent: it builds a standalone formatter, so it works with no
      *  file open. Returns the sample unchanged if formatting fails. */
-    fun formatStylePreview(languageId: String, style: FormatStyle): String {
+    fun formatStylePreview(
+        languageId: String,
+        style: FormatStyle,
+        xmlOptions: XmlFormatOptions = XmlFormatOptions(),
+    ): String {
         val sample = CodeStyleSamples.forLanguage(languageId)
         val edits = runCatching {
             when (languageId) {
                 CodeStyleSettings.LANG_KOTLIN ->
                     KotlinFormatter.reformat("Preview.kt", sample, style, 0, sample.length)
+                // A layout path, so the preview shows the Android layout rules.
+                CodeStyleSettings.LANG_XML ->
+                    XmlFormatter.reformat("res/layout/preview.xml", sample, style, xmlOptions)
                 // A high default compliance so newer Java syntax in the sample parses; not tied to any module.
                 else -> JdtFormattingService("17").formatText(sample, style)
             }

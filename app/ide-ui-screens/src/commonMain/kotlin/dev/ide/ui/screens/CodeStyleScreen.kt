@@ -77,6 +77,18 @@ import dev.ide.ui.generated.resources.codestyle_keep_at_most_desc
 import dev.ide.ui.generated.resources.codestyle_kotlin_note
 import dev.ide.ui.generated.resources.codestyle_lang_java
 import dev.ide.ui.generated.resources.codestyle_lang_kotlin
+import dev.ide.ui.generated.resources.codestyle_lang_xml
+import dev.ide.ui.generated.resources.codestyle_markup
+import dev.ide.ui.generated.resources.codestyle_preset_android_studio
+import dev.ide.ui.generated.resources.codestyle_xml_android_conventions
+import dev.ide.ui.generated.resources.codestyle_xml_android_conventions_desc
+import dev.ide.ui.generated.resources.codestyle_xml_note
+import dev.ide.ui.generated.resources.codestyle_xml_rearrange
+import dev.ide.ui.generated.resources.codestyle_xml_rearrange_desc
+import dev.ide.ui.generated.resources.codestyle_xml_space_in_empty_tag
+import dev.ide.ui.generated.resources.codestyle_xml_space_in_empty_tag_desc
+import dev.ide.ui.generated.resources.codestyle_xml_wrap_attributes
+import dev.ide.ui.generated.resources.codestyle_xml_wrap_attributes_desc
 import dev.ide.ui.generated.resources.codestyle_language
 import dev.ide.ui.generated.resources.codestyle_language_desc
 import dev.ide.ui.generated.resources.codestyle_line_width
@@ -111,14 +123,16 @@ import org.jetbrains.compose.resources.stringResource
 
 internal const val LANG_JAVA = "java"
 private const val LANG_KOTLIN = "kotlin"
+internal const val LANG_XML = "xml"
 internal const val PRESET_CUSTOM = "custom"
 internal const val FORMAT_ON_SAVE_KEY = "settings.codeStyle.formatOnSave"
 
 /**
- * The dedicated Code Style screen: a per-language formatting profile (Java / Kotlin), a preset, the detailed
- * options grouped by category, and a live preview that runs the real formatter on a fixed sample as you tune.
- * Java honors every option; the Kotlin re-indenter honors only indentation / tabs / blank-lines, so the
- * Java-only groups are hidden on the Kotlin tab.
+ * The dedicated Code Style screen: a per-language formatting profile (Java / Kotlin / XML), a preset, the
+ * detailed options grouped by category, and a live preview that runs the real formatter on a fixed sample as
+ * you tune. Java honors every option; the Kotlin re-indenter honors only indentation / tabs / blank-lines /
+ * inline spacing, so the Java-only groups are hidden on the Kotlin tab. The XML tab shows indentation, line
+ * width and blank lines plus its own markup group.
  *
  * The live preview runs the real formatter, which needs an open project's engine; with [hasProject] false
  * (the screen reached from the project picker's hub) it's disabled and the card shows a hint instead. Editing
@@ -131,6 +145,7 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
     val state = rememberCodeStyleScreenState(backend, hasProject)
     val display = state.display
     val javaOnly = state.javaOnly
+    val xml = state.xml
     val custom = state.custom
 
     ExpressiveScaffold(title = stringResource(Res.string.codestyle_title), onBack = onBack) { innerPadding ->
@@ -141,7 +156,11 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
             SettingsCard(null) {
                 SettingsChoiceRow(
                     stringResource(Res.string.codestyle_language), stringResource(Res.string.codestyle_language_desc), state.language,
-                    listOf(LANG_JAVA to stringResource(Res.string.codestyle_lang_java), LANG_KOTLIN to stringResource(Res.string.codestyle_lang_kotlin)),
+                    listOf(
+                        LANG_JAVA to stringResource(Res.string.codestyle_lang_java),
+                        LANG_KOTLIN to stringResource(Res.string.codestyle_lang_kotlin),
+                        LANG_XML to stringResource(Res.string.codestyle_lang_xml),
+                    ),
                 ) { state.selectLanguage(it) }
                 SettingsDivider()
                 SettingsChoiceRow(
@@ -158,7 +177,7 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
 
             if (!javaOnly) {
                 Text(
-                    stringResource(Res.string.codestyle_kotlin_note),
+                    stringResource(if (xml) Res.string.codestyle_xml_note else Res.string.codestyle_kotlin_note),
                     color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
@@ -170,6 +189,8 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
                     if (javaOnly) {
                         SettingsDivider()
                         SettingsSliderRow(stringResource(Res.string.codestyle_continuation_indent), stringResource(Res.string.codestyle_continuation_indent_desc), display.continuationIndent, 1, 16, 1, null) { state.edit { copy(continuationIndent = it) } }
+                    }
+                    if (javaOnly || xml) {
                         SettingsDivider()
                         SettingsSliderRow(stringResource(Res.string.codestyle_line_width), stringResource(Res.string.codestyle_line_width_desc), display.maxLineLength, 60, 200, 10, null) { state.edit { copy(maxLineLength = it) } }
                     }
@@ -191,9 +212,21 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
                     }
                 }
 
+                if (xml) {
+                    SettingsCard(stringResource(Res.string.codestyle_markup)) {
+                        SettingsToggleRow(stringResource(Res.string.codestyle_xml_android_conventions), stringResource(Res.string.codestyle_xml_android_conventions_desc), display.xmlAndroidConventions) { state.edit { copy(xmlAndroidConventions = it) } }
+                        SettingsDivider()
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_xml_wrap_attributes), stringResource(Res.string.codestyle_xml_wrap_attributes_desc), display.xmlWrapAttributes, wrapOptions()) { state.edit { copy(xmlWrapAttributes = it) } }
+                        SettingsDivider()
+                        SettingsToggleRow(stringResource(Res.string.codestyle_xml_space_in_empty_tag), stringResource(Res.string.codestyle_xml_space_in_empty_tag_desc), display.xmlSpaceInEmptyTag) { state.edit { copy(xmlSpaceInEmptyTag = it) } }
+                        SettingsDivider()
+                        SettingsToggleRow(stringResource(Res.string.codestyle_xml_rearrange), stringResource(Res.string.codestyle_xml_rearrange_desc), display.xmlRearrangeAttributes) { state.edit { copy(xmlRearrangeAttributes = it) } }
+                    }
+                }
+
                 // Inline spacing. The first five rules are honored by Kotlin too (token-level rewriting); the
-                // rest need Java's full formatter, so they are Java-only.
-                SettingsCard(stringResource(Res.string.codestyle_spaces)) {
+                // rest need Java's full formatter, so they are Java-only. XML has no expression spacing.
+                if (!xml) SettingsCard(stringResource(Res.string.codestyle_spaces)) {
                     SettingsToggleRow(stringResource(Res.string.codestyle_within_parens), stringResource(Res.string.codestyle_within_parens_desc), display.spaceWithinParens) { state.edit { copy(spaceWithinParens = it) } }
                     SettingsDivider()
                     SettingsToggleRow(stringResource(Res.string.codestyle_after_comma), stringResource(Res.string.codestyle_after_comma_desc), display.spaceAfterComma) { state.edit { copy(spaceAfterComma = it) } }
@@ -265,7 +298,11 @@ private fun PreviewCard(preview: String, language: String, hasProject: Boolean) 
                 } else if (preview.isEmpty()) {
                     Text("…", color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
                 } else {
-                    val codeLang = if (language == LANG_KOTLIN) CodeLanguage.Kotlin else CodeLanguage.Java
+                    val codeLang = when (language) {
+                        LANG_KOTLIN -> CodeLanguage.Kotlin
+                        LANG_XML -> CodeLanguage.Xml
+                        else -> CodeLanguage.Java
+                    }
                     val syntax = Ide.colors.syntax
                     val highlighted = remember(preview, codeLang, syntax) { highlight(preview, codeLang, syntax) }
                     Text(
@@ -284,6 +321,10 @@ private fun presetOptions(language: String): List<Pair<String, String>> = when (
     LANG_KOTLIN -> listOf(
         "kotlin_official" to stringResource(Res.string.codestyle_preset_kotlin_official),
         "android" to stringResource(Res.string.codestyle_preset_android),
+        PRESET_CUSTOM to stringResource(Res.string.codestyle_preset_custom),
+    )
+    LANG_XML -> listOf(
+        "android_studio" to stringResource(Res.string.codestyle_preset_android_studio),
         PRESET_CUSTOM to stringResource(Res.string.codestyle_preset_custom),
     )
     else -> listOf(
@@ -305,9 +346,11 @@ private fun wrapOptions(): List<Pair<String, String>> =
 internal fun displayStyle(style: UiCodeStyle): UiCodeStyle =
     if (style.preset == PRESET_CUSTOM) style else presetDefaults(style.preset)
 
-/** The canonical values for a named preset (presets differ only in indentation; the rest are shared). */
+/** The canonical values for a named preset (presets differ only in indentation, and the XML preset keeps two
+ *  blank lines; the rest are shared). */
 private fun presetDefaults(preset: String): UiCodeStyle = when (preset) {
     "android" -> UiCodeStyle(preset = "android", indentSize = 4, continuationIndent = 8)
     "kotlin_official" -> UiCodeStyle(preset = "kotlin_official", indentSize = 4, continuationIndent = 8)
+    "android_studio" -> UiCodeStyle(preset = "android_studio", indentSize = 4, continuationIndent = 8, blankLinesToKeep = 2)
     else -> UiCodeStyle(preset = "google", indentSize = 2, continuationIndent = 4)
 }

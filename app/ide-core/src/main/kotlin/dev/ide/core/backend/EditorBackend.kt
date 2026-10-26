@@ -8,7 +8,6 @@ import dev.ide.core.BackendContext
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.completion.CaretAction
-import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.highlight.HighlightModifier
@@ -712,18 +711,20 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         UiTextEdit(offset, offset + oldLength, newText.toString())
 
     override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> {
-        val style = currentFormatStyle(path)
+        val profile = currentCodeStyle(path)
         return userRequest("format", path) {
-            ctx.services.formatDocument(Paths.get(path), text, style)
+            ctx.services.formatDocument(Paths.get(path), text, profile.toFormatStyle(), profile.toXmlFormatOptions())
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
 
     override suspend fun formatRange(
         path: String, text: String, selStart: Int, selEnd: Int
     ): List<UiTextEdit> {
-        val style = currentFormatStyle(path)
+        val profile = currentCodeStyle(path)
         return userRequest("format", path) {
-            ctx.services.formatRange(Paths.get(path), text, selStart, selEnd, style)
+            ctx.services.formatRange(
+                Paths.get(path), text, selStart, selEnd, profile.toFormatStyle(), profile.toXmlFormatOptions(),
+            )
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
 
@@ -737,11 +738,8 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     private val settingsStore =
         SettingsStore(get = { ctx.manager?.preference(it) }, set = { _, _ -> })
 
-    private fun currentFormatStyle(path: String): FormatStyle =
-        settingsStore.loadCodeStyle(languageIdForPath(path)).toFormatStyle()
-
-    private fun languageIdForPath(path: String): String =
-        if (path.endsWith(".kt") || path.endsWith(".kts")) CodeStyleSettings.LANG_KOTLIN else CodeStyleSettings.LANG_JAVA
+    private fun currentCodeStyle(path: String): CodeStyleSettings =
+        settingsStore.loadCodeStyle(CodeStyleSettings.languageForPath(path))
 
     // ---- mappers (editor-local) ----
 

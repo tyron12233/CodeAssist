@@ -215,6 +215,7 @@ import dev.ide.lang.xml.XmlNode
 import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.lang.xml.XmlParsedFile
 import dev.ide.lang.xml.XmlSourceAnalyzer
+import dev.ide.lang.xml.formatting.XmlFormatOptions
 import dev.ide.lang.xml.completion.XmlCompletion
 import dev.ide.lang.xml.completion.XmlContextScanner
 import dev.ide.lang.xml.edit.XmlAttributeInsert
@@ -2875,8 +2876,9 @@ class IdeServices private constructor(
     fun formatDocument(
         file: Path,
         text: String,
-        style: dev.ide.lang.formatting.FormatStyle
-    ): List<DocumentEdit> = languageFeatures.formatDocument(file, text, style)
+        style: dev.ide.lang.formatting.FormatStyle,
+        xmlOptions: XmlFormatOptions = XmlFormatOptions(),
+    ): List<DocumentEdit> = languageFeatures.formatDocument(file, text, style, xmlOptions)
 
     /** Reformat only the text overlapping `[start, end)` of [file]'s live buffer. */
     fun formatRange(
@@ -2884,8 +2886,9 @@ class IdeServices private constructor(
         text: String,
         start: Int,
         end: Int,
-        style: dev.ide.lang.formatting.FormatStyle
-    ): List<DocumentEdit> = languageFeatures.formatRange(file, text, start, end, style)
+        style: dev.ide.lang.formatting.FormatStyle,
+        xmlOptions: XmlFormatOptions = XmlFormatOptions(),
+    ): List<DocumentEdit> = languageFeatures.formatRange(file, text, start, end, style, xmlOptions)
 
     /** Reorder + de-duplicate + wildcard-collapse + drop-unused the imports of [file]'s live buffer; minimal
      *  edits, or empty when the language has no organizer / the imports are already optimal. */
@@ -2895,8 +2898,11 @@ class IdeServices private constructor(
     /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
      *  Style screen's live preview. Module-independent: it builds a standalone formatter, so it works with no
      *  file open. Returns the sample unchanged if formatting fails. */
-    fun formatStylePreview(languageId: String, style: dev.ide.lang.formatting.FormatStyle): String =
-        languageFeatures.formatStylePreview(languageId, style)
+    fun formatStylePreview(
+        languageId: String,
+        style: dev.ide.lang.formatting.FormatStyle,
+        xmlOptions: XmlFormatOptions = XmlFormatOptions(),
+    ): String = languageFeatures.formatStylePreview(languageId, style, xmlOptions)
 
     /** Enclosing declarations (type/method names, outer→inner) at [offset] in [file]'s buffer — for the
      *  cursor-tracking breadcrumb. Empty if the file is outside the project or not JDT-backed. */

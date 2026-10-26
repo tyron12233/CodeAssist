@@ -1036,6 +1036,18 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="codestyle_wrap_never">Nunca</string>
     <string name="codestyle_wrap_if_long">Se longa</string>
     <string name="codestyle_wrap_one_per_line">Um por linha</string>
+    <string name="codestyle_lang_xml">XML</string>
+    <string name="codestyle_preset_android_studio">Android Studio</string>
+    <string name="codestyle_xml_note">A formatação XML reindenta as tags, quebra os atributos e organiza o espaçamento dentro das tags. Texto, valores de atributos e comentários permanecem como foram escritos.</string>
+    <string name="codestyle_markup">Marcação</string>
+    <string name="codestyle_xml_android_conventions">Regras do Android por tipo de arquivo</string>
+    <string name="codestyle_xml_android_conventions_desc">Layouts, o manifesto, valores e outros recursos são organizados como no Android Studio</string>
+    <string name="codestyle_xml_wrap_attributes">Quebrar atributos</string>
+    <string name="codestyle_xml_wrap_attributes_desc">Para XML não coberto pelas regras do Android</string>
+    <string name="codestyle_xml_space_in_empty_tag">Espaço em tag vazia</string>
+    <string name="codestyle_xml_space_in_empty_tag_desc">`&lt;View /&gt;` em vez de `&lt;View/&gt;`</string>
+    <string name="codestyle_xml_rearrange">Reorganizar atributos</string>
+    <string name="codestyle_xml_rearrange_desc">Ordena os atributos na ordem do Android Studio ao reformatar um arquivo inteiro</string>
 
     <!-- shared common labels -->
     <string name="save">Salvar</string>

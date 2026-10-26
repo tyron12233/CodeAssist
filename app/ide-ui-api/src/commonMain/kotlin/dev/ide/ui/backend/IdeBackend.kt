@@ -2099,7 +2099,8 @@ enum class UiAccent { Dynamic, Lime, Violet, Teal, Orange, Custom }
 /**
  * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,
  * brace style, and wrap modes are string ids) so the DTO stays transport-neutral; the host maps it to the
- * formatter's style. The Kotlin profile honors only indentation / tabs / blank-lines; the rest are Java-only.
+ * formatter's style. The Kotlin profile honors only indentation / tabs / blank-lines; the rest are Java-only,
+ * except the `xml*` fields, which only the XML profile reads (alongside indentation / tabs / width / blank-lines).
  */
 data class UiCodeStyle(
     val preset: String = "google",
@@ -2129,6 +2130,12 @@ data class UiCodeStyle(
     val spaceAfterTypeCast: Boolean = true,
     val formatComments: Boolean = true,
     val wrapComments: Boolean = false,
+    /** Android Studio's per-file-type layout for resource and manifest files. */
+    val xmlAndroidConventions: Boolean = true,
+    /** Attribute wrapping for XML the Android conventions don't cover: "never" / "ifLong" / "onePerLine". */
+    val xmlWrapAttributes: String = "ifLong",
+    val xmlSpaceInEmptyTag: Boolean = true,
+    val xmlRearrangeAttributes: Boolean = false,
 )
 
 /**

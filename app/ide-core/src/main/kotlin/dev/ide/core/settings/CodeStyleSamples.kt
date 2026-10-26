@@ -9,6 +9,7 @@ object CodeStyleSamples {
 
     fun forLanguage(languageId: String): String = when (languageId) {
         CodeStyleSettings.LANG_KOTLIN -> KOTLIN
+        CodeStyleSettings.LANG_XML -> XML
         else -> JAVA
     }
 
@@ -42,5 +43,20 @@ object CodeStyleSamples {
         return out
         }
         }
+    """.trimIndent()
+
+    // Formatted as a layout: nesting, attribute wrapping, empty-tag spacing, a comment, and blank lines.
+    private val XML = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <!-- Header -->
+        <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/app_name"/>
+
+
+
+        <Button android:id="@+id/go" android:text="Go"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <View android:layout_height="1dp"/>
+        </LinearLayout>
     """.trimIndent()
 }

@@ -1645,6 +1645,18 @@ We never collect your code, file or project names, which features you use, or an
     <string name="codestyle_wrap_never">Never</string>
     <string name="codestyle_wrap_if_long">If long</string>
     <string name="codestyle_wrap_one_per_line">One per line</string>
+    <string name="codestyle_lang_xml">XML</string>
+    <string name="codestyle_preset_android_studio">Android Studio</string>
+    <string name="codestyle_xml_note">XML formatting re-indents tags, wraps attributes and tidies the spacing inside tags. Text, attribute values and comments stay as written.</string>
+    <string name="codestyle_markup">Markup</string>
+    <string name="codestyle_xml_android_conventions">Android file-type rules</string>
+    <string name="codestyle_xml_android_conventions_desc">Layouts, the manifest, values and other resources are laid out the way Android Studio does</string>
+    <string name="codestyle_xml_wrap_attributes">Wrap attributes</string>
+    <string name="codestyle_xml_wrap_attributes_desc">For XML the Android rules don't cover</string>
+    <string name="codestyle_xml_space_in_empty_tag">Space in empty tag</string>
+    <string name="codestyle_xml_space_in_empty_tag_desc">`&lt;View /&gt;` instead of `&lt;View/&gt;`</string>
+    <string name="codestyle_xml_rearrange">Rearrange attributes</string>
+    <string name="codestyle_xml_rearrange_desc">Sort attributes into Android Studio's order when reformatting a whole file</string>
 
     <!-- shared common labels (reused across screens) -->
     <string name="save">Save</string>

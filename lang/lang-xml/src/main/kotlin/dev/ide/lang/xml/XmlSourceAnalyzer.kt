@@ -6,6 +6,7 @@ import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.folding.FoldingService
+import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -23,6 +24,7 @@ import dev.ide.lang.xml.completion.XmlCompletionContributor
 import dev.ide.lang.xml.completion.XmlCompletion
 import dev.ide.lang.xml.completion.XmlCompletionPosition
 import dev.ide.lang.xml.folding.XmlFoldingService
+import dev.ide.lang.xml.formatting.XmlFormattingService
 import dev.ide.lang.xml.highlight.XmlSemanticHighlighter
 import dev.ide.lang.xml.hints.XmlInlayHintService
 import dev.ide.lang.xml.hints.XmlResourceValueResolver
@@ -77,6 +79,9 @@ class XmlSourceAnalyzer : SourceAnalyzer {
 
     /** Code folding (element bodies + comments), always on — ranges come straight from the PSI. */
     override val folding: FoldingService = XmlFoldingService(::parsedFile)
+
+    /** Reformat Code: re-indents and re-wraps tags with Android Studio's per-file-type rules. */
+    override val formatting: FormattingService = XmlFormattingService()
 
     /** Parameter hints inside an attribute value — available only once the host wires the schema resolver. */
     override val signatureHelp: SignatureHelpService?

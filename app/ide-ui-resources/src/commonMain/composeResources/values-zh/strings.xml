@@ -1625,6 +1625,18 @@
     <string name="codestyle_wrap_never">从不</string>
     <string name="codestyle_wrap_if_long">过长时</string>
     <string name="codestyle_wrap_one_per_line">每行一个</string>
+    <string name="codestyle_lang_xml">XML</string>
+    <string name="codestyle_preset_android_studio">Android Studio</string>
+    <string name="codestyle_xml_note">XML 格式化会重新缩进标签、折行属性并整理标签内的空格。文本、属性值和注释保持原样。</string>
+    <string name="codestyle_markup">标记</string>
+    <string name="codestyle_xml_android_conventions">按文件类型应用 Android 规则</string>
+    <string name="codestyle_xml_android_conventions_desc">布局、清单、值资源和其他资源按 Android Studio 的方式排版</string>
+    <string name="codestyle_xml_wrap_attributes">属性折行</string>
+    <string name="codestyle_xml_wrap_attributes_desc">用于 Android 规则未涵盖的 XML</string>
+    <string name="codestyle_xml_space_in_empty_tag">空标签内加空格</string>
+    <string name="codestyle_xml_space_in_empty_tag_desc">使用 `&lt;View /&gt;` 而非 `&lt;View/&gt;`</string>
+    <string name="codestyle_xml_rearrange">重新排列属性</string>
+    <string name="codestyle_xml_rearrange_desc">重新格式化整个文件时，按 Android Studio 的顺序排列属性</string>
 
     <!-- shared common labels (reused across screens) -->
     <string name="save">保存</string>
