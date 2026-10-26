@@ -205,6 +205,12 @@ data class UiProjectResult(val success: Boolean, val message: String, val rootPa
  */
 enum class UiProjectFolderKind { CODE_ASSIST, GRADLE, UNKNOWN }
 
+/** A `.zip` unpacked for import: the projects found in it, or why it could not be unpacked ([error]). */
+data class UiProjectArchive(val projects: List<UiArchiveProject>, val error: String? = null)
+
+/** One project inside a [UiProjectArchive]: its unpacked [path], where it sat in the zip, and what it is. */
+data class UiArchiveProject(val path: String, val relativePath: String, val kind: UiProjectFolderKind)
+
 // ---- Projects Store DTOs ----
 
 /**

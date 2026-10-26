@@ -16,6 +16,7 @@ import dev.ide.platform.log.Log
 import dev.ide.platform.storage.StorageUsage
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
+import dev.ide.ui.backend.UiArchiveProject
 import dev.ide.ui.backend.UiCompatibilityInfo
 import dev.ide.ui.backend.UiExportModule
 import dev.ide.ui.backend.UiExportOptions
@@ -24,6 +25,7 @@ import dev.ide.ui.backend.UiGradleExport
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiPackagedModule
+import dev.ide.ui.backend.UiProjectArchive
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
@@ -294,7 +296,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
         return withContext(Dispatchers.IO) {
             runCatching {
-                val next = mgr.importExternalProject(Paths.get(sourceRootPath))
+                val next = mgr.importProjectFolder(Paths.get(sourceRootPath))
                     ?: return@runCatching UiProjectResult(false, "That folder isn't a CodeAssist or Gradle project.")
                 ctx.swapEngine(next)
                 UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
@@ -303,6 +305,24 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
                 UiProjectResult(false, e.message ?: "Failed to import the project")
             }
         }
+    }
+
+    override suspend fun extractProjectArchive(archivePath: String): UiProjectArchive? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val contents = mgr.extractProjectArchive(archivePath) ?: return@withContext null
+                UiProjectArchive(contents.projects.map { UiArchiveProject(it.path.toString(), it.relativePath, it.kind.toUi()) })
+            } catch (e: Exception) {
+                log.error("Couldn't unpack the archive at $archivePath", e)
+                UiProjectArchive(emptyList(), e.message ?: "Couldn't unpack the archive")
+            }
+        }
+    }
+
+    override suspend fun discardProjectArchive() {
+        val mgr = ctx.manager ?: return
+        withContext(Dispatchers.IO) { mgr.discardProjectArchive() }
     }
 
     // ---- shareable project packages (.caproj) ----

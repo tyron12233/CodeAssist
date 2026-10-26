@@ -175,11 +175,12 @@ class MainActivity : ComponentActivity() {
                     override val canPickFile: Boolean = true
                     override fun pickFile(extensions: List<String>, onPicked: (String?) -> Unit) {
                         pendingPick = onPicked
-                        // Custom extensions (e.g. .caproj) have no registered MIME, so fall back to */* and let
-                        // the caller validate the picked file; known extensions narrow the SAF picker.
+                        // Custom extensions (e.g. .caproj) have no registered MIME, so when any of them lacks one fall
+                        // back to */* and let the caller validate the picked file (narrowing to the known ones would
+                        // hide the rest); only all-known extensions narrow the SAF picker.
                         val mimes = extensions.mapNotNull { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
                         try {
-                            pickLauncher.launch(if (mimes.isEmpty()) arrayOf("*/*") else mimes.toTypedArray())
+                            pickLauncher.launch(if (mimes.size < extensions.size) arrayOf("*/*") else mimes.toTypedArray())
                         } catch (e: ActivityNotFoundException) {
                             // Some ROMs ship no SAF/documents provider; don't crash — signal cancel + tell the user.
                             pendingPick = null
@@ -276,18 +277,21 @@ class MainActivity : ComponentActivity() {
                 adHost.start()
             }
 
-            // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below); any
-            // other inbound file is copied into the open project's first source root as before.
+            // A `.caproj` package or a `.zip` handed in via "Open with" goes to project import (a package's preview,
+            // or the project inside the zip); any other inbound file is copied into the open project's first
+            // source root as before.
             var importPackagePath by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(backend, inbound.value) {
                 val b = backend
                 val uri = inbound.value
                 if (b != null && uri != null) {
                     val name = fileOps.queryDisplayName(uri) ?: ""
-                    if (name.endsWith(".${CaprojFormat.EXTENSION}", ignoreCase = true)) {
+                    val archive = name.endsWith(".zip", ignoreCase = true) ||
+                        contentResolver.getType(uri) in setOf("application/zip", "application/x-zip-compressed")
+                    if (name.endsWith(".${CaprojFormat.EXTENSION}", ignoreCase = true) || archive) {
                         val path = withContext(Dispatchers.IO) { fileOps.copyInboundToCache(uri, name) }
                         if (path != null) importPackagePath = path
-                        else Toast.makeText(this@MainActivity, "Couldn't open the project package", Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(this@MainActivity, "Couldn't open the project file", Toast.LENGTH_SHORT).show()
                     } else {
                         val target = firstSourceRoot(b.files.fileTree())
                         val path = if (target != null) fileOps.importUri(uri, target, b) else null

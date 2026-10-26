@@ -13,6 +13,7 @@ import dev.ide.ui.ext.ScreenArgumentHandoff
 import dev.ide.ui.ext.ScreenBackRegistry
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
+import dev.ide.ui.backend.UiArchiveProject
 import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
@@ -56,6 +57,9 @@ sealed interface ImportError {
 
     /** Importing a Gradle folder failed; [message] is the engine's reason, blank when it gave none. */
     data class GradleFailed(val message: String) : ImportError
+
+    /** A `.zip` held no project; or, with a [message], it could not be unpacked. */
+    data class ArchiveFailed(val message: String = "") : ImportError
 }
 
 /**
@@ -298,6 +302,10 @@ class CodeAssistAppState(
     /** The import-time "compatibility mode vs convert" chooser (shown after the folder pick request), and a
      *  one-shot carried into the freshly-opened editor's state when Convert was chosen. */
     var showImportModeChoice: Boolean by mutableStateOf(false)
+        private set
+
+    /** The projects found in an imported `.zip`, while the user picks one (only asked when there are several). */
+    var archiveChoices: List<UiArchiveProject>? by mutableStateOf(null)
         private set
     var pendingGradleConvert: Boolean by mutableStateOf(false)
         private set
@@ -619,14 +627,17 @@ class CodeAssistAppState(
 
     fun rememberExportAuthor(author: String) = backend.settings.setPreference(EXPORT_AUTHOR_PREF, author)
 
-    /** Ask the host for a `.caproj` file and open its import preview. */
+    /** Ask the host for a `.caproj` package or a `.zip` of a project, and import it. */
     fun pickProjectPackage() {
-        fileActions.pickFile(listOf("caproj")) { path ->
+        fileActions.pickFile(listOf("caproj", "zip")) { path ->
             if (path != null) scope.launch { openImportPackage(path) }
         }
     }
 
-    /** Read the `.caproj` at [path] and open the import preview for it, or raise the unrecognized-file notice. */
+    /**
+     * Import the file at [path]: a `.caproj` opens its import preview; any other zip is unpacked and the project
+     * in it imported like a picked folder ([openProjectArchive]). Anything else raises the unrecognized-file notice.
+     */
     suspend fun openImportPackage(path: String) {
         val preview = backend.projects.previewImportPackage(path)
         if (preview != null) {
@@ -634,8 +645,35 @@ class CodeAssistAppState(
             importPreview = preview
             screen = Screen.ImportProject
         } else {
-            importError = ImportError.Unrecognized
+            openProjectArchive(path)
         }
+    }
+
+    /** Unpack the `.zip` at [path] and import its project, asking which one when it holds several. */
+    private suspend fun openProjectArchive(path: String) {
+        importBusy = true
+        val archive = backend.projects.extractProjectArchive(path)
+        importBusy = false
+        val projects = archive?.projects.orEmpty()
+        val failure = archive?.error
+        when {
+            archive == null -> importError = ImportError.Unrecognized
+            failure != null -> importError = ImportError.ArchiveFailed(failure)
+            projects.isEmpty() -> importError = ImportError.ArchiveFailed()
+            projects.size == 1 -> importFolder(projects[0].path, projects[0].kind, fromArchive = true)
+            else -> archiveChoices = projects
+        }
+    }
+
+    /** Picked one of an archive's several projects. */
+    fun chooseArchiveProject(project: UiArchiveProject) {
+        archiveChoices = null
+        scope.launch { importFolder(project.path, project.kind, fromArchive = true) }
+    }
+
+    fun dismissArchiveChoice() {
+        archiveChoices = null
+        scope.launch { backend.projects.discardProjectArchive() }
     }
 
     fun cancelImportPreview() = leaveImportPreview(Screen.Projects)
@@ -652,6 +690,9 @@ class CodeAssistAppState(
 
     /** The folder the user picked, held while the compatibility/convert question is answered for it. */
     private var pendingImportPath: String? = null
+
+    /** Whether [pendingImportPath] was unpacked from a zip, whose staging folder a cancel has to drop. */
+    private var pendingFromArchive = false
 
     /**
      * The picker's "Import project" action. Picks the folder FIRST and asks what it is, because the only
@@ -691,22 +732,29 @@ class CodeAssistAppState(
         fileActions.pickDirectory { path ->
             if (path.isNullOrBlank()) return@pickDirectory
             importBusy = true
-            scope.launch {
-                when (backend.projects.inspectProjectFolder(path)) {
-                    // Nothing to translate: adopt it and open it.
-                    UiProjectFolderKind.CODE_ASSIST -> runImport(path, convert = false)
-                    // Foreign build system: it still has a mode to choose.
-                    // The question is the user's to answer, so drop the overlay while it is on screen.
-                    UiProjectFolderKind.GRADLE -> {
-                        importBusy = false
-                        pendingImportPath = path
-                        showImportModeChoice = true
-                    }
-                    UiProjectFolderKind.UNKNOWN -> {
-                        importBusy = false
-                        importError = ImportError.GradleFailed("")
-                    }
-                }
+            scope.launch { importFolder(path, backend.projects.inspectProjectFolder(path), fromArchive = false) }
+        }
+    }
+
+    /** Import the folder at [path], which is a [kind] project, asking compatibility vs convert for a Gradle one. */
+    private suspend fun importFolder(path: String, kind: UiProjectFolderKind, fromArchive: Boolean) {
+        when (kind) {
+            // Nothing to translate: adopt it and open it.
+            UiProjectFolderKind.CODE_ASSIST -> {
+                importBusy = true
+                runImport(path, convert = false)
+            }
+            // Foreign build system: it still has a mode to choose.
+            // The question is the user's to answer, so drop the overlay while it is on screen.
+            UiProjectFolderKind.GRADLE -> {
+                importBusy = false
+                pendingImportPath = path
+                pendingFromArchive = fromArchive
+                showImportModeChoice = true
+            }
+            UiProjectFolderKind.UNKNOWN -> {
+                importBusy = false
+                importError = ImportError.GradleFailed("")
             }
         }
     }
@@ -714,6 +762,8 @@ class CodeAssistAppState(
     fun dismissImportModeChoice() {
         showImportModeChoice = false
         pendingImportPath = null
+        if (pendingFromArchive) scope.launch { backend.projects.discardProjectArchive() }
+        pendingFromArchive = false
     }
 
     /** Answer to the compatibility/convert prompt, for the folder already picked. */
@@ -721,6 +771,7 @@ class CodeAssistAppState(
         val path = pendingImportPath
         showImportModeChoice = false
         pendingImportPath = null
+        pendingFromArchive = false
         if (path != null) {
             importBusy = true
             scope.launch { runImport(path, convert) }

@@ -61,7 +61,7 @@
     <string name="import_deps_bundled">Зависимости включены</string>
     <string name="import_failed">Не удалось импортировать пакет проекта.</string>
     <string name="import_unrecognized_title">Не удалось импортировать файл</string>
-    <string name="import_unrecognized">CodeAssist не распознает этот файл. Выберите пакет проекта .caproj для импорта.</string>
+    <string name="import_unrecognized">CodeAssist не распознает этот файл. Выберите пакет проекта .caproj или .zip-архив проекта для импорта.</string>
 
     <string name="export_title">Экспорт проекта</string>
     <string name="export_intro">Упакуйте проект в файл .caproj, которым можно поделиться с кем угодно.</string>

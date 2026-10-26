@@ -31,11 +31,13 @@ import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.import_gradle_failed
+import dev.ide.ui.generated.resources.import_archive_empty
 import dev.ide.ui.generated.resources.import_unrecognized
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.PointerInputModeHost
 import dev.ide.ui.platform.PlatformSystemBars
+import dev.ide.ui.screens.ArchiveProjectDialog
 import dev.ide.ui.screens.GradleImportModeDialog
 import dev.ide.ui.screens.ImportSourceDialog
 import dev.ide.ui.theme.CodeAssistTheme
@@ -119,10 +121,12 @@ fun CodeAssistApp(
     // The import notice is raised as a reason by the state holder and localized here.
     val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
     val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
+    val importArchiveEmptyMsg = stringResource(Res.string.import_archive_empty)
     val importErrorMessage = when (val error = app.importError) {
         null -> null
         ImportError.Unrecognized -> importUnrecognizedMsg
         is ImportError.GradleFailed -> error.message.ifBlank { importGradleFailedMsg }
+        is ImportError.ArchiveFailed -> error.message.ifBlank { importArchiveEmptyMsg }
     }
 
     CodeAssistTheme(
@@ -209,6 +213,11 @@ fun CodeAssistApp(
                         onFolder = app::chooseFolderImport,
                         onPackage = app::choosePackageImport,
                         onDismiss = app::dismissImportSourceChoice,
+                    )
+                    ArchiveProjectDialog(
+                        projects = app.archiveChoices,
+                        onPick = app::chooseArchiveProject,
+                        onDismiss = app::dismissArchiveChoice,
                     )
                     GradleImportModeDialog(
                         visible = app.showImportModeChoice,

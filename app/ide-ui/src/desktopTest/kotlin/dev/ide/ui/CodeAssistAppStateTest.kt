@@ -15,6 +15,8 @@ import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiPackagedModule
 import dev.ide.ui.backend.UiProjectFolderKind
+import dev.ide.ui.backend.UiArchiveProject
+import dev.ide.ui.backend.UiProjectArchive
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.screens.ModulesTab
@@ -50,6 +52,12 @@ class CodeAssistAppStateTest {
         /** The Projects Store this backend serves. Unsupported unless a test exercises the store. */
         private val storeService: StoreService = StoreService.Unsupported,
     ) : StubBackend() {
+        /** What a picked `.zip` unpacks to; null = not a zip. */
+        var archive: UiProjectArchive? = null
+        var discarded = 0
+        val imported = ArrayList<String>()
+        override suspend fun extractProjectArchive(archivePath: String): UiProjectArchive? = archive
+        override suspend fun discardProjectArchive() { discarded++ }
         override val store: StoreService get() = storeService
 
         val prefs = HashMap(prefs)
@@ -74,7 +82,10 @@ class CodeAssistAppStateTest {
             return true
         }
         override suspend fun previewImportPackage(archivePath: String): UiImportPreview? = importPreview
-        override suspend fun importExternalProject(sourceRootPath: String): UiProjectResult = importResult
+        override suspend fun importExternalProject(sourceRootPath: String): UiProjectResult {
+            imported += sourceRootPath
+            return importResult
+        }
         override fun analyticsAvailable(): Boolean = true
         override fun analyticsConsent(): Boolean? = analyticsConsent
         override fun setAnalyticsConsent(granted: Boolean) { analyticsConsent = granted }
@@ -773,6 +784,74 @@ class CodeAssistAppStateTest {
 
         assertFalse(app.showImportSourceChoice)
         assertEquals(Screen.ImportProject, app.screen, "a .caproj opens the import preview")
+    }
+
+    /** A zip holding one Gradle project goes straight to the compatibility/convert question for it. */
+    @Test
+    fun aZipWithOneProjectImportsIt() = runTest {
+        val backend = settled().apply {
+            archive = UiProjectArchive(listOf(UiArchiveProject("/staging/app/App-main", "App-main", UiProjectFolderKind.GRADLE)))
+        }
+        val app = appState(backend, PickingActions("/external/App-main.zip", pickDir = true, pickFile = true))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        app.choosePackageImport()
+        advanceUntilIdle()
+        assertTrue(app.showImportModeChoice, "a Gradle project in the zip still chooses compatibility vs convert")
+        app.importGradleProject(convert = false)
+        advanceUntilIdle()
+        assertEquals(listOf("/staging/app/App-main"), backend.imported)
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** A zip holding several projects asks which; cancelling drops the unpacked copy. */
+    @Test
+    fun aZipWithSeveralProjectsAsksWhich() = runTest {
+        val jetchat = UiArchiveProject("/staging/s/samples-main/Jetchat", "samples-main/Jetchat", UiProjectFolderKind.GRADLE)
+        val mine = UiArchiveProject("/staging/s/samples-main/Mine", "samples-main/Mine", UiProjectFolderKind.CODE_ASSIST)
+        val backend = settled().apply { archive = UiProjectArchive(listOf(jetchat, mine)) }
+        val app = appState(backend, PickingActions("/external/samples.zip", pickDir = false, pickFile = true))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        advanceUntilIdle()
+        assertEquals(listOf(jetchat, mine), app.archiveChoices)
+        app.dismissArchiveChoice()
+        advanceUntilIdle()
+        assertEquals(null, app.archiveChoices)
+        assertEquals(1, backend.discarded, "a cancelled choice drops the unpacked copy")
+
+        app.requestProjectImport()
+        advanceUntilIdle()
+        app.chooseArchiveProject(mine)
+        advanceUntilIdle()
+        assertFalse(app.showImportModeChoice, "a CodeAssist project has no mode to choose")
+        assertEquals(listOf(mine.path), backend.imported)
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** A zip with no project in it, or that cannot be unpacked, says so; a file that is not a zip is unrecognised. */
+    @Test
+    fun aZipWithoutAProjectIsReported() = runTest {
+        val backend = settled().apply { archive = UiProjectArchive(emptyList()) }
+        val app = appState(backend, PickingActions("/external/notes.zip", pickDir = false, pickFile = true))
+        advanceUntilIdle()
+        app.requestProjectImport()
+        advanceUntilIdle()
+        assertEquals(ImportError.ArchiveFailed(), app.importError)
+
+        backend.archive = UiProjectArchive(emptyList(), error = "The archive unpacks to more than 2 GB")
+        app.dismissImportError()
+        app.requestProjectImport()
+        advanceUntilIdle()
+        assertEquals(ImportError.ArchiveFailed("The archive unpacks to more than 2 GB"), app.importError)
+
+        backend.archive = null
+        app.dismissImportError()
+        app.requestProjectImport()
+        advanceUntilIdle()
+        assertEquals(ImportError.Unrecognized, app.importError)
     }
 
     @Test

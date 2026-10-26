@@ -437,6 +437,43 @@ class ProjectManager private constructor(
         return open(dest.toString())
     }
 
+    /** Where a `.zip` offered for import is unpacked while its project is found and imported. One at a time. */
+    private val archiveStaging: Path get() = homeDir.resolve(".platform/caches/import-staging")
+
+    /**
+     * Unpack the `.zip` at [archivePath] for import and report the projects in it ([ProjectArchives]). Each
+     * call replaces the previous staging folder, so an import the user walked away from does not linger past the
+     * next one. Null when the file is not a zip. A project found here is imported with [importExternalProject],
+     * which copies it into the projects folder and then clears the staging folder.
+     */
+    fun extractProjectArchive(archivePath: String): ProjectArchives.Contents? {
+        val staging = archiveStaging
+        runCatching { deleteTree(staging) }
+        val name = Paths.get(archivePath).fileName?.toString()?.substringBeforeLast('.')?.let(::slug)?.ifEmpty { null } ?: "archive"
+        return try {
+            ProjectArchives.extract(Paths.get(archivePath), staging.resolve(name), ::inspectFolder)
+                ?.also { if (it.projects.isEmpty()) runCatching { deleteTree(staging) } }
+        } catch (e: Exception) {
+            runCatching { deleteTree(staging) }
+            throw e
+        }
+    }
+
+    /** Drop whatever [extractProjectArchive] left unpacked (an import that was cancelled or failed). */
+    fun discardProjectArchive() {
+        runCatching { deleteTree(archiveStaging) }
+    }
+
+    /** [importExternalProject], clearing the staging folder afterwards when [sourceDir] was unpacked there. */
+    fun importProjectFolder(sourceDir: Path): IdeServices? {
+        val staged = sourceDir.toAbsolutePath().normalize().startsWith(archiveStaging.toAbsolutePath().normalize())
+        return try {
+            importExternalProject(sourceDir)
+        } finally {
+            if (staged) discardProjectArchive()
+        }
+    }
+
     /**
      * Turn a directory that is **already** a direct child of [projectsRoot] into a listable project,
      * without opening it.

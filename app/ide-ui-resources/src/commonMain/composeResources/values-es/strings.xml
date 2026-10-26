@@ -61,7 +61,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="import_deps_bundled">Dependencias incluidas</string>
     <string name="import_failed">No se pudo importar el paquete del proyecto.</string>
     <string name="import_unrecognized_title">No se puede importar este archivo</string>
-    <string name="import_unrecognized">CodeAssist no reconoce este archivo. Elige un paquete de proyecto .caproj para importar.</string>
+    <string name="import_unrecognized">CodeAssist no reconoce este archivo. Elige un paquete de proyecto .caproj o un .zip de un proyecto para importar.</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d archivo</item>
         <item quantity="other">%1$d archivos</item>

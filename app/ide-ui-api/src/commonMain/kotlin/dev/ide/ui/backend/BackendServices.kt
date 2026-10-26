@@ -829,6 +829,16 @@ interface ProjectService {
         UiProjectResult(false, "Project import not supported by this backend")
 
     /**
+     * Unpack the `.zip` at [archivePath] for import and list the projects in it, shallowest first (a download
+     * wraps its project in a folder; a samples repository holds several). Each one's path then goes to
+     * [importExternalProject] like a picked folder. Null when the file is not a zip.
+     */
+    suspend fun extractProjectArchive(archivePath: String): UiProjectArchive? = null
+
+    /** Drop what [extractProjectArchive] unpacked, when its import is abandoned. */
+    suspend fun discardProjectArchive() {}
+
+    /**
      * Export the project at [rootPath] to a shareable `.caproj` package and return its path (under the app's
      * exports dir), or null when packaging failed. The UI then hands the path to [FileActions.share] /
      * [FileActions.exportFile]. Runs off the main thread.

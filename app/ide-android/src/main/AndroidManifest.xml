@@ -106,6 +106,14 @@
 
                 <data android:mimeType="application/x-caproj" />
             </intent-filter>
+            <!-- Import a project from a .zip (a downloaded repository, a wizard's output) via "Open with". -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

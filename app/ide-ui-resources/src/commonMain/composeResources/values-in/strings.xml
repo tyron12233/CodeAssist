@@ -61,7 +61,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="import_deps_bundled">Dependensi disertakan</string>
     <string name="import_failed">Tidak dapat mengimpor paket proyek.</string>
     <string name="import_unrecognized_title">Tidak dapat mengimpor file ini</string>
-    <string name="import_unrecognized">CodeAssist tidak mengenali file ini. Pilih paket proyek .caproj untuk diimpor.</string>
+    <string name="import_unrecognized">CodeAssist tidak mengenali file ini. Pilih paket proyek .caproj atau .zip berisi proyek untuk diimpor.</string>
 
     <string name="export_title">Ekspor proyek</string>
     <string name="export_intro">Kemas proyek ini sebagai file .caproj yang dapat Anda bagikan dengan siapa saja.</string>

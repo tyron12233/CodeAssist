@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiArchiveProject
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.pressScale
@@ -46,6 +48,10 @@ import dev.ide.ui.generated.resources.gradle_convert_undo
 import dev.ide.ui.generated.resources.gradle_convert_working
 import dev.ide.ui.generated.resources.gradle_converted
 import dev.ide.ui.generated.resources.import_source_title
+import dev.ide.ui.generated.resources.import_archive_choose_message
+import dev.ide.ui.generated.resources.import_archive_choose_title
+import dev.ide.ui.generated.resources.import_archive_codeassist
+import dev.ide.ui.generated.resources.import_archive_gradle
 import dev.ide.ui.generated.resources.import_source_message
 import dev.ide.ui.generated.resources.import_source_folder
 import dev.ide.ui.generated.resources.import_source_folder_desc
@@ -145,6 +151,48 @@ fun ImportSourceDialog(
                 accent = true,
                 onClick = onPackage,
             )
+        }
+    }
+}
+
+/**
+ * "Choose a project": a `.zip` offered for import held several (a samples repository, a monorepo). Each is
+ * listed by its folder name, with where it sat in the zip and whether it is a Gradle build or a CodeAssist project.
+ */
+@Composable
+fun ArchiveProjectDialog(
+    projects: List<UiArchiveProject>?,
+    onPick: (UiArchiveProject) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    CenteredDialog(visible = projects != null, onDismiss = onDismiss) {
+        DialogCard {
+            Text(
+                stringResource(Res.string.import_archive_choose_title),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(Res.string.import_archive_choose_message),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.size(4.dp))
+            val gradle = stringResource(Res.string.import_archive_gradle)
+            val codeAssist = stringResource(Res.string.import_archive_codeassist)
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (project in projects.orEmpty()) {
+                    val kind = if (project.kind == UiProjectFolderKind.CODE_ASSIST) codeAssist else gradle
+                    ModeOption(
+                        icon = CaIcons.folderOpen,
+                        title = project.relativePath.substringAfterLast('/').ifEmpty { project.path.substringAfterLast('/') },
+                        description = "$kind · ${project.relativePath}",
+                        onClick = { onPick(project) },
+                    )
+                }
+            }
         }
     }
 }

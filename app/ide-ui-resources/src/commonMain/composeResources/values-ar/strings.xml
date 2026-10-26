@@ -62,7 +62,7 @@
     <string name="import_deps_bundled">المكتبات المضمنة</string>
     <string name="import_failed">تعذر استيراد حزمة المشروع.</string>
     <string name="import_unrecognized_title">تعذر استيراد هذا الملف</string>
-    <string name="import_unrecognized">لا يتعرف CodeAssist على هذا الملف. اختر حزمة مشروع .caproj للاستيراد.</string>
+    <string name="import_unrecognized">لا يتعرف CodeAssist على هذا الملف. اختر حزمة مشروع .caproj أو ملف .zip لمشروع للاستيراد.</string>
     <string name="import_as_title">استيراد باسم</string>
     <string name="import_as_hint">اسم المشروع</string>
     <string name="import_destination">سيوضع في %1$s</string>
@@ -80,8 +80,13 @@
     <string name="import_source_message">أين يوجد المشروع؟</string>
     <string name="import_source_folder">مجلد المشروع</string>
     <string name="import_source_folder_desc">مشروع CodeAssist، أو بناء Gradle موجود</string>
-    <string name="import_source_package">حزمة المشروع</string>
-    <string name="import_source_package_desc">ملف ‎.caproj تمت مشاركته أو تصديره من CodeAssist</string>
+    <string name="import_source_package">ملف المشروع</string>
+    <string name="import_source_package_desc">ملف ‎.zip لمشروع أو بناء Gradle، أو ملف ‎.caproj تمت مشاركته من CodeAssist</string>
+    <string name="import_archive_codeassist">مشروع CodeAssist</string>
+    <string name="import_archive_gradle">بناء Gradle</string>
+    <string name="import_archive_choose_message">يحتوي ملف zip هذا على عدة مشاريع. أيها تريد استيراده؟</string>
+    <string name="import_archive_choose_title">اختر مشروعًا</string>
+    <string name="import_archive_empty">لم يُعثر على مشروع CodeAssist أو بناء Gradle في ملف zip هذا.</string>
     <string name="import_gradle_mode_title">استيراد مشروع Gradle</string>
     <string name="import_gradle_mode_message">كيف ينبغي أن يفتح CodeAssist هذا المشروع؟</string>
     <string name="import_gradle_mode_compat">وضع التوافق</string>
