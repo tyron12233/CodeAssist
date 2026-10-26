@@ -1853,6 +1853,10 @@ data class UiInlayHint(
     val paddingRight: Boolean = false,
 ) {
     val text: String get() = parts.joinToString("") { it.text }
+
+    /** Whether the hint belongs to the text before it (a type after a name, a chain's type at its line end)
+     *  rather than the text after it (a parameter name before its argument); see `InlayPiece`. */
+    val relatesToPreceding: Boolean get() = kind == UiInlayKind.Type || kind == UiInlayKind.Chaining
 }
 
 // ---------------------------------------------------------------------------

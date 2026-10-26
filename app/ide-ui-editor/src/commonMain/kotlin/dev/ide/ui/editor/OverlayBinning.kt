@@ -156,7 +156,7 @@ internal fun perLineInlayPieces(
         val line = doc.lineForOffset(off)
         val col = off - doc.lineStart(line)
         val txt = (if (h.paddingLeft) " " else "") + h.text + (if (h.paddingRight) " " else "")
-        out.getOrPut(line) { ArrayList() }.add(InlayPiece(col, txt))
+        out.getOrPut(line) { ArrayList() }.add(InlayPiece(col, txt, relatesToPreceding = h.relatesToPreceding))
     }
     for (h in hints) add(h)
     for (h in pluginHints) add(h)

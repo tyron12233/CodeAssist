@@ -258,14 +258,17 @@ fun shiftFoldRegions(regions: List<FoldRegion>, edit: EditSpan, docLength: Int):
 /**
  * Re-anchor inlay-hint offsets across a single [edit], so the phantom type/parameter hints stay attached to
  * their anchor between debounced daemon passes. A hint before the edit holds; one after it shifts by the
- * length delta; one inside the replaced span is dropped (the next pass repositions it).
+ * length delta; one inside the replaced span is dropped (the next pass repositions it). Text typed exactly at
+ * a hint goes on the side the hint does not belong to: after a parameter hint (it labels the argument that
+ * follows), and before a type hint, which moves along with the name it follows.
  */
 fun shiftInlayHints(hints: List<UiInlayHint>, edit: EditSpan, docLength: Int): List<UiInlayHint> {
     if (hints.isEmpty() || edit.isNoOp) return hints
     val removedEnd = edit.start + edit.removed
     return mapPreserving(hints) { h ->
         when {
-            h.offset <= edit.start -> h
+            h.offset < edit.start -> h
+            h.offset == edit.start && !(edit.removed == 0 && h.relatesToPreceding) -> h
             h.offset >= removedEnd -> {
                 val offset = (h.offset + edit.delta).coerceIn(0, docLength)
                 if (offset == h.offset) h else h.copy(offset = offset)

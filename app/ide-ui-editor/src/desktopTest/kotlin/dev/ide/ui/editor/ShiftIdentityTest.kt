@@ -97,8 +97,20 @@ class ShiftIdentityTest {
     fun foldsAndInlaysKeepTheirListWhenNothingMoves() {
         val folds = listOf(FoldRegion(2, 8, "...", "block", false))
         assertSame(folds, shiftFoldRegions(folds, EditSpan(9, 0, 1), docLength = 20))
-        val hints = listOf(UiInlayHint(4, listOf(UiInlayPart(": Int")), UiInlayKind.Type))
+        val hints = listOf(UiInlayHint(4, listOf(UiInlayPart("x:")), UiInlayKind.Parameter))
         assertSame(hints, shiftInlayHints(hints, EditSpan(4, 0, 1), docLength = 20))
         assertEquals(5, shiftInlayHints(hints, EditSpan(3, 0, 1), docLength = 20).single().offset)
+    }
+
+    @Test
+    fun typingAtAHintGoesOnTheSideTheHintDoesNotBelongTo() {
+        // `println(|)` with `x:` at the caret: the argument typed there goes after the parameter hint.
+        val param = listOf(UiInlayHint(8, listOf(UiInlayPart("x:")), UiInlayKind.Parameter))
+        assertEquals(8, shiftInlayHints(param, EditSpan(8, 0, 1), docLength = 20).single().offset)
+        // `val name|` with `: Int` after it: extending the name carries its type hint along.
+        val type = listOf(UiInlayHint(8, listOf(UiInlayPart(": Int")), UiInlayKind.Type))
+        assertEquals(9, shiftInlayHints(type, EditSpan(8, 0, 1), docLength = 20).single().offset)
+        // A deletion that ends at the hint leaves it where it is, whatever its kind.
+        assertEquals(7, shiftInlayHints(type, EditSpan(7, 1, 0), docLength = 18).single().offset)
     }
 }

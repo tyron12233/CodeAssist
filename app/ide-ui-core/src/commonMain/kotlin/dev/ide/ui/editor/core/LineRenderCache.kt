@@ -24,8 +24,14 @@ import androidx.compose.ui.unit.TextUnit
  */
 const val MEASURER_CACHE_ENTRIES: Int = 64
 
-/** Phantom (non-document) text rendered inside a line at column [col] — an inlay hint. */
-data class InlayPiece(val col: Int, val text: String)
+/**
+ * Phantom (non-document) text rendered inside a line at column [col] — an inlay hint. [relatesToPreceding] says
+ * which side of the hint the position [col] itself is drawn on: a type hint (`val x: Int`, the `: Int` after the
+ * name) belongs to the text before it, so the caret at [col] sits before it and typing extends the name; a
+ * parameter-name hint (`println(x: "hi")`) belongs to the argument after it, so the caret at [col] sits after
+ * it, where the next typed character lands.
+ */
+data class InlayPiece(val col: Int, val text: String, val relatesToPreceding: Boolean = false)
 
 /** A semantic-highlight run within a line: columns `[start, end)` styled with [style] (already theme- and
  *  modifier-resolved). Overlaid on top of the lexical token spans, so it wins where they overlap. */
@@ -146,12 +152,17 @@ class LineRenderCache(
         inlayRevs.setLine(line, pieces)
     }
 
-    /** Document column → visual (laid-out) column for [line] — accounts for inlays inserted before [rawCol]. */
+    /**
+     * Document column → visual (laid-out) column for [line] — accounts for inlays inserted before [rawCol]. An
+     * inlay AT [rawCol] counts as before it unless it belongs to the preceding text
+     * ([InlayPiece.relatesToPreceding]): the caret at a parameter hint's own offset is drawn after the hint,
+     * which is where the next character goes, rather than before it, which made the caret jump on typing.
+     */
     fun rawToVisual(line: Int, rawCol: Int): Int {
         val pieces = inlayRevs.piecesFor(line)
         if (pieces.isEmpty()) return rawCol
         var add = 0
-        for (p in pieces) if (p.col < rawCol) add += p.text.length
+        for (p in pieces) if (p.col < rawCol || (p.col == rawCol && !p.relatesToPreceding)) add += p.text.length
         return rawCol + add
     }
 
