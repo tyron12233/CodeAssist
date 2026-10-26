@@ -44,6 +44,8 @@ import dev.ide.android.support.preview.DrawablePreview
 import dev.ide.android.support.preview.DrawablePreviewParser
 import dev.ide.android.support.preview.DrawableResolver
 import dev.ide.android.support.preview.ResolvedDrawable
+import dev.ide.android.support.permissions.AndroidPermissionTable
+import dev.ide.android.support.resources.AndroidManifestParser
 import dev.ide.android.support.resources.AndroidResources
 import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceReferences
@@ -201,6 +203,7 @@ import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.synthetic.KotlinLightClasses
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
 import dev.ide.lang.resolve.ApiLevelContext
+import dev.ide.lang.resolve.PermissionContext
 import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.resolve.orElse
 import dev.ide.lang.signature.SignatureHelp
@@ -2387,6 +2390,71 @@ class IdeServices private constructor(
         return ApiLevelContext.android(facet.minSdk, levels)
     }
 
+    /** The last [permissionContext] per module and when it was read, so a pass's many calls share one read. */
+    private val permissionContexts = ConcurrentHashMap<ModuleId, Pair<Long, PermissionContext?>>()
+
+    /** A manifest's declared permissions, kept until its size or modification time changes. */
+    private val manifestPermissions = ConcurrentHashMap<Path, Triple<Long, Long, Set<String>>>()
+
+    /**
+     * The missing-permission check's inputs for the Android module [id], or null for any other module (or when
+     * the table is not bundled). The declared permissions are what the merged manifest will hold: the module's
+     * own, its Android library modules', and every AAR's on its classpath (a library may declare the permission
+     * its API needs). Re-read at most every couple of seconds, since the check asks once per call it looks at.
+     */
+    private fun permissionContext(id: ModuleId): PermissionContext? {
+        val now = System.nanoTime()
+        permissionContexts[id]?.let { (at, ctx) -> if (now - at < PERMISSION_CONTEXT_TTL_NANOS) return ctx }
+        val ctx = runCatching { readPermissionContext(id) }.getOrNull()
+        permissionContexts[id] = now to ctx
+        return ctx
+    }
+
+    private fun readPermissionContext(id: ModuleId): PermissionContext? {
+        val modules = store.workspace.projects.flatMap { it.modules }
+        val module = modules.firstOrNull { it.id == id } ?: return null
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        val table = AndroidPermissionTable.bundled() ?: return null
+        val declared = HashSet<String>()
+        if (facet.isApplication) {
+            val seen = HashSet<ModuleId>()
+            fun addModule(m: dev.ide.model.Module) {
+                if (!seen.add(m.id)) return
+                val f = m.facets.get(AndroidFacet.KEY)
+                if (f != null) moduleRoot(m)?.resolve(f.manifest)?.let { declared += permissionsIn(it) }
+                for (dep in m.dependencies) {
+                    val target = (dep as? ModuleDependency)?.target ?: continue
+                    modules.firstOrNull { it.id == target }?.let(::addModule)
+                }
+            }
+            addModule(module)
+            // An exploded AAR keeps its manifest beside its classes.jar.
+            for (entry in module.classpath(DependencyScope.IMPLEMENTATION).entries) {
+                if (entry.root.name != "classes.jar") continue
+                Paths.get(entry.root.path).resolveSibling("AndroidManifest.xml").let { declared += permissionsIn(it) }
+            }
+        }
+        val levels = apiLevelContext(id)?.levels
+        return PermissionContext(
+            table, declared, facet.minSdk, facet.targetSdk, checkManifest = facet.isApplication,
+            permissionLevel = { p ->
+                p.takeIf { it.startsWith(PLATFORM_PERMISSION) }
+                    ?.let { levels?.fieldLevel("android.Manifest\$permission", it.removePrefix(PLATFORM_PERMISSION))?.since }
+            },
+        )
+    }
+
+    private fun permissionsIn(manifest: Path): Set<String> {
+        val attrs = runCatching { Files.readAttributes(manifest, java.nio.file.attribute.BasicFileAttributes::class.java) }
+            .getOrNull() ?: return emptySet()
+        val size = attrs.size()
+        val modified = attrs.lastModifiedTime().toMillis()
+        manifestPermissions[manifest]?.let { (s, m, perms) -> if (s == size && m == modified) return perms }
+        val perms = AndroidManifestParser.parse(manifest)?.permissions?.toSet() ?: emptySet()
+        manifestPermissions[manifest] = Triple(size, modified, perms)
+        return perms
+    }
+
     /**
      * The Android platform's bundled parameter names and javadoc, for an Android module: what its editors
      * show for framework and `java.*` APIs until real platform sources are attached. Empty elsewhere.
@@ -2418,6 +2486,7 @@ class IdeServices private constructor(
                     it.subtypeIndexQuery = ::javaSubtypesOf
                     // The minSdk check and the "Added in API N" doc line, from the module's current facet.
                     it.apiContext = { apiLevelContext(module.id) }
+                    it.permissionContext = { permissionContext(module.id) }
                     sdkManager.jdkSourceOverride()?.let { zip -> it.addSourceJars(listOf(zip)) }
                     module.facets.get(AndroidFacet.KEY)?.let { facet ->
                         sdkManager.androidSourcesDir(facet.compileSdk)?.let { dir -> it.addSourceDirs(listOf(dir)) }
@@ -2466,6 +2535,7 @@ class IdeServices private constructor(
                         module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
                     it.javaSourceLocator = { fqn, member -> javaSourceTarget(module, fqn, member) }
                     it.apiContext = { apiLevelContext(module.id) }
+                    it.permissionContext = { permissionContext(module.id) }
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Lowered Compose-preview declarations persist across launches, so the first preview after
                     // a reopen decodes instead of re-running overload resolution over the reachable closure.
@@ -3913,6 +3983,13 @@ class IdeServices private constructor(
         }
     }
 
+    /** [module]'s `AndroidManifest.xml` as the facet names it, or null for a non-Android module. */
+    internal fun manifestFileOf(module: Module): VirtualFile? {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        val path = moduleRoot(module)?.resolve(facet.manifest) ?: return null
+        return store.vfs.fileFor(path)
+    }
+
     /** True when [target]'s module library classpath includes AppCompat, so its `app:` compat attrs resolve. */
     internal fun moduleUsesAppCompat(target: AnalysisTarget): Boolean =
         runCatching {
@@ -5153,6 +5230,8 @@ class IdeServices private constructor(
     }
 
     companion object {
+        private const val PERMISSION_CONTEXT_TTL_NANOS = 2_000_000_000L
+        private const val PLATFORM_PERMISSION = "android.permission."
         /** The name of the library [ensureKotlinStdlib] adds, and the prefix of a kotlin-stdlib jar. */
         private const val KOTLIN_STDLIB = "kotlin-stdlib"
         /** Cache subdirs under `.platform/caches` the "Clear caches" action removes — all regenerable, none

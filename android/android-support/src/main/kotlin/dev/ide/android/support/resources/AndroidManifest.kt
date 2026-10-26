@@ -55,7 +55,7 @@ object AndroidManifestParser {
                     appRoundIcon = el.androidAttr("roundIcon") ?: appRoundIcon
                     applicationName = el.androidAttr("name")?.let { resolveName(it, pkg) } ?: applicationName
                 }
-                "uses-permission" -> el.androidAttr("name")?.let { permissions += it }
+                "uses-permission", "uses-permission-sdk-23", "uses-permission-sdk-m" -> el.androidAttr("name")?.let { permissions += it }
                 in COMPONENT_TAGS -> el.androidAttr("name")?.let { components += ManifestComponent(el.tagName, resolveName(it, pkg)) }
             }
         }

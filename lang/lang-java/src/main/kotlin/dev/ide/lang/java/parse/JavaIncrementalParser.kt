@@ -27,6 +27,7 @@ class JavaIncrementalParser(
     private val env: JavaEnvironment,
     private val apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null },
     private val languageLevel: () -> Int = { Int.MAX_VALUE },
+    private val permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null },
 ) : IncrementalParser {
 
     /** A parse together with the exact text it was parsed from, so an unchanged buffer is never reparsed. */
@@ -56,7 +57,7 @@ class JavaIncrementalParser(
     override fun parseFull(snapshot: DocumentSnapshot): ParsedFile {
         latestIfText(snapshot.file.path, snapshot.text)?.let { return it }
         val text = snapshot.text.toString()
-        val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version, apiContext, languageLevel)
+        val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version, apiContext, languageLevel, permissionContext)
         // An edit supersedes the previous tree; its resolve-cache entries would keep it alive (see
         // [JavaEnvironment.dropSourceResolveCache]). Clearing per edit also sweeps the one-off parses (rename,
         // imports, structure) that never come through here.

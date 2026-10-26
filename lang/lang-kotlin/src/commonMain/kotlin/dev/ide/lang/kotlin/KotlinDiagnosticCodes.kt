@@ -83,6 +83,9 @@ object KotlinDiagnosticCodes {
     const val NEW_API = dev.ide.lang.resolve.ApiGuards.NEW_API
     /** A JDK API newer than a JVM module's Java release (what `-Xjdk-release` rejects). Shared with Java. */
     const val NEW_JDK_API = dev.ide.lang.resolve.ApiGuards.NEW_JDK_API
+    /** A platform API whose permission the manifest lacks, or a dangerous one nothing checks at run time
+     *  (lint's `MissingPermission`). Shared with the Java editor. */
+    const val MISSING_PERMISSION = dev.ide.lang.resolve.PermissionGuards.MISSING_PERMISSION
     /** Use of an experimental API (a `@RequiresOptIn(level = WARNING)` marker) without opting in — the
      *  compiler's OPT_IN_USAGE. Resolved via [KotlinSymbolService.optInMarkersOf]. */
     const val OPT_IN_USAGE = "kt.optInUsage"

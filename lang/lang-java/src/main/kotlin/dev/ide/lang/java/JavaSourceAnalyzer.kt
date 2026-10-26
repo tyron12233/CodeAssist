@@ -102,7 +102,7 @@ class JavaSourceAnalyzer private constructor(
     }
     private val env: JavaEnvironment by envLazy
 
-    private val javaIncrementalParser by lazy { JavaIncrementalParser(env, { apiContext() }, { languageLevel }) }
+    private val javaIncrementalParser by lazy { JavaIncrementalParser(env, { apiContext() }, { languageLevel }, { permissionContext() }) }
     override val incrementalParser: IncrementalParser get() = javaIncrementalParser
 
     // --- JvmIndexScopeProvider: the roots this analyzer contributes to the workspace index scope ----------
@@ -174,6 +174,11 @@ class JavaSourceAnalyzer private constructor(
      *  edit takes effect without rebuilding the analyzer. */
     @Volatile
     var apiContext: () -> ApiLevelContext? = { null }
+
+    /** The module's missing-permission check inputs, injected by the host for an Android module (its declared
+     *  permissions + SDK levels). Read on every diagnostics pass, so a manifest edit takes effect. */
+    @Volatile
+    var permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null }
 
     /** The module's Java language level (`8`, `17`, ...): syntax newer than it is reported, as the build's
      *  compiler would. Files are still parsed at the highest level so a newer construct reads as itself.
@@ -301,7 +306,7 @@ class JavaSourceAnalyzer private constructor(
     private fun cachedParse(file: VirtualFile): JavaParsedFile {
         val hash = file.contentHash()
         cache[file.path]?.let { if (it.first == hash) return it.second }
-        val tree = JavaParsedFile(env.parse(file.name, file.readText()), file, version.incrementAndGet(), { apiContext() }, { languageLevel })
+        val tree = JavaParsedFile(env.parse(file.name, file.readText()), file, version.incrementAndGet(), { apiContext() }, { languageLevel }, { permissionContext() })
         cache[file.path] = hash to tree
         return tree
     }

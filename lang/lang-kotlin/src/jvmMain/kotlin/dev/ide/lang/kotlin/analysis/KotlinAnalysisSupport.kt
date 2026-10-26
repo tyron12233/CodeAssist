@@ -119,6 +119,26 @@ class KotlinNewApiFixProvider : QuickFixProvider {
     }
 }
 
+/** The missing-permission check's in-file fix: check the permission before the statement and return without it.
+ *  Only for the run-time warning; a permission missing from the manifest is fixed in the manifest (the host's). */
+class KotlinPermissionFixProvider : QuickFixProvider {
+    override val forCodes = setOf(KotlinDiagnosticCodes.MISSING_PERMISSION)
+    override val languages = setOf(KOTLIN)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        if (dev.ide.lang.resolve.PermissionGuards.isMissingFromManifest(diagnostic.message)) return emptyList()
+        val analyzer = target.resolver as? KotlinSourceAnalyzer ?: return emptyList()
+        val (permissions, anyOf) = dev.ide.lang.resolve.PermissionGuards.permissionsNamedIn(diagnostic.message)
+        val fix = analyzer.permissionCheckFix(target.file, diagnostic.range.start, permissions, anyOf) ?: return emptyList()
+        return listOf(object : QuickFix {
+            override val title = fix.title
+            override val kind = CodeActionKind.QUICK_FIX
+            override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit =
+                WorkspaceEdit.of(ctx.target.file, *fix.edits.toTypedArray())
+        })
+    }
+}
+
 object KotlinAnalysisSupport {
     val PLUGIN = PluginId("kotlin-analysis")
 
@@ -128,6 +148,7 @@ object KotlinAnalysisSupport {
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinImplementMembersFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinSuspendModifierFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinNewApiFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, KotlinPermissionFixProvider(), plugin)
         // Caret intentions (see KotlinEditorActions).
         extensions.register(ACTION_PROVIDER_EP, KotlinSurroundActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinIntroduceVariableActionProvider(), plugin)

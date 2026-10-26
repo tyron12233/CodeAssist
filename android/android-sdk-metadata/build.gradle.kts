@@ -47,3 +47,13 @@ tasks.register<JavaExec>("generateJdkApiLevels") {
     mainClass.set("dev.ide.android.support.metadata.gen.JdkApiLevelsGeneratorKt")
     workingDir = rootDir
 }
+
+// The bundled permission table generator (annotations.zip -> android-permissions.txt):
+//   ./gradlew :android-sdk-metadata:generatePermissions --args "<annotations.zip> <android.jar> <output.txt> <api>"
+tasks.register<JavaExec>("generatePermissions") {
+    group = "application"
+    description = "Generates the bundled Android @RequiresPermission table from a platform's annotations.zip."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.ide.android.support.metadata.gen.PermissionsGeneratorKt")
+    workingDir = rootDir
+}

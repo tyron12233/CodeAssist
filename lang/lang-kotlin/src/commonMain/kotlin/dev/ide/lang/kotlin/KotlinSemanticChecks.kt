@@ -119,9 +119,13 @@ internal class KotlinSemanticChecks(
     /** The module's API-level check inputs (Android minSdk, or a JVM module's Java release), read each pass;
      *  null skips the check. */
     private val apiContext: () -> ApiLevelContext? = { null },
+    /** The module's missing-permission check inputs (an Android module's declared permissions + SDK levels),
+     *  read each pass; null skips the check. */
+    private val permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null },
 ) {
 
     private val apiLevelCheck = KotlinApiLevelCheck(service)
+    private val permissionCheck = KotlinPermissionCheck(service)
 
     /** The whole-file checks (duplicate declarations, unused/conflicting imports, unused privates). Cheap (no
      *  type resolution), so [IncrementalSemanticAnalysis] recomputes them every analyze rather than caching. */
@@ -280,6 +284,7 @@ internal class KotlinSemanticChecks(
                 KotlinPerf.span("call.deprecation") { if (resolveReady) report(deprecatedCall(psi, resolver)) }
                 KotlinPerf.span("call.optIn") { if (resolveReady) report(optInCallUsage(psi, resolver)) }
                 KotlinPerf.span("call.newApi") { if (resolveReady) apiContext()?.let { report(apiLevelCheck.call(psi, resolver, it)) } }
+                KotlinPerf.span("call.permission") { if (resolveReady) permissionContext()?.let { report(permissionCheck.call(psi, resolver, it)) } }
                 KotlinPerf.span("call.inferType") { report(cannotInferType(psi, resolver)) }
                 KotlinPerf.span("call.abstractInst") { if (resolveReady) report(abstractInstantiation(psi, resolver)) }
             }
@@ -289,6 +294,9 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.qualified") { report(unsafeNullableAccess(psi as KtDotQualifiedExpression, resolver)) }
             KotlinPerf.span("sem.newApi") {
                 if (resolveReady) apiContext()?.let { report(apiLevelCheck.accessorProperty(psi as KtDotQualifiedExpression, resolver, it)) }
+            }
+            KotlinPerf.span("sem.permission") {
+                if (resolveReady) permissionContext()?.let { report(permissionCheck.accessorProperty(psi as KtDotQualifiedExpression, resolver, it)) }
             }
         },
         KotlinChecker(KtSafeQualifiedExpression::class) { psi ->

@@ -13,6 +13,7 @@ import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiStatement
 import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.PsiTreeUtil
+import dev.ide.lang.resolve.PermissionGuards
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ActionProvider
 import dev.ide.analysis.AnalysisTarget
@@ -49,6 +50,7 @@ object JavaPsiAnalysisSupport {
         extensions.register(QUICK_FIX_PROVIDER_EP, ChangeVariableTypeFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, CreateMethodFromUsageFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, NewApiFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, PermissionCheckFixProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, ImplementMembersActionProvider(), plugin)
     }
 }
@@ -309,6 +311,69 @@ internal class NewApiFixProvider : QuickFixProvider {
     private companion object {
         const val REQUIRES_API = "androidx.annotation.RequiresApi"
         const val TARGET_API = "android.annotation.TargetApi"
+    }
+}
+
+/**
+ * The missing-permission check's in-file fix, the one Android Studio offers: check the permission before the
+ * statement and return when it is not granted. Offered only where that `return;` is valid, a statement directly
+ * in the body of a `void` method, and only for the run-time warning (a permission missing from the manifest is
+ * fixed in the manifest, by the host).
+ */
+internal class PermissionCheckFixProvider : QuickFixProvider {
+    override val forCodes = setOf(PermissionGuards.MISSING_PERMISSION)
+    override val languages = setOf(JAVA)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        if (PermissionGuards.isMissingFromManifest(diagnostic.message)) return emptyList()
+        val (permissions, anyOf) = PermissionGuards.permissionsNamedIn(diagnostic.message)
+        if (permissions.isEmpty()) return emptyList()
+        val offset = diagnostic.range.start
+        val applies = IntellijPsiHost.withParseLock { leafAt(target, offset)?.let { (_, el) -> statementInVoidMethod(el) } != null }
+        if (!applies) return emptyList()
+        return listOf(object : QuickFix {
+            override val title = "Add permission check"
+            override val kind = CodeActionKind.QUICK_FIX
+            override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit = IntellijPsiHost.withParseLock {
+                val (file, el) = leafAt(ctx.target, offset) ?: return@withParseLock WorkspaceEdit.EMPTY
+                val statement = statementInVoidMethod(el) ?: return@withParseLock WorkspaceEdit.EMPTY
+                val compat = JavaPsiFacade.getInstance(file.project).findClass(ACTIVITY_COMPAT, file.resolveScope) != null
+                val at = statement.textRange.startOffset
+                val indent = indentAt(file.text, at)
+                val check = if (compat) "ActivityCompat.checkSelfPermission(this, " else "checkSelfPermission("
+                val condition = permissions.joinToString(if (anyOf) " &&\n$indent        " else " ||\n$indent        ") { p ->
+                    val constant = if (p.startsWith(PLATFORM_PERMISSION)) "Manifest.permission.${p.removePrefix(PLATFORM_PERMISSION)}" else "\"$p\""
+                    "$check$constant) != PackageManager.PERMISSION_GRANTED"
+                }
+                val edits = mutableListOf(DocumentEdit(at, 0,
+                    "if ($condition) {\n" +
+                        "$indent    // TODO: request the permission with ActivityCompat.requestPermissions and handle the result\n" +
+                        "$indent    return;\n" +
+                        "$indent}\n$indent"))
+                val imports = listOfNotNull(
+                    ACTIVITY_COMPAT.takeIf { compat },
+                    "android.content.pm.PackageManager",
+                    "android.Manifest".takeIf { permissions.any { it.startsWith(PLATFORM_PERMISSION) } },
+                ).mapNotNull { importEditFor(file, it) }
+                // One insertion for every import: several at one offset would land in no particular order.
+                if (imports.isNotEmpty()) edits += DocumentEdit(imports[0].offset, 0, imports.joinToString("") { it.newText })
+                WorkspaceEdit.of(ctx.target.file, *edits.toTypedArray())
+            }
+        })
+    }
+
+    /** The statement holding [el] when it sits directly in the body of a `void` method. */
+    private fun statementInVoidMethod(el: PsiElement): PsiStatement? {
+        var s: PsiStatement = PsiTreeUtil.getParentOfType(el, PsiStatement::class.java) ?: return null
+        while (s.parent !is PsiCodeBlock) s = PsiTreeUtil.getParentOfType(s, PsiStatement::class.java) ?: return null
+        val method = s.parent.parent as? PsiMethod ?: return null
+        if (method.returnType?.canonicalText != "void" || s is PsiDeclarationStatement) return null
+        return s
+    }
+
+    private companion object {
+        const val ACTIVITY_COMPAT = "androidx.core.app.ActivityCompat"
+        const val PLATFORM_PERMISSION = "android.permission."
     }
 }
 

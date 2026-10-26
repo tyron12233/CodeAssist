@@ -48,9 +48,11 @@ class IncrementalSemanticAnalysis(
     private val resolveReady: () -> Boolean = { service.classpathReady() },
     /** The module's API-level check inputs (Android minSdk, or a JVM module's Java release); null skips it. */
     private val apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null },
+    /** The module's missing-permission check inputs (an Android module's manifest + SDK levels); null skips it. */
+    private val permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null },
 ) {
 
-    private val checks = KotlinSemanticChecks(service, apiContext)
+    private val checks = KotlinSemanticChecks(service, apiContext, permissionContext)
 
     // The read-only checker set, driven over each declaration's subtree in one walk (see KotlinCheckerDriver).
     // Built once: the checkers are stateless beyond the per-pass caches [checks] clears in resetPassCaches.
@@ -159,7 +161,8 @@ class IncrementalSemanticAnalysis(
         // A cross-file dependency changed (a class edited in ANOTHER file) → this file's cached diagnostics may
         // be stale even though its own text is unchanged → re-analyze fully. (Self-edits are excluded from the
         // stamp and scoped by [IncrementalDecls.plan] below; per-declaration cross-file scoping is a later phase.)
-        val externalStamp = service.externalContentStamp(parsed.file.path)
+        // The manifest is outside the source model too: a permission added to it changes this file's warnings.
+        val externalStamp = service.externalContentStamp(parsed.file.path) * 31 + (permissionContext()?.stamp ?: 0L)
         val prev = analyzeCache[parsed.file.path]?.takeIf { it.externalStamp == externalStamp }
         // The recompute plan: the declarations this edit can actually affect (the changed ones plus the
         // dependents of any signature/import change). Everything else is reused, re-anchored. See IncrementalDecls.

@@ -4,6 +4,7 @@ import dev.ide.agent.ui.AgentUiPlugin
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.MODULE_ANALYSIS
+import dev.ide.analysis.QUICK_FIX_PROVIDER_EP
 import dev.ide.android.support.ANDROID_RESOURCE_REPOSITORY
 import dev.ide.android.support.AndroidAidlProvider
 import dev.ide.android.support.AndroidBuildConfigProvider
@@ -226,6 +227,7 @@ object BuiltInPlugins {
         BuiltInPlugin(JavaPsiAnalysisPlugin()),
         BuiltInPlugin(KotlinAnalysisPlugin()),
         BuiltInPlugin(PackageMismatchPlugin()),
+        BuiltInPlugin(ManifestPermissionPlugin(env)),
         BuiltInPlugin(XmlAnalysisPlugin(env)),
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
@@ -762,6 +764,25 @@ private class PackageMismatchPlugin : Plugin {
 
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid -> ext.register(ANALYZER_EP, PackageMismatchAnalyzer(), pid) }
+    }
+}
+
+/**
+ * The missing-permission check's manifest fix (Java + Kotlin): add the `<uses-permission>` a call needs to the
+ * module's `AndroidManifest.xml`, which the active engine locates.
+ */
+private class ManifestPermissionPlugin(private val env: ApplicationEnvironment) : Plugin {
+    override val manifest = PluginManifest(
+        id = "manifest-permission-fix",
+        name = "Missing Permission Fix",
+        description = "Adds the permission an Android API call needs to the module's AndroidManifest.xml.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(
+            QUICK_FIX_PROVIDER_EP,
+            dev.ide.core.analysis.ManifestPermissionFixProvider { module -> env.activeEngine?.manifestFileOf(module) },
+        )
     }
 }
 

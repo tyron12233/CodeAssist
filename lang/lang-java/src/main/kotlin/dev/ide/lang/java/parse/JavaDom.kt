@@ -110,6 +110,8 @@ class JavaParsedFile(
     private val apiContext: () -> ApiLevelContext? = { null },
     /** The module's Java language level (`8`, `17`); syntax newer than it is reported. */
     private val languageLevel: () -> Int = { Int.MAX_VALUE },
+    /** The module's missing-permission check inputs (an Android module's manifest + SDK levels); null skips it. */
+    private val permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null },
 ) : ParsedFile {
 
     private val cache = IdentityHashMap<PsiElement, JavaDomNode>()
@@ -127,11 +129,25 @@ class JavaParsedFile(
     // Syntax (PsiErrorElements) + resolution-derived semantic diagnostics (unresolved references). Lazy, so
     // the (locked, resolving) semantic pass runs only when diagnostics are actually read (the analysis pass),
     // not for completion/folding/etc. that never touch `.diagnostics`.
-    override val diagnostics: List<Diagnostic> by lazy {
+    override val diagnostics: List<Diagnostic> get() = fileDiagnostics + permissionDiagnostics()
+
+    private val fileDiagnostics: List<Diagnostic> by lazy {
         val api = apiContext()
         collectDiagnostics(javaFile) + dev.ide.lang.java.resolve.JavaSemanticDiagnostics.of(javaFile) +
             dev.ide.lang.java.resolve.JavaLanguageLevelCheck.of(javaFile, languageLevel()) +
             (if (api != null) dev.ide.lang.java.resolve.JavaApiLevelCheck.of(javaFile, api) else emptyList())
+    }
+
+    // The permission check reads the MANIFEST, which changes without this file changing (a permission added to
+    // fix the warning), so its result is kept only while the inputs it read are the same.
+    @Volatile private var permissionMemo: Pair<Long, List<Diagnostic>>? = null
+
+    private fun permissionDiagnostics(): List<Diagnostic> {
+        val ctx = permissionContext() ?: return emptyList()
+        permissionMemo?.let { (stamp, diags) -> if (stamp == ctx.stamp) return diags }
+        val diags = dev.ide.lang.java.resolve.JavaPermissionCheck.of(javaFile, ctx)
+        permissionMemo = ctx.stamp to diags
+        return diags
     }
 
     override fun nodeAt(offset: Int): DomNode {

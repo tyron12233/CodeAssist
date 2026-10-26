@@ -621,6 +621,12 @@ class KotlinEditorFeatures(
         return KotlinApiLevelFixes.fixes(parsed.ktFile, offset, level, service.isKnownType("androidx.annotation.RequiresApi"))
     }
 
+    /** The missing-permission check's "Add permission check" fix at [offset], or null where it can't apply. */
+    fun permissionCheckFix(file: VirtualFile, offset: Int, permissions: List<String>, anyOf: Boolean): KotlinImportFix? {
+        val parsed = parsedFor(file.path) ?: return null
+        return KotlinPermissionFixes.checkFix(parsed.ktFile, offset, permissions, anyOf, service.isKnownType("androidx.core.app.ActivityCompat"))
+    }
+
     /** The innermost function enclosing [offset] (the suspend-override diagnostic anchors on its name). */
     private fun functionCovering(ktFile: KtFile, offset: Int): KtNamedFunction? {
         var n: KtElement? =

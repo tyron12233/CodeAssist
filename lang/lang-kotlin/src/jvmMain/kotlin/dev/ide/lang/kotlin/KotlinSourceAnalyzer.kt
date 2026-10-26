@@ -159,6 +159,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null }
 
+    /** Injected by the host for an Android module: its declared permissions + SDK levels, for the
+     *  missing-permission check. Read on every pass, so a manifest edit applies. */
+    @Volatile
+    var permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null }
+
     /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
      *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
      *  and reindexed. Pushed into the symbol model at each analyze/complete/resolve; the model diffs the
@@ -537,6 +542,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             service,
             ::sharedCachesFor,
             apiContext = { apiContext() },
+            permissionContext = { permissionContext() },
         )
     }
     private val incrementalAnalysis by incrementalAnalysisLazy
@@ -567,6 +573,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The minSdk check's quick fixes (`@RequiresApi`, an `SDK_INT` guard); see [KotlinEditorFeatures.newApiFixes]. */
     fun newApiFixes(file: VirtualFile, offset: Int, level: Int): List<KotlinImportFix> = features.newApiFixes(file, offset, level)
+
+    fun permissionCheckFix(file: VirtualFile, offset: Int, permissions: List<String>, anyOf: Boolean): KotlinImportFix? =
+        features.permissionCheckFix(file, offset, permissions, anyOf)
 
     // --- resolution / inference ---
 
