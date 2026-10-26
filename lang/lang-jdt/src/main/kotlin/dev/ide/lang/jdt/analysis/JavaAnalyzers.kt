@@ -13,7 +13,6 @@ import dev.ide.analysis.FileAnalyzer
 import dev.ide.analysis.NodeIndex
 import dev.ide.lang.LanguageId
 import dev.ide.lang.jdt.JdtSourceAnalyzer
-import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
@@ -24,47 +23,6 @@ import dev.ide.lang.dom.TextRange
  * diagnostic stream the editor renders inline.
  */
 private val JAVA = LanguageId("java")
-
-/** SYNTAX: flag `System.out` / `System.err` used for logging (gated on METHOD_CALL nodes). */
-class SystemOutCallAnalyzer : FileAnalyzer {
-    override val id = AnalyzerId("java.systemOut")
-    override val displayName = "System.out/err used for logging"
-    override val languages = setOf(JAVA)
-    override val defaultSeverity = Severity.WARNING
-    override val tier = AnalyzerTier.SYNTAX
-    override val interestedIn = setOf(NodeKind.METHOD_CALL)
-
-    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink) =
-        analyze(target, sink, NodeIndex.over(target.parsed))
-
-    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink, nodes: NodeIndex) {
-        // The prefix is tested against the source at the call's own start, not against a copy of the
-        // call's text: an enclosing call's text includes every nested call's, so materializing it to
-        // read eleven characters re-copies the inner ones at every level of nesting.
-        val source = target.parsed.text()
-        for (call in nodes.nodes(NodeKind.METHOD_CALL)) {
-            val start = call.range.start
-            // Require the member boundary (`System.out.`), so a user type's own member — `System.outLog.append(x)`
-            // where `System` is the project's class — isn't mistaken for `java.lang.System.out`.
-            val prefix = when {
-                call.startsWith(source, "System.out.") -> "System.out"
-                call.startsWith(source, "System.err.") -> "System.err"
-                else -> continue
-            }
-            sink.report(
-                range = TextRange(start, start + prefix.length),
-                severity = defaultSeverity,
-                message = "Avoid $prefix for logging; use a logger",
-                code = "java.systemOut",
-            )
-        }
-    }
-
-    /** Whether this node's own text starts with [prefix], read off [source] in place, and never past
-     *  the node's end (a node shorter than [prefix] cannot start with it, whatever follows it). */
-    private fun DomNode.startsWith(source: CharSequence, prefix: String): Boolean =
-        range.end - range.start >= prefix.length && source.startsWith(prefix, range.start)
-}
 
 /**
  * Flag a single-type import whose name is never referenced in the file body (tag UNUSED). This is a

@@ -14,7 +14,6 @@ import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
-import dev.ide.lang.jdt.analysis.SystemOutCallAnalyzer
 import dev.ide.lang.jdt.analysis.UnusedImportAnalyzer
 import dev.ide.model.Module
 import dev.ide.vfs.VirtualFile
@@ -50,24 +49,22 @@ class FileAnalyzerBenchmark {
                 val target = Target(file, parsed, analyzer)
                 val calls = NodeIndex.over(parsed).nodes(NodeKind.METHOD_CALL).size
 
-                val sysOut = SystemOutCallAnalyzer()
                 val unused = UnusedImportAnalyzer()
                 // The shared traversal, on its own: the floor under everything below.
                 val walkNs = Bench.nsPerOp { NodeIndex.over(parsed).kinds.size.toLong() }
                 val walkAlloc = Bench.allocPerOp { NodeIndex.over(parsed).kinds.size.toLong() }
                 // Each analyzer given that index: its own work, with no traversal of its own.
                 val walked = walked(parsed)
-                val sysOutNs = Bench.nsPerOp { given(target, walked) { t, s, n -> sysOut.analyze(t, s, n) } }
                 val unusedNs = Bench.nsPerOp { given(target, walked) { t, s, n -> unused.analyze(t, s, n) } }
-                // The whole SYNTAX pass as the engine runs it: one index, gate, both analyzers.
-                val passNs = Bench.nsPerOp { pass(target, sysOut, unused) }
-                val passAlloc = Bench.allocPerOp { pass(target, sysOut, unused) }
+                // The whole SYNTAX pass as the engine runs it: one index, gate, the analyzer.
+                val passNs = Bench.nsPerOp { pass(target, unused) }
+                val passAlloc = Bench.allocPerOp { pass(target, unused) }
 
                 rows += ("%-28s %6d B src %4d imports %5d calls | walk %8s %8s" +
-                    " | systemOut %8s | unusedImport %8s | whole pass %8s %8s").format(
+                    " | unusedImport %8s | whole pass %8s %8s").format(
                     shape.name, src.length, shape.imports, calls,
                     Bench.ns(walkNs), Bench.bytes(walkAlloc.toDouble()),
-                    Bench.ns(sysOutNs), Bench.ns(unusedNs),
+                    Bench.ns(unusedNs),
                     Bench.ns(passNs), Bench.bytes(passAlloc.toDouble()),
                 )
                 if (shape === SHAPES[1]) typicalPass = passNs

@@ -11,7 +11,6 @@ import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
-import dev.ide.lang.jdt.analysis.SystemOutCallAnalyzer
 import dev.ide.lang.jdt.analysis.UnusedImportAnalyzer
 import dev.ide.model.Module
 import dev.ide.vfs.VirtualFile
@@ -20,66 +19,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The two built-in Java [dev.ide.analysis.FileAnalyzer]s, driven the way the engine drives them (over the
- * pass's shared [NodeIndex]). Both are syntactic heuristics with a boundary rule that is easy to get
- * subtly wrong (`System.out.` must not match `System.outLog.`, and an import of `List` must not read
- * as used because the body mentions `ListView`), so the boundaries are what these cover.
+ * The built-in Java [dev.ide.analysis.FileAnalyzer], driven the way the engine drives it (over the pass's
+ * shared [NodeIndex]). It is a syntactic heuristic with a boundary rule that is easy to get subtly wrong (an
+ * import of `List` must not read as used because the body mentions `ListView`), so the boundaries are what
+ * these cover.
  */
 class JavaAnalyzersTest {
-
-    // ---- java.systemOut ----
-
-    @Test
-    fun flagsSystemOutAndErrWithTheRangeOfTheStreamOnly() {
-        val src = """
-            package app;
-            class T {
-                void m() {
-                    System.out.println("hi");
-                    System.err.print("bad");
-                }
-            }
-        """.trimIndent()
-        val found = systemOut(src)
-        assertEquals(2, found.size, "expected one finding per stream; got $found")
-        assertTrue(found.all { it.code == "java.systemOut" })
-        // The squiggle covers `System.out`, not the whole statement.
-        assertEquals(listOf("System.out", "System.err"), found.map { src.substring(it.range.start, it.range.end) })
-    }
-
-    @Test
-    fun doesNotFlagAMemberWhoseNameMerelyStartsWithOut() {
-        // `System` here is the project's own class: `System.outLog` is not `java.lang.System.out`, and the
-        // member boundary (the `.` after `out`) is the only thing separating them syntactically.
-        val src = """
-            package app;
-            class T {
-                static Appendable outLog;
-                void m() { System.outLog.append("x"); }
-            }
-        """.trimIndent()
-        assertEquals(emptyList(), systemOut(src).map { it.message })
-    }
-
-    @Test
-    fun flagsTheOuterCallOnceWhenCallsNest() {
-        val src = """
-            package app;
-            class T {
-                void m() { System.out.println(compute(name())); }
-                String compute(String s) { return s; }
-                String name() { return "n"; }
-            }
-        """.trimIndent()
-        assertEquals(1, systemOut(src).size, "the nested calls must not each report")
-    }
-
-    @Test
-    fun ignoresShortCallsWithoutReadingPastThem() {
-        // A call shorter than "System.out." must not be tested against the text that follows it.
-        val src = "package app;\nclass T { void m() { f(); }\n void f() {} }"
-        assertEquals(emptyList(), systemOut(src).map { it.message })
-    }
 
     // ---- java.unusedImport ----
 
@@ -144,10 +89,6 @@ class JavaAnalyzersTest {
     }
 
     // ---- harness ----
-
-    private fun systemOut(src: String) = run(src) { target, sink, nodes ->
-        SystemOutCallAnalyzer().analyze(target, sink, nodes)
-    }
 
     private fun unusedImports(src: String) = run(src) { target, sink, nodes ->
         UnusedImportAnalyzer().analyze(target, sink, nodes)

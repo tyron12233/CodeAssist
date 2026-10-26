@@ -18,7 +18,6 @@ object JdtAnalysisSupport {
     val PLUGIN = PluginId("jdt-analysis")
 
     fun register(extensions: ExtensionRegistry, plugin: PluginId = PLUGIN) {
-        extensions.register(ANALYZER_EP, SystemOutCallAnalyzer(), plugin)
         extensions.register(ANALYZER_EP, UnusedImportAnalyzer(), plugin)
         extensions.register(DIAGNOSTIC_PROVIDER_EP, CompilerDiagnosticProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, AddImportQuickFixProvider(), plugin)
