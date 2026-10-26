@@ -676,6 +676,8 @@ private fun CodeEditorContent(
     LaunchedEffect(path, editorSession.selection, editorSession.textRevision, editorSession.diagnostics) {
         acts.refreshAvailability(isFocused)
     }
+    // Typing closes the problem popup/sheet: what it shows was resolved against the text before the edit.
+    LaunchedEffect(editorSession.textRevision) { acts.closeSheetIfEdited() }
 
     // Tear down the floating popups when the editor loses focus or is covered by an overlay.
     LaunchedEffect(engaged) {

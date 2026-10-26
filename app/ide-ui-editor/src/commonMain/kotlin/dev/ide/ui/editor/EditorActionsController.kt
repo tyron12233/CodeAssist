@@ -70,6 +70,8 @@ internal class EditorActionsController(
     /** Which of [sheetGroup] the sheet is showing in full (message + fixes). */
     var sheetSelected by mutableIntStateOf(0)
         private set
+    /** The buffer's [EditorSession.textRevision] when the sheet opened: its diagnostics and fixes describe that text. */
+    private var sheetRevision = 0
     /** The diagnostic the sheet currently details, or null when the sheet is closed. */
     val sheet: UiDiagnostic? get() = sheetGroup.getOrNull(sheetSelected)
     var sheetActions by mutableStateOf<List<UiAction>>(emptyList())
@@ -234,6 +236,7 @@ internal class EditorActionsController(
         dismissCompletion()
         menuOpen = false
         val group = diagnosticGroupFor(d)
+        sheetRevision = session.textRevision
         sheetGroup = group
         sheetSelected = group.indexOf(d).coerceAtLeast(0)
         fetchSheetActions(group.getOrNull(sheetSelected) ?: d)
@@ -268,6 +271,15 @@ internal class EditorActionsController(
             sheetActions = runCatching { backend.editor.actionsAt(path, text, d.startOffset, d.endOffset) }
                 .getOrNull().orEmpty().filter { it.actionId == null }
         }
+    }
+
+    /**
+     * Close the sheet once the text has changed since it opened, as IntelliJ hides its error tooltip on the next
+     * keystroke. Its message may no longer hold, and its fixes were resolved against the old text: applying one
+     * would edit the diagnostic's old range. The chip is still there to open it again, freshly resolved.
+     */
+    fun closeSheetIfEdited() {
+        if (sheetGroup.isNotEmpty() && session.textRevision != sheetRevision) closeSheet()
     }
 
     fun closeSheet() {
