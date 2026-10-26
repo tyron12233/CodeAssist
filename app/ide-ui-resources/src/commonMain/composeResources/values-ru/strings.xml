@@ -472,6 +472,12 @@
     <string name="run_conflict_message">Сборка или программа всё ещё выполняется. Остановить её и запустить вместо неё?</string>
     <string name="run_conflict_stop_and_run">Остановить и запустить</string>
     <string name="run_conflict_dont_ask">Больше не спрашивать</string>
+    <string name="unsaved_close_title">Несохранённые изменения</string>
+    <string name="unsaved_close_message_one">Сохранить изменения в %1$s перед закрытием?</string>
+    <string name="unsaved_close_message_many">Сохранить изменения в этих файлах перед закрытием?</string>
+    <string name="unsaved_close_discard">Не сохранять</string>
+    <string name="unsaved_close_dont_ask">Больше не спрашивать</string>
+    <string name="unsaved_close_dont_ask_hint">Это можно изменить в Настройки ▸ Редактор.</string>
     <string name="build_notif_title">Показывать уведомления о сборке?</string>
     <string name="build_notif_message">CodeAssist может выполнять сборки и вашу программу в отдельном изолированном процессе и показывать уведомление о ходе выполнения. Это не даёт Android останавливать сборку, когда вы переключаетесь на другое приложение, и позволяет следить за прогрессом. Разрешите уведомления, чтобы включить эту функцию.</string>
     <string name="build_notif_not_now">Не сейчас</string>
@@ -998,6 +1004,7 @@
     <string name="set_page_privacy">Конфиденциальность и данные</string>
     <string name="set_grp_gestures">Жесты</string>
     <string name="set_grp_keyboard">Клавиатура</string>
+    <string name="set_grp_tabs">Вкладки</string>
     <string name="set_grp_preview_sandbox">Песочница предпросмотра</string>
     <string name="set_grp_privacy">Конфиденциальность</string>
     <string name="set_grp_storage">Хранилище</string>
@@ -1038,6 +1045,11 @@
     <string name="set_editor_pinch_desc">Сведите или разведите два пальца, чтобы изменить размер шрифта кода</string>
     <string name="set_editor_kbd_suggest">Подсказки клавиатуры</string>
     <string name="set_editor_kbd_suggest_desc">Разрешить экранной клавиатуре автоисправление, подсказки и автопробелы (обычная клавиатура). Выключите для ввода чистого кода, чтобы после набранной «.» не вставлялся автоматический пробел, ценой полосы подсказок.</string>
+    <string name="set_editor_close_unsaved">Закрытие вкладки с несохранёнными изменениями</string>
+    <string name="set_editor_close_unsaved_desc">Сначала спрашивать или всегда сохранять либо отбрасывать изменения без вопроса</string>
+    <string name="set_editor_close_unsaved_ask">Спрашивать</string>
+    <string name="set_editor_close_unsaved_save">Сохранять</string>
+    <string name="set_editor_close_unsaved_discard">Не сохранять</string>
     <string name="set_completion_auto">Автопоказ подсказок</string>
     <string name="set_completion_auto_desc">Всплывающий список при вводе (выкл = только Ctrl-Space)</string>
     <string name="set_completion_postfix">Постфиксные шаблоны</string>

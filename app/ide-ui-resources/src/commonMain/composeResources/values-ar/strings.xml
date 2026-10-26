@@ -1077,6 +1077,12 @@
     <string name="run_conflict_message">لا يزال هناك بناء أو برنامج قيد التشغيل. هل تريد إيقافه وبدء هذا التشغيل بدلاً منه؟</string>
     <string name="run_conflict_stop_and_run">إيقاف وتشغيل</string>
     <string name="run_conflict_dont_ask">عدم السؤال مرة أخرى</string>
+    <string name="unsaved_close_title">تغييرات غير محفوظة</string>
+    <string name="unsaved_close_message_one">هل تريد حفظ التغييرات في %1$s قبل إغلاقه؟</string>
+    <string name="unsaved_close_message_many">هل تريد حفظ التغييرات في هذه الملفات قبل إغلاقها؟</string>
+    <string name="unsaved_close_discard">عدم الحفظ</string>
+    <string name="unsaved_close_dont_ask">عدم السؤال مرة أخرى</string>
+    <string name="unsaved_close_dont_ask_hint">يمكنك تغيير ذلك من الإعدادات ◂ المحرر.</string>
     <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">عرض إشعارات البناء؟</string>
     <string name="build_notif_message">يمكن لـ CodeAssist تشغيل عمليات البناء وبرنامجك في عملية منفصلة ومعزولة وعرض إشعار تقدّم أثناء تشغيلها. يمنع هذا Android من إيقاف البناء عند التبديل إلى تطبيق آخر، ويتيح لك متابعة التقدّم. اسمح بالإشعارات لتفعيل هذا.</string>
@@ -1755,6 +1761,7 @@
     <!-- Group sub-headings -->
     <string name="set_grp_gestures">الإيماءات</string>
     <string name="set_grp_keyboard">لوحة المفاتيح</string>
+    <string name="set_grp_tabs">علامات التبويب</string>
     <string name="set_grp_preview_sandbox">صندوق حماية المعاينة</string>
     <string name="set_grp_privacy">الخصوصية</string>
     <string name="set_grp_storage">التخزين</string>
@@ -1801,6 +1808,11 @@
     <string name="set_editor_pinch_desc">اقرص بإصبعين لتغيير حجم خط الكود</string>
     <string name="set_editor_kbd_suggest">اقتراحات لوحة المفاتيح</string>
     <string name="set_editor_kbd_suggest_desc">اسمح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفه لإدخال الكود الخام، بحيث لا تحصل النقطة "." المكتوبة على مسافة مُدرَجة تلقائيًا، مقابل فقدان شريط الاقتراحات.</string>
+    <string name="set_editor_close_unsaved">إغلاق علامة تبويب بها تغييرات غير محفوظة</string>
+    <string name="set_editor_close_unsaved_desc">السؤال أولاً، أو الحفظ أو تجاهل التغييرات دائمًا دون سؤال</string>
+    <string name="set_editor_close_unsaved_ask">السؤال</string>
+    <string name="set_editor_close_unsaved_save">الحفظ</string>
+    <string name="set_editor_close_unsaved_discard">عدم الحفظ</string>
     <!-- Code Completion -->
     <string name="set_completion_auto">إظهار الاقتراحات تلقائيًا</string>
     <string name="set_completion_auto_desc">إظهار القائمة أثناء الكتابة (إيقاف = Ctrl-Space فقط)</string>

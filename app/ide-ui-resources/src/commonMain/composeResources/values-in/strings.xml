@@ -505,6 +505,12 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="run_conflict_message">Sebuah build atau program masih berjalan. Hentikan dan mulai proses ini sebagai gantinya?</string>
     <string name="run_conflict_stop_and_run">Hentikan dan Jalankan</string>
     <string name="run_conflict_dont_ask">Jangan tanya lagi</string>
+    <string name="unsaved_close_title">Perubahan belum disimpan</string>
+    <string name="unsaved_close_message_one">Simpan perubahan pada %1$s sebelum menutupnya?</string>
+    <string name="unsaved_close_message_many">Simpan perubahan pada file-file ini sebelum menutupnya?</string>
+    <string name="unsaved_close_discard">Jangan Simpan</string>
+    <string name="unsaved_close_dont_ask">Jangan tanya lagi</string>
+    <string name="unsaved_close_dont_ask_hint">Anda dapat mengubahnya di Setelan ▸ Editor.</string>
     <string name="build_notif_title">Tampilkan notifikasi build?</string>
     <string name="build_notif_message">CodeAssist dapat menjalankan build dan program Anda dalam proses terisolasi yang terpisah dan menampilkan notifikasi progres saat berjalan. Ini mencegah Android menghentikan build ketika Anda beralih aplikasi, dan memungkinkan Anda mengikuti progresnya. Izinkan notifikasi untuk mengaktifkannya.</string>
     <string name="build_notif_not_now">Nanti saja</string>
@@ -1040,6 +1046,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="set_page_privacy">Privasi &amp; Data</string>
     <string name="set_grp_gestures">Gestur</string>
     <string name="set_grp_keyboard">Keyboard</string>
+    <string name="set_grp_tabs">Tab</string>
     <string name="set_grp_preview_sandbox">Sandbox pratinjau</string>
     <string name="set_grp_privacy">Privasi</string>
     <string name="set_grp_storage">Penyimpanan</string>
@@ -1080,6 +1087,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="set_editor_pinch_desc">Cubit dengan dua jari untuk mengubah ukuran font kode</string>
     <string name="set_editor_kbd_suggest">Saran keyboard</string>
     <string name="set_editor_kbd_suggest_desc">Biarkan keyboard lunak melakukan koreksi otomatis, memberi saran, dan spasi otomatis (keyboard normal). Matikan untuk input kode mentah, agar '.' yang diketik tidak mendapat spasi yang disisipkan otomatis, dengan konsekuensi kehilangan strip saran.</string>
+    <string name="set_editor_close_unsaved">Menutup tab dengan perubahan yang belum disimpan</string>
+    <string name="set_editor_close_unsaved_desc">Tanya dulu, atau selalu simpan atau buang perubahan tanpa bertanya</string>
+    <string name="set_editor_close_unsaved_ask">Tanya</string>
+    <string name="set_editor_close_unsaved_save">Simpan</string>
+    <string name="set_editor_close_unsaved_discard">Jangan simpan</string>
     <string name="set_completion_auto">Tampilkan saran otomatis</string>
     <string name="set_completion_auto_desc">Munculkan daftar saat mengetik (nonaktif = hanya Ctrl-Space)</string>
     <string name="set_completion_postfix">Template postfix</string>

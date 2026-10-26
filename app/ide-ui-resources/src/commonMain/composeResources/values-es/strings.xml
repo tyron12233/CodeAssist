@@ -560,6 +560,12 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="run_conflict_message">Todavía se está ejecutando una compilación o un programa. ¿Detenerlo e iniciar esta ejecución en su lugar?</string>
     <string name="run_conflict_stop_and_run">Detener y ejecutar</string>
     <string name="run_conflict_dont_ask">No volver a preguntar</string>
+    <string name="unsaved_close_title">Cambios sin guardar</string>
+    <string name="unsaved_close_message_one">¿Guardar los cambios de %1$s antes de cerrarlo?</string>
+    <string name="unsaved_close_message_many">¿Guardar los cambios de estos archivos antes de cerrarlos?</string>
+    <string name="unsaved_close_discard">No guardar</string>
+    <string name="unsaved_close_dont_ask">No volver a preguntar</string>
+    <string name="unsaved_close_dont_ask_hint">Puedes cambiarlo en Configuración ▸ Editor.</string>
 
     <!-- Build notifications -->
     <string name="build_notif_title">¿Mostrar notificaciones de compilación?</string>
@@ -1136,6 +1142,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="set_page_privacy">Privacidad y datos</string>
     <string name="set_grp_gestures">Gestos</string>
     <string name="set_grp_keyboard">Teclado</string>
+    <string name="set_grp_tabs">Pestañas</string>
     <string name="set_grp_preview_sandbox">Espacio aislado de la vista previa</string>
     <string name="set_grp_privacy">Privacidad</string>
     <string name="set_grp_storage">Almacenamiento</string>
@@ -1176,6 +1183,11 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="set_editor_pinch_desc">Pellizca con dos dedos para cambiar el tamaño de la fuente del código</string>
     <string name="set_editor_kbd_suggest">Sugerencias del teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un '.' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
+    <string name="set_editor_close_unsaved">Cerrar una pestaña con cambios sin guardar</string>
+    <string name="set_editor_close_unsaved_desc">Preguntar primero, o guardar o descartar siempre los cambios sin preguntar</string>
+    <string name="set_editor_close_unsaved_ask">Preguntar</string>
+    <string name="set_editor_close_unsaved_save">Guardar</string>
+    <string name="set_editor_close_unsaved_discard">No guardar</string>
     <string name="set_completion_auto">Mostrar sugerencias automáticamente</string>
     <string name="set_completion_auto_desc">Muestra la lista mientras escribes (desactivado = solo con Ctrl-Space)</string>
     <string name="set_completion_postfix">Plantillas postfix</string>

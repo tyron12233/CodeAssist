@@ -13,6 +13,7 @@ import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.components.RunConflictDialog
+import dev.ide.ui.components.UnsavedCloseDialog
 import dev.ide.ui.ext.OverlayContext
 import dev.ide.ui.ext.OverlayRegistry
 import dev.ide.ui.generated.resources.Res
@@ -85,6 +86,8 @@ internal fun AppOverlays(
     BuildNotificationGate(state)
     // "Already running" confirmation — raised when a new Run is requested while a build/program is in flight.
     RunConflictDialog(state)
+    // "Save changes before closing?" — raised when tabs holding unsaved edits are closed.
+    UnsavedCloseDialog(state)
     // IntelliJ-style non-fatal error dialog — overlays everything when the engine reports an unexpected error.
     ErrorDialog(backend)
     // "Unrecognized file" notice when a picked/opened file wasn't a readable .caproj package.

@@ -522,6 +522,12 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="run_conflict_message">Uma compilação ou programa ainda está em execução. Interromper e iniciar esta execução?</string>
     <string name="run_conflict_stop_and_run">Interromper e executar</string>
     <string name="run_conflict_dont_ask">Não perguntar novamente</string>
+    <string name="unsaved_close_title">Alterações não salvas</string>
+    <string name="unsaved_close_message_one">Salvar as alterações em %1$s antes de fechar?</string>
+    <string name="unsaved_close_message_many">Salvar as alterações nestes arquivos antes de fechá-los?</string>
+    <string name="unsaved_close_discard">Não salvar</string>
+    <string name="unsaved_close_dont_ask">Não perguntar novamente</string>
+    <string name="unsaved_close_dont_ask_hint">Você pode mudar isso em Configurações ▸ Editor.</string>
     <string name="build_notif_title">Mostrar notificações de compilação?</string>
     <string name="build_notif_message">O CodeAssist pode executar compilações e seu programa em um processo separado e isolado, e mostrar uma notificação de progresso enquanto são executados. Isso impede que o Android interrompa a compilação quando você troca de app e permite acompanhar o progresso. Permita as notificações para ativar isso.</string>
     <string name="build_notif_not_now">Agora não</string>
@@ -1090,6 +1096,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_page_privacy">Privacidade e dados</string>
     <string name="set_grp_gestures">Gestos</string>
     <string name="set_grp_keyboard">Teclado</string>
+    <string name="set_grp_tabs">Abas</string>
     <string name="set_grp_preview_sandbox">Sandbox da visualização</string>
     <string name="set_grp_privacy">Privacidade</string>
     <string name="set_grp_storage">Armazenamento</string>
@@ -1130,6 +1137,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_editor_pinch_desc">Pince com dois dedos para alterar o tamanho da fonte do código</string>
     <string name="set_editor_kbd_suggest">Sugestões do teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permita que o teclado virtual faça autocorreção, sugestões e espaçamento automático (um teclado normal). Desative para entrada de código bruto, para que um '.' digitado não receba um espaço inserido automaticamente, ao custo da barra de sugestões.</string>
+    <string name="set_editor_close_unsaved">Fechar uma aba com alterações não salvas</string>
+    <string name="set_editor_close_unsaved_desc">Perguntar antes, ou sempre salvar ou descartar as alterações sem perguntar</string>
+    <string name="set_editor_close_unsaved_ask">Perguntar</string>
+    <string name="set_editor_close_unsaved_save">Salvar</string>
+    <string name="set_editor_close_unsaved_discard">Não salvar</string>
     <string name="set_completion_auto">Mostrar sugestões automaticamente</string>
     <string name="set_completion_auto_desc">Abrir a lista enquanto você digita (desativado = apenas Ctrl-Space)</string>
     <string name="set_completion_postfix">Templates postfix</string>

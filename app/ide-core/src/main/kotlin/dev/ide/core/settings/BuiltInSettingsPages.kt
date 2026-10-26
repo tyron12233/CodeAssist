@@ -33,6 +33,14 @@ object BuiltInSettingsPages {
     /** Full preference key of [REOPEN_LAST_PROJECT]. */
     const val REOPEN_LAST_PROJECT_KEY = "settings.$APPEARANCE.$REOPEN_LAST_PROJECT"
 
+    /** Choice key on the [EDITOR] page: what closing a tab with unsaved edits does. Read by the UI app state
+     *  (`IdeUiState.CLOSE_UNSAVED_PREF`, the same full key), and written by its dialog's "Don't ask again". */
+    const val CLOSE_UNSAVED = "closeUnsaved"
+    const val CLOSE_UNSAVED_KEY = "settings.$EDITOR.$CLOSE_UNSAVED"
+    const val CLOSE_UNSAVED_ASK = "ask"
+    const val CLOSE_UNSAVED_SAVE = "save"
+    const val CLOSE_UNSAVED_DISCARD = "discard"
+
     /** Choice key on the [BUILD_RUNTIME] page: the "Low memory mode" override of the detected device tier
      *  (`auto` / `on` / `off`, see [dev.ide.platform.DeviceMemory]). Applied when a project opens. */
     const val LOW_MEMORY_MODE = "lowMemoryMode"
@@ -218,6 +226,16 @@ object BuiltInSettingsPages {
             SettingControl.Toggle("wordWrap", "Word wrap", "Soft-wrap long lines at the viewport edge instead of scrolling horizontally", default = d.wordWrap),
             SettingControl.Toggle("wrapIndent", "Indent wrapped lines", "Align a wrapped line's continuation rows to its indentation (when word wrap is on)", default = d.wrapIndent),
             SettingControl.Toggle("horizontalScrollbar", "Horizontal scrollbar", "Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)", default = d.horizontalScrollbar),
+            SettingControl.Choice(
+                CLOSE_UNSAVED, "Closing a tab with unsaved changes", "Ask first, or always save or discard the changes without asking",
+                default = CLOSE_UNSAVED_ASK,
+                options = listOf(
+                    SettingControl.Choice.Option(CLOSE_UNSAVED_ASK, "Ask"),
+                    SettingControl.Choice.Option(CLOSE_UNSAVED_SAVE, "Save"),
+                    SettingControl.Choice.Option(CLOSE_UNSAVED_DISCARD, "Don't save"),
+                ),
+                group = "Tabs",
+            ),
             SettingControl.Toggle("twoAxisScroll", "Two-axis scrolling", "Drag in any direction to scroll both axes at once (touch)", default = d.twoAxisScroll, group = "Gestures"),
             SettingControl.Toggle("pinchZoom", "Pinch to zoom", "Pinch with two fingers to change the code font size", default = d.pinchZoom, group = "Gestures"),
             SettingControl.Toggle("softKeyboardSuggestions", "Keyboard suggestions", "Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.", default = d.softKeyboardSuggestions, group = "Keyboard"),

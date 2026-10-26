@@ -174,6 +174,8 @@ internal fun BoxScope.AppShortcutsHost(
                 val item = switcher.visible.getOrNull(switcher.selected)
                 state.openFiles.firstOrNull { it.path == item?.path }?.let { tab ->
                     state.close(tab)
+                    // Unsaved edits: the save prompt takes over, and it needs the keyboard the switcher holds.
+                    if (tab in state.openFiles) { switcher.close(); return@let }
                     switcher.items = switcher.items.map { if (it.path == tab.path) it.copy(open = false) else it }
                         .filter { switcher.sticky || it.open }
                     switcher.selected = switcher.selected.coerceAtMost((switcher.visible.size - 1).coerceAtLeast(0))

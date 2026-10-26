@@ -1059,7 +1059,86 @@ class IdeUiState(
         }
     }
 
-    fun close(file: OpenFile) {
+    /** Close [file]'s tab (the tab's close button, Ctrl/Cmd-W, the switcher). Unsaved edits ask first. */
+    fun close(file: OpenFile) = requestClose(listOf(file))
+
+    /** Close every tab except [keep] (tab context menu). Iterates a copy, so mutating [openFiles] is safe. */
+    fun closeOthers(keep: OpenFile) = requestClose(openFiles.filter { it !== keep })
+
+    /** Close all open tabs. */
+    fun closeAll() = requestClose(openFiles.toList())
+
+    /** Close the tabs positioned after [file] in the strip. `drop`/`take` copy, so the loop can mutate safely. */
+    fun closeToRight(file: OpenFile) {
+        val i = openFiles.indexOf(file)
+        if (i < 0) return
+        requestClose(openFiles.drop(i + 1))
+    }
+
+    /** Close the tabs positioned before [file] in the strip. */
+    fun closeToLeft(file: OpenFile) {
+        val i = openFiles.indexOf(file)
+        if (i <= 0) return
+        requestClose(openFiles.take(i))
+    }
+
+    // ---- unsaved-close gate: closing a tab with unsaved edits asks before the edits are lost ----
+
+    /** Non-null while the "save before closing?" confirmation is up; holds the tabs it is about.
+     *  `UnsavedCloseDialog` renders it and answers through [resolveUnsavedClose] / [dismissUnsavedClose]. */
+    var unsavedClose by mutableStateOf<PendingClose?>(null)
+        private set
+
+    /**
+     * The one way a user closes tabs. Clean tabs close at once. Tabs with unsaved edits follow the
+     * [CLOSE_UNSAVED_PREF] choice: saved, discarded, or (the default) held for the confirmation dialog.
+     * A request made while the dialog is already up joins it, so a second Ctrl/Cmd-W can't drop the first.
+     */
+    private fun requestClose(tabs: List<OpenFile>) {
+        val (unsaved, clean) = tabs.partition { it.modified && !it.readOnly }
+        clean.forEach(::closeNow)
+        if (unsaved.isEmpty()) return
+        when (backend.settings.preference(CLOSE_UNSAVED_PREF)) {
+            CLOSE_UNSAVED_SAVE -> saveThenClose(unsaved)
+            CLOSE_UNSAVED_DISCARD -> unsaved.forEach(::closeNow)
+            else -> unsavedClose = PendingClose(((unsavedClose?.files ?: emptyList()) + unsaved).distinct())
+        }
+    }
+
+    /** The user chose Save ([save]) or Don't Save in the dialog. [remember] persists that choice as the
+     *  [CLOSE_UNSAVED_PREF] setting, so later closes skip the dialog (Settings ▸ Editor sets it back to Ask). */
+    fun resolveUnsavedClose(save: Boolean, remember: Boolean) {
+        val pending = unsavedClose ?: return
+        unsavedClose = null
+        if (remember) backend.settings.setPreference(CLOSE_UNSAVED_PREF, if (save) CLOSE_UNSAVED_SAVE else CLOSE_UNSAVED_DISCARD)
+        if (save) saveThenClose(pending.files) else pending.files.forEach(::closeNow)
+    }
+
+    /** The user cancelled the dialog: the tabs stay open with their edits. */
+    fun dismissUnsavedClose() {
+        unsavedClose = null
+    }
+
+    /**
+     * Save [files] the way [save] does (reformatting first when "Reformat on save" is on), then close them.
+     * A tab whose write failed is still dirty and stays open: its edits are not on disk, and closing it would
+     * throw them away after the user asked to keep them.
+     */
+    private fun saveThenClose(files: List<OpenFile>) {
+        val closeSaved = { files.filterNot { it.modified }.forEach(::closeNow) }
+        if (!runCatching { backend.settings.settings().formatOnSave }.getOrDefault(false)) {
+            files.forEach(::writeToDisk)
+            closeSaved()
+            return
+        }
+        scope.launch {
+            files.forEach { reformatBuffer(it); writeToDisk(it) }
+            closeSaved()
+        }
+    }
+
+    /** Close [file]'s tab now, whatever its buffer holds. Unsaved edits are dropped with it. */
+    private fun closeNow(file: OpenFile) {
         val idx = openFiles.indexOf(file)
         if (idx < 0) return
         openFiles.removeAt(idx)
@@ -1067,26 +1146,6 @@ class IdeUiState(
         closedTabs.addLast(file.path to file.name)
         while (closedTabs.size > CLOSED_TAB_LIMIT) closedTabs.removeFirst()
         backend.editor.onFileClosed(file.path)
-    }
-
-    /** Close every tab except [keep] (tab context menu). Iterates a copy, so mutating [openFiles] is safe. */
-    fun closeOthers(keep: OpenFile) = openFiles.filter { it !== keep }.forEach(::close)
-
-    /** Close all open tabs. */
-    fun closeAll() = openFiles.toList().forEach(::close)
-
-    /** Close the tabs positioned after [file] in the strip. `drop`/`take` copy, so the loop can mutate safely. */
-    fun closeToRight(file: OpenFile) {
-        val i = openFiles.indexOf(file)
-        if (i < 0) return
-        openFiles.drop(i + 1).forEach(::close)
-    }
-
-    /** Close the tabs positioned before [file] in the strip. */
-    fun closeToLeft(file: OpenFile) {
-        val i = openFiles.indexOf(file)
-        if (i <= 0) return
-        openFiles.take(i).forEach(::close)
     }
 
     /** Persist [file]'s buffer to disk, rebase its saved baseline, and clear the dirty flag. No-op if clean.
@@ -1431,9 +1490,9 @@ class IdeUiState(
     private fun underPath(p: String, root: String): Boolean =
         p == root || p.startsWith("$root/") || p.startsWith("$root\\")
 
-    /** Close every open tab at [path] or under it (after a delete). */
+    /** Close every open tab at [path] or under it (after a delete). The file is gone, so nothing to save. */
     private fun closeTabsUnder(path: String) {
-        openFiles.filter { underPath(it.path, path) }.forEach(::close)
+        openFiles.filter { underPath(it.path, path) }.forEach(::closeNow)
     }
 
     /** Re-point open tabs at [oldPath] (or under it, for a directory) to [newPath], re-reading from disk. */
@@ -1547,6 +1606,15 @@ class IdeUiState(
          *  runs then stop the current build/program and start automatically, without prompting. */
         const val RUN_CONFLICT_ALWAYS_STOP_PREF = "run.conflict.alwaysStop"
 
+        /** App preference: what closing a tab with unsaved edits does — [CLOSE_UNSAVED_ASK] (the default, also
+         *  when unset), [CLOSE_UNSAVED_SAVE] or [CLOSE_UNSAVED_DISCARD]. It is the Editor settings page's
+         *  `closeUnsaved` choice (`BuiltInSettingsPages.CLOSE_UNSAVED_KEY`), and the dialog's "Don't ask again"
+         *  writes it. */
+        const val CLOSE_UNSAVED_PREF = "settings.editor.closeUnsaved"
+        const val CLOSE_UNSAVED_ASK = "ask"
+        const val CLOSE_UNSAVED_SAVE = "save"
+        const val CLOSE_UNSAVED_DISCARD = "discard"
+
         /** App preference, suffixed with a project's root path: its [selectedRunTask] as `id\tlabel\tgroup`. */
         const val SELECTED_RUN_TASK_PREF_PREFIX = "run.selected."
 
@@ -1596,3 +1664,6 @@ object ToolWindowIds {
 
 /** A run the user is trying to start while a build/program is already running (see [IdeUiState.requestRun]). */
 class PendingRun(val action: () -> Unit)
+
+/** Tabs the user is closing while they hold unsaved edits (see [IdeUiState.unsavedClose]). */
+class PendingClose(val files: List<OpenFile>)

@@ -83,7 +83,7 @@ fun RunConflictDialog(state: IdeUiState) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(14.dp))
-                DontAskRow(checked = dontAsk, onToggle = { dontAsk = !dontAsk })
+                DontAskRow(stringResource(Res.string.run_conflict_dont_ask), checked = dontAsk, onToggle = { dontAsk = !dontAsk })
                 Spacer(Modifier.height(14.dp))
                 ConflictButton(stringResource(Res.string.run_conflict_stop_and_run), fill = MaterialTheme.colorScheme.primary, fg = MaterialTheme.colorScheme.onPrimary) {
                     state.confirmStopAndRun(dontAsk)
@@ -97,8 +97,9 @@ fun RunConflictDialog(state: IdeUiState) {
     }
 }
 
+/** A "Don't ask again" checkbox row for a confirmation dialog; [label] names what is remembered. */
 @Composable
-private fun DontAskRow(checked: Boolean, onToggle: () -> Unit) {
+internal fun DontAskRow(label: String, checked: Boolean, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -121,15 +122,16 @@ private fun DontAskRow(checked: Boolean, onToggle: () -> Unit) {
             if (checked) Icon(CaIcons.check, contentDescription = null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
         }
         Text(
-            stringResource(Res.string.run_conflict_dont_ask),
+            label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
 
+/** A full-width confirmation-dialog button. */
 @Composable
-private fun ConflictButton(label: String, fill: Color, fg: Color, onClick: () -> Unit) {
+internal fun ConflictButton(label: String, fill: Color, fg: Color, onClick: () -> Unit) {
     Text(
         label,
         color = fg,

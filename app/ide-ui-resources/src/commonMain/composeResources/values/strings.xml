@@ -1031,6 +1031,12 @@ We never collect your code, file or project names, which features you use, or an
     <string name="run_conflict_message">A build or program is still running. Stop it and start this run instead?</string>
     <string name="run_conflict_stop_and_run">Stop and Run</string>
     <string name="run_conflict_dont_ask">Don't ask again</string>
+    <string name="unsaved_close_title">Unsaved changes</string>
+    <string name="unsaved_close_message_one">Save the changes to %1$s before closing it?</string>
+    <string name="unsaved_close_message_many">Save the changes to these files before closing them?</string>
+    <string name="unsaved_close_discard">Don't Save</string>
+    <string name="unsaved_close_dont_ask">Don't ask again</string>
+    <string name="unsaved_close_dont_ask_hint">You can change this in Settings ▸ Editor.</string>
     <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">Show build notifications?</string>
     <string name="build_notif_message">CodeAssist can run builds and your program in a separate, isolated process and show a progress notification while they run. It keeps Android from stopping the build when you switch away, and lets you follow progress. Allow notifications to turn this on.</string>
@@ -1708,6 +1714,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- Group sub-headings -->
     <string name="set_grp_gestures">Gestures</string>
     <string name="set_grp_keyboard">Keyboard</string>
+    <string name="set_grp_tabs">Tabs</string>
     <string name="set_grp_preview_sandbox">Preview sandbox</string>
     <string name="set_grp_privacy">Privacy</string>
     <string name="set_grp_storage">Storage</string>
@@ -1754,6 +1761,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_editor_pinch_desc">Pinch with two fingers to change the code font size</string>
     <string name="set_editor_kbd_suggest">Keyboard suggestions</string>
     <string name="set_editor_kbd_suggest_desc">Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.</string>
+    <string name="set_editor_close_unsaved">Closing a tab with unsaved changes</string>
+    <string name="set_editor_close_unsaved_desc">Ask first, or always save or discard the changes without asking</string>
+    <string name="set_editor_close_unsaved_ask">Ask</string>
+    <string name="set_editor_close_unsaved_save">Save</string>
+    <string name="set_editor_close_unsaved_discard">Don't save</string>
     <!-- Code Completion -->
     <string name="set_completion_auto">Auto-show suggestions</string>
     <string name="set_completion_auto_desc">Pop the list up while typing (off = Ctrl-Space only)</string>

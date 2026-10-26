@@ -1026,6 +1026,12 @@
     <string name="run_conflict_message">构建或程序仍在运行。要停止它并启动这次运行吗？</string>
     <string name="run_conflict_stop_and_run">停止并运行</string>
     <string name="run_conflict_dont_ask">不再询问</string>
+    <string name="unsaved_close_title">未保存的更改</string>
+    <string name="unsaved_close_message_one">关闭前保存对 %1$s 的更改？</string>
+    <string name="unsaved_close_message_many">关闭前保存对这些文件的更改？</string>
+    <string name="unsaved_close_discard">不保存</string>
+    <string name="unsaved_close_dont_ask">不再询问</string>
+    <string name="unsaved_close_dont_ask_hint">可在 设置 ▸ 编辑器 中更改。</string>
     <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">显示构建通知？</string>
     <string name="build_notif_message">CodeAssist 可以在独立的隔离进程中运行构建和程序，并在运行期间显示进度通知。这能避免你切换应用时 Android 中止构建，也方便你跟踪进度。允许通知即可启用此功能。</string>
@@ -1687,6 +1693,7 @@
     <!-- Group sub-headings -->
     <string name="set_grp_gestures">手势</string>
     <string name="set_grp_keyboard">键盘</string>
+    <string name="set_grp_tabs">标签页</string>
     <string name="set_grp_preview_sandbox">预览沙盒</string>
     <string name="set_grp_privacy">隐私</string>
     <string name="set_grp_storage">存储</string>
@@ -1733,6 +1740,11 @@
     <string name="set_editor_pinch_desc">用两指捏合以更改代码字号</string>
     <string name="set_editor_kbd_suggest">键盘建议</string>
     <string name="set_editor_kbd_suggest_desc">允许软键盘自动纠错、联想和自动加空格（普通键盘）。关闭以进行原始代码输入，这样键入的“.”不会被自动插入空格，但会失去联想候选栏。</string>
+    <string name="set_editor_close_unsaved">关闭有未保存更改的标签页</string>
+    <string name="set_editor_close_unsaved_desc">先询问，或始终直接保存或放弃更改</string>
+    <string name="set_editor_close_unsaved_ask">询问</string>
+    <string name="set_editor_close_unsaved_save">保存</string>
+    <string name="set_editor_close_unsaved_discard">不保存</string>
     <!-- Code Completion -->
     <string name="set_completion_auto">自动显示建议</string>
     <string name="set_completion_auto_desc">键入时自动弹出列表（关闭 = 仅 Ctrl-Space）</string>
