@@ -21,6 +21,10 @@ import com.intellij.psi.PsiLambdaExpression
 import com.intellij.psi.LambdaUtil
 import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifierListOwner
+import com.intellij.psi.PsiMember
+import com.intellij.psi.PsiSuperExpression
+import com.intellij.psi.PsiThisExpression
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiMethodReferenceExpression
 import com.intellij.psi.PsiModifier
@@ -67,7 +71,8 @@ import dev.ide.psi.IntellijPsiHost
  *    ([checkConstructorApplicability]) whose arguments fit no overload;
  *  - **illegal jump** — an unlabeled `break`/`continue` with no enclosing loop/switch;
  *  - **`var` inference** — a `var` local with no initializer / a `null` initializer;
- *  - **unhandled checked exception** — a checked throw / call / `new` neither caught nor declared.
+ *  - **unhandled checked exception** — a checked throw / call / `new` neither caught nor declared;
+ *  - **static context** — `this`/`super` or an instance member used where there is no instance.
  *
  * Control-flow checks use IntelliJ's own [ControlFlowUtil] (matching javac's reachability + definite
  * assignment, incl. the `if`-vs-`while(true)` distinction), so they are as accurate as the platform. The type,
@@ -100,7 +105,18 @@ internal object JavaSemanticDiagnostics {
             // member access / calls) exactly once.
             override fun visitReferenceElement(reference: PsiJavaCodeReferenceElement) {
                 reportUnresolved(reference, out)
+                checkInstanceMemberAccess(reference, out)
                 super.visitReferenceElement(reference)
+            }
+
+            override fun visitThisExpression(expression: PsiThisExpression) {
+                super.visitThisExpression(expression)
+                checkInstanceKeyword(expression, expression.qualifier, "this", out)
+            }
+
+            override fun visitSuperExpression(expression: PsiSuperExpression) {
+                super.visitSuperExpression(expression)
+                checkInstanceKeyword(expression, expression.qualifier, "super", out)
             }
 
             override fun visitLocalVariable(variable: PsiLocalVariable) {
@@ -212,6 +228,56 @@ internal object JavaSemanticDiagnostics {
     /** `new Foo(...)` where `Foo` is an abstract class or interface (and not an anonymous-body `new Foo() {}`,
      *  which supplies the implementation) — nothing concrete to instantiate. Array creations, unresolved refs,
      *  enums and annotations (which can't appear after `new` at all) are left to other checks. */
+    /**
+     * `this`/`super` in static code: `this.getClass()` in `main`. A qualified `Outer.this` is checked only when it
+     * names the innermost class (reaching an enclosing instance from a nested class is a different rule).
+     */
+    private fun checkInstanceKeyword(expr: PsiElement, qualifier: PsiJavaCodeReferenceElement?, keyword: String, out: MutableList<Diagnostic>) {
+        if (qualifier != null) {
+            val named = qualifier.resolve() as? PsiClass ?: return
+            if (named != PsiTreeUtil.getParentOfType(expr, PsiClass::class.java)) return
+        }
+        if (staticMemberAround(expr) == null) return
+        val shown = if (qualifier != null) "${qualifier.referenceName}.$keyword" else keyword
+        out += diag(expr, "'$shown' cannot be referenced from a static context", JavaDiagnosticCodes.STATIC_CONTEXT)
+    }
+
+    /**
+     * An unqualified instance field or method used from static code: `helper()` or `count` inside `main`. The
+     * verdict is the resolver's own ([com.intellij.psi.JavaResolveResult.isStaticsScopeCorrect]), which also
+     * covers a static nested class reaching for its outer class's instance members, so nothing is guessed here.
+     */
+    private fun checkInstanceMemberAccess(ref: PsiJavaCodeReferenceElement, out: MutableList<Diagnostic>) {
+        val expr = ref as? PsiReferenceExpression ?: return
+        if (expr.qualifierExpression != null || expr is PsiMethodReferenceExpression) return
+        val result = expr.advancedResolve(false)
+        val target = result.element as? PsiMember ?: return
+        if (target !is PsiField && target !is PsiMethod) return
+        if (target.hasModifierProperty(PsiModifier.STATIC) || (target is PsiMethod && target.isConstructor)) return
+        if (result.isStaticsScopeCorrect) return
+        val what = if (target is PsiMethod) "method '${target.name}()'" else "field '${target.name}'"
+        out += diag(expr.referenceNameElement ?: expr, "Non-static $what cannot be referenced from a static context",
+            JavaDiagnosticCodes.STATIC_CONTEXT)
+    }
+
+    /**
+     * The static member [place] runs in, judged up to its innermost enclosing class: a `static` method, a
+     * `static` initializer, or a `static` field's initializer. Null when the code has an instance (an instance
+     * member, or the body of a local or anonymous class, whose own members are instance code).
+     */
+    private fun staticMemberAround(place: PsiElement): PsiElement? {
+        var n: PsiElement? = place.parent
+        while (n != null) {
+            when (n) {
+                is PsiClass -> return null
+                is PsiMethod, is PsiClassInitializer, is PsiField ->
+                    return n.takeIf { (it as PsiModifierListOwner).hasModifierProperty(PsiModifier.STATIC) }
+            }
+            n = n.parent
+        }
+        return null
+    }
+
     private fun checkInstantiable(expr: PsiNewExpression, anchor: PsiJavaCodeReferenceElement, out: MutableList<Diagnostic>) {
         if (expr.anonymousClass != null) return
         if (expr.arrayDimensions.isNotEmpty() || expr.arrayInitializer != null) return // `new Runnable[3]` is legal

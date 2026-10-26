@@ -52,6 +52,10 @@ object JavaDiagnosticCodes {
     /** A `new` of an abstract class or interface (without an anonymous body) — nothing to instantiate. */
     const val ABSTRACT_INSTANTIATION = "java.abstractInstantiation"
 
+    /** `this`/`super`, or an instance field or method, used from static code (a `static` method, initializer or
+     *  field), where there is no instance to refer to. */
+    const val STATIC_CONTEXT = "java.staticContext"
+
     /** A `break`/`continue` with no enclosing loop (or, for `break`, `switch`) to jump out of. */
     const val ILLEGAL_JUMP = "java.illegalJump"
 

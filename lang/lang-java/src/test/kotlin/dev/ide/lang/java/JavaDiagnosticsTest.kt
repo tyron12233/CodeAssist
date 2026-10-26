@@ -11,6 +11,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import dev.ide.vfs.local.fileFor
 
@@ -378,6 +379,68 @@ class JavaDiagnosticsTest {
     }
 
     // --- declaration / override / duplicate / definite-assignment -----------------------------------------
+
+    // --- static context -------------------------------------------------------------------------------------
+
+    @Test
+    fun instanceUseFromStaticCodeIsReported() {
+        val src = """
+            package com.foo;
+            class Main {
+                int count;
+                void helper() { }
+                static int seed = this.hashCode();
+                public static void main(String[] args) {
+                    this.getClass();
+                    super.toString();
+                    helper();
+                    count++;
+                    Runnable r = () -> helper();
+                }
+                static class Nested {
+                    void f() { helper(); }
+                }
+            }
+        """.trimIndent()
+        val messages = codes(src, JavaDiagnosticCodes.STATIC_CONTEXT).map { it.message }
+        assertEquals(
+            listOf(
+                "'this' cannot be referenced from a static context",
+                "'this' cannot be referenced from a static context",
+                "'super' cannot be referenced from a static context",
+                "Non-static method 'helper()' cannot be referenced from a static context",
+                "Non-static field 'count' cannot be referenced from a static context",
+                "Non-static method 'helper()' cannot be referenced from a static context",
+                "Non-static method 'helper()' cannot be referenced from a static context",
+            ).sorted(),
+            messages.sorted(),
+        )
+    }
+
+    @Test
+    fun instanceUseWithAnInstanceIsNotFlagged() {
+        val src = """
+            package com.foo;
+            class Main {
+                int count;
+                void helper() { this.count++; helper(); }
+                { this.helper(); }
+                int twice = this.count * 2;
+                static void make() {
+                    Main m = new Main();
+                    m.helper();
+                    m.count++;
+                    Runnable r = new Runnable() {
+                        public void run() { this.hashCode(); toString(); }
+                    };
+                }
+                class Inner { void f() { helper(); Main.this.helper(); } }
+                static String name() { return Main.class.getName(); }
+            }
+        """.trimIndent()
+        val wrong = codes(src, JavaDiagnosticCodes.STATIC_CONTEXT)
+        assertTrue(wrong.isEmpty(), "code with an instance must not be flagged; got ${wrong.map { it.message }}")
+    }
 
     @Test
     fun abstractNotImplementedIsReported() {
