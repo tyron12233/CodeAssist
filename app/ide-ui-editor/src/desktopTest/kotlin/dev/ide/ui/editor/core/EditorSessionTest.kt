@@ -153,6 +153,48 @@ class EditorSessionTest {
         )
     }
 
+    // ---- Tab out of a pair auto-closed while typing (IntelliJ's "Jump outside closing bracket/quote with Tab") ----
+
+    private fun typed(text: String, keys: String, language: CodeLanguage = CodeLanguage.Kotlin): EditorSession =
+        session(text, text.length, language).apply { keys.forEach { commitText(it.toString()) } }
+
+    @Test
+    fun tabStepsOutOfATypedPair() {
+        val s = typed("val x = foo", "(a")
+        assertTrue(s.tabOut(), "the caret is right before the closer the user typed up to")
+        assertEquals("val x = foo(a)‸", s.withCaret())
+    }
+
+    @Test
+    fun tabStepsOutOfTypedQuotesAndNestedPairsInnermostFirst() {
+        val s = typed("f", "(g(\"hi")
+        assertTrue(s.tabOut()); assertEquals("f(g(\"hi\"‸))", s.withCaret())
+        assertTrue(s.tabOut()); assertEquals("f(g(\"hi\")‸)", s.withCaret())
+        assertTrue(s.tabOut()); assertEquals("f(g(\"hi\"))‸", s.withCaret())
+        assertTrue(!s.tabOut(), "nothing left to step out of: Tab indents")
+    }
+
+    @Test
+    fun tabOnlyStepsOutWhileTheCaretStaysInsideThePair() {
+        val s = typed("f", "(a")
+        s.setCaret(0)
+        s.setCaret(3)
+        assertTrue(!s.tabOut(), "leaving the pair forgets it, so coming back doesn't arm Tab again")
+    }
+
+    @Test
+    fun tabNeverStepsOverACloserThatWasNotTyped() {
+        val s = session("f(a)", 3, CodeLanguage.Kotlin)
+        assertTrue(!s.tabOut(), "a closer already in the file is not a typing scope")
+    }
+
+    @Test
+    fun deletingTheCloserForgetsThePair() {
+        val s = typed("f", "(a")
+        s.replaceRange(3, 4, "", TextRange(3))
+        assertTrue(!s.tabOut())
+    }
+
     /** The smart heuristic: typing `{` before an already-unmatched `}` inserts a lone `{`, not a pair. */
     @Test
     fun typingBraceBeforeUnmatchedCloserDoesNotAutoClose() {

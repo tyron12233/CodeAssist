@@ -404,6 +404,7 @@ class EditorSession(
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
         onSnippetEdit?.invoke(edit)
+        if (typedPairs.isNotEmpty()) shiftTypedPairs(edit)
         notifyImeText(edit)
     }
 
@@ -510,6 +511,7 @@ class EditorSession(
         batchImeSpaceDeleteOffset = -1 // a caret/composition move breaks the swap-op adjacency
         selection = ns
         composing = nc
+        if (typedPairs.isNotEmpty()) pruneTypedPairs()
         goalColumn = -1
         coalesceTyping = false // a caret/selection move ends the current typing run → next type is a new undo step
         editCount++
@@ -729,6 +731,7 @@ class EditorSession(
      * at [selection], and bumps [textRevision] so the debounced analysis re-runs and the IME restarts.
      */
     fun setText(text: String, selection: TextRange = TextRange(0)) {
+        typedPairs.clear()
         doc = EditorDocument.of(text)
         styles.reset(doc)
         overlayGeneration++
@@ -789,6 +792,53 @@ class EditorSession(
 
     // ---- editing ops (keyboard + UI) ----
 
+    // ---- Tab out of an auto-closed pair (IntelliJ's "Jump outside closing bracket/quote with Tab when typing") ----
+
+    /**
+     * The pairs the editor auto-closed as the user typed, each `[opener offset, closer offset]`, innermost last.
+     * A pair is kept only while the caret stays inside it: moving out, or deleting either end, forgets it, so Tab
+     * jumps only over a closer the user is typing up to, never over one elsewhere in the file.
+     */
+    private val typedPairs = ArrayList<IntArray>()
+
+    /**
+     * Tab with the caret right before the closer of a pair auto-closed while typing (`foo(a|)`, `"text|"`): step
+     * past the closer instead of indenting, as IntelliJ does by default. Returns false (the caller indents) when
+     * the caret isn't there.
+     */
+    fun tabOut(): Boolean {
+        val sel = selection
+        if (!sel.collapsed) return false
+        val pair = typedPairs.lastOrNull { it[1] == sel.start } ?: return false
+        typedPairs.remove(pair)
+        updateSelectionAndComposing(TextRange(pair[1] + 1), null)
+        return true
+    }
+
+    /** Keep [typedPairs] on their brackets across [edit]; a pair whose opener or closer it touched is dropped. */
+    private fun shiftTypedPairs(edit: EditSpan) {
+        val es = edit.start
+        val ee = edit.start + edit.removed
+        val d = edit.delta
+        val it = typedPairs.iterator()
+        while (it.hasNext()) {
+            val p = it.next()
+            when {
+                ee <= p[0] -> { p[0] += d; p[1] += d } // before the opener
+                es > p[0] && ee <= p[1] -> p[1] += d // typed or deleted inside the pair
+                es > p[1] -> Unit                    // after the closer
+                else -> it.remove()                  // the edit took the opener or the closer
+            }
+        }
+        pruneTypedPairs()
+    }
+
+    /** Forget the pairs the caret is no longer inside. */
+    private fun pruneTypedPairs() {
+        val sel = selection
+        typedPairs.removeAll { p -> !sel.collapsed || sel.start <= p[0] || sel.start > p[1] }
+    }
+
     /** Type [text] at the selection. Single chars get the smart-edit rules (auto-close, skip-over…). */
     fun commitText(text: String) {
         if (text.length == 1) {
@@ -796,6 +846,10 @@ class EditorSession(
             val selMax = selection.max
             val edit = smartInsert(doc.chars, selMin, selMax, text[0], language)
             replaceRange(edit.start, edit.end, edit.text, TextRange(edit.caret))
+            // An auto-closed pair (`(|)`, `"|"`): remember it so Tab can step over its closer.
+            if (edit.start == selMin && edit.end == selMax && edit.caret == selMin + 1 && edit.text in AUTO_PAIRS) {
+                typedPairs += intArrayOf(edit.start, edit.start + 1)
+            }
             // A smart rule that didn't simply replace the selection with the typed char shifted the buffer by a
             // different amount than the IME delivered, so its model is now stale. Forced when the edit changed
             // no text (skip-over closer): no extracted-text push follows, so even a monitoring IME needs the
@@ -1489,6 +1543,9 @@ class EditorSession(
         else regionStart + newCursorPosition).coerceAtLeast(0)
 
     private companion object {
+        /** What an auto-close inserts for one typed opener: the pairs Tab can step out of. */
+        val AUTO_PAIRS = setOf("()", "[]", "{}", "\"\"", "''")
+
         /** Cap for IME text queries — never ship megabytes across the binder. */
         const val MAX_IPC_TEXT = 4096
 

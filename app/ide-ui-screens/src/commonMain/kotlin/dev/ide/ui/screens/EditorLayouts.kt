@@ -236,7 +236,7 @@ internal fun buildLeftPanels(
 private fun dispatchSymbolAction(state: IdeUiState, action: String) {
     val s = state.active?.session ?: return
     when (action) {
-        CustomizationActions.TAB -> if (s.acceptCompletionIfShowing?.invoke() != true) s.indent()
+        CustomizationActions.TAB -> if (s.acceptCompletionIfShowing?.invoke() != true && !s.tabOut()) s.indent()
         CustomizationActions.COMMENT -> s.toggleComment()
         CustomizationActions.MOVE_LINE_UP -> s.moveLines(-1)
         CustomizationActions.MOVE_LINE_DOWN -> s.moveLines(1)

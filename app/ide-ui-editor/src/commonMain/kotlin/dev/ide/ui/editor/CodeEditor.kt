@@ -844,7 +844,7 @@ private fun CodeEditorContent(
 
             Key.Tab -> {
                 if (!shortcut && !ev.isAltPressed) {
-                    if (ev.isShiftPressed) editorSession.dedent() else editorSession.indent()
+                    if (ev.isShiftPressed) editorSession.dedent() else if (!editorSession.tabOut()) editorSession.indent()
                     return true
                 }
                 return false
