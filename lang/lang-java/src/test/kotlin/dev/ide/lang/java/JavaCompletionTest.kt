@@ -174,6 +174,18 @@ class JavaCompletionTest {
     }
 
     @Test
+    fun psvmOfferedAmongTheMembersOnly() {
+        val member = itemsAt("package com.foo;\npublic class Use {\n    psv|\n}")
+        val psvm = member.firstOrNull { it.label == "psvm" }
+        assertTrue(psvm != null, "`psv` among the members should offer psvm; got ${member.map { it.label }}")
+        assertEquals("public static void main(String[] args) {\n        \n    }", psvm.insertText)
+        val inMethod = labelsAt("package com.foo;\nclass Use {\n    void run() {\n        psv|\n    }\n}")
+        assertTrue("psvm" !in inMethod, "no main method inside a method; got $inMethod")
+        val atMembers = labelsAt("package com.foo;\nclass Use {\n    sou|\n}")
+        assertTrue("sout" !in atMembers, "no statement among the members; got $atMembers")
+    }
+
+    @Test
     fun postfixTemplateOfferedOnExpression() {
         val items = itemsAt("package com.foo;\nclass Use { void run() { String s = \"\"; s.| } }")
         val labels = items.filter { it.kind == CompletionItemKind.SNIPPET }.map { it.label }.toSet()

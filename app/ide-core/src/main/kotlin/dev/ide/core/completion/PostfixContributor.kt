@@ -8,6 +8,8 @@ import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.template.indented
+import dev.ide.lang.template.lineIndentAt
 import dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP
 import dev.ide.lang.postfix.PostfixContext
 import dev.ide.platform.ExtensionRegistry
@@ -56,7 +58,8 @@ class PostfixContributor(private val extensions: ExtensionRegistry) : Completion
             if (!t.key.startsWith(params.prefix, ignoreCase = true)) continue
             if (!runCatching { t.isApplicable(ctx) }.getOrDefault(false)) continue
             val exp = runCatching { t.expand(ctx) }.getOrNull() ?: continue
-            val snippet = exp.snippet
+            // The rewrite lands where the receiver started, so its inner lines take that line's indent.
+            val snippet = exp.snippet?.indented(lineIndentAt(text, recvStart))
             result.addElement(
                 CompletionItem(
                     label = t.key,

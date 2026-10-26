@@ -518,6 +518,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** The source file declaring top-level type [fqn] within this module's source model (which spans its own +
      *  dependency-module sources), or null. The cross-module preview dispatcher uses this to LOCATE a reached
      *  declaration; the file is lowered by its owning module's analyzer via [loweredFile]. */
+    /** Whether [fqn] names a class this module can see (a source class, a stdlib type, or one on its classpath). */
+    fun isKnownType(fqn: String): Boolean = service.isKnownType(fqn)
+
     fun findDeclaringTypeFile(fqn: String): KotlinSymbolService.PreviewSourceFile? =
         service.sourceFileDeclaringType(fqn)
 

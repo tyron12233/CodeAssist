@@ -109,3 +109,31 @@ data class ExpandedStop(
     val ranges: List<TextRange>,
     val choices: List<String> = emptyList(),
 )
+
+/**
+ * This expansion with [indent] after every line break, its stops and final caret moved to match. A built-in
+ * template is written as if at column 0, and the line it lands on is usually indented: without this, the body
+ * and closing brace of an `if` typed inside a method would fall back to column 0.
+ */
+fun SnippetExpansion.indented(indent: String): SnippetExpansion {
+    if (indent.isEmpty() || '\n' !in text) return this
+    fun map(offset: Int): Int {
+        var breaks = 0
+        for (i in 0 until offset.coerceIn(0, text.length)) if (text[i] == '\n') breaks++
+        return offset + breaks * indent.length
+    }
+    return SnippetExpansion(
+        text = text.replace("\n", "\n$indent"),
+        stops = stops.map { s -> s.copy(ranges = s.ranges.map { TextRange(map(it.start), map(it.end)) }) },
+        finalCaretOffset = map(finalCaretOffset),
+    )
+}
+
+/** The leading spaces and tabs of the line holding [offset]: the indent a template inserted there takes on. */
+fun lineIndentAt(text: CharSequence, offset: Int): String {
+    var start = offset.coerceIn(0, text.length)
+    while (start > 0 && text[start - 1] != '\n') start--
+    var end = start
+    while (end < text.length && (text[end] == ' ' || text[end] == '\t')) end++
+    return text.subSequence(start, end).toString()
+}

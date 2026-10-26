@@ -82,11 +82,6 @@ class JdtCompletion(private val analyzer: JdtSourceAnalyzer) : CompletionContrib
                 )
                 if (postfix.isNotEmpty()) items = items + postfix
             }
-            // Live templates (sout / psvm / fori …) at a name/statement position — no receiver needed.
-            if (ctx.kind == CompletionKind.NAME_REFERENCE) {
-                val live = LiveTemplates.itemsFor(prefix)
-                if (live.isNotEmpty()) items = items + live
-            }
             val rank = kindRank(ctx.kind)
             // Prefer a result that actually produced candidates: an empty higher-rank context (e.g. a
             // recovery mis-parse of `recv.x` as a package-qualified type → empty PACKAGE_REFERENCE) must not
@@ -95,6 +90,10 @@ class JdtCompletion(private val analyzer: JdtSourceAnalyzer) : CompletionContrib
             if (items.isNotEmpty() && (best.isEmpty() || rank > bestRank)) { best = items; bestRank = rank }
             if (rank == 2 && items.isNotEmpty()) break // a resolved member/package/import context is definitive
         }
+        // Live templates (sout / psvm / fori …), each where it fits: read off the text rather than the parse above,
+        // which recovers from a half-typed `psv` differently at every spot (a type at class level, a name inside
+        // a method, or nothing at all).
+        best = best + LiveTemplates.itemsFor(text, replaceStart, prefix, analyzer.isAndroidPlatform)
         result.addAllElements(best)
         result.setReplacementRange(replacementRange)
     }

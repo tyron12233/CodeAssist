@@ -5,6 +5,8 @@ import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.template.indented
+import dev.ide.lang.template.lineIndentAt
 import dev.ide.lang.template.SnippetExpansion
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding
 import org.eclipse.jdt.internal.compiler.lookup.TypeBinding
@@ -54,6 +56,8 @@ internal object PostfixTemplates {
             if (!matches(t.key, prefix)) continue
             if (!t.applicable(ctx)) continue
             val spec = t.build(ctx) ?: continue
+            // The rewrite lands where the receiver started, so its inner lines take that line's indent.
+            val expansion = spec.expansion.indented(lineIndentAt(text, recvStart))
             val edits = buildList {
                 add(deleteReceiver)
                 spec.importFqn?.let { add(TextEdit(TextRange(importOffset, importOffset), "import $it;\n")) }
@@ -61,7 +65,7 @@ internal object PostfixTemplates {
             out.add(
                 CompletionItem(
                     label = t.key,
-                    insertText = spec.expansion.text,
+                    insertText = expansion.text,
                     kind = CompletionItemKind.SNIPPET,
                     detail = t.example,
                     documentation = t.description,
@@ -70,7 +74,7 @@ internal object PostfixTemplates {
                     // under real symbols; the absolute numbers don't compete with the JDT member scale).
                     sortPriority = if (t.key == prefix) -50 else 60,
                     additionalEdits = edits,
-                    caret = CaretAction.ExpandSnippet(spec.expansion),
+                    caret = CaretAction.ExpandSnippet(expansion),
                 ),
             )
         }

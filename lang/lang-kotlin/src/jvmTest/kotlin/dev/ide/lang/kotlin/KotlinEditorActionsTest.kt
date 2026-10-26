@@ -36,6 +36,32 @@ class KotlinEditorActionsTest {
     // ---- surround with ----------------------------------------------------------------------------
 
     @Test
+    fun composeLayoutsSurroundOnlyComposableCode() {
+        val composable = "package demo\n\nimport androidx.compose.runtime.Composable\n\n@Composable\nfun Screen() {\n    Text(\"hi\")|\n}\n"
+        val offered = titles(composable, KotlinSurroundActionProvider())
+        assertTrue(offered.containsAll(listOf("Surround with Row", "Surround with Column", "Surround with Box")), "got $offered")
+        val plain = titles("package demo\nfun f() {\n    println(\"hi\")|\n}\n", KotlinSurroundActionProvider())
+        assertTrue(plain.none { it.endsWith("Row") || it.endsWith("Column") || it.endsWith("Box") }, "a plain function lays out nothing; got $plain")
+        // A lambda counts: it may be a composable's content (`setContent { }`).
+        val inLambda = titles("package demo\nfun f() {\n    run {\n        println(\"hi\")|\n    }\n}\n", KotlinSurroundActionProvider())
+        assertTrue("Surround with Column" in inLambda, "got $inLambda")
+    }
+
+    @Test
+    fun composeLayoutSurroundWrapsAndImports() {
+        val result = apply(
+            "package demo\n\nimport androidx.compose.runtime.Composable\n\n@Composable\nfun Screen() {\n    Text(\"hi\")|\n}\n",
+            KotlinSurroundActionProvider(),
+            "Surround with Column",
+        )
+        assertEquals(
+            "package demo\n\nimport androidx.compose.runtime.Composable\nimport androidx.compose.foundation.layout.Column\n\n" +
+                "@Composable\nfun Screen() {\n    Column {\n        Text(\"hi\")\n    }\n}\n",
+            result,
+        )
+    }
+
+    @Test
     fun surroundWrapsTheStatementAtTheCaret() {
         val result = apply(
             "package demo\nfun f() {\n    println(\"hi\")|\n}\n",
@@ -493,7 +519,14 @@ class KotlinEditorActionsTest {
     }
 
     companion object {
-        val srcDir: Path = tempProject(mapOf("Local.kt" to "package demo\n"))
+        val srcDir: Path = tempProject(
+            mapOf(
+                "Local.kt" to "package demo\n",
+                // Stand-ins that put Compose's layouts "on the classpath" for the surround-with-layout actions.
+                "Layout.kt" to "package androidx.compose.foundation.layout\ninterface RowScope\n",
+                "Composable.kt" to "package androidx.compose.runtime\nannotation class Composable\n",
+            ),
+        )
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
     }
 }

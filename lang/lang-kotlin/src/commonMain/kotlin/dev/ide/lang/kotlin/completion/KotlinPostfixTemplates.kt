@@ -48,11 +48,17 @@ object KotlinPostfixTemplates {
         return s == "Throwable" || s.endsWith("Exception") || s.endsWith("Error")
     }
 
+    /** A Compose `Modifier`, or the `Modifier` companion a chain starts from (`Modifier.paddp`). */
+    private fun isModifier(ctx: PostfixContext): Boolean =
+        ctx.type?.qualifiedName.let { it == "androidx.compose.ui.Modifier" || it == "androidx.compose.ui.Modifier.Companion" }
+
     private fun template(
         key: String,
         example: String,
         description: String,
         applicable: (PostfixContext) -> Boolean = { true },
+        /** Classes the rewrite's text uses, imported when the file lacks them. */
+        imports: List<String> = emptyList(),
         build: (PostfixContext) -> SnippetExpansion,
     ): PostfixTemplate = object : PostfixTemplate {
         override val key = key
@@ -61,7 +67,8 @@ object KotlinPostfixTemplates {
         override val description = description
         override fun isApplicable(ctx: PostfixContext) = applicable(ctx)
         // The rewrite is the snippet; the driver adds the edit that deletes the original `receiver.` span.
-        override fun expand(ctx: PostfixContext) = PostfixExpansion(emptyList(), build(ctx))
+        override fun expand(ctx: PostfixContext) =
+            PostfixExpansion(imports.mapNotNull { kotlinImportEdit(ctx.document.text, it) }, build(ctx))
     }
 
     private val TEMPLATES: List<PostfixTemplate> = listOf(
@@ -139,6 +146,16 @@ object KotlinPostfixTemplates {
         },
         template("forEach", "coll.forEach → coll.forEach { }", "for-each with a lambda", ::isIterable) { c ->
             snippet { text("${c.expressionText}.forEach { "); finalHere(); text(" }") }
+        },
+        // Android Studio's Compose modifier templates, on a `Modifier` receiver.
+        template(
+            "paddp", "Modifier.paddp → Modifier.padding(16.dp)", "Padding in dp", ::isModifier,
+            imports = listOf("androidx.compose.foundation.layout.padding", "androidx.compose.ui.unit.dp"),
+        ) { c ->
+            snippet { text("${c.expressionText}.padding("); stop(1, "16"); text(".dp)"); finalHere() }
+        },
+        template("weight", "Modifier.weight → Modifier.weight(1f)", "Weight in a Row or Column", ::isModifier) { c ->
+            snippet { text("${c.expressionText}.weight("); stop(1, "1f"); text(")"); finalHere() }
         },
     )
 }

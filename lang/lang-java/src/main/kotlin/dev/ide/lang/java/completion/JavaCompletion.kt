@@ -165,6 +165,12 @@ class JavaCompletion(
                 fillNameReference(leaf, markerOffset, psi, params, result)
         }
 
+        // Live templates (`sout`, `psvm`, `logd`, …), each where it fits. Read off the text rather than the
+        // branch above: a half-typed `psv` among the members parses as a type, inside a method as a name.
+        JavaLiveTemplates.itemsFor(text, markerOffset, params.prefix, isAndroid) { fqn ->
+            JavaImportEdits.planImport(psi, fqn)?.let { TextEdit(TextRange(it.offset, it.offset), it.text) }
+        }.forEach { result.addElement(it) }
+
         // Smart ranking: flag every candidate whose produced type is assignable to the expected type; the
         // engine's ExpectedTypeWeigher floats those to the top (a boost, not a filter).
         if (expected != null) result.replaceAll { boostIfFits(it, expected) }
@@ -465,8 +471,6 @@ class JavaCompletion(
             .forEach { result.addElement(symbolItem(it)) }
         // Types visible without a qualifier.
         fillTypeReference(psi, params, result, leaf = leaf)
-        // Statement-position live templates (`sout`, `fori`, `psvm`, `try`, …).
-        JavaLiveTemplates.itemsFor(params.prefix).forEach { result.addElement(it) }
     }
 
     private fun fillTypeReference(
@@ -1014,6 +1018,9 @@ class JavaCompletion(
     }
 
     private fun scope() = GlobalSearchScope.allScope(env.project)
+
+    /** Whether this module builds against Android, which the `logd` / `Toast` templates need. */
+    private val isAndroid: Boolean by lazy { env.facade.findClass("android.util.Log", scope()) != null }
 
     companion object {
         /** Most index-backed types one [typeSearch] returns; a full page means more matches exist. */

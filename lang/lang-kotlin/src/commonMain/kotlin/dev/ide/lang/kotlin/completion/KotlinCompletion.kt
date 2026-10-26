@@ -348,6 +348,7 @@ class KotlinCompletion(
                 tokenStart = offset - prefix.length,
                 inFunction = KotlinKeywords.isInFunction(markerLeaf),
                 inLoop = KotlinKeywords.isInLoop(markerLeaf),
+                hasType = service::isKnownType,
             )
         }
 

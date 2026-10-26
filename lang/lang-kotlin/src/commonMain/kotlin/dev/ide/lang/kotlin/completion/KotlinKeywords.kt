@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin.completion
 
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
@@ -11,6 +12,7 @@ import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtImportDirective
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
 import dev.ide.kotlin.syntax.psi.KtOperationReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtPackageDirective
 import dev.ide.kotlin.syntax.psi.KtParameter
@@ -33,6 +35,8 @@ import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.template.SnippetExpansion
+import dev.ide.lang.template.indented
+import dev.ide.lang.template.lineIndentAt
 
 /**
  * Context-aware Kotlin keyword, modifier and live-template completion. Unlike the symbol candidates (locals,
@@ -93,6 +97,8 @@ internal object KotlinKeywords {
         tokenStart: Int,
         inFunction: Boolean,
         inLoop: Boolean,
+        /** Whether a class is on this module's classpath: the Android and Compose templates need theirs. */
+        hasType: (String) -> Boolean = { false },
     ): List<CompletionItem> {
         val present = precedingModifiers(precedingText, tokenStart)
 
@@ -221,22 +227,29 @@ internal object KotlinKeywords {
         }
 
         // Multi-line live templates for the same place — abbreviations that expand to a full skeleton. Gated
-        // to a non-empty prefix so they don't flood the bare-caret popup (cf. lang-jdt's LiveTemplates).
-        for (t in TEMPLATES) {
-            if (prefix.isEmpty()) break
-            if (place !in t.places) continue
-            if (!t.key.startsWith(prefix, ignoreCase = true)) continue
-            out += CompletionItem(
-                label = t.key,
-                insertText = t.expansion.text,
-                kind = CompletionItemKind.SNIPPET,
-                detail = t.preview,
-                documentation = t.description,
-                // Sign convention (see ItemTierWeigher): positive keeps a not-yet-typed template below real
-                // symbols; a fully-typed key (-30) opts into the symbol tier and tops.
-                sortPriority = if (t.key == prefix) -30 else 70,
-                caret = CaretAction.ExpandSnippet(t.expansion),
-            )
+        // to a non-empty prefix so they don't flood the bare-caret popup (cf. lang-jdt's LiveTemplates), to the
+        // libraries they use (the Android and Compose ones), and re-indented to the line they land on.
+        if (prefix.isNotEmpty()) {
+            val env = TemplateEnv(leaf, place)
+            val indent = lineIndentAt(precedingText, tokenStart)
+            for (t in TEMPLATES) {
+                if (place !in t.places) continue
+                if (!t.key.startsWith(prefix, ignoreCase = true)) continue
+                if (!t.requires.all(hasType)) continue
+                val expansion = t.build(env)?.indented(indent) ?: continue
+                out += CompletionItem(
+                    label = t.key,
+                    insertText = expansion.text,
+                    kind = CompletionItemKind.SNIPPET,
+                    detail = t.preview,
+                    documentation = t.description,
+                    // Sign convention (see ItemTierWeigher): positive keeps a not-yet-typed template below real
+                    // symbols; a fully-typed key (-30) opts into the symbol tier and tops.
+                    sortPriority = if (t.key == prefix) -30 else 70,
+                    additionalEdits = t.imports.mapNotNull { kotlinImportEdit(precedingText, it) },
+                    caret = CaretAction.ExpandSnippet(expansion),
+                )
+            }
         }
         return out
     }
@@ -585,14 +598,69 @@ internal object KotlinKeywords {
     private val ST_EXPR = setOf(Place.STATEMENT, Place.EXPRESSION)
     private val DECL = setOf(Place.STATEMENT, Place.MEMBER, Place.TOP_LEVEL)
     private val TOP = setOf(Place.TOP_LEVEL)
+    private val TOP_MEMBER = setOf(Place.TOP_LEVEL, Place.MEMBER)
+    private val EXPR = setOf(Place.EXPRESSION)
 
+    /**
+     * A template: the [places] it fits, the classes that must be on the classpath for it to apply ([requires]),
+     * the ones its text uses ([imports], added when the file lacks them), and [build], which may read the code
+     * around the caret ([TemplateEnv]) and returns null when it lacks what it needs (`logm` outside a function).
+     */
     private class Template(
         val key: String,
         val preview: String,
         val description: String,
         val places: Set<Place>,
-        val expansion: SnippetExpansion,
-    )
+        val requires: List<String> = emptyList(),
+        val imports: List<String> = requires,
+        val build: (TemplateEnv) -> SnippetExpansion?,
+    ) {
+        constructor(key: String, preview: String, description: String, places: Set<Place>, expansion: SnippetExpansion) :
+            this(key, preview, description, places, build = { expansion })
+    }
+
+    /** What a template can read from where it expands: the enclosing function and class, and the [place]. */
+    private class TemplateEnv(private val leaf: KtElement?, val place: Place) {
+        val function: KtNamedFunction? by lazy { leaf?.getParentOfType<KtNamedFunction>(strict = false) }
+
+        /** The class a log tag is named after: the enclosing one (a companion counts as its outer class), else
+         *  the file's first, else the file's own name. */
+        val className: String? by lazy {
+            var c = leaf?.getParentOfType<KtClassOrObject>(strict = false)
+            while (c != null && (c.name == null || c.name == "Companion")) c = c.getParentOfType<KtClassOrObject>(strict = true)
+            c?.name ?: leaf?.getParentOfType<KtFile>(strict = false)?.let { f ->
+                f.declarations.firstNotNullOfOrNull { (it as? KtClassOrObject)?.name } ?: f.name.substringBeforeLast('.')
+            }
+        }
+
+        /** Whether the enclosing class is an `object` (or companion), where a `const val` is allowed. */
+        val inObject: Boolean by lazy { leaf?.getParentOfType<KtClassOrObject>(strict = false) is KtObjectDeclaration }
+    }
+
+    private const val LOG = "android.util.Log"
+    private const val TOAST = "android.widget.Toast"
+    private const val COMPOSABLE = "androidx.compose.runtime.Composable"
+    private const val PREVIEW = "androidx.compose.ui.tooling.preview.Preview"
+
+    /** Android's log tags are at most 23 characters, so `logt` cuts a longer class name, as Android Studio does. */
+    private const val MAX_TAG = 23
+
+    /** `Log.x(TAG, "function: |")`, as Android Studio's `logd` family writes it. */
+    private fun log(level: Char) = Template(
+        "log$level", "Log.$level(TAG, \"function: \")", "Log.$level with the enclosing function's name", ST,
+        requires = listOf(LOG),
+    ) { env ->
+        snippet {
+            text("Log.$level(TAG, \"")
+            env.function?.name?.let { text("$it: ") }
+            finalHere()
+            text("\")")
+        }
+    }
+
+    /** A block declaration `keyword Name {` with the caret in its body. */
+    private fun block(head: String, name: String) =
+        snippet { text("$head "); stop(1, name); text(" {\n    "); finalHere(); text("\n}") }
 
     private val TEMPLATES: List<Template> = listOf(
         Template("main", "fun main() { }", "main entry point", TOP,
@@ -619,5 +687,65 @@ internal object KotlinKeywords {
             snippet { text("when ("); stop(1, "subject"); text(") {\n    "); finalHere(); text("\n}") }),
         Template("try", "try { } catch (e) { }", "try / catch", ST_EXPR,
             snippet { text("try {\n    "); finalHere(); text("\n} catch ("); stop(1, "e"); text(": Exception) {\n}") }),
+        Template("iter", "for (item in items) { }", "for-each loop", ST,
+            snippet { text("for ("); stop(1, "item"); text(" in "); stop(2, "items"); text(") {\n    "); finalHere(); text("\n}") }),
+        Template("ifn", "if (x == null) { }", "if null check", ST,
+            snippet { text("if ("); stop(1, "x"); text(" == null) {\n    "); finalHere(); text("\n}") }),
+        Template("inn", "if (x != null) { }", "if not-null check", ST,
+            snippet { text("if ("); stop(1, "x"); text(" != null) {\n    "); finalHere(); text("\n}") }),
+        // --- printing ---
+        Template("sout", "println()", "Print to standard output", ST,
+            snippet { text("println("); finalHere(); text(")") }),
+        Template("serr", "System.err.println()", "Print to standard error", ST, requires = listOf("java.lang.System"), imports = emptyList()) {
+            snippet { text("System.err.println("); finalHere(); text(")") }
+        },
+        Template("soutv", "println(\"value = \${value}\")", "Print a value with its name", ST,
+            snippet { text("println(\""); stop(1, "value"); text(" = \${"); stop(1, "value"); text("}\")"); finalHere() }),
+        // --- declarations ---
+        Template("void", "fun name() { }", "function returning nothing", DECL,
+            snippet { text("fun "); stop(1, "name"); text("("); stop(2); text(") {\n    "); finalHere(); text("\n}") }),
+        Template("exfun", "fun Receiver.name() { }", "extension function", TOP_MEMBER,
+            snippet { text("fun "); stop(1, "Receiver"); text("."); stop(2, "name"); text("("); stop(3); text(") {\n    "); finalHere(); text("\n}") }),
+        Template("exval", "val Receiver.name: Type get() =", "extension property", TOP_MEMBER,
+            snippet { text("val "); stop(1, "Receiver"); text("."); stop(2, "name"); text(": "); stop(3, "Type"); text("\n    get() = "); finalHere() }),
+        Template("exvar", "var Receiver.name: Type get() = … set(value) { }", "mutable extension property", TOP_MEMBER,
+            snippet {
+                text("var "); stop(1, "Receiver"); text("."); stop(2, "name"); text(": "); stop(3, "Type")
+                text("\n    get() = "); finalHere(); text("\n    set(value) {\n    }")
+            }),
+        Template("interface", "interface Name { }", "interface", TOP_MEMBER, block("interface", "Name")),
+        Template("singleton", "object Name { }", "singleton object", TOP_MEMBER, block("object", "Name")),
+        Template("anonymous", "object : Type { }", "anonymous object", ST_EXPR,
+            snippet { text("object : "); stop(1, "Type"); text(" {\n    "); finalHere(); text("\n}") }),
+        Template("closure", "{ x -> }", "lambda", EXPR,
+            snippet { text("{ "); stop(1, "x"); text(" -> "); finalHere(); text(" }") }),
+        // --- Android ---
+        Template("logt", "private const val TAG = \"Class\"", "A log tag named after the class", TOP_MEMBER, requires = listOf(LOG), imports = emptyList()) { env ->
+            val tag = (env.className ?: "TAG").take(MAX_TAG)
+            // `const` needs a top-level or object scope; a plain class gets a regular property.
+            val decl = if (env.place == Place.TOP_LEVEL || env.inObject) "private const val" else "private val"
+            snippet { text("$decl TAG = \""); stop(1, tag); text("\""); finalHere() }
+        },
+        log('d'), log('i'), log('w'), log('e'),
+        Template("logm", "Log.d(TAG, \"function() called with: a = \$a\")", "Log the function call with its parameters", ST,
+            requires = listOf(LOG)) { env ->
+            val fn = env.function ?: return@Template null
+            val name = fn.name ?: return@Template null
+            val params = fn.valueParameters.mapNotNull { it.name }
+            val message = if (params.isEmpty()) "$name() called"
+            else "$name() called with: " + params.joinToString(", ") { "$it = \$$it" }
+            snippet { text("Log.d(TAG, \"$message\")"); finalHere() }
+        },
+        Template("Toast", "Toast.makeText(this, \"\", Toast.LENGTH_SHORT).show()", "Show a toast", ST, requires = listOf(TOAST)) {
+            snippet { text("Toast.makeText("); stop(1, "this"); text(", \""); stop(2); text("\", Toast.LENGTH_SHORT).show()"); finalHere() }
+        },
+        // --- Compose ---
+        Template("comp", "@Composable fun Name() { }", "Composable function", TOP_MEMBER, requires = listOf(COMPOSABLE)) {
+            snippet { text("@Composable\nfun "); stop(1, "Name"); text("() {\n    "); finalHere(); text("\n}") }
+        },
+        Template("prev", "@Preview @Composable fun NamePreview() { }", "Preview Composable function", TOP,
+            requires = listOf(COMPOSABLE, PREVIEW)) {
+            snippet { text("@Preview\n@Composable\nfun "); stop(1, "Name"); text("Preview() {\n    "); finalHere(); text("\n}") }
+        },
     )
 }

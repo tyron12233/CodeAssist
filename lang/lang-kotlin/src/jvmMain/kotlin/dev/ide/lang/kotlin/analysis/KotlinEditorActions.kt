@@ -14,6 +14,7 @@ import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtForExpression
+import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
@@ -25,6 +26,7 @@ import dev.ide.lang.dom.DomNode
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
+import dev.ide.lang.kotlin.completion.kotlinImportEdit
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.resolve.TypeRef
 
@@ -45,6 +47,9 @@ import dev.ide.lang.resolve.TypeRef
  * inside `computeEdits`, which runs only for the intention the user picked.
  */
 private val KOTLIN = KotlinLanguageBackend.LANGUAGE_ID
+
+private const val COMPOSE_LAYOUT_PACKAGE = "androidx.compose.foundation.layout"
+private val COMPOSE_LAYOUTS = listOf("Row", "Column", "Box")
 
 // ---------------------------------------------------------------------------------------------------
 // Surround with
@@ -67,17 +72,36 @@ class KotlinSurroundActionProvider : ActionProvider {
         val inner = "$indent    "
         val reindented = body.replace("\n", "\n    ")
 
-        fun wrap(title: String, render: () -> String) = object : QuickFix {
+        fun wrap(title: String, imports: List<String> = emptyList(), render: () -> String) = object : QuickFix {
             override val title = title
             override val kind = CodeActionKind.REFACTOR
-            override suspend fun computeEdits(ctx2: FixContext): WorkspaceEdit =
-                WorkspaceEdit.of(
+            override suspend fun computeEdits(ctx2: FixContext): WorkspaceEdit {
+                val importEdits = imports.mapNotNull { kotlinImportEdit(text, it) }
+                    .map { DocumentEdit(it.range.start, it.range.end - it.range.start, it.newText) }
+                return WorkspaceEdit.of(
                     ctx2.target.file,
                     DocumentEdit(target.first, target.second - target.first, render()),
+                    *importEdits.toTypedArray(),
                 )
+            }
         }
 
-        return listOf(
+        // Android Studio's Compose surround templates (WR / WC / WB), offered in composable code only.
+        val layouts = if (inComposableCode(ctx)) {
+            COMPOSE_LAYOUTS.map { layout ->
+                wrap("Surround with $layout", imports = listOf("$COMPOSE_LAYOUT_PACKAGE.$layout")) {
+                    buildString {
+                        append("$layout {\n")
+                        append(inner).append(reindented).append('\n')
+                        append(indent).append('}')
+                    }
+                }
+            }
+        } else {
+            emptyList()
+        }
+
+        return layouts + listOf(
             wrap("Surround with 'if'") {
                 buildString {
                     append("if (true) {\n")
@@ -102,6 +126,26 @@ class KotlinSurroundActionProvider : ActionProvider {
                 }
             },
         )
+    }
+
+    /**
+     * Whether the code at the caret composes UI: Compose's layouts are on the classpath, and the nearest
+     * enclosing function is `@Composable` or a lambda sits in between (the content of `setContent { }`, a
+     * `Column { }`, or another composable's slot).
+     */
+    private fun inComposableCode(ctx: EditorActionContext): Boolean {
+        val analyzer = ctx.target.resolver as? KotlinSourceAnalyzer ?: return false
+        // `Row` itself is a function; `RowScope` is the class that says the layouts are on the classpath.
+        if (!analyzer.isKnownType("$COMPOSE_LAYOUT_PACKAGE.RowScope")) return false
+        var n: KtElement? = (ctx.node as? KotlinDomNode)?.psi
+        while (n != null) {
+            when (n) {
+                is KtFunctionLiteral -> return true
+                is KtNamedFunction -> return n.annotationEntries.any { it.shortName?.asString() == "Composable" }
+            }
+            n = n.parent
+        }
+        return false
     }
 
     /** `[start, end)` of the text to wrap: the selection, widened to whole statements, else the statement. */
