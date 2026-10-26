@@ -222,11 +222,16 @@ class AnalysisEngine(
      */
     private fun actionsFor(target: AnalysisTarget, range: TextRange): List<QuickFix> {
         val lang = environment.languageOf(target.file)
-        val fixes = diagnostics(target.file)
-            .filter { overlaps(it.range, range) }
-            .flatMap { fixesFor(it, target) }
+        val here = diagnostics(target.file).filter { overlaps(it.range, range) }
+        val fixes = here.flatMap { fixesFor(it, target) }
+        // Last in the menu, as in Android Studio: hide a warning for its line, declaration, class or file. One
+        // row per title, so two warnings of one kind on the line do not list each action twice.
+        val suppressTitles = HashSet<String>()
+        val suppressions = here
+            .flatMap { runCatching { SuppressActions.forDiagnostic(it, target) }.getOrDefault(emptyList()) }
+            .filter { suppressTitles.add(it.title) }
         val applicable = actionProviders.filter { lang == null || lang in it.languages }
-        if (applicable.isEmpty()) return fixes
+        if (applicable.isEmpty()) return fixes + suppressions
         // Resolve the caret's place in the tree ONCE and share it: every provider's first move is to find
         // the node at the caret and walk up from it, and that walk is identical for all of them.
         val ctx = EditorActionContext.of(target, range, lang)
@@ -234,7 +239,7 @@ class AnalysisEngine(
         val intentions = applicable
             .flatMap { runCatching { it.actions(ctx) }.getOrDefault(emptyList()) }
             .filter { titles.add(it.title) }
-        return fixes + intentions
+        return fixes + intentions + suppressions
     }
 
     override suspend fun caretSnapshotAt(file: VirtualFile, offset: Int): CaretSnapshot? {
