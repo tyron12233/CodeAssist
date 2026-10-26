@@ -64,7 +64,6 @@ internal object KotlinCompletionItems {
         // The call syntax may already be present after the caret (`foo|(x)`, `Column| { }`) — don't add a second
         // `(`/`{`; just insert the name and let the existing arguments/lambda stand.
         val callSyntaxFollows = followingChar == '(' || followingChar == '{'
-        val trailingLambda = if (isFunction && !infix && !callableRef && !bareCallable && !callSyntaxFollows) trailingLambdaParam(s) else null
         val (insert, caret) = when {
             // A PACKAGE segment (`import com.tyron.█`, `java.util.█`) is a navigational prefix, never a terminal
             // completion — append `.` so the next segment can be typed/completed right away (unless a `.` already
@@ -77,15 +76,6 @@ internal object KotlinCompletionItems {
             callableRef -> s.name to CaretAction.AtEnd
             // Infix use (`a downTo b`): the name followed by a space, ready for the right operand — not `downTo()`.
             infix -> "${s.name} " to CaretAction.AtEnd
-            // A function whose LAST parameter is a function type → insert a trailing lambda. Only a SOLE
-            // parameter (`remember { }`, `forEach { }`, or a Composable whose only slot is the content lambda)
-            // drops the parens and lands the caret in the braces. Any other parameters — even on a @Composable
-            // like `Column(modifier, ...) { }` — keep `()` and put the caret inside them so those args are fillable.
-            trailingLambda != null -> {
-                val lambdaOnly = s.paramTypes.size == 1
-                if (lambdaOnly) "${s.name} { }" to CaretAction.At(s.name.length + 2)      // `name { | }`
-                else "${s.name}() { }" to CaretAction.At(s.name.length + 1)               // `name(|) { }`
-            }
             isFunction && callSyntaxFollows -> s.name to CaretAction.AtEnd                 // parens/braces already there
             isFunction && hasParams -> "${s.name}()" to CaretAction.At(s.name.length + 1)  // between the parens
             isFunction -> "${s.name}()" to CaretAction.AtEnd                               // no-arg call
@@ -254,6 +244,37 @@ internal object KotlinCompletionItems {
     /** The callee's LAST value parameter when it is a (non-vararg) function type — the slot a trailing lambda
      *  fills (`Column`'s `@Composable () -> Unit` content, `forEach`'s `(T) -> Unit`). Null otherwise, so only
      *  genuinely lambda-taking calls get the `{ }` insert. */
+    /**
+     * The trailing-lambda form of a call item, offered beside the plain call as IntelliJ's Kotlin completion
+     * does: for a function whose last parameter is a function type and whose other parameters all have
+     * defaults (`forEach`, `remember`, `application(exitProcessOnExit = true, content)`), a second item labelled
+     * `name {...}` inserts `name { | }`, the caret between the braces. The plain item stays the parenthesized
+     * call (`name(|)`). Null when the call can't be written as a bare trailing lambda: a required parameter
+     * precedes the lambda (or whether one does isn't known), the last parameter is a vararg, or the position
+     * doesn't take a call ([toItem]'s flags), or the call syntax is already there.
+     */
+    fun trailingLambdaVariant(
+        s: KotlinSymbol,
+        plain: CompletionItem,
+        followingChar: Char? = null,
+        infix: Boolean = false,
+        callableRef: Boolean = false,
+        bareCallable: Boolean = false,
+    ): CompletionItem? {
+        if (s.kind != SymbolKind.METHOD || infix || callableRef || bareCallable) return null
+        if (followingChar == '(' || followingChar == '{') return null
+        trailingLambdaParam(s) ?: return null
+        val leading = s.paramTypes.size - 1
+        if (leading > 0 && (s.paramHasDefault.size != s.paramTypes.size || !s.paramHasDefault.take(leading).all { it })) {
+            return null
+        }
+        return plain.copy(
+            label = "${s.name} {...} " + paramListOf(s.signature),
+            insertText = "${s.name} {  }",
+            caret = CaretAction.At(s.name.length + 3), // `name { | }`
+        )
+    }
+
     private fun trailingLambdaParam(s: KotlinSymbol): KotlinType? {
         if (s.paramTypes.isEmpty()) return null
         if (s.varargParamIndex >= 0 && s.varargParamIndex == s.paramTypes.lastIndex) return null // last is vararg, not a lambda

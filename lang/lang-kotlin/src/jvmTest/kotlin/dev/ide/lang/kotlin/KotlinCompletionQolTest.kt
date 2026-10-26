@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import kotlinx.coroutines.runBlocking
@@ -10,7 +11,7 @@ import kotlin.test.assertTrue
 
 /**
  * Completion quality-of-life: editing an already-named argument replaces only the name (no duplicated `=`),
- * a function whose last parameter is a function type inserts a trailing lambda (`column { }`), the call
+ * a function whose last parameter is a function type is also offered as a trailing lambda (`column { }`), the call
  * syntax isn't duplicated when it's already present after the caret, and an expected-type value slot offers
  * the type's own companion constants (`Hue.Clear`).
  */
@@ -40,33 +41,39 @@ class KotlinCompletionQolTest {
         assertEquals("width = ", named("package demo\nfun g() { box(wid|) }", "width").insertText)
     }
 
-    // --- B: trailing-lambda insert ---
+    // --- B: trailing-lambda insert (IntelliJ's two items: `name {...}` above the plain `name(...)`) ---
+
+    /** Every item completing [name], in popup order, as (insert text, caret offset). */
+    private fun inserts(code: String, name: String): List<Pair<String, Int?>> =
+        items(code).filter { it.symbol?.name == name }.map { it.insertText to (it.caret as? CaretAction.At)?.offset }
 
     @Test
-    fun soleFunctionTypeParamInsertsTrailingLambda() {
-        val it = symbol("package demo\nfun g() { colu|mn }", "column")
-        assertEquals("column { }", it.insertText)
+    fun soleFunctionTypeParamOffersTheLambdaFormFirst() {
+        assertEquals(
+            listOf("column {  }" to 9, "column()" to 7),
+            inserts("package demo\nfun g() { colu|mn }", "column"),
+            "`column { | }` first, then the plain call with the caret in its parens",
+        )
     }
 
     @Test
-    fun composableContentParamInsertsTrailingLambda() {
-        val it = symbol("package demo\nfun g() { colu|mnC }", "columnC")
-        assertEquals("columnC { }", it.insertText)
+    fun composableContentParamOffersTheLambdaForm() {
+        assertEquals(listOf("columnC {  }" to 10, "columnC()" to 8), inserts("package demo\nfun g() { colu|mnC }", "columnC"))
     }
 
     @Test
-    fun functionTypeLastWithLeadingParamsKeepsParens() {
-        // `rows(count, item)` — the leading `count` is required, so the parens come first with the lambda after.
-        val it = symbol("package demo\nfun g() { row|s }", "rows")
-        assertEquals("rows() { }", it.insertText)
+    fun requiredLeadingParamOffersOnlyTheCall() {
+        // `rows(count, item)`: `count` has no default, so `rows { }` wouldn't compile and isn't offered.
+        assertEquals(listOf("rows()" to 5), inserts("package demo\nfun g() { row|s }", "rows"))
     }
 
     @Test
-    fun composableWithLeadingParamsKeepsParens() {
-        // `card(elevation, content)` — a @Composable trailing lambda but with other params, so the parens stay
-        // and the caret lands inside them (a content-only composable would drop the parens; this one must not).
-        val it = symbol("package demo\nfun g() { car|d }", "card")
-        assertEquals("card() { }", it.insertText)
+    fun optionalLeadingParamsOfferTheLambdaForm() {
+        // `card(elevation = 0, content)`, like `application(exitProcessOnExit = true, content)`: every parameter
+        // before the lambda is optional, so `card { }` is offered too, labelled the way IntelliJ labels it.
+        val all = items("package demo\nfun g() { car|d }").filter { it.symbol?.name == "card" }
+        assertEquals(listOf("card {  }" to 7, "card()" to 5), all.map { it.insertText to (it.caret as? CaretAction.At)?.offset })
+        assertTrue(all.first().label.startsWith("card {...} ("), "label: ${all.first().label}")
     }
 
     // --- C: don't duplicate call syntax already present ---

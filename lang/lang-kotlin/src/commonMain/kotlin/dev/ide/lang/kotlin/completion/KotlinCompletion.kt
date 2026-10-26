@@ -311,7 +311,7 @@ class KotlinCompletion(
         // the `()`.
         val valuePosition = pos.nameReference && nameRef != null && !isStatement(nameRef)
 
-        val symbolItems = candidates.map { c ->
+        val symbolItems = candidates.flatMap { c ->
             val (typeParamCount, ctorRequiredArgs) =
                 typeInsertFacts(c.symbol, superTypeEntry, valuePosition, typePosition, followingChar)
             KotlinCompletionItems.toItem(
@@ -327,6 +327,12 @@ class KotlinCompletion(
             ).let { item ->
                 // A platform API's doc opens with the level that added it ("Added in API 26", "Since Java 11").
                 service.apiLevelOf(c.symbol)?.let { item.copy(documentation = service.withApiLevel(c.symbol, item.documentation)) } ?: item
+            }.let { item ->
+                // The trailing-lambda form (`forEach {...}`), when there is one, ranks just above the plain call.
+                val lambda = KotlinCompletionItems.trailingLambdaVariant(
+                    c.symbol, item, followingChar, infix = pos.infixInsert, callableRef = callableRef, bareCallable = pos.bareCallable,
+                )
+                if (lambda != null) listOf(lambda, item) else listOf(item)
             }
         }
 
