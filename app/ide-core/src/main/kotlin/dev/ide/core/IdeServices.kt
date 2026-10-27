@@ -4038,18 +4038,29 @@ class IdeServices private constructor(
      * device viewport, for the Preview view. Null if [file] isn't an Android `res/layout` file. Custom views
      * currently render as placeholders (the live bridge is the next phase); built-ins + chrome are rendered.
      */
+    /** How long the last [layoutPreview]'s resource-repository lookup took, for the real-view timing log. */
+    @Volatile
+    private var previewRepoNanos = 0L
+
     fun layoutPreview(
         file: Path, text: String, request: dev.ide.preview.PreviewRequest
     ): LayoutPreviewResult? {
         if (!file.toString().replace('\\', '/').contains("/res/layout")) return null
         val module = moduleForResourceFile(file) ?: return null
         if (module.facets.get(AndroidFacet.KEY) == null) return null
-        val cached = resourceRepository(module) ?: return null
+        val tRepo = System.nanoTime()
+        val realView = request.realViews && realViewRuntime != null
+        // The real-view render doesn't read the repository (it renders the aapt2-linked table), and an open
+        // layout's every keystroke changes the repository's fingerprint, so waiting for a rebuild here put a
+        // whole-repository parse in front of each render. Real view takes the last one built instead.
+        val cached = (if (realView) repoCache[module.id.value] else null)
+            ?: resourceRepository(module) ?: return null
         val repo = cached.repo
         val (themeName, title) = manifestThemeAndLabel(module, repo)
+        previewRepoNanos = System.nanoTime() - tRepo
         // Real-view ("layoutlib-on-device") path, when requested and a runtime is wired. On success it returns
         // the rendered PNG; on any failure it returns owned rendering annotated with the reason (never blank).
-        if (request.realViews && realViewRuntime != null) {
+        if (realView) {
             // realViewPreview publishes its pipeline stage to _realViewProgress (the status chip); clear it
             // here so every exit path (success or owned fallback) leaves the chip idle.
             return try {
@@ -4164,18 +4175,18 @@ class IdeServices private constructor(
         text: String,
         request: dev.ide.preview.PreviewRequest,
     ): LayoutPreviewResult? {
-        val runtime = realViewRuntime ?: return ownedPreview(
-            module,
-            repo,
-            fingerprint,
-            themeName,
-            title,
-            text,
-            request,
-            null
-        )
-        val facet = module.facets.get(AndroidFacet.KEY)
-            ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
+        // [repo] may be the last repository built rather than one matching this edit (see [layoutPreview]): the
+        // real-view render reads resources from the linked table, not from it. Owned rendering draws from the
+        // repository, so a fallback to it takes a current one.
+        fun owned(problem: String?): LayoutPreviewResult? {
+            val fresh = resourceRepository(module)
+            return ownedPreview(
+                module, fresh?.repo ?: repo, fresh?.fingerprint ?: fingerprint, themeName, title, text, request, problem
+            )
+        }
+        val runtime = realViewRuntime ?: return owned(null)
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return owned(null)
+        val t0 = System.nanoTime()
 
         // Resolve against the user's ACTIVE variant (the persisted per-module choice the editor and build
         // target), not the default — the exploded AARs, resource link caches and dex caches
@@ -4200,6 +4211,7 @@ class IdeServices private constructor(
                 selectedVariant?.configurations
             )
         }.getOrNull()
+        val tResolved = System.nanoTime()
         // Extra R packages: every AAR package (androidx.coordinatorlayout, com.google.android.material, …) plus
         // every OTHER android module's package. A library/framework view references its OWN `R` at inflate time
         // (e.g. CoordinatorLayout → `androidx.coordinatorlayout.R$attr`), and AARs do NOT ship their `R` — the
@@ -4226,6 +4238,7 @@ class IdeServices private constructor(
             extraPackages = extraPackages,
             progress = { _realViewProgress.value = PreviewProgress(it) },
         )
+        val tLinked = System.nanoTime()
         // Broken project resources: report them. Rendering the build's last resources.ap_ (or owned rendering)
         // here would show the layout wrong with no hint why.
         if (linked != null && linked.resourceErrors.isNotEmpty()) {
@@ -4243,8 +4256,7 @@ class IdeServices private constructor(
         val resourcesAp = linked?.resourcesAp
             ?: AndroidBuildSystem.resourcesApPath(module, variant)
                 .takeIf { Files.exists(it) }
-            ?: return ownedPreview(
-                module, repo, fingerprint, themeName, title, text, request,
+            ?: return owned(
                 "Real-view resources unavailable (${linked?.error ?: "build the project once"}) — showing owned rendering"
             )
         // The R.jar: prefer the relink's (ids match the relinked arsc AND it covers every lib package); fall
@@ -4316,15 +4328,16 @@ class IdeServices private constructor(
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
         _realViewProgress.value = PreviewProgress("Rendering")
+        val tRender = System.nanoTime()
         val result = runCatching { runtime.render(req) }.getOrElse { t ->
             RealViewResult(null, error = t.message ?: t.javaClass.simpleName)
         }
+        val tRendered = System.nanoTime()
         // The render is a live native Bitmap on device (no PNG round-trip) or PNG bytes as the portable form.
         val nativeImage = result?.nativeBitmap
         val png = result?.pngBytes
         if (nativeImage == null && png == null) {
-            return ownedPreview(
-                module, repo, fingerprint, themeName, title, text, request,
+            return owned(
                 "Real-view render unavailable (${result?.error ?: "no result"}). Showing Legacy Rendering"
             )
         }
@@ -4344,6 +4357,12 @@ class IdeServices private constructor(
                 )
             }.getOrDefault(vt)
         }
+        fun ms(a: Long, b: Long) = (b - a) / 1_000_000
+        Log.logger("ide.preview").info(
+            "real-view host '${req.layoutName}': repo=${previewRepoNanos / 1_000_000}ms resolve=${ms(t0, tResolved)}ms " +
+                "link=${ms(tResolved, tLinked)}ms classpath=${ms(tLinked, tRender)}ms render=${ms(tRender, tRendered)}ms " +
+                "stamp=${ms(tRendered, System.nanoTime())}ms"
+        )
         return LayoutPreviewResult(
             root,
             resources,

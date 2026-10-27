@@ -66,6 +66,33 @@ object RBytecodeGenerator {
     }
 
     /**
+     * Package the `R` of one aapt2 [rJava] into [outJar] under its own package AND under each of [alsoAs]. That
+     * is what aapt2's `--extra-packages` writes (the same table, once per package name), produced here from one
+     * parse instead of a second link plus a parse per package. Returns the total class count.
+     */
+    fun writeJarAs(rJava: Path, alsoAs: List<String>, outJar: Path): Int {
+        outJar.parent?.let { Files.createDirectories(it) }
+        val model = parse(read(rJava))
+        val packages = (listOf(model.pkg) + alsoAs).filter { it.isNotEmpty() }.distinct()
+        var total = 0
+        java.util.jar.JarOutputStream(Files.newOutputStream(outJar).buffered(1 shl 16)).use { jos ->
+            // A local cache file, read back once: deflating its megabytes of near-identical classes is most of
+            // the cost of writing it, and saves only disk space.
+            jos.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
+            for (pkg in packages) {
+                total += emit(RModel(pkg, model.types)) { name, bytes ->
+                    jos.putNextEntry(java.util.jar.JarEntry("$name.class")); jos.write(bytes); jos.closeEntry()
+                }
+            }
+            if (total == 0) {
+                jos.putNextEntry(java.util.jar.JarEntry("META-INF/MANIFEST.MF"))
+                jos.write("Manifest-Version: 1.0\r\n\r\n".toByteArray()); jos.closeEntry()
+            }
+        }
+        return total
+    }
+
+    /**
      * Package one `R` class per (package, `R.txt`) entry of [symbolTables] into [outJar]. A dependency AAR
      * ships an `R.txt` symbol table but NO `R` classes — the consumer generates them — which is why an app
      * gets them from its own aapt2 link (`--extra-packages`) and a LIBRARY module, which links only its own

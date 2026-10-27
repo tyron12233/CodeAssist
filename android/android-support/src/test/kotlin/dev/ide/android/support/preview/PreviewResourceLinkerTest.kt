@@ -172,6 +172,69 @@ class PreviewResourceLinkerTest {
     }
 
     @Test
+    fun savingTheEditedLayoutReusesTheBaseAndTheRJarUntilIdsChange() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("preview-save") { env ->
+            val dir = env.dir
+            val store = buildAppWorkspace(dir, env.platform)
+            val module: Module = store.workspace.projects.single().modules.single { it.name == "app" }
+            dir.writeSource("app/src/main/res/layout/second.xml", LAYOUT)
+            val cache = dir.resolve(".caches/preview-res")
+            val linker = PreviewResourceLinker(Aapt2Subprocess(sdk.aapt2), sdk.androidJar, cache)
+            val resDirs = AndroidResources.resourceDirs(module, store.workspace)
+            val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
+            val second = dir.resolve("app/src/main/res/layout/second.xml")
+            val mergedCopy = cache.resolve("app/debug/base/merged/layout/activity_main.xml")
+            fun link(file: Path, text: String) = linker.link(
+                module, "debug", resDirs, file, text, "com.example.app", 24, 34,
+                extraPackages = listOf("com.example.lib"),
+            ).also { assertNull(it.error, "relink failed: ${it.error}") }
+
+            val first = link(layout, LAYOUT.trimIndent())
+            // The per-edit link includes an uncompressed copy of the framework table, not the SDK's deflated jar.
+            val framework = Files.list(cache).use { s -> s.filter { it.fileName.toString().startsWith("framework-res-") }.toList() }
+            assertEquals(1, framework.size, "no stored framework table: $framework")
+            ZipFile(framework.single().toFile()).use { z ->
+                assertEquals(java.util.zip.ZipEntry.STORED, z.getEntry("resources.arsc")?.method, "framework table is compressed")
+            }
+            val rJar = assertNotNull(first.rJar)
+            val rJarBytes = Files.readAllBytes(rJar)
+            val baseCopy = Files.readString(mergedCopy)
+
+            // Save the edited layout (no id change): the base is NOT rebuilt (its merged copy is still the old
+            // file, which the live overlay replaces anyway) and the R.jar is reused byte for byte.
+            val saved = LAYOUT.trimIndent().replace("vertical", "horizontal")
+            Files.writeString(layout, saved)
+            Files.setLastModifiedTime(layout, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 5_000))
+            link(layout, saved)
+            assertEquals(baseCopy, Files.readString(mergedCopy), "saving the edited layout rebuilt the base")
+            assertTrue(rJarBytes.contentEquals(Files.readAllBytes(rJar)), "an id-preserving save regenerated the R.jar")
+
+            // An `@+id` that exists only in the unsaved buffer reaches the R.jar, in every package's R.
+            val withId = saved.replace("<TextView ", "<TextView android:id=\"@+id/fresh\" ")
+            link(layout, withId)
+            val idFields = listOf("com/example/app/R\$id.class", "com/example/lib/R\$id.class").map { entry ->
+                ZipFile(rJar.toFile()).use { z ->
+                    val fields = ArrayList<String>()
+                    org.objectweb.asm.ClassReader(z.getInputStream(z.getEntry(entry)).readBytes()).accept(
+                        object : org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                            override fun visitField(a: Int, n: String, d: String?, s: String?, v: Any?) =
+                                null.also { fields += n }
+                        }, 0,
+                    )
+                    fields
+                }
+            }
+            idFields.forEach { assertTrue("fresh" in it, "buffer-only id missing from the R.jar: $it") }
+
+            // Previewing another layout makes the saved file count again: the base picks up its saved content.
+            link(second, LAYOUT.trimIndent())
+            assertEquals(saved, Files.readString(mergedCopy).trim(), "the saved layout never reached the base")
+        }
+    }
+
+    @Test
     fun reportsResourceErrorsInTheUsersOwnFiles() {
         val sdk = assumeAndroidSdk()
 
