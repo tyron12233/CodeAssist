@@ -48,6 +48,16 @@ fun interface StaticRedirect {
 }
 
 /**
+ * Makes one class name resolve to another's interpreted class: [target] returns the internal name [internalName]
+ * should share, or null for none. The two names then share ONE [VmClass] (one initialization, one set of
+ * statics), e.g. every Android library's `R` standing in for the app's, which holds the same table. Only for
+ * classes nothing inspects by name or identity; consulted once per name.
+ */
+fun interface ClassAlias {
+    fun target(internalName: String): String?
+}
+
+/**
  * A stack-based interpreter for JVM class-file bytecode. It parses classes from [source] that [policy] marks
  * interpretable, runs their methods instruction by instruction (see [Interpreter]), and routes every other
  * call through [bridge]. Interpreted code never reaches the host class loader; access to classes the policy
@@ -76,6 +86,8 @@ class Vm(
     private val threadStackSize: Long = 0,
     /** See [StaticRedirect]; null (the default) never redirects. */
     internal val staticRedirect: StaticRedirect? = null,
+    /** See [ClassAlias]; null (the default) aliases nothing. */
+    private val classAlias: ClassAlias? = null,
 ) {
     private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
@@ -179,6 +191,11 @@ class Vm(
      *  first use, so identity-keyed state (init, resolution cache, monitor) is never split across duplicates. */
     internal fun resolve(internalName: String): VmClass? {
         classes[internalName]?.let { return it.takeIf { c -> c !== notInterpreted } }
+        classAlias?.target(internalName)?.takeIf { it != internalName }?.let { target ->
+            // Resolved outside computeIfAbsent: the target's own resolution would be a recursive update.
+            val shared = resolve(target) ?: notInterpreted
+            return (classes.putIfAbsent(internalName, shared) ?: shared).takeIf { it !== notInterpreted }
+        }
         val resolved = classes.computeIfAbsent(internalName) { name ->
             if (!policy.interpret(name)) return@computeIfAbsent notInterpreted
             val bytes = source.bytesFor(name) ?: return@computeIfAbsent notInterpreted
@@ -198,6 +215,15 @@ class Vm(
             )
         }
         return resolved.takeIf { it !== notInterpreted }
+    }
+
+    /**
+     * Forgets the classes whose internal names [match], so the next use reads them from the source again (with
+     * fresh statics). For data-only classes whose bytes were replaced, such as regenerated `R` classes: running
+     * code that still holds one of their instances keeps the old class.
+     */
+    fun forgetClasses(match: (String) -> Boolean) {
+        classes.keys.removeIf(match)
     }
 
     /** The [VmMonitor] for a `synchronized`/`wait`/`notify` on [ref]: attached to the object itself for an
