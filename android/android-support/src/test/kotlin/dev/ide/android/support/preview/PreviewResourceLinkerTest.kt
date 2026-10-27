@@ -33,6 +33,7 @@ import java.nio.file.Path
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -132,7 +133,7 @@ class PreviewResourceLinkerTest {
     }
 
     @Test
-    fun generatesPreviewRJarWithPerExtraPackageRClasses() {
+    fun generatesPreviewRJarWithTheAppsRClasses() {
         val sdk = assumeAndroidSdk()
 
         testEnv("preview-rjar") { env ->
@@ -147,25 +148,22 @@ class PreviewResourceLinkerTest {
             val resDirs = AndroidResources.resourceDirs(module, store.workspace)
             val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
 
-            // A library/framework view references its OWN `R` at inflate time (e.g. CoordinatorLayout →
-            // androidx.coordinatorlayout.R$attr). AARs don't ship their R, so the preview must emit one per extra
-            // package (as the build does via aapt2 --extra-packages) into the preview R.jar — else inflation
-            // crashes with NoClassDefFoundError. Assert both the app's own R and the extra package's R are there.
+            // The preview R.jar holds the app's R, with ids matching the linked table. A library's own `R`
+            // (CoordinatorLayout → androidx.coordinatorlayout.R$attr; AARs don't ship one) is the same table, and
+            // the renderer resolves it to the app's, so the jar carries no per-library copies.
             val r = linker.link(
                 module, "debug", resDirs, layout, LAYOUT.trimIndent(), "com.example.app", 24, 34,
-                extraPackages = listOf("com.example.lib"),
             )
             assertNull(r.error, "relink failed: ${r.error}")
             val rJar = assertNotNull(r.rJar, "no preview R.jar was generated")
             assertTrue(Files.isRegularFile(rJar), "preview R.jar missing at $rJar")
             val classes = zipEntries(rJar)
             assertTrue("com/example/app/R\$string.class" in classes, "app R missing from preview R.jar: $classes")
-            assertTrue("com/example/lib/R\$string.class" in classes, "extra-package R missing from preview R.jar: $classes")
+            assertTrue(classes.none { it.startsWith("com/example/lib/") }, "no per-library R copies: $classes")
 
-            // Re-linking the same buffer + extra packages is cached, and still surfaces the R.jar.
+            // Re-linking the same buffer is cached, and still surfaces the R.jar.
             val again = linker.link(
                 module, "debug", resDirs, layout, LAYOUT.trimIndent(), "com.example.app", 24, 34,
-                extraPackages = listOf("com.example.lib"),
             )
             assertEquals(rJar, again.rJar, "cached relink should return the same preview R.jar")
         }
@@ -188,7 +186,6 @@ class PreviewResourceLinkerTest {
             val mergedCopy = cache.resolve("app/debug/base/merged/layout/activity_main.xml")
             fun link(file: Path, text: String) = linker.link(
                 module, "debug", resDirs, file, text, "com.example.app", 24, 34,
-                extraPackages = listOf("com.example.lib"),
             ).also { assertNull(it.error, "relink failed: ${it.error}") }
 
             val first = link(layout, LAYOUT.trimIndent())
@@ -211,10 +208,10 @@ class PreviewResourceLinkerTest {
             assertEquals(baseCopy, Files.readString(mergedCopy), "saving the edited layout rebuilt the base")
             assertTrue(rJarBytes.contentEquals(Files.readAllBytes(rJar)), "an id-preserving save regenerated the R.jar")
 
-            // An `@+id` that exists only in the unsaved buffer reaches the R.jar, in every package's R.
+            // An `@+id` that exists only in the unsaved buffer reaches the R.jar.
             val withId = saved.replace("<TextView ", "<TextView android:id=\"@+id/fresh\" ")
             link(layout, withId)
-            val idFields = listOf("com/example/app/R\$id.class", "com/example/lib/R\$id.class").map { entry ->
+            val idFields = listOf("com/example/app/R\$id.class").map { entry ->
                 ZipFile(rJar.toFile()).use { z ->
                     val fields = ArrayList<String>()
                     org.objectweb.asm.ClassReader(z.getInputStream(z.getEntry(entry)).readBytes()).accept(
@@ -231,6 +228,58 @@ class PreviewResourceLinkerTest {
             // Previewing another layout makes the saved file count again: the base picks up its saved content.
             link(second, LAYOUT.trimIndent())
             assertEquals(saved, Files.readString(mergedCopy).trim(), "the saved layout never reached the base")
+        }
+    }
+
+    @Test
+    fun anEditThatKeepsTheIdsIsPatchedInAndMatchesAFullLink() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("preview-quick") { env ->
+            val dir = env.dir
+            val store = buildAppWorkspace(dir, env.platform)
+            val module: Module = store.workspace.projects.single().modules.single { it.name == "app" }
+            val cache = dir.resolve(".caches/preview-res")
+            val resDirs = AndroidResources.resourceDirs(module, store.workspace)
+            val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
+            fun link(linker: PreviewResourceLinker, text: String) =
+                linker.link(module, "debug", resDirs, layout, text, "com.example.app", 24, 34)
+                    .also { assertNull(it.error, "relink failed: ${it.error}") }
+            fun dump(ap: Path) = ProcessBuilder(
+                sdk.aapt2.toString(), "dump", "xmltree", "--file", "res/layout/activity_main.xml", ap.toString(),
+            ).redirectErrorStream(true).start().inputStream.readBytes().decodeToString()
+
+            val linker = PreviewResourceLinker(Aapt2Subprocess(sdk.aapt2), sdk.androidJar, cache)
+            val withId = LAYOUT.trimIndent().replace("<TextView ", "<TextView android:id=\"@+id/title\" ")
+            link(linker, withId)
+            val fullRecord = cache.resolve("app/debug/full-key.txt")
+            val fullKey = Files.readString(fullRecord)
+            val rJava = cache.resolve("app/debug/gen/com/example/app/R.java")
+            val rBefore = Files.readString(rJava)
+
+            // Same ids, new text and orientation: patched into the last output, with no full link.
+            val edited = withId.replace("vertical", "horizontal").replace("@string/app_name", "Edited")
+            val quick = link(linker, edited)
+            assertEquals(fullKey, Files.readString(fullRecord), "the edit relinked the whole table")
+            // A patch appends the new layout to the full output, so the archive outgrows what the full link wrote.
+            assertTrue(Files.size(quick.resourcesAp!!) > fullKey.lines()[1].toLong(), "the edit was not patched in")
+            assertEquals(rBefore, Files.readString(rJava), "the ids changed")
+            // A second quick edit patches the patched output.
+            link(linker, edited.replace("Edited", "Edited twice"))
+            assertEquals(fullKey, Files.readString(fullRecord), "the second edit relinked the whole table")
+            assertTrue("Edited twice" in dump(quick.resourcesAp!!))
+            link(linker, edited)
+
+            // The patched layout compiles exactly as a full link of the same text does.
+            val fresh = PreviewResourceLinker(Aapt2Subprocess(sdk.aapt2), sdk.androidJar, dir.resolve(".caches/fresh"))
+            val reference = link(fresh, edited)
+            assertEquals(dump(reference.resourcesAp!!), dump(quick.resourcesAp!!))
+            assertTrue("Edited" in dump(quick.resourcesAp!!))
+
+            // A new id needs the table to change: that edit links in full again.
+            link(linker, edited.replace("<LinearLayout ", "<LinearLayout android:id=\"@+id/brand_new\" "))
+            assertFalse(Files.readString(fullRecord) == fullKey, "a new id must relink the table")
+            assertTrue("brand_new" in Files.readString(rJava))
         }
     }
 

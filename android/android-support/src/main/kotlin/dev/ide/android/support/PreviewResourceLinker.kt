@@ -30,12 +30,13 @@ import java.util.stream.Collectors
  *
  * The base archive is cached by the live `res/` files' signatures, ignoring the edited layout (the live buffer
  * always overlays it), so editing a layout, and saving it, reuses the base and only the one-file overlay
- * recompiles. The per-edit ARSC relink is cached by base + manifest + buffer.
+ * recompiles. The per-edit ARSC relink is cached by base + manifest + buffer, and an edit that changes no ids
+ * skips it: the layout is linked alone against the last full output and patched into a copy of it.
  *
- * The preview `R.jar` ([Result.rJar]) holds the app's `R` and the same table under every `extraPackages` name
- * (what aapt2 `--extra-packages` would write), packaged to bytecode via [RBytecodeGenerator], so a
- * library/framework view resolving its own `R` at inflate time (e.g. `androidx.coordinatorlayout.R$attr`)
- * finds it (AARs do not ship their `R`). It is built from the `R.java` the per-edit link writes and keyed on
+ * The preview `R.jar` ([Result.rJar]) holds the app's `R`, packaged to bytecode via [RBytecodeGenerator]. A
+ * library view resolving its own `R` at inflate time (e.g. `androidx.coordinatorlayout.R$attr`; AARs do not
+ * ship one) gets the app's: in a non-namespaced app every package's `R` is the same table, and the renderer
+ * resolves each library `R` to the app's. It is built from the `R.java` the per-edit link writes and keyed on
  * that file's content, so it regenerates only when the resource ids change. This makes the real-view preview
  * self-sufficient: it no longer depends on a prior build's (id-mismatched, or entirely absent) `R.jar`.
  * On any failure [link] returns an [Result.error] and the caller falls back to owned rendering.
@@ -60,6 +61,8 @@ class PreviewResourceLinker(
         val error: String? = null,
         val rJar: Path? = null,
         val resourceErrors: List<ResourceError> = emptyList(),
+        /** Classes the preview interprets beside the project's own ([PreviewToolsClasses]), or null. */
+        val toolsJar: Path? = null,
     )
 
     /** An aapt2 error in the project's resources: the user's [file] (null when aapt2 named none), its 1-based
@@ -67,6 +70,17 @@ class PreviewResourceLinker(
     data class ResourceError(val file: Path?, val line: Int?, val message: String)
 
     private val log = Log.logger("ide.preview")
+
+    companion object {
+        /** File name of the preview's `R` jar ([Result.rJar]); the renderer recognizes it on the classpath. */
+        const val R_JAR_NAME = "preview-r.jar"
+
+        /** What the last full link was linked from, and its size, for [quickRelink]. */
+        private const val FULL_KEY = "full-key.txt"
+
+        /** Dead bytes [quickRelink]'s patches may leave in `resources.ap_` before a full link compacts it. */
+        private const val MAX_PATCH_GROWTH = 8L shl 20
+    }
 
     /** Per output dir: the merge map of the current base, keyed by the res fingerprint it was merged from. */
     private val mergeMaps = ConcurrentHashMap<Path, Pair<String, ResourceMergeMap>>()
@@ -89,11 +103,8 @@ class PreviewResourceLinker(
         packageName: String,
         minSdk: Int,
         targetSdk: Int,
-        /** Dependency-lib + AAR package names to also emit `R` for (aapt2 `--extra-packages`), so a library view
-         *  resolves its own `R` at inflate time. Mirrors the build's extra packages. */
-        extraPackages: List<String> = emptyList(),
         progress: (String) -> Unit = {},
-    ): Result = runCatching { linkInternal(module, variant, resDirs, editedLayout, liveText, packageName, minSdk, targetSdk, extraPackages, progress) }
+    ): Result = runCatching { linkInternal(module, variant, resDirs, editedLayout, liveText, packageName, minSdk, targetSdk, progress) }
         .getOrElse { Result(null, "${it.javaClass.simpleName}: ${it.message ?: ""}".trim()) }
 
     private fun linkInternal(
@@ -105,7 +116,6 @@ class PreviewResourceLinker(
         packageName: String,
         minSdk: Int,
         targetSdk: Int,
-        extraPackages: List<String>,
         progress: (String) -> Unit,
     ): Result {
         val outDir = cacheRoot.resolve(module.name).resolve(variant)
@@ -126,85 +136,169 @@ class PreviewResourceLinker(
         val previewAp = outDir.resolve("resources.ap_")
         val keyFile = outDir.resolve("key.txt")
         val key = cacheKey(base, manifest, editedLayout, liveText)
+        var quick = false
         if (!Files.exists(previewAp) || readTextOrNull(keyFile) != key) {
             progress("Compiling resources")
+            val rewritten = PreviewLayoutRewriter.rewrite(liveText, frameworkAttrs)
+            val fullKey = fullLinkKey(base, manifest, editedLayout, packageName, minSdk, targetSdk)
+            quick = runCatching { quickRelink(outDir, fullKey, manifest, editedLayout, rewritten, packageName, minSdk, targetSdk, previewAp) }
+                .onFailure { log.warn("quick relink failed, linking in full: ${it.message}") }.getOrDefault(false)
+            if (!quick) {
+                // Compile the live buffer as a one-file overlay res tree, mirroring the edited file's qualifier dir
+                // (layout / layout-land / …) so aapt2 derives the right resource type + configuration.
+                val qualifier = editedLayout.parent?.fileName?.toString() ?: "layout"
+                val overlaySrc = outDir.resolve("overlay-src")
+                val overlayCompiled = outDir.resolve("overlay-compiled")
+                overlaySrc.toFile().deleteRecursively()
+                overlayCompiled.toFile().deleteRecursively()
+                val overlayFile = overlaySrc.resolve(qualifier).resolve(editedLayout.fileName.toString())
+                Files.createDirectories(overlayFile.parent)
+                Files.write(overlayFile, rewritten.toByteArray())
 
-            // Compile the live buffer as a one-file overlay res tree, mirroring the edited file's qualifier dir
-            // (layout / layout-land / …) so aapt2 derives the right resource type + configuration.
-            val qualifier = editedLayout.parent?.fileName?.toString() ?: "layout"
-            val overlaySrc = outDir.resolve("overlay-src")
-            val overlayCompiled = outDir.resolve("overlay-compiled")
-            overlaySrc.toFile().deleteRecursively()
-            overlayCompiled.toFile().deleteRecursively()
-            val overlayFile = overlaySrc.resolve(qualifier).resolve(editedLayout.fileName.toString())
-            Files.createDirectories(overlayFile.parent)
-            Files.write(overlayFile, liveText.toByteArray())
+                val overlay = aapt2.compile(listOf(overlaySrc), overlayCompiled)
+                if (!overlay.result.success) {
+                    locate(overlay.result.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
+                    return Result(null, "aapt2 compile failed: ${overlay.result.log.takeLast(2).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
+                }
 
-            val overlay = aapt2.compile(listOf(overlaySrc), overlayCompiled)
-            if (!overlay.result.success) {
-                locate(overlay.result.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
-                return Result(null, "aapt2 compile failed: ${overlay.result.log.takeLast(2).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
-            }
-
-            progress("Linking resources")
-            // base archives first, the live layout as an `-R` overlay → it overrides the saved copy (and
-            // `--auto-add-overlay` lets a newly added layout in), without recompiling the whole project. NO
-            // --extra-packages: the extra packages' `R` is the app's `R` under other names, which
-            // [ensurePreviewRJar] emits from the `R.java` this link writes to `gen/`.
-            val linkRes = aapt2.link(
-                compiled = base,
-                manifest = manifest,
-                androidJar = frameworkTable(),
-                customPackage = packageName,
-                extraPackages = emptyList(),
-                minSdk = minSdk,
-                targetSdk = targetSdk,
-                genJavaDir = outDir.resolve("gen"),
-                outApk = previewAp,
-                overlays = overlay.archives,
-            )
-            if (!linkRes.success) {
-                locate(linkRes.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
-                return Result(null, "aapt2 link failed: ${linkRes.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
+                progress("Linking resources")
+                // base archives first, the live layout as an `-R` overlay → it overrides the saved copy (and
+                // `--auto-add-overlay` lets a newly added layout in), without recompiling the whole project. NO
+                // --extra-packages: a library's `R` is the app's under another name, resolved by the renderer.
+                val linkRes = aapt2.link(
+                    compiled = base,
+                    manifest = manifest,
+                    androidJar = frameworkTable(),
+                    customPackage = packageName,
+                    extraPackages = emptyList(),
+                    minSdk = minSdk,
+                    targetSdk = targetSdk,
+                    genJavaDir = outDir.resolve("gen"),
+                    outApk = previewAp,
+                    overlays = overlay.archives,
+                )
+                if (!linkRes.success) {
+                    locate(linkRes.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
+                    return Result(null, "aapt2 link failed: ${linkRes.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
+                }
+                // The next edit of this layout can patch this output instead of relinking ([quickRelink]).
+                Files.write(outDir.resolve(FULL_KEY), "$fullKey\n${Files.size(previewAp)}".toByteArray())
             }
             Files.write(keyFile, key.toByteArray())
         }
         val tLink = System.nanoTime()
 
-        val previewRJar = ensurePreviewRJar(outDir, packageName, extraPackages, progress)
+        val previewRJar = ensurePreviewRJar(outDir, packageName, progress)
         fun ms(a: Long, b: Long) = (b - a) / 1_000_000
         log.info(
-            "preview link: base=${ms(t0, tBase)}ms link=${ms(tBase, tLink)}ms rJar=${ms(tLink, System.nanoTime())}ms"
+            "preview link: base=${ms(t0, tBase)}ms link=${ms(tBase, tLink)}ms${if (quick) " (quick)" else ""} " +
+                "rJar=${ms(tLink, System.nanoTime())}ms"
         )
-        return Result(previewAp, rJar = previewRJar)
+        val toolsJar = runCatching { PreviewToolsClasses.jar(cacheRoot) }
+            .onFailure { log.warn("preview tools classes unavailable: ${it.message}") }.getOrNull()
+        return Result(previewAp, rJar = previewRJar, toolsJar = toolsJar)
     }
 
     /**
-     * The preview R.jar: the app's `R` plus the same table under every [extraPackages] name, so a library view
-     * resolving its own `R` at inflate time (e.g. `androidx.coordinatorlayout.R$attr`) finds it. Built from the
-     * `R.java` the preview link just wrote, so its ids always match the rendered resource table (including an
-     * `@+id` that exists only in the unsaved buffer), and keyed on that file's CONTENT: a save or an edit that
-     * leaves the ids alone reuses the jar byte for byte, which also keeps the render's interpreter (keyed on the
-     * classpath's content) warm. Returns the current jar, a stale one if regeneration fails, or null.
+     * Relinks only the edited layout, when that is all that changed: no `@+id` the table lacks, and [previewAp]
+     * still descends from the last full link of this layout ([FULL_KEY] holds [fullKey]). The layout is linked
+     * alone against [previewAp] as an include (aapt2 then resolves every reference to the table's own ids, in a
+     * fraction of a full link, which rebuilds the whole table), and its compiled copies replace the old ones in
+     * a new [previewAp] ([ApkEntryPatcher], which appends them and leaves the old ones as dead bytes, so a long
+     * run of patches is capped by a full link). The ids do not change, so neither does the `R` jar. Returns
+     * false, having left [previewAp] as it was, whenever the full link is needed instead (including when the
+     * layout does not link: the full link reports the error against the user's file).
      */
-    private fun ensurePreviewRJar(
-        outDir: Path, packageName: String, extraPackages: List<String>, progress: (String) -> Unit,
-    ): Path? {
-        val previewRJar = outDir.resolve("preview-r.jar")
+    private fun quickRelink(
+        outDir: Path, fullKey: String, manifest: Path, edited: Path, text: String, packageName: String,
+        minSdk: Int, targetSdk: Int, previewAp: Path,
+    ): Boolean {
+        val record = readTextOrNull(outDir.resolve(FULL_KEY))?.lines() ?: return false
+        if (!Files.isRegularFile(previewAp) || record.firstOrNull() != fullKey) return false
+        val fullSize = record.getOrNull(1)?.toLongOrNull() ?: return false
+        if (Files.size(previewAp) > fullSize + MAX_PATCH_GROWTH) return false
+        val full = previewAp
+        val ids = declaredIds(outDir, packageName) ?: return false
+        // Ids the table already has are referenced, not declared: declaring one again in this scratch package
+        // would give the layout's views ids the table does not know.
+        var unknownId = false
+        val referenced = Regex("""@\+id/([A-Za-z0-9_.]+)""").replace(text) { m ->
+            if (m.groupValues[1].replace('.', '_') in ids) "@id/" + m.groupValues[1] else { unknownId = true; m.value }
+        }
+        if (unknownId) return false
+
+        val qualifier = edited.parent?.fileName?.toString() ?: "layout"
+        val name = edited.fileName.toString()
+        val src = outDir.resolve("quick-src")
+        val compiled = outDir.resolve("quick-compiled")
+        src.toFile().deleteRecursively()
+        compiled.toFile().deleteRecursively()
+        Files.createDirectories(src.resolve(qualifier))
+        Files.write(src.resolve(qualifier).resolve(name), referenced.toByteArray())
+        val c = aapt2.compile(listOf(src), compiled)
+        if (!c.result.success) return false
+        val scratch = outDir.resolve("quick.ap_")
+        val linked = aapt2.linkAgainst(c.archives, manifest, listOf(frameworkTable(), full), 0x80, minSdk, targetSdk, scratch)
+        if (!linked.success) return false
+
+        // The compiled layout (and any API-versioned copies aapt2 made of it) must be exactly the entries the
+        // table already holds for it; anything else needs the table itself to change.
+        val ownEntry = Regex("res/${Regex.escape(qualifier)}(-v\\d+)?/${Regex.escape(name)}")
+        val produced = java.util.zip.ZipFile(scratch.toFile()).use { z ->
+            z.entries().asSequence().filter { it.name.startsWith("res/") }
+                .associate { it.name to z.getInputStream(it).use { s -> s.readBytes() } }
+        }
+        val existing = java.util.zip.ZipFile(full.toFile()).use { z ->
+            z.entries().asSequence().map { it.name }.filter { ownEntry.matches(it) }.toSet()
+        }
+        if (produced.isEmpty() || produced.keys != existing) return false
+
+        val tmp = outDir.resolve("resources.ap_.tmp")
+        if (!ApkEntryPatcher.replace(full, tmp, produced)) return false
+        Files.move(tmp, previewAp, StandardCopyOption.REPLACE_EXISTING)
+        return true
+    }
+
+    /** The id names the last full link's `R` declares (`R.id`), or null without one. */
+    private fun declaredIds(outDir: Path, packageName: String): Set<String>? {
+        val rJava = outDir.resolve("gen").resolve(packageName.replace('.', '/')).resolve("R.java")
+        val text = readTextOrNull(rJava) ?: return null
+        val start = text.indexOf("class id {").takeIf { it >= 0 } ?: return emptySet()
+        val end = text.indexOf('}', start)
+        return Regex("""int\s+(\w+)\s*=""").findAll(text.substring(start, end)).map { it.groupValues[1] }.toSet()
+    }
+
+    /** What a full link's output depends on besides the edited layout's text: [quickRelink] patches it only
+     *  while these are unchanged. */
+    private fun fullLinkKey(
+        base: List<Path>, manifest: Path, edited: Path, packageName: String, minSdk: Int, targetSdk: Int,
+    ): String = digest {
+        put("full v1 rewriter ${PreviewLayoutRewriter.VERSION}")
+        for (a in (base + manifest).sortedBy { it.toString() }) putFileSig(a)
+        put(edited.toString()); put(packageName); put("$minSdk/$targetSdk")
+    }
+
+    /**
+     * The preview R.jar: the app's `R`, built from the `R.java` the preview link just wrote, so its ids always
+     * match the rendered resource table (including an `@+id` that exists only in the unsaved buffer). Keyed on
+     * that file's CONTENT: a save or an edit that leaves the ids alone reuses the jar as it is. Returns the
+     * current jar, a stale one if regeneration fails, or null.
+     */
+    private fun ensurePreviewRJar(outDir: Path, packageName: String, progress: (String) -> Unit): Path? {
+        val previewRJar = outDir.resolve(R_JAR_NAME)
         val rJava = outDir.resolve("gen").resolve(packageName.replace('.', '/')).resolve("R.java")
         if (!Files.isRegularFile(rJava)) return previewRJar.takeIf { Files.exists(it) }
         val rKeyFile = outDir.resolve("r-key.txt")
         val rKey = digest {
-            put("v2")
+            put("v3")
             update(Files.readAllBytes(rJava))
-            extraPackages.sorted().forEach { put(it) }
         }
         if (Files.exists(previewRJar) && readTextOrNull(rKeyFile) == rKey) return previewRJar
 
         val regenerated = runCatching {
             progress("Generating R")
             val tmp = outDir.resolve("preview-r.jar.tmp")
-            RBytecodeGenerator.writeJarAs(rJava, extraPackages, tmp)
+            RBytecodeGenerator.writeUncompressedJar(rJava, tmp)
             Files.move(tmp, previewRJar, StandardCopyOption.REPLACE_EXISTING)
             Files.write(rKeyFile, rKey.toByteArray())
             previewRJar
@@ -272,6 +366,7 @@ class PreviewResourceLinker(
             val merged = baseDir.resolve("merged")
             val tm = System.nanoTime()
             mergeMaps[outDir] = fingerprint to mergeResourceDirs(resDirs.filter { Files.isDirectory(it) }, merged)
+            rewriteLayouts(merged)
             compiledDir.toFile().deleteRecursively()
             val tc = System.nanoTime()
             val r = aapt2.compile(listOf(merged), compiledDir)
@@ -288,6 +383,39 @@ class PreviewResourceLinker(
             Files.write(keyFile, sigs.entries.joinToString("\n") { "${it.key}\t${it.value}" }.toByteArray())
             Base.Built(zips)
         }.getOrNull()
+    }
+
+    /** Rewrites every merged layout for the preview ([PreviewLayoutRewriter]): an included layout or a list item
+     *  shows its design-time values too, and a data-binding layout compiles. The merge is the preview's own copy. */
+    private fun rewriteLayouts(merged: Path) {
+        if (!Files.isDirectory(merged)) return
+        Files.list(merged).use { dirs -> dirs.filter { it.fileName.toString().startsWith("layout") }.toList() }.forEach { dir ->
+            Files.list(dir).use { files -> files.filter { it.toString().endsWith(".xml") }.toList() }.forEach { f ->
+                runCatching {
+                    val text = Files.readAllBytes(f).decodeToString()
+                    val rewritten = PreviewLayoutRewriter.rewrite(text, frameworkAttrs)
+                    if (rewritten != text) Files.write(f, rewritten.toByteArray())
+                }
+            }
+        }
+    }
+
+    /** The framework's attribute names (`android.R.attr`), the set a `tools:` attribute may stand in for. */
+    private val frameworkAttrs: Set<String> by lazy {
+        runCatching {
+            java.util.zip.ZipFile(androidJar.toFile()).use { jar ->
+                val entry = jar.getEntry("android/R\$attr.class") ?: return@use emptySet<String>()
+                val names = HashSet<String>()
+                org.objectweb.asm.ClassReader(jar.getInputStream(entry).use { it.readBytes() }).accept(
+                    object : org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        override fun visitField(access: Int, name: String, d: String?, s: String?, v: Any?) =
+                            null.also { names += name }
+                    },
+                    org.objectweb.asm.ClassReader.SKIP_CODE,
+                )
+                names
+            }
+        }.getOrElse { log.warn("framework attributes unreadable: ${it.message}"); emptySet() }
     }
 
     /** Whether the base recorded as [stored] (one `path<TAB>sig` line per file) matches [sigs] in every file
@@ -378,6 +506,8 @@ class PreviewResourceLinker(
                 }
             }
         }
+        // Not a file: the base's merged layouts are rewritten, so a new rewriter rebuilds it.
+        out["#layout-rewriter"] = PreviewLayoutRewriter.VERSION
         return out
     }
 
@@ -391,10 +521,10 @@ class PreviewResourceLinker(
 
     private fun normalized(p: Path): String = p.toAbsolutePath().normalize().toString()
 
-    /** Keyed on the base archives + manifest + the live buffer, so the ARSC relink runs only when one changed.
-     *  Excludes [extraPackages]: those affect only the R.jar, not the rendered resource table. */
+    /** Keyed on the base archives + manifest + the live buffer, so the ARSC relink runs only when one changed. */
     private fun cacheKey(base: List<Path>, manifest: Path, editedLayout: Path, liveText: String): String =
         digest {
+            put("rewriter " + PreviewLayoutRewriter.VERSION)
             for (a in (base + manifest).sortedBy { it.toString() }) putFileSig(a)
             put(editedLayout.toString())
             update(liveText.toByteArray())

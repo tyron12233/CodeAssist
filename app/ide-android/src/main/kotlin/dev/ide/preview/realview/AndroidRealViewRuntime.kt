@@ -135,13 +135,17 @@ class AndroidRealViewRuntime(
         // DexClassLoader), which is what keeps the preview clear of Google Play's dynamic-code policy. The
         // context classloader is the framework boot loader (android.*/java.* only); every non-framework tag is
         // created by the VM view factory below.
-        val jars = request.classpath.filter { it.toString().endsWith(".jar") }
-        val dirs = request.classpath.filter { Files.isDirectory(it) }
+        // The `R` jar is regenerated whenever the layout's ids change, so it stays out of the VM's key: the VM
+        // swaps its `R` classes in place (VmViewFactory.useResourceClasses) instead of being rebuilt.
+        val (rJars, classpath) = request.classpath.partition { it.fileName?.toString() in R_JAR_NAMES }
+        val jars = classpath.filter { it.toString().endsWith(".jar") }
+        val dirs = classpath.filter { Files.isDirectory(it) }
         val sig: String
         synchronized(lock) {
-            sig = "${classpathSig(jars)}|dirs:${classDirSig(dirs)}|api${request.minApi}"
+            sig = "${classpathSig(jars)}|dirs:${classDirSig(dirs)}|api${request.minApi}|${request.packageName}"
         }
-        val vmFactory: VmViewFactory = cachedVmFactory(request.classpath, sig, notify)
+        val vmFactory: VmViewFactory = cachedVmFactory(classpath, request.packageName, sig, notify)
+        vmFactory.useResourceClasses(rJars.firstOrNull())
         val classLoader: ClassLoader = View::class.java.classLoader ?: javaClass.classLoader!!
         val tLoader = System.nanoTime()
         val pc = cachedContext(request, resourcesAp, classLoader, sig, vmFactory)
@@ -173,7 +177,10 @@ class AndroidRealViewRuntime(
             LayoutInflater.from(ctx).cloneInContext(ctx).inflate(layoutId, null, false)
         }
 
-        vmFactory.applyAttachTimeState(root)
+        ToolsListItems.apply(root, request.packageName, vmFactory)
+
+        // What a window's first traversal would do before measuring: tell the tree it is attached.
+        val attached = WindowLifecycleReplay.attach(root, rootIsWindowDecor = usedDecor)
 
         // Synthesize system-bar insets (status + nav) so `fitsSystemWindows` / inset-driven padding apply, as
         // they would under a real window (there's no WindowManager here to deliver them).
@@ -186,6 +193,15 @@ class AndroidRealViewRuntime(
             View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
         )
         root.layout(0, 0, w, h)
+        // Pre-draw listeners can move views (CoordinatorLayout's dependent children); a pass they invalidate
+        // is laid out again before drawing, as a window would.
+        if (WindowLifecycleReplay.preDraw(root)) {
+            root.measure(
+                View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
+            )
+            root.layout(0, 0, w, h)
+        }
         val tInflate = System.nanoTime()
 
         notify?.invoke("Drawing")
@@ -198,6 +214,7 @@ class AndroidRealViewRuntime(
         val viewTree = runCatching { ViewHierarchyCapture.capture(root) }.getOrElse {
             log.warn("real-view hierarchy capture failed: ${it.message}"); null
         }
+        WindowLifecycleReplay.detach(attached)
 
         fun ms(a: Long, b: Long) = (b - a) / 1_000_000
         log.info("real-view '${request.layoutName}' ${w}x$h decor=$usedDecor${decorError?.let { " (decor failed: $it)" } ?: ""} " + "| classloader=${
@@ -286,12 +303,14 @@ class AndroidRealViewRuntime(
 
     /** The cached [VmViewFactory] over the interpret-mode classpath, keyed by [sig]; the previous one is closed
      *  on replacement (it holds open library-jar handles). Reports "Interpreting" when a rebuild happens. */
-    private fun cachedVmFactory(classpath: List<Path>, sig: String, notify: ((String) -> Unit)?): VmViewFactory =
+    private fun cachedVmFactory(
+        classpath: List<Path>, appPackage: String, sig: String, notify: ((String) -> Unit)?,
+    ): VmViewFactory =
         synchronized(lock) {
             vmFactoryCache?.takeIf { it.first == sig }?.second ?: run {
                 notify?.invoke("Interpreting")
                 vmFactoryCache?.second?.let { old -> runCatching { old.close() } }
-                VmViewFactory(classpath, peerFactory).also { vmFactoryCache = sig to it }
+                VmViewFactory(classpath, peerFactory, appPackage = appPackage).also { vmFactoryCache = sig to it }
             }
         }
 
@@ -336,5 +355,11 @@ class AndroidRealViewRuntime(
         )
         return jars.mapNotNull { j -> hashes[j]?.let { "$j:$it" } }.sorted().joinToString("|")
             .hashCode().toString()
+    }
+
+    private companion object {
+        /** The jars holding a module's `R` classes: the preview's own (its link's ids) or, without one, the
+         *  build's. */
+        val R_JAR_NAMES = setOf(dev.ide.android.support.PreviewResourceLinker.R_JAR_NAME, "R.jar")
     }
 }

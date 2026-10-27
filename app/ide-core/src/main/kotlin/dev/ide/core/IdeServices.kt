@@ -4212,20 +4212,11 @@ class IdeServices private constructor(
             )
         }.getOrNull()
         val tResolved = System.nanoTime()
-        // Extra R packages: every AAR package (androidx.coordinatorlayout, com.google.android.material, …) plus
-        // every OTHER android module's package. A library/framework view references its OWN `R` at inflate time
-        // (e.g. CoordinatorLayout → `androidx.coordinatorlayout.R$attr`), and AARs do NOT ship their `R` — the
-        // consuming app generates one per package via aapt2 `--extra-packages`. Without these the preview crashes
-        // with NoClassDefFoundError for a lib's R class. Mirrors the build's `extraPackages`.
-        val extraPackages = ((resolved?.aarPackages ?: emptyList()) +
-                modules().mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace }
-                    .filter { it != facet.namespace })
-            .distinct()
-
         // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
         // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
-        // is NOT required and edits to other resources show. It also generates a preview `R.jar` (app + [extraPackages]) with ids matching the relinked arsc, so the
-        // preview no longer depends on a prior build's (id-mismatched, possibly absent) R.jar.
+        // is NOT required and edits to other resources show. It also generates a preview `R.jar` with ids matching
+        // the relinked arsc (every library's `R` resolves to the app's in the renderer), so the preview no longer
+        // depends on a prior build's (id-mismatched, possibly absent) R.jar.
         val linked = previewResourceLinker?.link(
             module,
             variant,
@@ -4235,7 +4226,6 @@ class IdeServices private constructor(
             facet.namespace,
             facet.minSdk,
             facet.targetSdk,
-            extraPackages = extraPackages,
             progress = { _realViewProgress.value = PreviewProgress(it) },
         )
         val tLinked = System.nanoTime()
@@ -4291,7 +4281,7 @@ class IdeServices private constructor(
 
         // The VM interprets the compiled project class DIRS (reads their bytes), the external library jars, and
         // the preview R.jar — no dexing, no DexClassLoader.
-        val classpath = externalJars + projectClassDirs + listOfNotNull(rJar)
+        val classpath = externalJars + projectClassDirs + listOfNotNull(rJar, linked?.toolsJar)
         Log.logger("ide.preview").info(
             "real-view (interpret) resolved=${resolved != null} runtimeLibs=${runtimeLibs.size} " +
                 "externalJars=${externalJars.size} projectDirs=${projectClassDirs.size} rJar=${rJar != null} " +

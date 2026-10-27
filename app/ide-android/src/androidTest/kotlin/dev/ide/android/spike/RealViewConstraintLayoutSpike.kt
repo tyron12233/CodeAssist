@@ -12,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import kotlin.math.abs
 
 /**
@@ -33,7 +34,16 @@ class RealViewConstraintLayoutSpike {
     /** One expected box, relative to the ConstraintLayout `@id/root`, as a function of the root's size. */
     private class Expect(val id: String, val box: (w: Int, h: Int) -> IntArray)
 
-    private class Fixture(val name: String, val body: String, val expects: List<Expect>, val rootHeight: String = "match_parent")
+    private class Fixture(
+        val name: String,
+        val body: String,
+        val expects: List<Expect>,
+        val rootHeight: String = "match_parent",
+        val rootTag: String = "androidx.constraintlayout.widget.ConstraintLayout",
+        val rootAttrs: String = "",
+        /** Extra project files (path under `app/src/main/res/` to content) the fixture needs. */
+        val files: Map<String, String> = emptyMap(),
+    )
 
     private fun box(l: Number, t: Number, w: Number, h: Number) = intArrayOf(l.toInt(), t.toInt(), w.toInt(), h.toInt())
 
@@ -265,18 +275,68 @@ class RealViewConstraintLayoutSpike {
                 Expect("b") { w, h -> box((w - 110) / 2 + 275, (h - 110) / 2, 110, 110) },
             ),
         ),
+        Fixture(
+            "motionlayout-start-state",
+            """
+            <View android:id="@+id/box" android:layout_width="40dp" android:layout_height="40dp" android:background="#f44" />
+            """,
+            listOf(
+                // The scene's START constraint set places the box bottom-end; with no scene it would sit top-start.
+                Expect("box") { w, h -> box(w - 275, h - 275, 275, 275) },
+            ),
+            rootTag = "androidx.constraintlayout.motion.widget.MotionLayout",
+            rootAttrs = "app:layoutDescription=\"@xml/scene\"",
+            files = mapOf(
+                "xml/scene.xml" to """
+                    <?xml version="1.0" encoding="utf-8"?>
+                    <MotionScene xmlns:android="http://schemas.android.com/apk/res/android"
+                        xmlns:motion="http://schemas.android.com/apk/res-auto">
+                        <Transition motion:constraintSetStart="@+id/start" motion:constraintSetEnd="@+id/end"
+                            motion:duration="1000" />
+                        <ConstraintSet android:id="@+id/start">
+                            <Constraint android:id="@+id/box" android:layout_width="100dp" android:layout_height="100dp"
+                                motion:layout_constraintEnd_toEndOf="parent" motion:layout_constraintBottom_toBottomOf="parent" />
+                        </ConstraintSet>
+                        <ConstraintSet android:id="@+id/end">
+                            <Constraint android:id="@+id/box" android:layout_width="100dp" android:layout_height="100dp"
+                                motion:layout_constraintStart_toStartOf="parent" motion:layout_constraintTop_toTopOf="parent" />
+                        </ConstraintSet>
+                    </MotionScene>
+                """.trimIndent(),
+            ),
+        ),
+    )
+
+    /** ConstraintLayout 2.2 only: the Grid helper. */
+    private val gridFixture = Fixture(
+        "grid",
+        """
+        <androidx.constraintlayout.helper.widget.Grid android:id="@+id/grid" android:layout_width="0dp"
+            android:layout_height="0dp" app:grid_rows="2" app:grid_columns="2"
+            app:constraint_referenced_ids="g1,g2,g3,g4"
+            app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" app:layout_constraintBottom_toBottomOf="parent" />
+        <View android:id="@+id/g1" android:layout_width="0dp" android:layout_height="0dp" android:background="#f44" />
+        <View android:id="@+id/g2" android:layout_width="0dp" android:layout_height="0dp" android:background="#4f4" />
+        <View android:id="@+id/g3" android:layout_width="0dp" android:layout_height="0dp" android:background="#44f" />
+        <View android:id="@+id/g4" android:layout_width="0dp" android:layout_height="0dp" android:background="#ff4" />
+        """,
+        listOf(
+            Expect("g1") { w, h -> box(0, 0, w / 2, h / 2) },
+            Expect("g4") { w, h -> box(w / 2, h / 2, w - w / 2, h - h / 2) },
+        ),
     )
 
     // Built by concatenation: interpolating the unindented body into a trimIndent() template would leave the
     // template's indent before `<?xml`, which aapt2 rejects.
     private fun layoutOf(f: Fixture) = """<?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<${f.rootTag}
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="${f.rootHeight}">
-""" + f.body.trimIndent() + "\n</androidx.constraintlayout.widget.ConstraintLayout>\n"
+    android:layout_height="${f.rootHeight}" ${f.rootAttrs}>
+""" + f.body.trimIndent() + "\n</${f.rootTag}>\n"
 
     private fun find(n: PreviewViewNode, id: String): PreviewViewNode? =
         if (n.id == id) n else n.children.firstNotNullOfOrNull { find(it, id) }
@@ -286,8 +346,23 @@ class RealViewConstraintLayoutSpike {
         n.children.forEach { dump(it, depth + 1) }
     }
 
+    /** ConstraintLayout as the template gets it: 2.0.1, a transitive dependency of Material. */
     @Test
     fun constraintLayoutGeometry() {
+        geometry(constraintLayout = null, fixtures)
+    }
+
+    @Test
+    fun constraintLayout21Geometry() {
+        geometry("androidx.constraintlayout:constraintlayout:2.1.4", fixtures)
+    }
+
+    @Test
+    fun constraintLayout22Geometry() {
+        geometry("androidx.constraintlayout:constraintlayout:2.2.2", fixtures + gridFixture)
+    }
+
+    private fun geometry(constraintLayout: String?, fixtures: List<Fixture>) {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val pm = AndroidIde.createProjectManager(ctx)
         val services = pm.create("android-material-you", emptyMap())
@@ -298,8 +373,16 @@ class RealViewConstraintLayoutSpike {
             val deadline = System.currentTimeMillis() + 180_000
             Thread.sleep(2_000)
             while (backend.deps.depsState.value.resolving && System.currentTimeMillis() < deadline) Thread.sleep(1_000)
+            if (constraintLayout != null) {
+                val added = runBlocking { backend.deps.addDependency("app", constraintLayout, "implementation", emptyList(), null) }
+                log("added $constraintLayout: $added")
+            }
             log("deps settled; unresolved=${backend.deps.depsState.value.unresolved}")
+            val module = services.store.workspace.projects.single().modules.single { it.name == "app" }
+            log("constraintlayout on the module: " + module.dependencies.map { it.toString() }.filter { "constraint" in it })
 
+            val res = File(services.store.rootPath.toFile(), "app/src/main/res")
+            for (f in fixtures) for ((path, content) in f.files) File(res, path).apply { parentFile?.mkdirs() }.writeText(content)
             val file = File(services.store.rootPath.toFile(), "app/src/main/res/layout/activity_main.xml")
             // Each fixture renders twice: first SAVED (written to disk, as after Ctrl+S), then as an UNSAVED
             // buffer of the next edit (disk unchanged), the two latency cases the preview has.
@@ -347,7 +430,7 @@ class RealViewConstraintLayoutSpike {
         } finally {
             runCatching { services.close() }
         }
-        log("failures (${failures.size}):\n" + failures.joinToString("\n"))
+        log("failures [${constraintLayout ?: "transitive"}] (${failures.size}):\n" + failures.joinToString("\n"))
         assertTrue("ConstraintLayout geometry mismatches:\n" + failures.joinToString("\n"), failures.isEmpty())
     }
 }
