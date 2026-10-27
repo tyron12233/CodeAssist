@@ -21,7 +21,8 @@ import java.util.IdentityHashMap
  *   child order, so this holds even under AppCompat/Material view substitution). A count mismatch — a container
  *   that synthesizes internal children (Toolbar, RecyclerView) — stops structural descent there; its id'd
  *   descendants are still covered by the id pass. `<merge>` is transparent; `<include>` maps the include
- *   element itself and does not descend into the included layout's body.
+ *   element itself and does not descend into the included layout's body. A data-binding `<layout>` is skipped
+ *   for the view root inside it.
  *
  * Best-effort: a node that can't be traced keeps `sourceOffset = null` (read-only in the editor). Pure over the
  * parsed DOM + the captured tree, so it is host-testable without a device.
@@ -29,7 +30,10 @@ import java.util.IdentityHashMap
 internal object LayoutSourceMapper {
 
     fun stamp(tree: PreviewViewNode, parsed: XmlParsedFile): PreviewViewNode {
-        val rootTag = firstTag(parsed) ?: return tree
+        // A data-binding `<layout>` wraps the view root (beside its `<data>`); the preview renders the view root.
+        val rootTag = firstTag(parsed)
+            ?.let { top -> if (top.name == "layout") top.childTags.firstOrNull { it.name != null && it.name != "data" } else top }
+            ?: return tree
         val ids = HashMap<String, Int>()
         collectIds(rootTag, ids)
 

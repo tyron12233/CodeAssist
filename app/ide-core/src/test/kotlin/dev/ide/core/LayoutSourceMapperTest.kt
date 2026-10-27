@@ -56,6 +56,28 @@ class LayoutSourceMapperTest {
     }
 
     @Test
+    fun dataBindingLayoutMapsItsViewRoot() {
+        val xml = """
+            <layout xmlns:android="http://schemas.android.com/apk/res/android">
+              <data>
+                <variable name="user" type="com.example.User"/>
+              </data>
+              <LinearLayout android:orientation="vertical">
+                <TextView android:text="@{user.name}"/>
+              </LinearLayout>
+            </layout>
+        """.trimIndent()
+        // The preview unwraps `<layout>`: the rendered root is the LinearLayout inside it.
+        val tree = view(
+            "android.widget.FrameLayout", "content",
+            view("android.widget.LinearLayout", null, view("android.widget.TextView", null)),
+        )
+        val linear = LayoutSourceMapper.stamp(tree, parse(xml)).children[0]
+        assertEquals(xml.indexOf("<LinearLayout"), linear.sourceOffset)
+        assertEquals(xml.indexOf("<TextView"), linear.children[0].sourceOffset)
+    }
+
+    @Test
     fun idMapsInsideSynthesizedContainerButNotItsInternals() {
         val xml = """
             <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android">
