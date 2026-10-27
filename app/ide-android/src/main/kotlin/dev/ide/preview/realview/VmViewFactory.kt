@@ -5,6 +5,7 @@ import android.util.AttributeSet
 import android.view.InflateException
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import dev.ide.jvm.ClassBytesSource
 import dev.ide.jvm.InterpretPolicy
 import dev.ide.jvm.PeerFactory
@@ -13,6 +14,7 @@ import dev.ide.jvm.Vm
 import dev.ide.jvm.VmMethodView
 import dev.ide.jvm.hasInterpretedClass
 import dev.ide.jvm.interpretedConstructors
+import dev.ide.jvm.isInterpretedInstanceOf
 import dev.ide.platform.log.Log
 import java.nio.file.Files
 import java.nio.file.Path
@@ -134,6 +136,25 @@ internal class VmViewFactory(
             )
     }
 
+    /**
+     * Runs the attach-time work the inflated tree [root] would get from a real window. The preview draws its decor
+     * without ever attaching it, so `onAttachedToWindow` never fires; hosting it in a real window would cost every
+     * render a display round trip, so instead this replays the one hook layouts visibly depend on.
+     *
+     * A ConstraintLayout `Group` pushes its visibility onto its `constraint_referenced_ids` only when attached or
+     * when its own visibility is set, so a `visibility="gone"` group otherwise hides nothing. Setting the group's
+     * visibility to itself runs the same `applyLayoutFeatures`. Must run after inflation (the referenced siblings
+     * have to exist) and before measure.
+     */
+    fun applyAttachTimeState(root: View) {
+        if (!vm.hasInterpretedClass(CONSTRAINT_GROUP)) return
+        fun walk(v: View) {
+            if (vm.isInterpretedInstanceOf(v, CONSTRAINT_GROUP)) v.visibility = v.visibility
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+    }
+
     override fun close() {
         jarFiles.forEach { runCatching { it.close() } }
     }
@@ -141,5 +162,6 @@ internal class VmViewFactory(
     private companion object {
         const val CONTEXT = "Landroid/content/Context;"
         const val ATTRS = "Landroid/util/AttributeSet;"
+        const val CONSTRAINT_GROUP = "androidx.constraintlayout.widget.Group"
     }
 }

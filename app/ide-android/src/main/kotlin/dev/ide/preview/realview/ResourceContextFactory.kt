@@ -163,6 +163,10 @@ internal object ResourceContextFactory {
             }
         }
         override fun getResources(): Resources = resources
+        // The PROJECT's package, as layoutlib's context reports it, not the IDE's: views resolve names against
+        // it (`getIdentifier(name, "id", getPackageName())`). ConstraintLayout's helpers (Barrier, Group, Flow)
+        // find their `constraint_referenced_ids` that way, and with the IDE's package every lookup missed.
+        override fun getPackageName(): String = pkg
         override fun getAssets(): AssetManager = resources.assets
         override fun getClassLoader(): ClassLoader = cl
         override fun getTheme(): Resources.Theme = themeRef

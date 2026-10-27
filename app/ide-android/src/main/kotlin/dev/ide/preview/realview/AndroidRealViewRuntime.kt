@@ -173,6 +173,8 @@ class AndroidRealViewRuntime(
             LayoutInflater.from(ctx).cloneInContext(ctx).inflate(layoutId, null, false)
         }
 
+        vmFactory.applyAttachTimeState(root)
+
         // Synthesize system-bar insets (status + nav) so `fitsSystemWindows` / inset-driven padding apply, as
         // they would under a real window (there's no WindowManager here to deliver them).
         applyWindowInsets(ctx, root)
