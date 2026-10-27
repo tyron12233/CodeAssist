@@ -624,15 +624,28 @@ private fun NewXmlPanel(
 
 private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
 
+private const val APP_NS = "http://schemas.android.com/apk/res-auto"
+
+/** The tag written for a root chip: framework widgets inflate by short name, but a library view group must be
+ *  fully qualified (a bare `<ConstraintLayout>` resolves to the nonexistent `android.view.ConstraintLayout`). */
+private fun layoutRootTag(root: String): String = when (root) {
+    "ConstraintLayout" -> "androidx.constraintlayout.widget.ConstraintLayout"
+    else -> root
+}
+
 private fun xmlStub(kind: XmlResKind, root: String): String = when (kind) {
-    XmlResKind.Layout ->
+    XmlResKind.Layout -> {
+        val tag = layoutRootTag(root)
+        // Library view groups take their layout params from app: attributes (layout_constraint*), so declare it.
+        val appNs = if (tag != root) "\n    xmlns:app=\"$APP_NS\"" else ""
         """<?xml version="1.0" encoding="utf-8"?>
-<$root xmlns:android="$ANDROID_NS"
+<$tag xmlns:android="$ANDROID_NS"$appNs
     android:layout_width="match_parent"
     android:layout_height="match_parent"${if (root == "LinearLayout") "\n    android:orientation=\"vertical\"" else ""}>
 
-</$root>
+</$tag>
 """
+    }
     XmlResKind.Values ->
         """<?xml version="1.0" encoding="utf-8"?>
 <resources>
