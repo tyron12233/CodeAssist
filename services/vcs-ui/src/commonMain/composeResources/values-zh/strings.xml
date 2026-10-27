@@ -141,7 +141,10 @@
     <string name="vcs_clone_action">克隆</string>
     <string name="vcs_clone_yours">你的仓库</string>
     <string name="vcs_clone_search">搜索仓库</string>
-    <string name="vcs_clone_sign_in">登录后即可浏览你的仓库。</string>
+    <string name="vcs_clone_sign_in">登录后可浏览你的仓库并克隆私有仓库。此登录与项目商店的登录相互独立。</string>
+    <string name="vcs_clone_auth_title">此仓库需要登录</string>
+    <string name="vcs_clone_auth_signed_out">私有仓库需使用在此添加的 GitHub 账号克隆。登录项目商店并不会授予 CodeAssist 访问你仓库的权限。</string>
+    <string name="vcs_clone_auth_signed_in">当前登录的账号无法打开此仓库。请确认该账号有权访问此仓库，或添加其他账号。</string>
     <string name="vcs_clone_none">未找到仓库。</string>
     <string name="vcs_clone_unrecognized_title">无法识别的项目</string>
     <string name="vcs_clone_unrecognized_body">%1$s 已克隆并添加到你的项目中，但没有构建系统能识别它。你可以浏览和编辑其文件；构建和运行需要先设置好模块。</string>
@@ -159,7 +162,7 @@
     <string name="vcs_publish">发布</string>
     <string name="vcs_publish_needs_commit">发布前请先进行一次提交。</string>
     <string name="vcs_pull_requests">拉取请求</string>
-    <string name="vcs_pull_requests_empty">没有开启中的拉取请求。</string>
+    <string name="vcs_pull_requests_empty">没有打开的拉取请求。</string>
     <string name="vcs_new_pull_request">新建拉取请求</string>
     <string name="vcs_pr_title">标题</string>
     <string name="vcs_pr_body">描述</string>
@@ -176,7 +179,7 @@
     <string name="vcs_no_remote">此项目还没有远程仓库。</string>
 
     <!-- Plain-language hints and menu wording. Git's own vocabulary is the main thing newcomers trip on, so
-         each group of files says what it is and every occasional action is a worded menu row. -->
+    each group of files says what it is and every occasional action is a worded menu row. -->
     <string name="vcs_hint_conflicts">双方都修改了这些文件。逐个修复后，再将其标记为已解决。</string>
     <string name="vcs_hint_staged">已就绪待提交。这些文件会进入你的下一次提交。</string>
     <string name="vcs_hint_changes">已修改但尚未纳入。暂存文件即可将其加入下一次提交。</string>
