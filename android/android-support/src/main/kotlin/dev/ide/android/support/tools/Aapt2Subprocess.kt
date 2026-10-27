@@ -93,6 +93,31 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
         return if (r.success) r else ToolResult(false, r.log + selfTest())
     }
 
+    override fun linkAgainst(
+        compiled: List<Path>,
+        manifest: Path,
+        includes: List<Path>,
+        packageId: Int,
+        minSdk: Int,
+        targetSdk: Int,
+        outApk: Path,
+    ): ToolResult {
+        outApk.parent?.let { Files.createDirectories(it) }
+        val cmd = buildList {
+            add(aapt2.toString()); add("link")
+            add("-o"); add(outApk.toString())
+            includes.forEach { add("-I"); add(it.toString()) }
+            add("--manifest"); add(manifest.toString())
+            add("--package-id"); add("0x" + packageId.toString(16))
+            // Ids below 0x7f are reserved for system packages; a scratch package outside the app is all this is.
+            if (packageId < 0x7f) add("--allow-reserved-package-id")
+            add("--min-sdk-version"); add(minSdk.toString())
+            add("--target-sdk-version"); add(targetSdk.toString())
+            addAll(compiled.map { it.toString() })
+        }
+        return Subprocess.run(cmd)
+    }
+
     override fun convert(input: Path, output: Path, toProto: Boolean): ToolResult {
         output.parent?.let { Files.createDirectories(it) }
         val cmd = listOf(

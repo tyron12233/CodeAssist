@@ -242,6 +242,21 @@ interface Aapt2 {
      */
     fun convert(input: Path, output: Path, toProto: Boolean): ToolResult =
         ToolResult.fail("aapt2 convert not supported by this implementation")
+
+    /**
+     * Link [compiled] alone as its own package [packageId] against [includes] (`-I`, e.g. the framework jar and
+     * an already-linked `resources.ap_`), into [outApk]. References resolve to the included tables' ids, so a
+     * layout compiled this way can stand in for its copy in the included table without relinking it.
+     */
+    fun linkAgainst(
+        compiled: List<Path>,
+        manifest: Path,
+        includes: List<Path>,
+        packageId: Int,
+        minSdk: Int,
+        targetSdk: Int,
+        outApk: Path,
+    ): ToolResult = ToolResult.fail("aapt2 linkAgainst not supported by this implementation")
 }
 
 data class Aapt2CompileResult(val archives: List<Path>, val result: ToolResult)
