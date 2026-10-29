@@ -64,6 +64,20 @@ class StoreInstallHistoryTest {
         assertEquals(emptyMap(), history.installedPaths())
     }
 
+    /** A folder left behind by a delete, with no project in it, is not an install the store can open. */
+    @Test
+    fun aFolderThatIsNoLongerAProjectIsNotInstalled() {
+        val project = File(dir, "projects/Alpha").apply { mkdirs() }
+        val marker = File(project, ".platform/workspace.json").apply { parentFile.mkdirs(); writeText("{}") }
+        val isProject = { path: String -> File(path, ".platform/workspace.json").isFile }
+        history.remember("alpha", project.absolutePath)
+        assertEquals(mapOf("alpha" to project.absolutePath), history.installedPaths(isProject))
+
+        marker.delete()
+        File(project, ".platform/caches/source-index").mkdirs()
+        assertEquals(emptyMap(), history.installedPaths(isProject))
+    }
+
     /**
      * `recordInstall` remembers the id with no path, and runs right after the unpack that does know one.
      * If that second write cleared the path, Open would work for exactly as long as the process lived.

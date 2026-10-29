@@ -458,7 +458,9 @@ class IdeServicesBackend(
     override val deps: DependencyService = DependencyBackend(this)
     override val modules: ModuleService = ModuleBackend(this)
     override val signing: SigningService = SigningBackend(this)
-    override val projects: ProjectService = ProjectBackend(this)
+    // Read when a delete finishes, by which time [store] below exists.
+    override val projects: ProjectService =
+        ProjectBackend(this, onProjectDeleted = { (store as? StoreBackend)?.forgetDeletedInstalls() })
     /** The remote store catalog, resolved like [analytics]; absent → bundled-only. */
     private val storeCatalogSource: dev.ide.store.StoreCatalogSource =
         manager?.applicationContainer?.getServiceOrNull(STORE_CATALOG_SOURCE)
@@ -837,7 +839,7 @@ class IdeServicesBackend(
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
         manager?.env?.activeEngine = next
         followFileSystem(next)
-        _projectEpoch.value += 1
+        _projectEpoch.value = ++epochsIssued
         // Publish the project lifecycle for plugin subscribers, on the same app bus. Opened for the new engine;
         // Closed for the one being replaced (before it is disposed). Guarded so a subscriber can't break the swap.
         val bus = messageBus
@@ -848,6 +850,26 @@ class IdeServicesBackend(
             }
         }
         if (prev !== next) runCatching { prev?.close() }
+    }
+
+    /** The last [projectEpoch] a swap handed out. Never reused, so a reopen after [closeEngine] (which sets the
+     *  epoch to 0) still reads as a new project to everything keyed on it. */
+    private var epochsIssued = 0
+
+    override fun closeEngine() {
+        val prev = activeServices ?: return
+        // A build still running would go on writing outputs into the project. Only a runner already made:
+        // asking for one now would start one, compiler warm-up included.
+        val runner = synchronized(runnerCache) { runnerCache.remove(prev) }
+        runCatching { (runner ?: prev.buildRunner).stopBuild() }
+        activeServices = null
+        manager?.env?.activeEngine = null
+        followFileSystem(null)
+        _projectEpoch.value = 0
+        messageBus?.let { bus ->
+            runCatching { bus.syncPublisher(ProjectTopics.LIFECYCLE).onProjectEvent(ProjectEvent.Closed(prev.workspaceRoot.toString())) }
+        }
+        runCatching { prev.close() }
     }
 
 }

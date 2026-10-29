@@ -63,6 +63,8 @@ import dev.ide.ui.generated.resources.storage_cat_index_desc
 import dev.ide.ui.generated.resources.storage_cat_index_title
 import dev.ide.ui.generated.resources.storage_cat_language_desc
 import dev.ide.ui.generated.resources.storage_cat_language_title
+import dev.ide.ui.generated.resources.storage_cat_leftovers_desc
+import dev.ide.ui.generated.resources.storage_cat_leftovers_title
 import dev.ide.ui.generated.resources.storage_cat_other_desc
 import dev.ide.ui.generated.resources.storage_cat_other_title
 import dev.ide.ui.generated.resources.storage_cat_preview_desc
@@ -73,6 +75,8 @@ import dev.ide.ui.generated.resources.storage_cat_sdk_desc
 import dev.ide.ui.generated.resources.storage_cat_sdk_title
 import dev.ide.ui.generated.resources.storage_clear
 import dev.ide.ui.generated.resources.storage_clear_all_caches
+import dev.ide.ui.generated.resources.storage_clear_leftovers_body
+import dev.ide.ui.generated.resources.storage_clear_leftovers_title
 import dev.ide.ui.generated.resources.storage_clear_sdk_body
 import dev.ide.ui.generated.resources.storage_clear_sdk_title
 import dev.ide.ui.generated.resources.storage_freed
@@ -91,7 +95,7 @@ import org.jetbrains.compose.resources.stringResource
  * from the Settings & Tools hub. Talks only to [IdeBackend.projects] ([dev.ide.ui.backend.ProjectService]):
  * [dev.ide.ui.backend.ProjectService.storageReport] to size, [clearStorageCategory][dev.ide.ui.backend.ProjectService.clearStorageCategory]
  * and [deleteProject][dev.ide.ui.backend.ProjectService.deleteProject] to reclaim; it recomputes after each
- * action. Clearing caches is silent; the destructive SDK clear and project deletes go through a confirm.
+ * action. Clearing caches is silent; the SDK clear, leftover-folder removal and project deletes go through a confirm.
  */
 @Composable
 fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
@@ -112,7 +116,7 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
                     busy = state.busy,
                     onClear = state::clear,
                     onClearAllCaches = state::clearAllCaches,
-                    onRequestSdkClear = state::askClearSdk,
+                    onRequestConfirmedClear = state::askClear,
                     onRequestDeleteProject = state::askDeleteProject,
                 )
             }
@@ -126,14 +130,18 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
     }
 
     // ---- confirmations ----
-    val sdk = state.pendingSdkClear
+    val pending = state.pendingClear
+    val leftovers = pending?.id == "leftovers"
     ConfirmDialog(
-        visible = sdk != null,
-        title = stringResource(Res.string.storage_clear_sdk_title),
-        body = stringResource(Res.string.storage_clear_sdk_body, sdk?.let { formatBytes(it.bytes) } ?: ""),
+        visible = pending != null,
+        title = stringResource(if (leftovers) Res.string.storage_clear_leftovers_title else Res.string.storage_clear_sdk_title),
+        body = stringResource(
+            if (leftovers) Res.string.storage_clear_leftovers_body else Res.string.storage_clear_sdk_body,
+            pending?.let { formatBytes(it.bytes) } ?: "",
+        ),
         confirmLabel = stringResource(Res.string.storage_clear),
-        onCancel = state::cancelClearSdk,
-        onConfirm = state::confirmClearSdk,
+        onCancel = state::cancelClear,
+        onConfirm = state::confirmPendingClear,
     )
     val proj = state.pendingProjectDelete
     ConfirmDialog(
@@ -154,7 +162,7 @@ private fun StorageContent(
     busy: Boolean,
     onClear: (UiStorageCategory) -> Unit,
     onClearAllCaches: () -> Unit,
-    onRequestSdkClear: (UiStorageCategory) -> Unit,
+    onRequestConfirmedClear: (UiStorageCategory) -> Unit,
     onRequestDeleteProject: (UiStorageProject) -> Unit,
 ) {
     val shown = report.categories.filter { it.bytes > 0 }
@@ -173,7 +181,7 @@ private fun StorageContent(
             ) {
                 shown.forEach { c ->
                     CategoryRow(c, busy) { cat ->
-                        if (cat.destructive) onRequestSdkClear(cat) else onClear(cat)
+                        if (cat.destructive) onRequestConfirmedClear(cat) else onClear(cat)
                     }
                 }
             }
@@ -375,6 +383,7 @@ private fun storageColor(colorId: String): Color = when (colorId) {
     "success" -> Ide.colors.success
     "warning" -> Ide.colors.warning
     "gitModified" -> Ide.colors.gitModified
+    "error" -> MaterialTheme.colorScheme.error
     else -> MaterialTheme.colorScheme.outline
 }
 
@@ -387,6 +396,7 @@ private fun categoryTitle(id: String): String = when (id) {
     "language" -> stringResource(Res.string.storage_cat_language_title)
     "sdk" -> stringResource(Res.string.storage_cat_sdk_title)
     "projects" -> stringResource(Res.string.storage_cat_projects_title)
+    "leftovers" -> stringResource(Res.string.storage_cat_leftovers_title)
     else -> stringResource(Res.string.storage_cat_other_title)
 }
 
@@ -399,6 +409,7 @@ private fun categoryDescription(id: String): String = when (id) {
     "language" -> stringResource(Res.string.storage_cat_language_desc)
     "sdk" -> stringResource(Res.string.storage_cat_sdk_desc)
     "projects" -> stringResource(Res.string.storage_cat_projects_desc)
+    "leftovers" -> stringResource(Res.string.storage_cat_leftovers_desc)
     else -> stringResource(Res.string.storage_cat_other_desc)
 }
 

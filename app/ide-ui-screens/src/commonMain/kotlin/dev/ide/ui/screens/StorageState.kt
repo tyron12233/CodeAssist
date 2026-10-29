@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
 
 /**
  * State and intents for the Storage screen: the usage report, the reclaim operations, and the two
- * destructive confirmations (clearing the SDK, deleting a project). Every reclaim recomputes the report.
+ * destructive confirmations (clearing the SDK or the leftover folders, deleting a project). Every reclaim
+ * recomputes the report.
  */
 @Stable
 internal class StorageScreenState(
@@ -35,7 +36,7 @@ internal class StorageScreenState(
         private set
 
     /** Destructive confirmations, held until the user commits. */
-    var pendingSdkClear: UiStorageCategory? by mutableStateOf(null)
+    var pendingClear: UiStorageCategory? by mutableStateOf(null)
         private set
     var pendingProjectDelete: UiStorageProject? by mutableStateOf(null)
         private set
@@ -44,9 +45,9 @@ internal class StorageScreenState(
         reload()
     }
 
-    fun askClearSdk(category: UiStorageCategory) { pendingSdkClear = category }
+    fun askClear(category: UiStorageCategory) { pendingClear = category }
 
-    fun cancelClearSdk() { pendingSdkClear = null }
+    fun cancelClear() { pendingClear = null }
 
     fun askDeleteProject(project: UiStorageProject) { pendingProjectDelete = project }
 
@@ -67,7 +68,7 @@ internal class StorageScreenState(
         }
     }
 
-    /** Clear every non-destructive cache (everything except the SDK) in one pass. */
+    /** Clear every non-destructive cache (everything but the SDK and the leftover folders) in one pass. */
     fun clearAllCaches() {
         val current = report ?: return
         if (busy) return
@@ -84,9 +85,9 @@ internal class StorageScreenState(
         }
     }
 
-    fun confirmClearSdk() {
-        val category = pendingSdkClear
-        pendingSdkClear = null
+    fun confirmPendingClear() {
+        val category = pendingClear
+        pendingClear = null
         category?.let(::clear)
     }
 

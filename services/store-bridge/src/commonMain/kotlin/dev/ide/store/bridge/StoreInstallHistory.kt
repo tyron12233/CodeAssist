@@ -26,13 +26,16 @@ class StoreInstallHistory(private val file: () -> String?) {
     fun read(): List<String> = entries().map { it.first }
 
     /**
-     * Item id to the project directory it was unpacked into, for the installs that still exist on disk.
+     * Item id to the project directory it was unpacked into, for the installs that are still projects.
      *
      * A project the user has since deleted is dropped rather than reported: the store would otherwise
      * offer to open a folder that is not there, which is worse than offering to install it again.
+     * [isProject] decides what still counts. A folder that merely exists is not enough: a delete that was
+     * interrupted, or an engine that wrote a cache into the folder after it was deleted, leaves one behind
+     * with no project in it, and opening that gives an empty editor.
      */
-    fun installedPaths(): Map<String, String> = entries()
-        .mapNotNull { (id, path) -> path?.takeIf { StoreFs.isDirectory(it) }?.let { id to it } }
+    fun installedPaths(isProject: (String) -> Boolean = StoreFs::isDirectory): Map<String, String> = entries()
+        .mapNotNull { (id, path) -> path?.takeIf(isProject)?.let { id to it } }
         .toMap()
 
     /**

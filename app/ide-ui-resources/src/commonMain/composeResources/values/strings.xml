@@ -1281,6 +1281,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="storage_freed">Freed %1$s</string>
     <string name="storage_clear_sdk_title">Clear the Android SDK?</string>
     <string name="storage_clear_sdk_body">This removes the downloaded SDK components and downloads (%1$s). They'll be downloaded again the next time a build needs them.</string>
+    <string name="storage_clear_leftovers_title">Remove leftover folders?</string>
+    <string name="storage_clear_leftovers_body">This removes %1$s of folders that deleted projects left in your projects folder. None of them opens as a project.</string>
     <string name="storage_cat_dependencies_title">Dependencies</string>
     <string name="storage_cat_dependencies_desc">Downloaded libraries, re-downloaded when needed</string>
     <string name="storage_cat_index_title">Indexes</string>
@@ -1295,6 +1297,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="storage_cat_sdk_desc">SDK components and downloads, re-downloadable</string>
     <string name="storage_cat_projects_title">Project files</string>
     <string name="storage_cat_projects_desc">Your source code and project settings</string>
+    <string name="storage_cat_leftovers_title">Leftover project folders</string>
+    <string name="storage_cat_leftovers_desc">Left behind by deleted projects, safe to remove</string>
     <string name="storage_cat_other_title">Other</string>
     <string name="storage_cat_other_desc">Keystores, backups, and app data</string>
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>

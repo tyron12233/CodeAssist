@@ -323,14 +323,14 @@ class ScreenStateTest {
         advanceUntilIdle()
         val sdk = UiStorageCategory("sdk", 2_000, "red", clearable = true, destructive = true)
 
-        state.askClearSdk(sdk)
-        assertEquals(sdk, state.pendingSdkClear)
-        state.cancelClearSdk()
+        state.askClear(sdk)
+        assertEquals(sdk, state.pendingClear)
+        state.cancelClear()
         advanceUntilIdle()
         assertTrue(backend.cleared.isEmpty()) // cancelling clears nothing
 
-        state.askClearSdk(sdk)
-        state.confirmClearSdk()
+        state.askClear(sdk)
+        state.confirmPendingClear()
         advanceUntilIdle()
         assertEquals(listOf("sdk"), backend.cleared)
         assertEquals(2_000L, state.freedBytes)

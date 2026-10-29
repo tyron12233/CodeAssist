@@ -71,12 +71,16 @@ internal interface BackendContext {
      *  host with neither a manager nor an open project. See [dev.ide.plugin.editor.EditorTopics]. */
     val messageBus: dev.ide.platform.MessageBus?
 
-    /** Bumps when the active project changes (the project service re-exposes it). */
+    /** Bumps when the active project changes (the project service re-exposes it); 0 while none is open. */
     val projectEpoch: StateFlow<Int>
 
     /** Make [next] the active engine: swap it in, bump [projectEpoch], close the old one (lifecycle-owned by
      *  the aggregator). Called by the project service's open/create. */
     fun swapEngine(next: IdeServices)
+
+    /** Close the active engine and leave no project open ([projectEpoch] back to 0). Called before the
+     *  loaded project is deleted, so nothing it runs writes into the folder being removed. */
+    fun closeEngine()
 
     /** Record an analytics event (gated on consent; no-op otherwise). */
     fun track(event: String, props: Map<String, String>)

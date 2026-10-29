@@ -1328,6 +1328,8 @@
     <string name="storage_freed">تم تحرير %1$s</string>
     <string name="storage_clear_sdk_title">مسح حزمة Android SDK؟</string>
     <string name="storage_clear_sdk_body">يزيل هذا مكوّنات SDK المنزّلة والتنزيلات (%1$s). وستُنزَّل مرة أخرى في المرة القادمة التي يحتاجها فيها بناء.</string>
+    <string name="storage_clear_leftovers_title">إزالة المجلدات المتبقية؟</string>
+    <string name="storage_clear_leftovers_body">يزيل هذا %1$s من المجلدات التي تركتها المشاريع المحذوفة في مجلد مشاريعك. لا يُفتح أي منها كمشروع.</string>
     <string name="storage_cat_dependencies_title">التبعيات</string>
     <string name="storage_cat_dependencies_desc">مكتبات منزّلة، يُعاد تنزيلها عند الحاجة</string>
     <string name="storage_cat_index_title">الفهارس</string>
@@ -1342,6 +1344,8 @@
     <string name="storage_cat_sdk_desc">مكوّنات SDK والتنزيلات، يمكن تنزيلها مجددًا</string>
     <string name="storage_cat_projects_title">ملفات المشاريع</string>
     <string name="storage_cat_projects_desc">شفرتك المصدرية وإعدادات مشاريعك</string>
+    <string name="storage_cat_leftovers_title">مجلدات مشاريع متبقية</string>
+    <string name="storage_cat_leftovers_desc">تركتها المشاريع المحذوفة، ويمكن إزالتها بأمان</string>
     <string name="storage_cat_other_title">أخرى</string>
     <string name="storage_cat_other_desc">ملفات المفاتيح والنسخ الاحتياطية وبيانات التطبيق</string>
     <string name="plugins_restart_hint">أعد التشغيل لتطبيق تغييرات الإضافات.</string>

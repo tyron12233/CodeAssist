@@ -9,6 +9,7 @@ import dev.ide.core.project.ImportableKind
 import dev.ide.core.project.CaprojFormat
 import dev.ide.core.project.ProjectIconLocator
 import dev.ide.core.project.ProjectPackaging
+import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
 import dev.ide.model.template.TextValidation
@@ -64,7 +65,11 @@ internal fun ImportableKind.toUi(): UiProjectFolderKind = when (this) {
  * per-project open-tab session. Open/create drive the engine swap through [BackendContext.swapEngine] (the
  * swap + epoch bump are lifecycle-owned by the aggregator).
  */
-internal class ProjectBackend(private val ctx: BackendContext) : ProjectService {
+internal class ProjectBackend(
+    private val ctx: BackendContext,
+    /** Told after a delete, so the store stops offering to open a project that is gone. */
+    private val onProjectDeleted: () -> Unit = {},
+) : ProjectService {
 
     private val log = Log.logger("ide.backend")
 
@@ -128,6 +133,12 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         return withContext(Dispatchers.IO) {
             runCatching {
                 if (Paths.get(rootPath) == ctx.servicesOrNull?.workspaceRoot) return@runCatching true
+                // A folder with no project in it opens as an empty one, which is never what the caller meant:
+                // the store's Open on a project deleted since, or a remembered path that is gone.
+                if (!ModelPersistence.exists(rootPath)) {
+                    log.warn("Not opening $rootPath: there is no project in it")
+                    return@runCatching false
+                }
                 ctx.swapEngine(mgr.open(rootPath)); true
             }.getOrElse { e ->
                 // Surface the failure (console + the critical-error dialog) instead of swallowing it, so a
@@ -142,7 +153,21 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         val mgr = ctx.manager ?: return false
         iconCache.remove(rootPath)
         return withContext(Dispatchers.IO) {
-            runCatching { mgr.delete(rootPath); true }.getOrDefault(false)
+            // The loaded project stays loaded behind the picker, and its engine keeps writing into the folder
+            // (caches, open tabs, completion stats). Close it first, or a late write recreates the folder.
+            if (ctx.servicesOrNull?.workspaceRoot == Paths.get(rootPath)) ctx.closeEngine()
+            val deleted = runCatching { mgr.delete(rootPath) }
+                .onFailure { log.warn("Couldn't delete the project at $rootPath", it) }
+                .getOrDefault(false)
+            onProjectDeleted()
+            if (!deleted) {
+                ctx.showError(
+                    "Couldn't delete the project",
+                    "Some of its files could not be removed. Try again, or remove the folder with a file manager.",
+                    rootPath,
+                )
+            }
+            deleted
         }
     }
 
@@ -172,7 +197,9 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
             runCatching {
                 val summaries = mgr.list()
                 val androidByPath = summaries.associate { it.rootPath to it.isAndroid }
-                val r = StorageUsage.report(mgr.storageRoot, summaries.map { Paths.get(it.rootPath) }, mgr.sharedRoot)
+                val r = StorageUsage.report(
+                    mgr.storageRoot, summaries.map { Paths.get(it.rootPath) }, mgr.sharedRoot, mgr.leftoverFolders(),
+                )
                 UiStorageReport(
                     storageRootPath = r.storageRoot,
                     totalBytes = r.totalBytes,
@@ -198,6 +225,8 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         val mgr = ctx.manager ?: return false
         return withContext(Dispatchers.IO) {
             runCatching {
+                // Removing folders, not regenerable caches: kept to the manager's own narrow test of a leftover.
+                if (id == StorageUsage.LEFTOVERS) return@runCatching mgr.deleteLeftoverFolders()
                 StorageUsage.clearCategory(id, mgr.list().map { Paths.get(it.rootPath) }, mgr.sharedRoot)
                 true
             }.getOrElse { e -> log.error("Couldn't clear storage category $id", e); false }
@@ -213,6 +242,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         StorageUsage.LANGUAGE -> "gitModified"
         StorageUsage.SDK -> "warning"
         StorageUsage.PROJECTS -> "accentStrong"
+        StorageUsage.LEFTOVERS -> "error"
         else -> "textTertiary"
     }
 

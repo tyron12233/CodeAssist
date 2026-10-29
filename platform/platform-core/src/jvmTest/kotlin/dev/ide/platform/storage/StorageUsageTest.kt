@@ -145,6 +145,19 @@ class StorageUsageTest {
         assertTrue(Files.exists(root.resolve(".platform/caches/resolved-deps/lib.jar")), "deps cache kept")
     }
 
+    /** Leftover folders are their own slice, not "other", and only the project manager removes them. */
+    @Test
+    fun leftoverFoldersAreCountedApartAndNotClearedHere() {
+        val projects = seed()
+        val husk = file("projects/husk/.platform/caches/seg.bin", 300).parent.parent.parent
+        val before = cat(StorageUsage.report(root, projects, root), StorageUsage.OTHER)
+        val r = StorageUsage.report(root, projects, root, leftoverRoots = listOf(husk))
+        assertEquals(300L, cat(r, StorageUsage.LEFTOVERS))
+        assertEquals(before - 300L, cat(r, StorageUsage.OTHER))
+        assertEquals(0L, StorageUsage.clearCategory(StorageUsage.LEFTOVERS, projects, root))
+        assertTrue(Files.exists(husk.resolve(".platform/caches/seg.bin")))
+    }
+
     @Test
     fun clearingProjectsAndOtherAreNoOps() {
         val projects = seed()

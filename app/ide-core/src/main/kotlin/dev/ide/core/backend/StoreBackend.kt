@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
+import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.store.bridge.StoreAccounts
 import dev.ide.store.bridge.StoreFeedCache
@@ -751,15 +752,30 @@ internal class StoreBackend(
      *
      * Seeded, rather than starting empty, because "installed" is a fact about the workspace and not about
      * this session: a store row for a project already on disk has to offer Open after a relaunch too. The
-     * ledger drops entries whose directory is gone, so a deleted project goes back to offering Install.
+     * ledger drops entries that are no longer projects, so a deleted project goes back to offering Install.
      *
      * Read once, lazily, off a file of at most fifty short lines: the same shape of read `isLiked` already
-     * does during composition.
+     * does during composition. A delete later in the session goes through [forgetDeletedInstalls].
      */
     private val progressState by lazy {
-        val installed = history.installedPaths()
+        val installed = history.installedPaths(::isProject)
             .mapValues { (id, path) -> UiInstallProgress(id, UiInstallState.INSTALLED, 1f, rootPath = path) }
         kotlinx.coroutines.flow.MutableStateFlow(installed)
+    }
+
+    /** Whether [path] still holds a project, the same test the picker lists by. */
+    private fun isProject(path: String): Boolean =
+        runCatching { ModelPersistence.exists(path) }.getOrDefault(false)
+
+    /**
+     * Drop the installs whose project is gone, so their rows offer Install again. Called after a project is
+     * deleted: [progressState] is read once per session, and a row that still said Open would open the
+     * deleted folder, or what is left of it, as an empty project.
+     */
+    fun forgetDeletedInstalls() {
+        progressState.value = progressState.value.filterValues { p ->
+            p.state != UiInstallState.INSTALLED || p.rootPath?.let(::isProject) == true
+        }
     }
 
     private val installer = StoreInstaller(source)

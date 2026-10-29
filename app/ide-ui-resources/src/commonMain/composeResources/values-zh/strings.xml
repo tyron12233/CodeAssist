@@ -1269,6 +1269,8 @@
     <string name="storage_freed">已释放 %1$s</string>
     <string name="storage_clear_sdk_title">清除 Android SDK？</string>
     <string name="storage_clear_sdk_body">这将删除已下载的 SDK 组件和下载内容（%1$s）。下次构建需要时会重新下载。</string>
+    <string name="storage_clear_leftovers_title">删除残留文件夹？</string>
+    <string name="storage_clear_leftovers_body">这将删除已删除项目在项目文件夹中留下的文件夹（%1$s）。它们都无法作为项目打开。</string>
     <string name="storage_cat_dependencies_title">依赖</string>
     <string name="storage_cat_dependencies_desc">已下载的库，需要时会重新下载</string>
     <string name="storage_cat_index_title">索引</string>
@@ -1283,6 +1285,8 @@
     <string name="storage_cat_sdk_desc">SDK 组件和下载，可重新下载</string>
     <string name="storage_cat_projects_title">项目文件</string>
     <string name="storage_cat_projects_desc">你的源代码和项目设置</string>
+    <string name="storage_cat_leftovers_title">残留的项目文件夹</string>
+    <string name="storage_cat_leftovers_desc">已删除项目留下的，可以安全删除</string>
     <string name="storage_cat_other_title">其他</string>
     <string name="storage_cat_other_desc">密钥库、备份和应用数据</string>
     <string name="plugins_restart_hint">重启后将应用插件更改。</string>
