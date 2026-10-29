@@ -146,6 +146,19 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         }
     }
 
+    override val projectRenameSupported: Boolean get() = ctx.manager != null
+
+    override suspend fun renameProject(rootPath: String, name: String): Boolean {
+        val mgr = ctx.manager ?: return false
+        return withContext(Dispatchers.IO) {
+            // The loaded project renames through its live store; see ProjectManager.rename.
+            val live = ctx.servicesOrNull?.takeIf { it.workspaceRoot == Paths.get(rootPath) }?.store
+            runCatching { mgr.rename(rootPath, name, live) }
+                .onFailure { log.warn("Couldn't rename the project at $rootPath", it) }
+                .getOrDefault(false)
+        }
+    }
+
     override suspend fun backupProjects(): String? {
         val mgr = ctx.manager ?: return null
         return withContext(Dispatchers.IO) { runCatching { mgr.exportBackup().toString() }.getOrNull() }

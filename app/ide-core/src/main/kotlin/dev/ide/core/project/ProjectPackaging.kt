@@ -1,6 +1,7 @@
 package dev.ide.core.project
 
 import dev.ide.model.impl.format.Json
+import dev.ide.platform.writeFileAtomically
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -163,20 +164,21 @@ object ProjectPackaging {
         return total
     }
 
-    /** Rename the project inside an unpacked workspace's `workspace.json` — the display name the picker and
-     *  the editor show. Best-effort: a workspace file it can't parse is left alone. */
-    fun renameProject(projectDir: Path, name: String) {
-        if (name.isBlank()) return
+    /** Rename the project inside a workspace's `workspace.json` — the display name the picker and the editor
+     *  show. Only `name` changes: ids, root paths, modules and settings are carried over as read. Returns false
+     *  when the file can't be read, parsed or written, which leaves it as it was. */
+    fun renameProject(projectDir: Path, name: String): Boolean {
+        if (name.isBlank()) return false
         val workspace = projectDir.resolve(WORKSPACE_REL)
         val renamed = runCatching {
-            val root = Json.parse(Files.readAllBytes(workspace).toString(Charsets.UTF_8)) as? Map<*, *> ?: return
+            val root = Json.parse(Files.readAllBytes(workspace).toString(Charsets.UTF_8)) as? Map<*, *> ?: return false
             val projects = (root["projects"] as? List<*>)?.map { project ->
                 val map = project as? Map<*, *> ?: return@map project
                 LinkedHashMap(map).apply { this["name"] = name }
-            } ?: return
+            } ?: return false
             Json.write(LinkedHashMap(root).apply { this["projects"] = projects })
-        }.getOrNull() ?: return
-        runCatching { Files.write(workspace, renamed.toByteArray(Charsets.UTF_8)) }
+        }.getOrNull() ?: return false
+        return writeFileAtomically(workspace.toString(), renamed.toByteArray(Charsets.UTF_8))
     }
 
     /** The regular files under [projectDir] that belong in a package (source-of-truth only), minus anything

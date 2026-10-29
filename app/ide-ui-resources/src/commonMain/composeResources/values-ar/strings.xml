@@ -895,6 +895,9 @@
     <string name="home_delete_confirm_body">يزيل هذا المشروع وكل ما فيه من هذا الجهاز. لا يمكن التراجع عن ذلك.</string>
     <string name="home_delete_confirm_action">حذف المشروع</string>
     <string name="home_cancel">إلغاء</string>
+    <string name="home_rename">إعادة التسمية</string>
+    <string name="home_rename_title">إعادة تسمية المشروع</string>
+    <string name="home_rename_label">اسم المشروع</string>
     <string name="publish_from_share">النشر في المتجر</string>
     <string name="publish_from_share_body">شاركه مع الجميع، لا مع شخص واحد فقط. يراجعه مشرف أولًا.</string>
     <string name="guide_title">كيف يعمل النشر</string>
@@ -1582,6 +1585,15 @@
     <string name="modcfg_created">تم إنشاء %1$s</string>
     <string name="modcfg_couldnt_create">تعذّر إنشاء %1$s</string>
     <string name="modcfg_remove_module">إزالة الوحدة</string>
+    <string name="modcfg_rename_app">إعادة تسمية الحزمة واسم التطبيق</string>
+    <string name="modcfg_rename_app_name">اسم التطبيق</string>
+    <string name="modcfg_rename_app_package">الحزمة</string>
+    <string name="modcfg_rename_app_change_id">تغيير معرّف التطبيق أيضًا</string>
+    <string name="modcfg_rename_app_change_id_note">عند الإيقاف يبقى %1$s، فيستمر تحديث التطبيق المثبّت والمنشور.</string>
+    <string name="modcfg_rename_app_review">مراجعة التغييرات</string>
+    <string name="modcfg_rename_app_summary">الملفات التي ستتغير: %1$d. المنقولة إلى الحزمة الجديدة: %2$d.</string>
+    <string name="modcfg_rename_app_apply">إعادة التسمية</string>
+    <string name="modcfg_rename_app_nothing">لا تحتوي هذه الوحدة على حزمة أو اسم تطبيق لإعادة تسميته.</string>
     <string name="modcfg_remove_module_content">إزالة "%1$s" من المشروع؟ تبقى ملفاتها على القرص؛ وتُسقَط تبعيات الوحدات الأخرى عليها.</string>
     <string name="modcfg_remove">إزالة</string>
     <string name="modcfg_no_module_types">لا توجد أنواع وحدات متاحة.</string>

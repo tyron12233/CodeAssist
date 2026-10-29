@@ -17,6 +17,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
 
     override fun encode(facet: AndroidFacet): Map<String, Any?> = buildMap {
         put("namespace", facet.namespace)
+        facet.applicationId?.let { put("applicationId", it) }
         put("compileSdk", facet.compileSdk.toLong())
         put("minSdk", facet.minSdk.toLong())
         put("targetSdk", facet.targetSdk.toLong())
@@ -82,6 +83,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
                 buildConfig = values["buildConfig"] as? Boolean ?: true,
             ),
             packaging = decodePackaging(values.table("packaging")),
+            applicationId = (values["applicationId"] as? String)?.takeIf { it.isNotBlank() },
         )
     }
 

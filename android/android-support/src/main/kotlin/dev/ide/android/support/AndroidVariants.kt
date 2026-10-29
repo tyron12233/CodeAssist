@@ -77,7 +77,8 @@ object AndroidVariants {
         compute(module).let { all -> all.firstOrNull { it.name.endsWith("debug", ignoreCase = true) } ?: all.firstOrNull() }
 
     /**
-     * The effective **applicationId** of [variant] (AGP: a flavor override else the namespace, plus the flavor
+     * The effective **applicationId** of [variant] (AGP: a flavor override, else `defaultConfig.applicationId`
+     * ([AndroidFacet.applicationId]), else the namespace, plus the flavor
      * and build-type `applicationIdSuffix`es). This is what the installed app reports as `getPackageName()` at
      * runtime — so it, NOT the bare namespace, is the identity to install/launch by and to match forwarded app
      * logs against. Single source of truth; the build DAG ([AndroidBuildSystem]) uses the same computation.
@@ -90,7 +91,7 @@ object AndroidVariants {
             facet.productFlavors.firstOrNull { it.name == fn }?.applicationIdSuffix
         }.joinToString("")
         val buildTypeSuffix = facet.buildType(variant.buildTypeName)?.applicationIdSuffix ?: ""
-        return (flavorAppId ?: facet.namespace) + flavorIdSuffix + buildTypeSuffix
+        return (flavorAppId ?: facet.applicationId ?: facet.namespace) + flavorIdSuffix + buildTypeSuffix
     }
 
     /**

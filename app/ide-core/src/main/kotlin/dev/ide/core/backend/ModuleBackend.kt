@@ -4,6 +4,10 @@ import dev.ide.core.BackendContext
 import dev.ide.model.ContentRole
 import dev.ide.model.bridge.ModuleConfigBridge
 import dev.ide.ui.backend.ModuleService
+import dev.ide.ui.backend.UiAppIdentity
+import dev.ide.ui.backend.UiAppRenamePreview
+import dev.ide.ui.backend.UiAppRenameRequest
+import dev.ide.ui.backend.UiAppRenameResult
 import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigResult
@@ -113,6 +117,22 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
 
     override suspend fun getBuildFeatures(moduleName: String): UiBuildFeatures? =
         withContext(Dispatchers.IO) { ctx.services.moduleService.getBuildFeatures(moduleName) }
+
+    override suspend fun appIdentity(moduleName: String): UiAppIdentity? =
+        withContext(Dispatchers.IO) { ctx.servicesOrNull?.appRename?.identity(moduleName) }
+
+    // On the engine lane, like the file rename: both read and rewrite the editor's unsaved buffers.
+    override suspend fun previewAppRename(request: UiAppRenameRequest): UiAppRenamePreview =
+        withContext(ctx.engineDispatcher) {
+            ctx.servicesOrNull?.appRename?.preview(request) ?: UiAppRenamePreview(error = "No project is open.")
+        }
+
+    override suspend fun applyAppRename(request: UiAppRenameRequest): UiAppRenameResult =
+        withContext(ctx.engineDispatcher) {
+            val result = ctx.servicesOrNull?.appRename?.apply(request) ?: UiAppRenameResult(false, "No project is open.")
+            ctx.bumpFileSystemEpoch() // even a partial rename changed files on disk
+            result
+        }
 
     override suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         withContext(Dispatchers.IO) {

@@ -107,6 +107,7 @@ import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
+import dev.ide.core.services.AppRenameService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.settings.BuiltInSettingsPages
@@ -779,6 +780,10 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped Java rename refactoring (prepare + apply across the project). */
     internal val refactor: RefactorService
         get() = store.workspaceContainer.getService(REFACTOR_SERVICE)
+
+    /** WORKSPACE-scoped rename of an app's package and name across the workspace. */
+    internal val appRename: AppRenameService
+        get() = store.workspaceContainer.getService(APP_RENAME_SERVICE)
 
     /** WORKSPACE-scoped Kotlin editor queries (@Preview discovery, inheritor markers, go-to-implementation). */
     internal val kotlinEditor: KotlinEditorService

@@ -546,6 +546,13 @@ class CodeAssistAppState(
         }
     }
 
+    fun renameProject(project: ProjectInfo, name: String) {
+        scope.launch {
+            backend.projects.renameProject(project.rootPath, name)
+            projectsRefresh++
+        }
+    }
+
     /** Open the Create-Project gallery, optionally pre-selecting [templateId] (a Store item's template). */
     /**
      * Install a store item, or route it to Create-Project when it is a bundled scaffold.

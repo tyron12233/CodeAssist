@@ -852,6 +852,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="home_delete_confirm_body">This removes the project and everything in it from this device. It cannot be undone.</string>
     <string name="home_delete_confirm_action">Delete project</string>
     <string name="home_cancel">Cancel</string>
+    <string name="home_rename">Rename</string>
+    <string name="home_rename_title">Rename project</string>
+    <string name="home_rename_label">Project name</string>
     <string name="publish_from_share">Publish to the store</string>
     <string name="publish_from_share_body">Share it with everyone, not just one person. A moderator reviews it first.</string>
     <string name="guide_title">How publishing works</string>
@@ -1534,6 +1537,15 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_created">Created %1$s</string>
     <string name="modcfg_couldnt_create">Couldn't create %1$s</string>
     <string name="modcfg_remove_module">Remove module</string>
+    <string name="modcfg_rename_app">Rename package and app name</string>
+    <string name="modcfg_rename_app_name">App name</string>
+    <string name="modcfg_rename_app_package">Package</string>
+    <string name="modcfg_rename_app_change_id">Change the app's id too</string>
+    <string name="modcfg_rename_app_change_id_note">Off keeps %1$s, so it still updates the installed and published app.</string>
+    <string name="modcfg_rename_app_review">Review changes</string>
+    <string name="modcfg_rename_app_summary">Files that change: %1$d. Moved to the new package: %2$d.</string>
+    <string name="modcfg_rename_app_apply">Rename</string>
+    <string name="modcfg_rename_app_nothing">This module has no package or app name to rename.</string>
     <string name="modcfg_remove_module_content">Remove '%1$s' from the project? Its files are left on disk; other modules' dependencies on it are dropped.</string>
     <string name="modcfg_remove">Remove</string>
     <string name="modcfg_no_module_types">No module types available.</string>

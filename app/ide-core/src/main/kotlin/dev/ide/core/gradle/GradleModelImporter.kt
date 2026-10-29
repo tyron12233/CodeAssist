@@ -298,22 +298,13 @@ class GradleModelImporter : ProjectImporter {
         // A multiplatform module keeps its manifest in `androidMain`, where the facet's default never looks.
         val manifest = android["manifest"] as? String
             ?: KMP_MANIFEST.takeIf { raw["multiplatform"] as? Boolean == true && Files.isRegularFile(moduleDir.resolve(it)) }
-        // The model derives an app's package from the namespace, so a build whose applicationId differs
-        // would be renamed silently. Say so instead.
-        val applicationId = android["applicationId"] as? String
         val namespace = android["namespace"] as? String ?: "dev.ide.$module"
-        if (applicationId != null && applicationId != namespace) {
-            messages.add(
-                SyncMessage(
-                    SyncSeverity.WARNING,
-                    "$module: applicationId '$applicationId' is not carried by the model (it derives the " +
-                        "package from the namespace '$namespace'); the built artifact will use the namespace.",
-                )
-            )
-        }
+        // Kept only when it differs: an app whose id is its namespace leaves the facet's applicationId unset.
+        val applicationId = (android["applicationId"] as? String)?.takeIf { it.isNotBlank() && it != namespace }
         val features = android["buildFeatures"] as? Map<*, *>
         val facet = AndroidFacet(
             namespace = namespace,
+            applicationId = applicationId,
             manifest = manifest ?: DEFAULT_MANIFEST,
             compileSdk = android.int("compileSdk") ?: AndroidApiLevels.LATEST,
             minSdk = android.int("minSdk") ?: DEFAULT_MIN_SDK,

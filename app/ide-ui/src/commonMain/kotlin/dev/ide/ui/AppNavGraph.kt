@@ -455,6 +455,7 @@ private fun AppRoute(
             onOpenKeystoreManager = { app.openKeystoreManager(Screen.ModuleConfig, inProject = true) },
             codeFont = codeFont,
             fileActions = fileActions,
+            onFilesRelocated = state::afterFilesRelocated,
         )
 
         Screen.SdkManager -> SdkManagerScreen(
@@ -726,6 +727,7 @@ private fun ProjectPickerRoute(
         // Straight to the full-screen Create-Project gallery, which owns the template picker.
         onNewProject = { app.createProject() },
         onDeleteProject = app::deleteProject,
+        onRenameProject = if (backend.projects.projectRenameSupported) app::renameProject else null,
         // One "Import project" entry for both sources; it asks which when the host can do both.
         onImportProject = if (fileActions.canPickDirectory || fileActions.canPickFile) app::requestProjectImport else null,
         // Cloning is the other way into a project, and it is the only one a user with no projects yet can

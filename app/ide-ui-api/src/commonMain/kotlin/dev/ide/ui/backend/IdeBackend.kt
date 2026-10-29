@@ -1104,6 +1104,45 @@ data class UiModuleConfigEdit(
 data class UiConfigResult(val success: Boolean, val message: String)
 
 /**
+ * A module's current app identity, the starting values of the rename-package-and-app-name refactor.
+ * [packageName] is the Android namespace, or for another module the package its sources share; null when
+ * there is none to rename. [appName] is the launcher label's text, null when the module has none.
+ * [applicationId] is the app's id as built (null for a non-app module).
+ */
+data class UiAppIdentity(
+    val module: String,
+    val packageName: String?,
+    val appName: String?,
+    val applicationId: String?,
+)
+
+/** A rename of [module]'s package and/or app name. A null field leaves that part alone. [changeApplicationId]
+ *  moves the app's id with the package; off, the app keeps the id it has. */
+data class UiAppRenameRequest(
+    val module: String,
+    val newPackage: String?,
+    val newAppName: String?,
+    val changeApplicationId: Boolean = true,
+)
+
+/** What a rename would do: [files] (workspace-relative) that change, [moved] of them by changing directory,
+ *  and [notes] the user should read first. [error] set means the request can't run, and nothing else is. */
+data class UiAppRenamePreview(
+    val error: String? = null,
+    val files: List<String> = emptyList(),
+    val moved: Int = 0,
+    val notes: List<String> = emptyList(),
+)
+
+/** A finished rename. [movedPaths] maps each moved file's old absolute path to its new one, so open editor
+ *  tabs can follow. */
+data class UiAppRenameResult(
+    val success: Boolean,
+    val message: String,
+    val movedPaths: Map<String, String> = emptyMap(),
+)
+
+/**
  * The Android `buildFeatures` of one module — the toggles shown on the Build Features tab. Null when the
  * module is not an Android module (the tab then explains build features apply only to Android modules).
  */

@@ -46,6 +46,33 @@ class ProjectManagerTest {
      * Preferences are served from memory but still follow the file: a write from another manager on the same
      * home (another process, like the `:build` daemon) is seen on the next read, and a batch lands in one write.
      */
+    /** Rename changes only the display name; the directory, id and modules stay. A closed project renames on
+     *  disk; the loaded one through its store, so its own next save keeps the new name. */
+    @Test
+    fun renamesAProjectKeepingItsDirectoryAndModules() {
+        withTempDir("cm-rename") { root ->
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            val rootPath = manager.create("java-console", mapOf("name" to "Demo CLI", "packageName" to "com.acme.demo"))
+                .use { it.workspaceRoot.toString() }
+            val id = dev.ide.model.impl.ModelPersistence.load(rootPath).projects.single().id
+
+            assertTrue(manager.rename(rootPath, "  Shop Tool  "))
+            val closed = manager.list().single()
+            assertEquals("Shop Tool", closed.name)
+            assertEquals(rootPath, closed.rootPath)
+            assertEquals(id, dev.ide.model.impl.ModelPersistence.load(rootPath).projects.single().id)
+
+            manager.open(rootPath).use { ide ->
+                assertTrue(manager.rename(rootPath, "Live Name", ide.store))
+                assertEquals("Live Name", manager.list().single().name)
+                ide.store.save() // a later save by the loaded engine must not bring the old name back
+                assertEquals(listOf("app"), ide.moduleNames())
+            }
+            assertEquals("Live Name", manager.list().single().name)
+            assertFalse(manager.rename(rootPath, "   "), "a blank name is refused")
+        }
+    }
+
     @Test
     fun preferencesFollowWritesFromAnotherManager() {
         withTempDir("cm-prefs") { root ->

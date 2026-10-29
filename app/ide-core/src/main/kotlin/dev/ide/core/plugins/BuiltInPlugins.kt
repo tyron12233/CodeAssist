@@ -42,6 +42,7 @@ import dev.ide.core.MODULE_ANALYZERS
 import dev.ide.core.MODULE_SERVICE
 import dev.ide.core.PROJECT_SYNC_SERVICE
 import dev.ide.core.REFACTOR_SERVICE
+import dev.ide.core.APP_RENAME_SERVICE
 import dev.ide.core.SEARCH_SERVICE
 import dev.ide.core.SIGNING_SERVICE
 import dev.ide.core.actions.BuiltInActions
@@ -73,6 +74,7 @@ import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
+import dev.ide.core.services.AppRenameService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.sync.ProjectSyncService
@@ -930,6 +932,9 @@ private class IdeCoreServicesPlugin : Plugin {
         reg.service(MODULE_RESOURCES, ServiceScopeLevel.WORKSPACE) { getService(ANDROID_RESOURCE_SERVICE) }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
             RefactorService(getService(ENGINE_CONTEXT))
+        }
+        reg.service(APP_RENAME_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            AppRenameService(getService(ENGINE_CONTEXT))
         }
         reg.service(KOTLIN_EDITOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
             KotlinEditorService(getService(ENGINE_CONTEXT))

@@ -883,6 +883,15 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="modcfg_created">Membuat %1$s</string>
     <string name="modcfg_couldnt_create">Tidak dapat membuat %1$s</string>
     <string name="modcfg_remove_module">Hapus modul</string>
+    <string name="modcfg_rename_app">Ganti nama paket dan aplikasi</string>
+    <string name="modcfg_rename_app_name">Nama aplikasi</string>
+    <string name="modcfg_rename_app_package">Paket</string>
+    <string name="modcfg_rename_app_change_id">Ubah juga ID aplikasi</string>
+    <string name="modcfg_rename_app_change_id_note">Jika dimatikan, %1$s tetap dipakai, jadi aplikasi yang terpasang dan terbit tetap diperbarui.</string>
+    <string name="modcfg_rename_app_review">Tinjau perubahan</string>
+    <string name="modcfg_rename_app_summary">Berkas yang berubah: %1$d. Dipindah ke paket baru: %2$d.</string>
+    <string name="modcfg_rename_app_apply">Ganti nama</string>
+    <string name="modcfg_rename_app_nothing">Modul ini tidak punya paket atau nama aplikasi untuk diganti.</string>
     <string name="modcfg_remove_module_content">Hapus '%1$s' dari proyek? File-nya tetap ada di disk; dependensi modul lain terhadapnya akan dihapus.</string>
     <string name="modcfg_remove">Hapus</string>
     <string name="modcfg_no_module_types">Tidak ada tipe modul tersedia.</string>

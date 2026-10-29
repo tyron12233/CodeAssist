@@ -841,6 +841,15 @@
     <string name="modcfg_created">Создано: %1$s</string>
     <string name="modcfg_couldnt_create">Не удалось создать %1$s</string>
     <string name="modcfg_remove_module">Удалить модуль</string>
+    <string name="modcfg_rename_app">Переименовать пакет и приложение</string>
+    <string name="modcfg_rename_app_name">Название приложения</string>
+    <string name="modcfg_rename_app_package">Пакет</string>
+    <string name="modcfg_rename_app_change_id">Изменить и идентификатор приложения</string>
+    <string name="modcfg_rename_app_change_id_note">Если выключено, остаётся %1$s, и обновляется установленное и опубликованное приложение.</string>
+    <string name="modcfg_rename_app_review">Просмотреть изменения</string>
+    <string name="modcfg_rename_app_summary">Изменится файлов: %1$d. Перемещено в новый пакет: %2$d.</string>
+    <string name="modcfg_rename_app_apply">Переименовать</string>
+    <string name="modcfg_rename_app_nothing">У этого модуля нет пакета или названия приложения для переименования.</string>
     <string name="modcfg_remove_module_content">Удалить «%1$s» из проекта? Его файлы останутся на диске; зависимости других модулей от него будут удалены.</string>
     <string name="modcfg_remove">Удалить</string>
     <string name="modcfg_no_module_types">Нет доступных типов модулей.</string>

@@ -14,6 +14,7 @@ import dev.ide.core.services.KotlinProgramLowering
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
+import dev.ide.core.services.AppRenameService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.sync.ProjectSyncService
@@ -59,6 +60,7 @@ internal val LANGUAGE_FEATURE_SERVICE =
 internal val ANDROID_RESOURCE_SERVICE =
     ServiceKey<AndroidResourceService>("ide.service.androidResources")
 internal val REFACTOR_SERVICE = ServiceKey<RefactorService>("ide.service.refactor")
+internal val APP_RENAME_SERVICE = ServiceKey<AppRenameService>("ide.service.appRename")
 internal val KOTLIN_EDITOR_SERVICE = ServiceKey<KotlinEditorService>("ide.service.kotlinEditor")
 internal val COMPOSE_PREVIEW_SERVICE = ServiceKey<ComposePreviewService>("ide.service.composePreview")
 internal val ICON_MANAGER_SERVICE = ServiceKey<IconManagerService>("ide.service.icons")

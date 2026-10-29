@@ -847,6 +847,9 @@
     <string name="home_delete_confirm_body">这会从此设备上移除该项目及其全部内容。此操作无法撤销。</string>
     <string name="home_delete_confirm_action">删除项目</string>
     <string name="home_cancel">取消</string>
+    <string name="home_rename">重命名</string>
+    <string name="home_rename_title">重命名项目</string>
+    <string name="home_rename_label">项目名称</string>
     <string name="publish_from_share">发布到商店</string>
     <string name="publish_from_share_body">分享给所有人，而不只是一个人。发布前会先经审核。</string>
     <string name="guide_title">发布流程是怎样的</string>
@@ -1514,6 +1517,15 @@
     <string name="modcfg_created">创建于 %1$s</string>
     <string name="modcfg_couldnt_create">无法创建 %1$s</string>
     <string name="modcfg_remove_module">移除模块</string>
+    <string name="modcfg_rename_app">重命名包名和应用名称</string>
+    <string name="modcfg_rename_app_name">应用名称</string>
+    <string name="modcfg_rename_app_package">包名</string>
+    <string name="modcfg_rename_app_change_id">同时更改应用 ID</string>
+    <string name="modcfg_rename_app_change_id_note">关闭时保留 %1$s，仍会更新已安装和已发布的应用。</string>
+    <string name="modcfg_rename_app_review">查看更改</string>
+    <string name="modcfg_rename_app_summary">将更改的文件：%1$d。移动到新包：%2$d。</string>
+    <string name="modcfg_rename_app_apply">重命名</string>
+    <string name="modcfg_rename_app_nothing">此模块没有可重命名的包名或应用名称。</string>
     <string name="modcfg_remove_module_content">要从项目中移除“%1$s”吗？其文件将保留，但其他模块对它的依赖将被移除。</string>
     <string name="modcfg_remove">移除</string>
     <string name="modcfg_no_module_types">没有可用的模块类型。</string>

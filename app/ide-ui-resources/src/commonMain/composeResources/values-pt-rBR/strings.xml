@@ -925,6 +925,15 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="modcfg_created">%1$s criado</string>
     <string name="modcfg_couldnt_create">Não foi possível criar %1$s</string>
     <string name="modcfg_remove_module">Remover módulo</string>
+    <string name="modcfg_rename_app">Renomear pacote e nome do app</string>
+    <string name="modcfg_rename_app_name">Nome do app</string>
+    <string name="modcfg_rename_app_package">Pacote</string>
+    <string name="modcfg_rename_app_change_id">Alterar também o ID do app</string>
+    <string name="modcfg_rename_app_change_id_note">Desligado mantém %1$s, então continua atualizando o app instalado e publicado.</string>
+    <string name="modcfg_rename_app_review">Revisar alterações</string>
+    <string name="modcfg_rename_app_summary">Arquivos alterados: %1$d. Movidos para o novo pacote: %2$d.</string>
+    <string name="modcfg_rename_app_apply">Renomear</string>
+    <string name="modcfg_rename_app_nothing">Este módulo não tem pacote nem nome de app para renomear.</string>
     <string name="modcfg_remove_module_content">Remover '%1$s' do projeto? Seus arquivos permanecem no disco; as dependências de outros módulos nele são removidas.</string>
     <string name="modcfg_remove">Remover</string>
     <string name="modcfg_no_module_types">Nenhum tipo de módulo disponível.</string>

@@ -136,6 +136,8 @@ object GradleImport {
         val buildConfig: Boolean? = null,
         /** The `com.github.gmazzo.buildconfig` plugin's `buildConfig { }`, when the module applies it. */
         val kotlinBuildConfig: KotlinBuildConfigSpec? = null,
+        /** `defaultConfig.applicationId`, when the script sets one. */
+        val applicationId: String? = null,
     )
 
     /** gmazzo's Kotlin `BuildConfig` object: where it goes and its constants (Kotlin type, name, Kotlin expression). */
@@ -467,6 +469,7 @@ object GradleImport {
             targetSdk = androidInt("""targetSdk(?:Version)?"""),
             versionCode = defaultConfig?.let { firstGroup(it, """versionCode\s*=?\s*\(?\s*(\d+)""")?.toIntOrNull() },
             versionName = defaultConfig?.let { firstGroup(it, """versionName\s*=?\s*['"]([^'"]+)['"]""") },
+            applicationId = defaultConfig?.let { firstGroup(it, """applicationId\s*=?\s*['"]([\w.]+)['"]""") },
             manifestPlaceholders = placeholders,
             isKotlin = isKotlin,
             isCompose = isCompose,

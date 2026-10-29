@@ -1469,6 +1469,16 @@ class IdeUiState(
         return r
     }
 
+    /** After a refactoring elsewhere moved files ([moved]: old → new absolute path) and rewrote others: open
+     *  tabs follow their files, unedited tabs re-read, and the tree reloads. */
+    fun afterFilesRelocated(moved: Map<String, String>) {
+        scope.launch {
+            for ((from, to) in moved) rebaseTabs(from, to)
+            refreshCleanTabs()
+            loadTree()
+        }
+    }
+
     /** Move a file/directory into [destDir] (off the main thread); rebase open tabs + refresh. */
     fun movePath(path: String, destDir: String) {
         scope.launch {

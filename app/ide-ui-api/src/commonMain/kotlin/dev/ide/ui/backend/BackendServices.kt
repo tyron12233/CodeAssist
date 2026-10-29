@@ -573,6 +573,18 @@ interface ModuleService {
     /** The Android `buildFeatures` toggles for [moduleName], or null when it is not an Android module. */
     suspend fun getBuildFeatures(moduleName: String): UiBuildFeatures? = null
 
+    /** What the rename-package-and-app-name refactor starts from for [moduleName], or null where this backend
+     *  can't run it. */
+    suspend fun appIdentity(moduleName: String): UiAppIdentity? = null
+
+    /** The files [request] would change, without changing anything. */
+    suspend fun previewAppRename(request: UiAppRenameRequest): UiAppRenamePreview =
+        UiAppRenamePreview(error = "Renaming is not supported by this backend")
+
+    /** Rename the package and/or app name across the workspace as [request] says (see [previewAppRename]). */
+    suspend fun applyAppRename(request: UiAppRenameRequest): UiAppRenameResult =
+        UiAppRenameResult(false, "Renaming is not supported by this backend")
+
     /**
      * Turn an Android build feature ([feature] = `viewBinding`/`compose`) on or off for [moduleName].
      * Enabling a feature also adds the dependencies it needs (the ViewBinding/Compose runtime), like AGP.
@@ -741,6 +753,13 @@ interface ProjectService {
 
     /** Permanently delete the project rooted at [rootPath] from disk. */
     suspend fun deleteProject(rootPath: String): Boolean = false
+
+    /** Whether [renameProject] is implemented here; the picker hides Rename where it is not. */
+    val projectRenameSupported: Boolean get() = false
+
+    /** Give the project rooted at [rootPath] the display name [name]. Its directory, id, modules and settings
+     *  stay as they are. False when the name is blank or the model could not be written. */
+    suspend fun renameProject(rootPath: String, name: String): Boolean = false
 
     /** Bumps whenever the active project changes (create/open). The UI keys per-project state on this. */
     val projectEpoch: StateFlow<Int> get() = MutableStateFlow(0)

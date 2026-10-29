@@ -514,6 +514,7 @@ object GradleProjectExport {
             line("compileSdk = ${facet.compileSdk}")
             line()
             block("defaultConfig") {
+                if (facet.isApplication) facet.applicationId?.let { line("applicationId = \"${escape(it)}\"") }
                 line("minSdk = ${facet.minSdk}")
                 if (facet.isApplication) line("targetSdk = ${facet.targetSdk}")
                 if (facet.versionCode != AndroidFacet.DEFAULT_VERSION_CODE) line("versionCode = ${facet.versionCode}")

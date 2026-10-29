@@ -38,6 +38,7 @@ import dev.ide.model.PlatformKind
 import dev.ide.model.ProjectTemplateRegistry
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectData
+import dev.ide.model.impl.ProjectModelStore
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
@@ -543,6 +544,27 @@ class ProjectManager private constructor(
     }
 
     /**
+     * Give the project rooted at [rootPath] the display name [name]. Only the name changes: the directory, the
+     * project id, its modules and settings stay as they are. Guarded like [delete].
+     *
+     * [live] is the open engine's model store when this project is the one loaded. The engine stays loaded
+     * behind the picker and saves its whole snapshot on any later model edit, so writing the file alone would
+     * be undone by that save; the rename goes through the store instead.
+     */
+    fun rename(rootPath: String, name: String, live: ProjectModelStore? = null): Boolean {
+        val newName = name.trim()
+        if (newName.isEmpty()) return false
+        val dir = Paths.get(rootPath).toAbsolutePath().normalize()
+        val root = projectsRoot.toAbsolutePath().normalize()
+        require(dir.parent == root && dir != root) { "Refusing to rename a project outside the projects directory: $dir" }
+        if (live == null) return ProjectPackaging.renameProject(dir, newName)
+        val data = live.data
+        live.commit(data.copy(projects = data.projects.map { it.copy(name = newName) }), emptyList())
+        live.save()
+        return true
+    }
+
+    /**
      * Warm the host's Kotlin compiler with no project open, for a process that will compile but has not
      * opened its project yet (the `:build` daemon at the IDE's project open). The compiler is
      * application-scoped, so the engine the daemon opens later compiles on the warm one. No-op without a
@@ -811,7 +833,7 @@ class ProjectManager private constructor(
         return ProjectPackaging.ExportMeta(
             name = project?.name ?: projectDir.fileName?.toString() ?: "project",
             isAndroid = androidFacets.isNotEmpty(),
-            packageName = appFacet?.namespace,
+            packageName = appFacet?.let { it.applicationId ?: it.namespace },
             modules = project?.let { moduleSpecs(it) } ?: emptyList(),
             createdBy = CaprojFormat.APP_NAME,
             exportedAt = System.currentTimeMillis(),

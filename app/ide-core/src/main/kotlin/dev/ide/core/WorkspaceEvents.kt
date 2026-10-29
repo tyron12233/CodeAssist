@@ -162,6 +162,15 @@ internal class WorkspaceEventHub(
         publish(events)
     }
 
+    /** A refactoring that rewrote [edited] files and moved others ([moved]: old path → new path), as ONE batch
+     *  so the reaction runs once however many files it touched. */
+    fun filesRelocated(edited: List<Path>, moved: Map<Path, Path>) {
+        val events = ArrayList<VfsEvent>(edited.size + moved.size)
+        edited.mapTo(events) { changedEvent(it, null) }
+        moved.mapTo(events) { (from, to) -> FileMoved(store.vfs.fileFor(to), from.toString(), to.toString()) }
+        publish(events)
+    }
+
     fun fileCreated(path: Path) = publish(listOf(FileCreated(store.vfs.fileFor(path))))
 
     /** A batch of created files (a directory copy). One event per real file so remote consumers see the

@@ -73,6 +73,12 @@ data class AndroidFacet(
     val buildFeatures: BuildFeatures = BuildFeatures(),
     /** AGP's `android { packaging { … } }`: how Java resources + native libs are merged into the APK. */
     val packaging: AndroidPackaging = AndroidPackaging(),
+    /**
+     * `defaultConfig.applicationId`: the app's identity on a device and in a store, when it differs from
+     * [namespace]. Null (the usual case) means it follows the namespace. Set when the code package is renamed
+     * but the published app must keep its id. A flavor's own `applicationId` still wins over this.
+     */
+    val applicationId: String? = null,
 ) : PlatformSdkFacet {
     override val key: FacetKey<AndroidFacet> get() = KEY
 

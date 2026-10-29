@@ -162,9 +162,9 @@ class GradleModelImportTest {
         }
     }
 
-    /** An applicationId the model cannot carry is reported, not silently swapped for the namespace. */
+    /** An applicationId that differs from the namespace is carried by the facet, not swapped for the namespace. */
     @Test
-    fun reportsAnApplicationIdTheModelCannotCarry() {
+    fun carriesAnApplicationIdThatDiffersFromTheNamespace() {
         withTempDir("gradle-model-appid") { dir ->
             write(dir, """
                 {
@@ -200,8 +200,9 @@ class GradleModelImportTest {
             // The codec writes TOML integers, which are Long.
             assertEquals(26L, android.values["minSdk"])
             assertEquals(93L, android.values["versionCode"])
-            val warning = outcome.messages.single { it.severity == SyncSeverity.WARNING }
-            assertContains(warning.text, "com.tyron.code")
+            assertEquals("dev.ide.android", android.values["namespace"])
+            assertEquals("com.tyron.code", android.values["applicationId"])
+            assertTrue(outcome.messages.none { it.severity == SyncSeverity.WARNING }, "${outcome.messages}")
         }
     }
 

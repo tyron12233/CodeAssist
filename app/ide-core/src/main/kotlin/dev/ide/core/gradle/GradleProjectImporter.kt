@@ -265,6 +265,7 @@ class GradleProjectImporter : ProjectImporter {
 
     private fun androidFacet(spec: GradleImport.ModuleSpec): AndroidFacet = AndroidFacet(
         namespace = spec.namespace ?: "com.example.${spec.name}",
+        applicationId = spec.applicationId?.takeIf { it != (spec.namespace ?: "com.example.${spec.name}") },
         manifest = spec.manifest ?: DEFAULT_MANIFEST,
         compileSdk = spec.compileSdk ?: DEFAULT_COMPILE_SDK,
         minSdk = spec.minSdk ?: DEFAULT_MIN_SDK,

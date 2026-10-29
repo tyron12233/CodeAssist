@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import dev.ide.ui.backend.UiAppRenameResult
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiCompilerPlugins
@@ -87,6 +88,24 @@ internal class ModulesListState(
     fun closeNewModule() { newModuleOpen = false }
 
     fun askRemove(name: String) { pendingRemove = name }
+
+    /** The module whose package and app name are being renamed, or null. */
+    var renameTarget: String? by mutableStateOf(null)
+        private set
+
+    /** Bumps after a rename, so the open module's form reloads the namespace it changed. */
+    var renameEpoch: Int by mutableStateOf(0)
+        private set
+
+    fun askRename(name: String) { renameTarget = name }
+
+    fun cancelRename() { renameTarget = null }
+
+    fun renamed(result: UiAppRenameResult) {
+        renameTarget = null
+        renameEpoch++
+        showToast(ConfigToast.Message(result.message, error = !result.success))
+    }
 
     fun cancelRemove() { pendingRemove = null }
 
