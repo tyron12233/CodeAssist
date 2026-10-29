@@ -369,6 +369,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
     fun resolveLayer(source: LayerSource, warnings: MutableList<String>): AppIconLayer = when (source) {
         LayerSource.None -> AppIconLayer.None
         is LayerSource.Flat -> AppIconLayer.Color(source.argb)
+        is LayerSource.Gradient -> AppIconLayer.Gradient(source.startArgb, source.endArgb, source.angle)
 
         is LayerSource.Repo -> {
             val art = artwork(source.repoId, source.name, source.variant)
@@ -418,6 +419,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
     sealed interface LayerSource {
         data object None : LayerSource
         data class Flat(val argb: Long) : LayerSource
+        data class Gradient(val startArgb: Long, val endArgb: Long, val angle: Int) : LayerSource
         data class Repo(
             val repoId: String,
             val name: String,
@@ -444,6 +446,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
         AppIconLayer.None -> null
         is AppIconLayer.Color -> null
         is AppIconLayer.Raster -> null
+        is AppIconLayer.Gradient -> null
         is AppIconLayer.Vector -> {
             val composed = AppIconGenerator.composeLayer(layer.spec, layer.scale, layer.offsetX, layer.offsetY)
             layer.tintArgb?.let { composed.recolored(it) } ?: composed

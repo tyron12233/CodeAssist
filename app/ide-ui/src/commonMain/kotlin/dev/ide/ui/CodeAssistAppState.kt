@@ -14,6 +14,7 @@ import dev.ide.ui.ext.ScreenBackRegistry
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
 import dev.ide.ui.backend.UiArchiveProject
+import dev.ide.ui.backend.UiIconLayer
 import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
@@ -205,11 +206,8 @@ class CodeAssistAppState(
     var iconManagerResDir: String? by mutableStateOf(null)
         private set
 
-    /** The icon the app-icon studio should open with as its foreground, when one was picked for it. */
-    var appIconSeedRepoId: String? by mutableStateOf(null)
-        private set
-
-    var appIconSeedName: String? by mutableStateOf(null)
+    /** The layer the app-icon studio should open with as its foreground, when an icon was picked for it. */
+    var appIconSeed: UiIconLayer? by mutableStateOf(null)
         private set
 
     // ---- per-screen arguments ----
@@ -507,12 +505,11 @@ class CodeAssistAppState(
     }
 
     /**
-     * Open the app-icon studio, optionally seeded with the icon the user picked in the Icon Manager. Back from
-     * the studio returns to the manager, so choosing a different icon is a round trip rather than a dead end.
+     * Open the app-icon studio, optionally seeded with the icon the user picked in the Icon Manager (in the
+     * style they picked it in). Back from the studio returns to the manager.
      */
-    fun openAppIconStudio(repoId: String? = null, iconName: String? = null) {
-        appIconSeedRepoId = repoId
-        appIconSeedName = iconName
+    fun openAppIconStudio(seed: UiIconLayer? = null) {
+        appIconSeed = seed
         screen = Screen.AppIconStudio
     }
 

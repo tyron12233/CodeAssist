@@ -434,6 +434,8 @@ fun ColorPickerDialog(
         var l by remember(initial) { mutableStateOf(start[2]) }
         var a by remember(initial) { mutableStateOf(Color(initial).alpha) }
         val current = hslToColor(h, s, l).copy(alpha = if (allowAlpha) a else 1f)
+        // What the user is typing into the hex field, until a slider or swatch moves the colour again.
+        var hexDraft by remember(initial) { mutableStateOf<String?>(null) }
         Column(
             Modifier.widthIn(max = 360.dp).padding(horizontal = 24.dp)
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.xl))
@@ -444,7 +446,26 @@ fun ColorPickerDialog(
             Text(stringResource(Res.string.color_picker_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(56.dp).background(current, RoundedCornerShape(Ca.radius.control)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)))
-                Text(hexOf(current), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                // Editable, so a brand colour can be pasted in rather than chased with three sliders.
+                BasicTextField(
+                    value = hexDraft ?: hexOf(current),
+                    onValueChange = { text ->
+                        hexDraft = text
+                        parseHexColor(text)?.let { c ->
+                            val t = colorToHsl(c); h = t[0]; s = t[1]; l = t[2]
+                            if (allowAlpha) a = c.alpha
+                        }
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.width(120.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PICKER_PRESETS.forEach { p ->
@@ -454,14 +475,15 @@ fun ColorPickerDialog(
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                             .clickable(remember { MutableInteractionSource() }, null) {
                                 val t = colorToHsl(pc); h = t[0]; s = t[1]; l = t[2]
+                                hexDraft = null
                             },
                     )
                 }
             }
-            PickerSlider(stringResource(Res.string.color_hue), h, 0f, 360f) { h = it }
-            PickerSlider(stringResource(Res.string.color_saturation), s, 0f, 1f) { s = it }
-            PickerSlider(stringResource(Res.string.color_lightness), l, 0f, 1f) { l = it }
-            if (allowAlpha) PickerSlider(stringResource(Res.string.color_opacity), a, 0f, 1f) { a = it }
+            PickerSlider(stringResource(Res.string.color_hue), h, 0f, 360f) { h = it; hexDraft = null }
+            PickerSlider(stringResource(Res.string.color_saturation), s, 0f, 1f) { s = it; hexDraft = null }
+            PickerSlider(stringResource(Res.string.color_lightness), l, 0f, 1f) { l = it; hexDraft = null }
+            if (allowAlpha) PickerSlider(stringResource(Res.string.color_opacity), a, 0f, 1f) { a = it; hexDraft = null }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.cancel)) }
                 Button(onClick = { onPick(argbLong(current)) }, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.save)) }
@@ -519,6 +541,14 @@ private fun argbLong(c: Color): Long {
     val g = (c.green * 255f).roundToInt().toLong()
     val b = (c.blue * 255f).roundToInt().toLong()
     return (a shl 24) or (r shl 16) or (g shl 8) or b
+}
+
+/** `#RRGGBB` or `#AARRGGBB` (the `#` optional) as a colour, or null while it is not one yet. */
+internal fun parseHexColor(text: String): Color? {
+    val digits = text.trim().removePrefix("#")
+    if (digits.length != 6 && digits.length != 8) return null
+    val value = digits.toLongOrNull(16) ?: return null
+    return Color(if (digits.length == 6) value or 0xFF000000L else value)
 }
 
 private fun hexOf(c: Color): String {

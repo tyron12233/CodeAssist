@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAppIconPlan
 import dev.ide.ui.backend.UiAppIconPreview
@@ -16,9 +17,9 @@ import dev.ide.ui.backend.UiAppIconState
 import dev.ide.ui.backend.UiIconLayer
 import dev.ide.ui.backend.UiIconVariant
 import dev.ide.ui.backend.UiRasterFile
-import dev.ide.ui.backend.UiResourceIcon
 import dev.ide.ui.editor.preview.AppIconRaster
 import dev.ide.ui.editor.preview.IconMask
+import dev.ide.ui.editor.preview.decodeImageBytes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -34,20 +35,11 @@ import kotlinx.coroutines.launch
 internal class AppIconStudioState(
     private val backend: IdeBackend,
     private val scope: CoroutineScope,
-    seedRepoId: String? = null,
-    seedIconName: String? = null,
+    /** The foreground to start with: the icon the user picked in the Icon Manager, style and all. */
+    seed: UiIconLayer? = null,
 ) {
 
-    var spec: UiAppIconSpec by mutableStateOf(
-        UiAppIconSpec(
-            moduleName = "",
-            foreground = if (seedRepoId != null && seedIconName != null) {
-                UiIconLayer.RepoIcon(seedRepoId, seedIconName)
-            } else {
-                UiIconLayer.None
-            },
-        ),
-    )
+    var spec: UiAppIconSpec by mutableStateOf(UiAppIconSpec(moduleName = "", foreground = seed ?: UiIconLayer.None))
         private set
 
     var current: UiAppIconState? by mutableStateOf(null)
@@ -67,10 +59,6 @@ internal class AppIconStudioState(
     var showThemed: Boolean by mutableStateOf(false)
         private set
 
-    /** Project drawables offered as a layer source. */
-    var projectIcons: List<UiResourceIcon> by mutableStateOf(emptyList())
-        private set
-
     var loading: Boolean by mutableStateOf(true)
         private set
 
@@ -83,6 +71,14 @@ internal class AppIconStudioState(
     var applied: Boolean by mutableStateOf(false)
         private set
 
+    /** The decoded image layers of [preview], keyed like [UiAppIconPreview.images]. */
+    var images: Map<String, ImageBitmap> by mutableStateOf(emptyMap())
+        private set
+
+    /** Every file the last Apply wrote, as absolute paths, for the "what changed" list. */
+    var written: List<String> by mutableStateOf(emptyList())
+        private set
+
     private var refreshJob: Job? = null
 
     init {
@@ -90,7 +86,6 @@ internal class AppIconStudioState(
             val state = backend.icons.launcherIcon()
             current = state
             spec = spec.copy(moduleName = state?.moduleName.orEmpty())
-            projectIcons = runCatching { backend.icons.projectIcons(state?.moduleName) }.getOrDefault(emptyList())
             loading = false
             refresh(immediate = true)
         }
@@ -119,7 +114,40 @@ internal class AppIconStudioState(
     fun clearBackground() = update(spec.copy(background = UiIconLayer.None))
 
     fun setBackgroundResource(path: String) =
-        update(spec.copy(background = UiIconLayer.Resource(path)))
+        update(spec.copy(background = UiIconLayer.Resource(path, scale = BACKGROUND_FILL)))
+
+    fun setBackgroundGradient(startArgb: Long, endArgb: Long, angle: Int) =
+        update(spec.copy(background = UiIconLayer.Gradient(startArgb, endArgb, angle)))
+
+    fun setBackgroundImage(path: String) = update(spec.copy(background = UiIconLayer.ImageFile(path)))
+
+    /**
+     * Use [layer] (picked in the icon browser) as the background. Artwork is stretched over the whole box
+     * rather than fitted to the safe zone, because a background that stops short of the mask shows a frame.
+     */
+    fun setBackgroundLayer(layer: UiIconLayer) = update(
+        spec.copy(
+            background = when (layer) {
+                is UiIconLayer.RepoIcon -> layer.copy(scale = BACKGROUND_FILL)
+                is UiIconLayer.Resource -> layer.copy(scale = BACKGROUND_FILL)
+                else -> layer
+            },
+        ),
+    )
+
+    /** Use [layer] (picked in the icon browser) as the foreground, keeping the current placement and tint. */
+    fun setForegroundLayer(layer: UiIconLayer) {
+        val tint = foregroundTint()
+        val placedLayer = when (val next = placed(layer)) {
+            is UiIconLayer.RepoIcon -> next.copy(tintArgb = tint)
+            is UiIconLayer.Resource -> next.copy(tintArgb = tint)
+            else -> next
+        }
+        val mono = spec.monochrome != UiIconLayer.None
+        update(spec.copy(foreground = placedLayer))
+        // The themed layer follows the foreground it was copied from, or it would keep showing the old icon.
+        if (mono) monochromeFromForeground()
+    }
 
     fun setForegroundResource(path: String) =
         update(spec.copy(foreground = placed(UiIconLayer.Resource(path))))
@@ -205,6 +233,7 @@ internal class AppIconStudioState(
                     pixels = raster.pixels,
                     mask = if (raster.round) IconMask.CIRCLE else IconMask.ROUNDED_SQUARE,
                     opaqueBackground = if (raster.opaque) AppIconRaster.opaqueGround(snapshot) else null,
+                    images = images,
                 )
                 bytes?.let { UiRasterFile(raster.relativePath, it) }
             }
@@ -212,6 +241,7 @@ internal class AppIconStudioState(
             applying = false
             if (result.ok) {
                 applied = true
+                written = target.files.map { resolveAgainst(target.resDirPath, it) }
                 message = null
                 plan = backend.icons.planAppIcon(spec)
             } else {
@@ -246,6 +276,7 @@ internal class AppIconStudioState(
     private fun update(next: UiAppIconSpec) {
         spec = next
         applied = false
+        written = emptyList()
         refresh()
     }
 
@@ -254,7 +285,10 @@ internal class AppIconStudioState(
         refreshJob = scope.launch {
             if (!immediate) kotlinx.coroutines.delay(REFRESH_DEBOUNCE_MS)
             val snapshot = spec
-            preview = runCatching { backend.icons.previewAppIcon(snapshot) }.getOrNull()
+            val next = runCatching { backend.icons.previewAppIcon(snapshot) }.getOrNull()
+            // Decoded before the preview is published, so an image layer never flashes in empty.
+            images = next?.images.orEmpty().mapNotNull { (key, bytes) -> decodeImageBytes(bytes)?.let { key to it } }.toMap()
+            preview = next
             plan = runCatching { backend.icons.planAppIcon(snapshot) }.getOrNull()
         }
     }
@@ -262,10 +296,41 @@ internal class AppIconStudioState(
     private companion object {
         const val REFRESH_DEBOUNCE_MS = 120L
 
+        /** The whole 108-unit box as a multiple of the 72-unit safe zone: a background has to reach the edges. */
+        const val BACKGROUND_FILL = 1.5f
+
         /** A themed icon is a stencil, so the layer is authored as flat black and re-tinted by the system. */
         const val MONOCHROME_TINT = 0xFF000000L
     }
 }
+
+/**
+ * [relative] (as the plan lists it, `/`-separated, possibly `../` for the Play Store image beside `res/`)
+ * resolved against [dir], keeping [dir]'s own separator so a Windows path stays one.
+ */
+internal fun resolveAgainst(dir: String, relative: String): String {
+    var base = dir.trimEnd('/', '\\')
+    var rest = relative
+    while (rest.startsWith("../")) {
+        val cut = maxOf(base.lastIndexOf('/'), base.lastIndexOf('\\'))
+        if (cut <= 0) break
+        base = base.substring(0, cut)
+        rest = rest.removePrefix("../")
+    }
+    val separator = if ('\\' in base && '/' !in base) '\\' else '/'
+    return base + separator + rest.replace('/', separator)
+}
+
+/** Gradient presets for the background, as start/end pairs. */
+internal val APP_ICON_GRADIENTS = listOf(
+    0xFF3DDC84L to 0xFF0B8043L,
+    0xFF4FC3F7L to 0xFF1A237EL,
+    0xFFFF8A65L to 0xFFD81B60L,
+    0xFFFFD54FL to 0xFFF4511EL,
+    0xFFB388FFL to 0xFF311B92L,
+    0xFF80CBC4L to 0xFF00695CL,
+    0xFF90A4AEL to 0xFF263238L,
+)
 
 /** The palette the studio offers for a flat background. */
 internal val APP_ICON_BACKGROUNDS = listOf(
@@ -279,9 +344,8 @@ internal val APP_ICON_TINTS = listOf(0xFFFFFFFFL, 0xFF000000L, 0xFF3DDC84L, 0xFF
 @Composable
 internal fun rememberAppIconStudioState(
     backend: IdeBackend,
-    seedRepoId: String? = null,
-    seedIconName: String? = null,
+    seed: UiIconLayer? = null,
     scope: CoroutineScope = rememberCoroutineScope(),
-): AppIconStudioState = remember(backend, seedRepoId, seedIconName, scope) {
-    AppIconStudioState(backend, scope, seedRepoId, seedIconName)
+): AppIconStudioState = remember(backend, seed, scope) {
+    AppIconStudioState(backend, scope, seed)
 }

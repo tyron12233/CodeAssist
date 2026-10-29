@@ -3492,6 +3492,14 @@ class IdeServices private constructor(
     suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome =
         androidEditor.rename.rename(file, text, offset, newName) ?: refactor.rename(file, text, offset, newName)
 
+    /** Rename project resource [type]/[oldName] everywhere it is named, with no caret to start from. */
+    suspend fun renameResource(type: ResourceType, oldName: String, newName: String): RenameOutcome =
+        androidEditor.rename.renameResource(type, oldName, newName)
+
+    /** Every place resource [type]/[name] is named (XML and code), as (file, start offset) pairs. */
+    fun resourceUsages(type: ResourceType, name: String): List<Pair<Path, Int>> =
+        androidEditor.navigation.occurrences(type, name).map { (path, occ) -> path to occ.range.first }
+
     /** Every reference to the symbol under [offset] in [file]/[text], project-wide, as (file, range) pairs.
      *  Read-only (Java/JDT); empty when the position is not a resolvable symbol. */
     fun findReferences(file: Path, text: String, offset: Int): List<Pair<Path, dev.ide.lang.dom.TextRange>> =

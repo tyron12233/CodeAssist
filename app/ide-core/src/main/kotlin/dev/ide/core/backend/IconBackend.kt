@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.android.support.icons.AppIconFile
+import dev.ide.android.support.icons.AppIconGenerator
 import dev.ide.android.support.icons.AppIconLayer
 import dev.ide.android.support.icons.AppIconSpec
 import dev.ide.android.support.icons.IconArtwork
@@ -20,6 +21,7 @@ import dev.ide.ui.backend.UiAppIconRaster
 import dev.ide.ui.backend.UiAppIconSpec
 import dev.ide.ui.backend.UiAppIconState
 import dev.ide.ui.backend.UiDrawable
+import dev.ide.ui.backend.UiGradient
 import dev.ide.ui.backend.IconSnippets
 import dev.ide.ui.backend.UiIconArtwork
 import dev.ide.ui.backend.UiIconLayer
@@ -32,6 +34,8 @@ import dev.ide.ui.backend.UiIconLoadResult
 import dev.ide.ui.backend.UiIconRepo
 import dev.ide.ui.backend.UiIconTarget
 import dev.ide.ui.backend.UiIconVariant
+import dev.ide.ui.backend.UiNavTarget
+import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiRasterFile
 import dev.ide.ui.backend.UiResourceConfig
 import dev.ide.ui.backend.UiResourceIcon
@@ -123,6 +127,31 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
         val service = icons ?: return null
         // Per-tile like the artwork calls above, and a plain file read — off the engine worker.
         return withContext(Dispatchers.IO) { service.resourceBytes(Paths.get(path)) }
+    }
+
+    override suspend fun iconUsages(resType: String, name: String): List<UiNavTarget> {
+        val services = ctx.servicesOrNull ?: return emptyList()
+        return ctx.background("icons.usages") {
+            services.resourceUsages(resTypeOf(resType), name).map { (path, offset) ->
+                // Labelled like the editor's own usages picker: where it is, then the line itself.
+                val text = runCatching { Files.readString(path) }.getOrNull().orEmpty()
+                val at = offset.coerceIn(0, text.length)
+                val lineStart = text.lastIndexOf('\n', at - 1) + 1
+                val lineEnd = text.indexOf('\n', at).let { if (it < 0) text.length else it }
+                val line = text.substring(lineStart, lineEnd).trim()
+                val lineNo = text.substring(0, at).count { it == '\n' } + 1
+                UiNavTarget(path.toString(), offset, "${path.fileName}:$lineNo  $line", "usage")
+            }
+        }
+    }
+
+    override suspend fun renameIcon(resType: String, oldName: String, newName: String): UiRenameResult {
+        val services = ctx.servicesOrNull ?: return UiRenameResult(false, "No project is open")
+        return withContext(ctx.engineDispatcher) {
+            val outcome = services.renameResource(resTypeOf(resType), oldName, newName)
+            if (outcome.success) ctx.bumpFileSystemEpoch()
+            UiRenameResult(outcome.success, outcome.message, outcome.occurrences, outcome.filesChanged, outcome.newPath)
+        }
     }
 
     // --- importing -----------------------------------------------------------------------------------
@@ -351,6 +380,7 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
             UiAppIconPreview(
                 // A flat colour has no geometry, so it arrives as a solid-colour drawable the canvas fills with.
                 background = (background as? AppIconLayer.Color)?.let { UiDrawable.SolidColor(it.argb) }
+                    ?: (background as? AppIconLayer.Gradient)?.let(::gradientDrawable)
                     ?: service.composedLayer(background)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
                 foreground = service.composedLayer(foreground)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
                 monochrome = service.composedLayer(monochrome)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
@@ -390,6 +420,34 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
         }
     }
 
+    /** A gradient layer as the `<shape>` it is written as, filling the whole icon box. */
+    private fun gradientDrawable(layer: AppIconLayer.Gradient) = UiDrawable.Shape(
+        shape = "rectangle",
+        solidColor = null,
+        gradient = UiGradient(
+            kind = "linear",
+            startColor = layer.startArgb,
+            centerColor = null,
+            endColor = layer.endArgb,
+            angle = layer.snappedAngle,
+            centerX = 0.5f,
+            centerY = 0.5f,
+            radiusFraction = 0.5f,
+        ),
+        strokeColor = null,
+        strokeWidthDp = 0f,
+        dashWidthDp = 0f,
+        dashGapDp = 0f,
+        cornerTopLeftDp = 0f,
+        cornerTopRightDp = 0f,
+        cornerBottomRightDp = 0f,
+        cornerBottomLeftDp = 0f,
+        intrinsicWidthDp = AppIconGenerator.BOX,
+        intrinsicHeightDp = AppIconGenerator.BOX,
+        innerRadiusFraction = 0f,
+        thicknessFraction = 0f,
+    )
+
     /** A UI spec, with each layer resolved against the project. */
     private fun UiAppIconSpec.toEngine(service: IconManagerService, warnings: MutableList<String>) = AppIconSpec(
         name = name,
@@ -404,6 +462,7 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
     private fun UiIconLayer.toSource(): IconManagerService.LayerSource = when (this) {
         UiIconLayer.None -> IconManagerService.LayerSource.None
         is UiIconLayer.Color -> IconManagerService.LayerSource.Flat(argb)
+        is UiIconLayer.Gradient -> IconManagerService.LayerSource.Gradient(startArgb, endArgb, angle)
         is UiIconLayer.RepoIcon -> IconManagerService.LayerSource.Repo(
             repoId = repoId, name = name, variant = variant.toEngine(),
             scale = scale, offsetX = offsetX, offsetY = offsetY, tintArgb = tintArgb,

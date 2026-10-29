@@ -13,9 +13,12 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import dev.ide.ui.backend.UiAppIconPreview
 import dev.ide.ui.backend.UiDrawable
+import kotlin.math.roundToInt
 
 /** The shapes a launcher may mask an adaptive icon to. */
 enum class IconMask { CIRCLE, SQUIRCLE, ROUNDED_SQUARE, SQUARE }
@@ -52,13 +55,14 @@ object AppIconRaster {
         mask: IconMask,
         opaqueBackground: Color? = null,
         monochrome: Boolean = false,
+        images: Map<String, ImageBitmap> = emptyMap(),
     ): ImageBitmap? {
         if (pixels <= 0) return null
         return runCatching {
             val bitmap = ImageBitmap(pixels, pixels)
             val size = Size(pixels.toFloat(), pixels.toFloat())
             CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), size) {
-                drawAppIcon(preview, mask, opaqueBackground, monochrome)
+                drawAppIcon(preview, mask, opaqueBackground, monochrome, images)
             }
             bitmap
         }.getOrNull()
@@ -70,17 +74,21 @@ object AppIconRaster {
         pixels: Int,
         mask: IconMask,
         opaqueBackground: Color? = null,
-    ): ByteArray? = render(preview, pixels, mask, opaqueBackground)?.let(::encodeImagePng)
+        images: Map<String, ImageBitmap> = emptyMap(),
+    ): ByteArray? = render(preview, pixels, mask, opaqueBackground, images = images)?.let(::encodeImagePng)
 
     /**
      * Draws [preview] filling the current bounds. [opaqueBackground] paints an opaque ground and drops the
-     * mask; [monochrome] draws the themed-icon layer instead of the foreground.
+     * mask; [monochrome] draws the themed-icon layer instead of the foreground. [images] holds the decoded
+     * [UiAppIconPreview.images], keyed the same way: an image layer is written as-is across the whole box, so
+     * it is drawn across the whole box.
      */
     fun DrawScope.drawAppIcon(
         preview: UiAppIconPreview,
         mask: IconMask,
         opaqueBackground: Color? = null,
         monochrome: Boolean = false,
+        images: Map<String, ImageBitmap> = emptyMap(),
     ) {
         val edge = minOf(size.width, size.height)
         if (edge <= 0f) return
@@ -98,11 +106,19 @@ object AppIconRaster {
             (size.height + edge) / 2f,
         )
 
+        val dstOffset = IntOffset(boxTopLeft.x.roundToInt(), boxTopLeft.y.roundToInt())
+        val dstSize = IntSize(boxEdge.roundToInt(), boxEdge.roundToInt())
+        fun DrawScope.image(key: String) = images[key]?.let { drawImage(it, dstOffset = dstOffset, dstSize = dstSize) }
+
         val body: DrawScope.() -> Unit = {
             opaqueBackground?.let { drawRect(it, Offset(iconRect.left, iconRect.top), Size(edge, edge)) }
-            preview.background?.let { drawUiDrawable(it, boxTopLeft, boxSize) }
+            preview.background?.let { drawUiDrawable(it, boxTopLeft, boxSize) } ?: image("background")
             val top = if (monochrome) preview.monochrome ?: preview.foreground else preview.foreground
-            top?.let { drawUiDrawable(it, boxTopLeft, boxSize) }
+            when {
+                top != null -> drawUiDrawable(top, boxTopLeft, boxSize)
+                // A themed icon is a stencil of the foreground; a bitmap foreground has none, so draw nothing.
+                !monochrome -> image("foreground")
+            }
         }
 
         // A store image must be a full opaque square, so it is never masked.

@@ -161,6 +161,35 @@ class AndroidXmlNavigationTest {
         assertTrue(Files.readString(draft).contains("R.id.page_title"))
     }
 
+    /** The Icon Manager's Rename and usages, which start from a resource name rather than an editor caret. */
+    @Test
+    fun aDrawableIsFoundAndRenamedByNameFromTheIconManager() {
+        val s = boot()
+        val vector = """<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp"
+            | android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+            |<path android:pathData="M0,0h24v24H0z" android:fillColor="#FF000000"/></vector>""".trimMargin()
+        s.save(app.resolve("res/drawable/ic_thing.xml"), vector)
+        s.save(app.resolve("res/drawable-night/ic_thing.xml"), vector)
+        val user = app.resolve("java/com/example/app/Badge.kt")
+        s.save(user, "package com.example.app\n\nclass Badge {\n    val icon = R.drawable.ic_thing\n}\n")
+        val icons = IdeServicesBackend(s).icons
+        eventually("the drawable's use is indexed") {
+            runBlocking { icons.iconUsages("drawable", "ic_thing") }.any { it.path.endsWith("Badge.kt") }
+        }
+        val usage = runBlocking { icons.iconUsages("drawable", "ic_thing") }.first { it.path.endsWith("Badge.kt") }
+        assertEquals("Badge.kt:4  val icon = R.drawable.ic_thing", usage.label)
+
+        val outcome = runBlocking { icons.renameIcon("drawable", "ic_thing", "ic_badge") }
+        assertTrue(outcome.success, outcome.message)
+        assertTrue(Files.exists(app.resolve("res/drawable/ic_badge.xml")), "the default configuration moves")
+        assertTrue(Files.exists(app.resolve("res/drawable-night/ic_badge.xml")), "and every other one")
+        assertTrue(!Files.exists(app.resolve("res/drawable/ic_thing.xml")))
+        assertTrue(Files.readString(user).contains("R.drawable.ic_badge"), Files.readString(user))
+
+        val refused = runBlocking { icons.renameIcon("drawable", "ic_nothing", "ic_x") }
+        assertTrue(!refused.success, "a name the project does not declare is refused")
+    }
+
     private fun eventually(what: String, timeoutMs: Long = 60_000, check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

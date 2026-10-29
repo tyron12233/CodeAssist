@@ -6,12 +6,15 @@ import dev.ide.ui.backend.UiIconArtwork
 import dev.ide.ui.backend.UiIconEntry
 import dev.ide.ui.backend.UiIconImport
 import dev.ide.ui.backend.UiIconImportResult
+import dev.ide.ui.backend.UiIconLayer
 import dev.ide.ui.backend.UiIconLoadResult
 import dev.ide.ui.backend.UiIconRepo
 import dev.ide.ui.backend.UiIconTarget
 import dev.ide.ui.backend.UiIconRef
 import dev.ide.ui.backend.UiIconVariant
 import dev.ide.ui.backend.UiInsertionTarget
+import dev.ide.ui.backend.UiNavTarget
+import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiResourceConfig
 import dev.ide.ui.backend.UiResourceIcon
 import dev.ide.ui.backend.UiVectorPath
@@ -44,6 +47,28 @@ class IconManagerStateTest {
 
         /** What [existingResource] reports, so the import-before-insert branch can be exercised. */
         var existing: String? = null
+
+        /** Names whose import reports a conflict, for the batch cases. */
+        val taken = HashSet<String>()
+
+        val deleted = ArrayList<String>()
+        val renames = ArrayList<String>()
+        var composeCatalogue: List<UiIconEntry> = emptyList()
+
+        override suspend fun iconUsages(resType: String, name: String): List<UiNavTarget> =
+            listOf(UiNavTarget("/p/app/src/main/res/layout/main.xml", 120, "main.xml:4", "usage"))
+
+        override suspend fun renameIcon(resType: String, oldName: String, newName: String): UiRenameResult {
+            renames += "$resType/$oldName->$newName"
+            return UiRenameResult(true, "Renamed '$oldName' to '$newName'")
+        }
+
+        override fun deletePath(path: String): Boolean {
+            deleted += path
+            return true
+        }
+
+        override suspend fun composeIcons(moduleName: String?): List<UiIconEntry> = composeCatalogue
 
         private val bundled = UiIconRepo(
             id = "bundled", displayName = "Material", license = "Apache-2.0", attribution = null,
@@ -121,6 +146,7 @@ class IconManagerStateTest {
         ): UiIconImportResult {
             imports += request
             importedAs += "$repoId:$name:${variant.style}:${variant.filled}"
+            if (request.name in taken) return UiIconImportResult(ok = false, conflictPath = "/p/${request.name}.xml")
             return importResult
         }
 
@@ -220,17 +246,47 @@ class IconManagerStateTest {
     }
 
     @Test
-    fun aNetworkRepositoryStaysEmptyUntilItIsLoaded() {
+    fun selectingANetworkRepositoryDownloadsIt() {
         withState { state, backend ->
+            assertFalse(backend.loaded, "nothing downloads just by opening the screen")
             state.selectRepo("remote")
-            assertTrue(state.results.isEmpty(), "nothing is listed before the catalogue is downloaded")
-            assertFalse(assertNotNull(state.selectedRepo()).loaded)
-
-            state.loadRepo("remote")
-            assertTrue(backend.loaded, "loading was requested")
+            assertTrue(backend.loaded, "picking the set is the request to download it")
             assertNull(state.loadingRepoId, "the spinner clears")
             assertTrue(assertNotNull(state.selectedRepo()).loaded)
             assertEquals(3, state.results.size, "the catalogue lists once it is loaded")
+        }
+    }
+
+    @Test
+    fun theFirstSearchDownloadsTheNetworkSetAndCountsItsMatches() {
+        withState { state, backend ->
+            state.updateQuery("home")
+            delay(400)
+            assertTrue(backend.loaded, "the first search fetched the network set in the background")
+            assertEquals("bundled", state.selectedRepoId, "without moving off the set being browsed")
+            assertEquals(2, state.otherRepoMatches["remote"], "its matches label its chip")
+
+            state.updateQuery("")
+            delay(400)
+            assertTrue(state.otherRepoMatches.isEmpty(), "no query, no match counts")
+        }
+    }
+
+    @Test
+    fun aQueryCountsMatchesInEverySection() {
+        withState { state, backend ->
+            backend.composeCatalogue = listOf(UiIconEntry("compose-icons", "Home", "Home", styles = listOf("filled")))
+            assertNull(state.matchesIn(IconTab.Project), "no counts without a query")
+            state.updateQuery("logo")
+            delay(400)
+            assertEquals(1, state.matchesIn(IconTab.Project), "the project catalogue loaded for the count")
+            assertEquals(0, state.matchesIn(IconTab.Library))
+            assertEquals(0, state.matchesIn(IconTab.Compose))
+
+            state.updateQuery("home")
+            delay(400)
+            assertEquals(2, state.matchesIn(IconTab.Library))
+            assertEquals(1, state.matchesIn(IconTab.Compose))
         }
     }
 
@@ -533,5 +589,131 @@ class IconManagerStateTest {
             state.selectTab(IconTab.Project)
             assertNull(state.selection)
         }
+    }
+
+    @Test
+    fun theStyleToolbarDoesNotMoveWhenAnIconLacksTheStyle() {
+        withState { state, _ ->
+            state.selectVariant(UiIconVariant(style = "rounded", filled = true))
+            val outlinedOnly = UiIconEntry("bundled", "home", "Home", styles = listOf("outlined"), supportsFill = false)
+            state.select(IconSelection.FromRepo(outlinedOnly))
+            assertEquals("rounded", state.variant.style, "selecting an icon leaves the grid's style alone")
+            assertEquals(UiIconVariant("outlined", filled = false), state.variantFor(outlinedOnly))
+            assertEquals("bundled:home:outlined:false", state.keyOf(IconSelection.FromRepo(outlinedOnly)))
+        }
+    }
+
+    @Test
+    fun aBatchAddsEveryTickedIconUnderItsOwnNameAndSkipsTakenNames() {
+        withState { state, backend ->
+            backend.taken += "ic_settings"
+            val home = IconSelection.FromRepo(state.results.first { it.name == "home" })
+            val settings = IconSelection.FromRepo(state.results.first { it.name == "settings" })
+            state.select(home)
+            state.toggleChecked(home)
+            assertNull(state.selection, "ticking replaces the single-icon sheet")
+            state.toggleChecked(settings)
+            assertTrue(state.isChecked(settings))
+            state.updateSize(32)
+
+            state.importChecked()
+
+            assertEquals(listOf("ic_home", "ic_settings"), backend.imports.map { it.name })
+            assertTrue(backend.imports.all { it.sizeDp == 32f }, "the shared settings apply to each")
+            assertEquals(BatchOutcome(added = 1, existing = 1, failed = emptyList()), state.batchOutcome)
+            assertTrue(state.checked.isEmpty(), "the batch clears once added")
+        }
+    }
+
+    @Test
+    fun tickingTwiceUnticksAndProjectIconsAreNotBatched() {
+        withState { state, _ ->
+            val home = IconSelection.FromRepo(state.results.first { it.name == "home" })
+            state.toggleChecked(home)
+            state.toggleChecked(home)
+            assertTrue(state.checked.isEmpty())
+
+            state.selectTab(IconTab.Project)
+            val icon = state.projectIcons.first()
+            state.toggleChecked(IconSelection.FromProject(icon, icon.configurations.first()))
+            assertTrue(state.checked.isEmpty(), "a project icon is already in the project")
+        }
+    }
+
+    @Test
+    fun anyIconCanBecomeTheAppIconInTheStyleItIsShownIn() {
+        withState { state, _ ->
+            state.selectVariant(UiIconVariant(style = "outlined", filled = true))
+            val home = state.results.first { it.name == "home" }
+            assertEquals(
+                UiIconLayer.RepoIcon("bundled", "home", UiIconVariant("outlined", filled = true)),
+                state.appIconLayerFor(IconSelection.FromRepo(home)),
+                "the picked style travels with it",
+            )
+
+            val icon = UiResourceIcon(
+                "app", "drawable", "ic_existing",
+                listOf(UiResourceConfig("", "/p/app/src/main/res/drawable/ic_existing.xml", isRaster = false)),
+            )
+            assertEquals(
+                UiIconLayer.Resource("/p/app/src/main/res/drawable/ic_existing.xml"),
+                state.appIconLayerFor(IconSelection.FromProject(icon, icon.configurations.first())),
+            )
+
+            state.selectVariant(UiIconVariant(style = "filled"))
+            val star = UiIconEntry("compose-icons", "ShoppingCart", "Shopping cart", styles = listOf("filled"))
+            assertEquals(
+                UiIconLayer.RepoIcon("bundled", "shopping_cart", UiIconVariant("outlined", filled = true)),
+                state.appIconLayerFor(IconSelection.FromCompose(star)),
+                "a Compose icon is taken from a repository under its naming",
+            )
+        }
+    }
+
+    @Test
+    fun aProjectIconShowsItsUsagesAndCanBeRenamedOrDeleted() {
+        withState { state, backend ->
+            state.selectTab(IconTab.Project)
+            val icon = state.projectIcons.first { it.name == "ic_existing" }
+            state.select(IconSelection.FromProject(icon, icon.configurations.first()))
+            assertEquals(1, state.usages?.size, "its usages are looked up on selection")
+
+            var renamed: Boolean? = null
+            var moved: Map<String, String> = emptyMap()
+            state.renameSelected("ic_new") { ok, paths -> renamed = ok; moved = paths }
+            assertEquals(true, renamed)
+            assertEquals(
+                mapOf(
+                    "/p/app/src/main/res/drawable/ic_existing.xml" to "/p/app/src/main/res/drawable/ic_new.xml",
+                    "/p/app/src/main/res/drawable-night/ic_existing.xml" to "/p/app/src/main/res/drawable-night/ic_new.xml",
+                ),
+                moved,
+                "every configuration's file is reported where it went, for open tabs to follow",
+            )
+            assertEquals(listOf("drawable/ic_existing->ic_new"), backend.renames)
+            assertNull(state.selection, "the renamed icon is a different icon now")
+
+            state.select(IconSelection.FromProject(icon, icon.configurations.first()))
+            state.deleteSelected()
+            assertEquals(icon.configurations.map { it.path }, backend.deleted, "every configuration goes")
+            assertNull(state.selection)
+        }
+    }
+
+    @Test
+    fun aWrittenFileResolvesAgainstTheResDirectory() {
+        assertEquals(
+            "/p/app/src/main/res/mipmap-hdpi/ic_launcher.png",
+            resolveAgainst("/p/app/src/main/res", "mipmap-hdpi/ic_launcher.png"),
+        )
+        assertEquals(
+            "/p/app/src/main/ic_launcher-playstore.png",
+            resolveAgainst("/p/app/src/main/res/", "../ic_launcher-playstore.png"),
+            "the Play Store image sits beside res/",
+        )
+        assertEquals(
+            "C:\\p\\app\\src\\main\\res\\drawable\\a.xml",
+            resolveAgainst("C:\\p\\app\\src\\main\\res", "drawable/a.xml"),
+        )
     }
 }

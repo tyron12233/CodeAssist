@@ -130,6 +130,9 @@ sealed interface UiIconLayer {
     /** A flat `0xAARRGGBB` fill, written as a colour resource. */
     data class Color(val argb: Long) : UiIconLayer
 
+    /** A linear gradient across the whole box, written as a `<shape>`; [angle] snaps to a multiple of 45. */
+    data class Gradient(val startArgb: Long, val endArgb: Long, val angle: Int = 135) : UiIconLayer
+
     /** An icon from a registered repository. */
     data class RepoIcon(
         val repoId: String,
@@ -271,6 +274,16 @@ interface IconService {
 
     /** Raw bytes of a raster resource at [path], for the grid's bitmap tiles. */
     suspend fun resourceBytes(path: String): ByteArray? = null
+
+    /** Every place project resource `[resType]/[name]` is named, in XML and in code. */
+    suspend fun iconUsages(resType: String, name: String): List<UiNavTarget> = emptyList()
+
+    /**
+     * Rename project resource `[resType]/[oldName]` to [newName]: every file declaring it (each qualifier folder)
+     * and every reference to it, in XML (`@drawable/x`) and code (`R.drawable.x`).
+     */
+    suspend fun renameIcon(resType: String, oldName: String, newName: String): UiRenameResult =
+        UiRenameResult(false, "Renaming resources is not available in this project")
 
     // --- importing ---
 

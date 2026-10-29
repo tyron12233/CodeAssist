@@ -589,7 +589,7 @@ private fun AppRoute(
             IconManagerScreen(
                 backend = state.backend,
                 onBack = { app.navigateTo(app.iconManagerReturn) },
-                onOpenAppIconStudio = { repoId, name -> app.openAppIconStudio(repoId, name) },
+                onOpenAppIconStudio = { seed -> app.openAppIconStudio(seed) },
                 // Offered only when there is an editor tab to write into; the edits drive that tab's own
                 // session, then the user is handed back to it so they see the result in place.
                 onInsert = if (tab == null) null else { ref ->
@@ -606,16 +606,34 @@ private fun AppRoute(
                 insertionTarget = insertionTarget,
                 initialResDir = app.iconManagerResDir,
                 fileActions = fileActions,
+                onOpenFile = { path, offset ->
+                    state.openAt(path, offset)
+                    app.navigateTo(Screen.Editor)
+                },
+                onFilesRelocated = state::afterFilesRelocated,
             )
         }
 
         Screen.AppIconStudio -> AppIconStudioScreen(
             backend = state.backend,
             onBack = { app.navigateTo(Screen.IconManager) },
-            onChooseIcon = { app.navigateTo(Screen.IconManager) },
-            seedRepoId = app.appIconSeedRepoId,
-            seedIconName = app.appIconSeedName,
+            seed = app.appIconSeed,
             fileActions = fileActions,
+            onOpenFile = { path ->
+                state.openAt(path, 0)
+                app.navigateTo(Screen.Editor)
+            },
+            // The same run the editor's Run button starts, with the console open to follow it.
+            onRunApp = if (state.backend.build.supported()) {
+                {
+                    state.consoleOpen = true
+                    state.requestRun {
+                        val selected = state.selectedRunTask
+                        if (selected != null) state.backend.build.runTask(selected.id) else state.backend.build.runBuild()
+                    }
+                    app.navigateTo(Screen.Editor)
+                }
+            } else null,
         )
 
         Screen.KeystoreCreate -> KeystoreCreateScreen(

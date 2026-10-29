@@ -60,6 +60,22 @@ class AppIconGeneratorTest {
     }
 
     @Test
+    fun aGradientBackgroundIsAShapeDrawableAtAnAngleEveryVersionAccepts() {
+        val plan = AppIconGenerator.plan(spec(background = AppIconLayer.Gradient(0xFF3DDC84L, 0xFF0B8043L, angle = 130)))
+        val shape = textOf(plan, "drawable/ic_launcher_background.xml")
+        assertTrue("<shape" in shape && "<gradient" in shape, shape)
+        assertTrue("android:angle=\"135\"" in shape, "130° snaps to the nearest multiple of 45: $shape")
+        assertTrue("startColor=\"#3DDC84\"" in shape && "endColor=\"#0B8043\"" in shape, shape)
+        assertTrue("values/ic_launcher_background.xml" !in paths(plan), "no colour resource for a gradient")
+        assertTrue(
+            "@drawable/ic_launcher_background" in textOf(plan, "mipmap-anydpi-v26/ic_launcher.xml"),
+            "the adaptive icon points at the shape",
+        )
+        assertEquals(0, AppIconLayer.Gradient(0, 0, angle = 350).snappedAngle, "wraps past 337.5°")
+        assertEquals(270, AppIconLayer.Gradient(0, 0, angle = -90).snappedAngle, "a negative angle wraps too")
+    }
+
+    @Test
     fun theAdaptiveIconReferencesEveryLayerItWasGiven() {
         val plan = AppIconGenerator.plan(spec(monochrome = AppIconLayer.Vector(source)))
         val xml = textOf(plan, "mipmap-anydpi-v26/ic_launcher.xml")

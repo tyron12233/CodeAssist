@@ -27,6 +27,14 @@ sealed interface AppIconLayer {
 
     /** An already-encoded image (an imported PNG or WebP), written as-is into a density-independent folder. */
     data class Raster(val bytes: ByteArray, val extension: String) : AppIconLayer
+
+    /**
+     * A linear gradient across the whole box, written as a `<shape>` drawable. [angle] is in degrees and is
+     * snapped to a multiple of 45, the only angles a `<gradient>` accepts on every Android version.
+     */
+    data class Gradient(val startArgb: Long, val endArgb: Long, val angle: Int = 0) : AppIconLayer {
+        val snappedAngle: Int get() = (Math.floorMod(angle, 360) + 22) / 45 * 45 % 360
+    }
 }
 
 /** What the studio should produce. */
@@ -214,6 +222,11 @@ object AppIconGenerator {
             out += AppIconFile.Bytes("drawable-nodpi/$resourceName.${layer.extension}", layer.bytes)
             "@drawable/$resourceName"
         }
+
+        is AppIconLayer.Gradient -> {
+            out += AppIconFile.Text("drawable/$resourceName.xml", gradientShapeXml(layer))
+            "@drawable/$resourceName"
+        }
     }
 
     /**
@@ -269,6 +282,17 @@ object AppIconGenerator {
         background?.let { append("    <item android:drawable=\"").append(it).append("\"/>\n") }
         append("    <item android:drawable=\"").append(foreground).append("\"/>\n")
         append("</layer-list>\n")
+    }
+
+    private fun gradientShapeXml(layer: AppIconLayer.Gradient): String = buildString {
+        append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
+        append("<shape xmlns:android=\"$ANDROID_NS\" android:shape=\"rectangle\">\n")
+        append("    <gradient\n")
+        append("        android:angle=\"").append(layer.snappedAngle).append("\"\n")
+        append("        android:startColor=\"").append(VectorDrawableWriter.hex(layer.startArgb)).append("\"\n")
+        append("        android:endColor=\"").append(VectorDrawableWriter.hex(layer.endArgb)).append("\"\n")
+        append("        android:type=\"linear\"/>\n")
+        append("</shape>\n")
     }
 
     private fun colorResourceXml(name: String, argb: Long): String = buildString {
