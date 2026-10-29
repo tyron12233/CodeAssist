@@ -357,11 +357,11 @@ internal fun kspCrashTraceLines(e: Throwable, max: Int, perLevel: Int = 20): Lis
 
 private val localeLock = Any()
 private var localeHolds = 0
-private var savedLocales: Triple<Locale, Locale, Locale>? = null
+private var savedFormatLocale: Locale? = null
 
 /**
- * Run [block] with the JVM's default locale pinned to [Locale.ROOT], restoring the previous defaults
- * once the last overlapping caller finishes.
+ * Run [block] with the JVM's FORMAT locale pinned to [Locale.ROOT], restoring the previous one once the last
+ * overlapping caller finishes.
  *
  * Processors emit SOURCE CODE, and some of them format numeric literals with the default locale: KotlinPoet
  * (Room's Kotlin codegen) builds `DecimalFormatSymbols()` for every `%L` number, so on a device set to Arabic
@@ -369,16 +369,18 @@ private var savedLocales: Triple<Locale, Locale, Locale>? = null
  * generated file. Nothing in the processor accepts a locale, so the default itself has to be neutral for the
  * duration of the run. It is process-global, hence the hold count: parallel module builds share one pinned
  * window instead of one run restoring Arabic underneath another.
+ *
+ * Only the FORMAT category, which is what `DecimalFormatSymbols()`, `NumberFormat` and `String.format` read.
+ * The plain default must stay put: KSP can run in the IDE's own process (the agent's builds, the in-process
+ * runner), where Android's `LocaleList.getDefault()` and so Compose's `Locale.current` follow it, and a ROOT
+ * locale (language "") has no plural rules, so every `pluralStringResource` on screen threw
+ * NoSuchElementException for the length of the run.
  */
 internal fun <T> withRootLocale(block: () -> T): T {
     synchronized(localeLock) {
         if (localeHolds++ == 0) {
-            savedLocales = Triple(
-                Locale.getDefault(),
-                Locale.getDefault(Locale.Category.FORMAT),
-                Locale.getDefault(Locale.Category.DISPLAY),
-            )
-            Locale.setDefault(Locale.ROOT)
+            savedFormatLocale = Locale.getDefault(Locale.Category.FORMAT)
+            Locale.setDefault(Locale.Category.FORMAT, Locale.ROOT)
         }
     }
     try {
@@ -386,12 +388,8 @@ internal fun <T> withRootLocale(block: () -> T): T {
     } finally {
         synchronized(localeLock) {
             if (--localeHolds == 0) {
-                savedLocales?.let { (all, format, display) ->
-                    Locale.setDefault(all)
-                    Locale.setDefault(Locale.Category.FORMAT, format)
-                    Locale.setDefault(Locale.Category.DISPLAY, display)
-                }
-                savedLocales = null
+                savedFormatLocale?.let { Locale.setDefault(Locale.Category.FORMAT, it) }
+                savedFormatLocale = null
             }
         }
     }

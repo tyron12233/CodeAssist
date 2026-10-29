@@ -58,6 +58,27 @@ class BundledRoomProcessorTest {
         }
     }
 
+    /**
+     * KSP can run in the IDE's own process, where Compose's `Locale.current` follows the plain default: pinning
+     * that to ROOT made every on-screen `pluralStringResource` throw (no plural rules for language ""). Only the
+     * FORMAT category may move.
+     */
+    @Test
+    fun pinsOnlyTheFormatLocale() {
+        val indonesian = Locale.forLanguageTag("id-ID")
+        val previous = Locale.getDefault()
+        Locale.setDefault(indonesian)
+        try {
+            withRootLocale {
+                assertEquals(indonesian, Locale.getDefault(), "the plain default must not move during a KSP run")
+                assertEquals(Locale.ROOT, Locale.getDefault(Locale.Category.FORMAT))
+            }
+            assertEquals(indonesian, Locale.getDefault(Locale.Category.FORMAT), "the FORMAT locale must be restored")
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
     private fun generateRoom(check: (emitted: List<Path>) -> Unit) {
         assumeTrue(BundledKspProcessors.isBundled("room"), "/processors/room.zip not bundled — did roomProcessorZip run?")
         val runner = classpathProp("ksp.runner.classpath")
