@@ -71,7 +71,7 @@ class BuiltInParityTest {
             "ide.service.editorDecorations",
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
             "ide.service.projectSync", "ide.service.languageFeatures", "ide.service.androidResources",
-            "ide.service.refactor", "ide.service.kotlinEditor", "ide.service.composePreview",
+            "ide.service.refactor", "ide.service.appRename", "ide.service.kotlinEditor", "ide.service.composePreview",
             "ide.service.icons", "ide.service.interpreterLowering",
             // The android plugin's shared resource-repository cache, which the synthetic `R` resolves through
             // the workspace it is handed rather than through the open project.
@@ -93,7 +93,7 @@ class BuiltInParityTest {
             moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
                 spiApplicationServices,
             byId.keys,
-            "exactly the 18 engine services plus the 6 published-SPI keys",
+            "exactly the 19 engine services plus the 6 published-SPI keys",
         )
         spiApplicationServices.forEach {
             assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)

@@ -48,6 +48,9 @@ class AndroidApiFloorTest {
 
     private data class Rule(val name: String, val since: String, val use: String, val match: (String) -> Boolean)
 
+    /** `.transferTo(x)` with a single argument (no comma before the closing parenthesis). */
+    private val TRANSFER_TO_ONE_ARG = Regex("""\.transferTo\([^,()]*\)""")
+
     private val rules = listOf(
         Rule("Path.of", "API 34", "Paths.get(...)") { "Path.of(" in it },
         Rule("Files.readString", "no Android release at all", "path.readText() / Files.readAllBytes") {
@@ -57,7 +60,8 @@ class AndroidApiFloorTest {
             "Files.writeString(" in it
         },
         Rule("InputStream.readNBytes", "API 33", "read into a ByteArray in a loop") { ".readNBytes(" in it },
-        Rule("InputStream.transferTo", "API 33", "copyTo(...)") { ".transferTo(" in it },
+        // Only the one-argument form: FileChannel.transferTo(position, count, target) is API 1 and takes three.
+        Rule("InputStream.transferTo", "API 33", "copyTo(...)") { TRANSFER_TO_ONE_ARG.containsMatchIn(it) },
         Rule("InputStream.nullInputStream", "API 33", "ByteArrayInputStream(ByteArray(0))") {
             "nullInputStream()" in it
         },

@@ -103,7 +103,11 @@ object StorageUsage {
      * shared cache/SDK dir once, and everything else under [storageRoot] once (pruning the already-counted
      * subtrees), so nothing is walked or counted twice. [totalBytes] is the sum of the categories.
      * [leftoverRoots] are counted as [LEFTOVERS].
+     *
+     * `@JvmOverloads` keeps the three-argument form in the bytecode: this is published SPI, and a plugin
+     * compiled before [leftoverRoots] existed links against that exact signature.
      */
+    @JvmOverloads
     fun report(storageRoot: Path, projectRoots: List<Path>, sharedRoot: Path, leftoverRoots: List<Path> = emptyList()): Report {
         val bytes = LinkedHashMap<String, Long>().apply { ORDER.forEach { put(it, 0L) } }
         val projects = ArrayList<Proj>()

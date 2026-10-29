@@ -389,8 +389,9 @@ class PreviewResourceLinker(
      *  shows its design-time values too, and a data-binding layout compiles. The merge is the preview's own copy. */
     private fun rewriteLayouts(merged: Path) {
         if (!Files.isDirectory(merged)) return
-        Files.list(merged).use { dirs -> dirs.filter { it.fileName.toString().startsWith("layout") }.toList() }.forEach { dir ->
-            Files.list(dir).use { files -> files.filter { it.toString().endsWith(".xml") }.toList() }.forEach { f ->
+        // collect(), not Stream.toList(): the member is JDK 16, which Android only has from API 34.
+        Files.list(merged).use { dirs -> dirs.filter { it.fileName.toString().startsWith("layout") }.collect(Collectors.toList()) }.forEach { dir ->
+            Files.list(dir).use { files -> files.filter { it.toString().endsWith(".xml") }.collect(Collectors.toList()) }.forEach { f ->
                 runCatching {
                     val text = Files.readAllBytes(f).decodeToString()
                     val rewritten = PreviewLayoutRewriter.rewrite(text, frameworkAttrs)
