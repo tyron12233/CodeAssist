@@ -5,7 +5,7 @@ package dev.ide.analytics
  * backend keep crash/performance telemetry distinguishable from plain feature usage. Stored as a column
  * so it's queryable without parsing the event name.
  */
-enum class EventCategory { ENVIRONMENT, USAGE, PERFORMANCE, CRASH }
+enum class EventCategory { ENVIRONMENT, USAGE, PERFORMANCE, CRASH, ADS }
 
 /**
  * A single analytics event: a stable [name] (snake_case, from [Events]), its [category], and string-only
@@ -138,9 +138,17 @@ object Events {
     const val ERROR_LOGGED = "error_logged"  // a caught ERROR-level failure (non-fatal, scrubbed)
     const val APP_ANR = "app_anr"            // a previous process killed for not responding (scrubbed thread dump)
 
-    /** The category an event name belongs to. Everything we emit is PERFORMANCE except stability events. */
-    fun categoryOf(name: String): EventCategory = when (name) {
-        APP_CRASH, ERROR_LOGGED, APP_ANR -> EventCategory.CRASH
+    // ads: how often full-screen ads show and how people respond to them (Android only). The `ad_` and `ads_`
+    // prefixes are what [categoryOf] keys on.
+    const val AD_SHOWN = "ad_shown"          // a full-screen ad was shown (`trigger`: `build` or `lesson`)
+    const val AD_CLOSED = "ad_closed"        // it was closed (`trigger`, `duration_ms` on screen, `build_done`)
+    const val AD_SKIPPED = "ad_skipped"      // a long build got no ad (`reason`)
+    const val ADS_SETTING = "ads_setting"    // the user changed an ad setting (`setting`, `on`, `via`)
+
+    /** The category an event name belongs to. Everything we emit is PERFORMANCE except stability and ad events. */
+    fun categoryOf(name: String): EventCategory = when {
+        name == APP_CRASH || name == ERROR_LOGGED || name == APP_ANR -> EventCategory.CRASH
+        name.startsWith("ad_") || name.startsWith("ads_") -> EventCategory.ADS
         else -> EventCategory.PERFORMANCE
     }
 }

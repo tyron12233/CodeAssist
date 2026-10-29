@@ -89,9 +89,9 @@ interface AdHost {
 
     /**
      * Begin loading the full-screen interstitial ahead of showing it (idempotent — a repeat call while one is
-     * loading or already loaded is a no-op). Callers preload at the last natural moment before a possible show
-     * (a build starting, a learner reaching a lesson's final step) so an ad is ready in time. No-op where
-     * unsupported (desktop; the default).
+     * loading or already loaded is a no-op). Callers preload while nothing heavy is running (the IDE sitting
+     * idle between builds, a learner reaching a lesson's final step) so an ad is ready in time without its
+     * WebView competing with a build for memory. No-op where unsupported (desktop; the default).
      */
     fun preloadInterstitial() {}
 
@@ -99,9 +99,23 @@ interface AdHost {
      * Show a preloaded interstitial, if one is ready. Returns true only when an ad was actually presented (so the
      * caller can advance its frequency bookkeeping); false when none was ready or the host has no ads. Called
      * only while ads are active, at a natural break (a build still running past the threshold, a lesson just
-     * finished). No-op → false where unsupported (desktop; the default).
+     * finished). Does not load the next one: the callers preload again once the IDE is idle. No-op → false
+     * where unsupported (desktop; the default).
      */
     fun showInterstitial(): Boolean = false
+
+    /**
+     * Whether the full-screen interstitial is on screen right now: true from a successful [showInterstitial]
+     * until the user closes it. Observable (Compose state) on hosts that show one, so the shared UI can react
+     * the moment it closes. False where unsupported (desktop; the default).
+     */
+    val interstitialShowing: Boolean get() = false
+
+    /**
+     * Whether the device is short of memory. Full-screen ads skip builds here: the ad's WebView next to an
+     * on-device build makes the system more likely to kill one of them. False by default.
+     */
+    val lowMemoryDevice: Boolean get() = false
 
     /** A no-op bridge for hosts without ads (desktop; the default). */
     object None : AdHost {

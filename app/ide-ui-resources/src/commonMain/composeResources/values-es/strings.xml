@@ -11,7 +11,7 @@ Haga una copia de seguridad de sus proyectos en un archivo .zip ahora, sus archi
     <string name="help_improve_codeassist">Ayuda a mejorar CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[Comparta datos de rendimiento anónimos para que podamos ver qué es lento y qué está fallando, y solucionar las cosas correctas.
 
-Recopilamos: la versión de su aplicación y el modelo de su dispositivo, cuánto tiempo toman las compilaciones, la indexación y la finalización del código, el éxito o fracaso de la compilación y los informes de fallos limpios.
+Recopilamos: la versión de su aplicación y el modelo de su dispositivo, cuánto tiempo toman las compilaciones, la indexación y la finalización del código, el éxito o fracaso de la compilación, los informes de fallos limpios, y cuándo se muestran o cierran los anuncios y los cambios en su configuración de anuncios.
 
 Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones usa o cualquier cosa que lo identifique. Puede cambiar esto en cualquier momento en Más mientras un proyecto está abierto.]]></string>
     <string name="learn_more">Más información</string>
@@ -1230,7 +1230,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="set_br_dexbatch_desc">En una app muy grande, el paso final de dexing fusiona las clases por lotes para no necesitarlas todas en memoria a la vez. Los lotes más pequeños mantienen baja esa memoria (bueno para dispositivos con poca memoria) pero hacen el APK ligeramente más grande (menos compresión compartida entre clases); los lotes más grandes comprimen mejor pero necesitan más memoria por fusión. La mayoría de las apps nunca llegan a esto, solo entra en juego a partir de unos pocos miles de clases.</string>
     <string name="set_br_dexfork">Máximo de forks de dex concurrentes</string>
     <string name="set_privacy_analytics">Compartir análisis de rendimiento</string>
-    <string name="set_privacy_analytics_desc">Solo métricas de rendimiento anónimas, nunca tu código ni nombres de archivos</string>
+    <string name="set_privacy_analytics_desc">Solo métricas anónimas de rendimiento y de anuncios, nunca tu código ni nombres de archivos</string>
     <string name="set_privacy_clear">Borrar cachés</string>
     <string name="set_privacy_clear_desc">Libera cachés regenerables de dependencias / lenguaje / vista previa (nunca las fuentes)</string>
     <string name="set_privacy_clear_btn">Borrar</string>

@@ -201,8 +201,14 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         onLaunchPackage = { pkg ->
             // The daemon installed the APK in :build; launch it here in the UI process (it has a foreground
             // activity, so the activity launch isn't blocked) and surface the outcome in the build console.
-            if (pkg.isNotEmpty()) {
+            // Held while a full-screen ad is up, so the app doesn't open under it.
+            if (pkg.isNotEmpty()) dev.ide.android.FullScreenAdGate.runWhenClear {
                 dev.ide.android.ApkLauncher.launch(appContext, pkg) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
+            }
+        },
+        onInstallConfirm = { confirm ->
+            dev.ide.android.FullScreenAdGate.runWhenClear {
+                runCatching { appContext.startActivity(confirm.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }
         },
         // App-log deltas are no longer streamed from the daemon — the UI channel is fed directly by the sink and

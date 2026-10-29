@@ -11,7 +11,7 @@ Faça um backup dos seus projetos em um arquivo .zip agora, seus arquivos de có
     <string name="help_improve_codeassist">Ajude a melhorar o CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[Compartilhe dados anônimos de desempenho para que possamos ver o que está lento e o que está falhando, e corrigir as coisas certas.
 
-Coletamos: a versão do seu aplicativo e modelo de dispositivo, quanto tempo levam as compilações, a indexação e a conclusão do código, sucesso/falha da compilação e relatórios de erros limpos.
+Coletamos: a versão do seu aplicativo e modelo de dispositivo, quanto tempo levam as compilações, a indexação e a conclusão do código, sucesso/falha da compilação, relatórios de erros limpos e quando anúncios são exibidos ou fechados e alterações nas suas configurações de anúncios.
 
 Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você usa ou qualquer coisa que o identifique. Você pode alterar isso a qualquer momento em Mais enquanto um projeto estiver aberto.]]></string>
     <string name="learn_more">Saiba mais</string>
@@ -1184,7 +1184,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_br_dexbatch_desc">Em um app muito grande, a etapa final de dexing mescla as classes em lotes para não precisar de todas na memória de uma vez. Lotes menores mantêm essa memória baixa (bom para dispositivos com pouca memória), mas deixam o APK um pouco maior (menos compressão compartilhada entre classes); lotes maiores compactam melhor, mas precisam de mais memória por mesclagem. A maioria dos apps nunca chega a isso, só entra em ação a partir de alguns milhares de classes.</string>
     <string name="set_br_dexfork">Máximo de processos de dex simultâneos</string>
     <string name="set_privacy_analytics">Compartilhar análise de desempenho</string>
-    <string name="set_privacy_analytics_desc">Apenas métricas anônimas de desempenho, nunca seu código ou nomes de arquivos</string>
+    <string name="set_privacy_analytics_desc">Apenas métricas anônimas de desempenho e de anúncios, nunca seu código ou nomes de arquivos</string>
     <string name="set_privacy_clear">Limpar caches</string>
     <string name="set_privacy_clear_desc">Liberar caches regeneráveis de dependências / linguagem / visualização (nunca o código-fonte)</string>
     <string name="set_privacy_clear_btn">Limpar</string>

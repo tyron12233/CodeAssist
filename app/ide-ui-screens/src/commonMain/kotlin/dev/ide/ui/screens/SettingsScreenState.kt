@@ -91,14 +91,14 @@ internal class SettingsScreenState(
     /** The prompt's lighter choice: keep the ads in lists and panels, turn off only the full-screen ones. */
     fun turnOffFullScreenAdsOnly() {
         adsOffPrompt = false
-        ads?.updateInterstitialsEnabled(false)
+        ads?.updateInterstitialsEnabled(false, via = "prompt")
         values["$PRIVACY_PAGE_ID.$SHOW_INTERSTITIALS_KEY"] = false.toString()
     }
 
     /** The prompt's full choice: turn every ad off. */
     fun turnOffAllAds() {
         adsOffPrompt = false
-        ads?.updateAdsEnabled(false)
+        ads?.updateAdsEnabled(false, via = "prompt")
         values["$PRIVACY_PAGE_ID.$SHOW_ADS_KEY"] = false.toString()
     }
 

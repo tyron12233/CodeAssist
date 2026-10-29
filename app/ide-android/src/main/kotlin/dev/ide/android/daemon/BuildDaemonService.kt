@@ -507,6 +507,10 @@ class BuildDaemonService : Service() {
             val cb = callback ?: return@setForwarder false
             runCatching { cb.onLaunchPackage(pkg); true }.getOrDefault(false)
         }
+        PackageLaunchBridge.setConfirmForwarder { confirm ->
+            val cb = callback ?: return@setConfirmForwarder false
+            runCatching { cb.onInstallConfirm(confirm); true }.getOrDefault(false)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -529,6 +533,7 @@ class BuildDaemonService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         PackageLaunchBridge.setForwarder(null)
+        PackageLaunchBridge.setConfirmForwarder(null)
         callback = null
         exitForeground()
         runCatching { services?.close() }

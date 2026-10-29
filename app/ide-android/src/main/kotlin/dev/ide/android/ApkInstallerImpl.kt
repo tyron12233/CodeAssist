@@ -136,9 +136,14 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
             override fun onReceive(ctx: Context, intent: Intent) {
                 when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
                     PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                        // The OS install-confirmation dialog — launch the Intent it handed us.
+                        // The OS install-confirmation dialog — launch the Intent it handed us. Under isolation the
+                        // UI process starts it; either way it waits while a full-screen ad is on screen.
                         @Suppress("DEPRECATION") val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-                        runCatching { confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)?.let { context.startActivity(it) } }
+                        if (confirm != null && !PackageLaunchBridge.forwardInstallConfirm(confirm)) {
+                            FullScreenAdGate.runWhenClear {
+                                runCatching { context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            }
+                        }
                     }
                     PackageInstaller.STATUS_SUCCESS -> {
                         log("Installed $packageName.")
@@ -148,7 +153,7 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
                         // Fall back to launching here only when there's no UI to forward to (isolation off /
                         // unbound) — ApkLauncher then retries while this process's PackageManager catches up.
                         if (!PackageLaunchBridge.forwardLaunch(packageName)) {
-                            ApkLauncher.launch(context, packageName, log)
+                            FullScreenAdGate.runWhenClear { ApkLauncher.launch(context, packageName, log) }
                         }
                     }
                     else -> {

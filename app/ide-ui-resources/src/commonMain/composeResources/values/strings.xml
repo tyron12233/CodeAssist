@@ -11,7 +11,7 @@ Back up your projects to a .zip now, your source files stay safe, and you can re
     <string name="help_improve_codeassist">Help improve CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing, and fix the right things.
 
-We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, and scrubbed crash reports.
+We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, scrubbed crash reports, and when ads are shown or closed and changes to your ad settings.
 
 We never collect your code, file or project names, which features you use, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
     <string name="learn_more">Learn more</string>
@@ -1814,7 +1814,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_br_dexfork">Max concurrent dex forks</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">Share performance analytics</string>
-    <string name="set_privacy_analytics_desc">Anonymous performance metrics only — never your code or file names</string>
+    <string name="set_privacy_analytics_desc">Anonymous performance and ad metrics only, never your code or file names</string>
     <string name="set_privacy_clear">Clear caches</string>
     <string name="set_privacy_clear_desc">Free regenerable dependency / language / preview caches (never source)</string>
     <string name="set_privacy_clear_btn">Clear</string>

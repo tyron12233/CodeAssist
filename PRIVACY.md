@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **App:** CodeAssist
-**Effective date:** 20 June 2026
+**Effective date:** 27 October 2026
 
 This policy explains what information the CodeAssist Android app handles, why, and the choices you have. CodeAssist is a code editor and build environment that runs on your device. You do not need an account to use it.
 
@@ -9,7 +9,7 @@ This policy explains what information the CodeAssist Android app handles, why, a
 
 - CodeAssist does not require you to sign in and does not ask for your name, email, phone number, or location.
 - The app does not read, upload, or share the source code, files, or projects you work on. Your projects stay on your device.
-- The only data the app sends about you is optional performance and crash telemetry. It is turned off by default and is sent only if you choose to turn it on.
+- The only data the app sends about you is optional performance, crash, and ad-display telemetry. It is turned off by default and is sent only if you choose to turn it on.
 - You can turn telemetry on or off at any time in the app.
 
 ## Information the app collects
@@ -23,6 +23,7 @@ If you turn it on, the app sends:
 - **App and device information:** app version and build number, Android API level, device model and manufacturer, CPU architecture (ABI), and device language (locale).
 - **Performance measurements:** how long app startup, project indexing, builds, code completion, and code analysis take, reported as durations and as aggregated summaries (for example a count and average over a period), not as a record of individual keystrokes.
 - **Build outcomes:** whether a build or run succeeded or failed, and how long it took.
+- **Ad events:** when a full-screen ad is shown or closed, how long it stayed on screen, why one was skipped (for example because one was shown recently), and when you change the app's ad settings. These describe how often ads appear, not what they were, and are not shared with ad networks.
 - **Crash and error reports:** a scrubbed report when the app crashes or hits an internal error. The report contains the exception type and the app's own stack frames only. Exception messages, file paths, and any code are removed before the report is created.
 - **Identifiers:** a random install identifier (a UUID generated on your device that is not linked to your identity or any account) and a per-session identifier used to group events from one app launch.
 
@@ -47,7 +48,7 @@ Apart from optional telemetry, CodeAssist connects to the internet only to carry
 
 ## How the information is used
 
-Telemetry is used only to understand and improve the app's performance and stability, for example to find slow operations and to diagnose crashes. It is not used for advertising, profiling, or sale.
+Telemetry is used only to understand and improve the app's performance and stability, for example to find slow operations and to diagnose crashes, and to keep ads from interrupting you more than necessary. It is not used for advertising, profiling, or sale.
 
 ## How the information is shared
 

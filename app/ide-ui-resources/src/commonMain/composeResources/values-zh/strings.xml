@@ -11,7 +11,7 @@
     <string name="help_improve_codeassist">帮助我们改进 CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[共享匿名性能运行数据，帮助我们定位卡顿、崩溃问题并针对性修复。
 
-我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况以及已清理的崩溃报告。
+我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况、已清理的崩溃报告，以及广告的展示与关闭情况和您的广告设置变更。
 
 我们不会收集代码、项目文件、项目名、使用记录以及任何个人身份信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。]]></string>
     <string name="learn_more">了解更多</string>
@@ -1793,7 +1793,7 @@
     <string name="set_br_dexfork">最大并发 Dex 进程数</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">分享性能分析数据</string>
-    <string name="set_privacy_analytics_desc">仅共享匿名性能指标，绝不共享你的代码或文件名</string>
+    <string name="set_privacy_analytics_desc">仅共享匿名性能与广告指标，绝不共享你的代码或文件名</string>
     <string name="set_privacy_clear">清除缓存</string>
     <string name="set_privacy_clear_desc">释放可再生的依赖 / 语言 / 预览缓存（绝不清除源代码）</string>
     <string name="set_privacy_clear_btn">清除</string>

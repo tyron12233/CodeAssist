@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.IdeBackend
+import kotlin.time.TimeSource
 
 /** App-global preference: whether the user wants ads shown (default true). Flipped by the disable-ads toggle. */
 const val ADS_ENABLED_PREF = "ads.enabled"
@@ -18,8 +19,17 @@ const val INTERSTITIALS_ENABLED_PREF = "ads.interstitials.enabled"
 /** The [AdHost.installStamp] the stored [ADS_ENABLED_PREF] value belongs to — see [AdController]. */
 const val ADS_ENABLED_STAMP_PREF = "ads.enabled.stamp"
 
+/** How many long builds an install has run past the threshold, up to [FREE_LONG_BUILDS] (see [BuildAdPacing]). */
+const val LONG_BUILDS_PREF = "ads.interstitials.longBuilds"
+
 /** Show a tutorials interstitial on every Nth finished lesson (see [AdController.shouldShowLessonInterstitial]). */
 private const val LESSON_INTERSTITIAL_EVERY = 2
+
+/** Analytics names for the ad events (mirrors `dev.ide.analytics.Events`, which the shared UI can't link). */
+private const val AD_SHOWN = "ad_shown"
+private const val AD_CLOSED = "ad_closed"
+private const val AD_SKIPPED = "ad_skipped"
+private const val ADS_SETTING = "ads_setting"
 
 /**
  * Common-side ad gating + state. Holds the user's "show ads" preference (persisted through
@@ -35,6 +45,10 @@ class AdController(
     private val backend: IdeBackend,
     val host: AdHost,
 ) {
+    /** True for the first launch after a fresh install: no ads stamp has been recorded yet. Read before
+     *  [initialAdsEnabled] records one. */
+    private val firstSession = host.installStamp != null && backend.settings.preference(ADS_ENABLED_STAMP_PREF) == null
+
     var adsEnabled by mutableStateOf(initialAdsEnabled(backend, host))
         private set
 
@@ -63,17 +77,64 @@ class AdController(
     /** Open the host's ad consent / privacy-options form. Call only when [privacyOptionsRequired]. */
     fun showPrivacyOptions() = host.showPrivacyOptions()
 
-    /** Turn ads on/off for free and persist the choice. */
-    fun updateAdsEnabled(enabled: Boolean) {
+    /** Turn ads on/off for free and persist the choice. [via] says where the user did it, for analytics. */
+    fun updateAdsEnabled(enabled: Boolean, via: String = "settings") {
+        if (enabled != adsEnabled) track(ADS_SETTING, mapOf("setting" to "all", "on" to enabled.flag(), "via" to via))
         adsEnabled = enabled
         backend.settings.setPreference(ADS_ENABLED_PREF, enabled.toString())
     }
 
     /** Turn full-screen ads on/off on their own (native ads unaffected) and persist the choice. */
-    fun updateInterstitialsEnabled(enabled: Boolean) {
+    fun updateInterstitialsEnabled(enabled: Boolean, via: String = "settings") {
+        if (enabled != interstitialsEnabled) {
+            track(ADS_SETTING, mapOf("setting" to "fullscreen", "on" to enabled.flag(), "via" to via))
+        }
         interstitialsEnabled = enabled
         backend.settings.setPreference(INTERSTITIALS_ENABLED_PREF, enabled.toString())
     }
+
+    /** When full-screen ads may show over a build: see [BuildAdPacing]. */
+    internal val buildPacing = BuildAdPacing(
+        longBuildsSeen = if (firstSession) 0 else
+            backend.settings.preference(LONG_BUILDS_PREF)?.toIntOrNull() ?: FREE_LONG_BUILDS,
+        firstSession = firstSession,
+        persist = { backend.settings.setPreference(LONG_BUILDS_PREF, it.toString()) },
+        nowMs = { clockStart.elapsedNow().inWholeMilliseconds },
+    )
+
+    /** What the interstitial now on screen was shown for, and since when; null when none is up. */
+    private var shownFor: String? = null
+    private var shownAtMs = 0L
+
+    /**
+     * Show the full-screen interstitial for [trigger] (`"build"`, `"lesson"`) if the host has one ready, and
+     * record it. Returns whether it showed.
+     */
+    fun showInterstitial(trigger: String): Boolean {
+        if (!host.showInterstitial()) return false
+        shownFor = trigger
+        shownAtMs = clockStart.elapsedNow().inWholeMilliseconds
+        track(AD_SHOWN, mapOf("trigger" to trigger))
+        return true
+    }
+
+    /** The interstitial shown by [showInterstitial] was closed. [props] ride along on the `ad_closed` event. */
+    fun interstitialClosed(props: Map<String, String> = emptyMap()) {
+        val trigger = shownFor ?: return
+        shownFor = null
+        val shownMs = clockStart.elapsedNow().inWholeMilliseconds - shownAtMs
+        track(AD_CLOSED, mapOf("trigger" to trigger, "duration_ms" to shownMs.toString()) + props)
+    }
+
+    /** What the open interstitial was shown for, or null when none is up. */
+    val interstitialTrigger: String? get() = shownFor
+
+    /** A long build reached the point where it could have shown an ad and didn't, because of [reason]. */
+    fun interstitialSkipped(reason: String) = track(AD_SKIPPED, mapOf("trigger" to "build", "reason" to reason))
+
+    private fun track(event: String, props: Map<String, String>) = backend.diagnostics.track(event, props)
+
+    private fun Boolean.flag() = if (this) "1" else "0"
 
     /** Count of eligible (ads-active) lesson finishes so far this session — drives the every-Nth gate below. */
     private var lessonFinishes = 0
@@ -90,6 +151,9 @@ class AdController(
         return lessonFinishes % LESSON_INTERSTITIAL_EVERY == 0
     }
 }
+
+/** The monotonic clock the ad bookkeeping measures from. */
+private val clockStart = TimeSource.Monotonic.markNow()
 
 /**
  * The ads-enabled value a freshly created [AdController] starts from, resetting it to on once per installed

@@ -1,5 +1,7 @@
 package dev.ide.android.daemon
 
+import android.content.Intent
+
 /**
  * Process-local hand-off so the android "Run" launch happens in the UI process, not in `:build`.
  *
@@ -17,6 +19,9 @@ object PackageLaunchBridge {
     @Volatile
     private var forwarder: ((String) -> Boolean)? = null
 
+    @Volatile
+    private var confirmForwarder: ((Intent) -> Boolean)? = null
+
     /** Registered by [BuildDaemonService] while it holds a live UI callback; cleared (null) when it doesn't. */
     fun setForwarder(f: ((String) -> Boolean)?) {
         forwarder = f
@@ -25,4 +30,13 @@ object PackageLaunchBridge {
     /** Try to forward the launch of [packageName] to the UI process. Returns true if it was handed off (the
      *  caller must NOT also launch locally); false if there's no UI to forward to. */
     fun forwardLaunch(packageName: String): Boolean = forwarder?.invoke(packageName) ?: false
+
+    /** Registered alongside [setForwarder]: ships an install confirmation to the UI process. */
+    fun setConfirmForwarder(f: ((Intent) -> Boolean)?) {
+        confirmForwarder = f
+    }
+
+    /** Try to forward the OS install-confirmation [confirm] to the UI process, which holds it while a
+     *  full-screen ad is up. Returns true if it was handed off (the caller must NOT also start it). */
+    fun forwardInstallConfirm(confirm: Intent): Boolean = confirmForwarder?.invoke(confirm) ?: false
 }

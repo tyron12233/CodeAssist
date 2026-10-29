@@ -200,7 +200,7 @@ fun LessonPlayerScreen(
                     state.next {
                         // Every 2nd finished lesson shows the full-screen interstitial (ads-active gated); it
                         // overlays as we return to the track. shouldShowLessonInterstitial advances the counter.
-                        if (ads?.shouldShowLessonInterstitial() == true) ads.host.showInterstitial()
+                        if (ads?.shouldShowLessonInterstitial() == true) ads.showInterstitial("lesson")
                         onExit()
                     }
                 }

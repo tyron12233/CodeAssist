@@ -39,6 +39,7 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
+import dev.ide.platform.DeviceMemory
 import dev.ide.platform.log.Log
 import dev.ide.ui.ads.NativeAdPool
 import dev.ide.ui.backend.AdHost
@@ -92,18 +93,35 @@ class AndroidAdHost(
 
     override fun showPrivacyOptions() = onShowPrivacyOptions()
 
-    // Full-screen interstitial, shared across trigger points (long build, finished lesson). Preloaded just
-    // before a possible show and shown if the caller's gate allows. Single-use: cleared once shown/dismissed
-    // and reloaded for next time. Touched on the main thread (the callers invoke on the Main dispatcher, and
-    // AdMob requires main-thread load/show); the volatiles just publish state safely to any stray reader.
+    // Full-screen interstitial, shared across trigger points (long build, finished lesson). Preloaded while the
+    // IDE is idle and shown if the caller's gate allows. Single-use: cleared once shown; the callers preload the
+    // next one when the IDE is idle again, never right after a show (that would load it next to the build the
+    // ad just covered). Touched on the main thread (the callers invoke on the Main dispatcher, and AdMob
+    // requires main-thread load/show); the volatiles just publish state safely to any stray reader.
     @Volatile private var interstitial: InterstitialAd? = null
+    @Volatile private var interstitialLoadedAt = 0L
     @Volatile private var loadingInterstitial = false
+    // A preload asked for before [start]: carried out by [start].
+    private var preloadWanted = false
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    override var interstitialShowing: Boolean by mutableStateOf(false)
+        private set
+
+    override val lowMemoryDevice: Boolean get() = DeviceMemory.isLow
 
     override fun preloadInterstitial() {
         // AdMob load must run on the main thread; hop there defensively if a caller ever invokes us off it.
         mainHandler.post {
-            if (!started || !webViewAvailable || interstitial != null || loadingInterstitial) return@post
+            if (!started) {
+                preloadWanted = true
+                return@post
+            }
+            // A loaded ad that has sat unused too long no longer counts when shown: drop it and load a fresh one.
+            if (interstitial != null && SystemClock.elapsedRealtime() - interstitialLoadedAt > INTERSTITIAL_MAX_AGE_MS) {
+                interstitial = null
+            }
+            if (!webViewAvailable || interstitial != null || loadingInterstitial) return@post
             val ctx = activityProvider()?.applicationContext ?: return@post
             loadingInterstitial = true
             runCatching {
@@ -115,10 +133,11 @@ class AndroidAdHost(
                         override fun onAdLoaded(ad: InterstitialAd) {
                             loadingInterstitial = false
                             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-                                override fun onAdDismissedFullScreenContent() { interstitial = null }
-                                override fun onAdFailedToShowFullScreenContent(error: AdError) { interstitial = null }
+                                override fun onAdDismissedFullScreenContent() = interstitialClosed()
+                                override fun onAdFailedToShowFullScreenContent(error: AdError) = interstitialClosed()
                             }
                             interstitial = ad
+                            interstitialLoadedAt = SystemClock.elapsedRealtime()
                             adLog.info("interstitial loaded (unit ${BuildConfig.AD_INTERSTITIAL_UNIT_ID})")
                         }
 
@@ -145,12 +164,25 @@ class AndroidAdHost(
         // off-main, skip this round (return false) rather than risk an off-thread show.
         if (Looper.myLooper() != Looper.getMainLooper()) return false
         val ad = interstitial ?: return false
+        if (SystemClock.elapsedRealtime() - interstitialLoadedAt > INTERSTITIAL_MAX_AGE_MS) {
+            interstitial = null
+            return false
+        }
         val activity = activityProvider() ?: return false
         interstitial = null // single-use
-        ad.show(activity)
-        // Warm the next one so a later trigger can show without waiting on its own preload.
-        preloadInterstitial()
+        // Hold the install prompt and the built app's launch until the ad closes (see FullScreenAdGate).
+        FullScreenAdGate.adShown()
+        interstitialShowing = true
+        runCatching { ad.show(activity) }.onFailure {
+            interstitialClosed()
+            return false
+        }
         return true
+    }
+
+    private fun interstitialClosed() {
+        interstitialShowing = false
+        FullScreenAdGate.adClosed()
     }
 
     // Native ads outlive the slots that show them (see NativeAdPool): a slot that leaves and comes back, or a
@@ -176,6 +208,10 @@ class AndroidAdHost(
     fun start() {
         if (started) return
         started = true
+        if (preloadWanted) {
+            preloadWanted = false
+            preloadInterstitial()
+        }
         val queued = held.toList()
         held.clear()
         for ((placement, callbacks) in queued) {
@@ -455,3 +491,6 @@ private const val ID_HEADLINE = 0x7f_00_00_02
 private const val ID_BODY = 0x7f_00_00_03
 private const val ID_CTA = 0x7f_00_00_04
 private const val ID_MEDIA = 0x7f_00_00_05
+
+/** A loaded interstitial unused for this long is dropped: AdMob asks that one older than an hour isn't shown. */
+private const val INTERSTITIAL_MAX_AGE_MS = 55 * 60_000L
