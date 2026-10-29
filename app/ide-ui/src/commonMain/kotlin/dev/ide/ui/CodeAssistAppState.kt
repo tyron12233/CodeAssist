@@ -15,6 +15,7 @@ import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
 import dev.ide.ui.backend.UiArchiveProject
 import dev.ide.ui.backend.UiIconLayer
+import dev.ide.ui.screens.IconTab
 import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
@@ -205,6 +206,9 @@ class CodeAssistAppState(
     /** A `res/` directory the Icon Manager should preselect, set when it was opened from a file-tree node. */
     var iconManagerResDir: String? by mutableStateOf(null)
         private set
+
+    /** The Icon Manager section the user was in, kept while they visit the studio; null opens the default. */
+    var iconManagerTab: IconTab? by mutableStateOf(null)
 
     /** The layer the app-icon studio should open with as its foreground, when an icon was picked for it. */
     var appIconSeed: UiIconLayer? by mutableStateOf(null)
@@ -501,6 +505,7 @@ class CodeAssistAppState(
     fun openIconManager(returnTo: Screen = Screen.Editor, resDir: String? = null) {
         iconManagerReturn = returnTo
         iconManagerResDir = resDir
+        iconManagerTab = null
         screen = Screen.IconManager
     }
 

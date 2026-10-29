@@ -61,6 +61,8 @@ internal class IconManagerState(
     private val scope: CoroutineScope,
     /** A `res/` directory to preselect, when the screen was opened from a file-tree node. */
     initialResDir: String? = null,
+    /** The section to open on: the one the user was in, when they come back from the app-icon studio. */
+    initialTab: IconTab? = null,
 ) {
 
     // --- sections ---
@@ -187,7 +189,7 @@ internal class IconManagerState(
         repositories = backend.icons.iconRepositories()
         selectedRepoId = repositories.firstOrNull { !it.requiresNetwork }?.id ?: repositories.firstOrNull()?.id
         // A file-tree entry point means the user is already thinking about a res/ directory, so open there.
-        if (initialResDir != null) tab = IconTab.Project
+        if (initialResDir != null) tab = IconTab.Project else if (initialTab != null) tab = initialTab
         refreshSection()
     }
 
@@ -855,7 +857,8 @@ data class BatchOutcome(val added: Int, val existing: Int, val failed: List<Stri
 internal fun rememberIconManagerState(
     backend: IdeBackend,
     initialResDir: String? = null,
+    initialTab: IconTab? = null,
     scope: CoroutineScope = rememberCoroutineScope(),
 ): IconManagerState = remember(backend, initialResDir, scope) {
-    IconManagerState(backend, scope, initialResDir)
+    IconManagerState(backend, scope, initialResDir, initialTab)
 }

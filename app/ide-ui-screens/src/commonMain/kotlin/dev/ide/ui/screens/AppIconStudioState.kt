@@ -39,7 +39,9 @@ internal class AppIconStudioState(
     seed: UiIconLayer? = null,
 ) {
 
-    var spec: UiAppIconSpec by mutableStateOf(UiAppIconSpec(moduleName = "", foreground = seed ?: UiIconLayer.None))
+    var spec: UiAppIconSpec by mutableStateOf(
+        UiAppIconSpec(moduleName = "", foreground = seed?.let(::withDefaultScale) ?: UiIconLayer.None),
+    )
         private set
 
     var current: UiAppIconState? by mutableStateOf(null)
@@ -202,7 +204,7 @@ internal class AppIconStudioState(
     fun placement(): Triple<Float, Float, Float> = when (val fg = spec.foreground) {
         is UiIconLayer.RepoIcon -> Triple(fg.scale, fg.offsetX, fg.offsetY)
         is UiIconLayer.Resource -> Triple(fg.scale, fg.offsetX, fg.offsetY)
-        else -> Triple(1f, 0f, 0f)
+        else -> Triple(DEFAULT_FOREGROUND_SCALE, 0f, 0f)
     }
 
     /** The foreground's tint, or null when it keeps its own colours. */
@@ -244,6 +246,8 @@ internal class AppIconStudioState(
                 written = target.files.map { resolveAgainst(target.resDirPath, it) }
                 message = null
                 plan = backend.icons.planAppIcon(spec)
+                // "Current icon" is now this one.
+                current = runCatching { backend.icons.launcherIcon(spec.moduleName) }.getOrNull() ?: current
             } else {
                 message = result.message
             }
@@ -295,6 +299,19 @@ internal class AppIconStudioState(
 
     private companion object {
         const val REFRESH_DEBOUNCE_MS = 120L
+
+        /**
+         * Where a new foreground starts, as a multiple of the safe zone. At 1.0 a square glyph's corners reach
+         * past the circle a launcher masks to (the circle IS the safe zone); at ~0.7 its diagonal fits.
+         */
+        const val DEFAULT_FOREGROUND_SCALE = 0.7f
+
+        /** A seeded layer at the layer model's own default scale starts at [DEFAULT_FOREGROUND_SCALE]. */
+        fun withDefaultScale(layer: UiIconLayer): UiIconLayer = when {
+            layer is UiIconLayer.RepoIcon && layer.scale == 1f -> layer.copy(scale = DEFAULT_FOREGROUND_SCALE)
+            layer is UiIconLayer.Resource && layer.scale == 1f -> layer.copy(scale = DEFAULT_FOREGROUND_SCALE)
+            else -> layer
+        }
 
         /** The whole 108-unit box as a multiple of the 72-unit safe zone: a background has to reach the edges. */
         const val BACKGROUND_FILL = 1.5f

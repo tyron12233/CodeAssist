@@ -43,6 +43,7 @@ import dev.ide.ui.backend.UiTextEdit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.io.path.readText
 
 /**
  * [IconService]: the Icon Manager's backend. Maps the engine's icon service onto the neutral UI DTOs, and
@@ -134,7 +135,7 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
         return ctx.background("icons.usages") {
             services.resourceUsages(resTypeOf(resType), name).map { (path, offset) ->
                 // Labelled like the editor's own usages picker: where it is, then the line itself.
-                val text = runCatching { Files.readString(path) }.getOrNull().orEmpty()
+                val text = runCatching { path.readText() }.getOrNull().orEmpty()
                 val at = offset.coerceIn(0, text.length)
                 val lineStart = text.lastIndexOf('\n', at - 1) + 1
                 val lineEnd = text.indexOf('\n', at).let { if (it < 0) text.length else it }
@@ -381,9 +382,12 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
                 // A flat colour has no geometry, so it arrives as a solid-colour drawable the canvas fills with.
                 background = (background as? AppIconLayer.Color)?.let { UiDrawable.SolidColor(it.argb) }
                     ?: (background as? AppIconLayer.Gradient)?.let(::gradientDrawable)
+                    ?: existing(service, background)
                     ?: service.composedLayer(background)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
-                foreground = service.composedLayer(foreground)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
-                monochrome = service.composedLayer(monochrome)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
+                foreground = existing(service, foreground)
+                    ?: service.composedLayer(foreground)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
+                monochrome = existing(service, monochrome)
+                    ?: service.composedLayer(monochrome)?.let { DrawableMapping.toUi(DrawablePreview.Vector(it)) },
                 images = images,
                 warnings = warnings,
             )
@@ -419,6 +423,10 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
             }
         }
     }
+
+    /** A project drawable used as it stands, drawn as the drawable it is (it fills the box like any layer). */
+    private fun existing(service: IconManagerService, layer: AppIconLayer): UiDrawable? =
+        (layer as? AppIconLayer.Existing)?.let { service.resourceArtwork(Paths.get(it.path)) }?.let(DrawableMapping::toUi)
 
     /** A gradient layer as the `<shape>` it is written as, filling the whole icon box. */
     private fun gradientDrawable(layer: AppIconLayer.Gradient) = UiDrawable.Shape(

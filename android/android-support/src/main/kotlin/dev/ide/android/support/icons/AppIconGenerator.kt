@@ -29,6 +29,13 @@ sealed interface AppIconLayer {
     data class Raster(val bytes: ByteArray, val extension: String) : AppIconLayer
 
     /**
+     * A drawable the project already declares, referenced as it stands ([ref], e.g. `@drawable/bg`) rather
+     * than copied: a `<shape>` or `<layer-list>` has no geometry to scale, and needs none to fill a layer.
+     * [path] is its file, for the preview to draw.
+     */
+    data class Existing(val ref: String, val path: String) : AppIconLayer
+
+    /**
      * A linear gradient across the whole box, written as a `<shape>` drawable. [angle] is in degrees and is
      * snapped to a multiple of 45, the only angles a `<gradient>` accepts on every Android version.
      */
@@ -227,6 +234,9 @@ object AppIconGenerator {
             out += AppIconFile.Text("drawable/$resourceName.xml", gradientShapeXml(layer))
             "@drawable/$resourceName"
         }
+
+        // Nothing to write: the layer points at the drawable where it is.
+        is AppIconLayer.Existing -> layer.ref
     }
 
     /**

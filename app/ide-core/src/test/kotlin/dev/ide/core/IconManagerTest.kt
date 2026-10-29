@@ -1,7 +1,9 @@
 package dev.ide.core
 
 import dev.ide.testkit.withTempDir
+import dev.ide.ui.backend.UiAppIconSpec
 import dev.ide.ui.backend.UiDrawable
+import dev.ide.ui.backend.UiIconLayer
 import dev.ide.ui.backend.UiIconImport
 import dev.ide.ui.backend.UiIconTarget
 import dev.ide.ui.backend.UiIconVariant
@@ -308,6 +310,55 @@ class IconManagerTest {
                 val result = icons.importIcon(repo.id, "home", UiIconVariant(), request(bogus, "ic_stray"))
                 assertFalse(result.ok)
                 assertFalse(Files.exists(dir.resolve("elsewhere")), "nothing is created outside a known res/ dir")
+            }
+        }
+        }
+    }
+
+    /**
+     * An icon the manager just wrote is a resource to the rest of the IDE straight away: the writes are
+     * announced to the engine, so Rename finds it. They were silent, and Rename said the icon the user had
+     * just added "isn't a resource of this project".
+     */
+    @Test
+    fun anIconJustAddedCanBeRenamedRightAway() {
+        withTempDir("icons-rename-new") { dir ->
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            val icons = IdeServicesBackend(ide).icons
+            val repo = icons.iconRepositories().first { !it.requiresNetwork }
+            val target = icons.importTargets().first()
+            runBlocking {
+                assertTrue(icons.importIcon(repo.id, "home", UiIconVariant(), request(target, "ic_fresh")).ok)
+                val outcome = icons.renameIcon("drawable", "ic_fresh", "ic_renamed")
+                assertTrue(outcome.success, outcome.message)
+                val res = Paths.get(target.resDirPath)
+                assertTrue(Files.exists(res.resolve("drawable/ic_renamed.xml")))
+                assertFalse(Files.exists(res.resolve("drawable/ic_fresh.xml")))
+            }
+        }
+        }
+    }
+
+    /** A <shape> background (the gradient the studio itself writes, say) is used where it is, not refused. */
+    @Test
+    fun aShapeDrawableBackgroundIsReferencedAsItStands() {
+        withTempDir("icons-shape-bg") { dir ->
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            val icons = IdeServicesBackend(ide).icons
+            val target = icons.importTargets().first()
+            val shape = writeRes(
+                target, "drawable", "brand_bg.xml",
+                """<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+                  |<gradient android:startColor="#FF4FC3F7" android:endColor="#FF1A237E" android:angle="135"/></shape>""".trimMargin(),
+            )
+            runBlocking {
+                val module = assertNotNull(icons.launcherIcon()).moduleName
+                val spec = UiAppIconSpec(moduleName = module, background = UiIconLayer.Resource(shape.toString(), scale = 1.5f))
+                val preview = assertNotNull(icons.previewAppIcon(spec))
+                assertTrue(preview.background is UiDrawable.Shape, "the shape is drawn as itself: ${preview.background}")
+                assertTrue(preview.warnings.none { "not a vector" in it }, preview.warnings.toString())
+                val plan = assertNotNull(icons.planAppIcon(spec))
+                assertTrue(plan.files.none { "ic_launcher_background" in it }, "nothing is copied: ${plan.files}")
             }
         }
         }

@@ -187,6 +187,10 @@ internal class IconManagerService(private val ctx: EngineContext) {
         return DrawablePreviewParser.parse(text, resolverFor(path))
     }
 
+    /** `@drawable/name` for `res/drawable-night/name.xml`: the folder's type, the file's base name. */
+    private fun resourceRef(path: Path): String =
+        "@${path.parent?.fileName?.toString()?.substringBefore('-') ?: "drawable"}/${path.fileName.toString().substringBefore('.')}"
+
     /** Raw bytes of a raster resource, for the grid's bitmap tiles. */
     fun resourceBytes(path: Path): ByteArray? =
         runCatching { path.takeIf { it.isRegularFile() }?.readBytes() }.getOrNull()
@@ -250,8 +254,10 @@ internal class IconManagerService(private val ctx: EngineContext) {
             file.createParentDirectories()
             // Replacing a resource declared with a different extension (an XML icon over a PNG one, say) has
             // to delete the old file, or aapt sees two declarations of the same name.
-            if (existing != null && existing != file) Files.deleteIfExists(existing)
+            if (existing != null && existing != file && Files.deleteIfExists(existing)) ctx.events.fileDeleted(existing)
+            val replacing = Files.exists(file)
             Files.write(file, bytes)
+            announce(created = if (replacing) emptyList() else listOf(file), changed = if (replacing) listOf(file) else emptyList())
             WriteOutcome.Written(file)
         }.getOrElse { WriteOutcome.Failed(it.message ?: it::class.simpleName ?: "Write failed") }
     }
@@ -393,12 +399,16 @@ internal class IconManagerService(private val ctx: EngineContext) {
                     AppIconLayer.Raster(bytes, path.extension.lowercase().ifEmpty { "png" })
                 }
             } else {
-                val spec = (resourceArtwork(path) as? DrawablePreview.Vector)?.spec
-                if (spec == null) {
-                    warnings += "${path.name} is not a vector, so it cannot be scaled into the icon box"
-                    AppIconLayer.None
-                } else {
-                    AppIconLayer.Vector(spec, source.scale, source.offsetX, source.offsetY, source.tintArgb)
+                when (val artwork = resourceArtwork(path)) {
+                    is DrawablePreview.Vector ->
+                        AppIconLayer.Vector(artwork.spec, source.scale, source.offsetX, source.offsetY, source.tintArgb)
+                    // A <shape>, <layer-list> or similar is used as it stands: it already fills whatever bounds
+                    // it is given, so there is nothing to scale, only nothing to place or tint.
+                    null -> {
+                        warnings += "Could not read ${path.name} as a drawable"
+                        AppIconLayer.None
+                    }
+                    else -> AppIconLayer.Existing(resourceRef(path), path.toString())
                 }
             }
         }
@@ -447,6 +457,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
         is AppIconLayer.Color -> null
         is AppIconLayer.Raster -> null
         is AppIconLayer.Gradient -> null
+        is AppIconLayer.Existing -> null
         is AppIconLayer.Vector -> {
             val composed = AppIconGenerator.composeLayer(layer.spec, layer.scale, layer.offsetX, layer.offsetY)
             layer.tintArgb?.let { composed.recolored(it) } ?: composed
@@ -459,6 +470,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
      */
     fun applyAppIcon(plan: AppIconPlan, target: Target, rasters: Map<String, ByteArray>): ApplyOutcome {
         val written = ArrayList<Path>()
+        val created = ArrayList<Path>()
         val skipped = ArrayList<String>()
         for (file in plan.files) {
             val destination = resolveOutput(target, file.relativePath)
@@ -473,10 +485,12 @@ internal class IconManagerService(private val ctx: EngineContext) {
             }
             val result = runCatching {
                 destination.createParentDirectories()
+                if (!Files.exists(destination)) created.add(destination)
                 Files.write(destination, bytes)
                 Unit
             }
             if (result.isFailure) {
+                announce(created, written - created.toSet())
                 return ApplyOutcome.Failed(result.exceptionOrNull()?.message ?: "Could not write $destination")
             }
             written.add(destination)
@@ -489,7 +503,18 @@ internal class IconManagerService(private val ctx: EngineContext) {
             val patched = text?.let { ManifestIconWriter.apply(it, manifestEdit) }
             patched != null && runCatching { manifestPath.writeText(patched) }.isSuccess
         }
+        val changed = written.filterNot { it in created } + listOfNotNull(manifestPath.takeIf { manifestUpdated })
+        announce(created, changed)
         return ApplyOutcome.Written(written, skipped, manifestUpdated)
+    }
+
+    /**
+     * Tell the engine what was written, so its indexes see it now rather than at the next resync: without
+     * this a freshly imported icon was not a resource yet as far as Rename, usages or completion knew.
+     */
+    private fun announce(created: List<Path>, changed: List<Path>) {
+        if (created.isNotEmpty()) ctx.events.filesCreated(created)
+        if (changed.isNotEmpty()) ctx.events.filesMutated(changed)
     }
 
     sealed interface ApplyOutcome {

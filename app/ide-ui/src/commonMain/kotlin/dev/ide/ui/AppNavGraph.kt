@@ -611,6 +611,8 @@ private fun AppRoute(
                     app.navigateTo(Screen.Editor)
                 },
                 onFilesRelocated = state::afterFilesRelocated,
+                initialTab = app.iconManagerTab,
+                onTabChanged = { app.iconManagerTab = it },
             )
         }
 

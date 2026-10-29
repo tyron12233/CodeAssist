@@ -94,7 +94,6 @@ import dev.ide.ui.backend.UiVectorPath
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.editor.preview.decodeImageBytes
-import dev.ide.ui.editor.preview.drawCheckerboard
 import dev.ide.ui.editor.preview.drawUiDrawable
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.cancel
@@ -200,8 +199,12 @@ fun IconManagerScreen(
     onOpenFile: ((path: String, offset: Int) -> Unit)? = null,
     /** Files were renamed (old path to new) or deleted here, so open editor tabs can follow. */
     onFilesRelocated: (Map<String, String>) -> Unit = {},
+    /** The section to open on, and where the current one is reported, so a trip to the studio returns to it. */
+    initialTab: IconTab? = null,
+    onTabChanged: (IconTab) -> Unit = {},
 ) {
-    val state = rememberIconManagerState(backend, initialResDir)
+    val state = rememberIconManagerState(backend, initialResDir, initialTab)
+    LaunchedEffect(state.tab) { onTabChanged(state.tab) }
     val clipboard = LocalClipboardManager.current
     val snackbar = remember { SnackbarHostState() }
     val copiedLabel = stringResource(Res.string.icons_copied)
@@ -1122,9 +1125,14 @@ private fun DetailHeader(state: IconManagerState, selection: IconSelection, menu
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
     ) {
-        Surface(shape = MaterialTheme.shapes.medium, color = Color.Transparent, modifier = Modifier.size(72.dp)) {
+        // A tonal ground like the grid's tiles, not a checkerboard: the art is tinted to the surface's ink, and a
+        // light checkerboard swallowed a light glyph in the dark theme.
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.size(72.dp),
+        ) {
             Box(contentAlignment = Alignment.Center) {
-                Canvas(Modifier.fillMaxSize()) { drawCheckerboard(cell = 8f) }
                 IconArt(
                     state.artworkFor(key),
                     (selection as? IconSelection.FromProject)?.let { state.rasterFor(it.config.path) },

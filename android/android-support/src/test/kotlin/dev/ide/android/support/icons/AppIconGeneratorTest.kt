@@ -76,6 +76,15 @@ class AppIconGeneratorTest {
     }
 
     @Test
+    fun anExistingDrawableIsReferencedWhereItIsAndNothingIsWrittenForIt() {
+        val plan = AppIconGenerator.plan(
+            spec(background = AppIconLayer.Existing("@drawable/brand_bg", "/p/res/drawable/brand_bg.xml")),
+        )
+        assertTrue(paths(plan).none { "background" in it }, paths(plan).toString())
+        assertTrue("@drawable/brand_bg" in textOf(plan, "mipmap-anydpi-v26/ic_launcher.xml"))
+    }
+
+    @Test
     fun theAdaptiveIconReferencesEveryLayerItWasGiven() {
         val plan = AppIconGenerator.plan(spec(monochrome = AppIconLayer.Vector(source)))
         val xml = textOf(plan, "mipmap-anydpi-v26/ic_launcher.xml")

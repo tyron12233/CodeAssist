@@ -138,6 +138,9 @@ private val WIDE_LAYOUT = 840.dp
 /** The preview column's width in the wide layout: room for the four mask labels at full length. */
 private val PREVIEW_PANE = 420.dp
 
+/** A colour the user is choosing: where the picker starts, and what to do with the result. */
+private class ColourRequest(val initial: Long, val onPick: (Long) -> Unit)
+
 /** Which layer the icon picker is choosing for. */
 private enum class StudioPick { Foreground, Background }
 
@@ -176,6 +179,8 @@ fun AppIconStudioScreen(
     // Held here rather than in the sheet, so the picker reopens on the section, search and style it was left on.
     val picker = rememberIconManagerState(backend)
     var picking by remember { mutableStateOf<StudioPick?>(null) }
+    // The colour picker is an overlay that has to sit over the whole screen, so the cards only ask for it.
+    var colour by remember { mutableStateOf<ColourRequest?>(null) }
     val snackbar = remember { SnackbarHostState() }
 
     state.message?.let { text ->
@@ -185,60 +190,68 @@ fun AppIconStudioScreen(
         }
     }
 
-    ExpressiveScaffold(
-        title = stringResource(Res.string.appicon_title),
-        onBack = onBack,
-        large = false,
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        when {
-            state.loading -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
-                CircularProgressIndicator()
-            }
+    Box(Modifier.fillMaxSize()) {
+        ExpressiveScaffold(
+            title = stringResource(Res.string.appicon_title),
+            onBack = onBack,
+            large = false,
+            snackbarHost = { SnackbarHost(snackbar) },
+        ) { padding ->
+            when {
+                state.loading -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
+                    CircularProgressIndicator()
+                }
 
-            !state.hasModule() -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
-                Text(
-                    stringResource(Res.string.appicon_no_module),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(Ca.spacing.s8),
-                )
-            }
-
-            else -> BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
-                val controls: @Composable (Modifier) -> Unit = { modifier ->
-                    StudioControls(
-                        state = state,
-                        modifier = modifier,
-                        fileActions = fileActions,
-                        onPick = { picking = it },
-                        onOpenFile = onOpenFile,
-                        onRunApp = onRunApp,
+                !state.hasModule() -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
+                    Text(
+                        stringResource(Res.string.appicon_no_module),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(Ca.spacing.s8),
                     )
                 }
-                if (maxWidth >= WIDE_LAYOUT) {
-                    Row(
-                        Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2, Alignment.CenterHorizontally),
-                    ) {
-                        // Spaced like the controls column, so the two first cards line up.
-                        Column(
-                            Modifier.width(PREVIEW_PANE).fillMaxHeight().verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
-                        ) {
-                            Spacer(Modifier.height(Ca.spacing.s2))
-                            PreviewCard(state)
-                        }
-                        controls(Modifier.widthIn(max = CARD_MAX).weight(1f, fill = false).fillMaxHeight())
+
+                else -> BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+                    val controls: @Composable (Modifier) -> Unit = { modifier ->
+                        StudioControls(
+                            state = state,
+                            modifier = modifier,
+                            fileActions = fileActions,
+                            onPick = { picking = it },
+                            onPickColour = { initial, onPick -> colour = ColourRequest(initial, onPick) },
+                            onOpenFile = onOpenFile,
+                            onRunApp = onRunApp,
+                        )
                     }
-                } else {
-                    Column(Modifier.fillMaxSize()) {
-                        PinnedPreview(state)
-                        controls(Modifier.weight(1f).fillMaxWidth())
+                    if (maxWidth >= WIDE_LAYOUT) {
+                        Row(
+                            Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2, Alignment.CenterHorizontally),
+                        ) {
+                            // Spaced like the controls column, so the two first cards line up.
+                            Column(
+                                Modifier.width(PREVIEW_PANE).fillMaxHeight().verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
+                            ) {
+                                Spacer(Modifier.height(Ca.spacing.s2))
+                                PreviewCard(state)
+                            }
+                            controls(Modifier.widthIn(max = CARD_MAX).weight(1f, fill = false).fillMaxHeight())
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            PinnedPreview(state)
+                            controls(Modifier.weight(1f).fillMaxWidth())
+                        }
                     }
                 }
             }
+        }
+
+        ColorPickerDialog(colour != null, colour?.initial ?: 0xFFFFFFFFL, onDismiss = { colour = null }) {
+            colour?.onPick?.invoke(it)
+            colour = null
         }
     }
 
@@ -263,6 +276,7 @@ private fun StudioControls(
     modifier: Modifier,
     fileActions: FileActions,
     onPick: (StudioPick) -> Unit,
+    onPickColour: (initial: Long, onPick: (Long) -> Unit) -> Unit,
     onOpenFile: ((String) -> Unit)?,
     onRunApp: (() -> Unit)?,
 ) {
@@ -273,7 +287,7 @@ private fun StudioControls(
     ) {
         Spacer(Modifier.height(Ca.spacing.s2))
         ForegroundCard(state, { onPick(StudioPick.Foreground) }, fileActions)
-        BackgroundCard(state, { onPick(StudioPick.Background) }, fileActions)
+        BackgroundCard(state, { onPick(StudioPick.Background) }, onPickColour, fileActions)
         MonochromeCard(state)
         AdvancedCard(state)
         WarningsCard(state)
@@ -469,7 +483,12 @@ private fun ForegroundCard(state: AppIconStudioState, onChooseIcon: () -> Unit, 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BackgroundCard(state: AppIconStudioState, onChooseDrawable: () -> Unit, fileActions: FileActions) {
+private fun BackgroundCard(
+    state: AppIconStudioState,
+    onChooseDrawable: () -> Unit,
+    onPickColour: (initial: Long, onPick: (Long) -> Unit) -> Unit,
+    fileActions: FileActions,
+) {
     val background = state.spec.background
     // Held apart from the spec: choosing "Image" shows its buttons before there is an image to show.
     var mode by remember { mutableStateOf(modeOf(background)) }
@@ -494,7 +513,10 @@ private fun BackgroundCard(state: AppIconStudioState, onChooseDrawable: () -> Un
                             }
 
                             BackgroundMode.Gradient -> if (background !is UiIconLayer.Gradient) {
+                                // A colour becomes a gradient into a darker shade of itself; white or black
+                                // have no useful shade (white to grey reads as dirty), so they take a preset.
                                 val (start, end) = (background as? UiIconLayer.Color)
+                                    ?.takeIf { !isNeutralExtreme(it.argb) }
                                     ?.let { it.argb to darken(it.argb) }
                                     ?: APP_ICON_GRADIENTS.first()
                                 state.setBackgroundGradient(start, end, 135)
@@ -511,8 +533,8 @@ private fun BackgroundCard(state: AppIconStudioState, onChooseDrawable: () -> Un
         }
 
         when (mode) {
-            BackgroundMode.Colour -> ColourControls(state)
-            BackgroundMode.Gradient -> GradientControls(state)
+            BackgroundMode.Colour -> ColourControls(state, onPickColour)
+            BackgroundMode.Gradient -> GradientControls(state, onPickColour)
             BackgroundMode.Image -> FlowRow(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
@@ -539,28 +561,22 @@ private fun BackgroundCard(state: AppIconStudioState, onChooseDrawable: () -> Un
 
 /** The flat-colour swatches, plus any colour at all through the picker (the current one shown when custom). */
 @Composable
-private fun ColourControls(state: AppIconStudioState) {
+private fun ColourControls(state: AppIconStudioState, onPickColour: (Long, (Long) -> Unit) -> Unit) {
     val selected = (state.spec.background as? UiIconLayer.Color)?.argb
-    var picking by remember { mutableStateOf(false) }
     val swatches = if (selected != null && selected !in APP_ICON_BACKGROUNDS) listOf(selected) + APP_ICON_BACKGROUNDS else APP_ICON_BACKGROUNDS
     SwatchRow(
         selected = selected,
         swatches = swatches,
         onNone = { state.clearBackground() },
         onPick = { state.setBackgroundColor(it) },
-        onCustom = { picking = true },
+        onCustom = { onPickColour(selected ?: 0xFFFFFFFFL) { state.setBackgroundColor(it) } },
     )
-    ColorPickerDialog(picking, selected ?: 0xFFFFFFFFL, onDismiss = { picking = false }) {
-        state.setBackgroundColor(it)
-        picking = false
-    }
 }
 
 /** Gradient presets, the two ends (each through the colour picker), and the direction in 45° steps. */
 @Composable
-private fun GradientControls(state: AppIconStudioState) {
+private fun GradientControls(state: AppIconStudioState, onPickColour: (Long, (Long) -> Unit) -> Unit) {
     val gradient = state.spec.background as? UiIconLayer.Gradient ?: return
-    var editing by remember { mutableStateOf<Int?>(null) }
     val scheme = MaterialTheme.colorScheme
 
     LazyRow(
@@ -587,8 +603,17 @@ private fun GradientControls(state: AppIconStudioState) {
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3)) {
-        ColourWell(stringResource(Res.string.appicon_gradient_start), gradient.startArgb) { editing = 0 }
-        ColourWell(stringResource(Res.string.appicon_gradient_end), gradient.endArgb) { editing = 1 }
+        // Each end reads the gradient as it is when its colour comes back, not as it was when the picker opened.
+        ColourWell(stringResource(Res.string.appicon_gradient_start), gradient.startArgb) {
+            onPickColour(gradient.startArgb) { picked ->
+                (state.spec.background as? UiIconLayer.Gradient)?.let { state.setBackgroundGradient(picked, it.endArgb, it.angle) }
+            }
+        }
+        ColourWell(stringResource(Res.string.appicon_gradient_end), gradient.endArgb) {
+            onPickColour(gradient.endArgb) { picked ->
+                (state.spec.background as? UiIconLayer.Gradient)?.let { state.setBackgroundGradient(it.startArgb, picked, it.angle) }
+            }
+        }
     }
 
     Column {
@@ -607,17 +632,6 @@ private fun GradientControls(state: AppIconStudioState) {
             valueRange = 0f..315f,
             steps = 6,
         )
-    }
-
-    editing?.let { end ->
-        ColorPickerDialog(true, if (end == 0) gradient.startArgb else gradient.endArgb, onDismiss = { editing = null }) {
-            if (end == 0) {
-                state.setBackgroundGradient(it, gradient.endArgb, gradient.angle)
-            } else {
-                state.setBackgroundGradient(gradient.startArgb, it, gradient.angle)
-            }
-            editing = null
-        }
     }
 }
 
@@ -1014,6 +1028,14 @@ private fun layerLabel(layer: UiIconLayer): String = when (layer) {
 }
 
 private fun hexOf(argb: Long): String = "#" + (argb and 0xFFFFFF).toString(16).padStart(6, '0').uppercase()
+
+/** Near-white or near-black, where "a darker shade" makes a dull gradient. */
+private fun isNeutralExtreme(argb: Long): Boolean {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    return (r > 0xE0 && g > 0xE0 && b > 0xE0) || (r < 0x20 && g < 0x20 && b < 0x20)
+}
 
 /** [argb] at roughly two thirds of its brightness: the far end of a gradient made from one colour. */
 private fun darken(argb: Long): Long {
