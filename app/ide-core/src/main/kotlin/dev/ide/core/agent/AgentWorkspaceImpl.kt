@@ -20,6 +20,7 @@ import dev.ide.agent.TextMatch
 import dev.ide.agent.WorkspaceEntry
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
+import dev.ide.core.build.BuildRunner
 import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.kotlin.NavKind
@@ -46,6 +47,11 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
 
     private fun engine(): IdeServices =
         ctx.servicesOrNull ?: throw IllegalStateException("No project is open.")
+
+    /** The build runner the user's builds go through: the `:build` daemon when that setting is on, so the agent's
+     *  builds get the same isolation (a build OOM or KSP's process-wide state stays out of the IDE) and show in
+     *  the build console the UI is watching. */
+    private fun runner(): BuildRunner = ctx.buildRunnerFor(engine())
 
     /**
      * Resolves an agent-supplied path. Absolute paths are used as-is; a relative path is anchored to the
@@ -362,7 +368,7 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
     // and launches, so the agent is offered the same build stopped at assemble instead: it can still tell
     // whether the app builds, and the install stays one tap of the user's.
     override suspend fun listTasks(): List<TaskInfo> = ctx.background {
-        engine().build.runTasks().map { t ->
+        runner().runTasks().map { t ->
             val assemble = assembleFor(t.id)
             if (assemble == null) TaskInfo(t.id, t.label, t.group)
             else {
@@ -379,7 +385,12 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
                 listOf("Installing on the device is left to the user. Run $assemble to check that it builds."),
             )
         }
-        val build = engine().build
+        val build = runner()
+        // Another build (the user's, or an earlier one of ours that timed out) still owns the runner: waiting
+        // now would report THAT build's result as this task's.
+        if (build.buildState.value.status == RunStatus.Running) {
+            return TaskRunResult(false, "busy", "", listOf("A build is already running. Try again once it finishes."))
+        }
         build.runTask(id)
         // Wait for a terminal status, dropping any stale terminal/idle state left by a previous run first, so
         // we observe the build WE launched. Not on the engine lane: collecting suspends until the build ends.
