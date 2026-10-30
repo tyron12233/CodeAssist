@@ -3108,13 +3108,13 @@ private fun gettingStarted() = LearnTrackDef(
     category = "Get started",
     lessons = listOf(
         LearnLessonDef(
-            id = "gs-welcome", title = "Welcome to CodeAssist", summary = "What you can build here.",
+            id = "gs-welcome", title = "Welcome to CodePrimer", summary = "What you can build here.",
             iconId = "sparkle", estMinutes = 3,
             steps = listOf(
                 LearnStepDef.Concept(
                     "gs-welcome-c", "A full IDE on your device",
                     listOf(
-                        text("CodeAssist is a complete IDE that **edits, builds, and runs** Java and Kotlin projects right on your device — no desktop required."),
+                        text("CodePrimer is a complete IDE that **edits, builds, and runs** Java and Kotlin projects right on your device — no desktop required."),
                         text("You get smart code completion, live error checking, a real build system, and for Android projects a full **compile → dex → package → sign** pipeline that produces an installable APK."),
                         tip("Head to the **Store** tab to start a new project from a ready-made template."),
                     ),

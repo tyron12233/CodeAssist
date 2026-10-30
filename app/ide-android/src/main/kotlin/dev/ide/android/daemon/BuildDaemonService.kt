@@ -465,7 +465,7 @@ class BuildDaemonService : Service() {
         if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Builds", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Shown while CodeAssist is building or running your project"
+                    description = "Shown while CodePrimer is building or running your project"
                 },
             )
         }
@@ -550,7 +550,7 @@ class BuildDaemonService : Service() {
         val indeterminate: Boolean,
     ) {
         companion object {
-            val PREPARING = NotifContent("CodeAssist", "Preparing…", 0, 0, true)
+            val PREPARING = NotifContent("CodePrimer", "Preparing…", 0, 0, true)
         }
     }
 

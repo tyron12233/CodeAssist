@@ -39,7 +39,7 @@
     <string name="chat_usage_cached">из кэша</string>
     <string name="chat_antigravity_warning">Экспериментально. Использует аккаунт Google через эндпоинт Antigravity, что нарушает Условия использования Google и приводило к блокировке аккаунтов. Вставьте OAuth-токен обновления или доступа (при необходимости в виде token|projectId).</string>
     <string name="chat_antigravity_signin">Войти через Google</string>
-    <string name="chat_antigravity_waiting">Ожидание браузера — разрешите доступ и вернитесь в CodeAssist</string>
+    <string name="chat_antigravity_waiting">Ожидание браузера — разрешите доступ и вернитесь в CodePrimer</string>
     <string name="chat_cancel">Отмена</string>
     <string name="chat_attach">Прикрепить</string>
     <string name="chat_attach_image">Изображение</string>

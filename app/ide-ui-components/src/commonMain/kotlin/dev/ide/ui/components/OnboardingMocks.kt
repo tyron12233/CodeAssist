@@ -725,7 +725,7 @@ internal fun FilesAccessMock() {
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(".../CodeAssist/projects", color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(".../CodePrimer/projects", color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Icon(CaIcons.copy, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
             }
             Row(

@@ -224,7 +224,7 @@ class IosStoreServiceTest {
         )
         assertFalse(store.isModerator(), "nothing is drawn before anyone signs in")
 
-        store.completeSignIn("codeassist://auth-callback#access_token=t&refresh_token=r")
+        store.completeSignIn("codeprimer://auth-callback#access_token=t&refresh_token=r")
         // Two states arrive: the sign-in itself, and then what adopting the account learned. The second is
         // the one under test, so this waits for the row's own fields rather than for `account != null`.
         val account = awaitAdopted(store)
@@ -243,7 +243,7 @@ class IosStoreServiceTest {
             submissions = FakeProfile(isModerator = false),
         )
 
-        store.completeSignIn("codeassist://auth-callback#access_token=t&refresh_token=r")
+        store.completeSignIn("codeprimer://auth-callback#access_token=t&refresh_token=r")
         awaitAdopted(store)
 
         assertFalse(store.isModerator())

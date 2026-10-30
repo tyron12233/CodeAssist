@@ -16,7 +16,7 @@ class SubmissionScreenshotsRequiredTest {
     private val service = SupabaseSubmissionService(
         "http://127.0.0.1:1",
         "anon",
-        SupabaseAccountService("http://127.0.0.1:1", "anon", "codeassist://auth-callback"),
+        SupabaseAccountService("http://127.0.0.1:1", "anon", "codeprimer://auth-callback"),
     )
     private val packaged = PackagedProject(emptyList(), emptyList(), 0, "", "/nonexistent.zip")
 

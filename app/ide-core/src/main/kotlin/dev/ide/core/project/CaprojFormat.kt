@@ -29,7 +29,7 @@ object CaprojFormat {
     const val MIME = "application/x-caproj"
 
     /** Product name stamped into [CaprojManifest.createdBy]. */
-    const val APP_NAME = "CodeAssist"
+    const val APP_NAME = "CodePrimer"
 
     const val KIND_PROJECT = "project"
 

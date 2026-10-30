@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
     private var pendingAuthRedirect: String? = null
 
     /**
-     * A store item id from a `codeassist://store/...` link, pending the composition that can act on it.
+     * A store item id from a `codeprimer://store/...` link, pending the composition that can act on it.
      *
      * Held outside composition for the same reason [inbound] is: the link can arrive by `onNewIntent` on a
      * warm activity, or on the launch intent before anything is composed.
@@ -328,7 +328,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 error != null -> Splash("Failed to start: $error")
-                else -> Splash("Starting CodeAssist…")
+                else -> Splash("Starting CodePrimer…")
             }
         }
     }
@@ -362,14 +362,14 @@ class MainActivity : ComponentActivity() {
      * Claim [intent] if it is a store link, and return whether it was claimed.
      *
      * The URI is cleared off the intent for the same reason the sign-in redirect is: this activity also
-     * handles `file` and `content` VIEW intents, and a `codeassist://store/...` left sitting in
+     * handles `file` and `content` VIEW intents, and a `codeprimer://store/...` left sitting in
      * `getIntent()` would be read as a file to import on the next configuration change.
      */
     private fun takeStoreLink(intent: Intent?): Boolean {
         if (intent?.action != Intent.ACTION_VIEW) return false
         val url = intent.data?.toString()
         if (!dev.ide.store.StoreLink.isStoreLink(url)) return false
-        // A bare `codeassist://store` names no item, which the app reads as "the Store tab".
+        // A bare `codeprimer://store` names no item, which the app reads as "the Store tab".
         storeLink.value = dev.ide.store.StoreLink.itemId(url) ?: ""
         intent.data = null
         return true
@@ -379,7 +379,7 @@ class MainActivity : ComponentActivity() {
      * Claim [intent] if it is a store sign-in redirect, and return whether it was claimed.
      *
      * The URI is cleared off the intent once claimed: the activity is also the handler for `file` and
-     * `content` VIEW intents, and a stale `codeassist://auth-callback` sitting in `getIntent()` would be
+     * `content` VIEW intents, and a stale `codeprimer://auth-callback` sitting in `getIntent()` would be
      * read as a file to import on the next configuration change. The tokens are in the fragment, so the
      * link is also not something to keep around.
      */

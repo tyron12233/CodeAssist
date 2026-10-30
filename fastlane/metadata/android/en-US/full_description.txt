@@ -1,4 +1,4 @@
-CodeAssist is an Android IDE for your phone and tablet. Write Kotlin and Java, watch Jetpack Compose previews update as you type, and build, sign and install real Android apps on the device itself. No PC, no cloud build server, no Gradle daemon.
+CodePrimer is an Android IDE for your phone and tablet. Write Kotlin and Java, watch Jetpack Compose previews update as you type, and build, sign and install real Android apps on the device itself. No PC, no cloud build server, no Gradle daemon.
 
 It is a complete Android IDE, not a code playground: open multi-module Android projects, add libraries from Maven, and ship an APK or App Bundle you can install or publish.
 
@@ -45,5 +45,7 @@ It is a complete Android IDE, not a code playground: open multi-module Android p
 • Light and dark themes with Material You colors
 
 <b>Free and open source</b>
-CodeAssist is a free, open-source Android IDE licensed under the GNU General Public License v3.0. It shows a few small ads, and you can turn them off in the app at no cost. Source code, issues and releases are on GitHub:
-https://github.com/tyron12233/CodeAssist
+CodePrimer is a free, open-source Android IDE licensed under the GNU General Public License v3.0. It shows a few small ads, and you can turn them off in the app at no cost. Source code, issues and releases are on GitHub:
+https://github.com/veelex/CodePrimer
+
+CodePrimer is a remix of CodeAssist by tyron12233 (https://github.com/tyron12233/CodeAssist), used under the GPL-3.0-or-later.

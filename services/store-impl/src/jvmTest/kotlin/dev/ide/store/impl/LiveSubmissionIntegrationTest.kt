@@ -74,10 +74,10 @@ class LiveSubmissionIntegrationTest {
      * redirect, which a test cannot drive.
      */
     private fun accountsFor(uid: String): SupabaseAccountService {
-        val svc = SupabaseAccountService(baseUrl, anonKey, "codeassist://auth-callback")
+        val svc = SupabaseAccountService(baseUrl, anonKey, "codeprimer://auth-callback")
         // complete() with an implicit-flow redirect is the honest way in: it exercises the same
         // adopt()/fetchUser() path a real sign-in takes, rather than reaching past it.
-        val r = svc.complete("codeassist://auth-callback#access_token=${mintJwt(uid)}&refresh_token=none")
+        val r = svc.complete("codeprimer://auth-callback#access_token=${mintJwt(uid)}&refresh_token=none")
         assertTrue(r is StoreResult.Ok, "sign-in with a minted token failed: $r")
         return svc
     }

@@ -34,7 +34,7 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
                 dev.ide.android.support.BuiltApks.isRecorded(File(path).toPath())
             activity.runOnUiThread {
                 if (!built) {
-                    Toast.makeText(activity, "CodeAssist installs only APKs its own build made. Run the app to build it.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(activity, "CodePrimer installs only APKs its own build made. Run the app to build it.", Toast.LENGTH_LONG).show()
                     return@runOnUiThread
                 }
                 runCatching {
@@ -199,7 +199,7 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
         if (runCatching { activity.startActivity(viewRoot); true }.getOrDefault(false)) return
         val browse = Intent("android.provider.action.BROWSE", rootUri)
         runCatching { activity.startActivity(browse) }.getOrElse {
-            Toast.makeText(activity, "Open the Files app → CodeAssist to browse your projects", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, "Open the Files app → CodePrimer to browse your projects", Toast.LENGTH_LONG).show()
         }
     }
 

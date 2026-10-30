@@ -23,7 +23,7 @@ class StoreSignInStateTest {
 
     private class FakeAccounts(
         private val challenge: StoreResult<StoreAuthChallenge> =
-            StoreResult.Ok(StoreAuthChallenge("https://provider/authorize?x=1", "codeassist://auth-callback")),
+            StoreResult.Ok(StoreAuthChallenge("https://provider/authorize?x=1", "codeprimer://auth-callback")),
         private val completion: StoreResult<StoreAccount> = StoreResult.Ok(StoreAccount("user-1", email = "a@b.c")),
         private val existing: StoreAccount? = null,
         private val supported: List<StoreProvider> = listOf(StoreProvider.GITHUB),
@@ -79,7 +79,7 @@ class StoreSignInStateTest {
     fun completingTheRedirectSignsIn() {
         val b = backend(FakeAccounts())
         b.beginSignIn("github")
-        b.completeSignIn("codeassist://auth-callback#access_token=t")
+        b.completeSignIn("codeprimer://auth-callback#access_token=t")
         awaitPhase(b, UiSignInPhase.SignedIn)
         val state = b.authState().value
         assertTrue(state.signedIn)
@@ -91,7 +91,7 @@ class StoreSignInStateTest {
     @Test
     fun aFailedExchangeKeepsTheBackendsOwnReason() {
         val b = backend(FakeAccounts(completion = StoreResult.Failed("That sign-in link has expired")))
-        b.completeSignIn("codeassist://auth-callback#access_token=t")
+        b.completeSignIn("codeprimer://auth-callback#access_token=t")
         awaitPhase(b, UiSignInPhase.Failed)
         assertEquals("That sign-in link has expired", b.authState().value.message)
         assertNull(b.authState().value.account)

@@ -68,7 +68,7 @@ fun CodeAssistApp(
     /** A `.caproj` path handed in from outside the app (Android "Open with"). When it changes to a
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
     importPackagePath: String? = null,
-    /** A store item id handed in from outside the app (a `codeassist://store/<id>` link). Opened when it
+    /** A store item id handed in from outside the app (a `codeprimer://store/<id>` link). Opened when it
      *  changes to a non-null value. Null on desktop / normal launch. */
     openStoreItemId: String? = null,
     /** Called once [openStoreItemId] has been acted on, so the host can clear it. Without that the same
@@ -175,7 +175,7 @@ fun CodeAssistApp(
                 ) {
                     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                         // Desktop with a custom title bar: the title strip for screens that draw none of their own.
-                        WindowTitleStrip(title = "CodeAssist")
+                        WindowTitleStrip(title = "CodePrimer")
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             AppNavGraph(
                                 app = app,

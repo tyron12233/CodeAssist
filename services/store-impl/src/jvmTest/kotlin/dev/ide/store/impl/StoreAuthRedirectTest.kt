@@ -16,12 +16,12 @@ class StoreAuthRedirectTest {
     @Test
     fun recognisesTheRedirectTheProviderSendsBack() {
         // Implicit flow: the session arrives in the fragment.
-        assertTrue(StoreAuth.isAuthRedirect("codeassist://auth-callback#access_token=abc&refresh_token=d"))
+        assertTrue(StoreAuth.isAuthRedirect("codeprimer://auth-callback#access_token=abc&refresh_token=d"))
         // PKCE: a code in the query instead.
-        assertTrue(StoreAuth.isAuthRedirect("codeassist://auth-callback?code=abc"))
+        assertTrue(StoreAuth.isAuthRedirect("codeprimer://auth-callback?code=abc"))
         // Bare, and with a trailing slash.
-        assertTrue(StoreAuth.isAuthRedirect("codeassist://auth-callback"))
-        assertTrue(StoreAuth.isAuthRedirect("codeassist://auth-callback/"))
+        assertTrue(StoreAuth.isAuthRedirect("codeprimer://auth-callback"))
+        assertTrue(StoreAuth.isAuthRedirect("codeprimer://auth-callback/"))
         // Schemes are case-insensitive per RFC 3986, and some browsers normalise them.
         assertTrue(StoreAuth.isAuthRedirect("CODEASSIST://auth-callback#access_token=abc"))
     }
@@ -33,7 +33,7 @@ class StoreAuthRedirectTest {
         assertFalse(StoreAuth.isAuthRedirect("file:///sdcard/Download/thing.caproj"))
         assertFalse(StoreAuth.isAuthRedirect("content://media/external/file/1234"))
         // A different deep link into the same app is not a sign-in.
-        assertFalse(StoreAuth.isAuthRedirect("codeassist://open-project?path=/x"))
+        assertFalse(StoreAuth.isAuthRedirect("codeprimer://open-project?path=/x"))
         // And neither is a lookalike host on another scheme.
         assertFalse(StoreAuth.isAuthRedirect("https://auth-callback"))
     }

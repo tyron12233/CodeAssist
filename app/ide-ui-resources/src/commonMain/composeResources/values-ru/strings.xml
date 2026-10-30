@@ -2,13 +2,13 @@
 <resources>
     <string name="projects">Проекты</string>
     <string name="a_new_build_system">Новая система сборки</string>
-    <string name="a_new_build_system_content"><![CDATA[CodeAssist был переработан с новой системой сборки на устройстве. Он использует собственную конфигурацию проектов, поэтому проекты прошлых версий несовместимы и не откроются автоматически.
+    <string name="a_new_build_system_content"><![CDATA[CodePrimer был переработан с новой системой сборки на устройстве. Он использует собственную конфигурацию проектов, поэтому проекты прошлых версий несовместимы и не откроются автоматически.
 
 Создайте резервную копию проектов в .zip прямо сейчас, ваши исходные файлы останутся в безопасности, и вы сможете снова добавить их в новый проект.]]></string>
     <string name="preparing_backup">Подготовка резервной копии…</string>
     <string name="backup_projects">Резервное копирование</string>
     <string name="got_it">Понятно</string>
-    <string name="help_improve_codeassist">Помочь улучшить CodeAssist</string>
+    <string name="help_improve_codeassist">Помочь улучшить CodePrimer</string>
     <string name="help_improve_codeassist_content"><![CDATA[Делитесь анонимными данными о производительности, чтобы мы могли видеть задержки и сбои и исправлять нужные вещи.
 
 Мы собираем: версию приложения и модель устройства, время сборки, индексации и автодополнения кода, статус сборки, очищенные отчеты о сбоях, а также когда реклама показывается или закрывается и изменения ваших настроек рекламы.
@@ -46,7 +46,7 @@
     <string name="your_files_content">Проекты хранятся в памяти приложения, вы можете открыть их из любого файлового менеджера, добавлять иконки или ресурсы или редактировать с ПК. Без специальных разрешений, ничего скрытого.</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">Переработано на Jetpack Compose.</string>
-    <string name="jetpack_compose_content">Более быстрый и плавный CodeAssist на нативном Compose с живым @Preview.</string>
+    <string name="jetpack_compose_content">Более быстрый и плавный CodePrimer на нативном Compose с живым @Preview.</string>
     <string name="create_your_first_project">Создайте свой первый проект</string>
     <string name="open_a_project">Откройте проект или создайте новый.</string>
     <string name="new_project">Новый проект</string>
@@ -57,11 +57,11 @@
     <string name="import_by">автор %1$s</string>
     <string name="import_section_contents">Содержимое</string>
     <string name="import_more">еще +%1$d</string>
-    <string name="import_incompatible">Для импорта этого пакета требуется более новая версия CodeAssist.</string>
+    <string name="import_incompatible">Для импорта этого пакета требуется более новая версия CodePrimer.</string>
     <string name="import_deps_bundled">Зависимости включены</string>
     <string name="import_failed">Не удалось импортировать пакет проекта.</string>
     <string name="import_unrecognized_title">Не удалось импортировать файл</string>
-    <string name="import_unrecognized">CodeAssist не распознает этот файл. Выберите пакет проекта .caproj или .zip-архив проекта для импорта.</string>
+    <string name="import_unrecognized">CodePrimer не распознает этот файл. Выберите пакет проекта .caproj или .zip-архив проекта для импорта.</string>
 
     <string name="export_title">Экспорт проекта</string>
     <string name="export_intro">Упакуйте проект в файл .caproj, которым можно поделиться с кем угодно.</string>
@@ -83,7 +83,7 @@
     <string name="export_retry">Повторить</string>
     <string name="join_the_community">Присоединиться к сообществу</string>
     <string name="join_the_community_content">Общайтесь, получайте помощь и делитесь созданными проектами в Discord.</string>
-    <string name="support_title">Поддержать CodeAssist</string>
+    <string name="support_title">Поддержать CodePrimer</string>
     <string name="support_content">Создано в свободное время и остается бесплатным для всех. Если проект вам помогает, спонсорство или звезда имеют большое значение.</string>
     <string name="support_chip_free">100% бесплатно</string>
     <string name="support_chip_open_source">Открытый исходный код</string>
@@ -106,7 +106,7 @@
     <string name="beta_notice">Вы используете %1$s</string>
     <string name="beta_notice_content">Некоторые функции могут быть неполными или изменяться. Мы будем рады вашим отзывам — сообщите нам о недочетах.</string>
     <string name="submit_suggestion">Отправить предложение</string>
-    <string name="your_codeassist_files">Ваши файлы CodeAssist</string>
+    <string name="your_codeassist_files">Ваши файлы CodePrimer</string>
     <string name="your_codeassist_files_content">Откройте эту папку в любом файловом менеджере, чтобы просматривать проекты, добавлять иконки или редактировать с ПК.</string>
     <string name="open_in_the_file_manager">Открыть в файловом менеджере</string>
     <string name="choose_start_point">Выберите начальную точку.</string>
@@ -479,10 +479,10 @@
     <string name="unsaved_close_dont_ask">Больше не спрашивать</string>
     <string name="unsaved_close_dont_ask_hint">Это можно изменить в Настройки ▸ Редактор.</string>
     <string name="build_notif_title">Показывать уведомления о сборке?</string>
-    <string name="build_notif_message">CodeAssist может выполнять сборки и вашу программу в отдельном изолированном процессе и показывать уведомление о ходе выполнения. Это не даёт Android останавливать сборку, когда вы переключаетесь на другое приложение, и позволяет следить за прогрессом. Разрешите уведомления, чтобы включить эту функцию.</string>
+    <string name="build_notif_message">CodePrimer может выполнять сборки и вашу программу в отдельном изолированном процессе и показывать уведомление о ходе выполнения. Это не даёт Android останавливать сборку, когда вы переключаетесь на другое приложение, и позволяет следить за прогрессом. Разрешите уведомления, чтобы включить эту функцию.</string>
     <string name="build_notif_not_now">Не сейчас</string>
     <string name="build_notif_inprocess_title">Сборки будут выполняться в приложении</string>
-    <string name="build_notif_inprocess_message">Без разрешения на уведомления сборки выполняются внутри CodeAssist, а не в отдельном процессе, и вы не будете видеть уведомления о ходе сборки. Вы можете включить уведомления в любой момент в настройках, в разделе «Среда выполнения сборки».</string>
+    <string name="build_notif_inprocess_message">Без разрешения на уведомления сборки выполняются внутри CodePrimer, а не в отдельном процессе, и вы не будете видеть уведомления о ходе сборки. Вы можете включить уведомления в любой момент в настройках, в разделе «Среда выполнения сборки».</string>
     <string name="build_notif_enabled">Уведомления о сборке включены</string>
     <string name="preview_live">В реальном времени</string>
     <string name="preview_paused">Приостановлено</string>

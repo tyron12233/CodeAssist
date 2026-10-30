@@ -41,19 +41,19 @@ object BetaInfo {
     const val LABEL: String = "Beta"
 
     /** Where "Submit suggestions" sends the user (opened via FileActions.openUrl). */
-    const val FEEDBACK_URL: String = "https://github.com/tyron12233/CodeAssist/issues/new"
+    const val FEEDBACK_URL: String = "https://github.com/veelex/CodePrimer/issues/new"
 
     /** What "Learn more" on the analytics consent prompt opens: the privacy policy. */
-    const val PRIVACY_URL: String = "https://github.com/tyron12233/CodeAssist/blob/main/PRIVACY.md"
+    const val PRIVACY_URL: String = "https://github.com/veelex/CodePrimer/blob/main/PRIVACY.md"
 
     /** The Discord community invite (opened via FileActions.openUrl from the Projects screen). */
     const val DISCORD_URL: String = "https://discord.gg/y2gycT6pDW"
 
     /** Where the "Sponsor" action sends the user (the GitHub Sponsors page). */
-    const val SPONSOR_URL: String = "https://github.com/sponsors/tyron12233"
+    const val SPONSOR_URL: String = "https://github.com/veelex/CodePrimer"
 
     /** The GitHub repository the "Star on GitHub" action opens. */
-    const val REPO_URL: String = "https://github.com/tyron12233/CodeAssist"
+    const val REPO_URL: String = "https://github.com/veelex/CodePrimer"
 }
 
 /**

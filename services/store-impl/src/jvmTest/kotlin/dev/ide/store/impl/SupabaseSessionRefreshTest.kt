@@ -210,11 +210,11 @@ class SupabaseSessionRefreshTest {
         val accounts = SupabaseAccountService(
             url = base,
             apiKey = KEY,
-            redirectUrl = "codeassist://auth-callback",
+            redirectUrl = "codeprimer://auth-callback",
             tokens = store,
         )
         val adopted = accounts.complete(
-            "codeassist://auth-callback#access_token=$accessToken&refresh_token=refresh-1&expires_in=3600",
+            "codeprimer://auth-callback#access_token=$accessToken&refresh_token=refresh-1&expires_in=3600",
         )
         assertTrue(adopted is StoreResult.Ok, "the fixture must start signed in, got $adopted")
         return accounts
