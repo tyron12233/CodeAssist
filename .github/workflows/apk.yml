@@ -1,17 +1,23 @@
-name: APK
+name: Debug APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, codeprimer-remix ]
   pull_request:
   workflow_dispatch:
 
-# Build the installable Android APK (:ide-android). Unlike the framework jobs, this needs the full
+# Build the installable CodePrimer debug APK (:ide-android). Unlike the framework jobs, this needs the full
 # module set (CI_CORE_ONLY must stay unset) and the Android SDK; the runner's stock SDK plus the exact
 # platform AGP wants (android-36.1 for compileSdk=36 + compileSdkMinor=1) are provisioned with
 # setup-android. The `debug` variant is signed with the debug key so the artifact installs directly.
+#
+# The app id is io.github.veelex.codeprimer, so this APK installs next to the official CodeAssist app.
+# Debug builds use Google's AdMob test ids and no backend endpoints, so no secrets are needed here.
 env:
   JAVA_VERSION: "25"
+
+permissions:
+  contents: read
 
 concurrency:
   group: apk-${{ github.ref }}
@@ -21,6 +27,7 @@ jobs:
   build:
     name: assembleDebug
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -49,10 +56,35 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :ide-android:assembleDebug --console=plain --stacktrace
 
+      # Put the file names, sizes and checksums on the run page, so a downloaded APK can be checked against it.
+      - name: Summarise APK
+        run: |
+          {
+            echo "### CodePrimer debug APK"
+            echo ""
+            for f in app/ide-android/build/outputs/apk/debug/*.apk; do
+              echo "- \`$(basename "$f")\`: $(du -h "$f" | cut -f1), sha256 \`$(sha256sum "$f" | cut -d' ' -f1)\`"
+            done
+            echo ""
+            echo "Package \`io.github.veelex.codeprimer\`. Signed with the debug key, so it installs directly."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: codeassist-debug-apk
+          name: codeprimer-debug-apk
           path: app/ide-android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      # Only on failure: the compiler and lint reports are what you need to find out why.
+      - name: Upload build reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeprimer-build-reports
+          path: |
+            app/ide-android/build/reports
+            build/reports
+          if-no-files-found: ignore
+          retention-days: 7
