@@ -71,8 +71,8 @@ class LiveModerationIntegrationTest {
     }
 
     private fun accountsFor(uid: String): SupabaseAccountService {
-        val svc = SupabaseAccountService(baseUrl, anonKey, "codeassist://auth-callback")
-        val r = svc.complete("codeassist://auth-callback#access_token=${mintJwt(uid)}&refresh_token=none")
+        val svc = SupabaseAccountService(baseUrl, anonKey, "codeprimer://auth-callback")
+        val r = svc.complete("codeprimer://auth-callback#access_token=${mintJwt(uid)}&refresh_token=none")
         assertTrue(r is StoreResult.Ok, "sign-in with a minted token failed: $r")
         return svc
     }

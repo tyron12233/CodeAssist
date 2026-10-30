@@ -2,13 +2,13 @@
 <resources>
     <string name="projects">Proyek</string>
     <string name="a_new_build_system">Sistem build baru</string>
-    <string name="a_new_build_system_content"><![CDATA[CodeAssist telah dibangun kembali dengan sistem build baru di perangkat. Menggunakan konfigurasi proyek sendiri, jadi proyek dari versi sebelumnya tidak kompatibel dan tidak akan terbuka secara otomatis.
+    <string name="a_new_build_system_content"><![CDATA[CodePrimer telah dibangun kembali dengan sistem build baru di perangkat. Menggunakan konfigurasi proyek sendiri, jadi proyek dari versi sebelumnya tidak kompatibel dan tidak akan terbuka secara otomatis.
 
 Cadangkan proyek Anda ke file .zip sekarang, file sumber Anda tetap aman, dan Anda dapat menambahkannya kembali ke proyek baru.]]></string>
     <string name="preparing_backup">Menyiapkan cadangan…</string>
     <string name="backup_projects">Cadangkan proyek</string>
     <string name="got_it">Mengerti</string>
-    <string name="help_improve_codeassist">Bantu tingkatkan CodeAssist</string>
+    <string name="help_improve_codeassist">Bantu tingkatkan CodePrimer</string>
     <string name="help_improve_codeassist_content"><![CDATA[Bagikan data performa anonim agar kami dapat melihat apa yang lambat dan gagal, serta memperbaiki hal yang benar.
 
 Kami mengumpulkan: versi aplikasi dan model perangkat Anda, berapa lama waktu build, pengindeksan, dan penyelesaian kode, keberhasilan/kegagalan build, laporan kerusakan yang dibersihkan, serta kapan iklan ditampilkan atau ditutup dan perubahan pengaturan iklan Anda.
@@ -46,7 +46,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="your_files_content">Proyek tersimpan di penyimpanan aplikasi yang dapat Anda buka dari manajer file mana pun, jatuhkan ikon, tata letak, atau aset, atau edit dari PC. Tanpa izin khusus, tidak ada yang tersembunyi.</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">Dibangun kembali di Jetpack Compose.</string>
-    <string name="jetpack_compose_content">CodeAssist yang lebih cepat dan lebih lancar, Compose asli di seluruh bagian, dengan @Preview langsung.</string>
+    <string name="jetpack_compose_content">CodePrimer yang lebih cepat dan lebih lancar, Compose asli di seluruh bagian, dengan @Preview langsung.</string>
     <string name="create_your_first_project">Buat proyek pertama Anda</string>
     <string name="open_a_project">Buka proyek atau mulai yang baru.</string>
     <string name="new_project">Proyek Baru</string>
@@ -57,11 +57,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="import_by">oleh %1$s</string>
     <string name="import_section_contents">Konten</string>
     <string name="import_more">+%1$d lagi</string>
-    <string name="import_incompatible">Paket ini memerlukan versi CodeAssist yang lebih baru untuk diimpor.</string>
+    <string name="import_incompatible">Paket ini memerlukan versi CodePrimer yang lebih baru untuk diimpor.</string>
     <string name="import_deps_bundled">Dependensi disertakan</string>
     <string name="import_failed">Tidak dapat mengimpor paket proyek.</string>
     <string name="import_unrecognized_title">Tidak dapat mengimpor file ini</string>
-    <string name="import_unrecognized">CodeAssist tidak mengenali file ini. Pilih paket proyek .caproj atau .zip berisi proyek untuk diimpor.</string>
+    <string name="import_unrecognized">CodePrimer tidak mengenali file ini. Pilih paket proyek .caproj atau .zip berisi proyek untuk diimpor.</string>
 
     <string name="export_title">Ekspor proyek</string>
     <string name="export_intro">Kemas proyek ini sebagai file .caproj yang dapat Anda bagikan dengan siapa saja.</string>
@@ -83,7 +83,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="export_retry">Coba lagi</string>
     <string name="join_the_community">Bergabung dengan komunitas</string>
     <string name="join_the_community_content">Obrolan, dapatkan bantuan, dan bagikan apa yang Anda bangun di Discord.</string>
-    <string name="support_title">Dukung CodeAssist</string>
+    <string name="support_title">Dukung CodePrimer</string>
     <string name="support_content">Dibuat di waktu luang saya dan tetap gratis untuk semua orang. Jika ini membantu Anda, sponsor atau bintang sangat berarti.</string>
     <string name="support_chip_free">100% gratis</string>
     <string name="support_chip_open_source">Sumber terbuka</string>
@@ -106,7 +106,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="beta_notice">Anda berada di %1$s</string>
     <string name="beta_notice_content">Beberapa fitur mungkin tidak lengkap atau berubah. Kami sangat mengharapkan masukan Anda, beri tahu kami apa yang hilang atau rusak.</string>
     <string name="submit_suggestion">Kirim saran</string>
-    <string name="your_codeassist_files">File CodeAssist Anda</string>
+    <string name="your_codeassist_files">File CodePrimer Anda</string>
     <string name="your_codeassist_files_content">Buka folder ini di manajer file mana pun untuk menjelajahi proyek Anda, menambahkan ikon atau aset, atau mengedit dari PC.</string>
     <string name="open_in_the_file_manager">Buka di manajer file</string>
     <string name="choose_start_point">Pilih titik awal.</string>
@@ -512,10 +512,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="unsaved_close_dont_ask">Jangan tanya lagi</string>
     <string name="unsaved_close_dont_ask_hint">Anda dapat mengubahnya di Setelan ▸ Editor.</string>
     <string name="build_notif_title">Tampilkan notifikasi build?</string>
-    <string name="build_notif_message">CodeAssist dapat menjalankan build dan program Anda dalam proses terisolasi yang terpisah dan menampilkan notifikasi progres saat berjalan. Ini mencegah Android menghentikan build ketika Anda beralih aplikasi, dan memungkinkan Anda mengikuti progresnya. Izinkan notifikasi untuk mengaktifkannya.</string>
+    <string name="build_notif_message">CodePrimer dapat menjalankan build dan program Anda dalam proses terisolasi yang terpisah dan menampilkan notifikasi progres saat berjalan. Ini mencegah Android menghentikan build ketika Anda beralih aplikasi, dan memungkinkan Anda mengikuti progresnya. Izinkan notifikasi untuk mengaktifkannya.</string>
     <string name="build_notif_not_now">Nanti saja</string>
     <string name="build_notif_inprocess_title">Build akan berjalan di dalam aplikasi</string>
-    <string name="build_notif_inprocess_message">Tanpa izin notifikasi, build berjalan di dalam CodeAssist alih-alih proses terpisah, dan Anda tidak akan melihat notifikasi progres build. Anda dapat mengaktifkan notifikasi kapan saja di Setelan, pada Build Runtime.</string>
+    <string name="build_notif_inprocess_message">Tanpa izin notifikasi, build berjalan di dalam CodePrimer alih-alih proses terpisah, dan Anda tidak akan melihat notifikasi progres build. Anda dapat mengaktifkan notifikasi kapan saja di Setelan, pada Build Runtime.</string>
     <string name="build_notif_enabled">Notifikasi build diaktifkan</string>
     <string name="preview_live">Langsung</string>
     <string name="preview_paused">Dijeda</string>

@@ -2,13 +2,13 @@
 <resources>
     <string name="projects">المشاريع</string>
     <string name="a_new_build_system">نظام بناء جديد</string>
-    <string name="a_new_build_system_content"><![CDATA[تمت إعادة بناء CodeAssist باستخدام نظام بناء جديد على الجهاز. يستخدم تكوين المشروع الخاص به، لذا فإن المشاريع من الإصدارات السابقة غير متوافقة ولن تفتح تلقائيًا.
+    <string name="a_new_build_system_content"><![CDATA[تمت إعادة بناء CodePrimer باستخدام نظام بناء جديد على الجهاز. يستخدم تكوين المشروع الخاص به، لذا فإن المشاريع من الإصدارات السابقة غير متوافقة ولن تفتح تلقائيًا.
 
 قم بعمل نسخة احتياطية لمشاريعك إلى ملف .zip الآن، وستظل ملفات المصدر آمنة ويمكنك إعادة إضافتها إلى مشروع جديد.]]></string>
     <string name="preparing_backup">جاري إعداد النسخة الاحتياطية…</string>
     <string name="backup_projects">نسخ المشاريع احتياطيًا</string>
     <string name="got_it">حسناً</string>
-    <string name="help_improve_codeassist">المساعدة في تحسين CodeAssist</string>
+    <string name="help_improve_codeassist">المساعدة في تحسين CodePrimer</string>
     <string name="help_improve_codeassist_content"><![CDATA[شارِك بيانات الأداء مجهولة الهوية حتى نتمكن من معرفة ما هو بطيء وما يفشل، وإصلاح الأشياء الصحيحة.
 
 نجمع: إصدار التطبيق ونموذج الجهاز، والوقت الذي تستغرقه عمليات البناء والفهرسة وإكمال الكود، ونجاح/فشل البناء، وتقارير العطل المنظفة، ومتى تُعرض الإعلانات أو تُغلق والتغييرات على إعدادات الإعلانات لديك.
@@ -46,7 +46,7 @@
     <string name="your_files_content">توجد المشاريع في سعة تخزين التطبيق التي يمكنك فتحها من أي مدير ملفات، أو إفلات الأيقونات أو المخططات أو الأصول، أو التعديل من جهاز الكمبيوتر. لا توجد أذونات خاصة، ولا شيء مخفي.</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">إعادة البناء على Jetpack Compose.</string>
-    <string name="jetpack_compose_content">تجربة CodeAssist أسرع وأسلس، مع Compose الأصلي في كل مكان مع المعاينة المباشرة.</string>
+    <string name="jetpack_compose_content">تجربة CodePrimer أسرع وأسلس، مع Compose الأصلي في كل مكان مع المعاينة المباشرة.</string>
     <string name="create_your_first_project">أنشئ مشروعك الأول</string>
     <string name="open_a_project">افتح مشروعًا أو ابدأ مشروعًا جديدًا.</string>
     <string name="new_project">مشروع جديد</string>
@@ -58,11 +58,11 @@
     <string name="import_by">بواسطة %1$s</string>
     <string name="import_section_contents">المحتويات</string>
     <string name="import_more">+%1$d المزيد</string>
-    <string name="import_incompatible">تحتاج هذه الحزمة إلى إصدار أحدث من CodeAssist للاستيراد.</string>
+    <string name="import_incompatible">تحتاج هذه الحزمة إلى إصدار أحدث من CodePrimer للاستيراد.</string>
     <string name="import_deps_bundled">المكتبات المضمنة</string>
     <string name="import_failed">تعذر استيراد حزمة المشروع.</string>
     <string name="import_unrecognized_title">تعذر استيراد هذا الملف</string>
-    <string name="import_unrecognized">لا يتعرف CodeAssist على هذا الملف. اختر حزمة مشروع .caproj أو ملف .zip لمشروع للاستيراد.</string>
+    <string name="import_unrecognized">لا يتعرف CodePrimer على هذا الملف. اختر حزمة مشروع .caproj أو ملف .zip لمشروع للاستيراد.</string>
     <string name="import_as_title">استيراد باسم</string>
     <string name="import_as_hint">اسم المشروع</string>
     <string name="import_destination">سيوضع في %1$s</string>
@@ -72,27 +72,27 @@
     <string name="import_gradle_title">استيراد مشروع</string>
     <string name="clone_repository_title">استنساخ من Git</string>
     <string name="clone_repository_subtitle">انسخ مستودعًا من GitHub أو أي خادم Git إلى مشروع جديد.</string>
-    <string name="import_gradle_subtitle">افتح مجلد مشروع CodeAssist، أو بناء Gradle موجودًا</string>
+    <string name="import_gradle_subtitle">افتح مجلد مشروع CodePrimer، أو بناء Gradle موجودًا</string>
     <string name="import_gradle_busy">جاري استيراد مشروع Gradle…</string>
-    <string name="import_gradle_failed">هذا المجلد ليس مشروع CodeAssist ولا بناء Gradle.</string>
+    <string name="import_gradle_failed">هذا المجلد ليس مشروع CodePrimer ولا بناء Gradle.</string>
     <!-- Import-time choice: keep Gradle (compatibility) vs convert to the native module system -->
     <string name="import_source_title">استيراد مشروع</string>
     <string name="import_source_message">أين يوجد المشروع؟</string>
     <string name="import_source_folder">مجلد المشروع</string>
-    <string name="import_source_folder_desc">مشروع CodeAssist، أو بناء Gradle موجود</string>
+    <string name="import_source_folder_desc">مشروع CodePrimer، أو بناء Gradle موجود</string>
     <string name="import_source_package">ملف المشروع</string>
-    <string name="import_source_package_desc">ملف ‎.zip لمشروع أو بناء Gradle، أو ملف ‎.caproj تمت مشاركته من CodeAssist</string>
-    <string name="import_archive_codeassist">مشروع CodeAssist</string>
+    <string name="import_source_package_desc">ملف ‎.zip لمشروع أو بناء Gradle، أو ملف ‎.caproj تمت مشاركته من CodePrimer</string>
+    <string name="import_archive_codeassist">مشروع CodePrimer</string>
     <string name="import_archive_gradle">بناء Gradle</string>
     <string name="import_archive_choose_message">يحتوي ملف zip هذا على عدة مشاريع. أيها تريد استيراده؟</string>
     <string name="import_archive_choose_title">اختر مشروعًا</string>
-    <string name="import_archive_empty">لم يُعثر على مشروع CodeAssist أو بناء Gradle في ملف zip هذا.</string>
+    <string name="import_archive_empty">لم يُعثر على مشروع CodePrimer أو بناء Gradle في ملف zip هذا.</string>
     <string name="import_gradle_mode_title">استيراد مشروع Gradle</string>
-    <string name="import_gradle_mode_message">كيف ينبغي أن يفتح CodeAssist هذا المشروع؟</string>
+    <string name="import_gradle_mode_message">كيف ينبغي أن يفتح CodePrimer هذا المشروع؟</string>
     <string name="import_gradle_mode_compat">وضع التوافق</string>
     <string name="import_gradle_mode_compat_desc">الإبقاء على ملفات Gradle وإعادة المزامنة منها. يمكنك التحويل لاحقًا.</string>
-    <string name="import_gradle_mode_convert">التحويل إلى CodeAssist</string>
-    <string name="import_gradle_mode_convert_desc">الانتقال إلى نظام الوحدات في CodeAssist. تُنقل ملفات Gradle إلى مجلد نسخ احتياطي.</string>
+    <string name="import_gradle_mode_convert">التحويل إلى CodePrimer</string>
+    <string name="import_gradle_mode_convert_desc">الانتقال إلى نظام الوحدات في CodePrimer. تُنقل ملفات Gradle إلى مجلد نسخ احتياطي.</string>
     <plurals name="caproj_files">
         <item quantity="one">ملف واحد</item>
         <item quantity="two">ملفان</item>
@@ -132,8 +132,8 @@
     <string name="export_screenshot_unreadable">تعذّرت معاينة هذه الصورة</string>
     <string name="export_intro_gradle">اكتب هذا المشروع في صورة بناء Gradle، لتتمكن من فتحه في Android Studio أو بنائه باستخدام gradle.</string>
     <string name="export_format_title">الصيغة</string>
-    <string name="export_format_package">حزمة CodeAssist</string>
-    <string name="export_format_package_desc">ملف ‎.caproj يستطيع أي شخص لديه CodeAssist استيراده، كما هو تمامًا هنا.</string>
+    <string name="export_format_package">حزمة CodePrimer</string>
+    <string name="export_format_package_desc">ملف ‎.caproj يستطيع أي شخص لديه CodePrimer استيراده، كما هو تمامًا هنا.</string>
     <string name="export_format_gradle">مشروع Gradle</string>
     <string name="export_format_gradle_desc">ملف ‎.zip يضم مصادرك مع ملفات بناء Gradle المولَّدة، من أجل Android Studio أو بناء gradle.</string>
     <string name="export_gradle_title">ما الذي سيُولَّد</string>
@@ -149,7 +149,7 @@
     <string name="share_type_java_lib">مكتبة Java</string>
     <string name="join_the_community">الانضمام إلى المجتمع</string>
     <string name="join_the_community_content">دردش واحصل على المساعدة وشارك ما تبنيه على Discord.</string>
-    <string name="support_title">دعم CodeAssist</string>
+    <string name="support_title">دعم CodePrimer</string>
     <string name="support_content">تم بناؤه في وقت فراغي وهو مجاني للجميع. إذا كان يساعدك، فإن الرعاية أو النجمة تعني الكثير.</string>
     <string name="support_chip_free">100% مجاني</string>
     <string name="support_chip_open_source">مفتوح المصدر</string>
@@ -172,7 +172,7 @@
     <string name="project_kind_android">أندرويد</string>
     <string name="project_kind_gradle">Gradle</string>
     <string name="project_kind_files">ملفات</string>
-    <string name="project_kind_codeassist">CodeAssist</string>
+    <string name="project_kind_codeassist">CodePrimer</string>
     <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
          does not fit and the "Opened" is carried by the context. -->
     <string name="project_age_just_now">قبل قليل</string>
@@ -245,7 +245,7 @@
     <string name="beta_notice">أنت على %1$s</string>
     <string name="beta_notice_content">قد تكون بعض الميزات غير مكتملة أو تتغير. نود الحصول على ملاحظاتك، أخبرنا بما هو مفقود أو مكسور.</string>
     <string name="submit_suggestion">إرسال الاقتراحات</string>
-    <string name="your_codeassist_files">ملفات CodeAssist الخاصة بك</string>
+    <string name="your_codeassist_files">ملفات CodePrimer الخاصة بك</string>
     <string name="your_codeassist_files_content">افتح هذا المجلد في أي مدير ملفات لتصفح مشاريعك، أو إضافة أيقونات أو أصول، أو التعديل من جهاز كمبيوتر.</string>
     <string name="open_in_the_file_manager">الفتح في مدير الملفات</string>
     <string name="choose_start_point">اختر نقطة البداية.</string>
@@ -591,12 +591,12 @@
     <string name="gradle_sync_needed">تغيّرت ملفات البناء منذ آخر مزامنة. أعد المزامنة لتحديث المشروع.</string>
     <string name="gradle_syncing">جاري المزامنة من Gradle…</string>
     <string name="gradle_convert">تحويل</string>
-    <string name="gradle_convert_title">التحويل إلى مشروع CodeAssist؟</string>
-    <string name="gradle_convert_body">تُنقل ملفات بناء Gradle إلى مجلد نسخ احتياطي ويتولّى نظام الوحدات الخاص بـ CodeAssist. لن تتوفر بعدها إعادة المزامنة من Gradle. يمكنك التراجع عن هذا.</string>
+    <string name="gradle_convert_title">التحويل إلى مشروع CodePrimer؟</string>
+    <string name="gradle_convert_body">تُنقل ملفات بناء Gradle إلى مجلد نسخ احتياطي ويتولّى نظام الوحدات الخاص بـ CodePrimer. لن تتوفر بعدها إعادة المزامنة من Gradle. يمكنك التراجع عن هذا.</string>
     <string name="gradle_convert_notes_intro">قرأ المستورِد هذه بأفضل ما يمكن — ولن يُعاد فحصها بعد التحويل:</string>
     <string name="gradle_convert_action">تحويل</string>
     <string name="gradle_convert_working">جاري التحويل…</string>
-    <string name="gradle_converted">تم التحويل إلى مشروع CodeAssist.</string>
+    <string name="gradle_converted">تم التحويل إلى مشروع CodePrimer.</string>
     <string name="gradle_convert_failed">تعذّر تحويل هذا المشروع.</string>
     <string name="gradle_convert_undo">تراجع</string>
     <string name="gradle_convert_done">تم</string>
@@ -666,7 +666,7 @@
     <string name="home_open_in_files">فتح وحدة التخزين في «الملفات»</string>
     <string name="home_backup">نسخ المشاريع احتياطيًا</string>
     <string name="home_star_github">ضع نجمة على GitHub</string>
-    <string name="home_sponsor">ادعم CodeAssist</string>
+    <string name="home_sponsor">ادعم CodePrimer</string>
     <string name="home_feedback">إرسال ملاحظات</string>
     <string name="home_legacy_recovery">يمكن استرجاع المشاريع من إصدار أقدم.</string>
     <string name="store_title">استكشاف</string>
@@ -769,7 +769,7 @@
     <string name="submit_field_changelog">ما الذي تغيّر</string>
     <string name="submit_required_version">اكتب الإصدار في ثلاثة أرقام، مثل 1.2.0.</string>
     <string name="submit_required_screenshot">أضف لقطة شاشة واحدة على الأقل. هذا ما ينظر إليه الناس قبل أن يثبّتوا أي شيء.</string>
-    <string name="submit_screenshots_unavailable">تحتاج القائمة الجديدة إلى لقطة شاشة واحدة على الأقل، ولا يمكن اختيار الصور هنا. أرسلها من CodeAssist على أندرويد أو سطح المكتب.</string>
+    <string name="submit_screenshots_unavailable">تحتاج القائمة الجديدة إلى لقطة شاشة واحدة على الأقل، ولا يمكن اختيار الصور هنا. أرسلها من CodePrimer على أندرويد أو سطح المكتب.</string>
     <string name="submit_mine_title">إرسالاتك</string>
     <string name="submit_withdraw">سحب</string>
     <string name="submit_unavailable">النشر غير متاح في هذا الإصدار.</string>
@@ -878,7 +878,7 @@
     <string name="reviews_helpful_count">مفيدة (%1$d)</string>
     <string name="reviews_count">‏%1$d مراجعة</string>
     <string name="reviews_count_one">مراجعة واحدة</string>
-    <string name="reviews_reader">أحد مستخدمي CodeAssist</string>
+    <string name="reviews_reader">أحد مستخدمي CodePrimer</string>
     <string name="reviews_reply">ردّ الناشر</string>
     <string name="reviews_on_version">على الإصدار %1$s</string>
     <string name="reviews_delete">حذف</string>
@@ -1088,10 +1088,10 @@
     <string name="unsaved_close_dont_ask_hint">يمكنك تغيير ذلك من الإعدادات ◂ المحرر.</string>
     <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">عرض إشعارات البناء؟</string>
-    <string name="build_notif_message">يمكن لـ CodeAssist تشغيل عمليات البناء وبرنامجك في عملية منفصلة ومعزولة وعرض إشعار تقدّم أثناء تشغيلها. يمنع هذا Android من إيقاف البناء عند التبديل إلى تطبيق آخر، ويتيح لك متابعة التقدّم. اسمح بالإشعارات لتفعيل هذا.</string>
+    <string name="build_notif_message">يمكن لـ CodePrimer تشغيل عمليات البناء وبرنامجك في عملية منفصلة ومعزولة وعرض إشعار تقدّم أثناء تشغيلها. يمنع هذا Android من إيقاف البناء عند التبديل إلى تطبيق آخر، ويتيح لك متابعة التقدّم. اسمح بالإشعارات لتفعيل هذا.</string>
     <string name="build_notif_not_now">ليس الآن</string>
     <string name="build_notif_inprocess_title">ستُشغَّل عمليات البناء داخل التطبيق</string>
-    <string name="build_notif_inprocess_message">بدون إذن الإشعارات، تُشغَّل عمليات البناء داخل CodeAssist بدلاً من عملية منفصلة، ولن ترى إشعارات تقدّم البناء. يمكنك تفعيل الإشعارات في أي وقت من الإعدادات، ضمن وقت تشغيل البناء.</string>
+    <string name="build_notif_inprocess_message">بدون إذن الإشعارات، تُشغَّل عمليات البناء داخل CodePrimer بدلاً من عملية منفصلة، ولن ترى إشعارات تقدّم البناء. يمكنك تفعيل الإشعارات في أي وقت من الإعدادات، ضمن وقت تشغيل البناء.</string>
     <string name="build_notif_enabled">تم تفعيل إشعارات البناء</string>
     <string name="preview_live">مباشر</string>
     <string name="preview_paused">متوقف مؤقتًا</string>
@@ -1363,7 +1363,7 @@
     <string name="plugins_requires">يتطلب %1$s</string>
     <string name="plugins_tab_builtin">مضمَّنة</string>
     <string name="plugins_tab_installed">مثبّتة</string>
-    <string name="plugins_installed_empty">لا شيء مثبّت بعد. تظهر هنا إضافة CodeAssist التي تثبّتها من متجر التطبيقات لديك.</string>
+    <string name="plugins_installed_empty">لا شيء مثبّت بعد. تظهر هنا إضافة CodePrimer التي تثبّتها من متجر التطبيقات لديك.</string>
     <string name="plugins_failed">لم تُحمَّل: %1$s</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
@@ -2113,7 +2113,7 @@
     <string name="store_status_submitted">قيد المراجعة · عادةً يومَي عمل</string>
     <string name="store_step_listing_body">العنوان، ووصف قصير، والفئة، ولقطات الشاشة — تُلتقط من محررك داخل التطبيق.</string>
     <string name="store_step_listing_title">املأ بطاقة المتجر</string>
-    <string name="store_step_pick_body">اختر أي مشروع محلي. يقرأ CodeAssist اسمه ولغته وإعداد JDK وGradle نيابةً عنك — لا شيء تكتبه بيدك.</string>
+    <string name="store_step_pick_body">اختر أي مشروع محلي. يقرأ CodePrimer اسمه ولغته وإعداد JDK وGradle نيابةً عنك — لا شيء تكتبه بيدك.</string>
     <string name="store_step_pick_title">اختر مشروعًا من الصفحة الرئيسية</string>
     <string name="store_step_submit_body">نبنيه على جهاز نظيف ويتحقق شخص من الترخيص وملف README. عادةً في يومَي عمل.</string>
     <string name="store_step_submit_title">أرسل للمراجعة</string>
@@ -2332,7 +2332,7 @@
     <!-- Plugin consent dialog -->
     <string name="plugin_consent_title">السماح بتشغيل %1$s؟</string>
     <string name="plugin_consent_declares">تقول الإضافة إنها ستقوم بما يلي:</string>
-    <string name="plugin_consent_warning">تعمل الإضافة داخل CodeAssist، بصلاحيات الوصول نفسها إلى مشاريعك وحسابك التي تملكها بيئة التطوير. وهي غير معزولة، والقائمة أعلاه غير مُلزِمة. لا تسمح بها إلا إذا كنت تثق بناشرها.</string>
+    <string name="plugin_consent_warning">تعمل الإضافة داخل CodePrimer، بصلاحيات الوصول نفسها إلى مشاريعك وحسابك التي تملكها بيئة التطوير. وهي غير معزولة، والقائمة أعلاه غير مُلزِمة. لا تسمح بها إلا إذا كنت تثق بناشرها.</string>
     <string name="plugin_consent_deny">عدم السماح</string>
     <string name="plugin_consent_publisher_unknown">تعذّر التعرّف على الناشر: لا تحتوي هذه الحزمة على شهادة توقيع قابلة للقراءة.</string>
     <string name="plugin_consent_signed_by">موقّعة من %1$s. أي تحديث من الناشر نفسه يستخدم هذه الشهادة.</string>

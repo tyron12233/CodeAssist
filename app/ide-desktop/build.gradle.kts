@@ -167,7 +167,7 @@ compose.desktop {
             modules(*bundledRuntimeModules.toTypedArray())
             appResourcesRootDir.set(appResourcesRoot)
             macOS {
-                bundleID = "com.tyron.code.desktop"
+                bundleID = "io.github.veelex.codeprimer.desktop"
                 iconFile.set(project.file("icons/CodeAssist.icns"))
             }
             windows {

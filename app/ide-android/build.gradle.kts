@@ -456,30 +456,30 @@ val testAdmobInterstitialUnitId = "ca-app-pub-3940256099942544/1033173712"
 // The real ids are baked in as the release defaults (AdMob ids are not secret — they ship inside every APK),
 // and stay overridable so a fork can point ads at its own AdMob account instead of the upstream one.
 val realAdmobAppId = (findProperty("ADMOB_APP_ID") as String?) ?: System.getenv("ADMOB_APP_ID")
-    ?: "ca-app-pub-7523005242346905~2985774451"
+    ?: testAdmobAppId
 val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_ID")
-    ?: "ca-app-pub-7523005242346905/7440024785"
+    ?: testAdmobNativeUnitId
 // The real interstitial unit (full-screen "long build" ad). Baked in as the release default like the other
 // ids (AdMob ids aren't secret — they ship in every APK), overridable via -PADMOB_INTERSTITIAL_UNIT_ID or the
 // ADMOB_INTERSTITIAL_UNIT_ID env var so a fork can point at its own AdMob account.
 val realAdmobInterstitialUnitId = (findProperty("ADMOB_INTERSTITIAL_UNIT_ID") as String?)
     ?: System.getenv("ADMOB_INTERSTITIAL_UNIT_ID")
-    ?: "ca-app-pub-7523005242346905/6735189457"
+    ?: testAdmobInterstitialUnitId
 // Per-placement native units, keyed by AdPlacement name, so the AdMob report splits native earnings by screen.
 // A placement left blank falls back to the shared native unit above, and several placements may share one
 // unit. Each is overridable via -PADMOB_NATIVE_UNIT_<PLACEMENT> (or the env var of the same name). Reaches
 // AndroidAdHost as AD_NATIVE_UNIT_IDS, `PLACEMENT=unit` pairs joined by `;`.
 val realAdmobNativeUnitsByPlacement = mapOf(
-    "STORE" to "ca-app-pub-7523005242346905/7834378049",
-    "STORE_ITEM" to "ca-app-pub-7523005242346905/7783155586",
-    "PROJECTS" to "ca-app-pub-7523005242346905/4502386125",
-    "LEARN" to "ca-app-pub-7523005242346905/1338175893",
-    "CHALLENGE" to "ca-app-pub-7523005242346905/9563141113",
-    "BUILD_CONSOLE" to "ca-app-pub-7523005242346905/3460767191",
-    "RUN_RESULT" to "ca-app-pub-7523005242346905/5021260875",
-    "SDK_MANAGER" to "ca-app-pub-7523005242346905/6936977775",
-    "SETTINGS" to "ca-app-pub-7523005242346905/7642806352",
-    "SIDEBAR" to "ca-app-pub-7523005242346905/8833522537",
+    "STORE" to "",
+    "STORE_ITEM" to "",
+    "PROJECTS" to "",
+    "LEARN" to "",
+    "CHALLENGE" to "",
+    "BUILD_CONSOLE" to "",
+    "RUN_RESULT" to "",
+    "SDK_MANAGER" to "",
+    "SETTINGS" to "",
+    "SIDEBAR" to "",
 ).mapValues { (placement, default) ->
     (findProperty("ADMOB_NATIVE_UNIT_$placement") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_$placement") ?: default
 }.filterValues { it.isNotBlank() }.entries.joinToString(";") { "${it.key}=${it.value}" }
@@ -492,7 +492,7 @@ android {
     defaultConfig {
         // The Play Store identity (immutable once published). The Kotlin source package (namespace,
         // above) stays dev.ide.android — that's an internal build detail, independent of applicationId.
-        applicationId = "com.tyron.code"
+        applicationId = "io.github.veelex.codeprimer"
         // The real engine (project-model-impl/lang-jdt/...) leans on java.nio.file (Path/Files/walk),
         // which is API 26+. Targeting 26 keeps it native and avoids core-library desugaring complexity.
         minSdk = 26
@@ -518,9 +518,9 @@ android {
         // Analytics collection still never happens without the user's explicit consent.
         val defaultSupabaseUrl = "https://lqlpkeummmmglikumotx.supabase.co"
         val supabaseUrl = (findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL")
-            ?: defaultSupabaseUrl
+            ?: ""
         val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SUPABASE_KEY")
-            ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
+            ?: ""
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
 
@@ -544,7 +544,7 @@ android {
         // thing that compiles and runs a submission. Blank leaves the tab readable and submitting
         // disabled, which is what a fork with no judge of its own should get.
         val judgeUrl = (findProperty("JUDGE_URL") as String?) ?: System.getenv("JUDGE_URL")
-            ?: "https://codeassist-judge.vercel.app"
+            ?: ""
         buildConfigField("String", "JUDGE_URL", "\"$judgeUrl\"")
 
         // Where the store's public files (project zips, screenshots, icons) are mirrored, in Cloudflare R2 (see
@@ -552,7 +552,7 @@ android {
         // so blank simply reads Supabase as before. The default is the bucket's r2.dev address until it has a
         // custom domain (which adds Cloudflare's cache and rate limiting in front of it).
         val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
-            ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+            ?: ""
         buildConfigField("String", "STORE_MEDIA_URL", "\"$storeMediaUrl\"")
 
         // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids

@@ -24,7 +24,7 @@ class IosHost {
     val composePreviewHost: dev.ide.ui.ComposePreviewHost = IosComposePreviewHost(backend)
 
     /**
-     * The store item a `codeassist://store/<id>` link asked for, or "" for the Store tab itself.
+     * The store item a `codeprimer://store/<id>` link asked for, or "" for the Store tab itself.
      *
      * Null until a link arrives and again once the app has acted on it: the same id arriving twice has to
      * re-fire, a link being tapped twice being the ordinary case.
@@ -35,7 +35,7 @@ class IosHost {
     /**
      * A URL the system handed the app.
      *
-     * Two kinds reach here and they are told apart by host, not by parsing: `codeassist://store[/<id>]`
+     * Two kinds reach here and they are told apart by host, not by parsing: `codeprimer://store[/<id>]`
      * opens the store, and a sign-in redirect is claimed by whoever is waiting for it. The sign-in case is
      * a fallback — `ASWebAuthenticationSession` normally hands the redirect straight back to the caller
      * without the system ever routing it — but a provider that bounces through Safari still lands here,

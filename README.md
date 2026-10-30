@@ -1,16 +1,18 @@
 <div align="center">
 
-# CodeAssist
+# CodePrimer
+
+> **CodePrimer is a remix of [CodeAssist](https://github.com/tyron12233/CodeAssist) by tyron12233**, used under the GPL-3.0-or-later. It installs alongside the official app. See [REMIX.md](REMIX.md) for what changed. The install options listed further down describe the upstream project; this remix is distributed through this repository's GitHub Releases only.
 
 **A lightweight, on-device IDE that edits *and builds* Android & Java projects — no laptop, no Gradle daemon.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/tyron12233/CodeAssist/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/tyron12233/CodeAssist/actions)
-[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tyron12233/CodeAssist/main/.github/badges/tests.json)](https://github.com/tyron12233/CodeAssist/actions)
-[![Benchmarks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tyron12233/CodeAssist/main/.github/badges/benchmarks.json)](#benchmarks)
-[![Release](https://img.shields.io/github/v/release/tyron12233/CodeAssist?display_name=tag&logo=github&sort=semver)](https://github.com/tyron12233/CodeAssist/releases)
-[![License](https://img.shields.io/github/license/tyron12233/CodeAssist)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/tyron12233/CodeAssist?style=flat&logo=github)](https://github.com/tyron12233/CodeAssist/stargazers)
-[![Forks](https://img.shields.io/github/forks/tyron12233/CodeAssist?style=flat&logo=github)](https://github.com/tyron12233/CodeAssist/network/members)
+[![CI](https://img.shields.io/github/actions/workflow/status/veelex/CodePrimer/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/veelex/CodePrimer/actions)
+[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/veelex/CodePrimer/main/.github/badges/tests.json)](https://github.com/veelex/CodePrimer/actions)
+[![Benchmarks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/veelex/CodePrimer/main/.github/badges/benchmarks.json)](#benchmarks)
+[![Release](https://img.shields.io/github/v/release/veelex/CodePrimer?display_name=tag&logo=github&sort=semver)](https://github.com/veelex/CodePrimer/releases)
+[![License](https://img.shields.io/github/license/veelex/CodePrimer)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/veelex/CodePrimer?style=flat&logo=github)](https://github.com/veelex/CodePrimer/stargazers)
+[![Forks](https://img.shields.io/github/forks/veelex/CodePrimer?style=flat&logo=github)](https://github.com/veelex/CodePrimer/network/members)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/y2gycT6pDW)
 
 <img src="docs/assets/banner.png" alt="CodeAssist: build Android apps on Android" width="720" />

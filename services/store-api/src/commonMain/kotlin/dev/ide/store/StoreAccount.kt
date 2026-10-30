@@ -44,12 +44,12 @@ object StoreAuth {
      * it is Supabase's `additional_redirect_urls`, which is a list of literal URLs — a second entry would
      * be a second thing to remember to add.
      */
-    const val MOBILE_REDIRECT = "codeassist://auth-callback"
+    const val MOBILE_REDIRECT = "codeprimer://auth-callback"
 
     /** The desktop loopback redirect, for a host that can run a one-shot local listener. */
     const val DESKTOP_REDIRECT = "http://127.0.0.1:8976/auth-callback"
 
-    const val SCHEME = "codeassist"
+    const val SCHEME = "codeprimer"
     const val HOST = "auth-callback"
 
     /**
@@ -66,7 +66,7 @@ object StoreAuth {
  * A link that opens the store, for a host that can receive one.
  *
  * The same scheme as the sign-in redirect under a different host, so the activity can tell the two apart
- * without parsing either: `codeassist://store` opens the Store tab, `codeassist://store/<item id>` opens
+ * without parsing either: `codeprimer://store` opens the Store tab, `codeprimer://store/<item id>` opens
  * that item's page. Used by the moderation page to jump from a submission into the app on the same phone,
  * and by anything else that has an item id and wants to hand it to the app.
  *
@@ -84,7 +84,7 @@ object StoreLink {
     /**
      * Whether [url] is a store link.
      *
-     * The host is matched whole rather than by prefix, so a future `codeassist://storefront` would not be
+     * The host is matched whole rather than by prefix, so a future `codeprimer://storefront` would not be
      * swallowed by this one.
      */
     fun isStoreLink(url: String?): Boolean {

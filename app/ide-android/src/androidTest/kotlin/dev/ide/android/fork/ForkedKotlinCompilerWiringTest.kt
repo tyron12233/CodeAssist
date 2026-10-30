@@ -100,7 +100,7 @@ class ForkedKotlinCompilerWiringTest {
 
     private companion object {
         const val TAG = "ForkedKotlincWiring"
-        const val APP_ID = "com.tyron.code"
+        const val APP_ID = "io.github.veelex.codeprimer"
         const val SCRATCH_KEY = "kotlin-console"
 
         /** A cold worker plus a first compile; generous so a slow device does not fail on the clock. */

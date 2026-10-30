@@ -2,13 +2,13 @@
 <resources>
     <string name="projects">Proyectos</string>
     <string name="a_new_build_system">Un nuevo sistema de compilación</string>
-    <string name="a_new_build_system_content"><![CDATA[CodeAssist se ha reconstruido con un nuevo sistema de compilación en el dispositivo. Utiliza su propia configuración de proyecto, por lo que los proyectos de versiones anteriores no son compatibles y no se abrirán automáticamente.
+    <string name="a_new_build_system_content"><![CDATA[CodePrimer se ha reconstruido con un nuevo sistema de compilación en el dispositivo. Utiliza su propia configuración de proyecto, por lo que los proyectos de versiones anteriores no son compatibles y no se abrirán automáticamente.
 
 Haga una copia de seguridad de sus proyectos en un archivo .zip ahora, sus archivos fuente permanecerán seguros y podrá volver a agregarlos a un nuevo proyecto.]]></string>
     <string name="preparing_backup">Preparando copia de seguridad…</string>
     <string name="backup_projects">Respaldar proyectos</string>
     <string name="got_it">Entendido</string>
-    <string name="help_improve_codeassist">Ayuda a mejorar CodeAssist</string>
+    <string name="help_improve_codeassist">Ayuda a mejorar CodePrimer</string>
     <string name="help_improve_codeassist_content"><![CDATA[Comparta datos de rendimiento anónimos para que podamos ver qué es lento y qué está fallando, y solucionar las cosas correctas.
 
 Recopilamos: la versión de su aplicación y el modelo de su dispositivo, cuánto tiempo toman las compilaciones, la indexación y la finalización del código, el éxito o fracaso de la compilación, los informes de fallos limpios, y cuándo se muestran o cierran los anuncios y los cambios en su configuración de anuncios.
@@ -46,7 +46,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="your_files_content">Los proyectos se almacenan en el almacenamiento de la aplicación y puedes abrirlos desde cualquier administrador de archivos, arrastrar íconos, diseños o recursos, o editarlos desde una PC. Sin permisos especiales, nada oculto.</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">Reconstruido en Jetpack Compose.</string>
-    <string name="jetpack_compose_content">Un CodeAssist más rápido y fluido, Compose nativo en todas partes, con @Preview en vivo.</string>
+    <string name="jetpack_compose_content">Un CodePrimer más rápido y fluido, Compose nativo en todas partes, con @Preview en vivo.</string>
     <string name="create_your_first_project">Crea tu primer proyecto</string>
     <string name="open_a_project">Abre un proyecto o comienza uno nuevo.</string>
     <string name="new_project">Nuevo Proyecto</string>
@@ -57,11 +57,11 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="import_by">por %1$s</string>
     <string name="import_section_contents">Contenidos</string>
     <string name="import_more">+%1$d más</string>
-    <string name="import_incompatible">Este paquete necesita una versión más reciente de CodeAssist para importarse.</string>
+    <string name="import_incompatible">Este paquete necesita una versión más reciente de CodePrimer para importarse.</string>
     <string name="import_deps_bundled">Dependencias incluidas</string>
     <string name="import_failed">No se pudo importar el paquete del proyecto.</string>
     <string name="import_unrecognized_title">No se puede importar este archivo</string>
-    <string name="import_unrecognized">CodeAssist no reconoce este archivo. Elige un paquete de proyecto .caproj o un .zip de un proyecto para importar.</string>
+    <string name="import_unrecognized">CodePrimer no reconoce este archivo. Elige un paquete de proyecto .caproj o un .zip de un proyecto para importar.</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d archivo</item>
         <item quantity="other">%1$d archivos</item>
@@ -86,7 +86,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="export_retry">Reintentar</string>
     <string name="join_the_community">Únete a la comunidad</string>
     <string name="join_the_community_content">Chatea, obtén ayuda y comparte lo que construyes en Discord.</string>
-    <string name="support_title">Apoya a CodeAssist</string>
+    <string name="support_title">Apoya a CodePrimer</string>
     <string name="support_content">Construido en mi tiempo libre y mantenido gratuito para todos. Si te ayuda, un patrocinio o una estrella significan mucho.</string>
     <string name="support_chip_free">100% gratis</string>
     <string name="support_chip_open_source">Código abierto</string>
@@ -129,7 +129,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="beta_notice">Estás en el %1$s</string>
     <string name="beta_notice_content">Algunas funciones pueden estar incompletas o cambiar. Nos encantaría recibir tus comentarios, dinos qué falta o qué está roto.</string>
     <string name="submit_suggestion">Enviar sugerencias</string>
-    <string name="your_codeassist_files">Tus archivos de CodeAssist</string>
+    <string name="your_codeassist_files">Tus archivos de CodePrimer</string>
     <string name="your_codeassist_files_content">Abre esta carpeta en cualquier administrador de archivos para examinar tus proyectos, agregar íconos o recursos, o editar desde una PC.</string>
     <string name="open_in_the_file_manager">Abrir en administrador de archivos</string>
     <string name="choose_start_point">Elige un punto de partida.</string>
@@ -569,10 +569,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- Build notifications -->
     <string name="build_notif_title">¿Mostrar notificaciones de compilación?</string>
-    <string name="build_notif_message">CodeAssist puede ejecutar las compilaciones y tu programa en un proceso separado y aislado, y mostrar una notificación de progreso mientras se ejecutan. Esto evita que Android detenga la compilación cuando cambias de app, y te permite seguir el progreso. Permite las notificaciones para activarlo.</string>
+    <string name="build_notif_message">CodePrimer puede ejecutar las compilaciones y tu programa en un proceso separado y aislado, y mostrar una notificación de progreso mientras se ejecutan. Esto evita que Android detenga la compilación cuando cambias de app, y te permite seguir el progreso. Permite las notificaciones para activarlo.</string>
     <string name="build_notif_not_now">Ahora no</string>
     <string name="build_notif_inprocess_title">Las compilaciones se ejecutarán en la app</string>
-    <string name="build_notif_inprocess_message">Sin permiso de notificaciones, las compilaciones se ejecutan dentro de CodeAssist en lugar de en un proceso separado, y no verás notificaciones de progreso de compilación. Puedes activar las notificaciones en cualquier momento en Configuración, en Entorno de compilación.</string>
+    <string name="build_notif_inprocess_message">Sin permiso de notificaciones, las compilaciones se ejecutan dentro de CodePrimer en lugar de en un proceso separado, y no verás notificaciones de progreso de compilación. Puedes activar las notificaciones en cualquier momento en Configuración, en Entorno de compilación.</string>
     <string name="build_notif_enabled">Notificaciones de compilación activadas</string>
 
     <!-- Compose preview -->

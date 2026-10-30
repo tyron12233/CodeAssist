@@ -2,13 +2,13 @@
 <resources>
     <string name="projects">项目</string>
     <string name="a_new_build_system">全新的构建系统</string>
-    <string name="a_new_build_system_content"><![CDATA[CodeAssist 已基于全新端内构建系统重构。新版本采用独立的项目配置，因此旧版本工程不兼容，无法打开。
+    <string name="a_new_build_system_content"><![CDATA[CodePrimer 已基于全新端内构建系统重构。新版本采用独立的项目配置，因此旧版本工程不兼容，无法打开。
 
 请立即将工程备份为.zip压缩包，保障项目文件安全，后续可在新项目内重新导入。]]></string>
     <string name="preparing_backup">准备备份…</string>
     <string name="backup_projects">备份工程项目</string>
     <string name="got_it">知道了</string>
-    <string name="help_improve_codeassist">帮助我们改进 CodeAssist</string>
+    <string name="help_improve_codeassist">帮助我们改进 CodePrimer</string>
     <string name="help_improve_codeassist_content"><![CDATA[共享匿名性能运行数据，帮助我们定位卡顿、崩溃问题并针对性修复。
 
 我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况、已清理的崩溃报告，以及广告的展示与关闭情况和您的广告设置变更。
@@ -46,7 +46,7 @@
     <string name="your_files_content">项目文件存储于应用独立目录，任意文件管理器均可查看、编辑，也可复制至电脑修改；无需额外权限，无任何隐藏文件</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">基于 Jetpack Compose 全新重构</string>
-    <string name="jetpack_compose_content">CodeAssist 运行更快、操作更流畅，全界面原生搭载 Jetpack Compose，支持 @Preview 实时预览。</string>
+    <string name="jetpack_compose_content">CodePrimer 运行更快、操作更流畅，全界面原生搭载 Jetpack Compose，支持 @Preview 实时预览。</string>
     <string name="create_your_first_project">创建你的第一个项目</string>
     <string name="open_a_project">打开现有项目或创建一个新的项目</string>
     <string name="new_project">新建项目</string>
@@ -58,11 +58,11 @@
     <string name="import_by">作者：%1$s</string>
     <string name="import_section_contents">内容</string>
     <string name="import_more">还有 %1$d 项</string>
-    <string name="import_incompatible">导入该项目工程包需要更高版本的CodeAssist！</string>
+    <string name="import_incompatible">导入该项目工程包需要更高版本的CodePrimer！</string>
     <string name="import_deps_bundled">已内置依赖库</string>
     <string name="import_failed">无法导入该项目工程包！</string>
     <string name="import_unrecognized_title">该文件导入失败!</string>
-    <string name="import_unrecognized">CodeAssist 无法识别此文件！请选择 .caproj 项目工程包或项目的 .zip 压缩包进行导入。</string>
+    <string name="import_unrecognized">CodePrimer 无法识别此文件！请选择 .caproj 项目工程包或项目的 .zip 压缩包进行导入。</string>
     <string name="import_as_title">导入为</string>
     <string name="import_as_hint">项目名称</string>
     <string name="import_destination">导入到 %1$s</string>
@@ -79,20 +79,20 @@
     <string name="import_source_title">导入项目</string>
     <string name="import_source_message">项目在哪里？</string>
     <string name="import_source_folder">项目文件夹</string>
-    <string name="import_source_folder_desc">CodeAssist 项目或现有的 Gradle 构建</string>
+    <string name="import_source_folder_desc">CodePrimer 项目或现有的 Gradle 构建</string>
     <string name="import_source_package">项目文件</string>
-    <string name="import_source_package_desc">项目或 Gradle 构建的 .zip 压缩包，或从 CodeAssist 共享的 .caproj 文件</string>
-    <string name="import_archive_codeassist">CodeAssist 项目</string>
+    <string name="import_source_package_desc">项目或 Gradle 构建的 .zip 压缩包，或从 CodePrimer 共享的 .caproj 文件</string>
+    <string name="import_archive_codeassist">CodePrimer 项目</string>
     <string name="import_archive_gradle">Gradle 构建</string>
     <string name="import_archive_choose_message">此 zip 文件包含多个项目。要导入哪一个？</string>
     <string name="import_archive_choose_title">选择项目</string>
-    <string name="import_archive_empty">该 zip 文件中未找到 CodeAssist 项目或 Gradle 构建。</string>
+    <string name="import_archive_empty">该 zip 文件中未找到 CodePrimer 项目或 Gradle 构建。</string>
     <string name="import_gradle_mode_title">导入 Gradle 项目</string>
-    <string name="import_gradle_mode_message">CodeAssist 应该如何打开此项目？</string>
+    <string name="import_gradle_mode_message">CodePrimer 应该如何打开此项目？</string>
     <string name="import_gradle_mode_compat">兼容模式</string>
     <string name="import_gradle_mode_compat_desc">保留 Gradle 文件并从中重新同步。你可以稍后转换。</string>
-    <string name="import_gradle_mode_convert">转换为 CodeAssist</string>
-    <string name="import_gradle_mode_convert_desc">切换到 CodeAssist 的模块系统。Gradle 文件会移动到备份文件夹。</string>
+    <string name="import_gradle_mode_convert">转换为 CodePrimer</string>
+    <string name="import_gradle_mode_convert_desc">切换到 CodePrimer 的模块系统。Gradle 文件会移动到备份文件夹。</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d 个文件</item>
         <item quantity="other">%1$d 个文件</item>
@@ -129,8 +129,8 @@
     <string name="export_screenshot_unreadable">无法预览此图片</string>
     <string name="export_intro_gradle">将此项目导出为 Gradle 构建，以便在 Android Studio 中打开或使用 gradle 构建。</string>
     <string name="export_format_title">格式</string>
-    <string name="export_format_package">CodeAssist 包</string>
-    <string name="export_format_package_desc">一个 .caproj 文件，任何 CodeAssist 用户都可以原样导入。</string>
+    <string name="export_format_package">CodePrimer 包</string>
+    <string name="export_format_package_desc">一个 .caproj 文件，任何 CodePrimer 用户都可以原样导入。</string>
     <string name="export_format_gradle">Gradle 项目</string>
     <string name="export_format_gradle_desc">一个 .zip 文件，包含你的源代码和生成的 Gradle 构建文件，适用于 Android Studio 或 gradle 构建。</string>
     <string name="export_gradle_title">生成的内容</string>
@@ -146,7 +146,7 @@
     <string name="share_type_java_lib">Java 库</string>
     <string name="join_the_community">加入交流社区</string>
     <string name="join_the_community_content">可在Discord内交流、寻求帮助、分享你开发的项目</string>
-    <string name="support_title">支持 CodeAssist</string>
+    <string name="support_title">支持 CodePrimer</string>
     <string name="support_content">本项目由我业余独立开发的，坚持免费开源。如果它帮助到了你，赞助或收藏项目仓库便是极大的鼓励支持</string>
     <string name="support_chip_free">100% 免费</string>
     <string name="support_chip_open_source">开源</string>
@@ -213,7 +213,7 @@
     <string name="beta_notice">您当前使用的是 %1$s 版本</string>
     <string name="beta_notice_content">部分功能尚未完善，后续可能调整。欢迎反馈问题，告诉我们缺失或异常的功能。</string>
     <string name="submit_suggestion">提交建议</string>
-    <string name="your_codeassist_files">你的 CodeAssist 文件</string>
+    <string name="your_codeassist_files">你的 CodePrimer 文件</string>
     <string name="your_codeassist_files_content">可使用文件管理器打开该目录管理项目（存放在Projects目录的旧版项目也包含在内），可添加图标、资源文件，或在电脑端编辑文件。</string>
     <string name="open_in_the_file_manager">在文件管理器中打开</string>
     <string name="choose_start_point">选择起始位置</string>
@@ -540,12 +540,12 @@
     <string name="gradle_sync_needed">自上次同步以来构建文件已更改。重新同步以更新项目。</string>
     <string name="gradle_syncing">正在从 Gradle 同步…</string>
     <string name="gradle_convert">转换</string>
-    <string name="gradle_convert_title">转换为 CodeAssist 项目？</string>
-    <string name="gradle_convert_body">Gradle 构建文件将移动到备份文件夹，由 CodeAssist 的模块系统接管。之后将无法从 Gradle 重新同步。你可以撤销此操作。</string>
+    <string name="gradle_convert_title">转换为 CodePrimer 项目？</string>
+    <string name="gradle_convert_body">Gradle 构建文件将移动到备份文件夹，由 CodePrimer 的模块系统接管。之后将无法从 Gradle 重新同步。你可以撤销此操作。</string>
     <string name="gradle_convert_notes_intro">导入器尽力读取了以下内容 — 转换后不会重新检查：</string>
     <string name="gradle_convert_action">转换</string>
     <string name="gradle_convert_working">正在转换…</string>
-    <string name="gradle_converted">已转换为 CodeAssist 项目。</string>
+    <string name="gradle_converted">已转换为 CodePrimer 项目。</string>
     <string name="gradle_convert_failed">无法转换此项目。</string>
     <string name="gradle_convert_undo">撤销</string>
     <string name="gradle_convert_done">完成</string>
@@ -615,7 +615,7 @@
     <string name="home_open_in_files">在文件管理中打开存储</string>
     <string name="home_backup">备份项目</string>
     <string name="home_star_github">去 GitHub 加星</string>
-    <string name="home_sponsor">赞助 CodeAssist</string>
+    <string name="home_sponsor">赞助 CodePrimer</string>
     <string name="home_feedback">发送反馈</string>
     <string name="home_legacy_recovery">旧版本的项目可以恢复。</string>
     <string name="store_title">发现</string>
@@ -719,7 +719,7 @@
     <string name="submit_field_changelog">变更内容</string>
     <string name="submit_required_version">版本号请使用三段数字，如 1.2.0。</string>
     <string name="submit_required_screenshot">请至少添加一张截图。这是别人在安装之前最先看的东西。</string>
-    <string name="submit_screenshots_unavailable">新作品至少需要一张截图，但这里无法选择图片。请在 Android 或桌面版 CodeAssist 中提交。</string>
+    <string name="submit_screenshots_unavailable">新作品至少需要一张截图，但这里无法选择图片。请在 Android 或桌面版 CodePrimer 中提交。</string>
     <string name="submit_mine_title">你的提交</string>
     <string name="submit_withdraw">撤回</string>
     <string name="submit_unavailable">此构建版本不支持发布。</string>
@@ -830,7 +830,7 @@
     <string name="reviews_helpful_count">有帮助（%1$d）</string>
     <string name="reviews_count">%1$d 条评价</string>
     <string name="reviews_count_one">1 条评价</string>
-    <string name="reviews_reader">一位 CodeAssist 用户</string>
+    <string name="reviews_reader">一位 CodePrimer 用户</string>
     <string name="reviews_reply">发布者已回复</string>
     <string name="reviews_on_version">于 v%1$s</string>
     <string name="reviews_delete">删除</string>
@@ -1037,10 +1037,10 @@
     <string name="unsaved_close_dont_ask_hint">可在 设置 ▸ 编辑器 中更改。</string>
     <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">显示构建通知？</string>
-    <string name="build_notif_message">CodeAssist 可以在独立的隔离进程中运行构建和程序，并在运行期间显示进度通知。这能避免你切换应用时 Android 中止构建，也方便你跟踪进度。允许通知即可启用此功能。</string>
+    <string name="build_notif_message">CodePrimer 可以在独立的隔离进程中运行构建和程序，并在运行期间显示进度通知。这能避免你切换应用时 Android 中止构建，也方便你跟踪进度。允许通知即可启用此功能。</string>
     <string name="build_notif_not_now">暂不</string>
     <string name="build_notif_inprocess_title">构建将在应用内运行</string>
-    <string name="build_notif_inprocess_message">未授予通知权限时，构建会在 CodeAssist 内部运行，而不是使用独立进程，你也不会收到构建进度通知。可随时在“设置”的“构建运行时”中开启通知。</string>
+    <string name="build_notif_inprocess_message">未授予通知权限时，构建会在 CodePrimer 内部运行，而不是使用独立进程，你也不会收到构建进度通知。可随时在“设置”的“构建运行时”中开启通知。</string>
     <string name="build_notif_enabled">已启用构建通知</string>
     <string name="preview_live">实时</string>
     <string name="preview_paused">已暂停</string>
@@ -1304,7 +1304,7 @@
     <string name="plugins_requires">需要 %1$s</string>
     <string name="plugins_tab_builtin">内置</string>
     <string name="plugins_tab_installed">已安装</string>
-    <string name="plugins_installed_empty">还没有安装任何插件。从应用商店安装的 CodeAssist 插件会显示在这里。</string>
+    <string name="plugins_installed_empty">还没有安装任何插件。从应用商店安装的 CodePrimer 插件会显示在这里。</string>
     <string name="plugins_failed">加载失败：%1$s</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
@@ -2045,7 +2045,7 @@
     <string name="store_status_submitted">审核中 · 通常 2 个工作日</string>
     <string name="store_step_listing_body">标题、一句话简介、分类和截图——直接取自应用内的编辑器。</string>
     <string name="store_step_listing_title">填写列表信息</string>
-    <string name="store_step_pick_body">选择任意本地项目，CodeAssist 会替你读取名称、语言、JDK 和 Gradle 配置——无需手写任何内容。</string>
+    <string name="store_step_pick_body">选择任意本地项目，CodePrimer 会替你读取名称、语言、JDK 和 Gradle 配置——无需手写任何内容。</string>
     <string name="store_step_pick_title">从“项目”页选择一个项目</string>
     <string name="store_step_submit_body">我们会在干净的机器上构建，并由真人检查许可协议与 README。通常两个工作日。</string>
     <string name="store_step_submit_title">提交审核</string>
