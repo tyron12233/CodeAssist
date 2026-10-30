@@ -14,6 +14,7 @@ import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.ShrinkRequest
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.android.support.tools.ToolResult
 import dev.ide.android.support.viewbinding.LayoutBindingModel
 import dev.ide.android.support.viewbinding.ViewBindingJavaSource
 import dev.ide.build.BuildDiagnostic
@@ -47,6 +48,7 @@ import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
@@ -95,11 +97,16 @@ internal class MergeResourcesTask(
     private val outDir: Path,
 ) : Task {
     override val inputs: TaskInputs get() = TaskInputsImpl().apply { dirPaths("res", resDirs) }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("merged", outDir) }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
+        dirPath("merged", outDir)
+        filePath("map", ResourceMergeMap.fileFor(outDir))
+    }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        mergeResourceDirs(resDirs, outDir)
+        // Kept beside the merged dir (never inside it, where aapt2 would compile it) for the aapt2 steps, which
+        // report an error in a merged file against the user's own file instead.
+        mergeResourceDirs(resDirs, outDir).save(ResourceMergeMap.fileFor(outDir))
         ctx.debug("mergeResources -> ${outDir.fileName}")
         return TaskResult.Success
     }
@@ -170,6 +177,29 @@ internal class ResourceMergeMap(copies: Map<Path, Path>, values: Map<Path, List<
     private val copies = copies.mapKeys { norm(it.key) }
     private val values = values.mapKeys { norm(it.key) }
 
+    /** Write this map to [file], one tab-separated line per copy or values entry, for [load]. */
+    fun save(file: Path) {
+        file.parent?.let { Files.createDirectories(it) }
+        val lines = copies.map { (merged, source) -> "c\t$merged\t$source" } +
+            values.flatMap { (merged, entries) ->
+                entries.map { "v\t$merged\t${it.startLine}\t${it.endLine}\t${it.tag}\t${it.name}\t${it.source}" }
+            }
+        Files.write(file, lines)
+    }
+
+    /**
+     * [log] with every aapt2 line that names a merged file (`<path>[:line]: error|warning: …`) rewritten to name
+     * the user's file and line behind it, so the Problems list opens the file to fix, not the merge's copy of it.
+     * Any other line is left as it is.
+     */
+    fun remap(log: List<String>): List<String> = log.map { raw ->
+        val m = LOCATED.matchEntire(raw.trim()) ?: return@map raw
+        val merged = runCatching { Paths.get(m.groupValues[1]) }.getOrNull() ?: return@map raw
+        val line = m.groupValues[2].toIntOrNull()
+        val (source, sourceLine) = sourceOf(merged, line) ?: return@map raw
+        "$source${sourceLine?.let { ":$it" } ?: ""}: ${m.groupValues[3]}"
+    }
+
     private fun norm(p: Path): Path = p.toAbsolutePath().normalize()
 
     /** The user's file and 1-based line behind [line] of the merged file [merged], or null when [merged] is
@@ -184,6 +214,35 @@ internal class ResourceMergeMap(copies: Map<Path, Path>, values: Map<Path, List<
             ?: return entry.source to null
         val declLine = 1 + text.substring(0, decl.range.first).count { it == '\n' }
         return entry.source to declLine + (line - entry.startLine)
+    }
+
+    companion object {
+        private val LOCATED = Regex("""^(.+?)(?::(\d+))?: ((?:error|warn(?:ing)?): .+)$""", RegexOption.IGNORE_CASE)
+
+        /** Where [MergeResourcesTask] keeps the map of the merge into [mergedDir]. */
+        fun fileFor(mergedDir: Path): Path = mergedDir.resolveSibling("${mergedDir.fileName}.map")
+
+        /** The map [save]d to [file], or null when there is none (or it can't be read). */
+        fun load(file: Path): ResourceMergeMap? {
+            if (!Files.isRegularFile(file)) return null
+            val copies = HashMap<Path, Path>()
+            val values = HashMap<Path, MutableList<MergedValuesEntry>>()
+            runCatching {
+                for (line in Files.readAllLines(file)) {
+                    val f = line.split('\t')
+                    when {
+                        f.size == 3 && f[0] == "c" -> copies[Paths.get(f[1])] = Paths.get(f[2])
+                        f.size == 7 && f[0] == "v" -> values.getOrPut(Paths.get(f[1])) { ArrayList() }
+                            .add(MergedValuesEntry(f[2].toInt(), f[3].toInt(), f[4], f[5], Paths.get(f[6])))
+                    }
+                }
+            }.onFailure { return null }
+            return ResourceMergeMap(copies, values)
+        }
+
+        /** [result] with its log [remap]ped through the merge maps of [mergedDirs], if any were saved. */
+        fun remapped(result: ToolResult, mergedDirs: List<Path>): ToolResult =
+            mergedDirs.mapNotNull { load(fileFor(it)) }.fold(result) { r, map -> r.copy(log = map.remap(r.log)) }
     }
 }
 
@@ -518,7 +577,7 @@ internal class Aapt2CompileTask(
         ctx.checkCanceled()
         Files.createDirectories(outDir)
         val r = aapt2.compile(resDirs, outDir)
-        ctx.reportTool("aapt2", r.result, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", ResourceMergeMap.remapped(r.result, resDirs), DiagnosticKind.RESOURCE)
         return if (r.result.success) TaskResult.Success else TaskResult.Failed("aapt2 compile failed")
     }
 }
@@ -542,6 +601,8 @@ internal class Aapt2LinkTask(
     private val proguardRules: Path? = null,
     /** When true, link to proto resources (the input form R8's resource shrinker reads). */
     private val protoFormat: Boolean = false,
+    /** The merged res dir [compiledDir] was compiled from, so an error in it names the user's file instead. */
+    private val mergedRes: Path? = null,
 ) : Task {
     private fun archives(): List<Path> =
         if (Files.isDirectory(compiledDir)) Files.list(compiledDir).use { s ->
@@ -587,7 +648,7 @@ internal class Aapt2LinkTask(
             proguardRules = proguardRules,
             protoFormat = protoFormat,
         )
-        ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", ResourceMergeMap.remapped(r, listOfNotNull(mergedRes)), DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
 }

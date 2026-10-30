@@ -588,6 +588,7 @@ class AndroidBuildSystem(
                 aapt2,
                 proguardRules = if (minify) layout.aaptProguardRules else null,
                 protoFormat = protoResources,
+                mergedRes = layout.mergedRes,
             )
         }
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
@@ -1022,7 +1023,7 @@ class AndroidBuildSystem(
                 Aapt2LinkTask(
                     linkTest, testRoot.resolve("compiled-res"), mergedTestManifest, androidJar, testNamespace,
                     testLibs.aarPackages, facet.minSdk, facet.targetSdk, versionCode, versionName,
-                    testRoot.resolve("gen"), testAp, aapt2,
+                    testRoot.resolve("gen"), testAp, aapt2, mergedRes = testRoot.resolve("merged-res"),
                 )
             }
             val testRJar = testRoot.resolve("R.jar")
