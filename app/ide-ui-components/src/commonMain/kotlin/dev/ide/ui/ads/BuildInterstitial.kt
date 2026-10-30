@@ -53,6 +53,26 @@ internal const val FREE_LONG_BUILDS = 3
 /** How long the IDE must sit idle (no build running) before the next interstitial is loaded. */
 private const val IDLE_PRELOAD_DELAY_MS = 15_000L
 
+/**
+ * Further load attempts while the IDE stays idle, as gaps after the previous one. A repeat while an ad is loaded
+ * or loading is a no-op in the host, so these only re-request after a failed (often no-fill) or expired load.
+ */
+private val IDLE_PRELOAD_RETRY_MS = listOf(60_000L, 2 * 60_000L, 4 * 60_000L)
+
+/**
+ * Loads the next interstitial while the IDE sits idle: after [firstDelayMs], then again after each of
+ * [IDLE_PRELOAD_RETRY_MS] in case the load failed, until [active] turns false. The caller runs it under
+ * [collectLatest], so a build starting cancels it.
+ */
+internal suspend fun preloadWhileIdle(firstDelayMs: Long, active: () -> Boolean, preload: () -> Unit) {
+    delay(firstDelayMs)
+    for (gap in listOf(0L) + IDLE_PRELOAD_RETRY_MS) {
+        delay(gap)
+        if (!active()) return
+        preload()
+    }
+}
+
 /** How long the "build finished while the ad was open" notice stays up. */
 private const val RESULT_NOTICE_MS = 4_000L
 
@@ -109,10 +129,10 @@ class BuildAdPacing(
 
 /**
  * Drives the occasional full-screen interstitial shown over a LONG build (Android only; inert on desktop and
- * whenever ads or full-screen ads are turned off). The ad is loaded while the IDE sits idle between builds, never
- * while one runs. When a build is still running [LONG_BUILD_THRESHOLD_MS] after it started and [BuildAdPacing]
- * allows it, the ad shows; a build that finishes first cancels the timer (via [collectLatest]), so quick
- * compiles never see one.
+ * whenever ads or full-screen ads are turned off). The ad is loaded at launch and while the IDE sits idle between
+ * builds (retrying a failed load while it stays idle), never while one runs. When a build is still running
+ * [LONG_BUILD_THRESHOLD_MS] after it started and [BuildAdPacing] allows it, the ad shows; a build that finishes
+ * first cancels the timer (via [collectLatest]), so quick compiles never see one.
  *
  * It also watches every interstitial close (lesson ones too) to record it, and when a build finished behind the
  * ad, briefly shows that build's result so it isn't missed.
@@ -129,17 +149,23 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
     var finishedBehindAd by remember { mutableStateOf<RunStatus?>(null) }
 
     LaunchedEffect(backend, ads) {
+        // At launch there is no build to wait out, and the host holds loads until it has started anyway.
+        var idleWait = 0L
         backend.build.buildState
             .map { it.status }
             .distinctUntilChanged()
             .collectLatest { status ->
+                val wait = idleWait
+                idleWait = IDLE_PRELOAD_DELAY_MS
                 if (status != RunStatus.Running) {
                     if (status == RunStatus.Failed) pacing.lastBuildFailed = true
                     if (status == RunStatus.Succeeded) pacing.lastBuildFailed = false
                     // Idle: load the next ad now, so its WebView never starts up next to a running build.
-                    if (!ads.interstitialsActive || !pacing.mayShowLater(ads.host.lowMemoryDevice)) return@collectLatest
-                    delay(IDLE_PRELOAD_DELAY_MS)
-                    ads.host.preloadInterstitial()
+                    preloadWhileIdle(
+                        firstDelayMs = wait,
+                        active = { ads.interstitialsActive && pacing.mayShowLater(ads.host.lowMemoryDevice) },
+                        preload = ads.host::preloadInterstitial,
+                    )
                     return@collectLatest
                 }
                 if (!ads.interstitialsActive) return@collectLatest
@@ -148,11 +174,14 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
                 // status leaves Running (finished / failed / stopped), so a short build never gets here.
                 if (!ads.interstitialsActive) return@collectLatest
                 val reason = pacing.skipReason(ads.host.lowMemoryDevice)
-                when {
-                    reason != null -> ads.interstitialSkipped(reason)
-                    ads.showInterstitial("build") -> pacing.shown()
-                    else -> ads.interstitialSkipped("not_ready")
+                if (reason != null) {
+                    ads.interstitialSkipped(reason)
+                    return@collectLatest
                 }
+                // Read before the show, which clears a ready ad: on a miss, it says whether one was loading,
+                // failed to fill, or was never asked for.
+                val state = ads.host.interstitialState
+                if (ads.showInterstitial("build")) pacing.shown() else ads.interstitialSkipped("not_ready", state)
             }
     }
 

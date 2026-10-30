@@ -101,6 +101,8 @@ class AndroidAdHost(
     @Volatile private var interstitial: InterstitialAd? = null
     @Volatile private var interstitialLoadedAt = 0L
     @Volatile private var loadingInterstitial = false
+    // Why the last load failed (`failed_<code>`), until the next one starts; reported by [interstitialState].
+    @Volatile private var interstitialFailure: String? = null
     // A preload asked for before [start]: carried out by [start].
     private var preloadWanted = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -124,6 +126,7 @@ class AndroidAdHost(
             if (!webViewAvailable || interstitial != null || loadingInterstitial) return@post
             val ctx = activityProvider()?.applicationContext ?: return@post
             loadingInterstitial = true
+            interstitialFailure = null
             runCatching {
                 InterstitialAd.load(
                     ctx,
@@ -143,6 +146,7 @@ class AndroidAdHost(
 
                         override fun onAdFailedToLoad(error: LoadAdError) {
                             loadingInterstitial = false
+                            interstitialFailure = "failed_${error.code}"
                             // Code 3 is NO_FILL (expected for a while on a fresh real unit); other codes point at
                             // a config/network problem. Never crash — we just don't show one this time.
                             adLog.warn(
@@ -154,10 +158,21 @@ class AndroidAdHost(
                 )
             }.onFailure { e ->
                 loadingInterstitial = false
+                interstitialFailure = "failed_sdk"
                 adLog.warn("build interstitial load skipped (no WebView / SDK unavailable): ${e.message}")
             }
         }
     }
+
+    override val interstitialState: String
+        get() = when {
+            !started -> "not_started"
+            !webViewAvailable -> "no_webview"
+            interstitial != null ->
+                if (SystemClock.elapsedRealtime() - interstitialLoadedAt > INTERSTITIAL_MAX_AGE_MS) "expired" else "ready"
+            loadingInterstitial -> "loading"
+            else -> interstitialFailure ?: "not_requested"
+        }
 
     override fun showInterstitial(): Boolean {
         // Callers invoke on the Main dispatcher, and AdMob requires show() on the main thread. If somehow

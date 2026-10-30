@@ -112,6 +112,13 @@ interface AdHost {
     val interstitialShowing: Boolean get() = false
 
     /**
+     * Where the interstitial stands, as a short word for analytics when a show finds none ready: `ready`,
+     * `loading`, `failed_<code>` (the last load failed; 3 is no fill), `expired`, `not_requested`,
+     * `not_started` or `no_webview`. `none` where unsupported (desktop; the default).
+     */
+    val interstitialState: String get() = "none"
+
+    /**
      * Whether the device is short of memory. Full-screen ads skip builds here: the ad's WebView next to an
      * on-device build makes the system more likely to kill one of them. False by default.
      */

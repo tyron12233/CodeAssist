@@ -5,6 +5,11 @@ import androidx.compose.ui.Modifier
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,6 +76,48 @@ class BuildAdPacingTest {
     }
 }
 
+/** When the next interstitial is loaded while the IDE sits idle (see [preloadWhileIdle]). */
+@OptIn(ExperimentalCoroutinesApi::class)
+class IdlePreloadTest {
+
+    @Test
+    fun loadsAfterTheIdleDelayThenRetriesWithBackoff() = runTest {
+        var loads = 0
+        launch { preloadWhileIdle(firstDelayMs = 15_000, active = { true }, preload = { loads++ }) }
+        advanceTimeBy(14_999); runCurrent()
+        assertEquals(0, loads)
+        advanceTimeBy(1); runCurrent()
+        assertEquals(1, loads)
+        advanceTimeBy(60_000); runCurrent()
+        assertEquals(2, loads)
+        advanceTimeBy(2 * 60_000); runCurrent()
+        assertEquals(3, loads)
+        advanceTimeBy(4 * 60_000); runCurrent()
+        assertEquals(4, loads)
+        advanceTimeBy(60 * 60_000); runCurrent()
+        assertEquals(4, loads)
+    }
+
+    @Test
+    fun atLaunchItLoadsAtOnce() = runTest {
+        var loads = 0
+        launch { preloadWhileIdle(firstDelayMs = 0, active = { true }, preload = { loads++ }) }
+        runCurrent()
+        assertEquals(1, loads)
+    }
+
+    @Test
+    fun stopsOnceAdsCanNoLongerShow() = runTest {
+        var loads = 0
+        var active = true
+        launch { preloadWhileIdle(firstDelayMs = 0, active = { active }, preload = { loads++ }) }
+        runCurrent()
+        active = false
+        advanceTimeBy(10 * 60_000); runCurrent()
+        assertEquals(1, loads)
+    }
+}
+
 /** A backend that records analytics events and keeps preferences in a map. */
 private class TrackingBackend : StubBackend() {
     val prefs = mutableMapOf<String, String>()
@@ -115,6 +162,21 @@ class AdControllerEventsTest {
         assertFalse(ads.showInterstitial("lesson"))
         ads.interstitialClosed()
         assertTrue(backend.events.isEmpty())
+    }
+
+    @Test
+    fun aSkipCarriesTheHostStateOnlyWhenGiven() {
+        val backend = TrackingBackend()
+        val ads = AdController(backend, ReadyAdHost("build-1"))
+        ads.interstitialSkipped("cooldown")
+        ads.interstitialSkipped("not_ready", "failed_3")
+        assertEquals(
+            listOf(
+                mapOf("trigger" to "build", "reason" to "cooldown"),
+                mapOf("trigger" to "build", "reason" to "not_ready", "state" to "failed_3"),
+            ),
+            backend.events.map { it.second },
+        )
     }
 
     @Test
