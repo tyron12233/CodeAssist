@@ -58,7 +58,7 @@ internal class DiagnosticsBackend(private val ctx: BackendContext) : Diagnostics
 
     /** Render log records as a plain-text dump (one record per block, stack traces inline) for export/copy. */
     private fun renderLogs(records: List<LogRecord>): String = buildString {
-        append("CodeAssist log — ${records.size} records\n")
+        append("CodePrimer log — ${records.size} records\n")
         append("exported ${runCatching { java.time.LocalDateTime.now().withNano(0) }.getOrDefault("")}\n\n")
         for (r in records) {
             val time = runCatching { java.time.Instant.ofEpochMilli(r.timestampMs).toString() }.getOrDefault(r.timestampMs.toString())

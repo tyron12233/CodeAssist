@@ -13,7 +13,10 @@ Base: upstream `main` at commit `ee24e06` (2026-10-29).
 **Identity, so it installs next to the official app**
 - `applicationId` is `io.github.veelex.codeprimer` (was `com.tyron.code`). The Kotlin source package
   (`dev.ide.android`) is unchanged.
-- Launcher name and user-visible text (all locales) say "CodePrimer".
+- Launcher name and user-visible text (all locales, including the agent and VCS screens) say "CodePrimer".
+  That covers the strings hardcoded in Kotlin too: the splash screen, home header, build notifications, the
+  Files-app root, toasts, import/convert messages, the first Learn lesson, and the `createdBy` stamp on exported
+  `.caproj` packages.
 - Deep-link scheme is `codeprimer://` (was `codeassist://`), so the two apps do not compete for the same
   links. Changed in the manifest, `StoreAuth`, and the tests that assert it.
 - Desktop bundle ID is `io.github.veelex.codeprimer.desktop`.
@@ -30,8 +33,10 @@ Base: upstream `main` at commit `ee24e06` (2026-10-29).
 - `PRIVACY.md` is rewritten for this build.
 
 **Left as upstream on purpose**
-- Internal names (`CodeAssistApp`, packages under `dev.ide.*`, `.caproj`, the plugin SPI), so upstream changes
-  stay easy to merge and CodeAssist plugins keep working.
+- Internal names (`CodeAssistApp`, packages under `dev.ide.*`, `.caproj`, the plugin SPI, the `codeassist`
+  color-scheme id), so upstream changes stay easy to merge and CodeAssist plugins keep working.
+- Plugin templates and the `samples/` plugins still say "CodeAssist", because plugins are built for the CodeAssist
+  plugin API. The CLI, the MCP server and the desktop launcher's own text are also unchanged.
 - Copyright headers.
 - The "Join Discord" link still opens the upstream community invite.
 

@@ -170,7 +170,7 @@ class IosBackend(
         preferences = preferences,
         adopt = { dir ->
             if (!IosFiles.isDirectory(dir)) {
-                "That download isn't a project CodeAssist can open"
+                "That download isn't a project CodePrimer can open"
             } else {
                 // Nothing else to do: [projects] lists the directories under the root, so an unpacked
                 // archive is a project the moment it lands. The picker just has to be told to look again.

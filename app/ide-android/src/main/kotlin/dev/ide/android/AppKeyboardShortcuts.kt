@@ -20,7 +20,7 @@ internal object AppKeyboardShortcuts {
         return rows.groupBy({ it.first }) { (_, title, actionId) ->
             KeymapHost.shortcutSpec(actionId)?.let { info(title, it) }
         }.mapNotNull { (group, infos) ->
-            infos.filterNotNull().takeIf { it.isNotEmpty() }?.let { KeyboardShortcutGroup("CodeAssist: $group", it) }
+            infos.filterNotNull().takeIf { it.isNotEmpty() }?.let { KeyboardShortcutGroup("CodePrimer: $group", it) }
         }
     }
 

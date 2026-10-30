@@ -32,7 +32,7 @@ internal object KmpTemplateSupport {
             key = GRADLE,
             label = "Gradle build files",
             default = true,
-            help = "On: a Gradle project that also opens in Android Studio or Fleet. Off: a CodeAssist project " +
+            help = "On: a Gradle project that also opens in Android Studio or Fleet. Off: a CodePrimer project " +
                 "(module.toml) with both targets recorded, switchable between Android and desktop here.",
         ),
         TemplateParameter.Toggle(
@@ -40,7 +40,7 @@ internal object KmpTemplateSupport {
             label = "Include iOS",
             default = false,
             help = "Adds the iOS targets and an iosMain source set, to build with Xcode on a Mac. " +
-                "CodeAssist builds the Android and desktop targets.",
+                "CodePrimer builds the Android and desktop targets.",
         ),
     )
 

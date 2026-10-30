@@ -1040,7 +1040,7 @@ object GradleImport {
         notes: MutableList<String>,
     ) {
         for (what in plugins.mapNotNull { UNRUN_CODEGEN_PLUGINS[it] }.distinct()) {
-            notes.add("$module: uses $what, which CodeAssist does not generate. Code that refers to it will not compile here.")
+            notes.add("$module: uses $what, which CodePrimer does not generate. Code that refers to it will not compile here.")
         }
         // KSP processors, in the two spellings scripts use: `kspAndroid(libs.x)` / `ksp("g:a:v")`, and the
         // multi-target `with(libs.x) { add("kspAndroid", this) }`.
@@ -1053,7 +1053,7 @@ object GradleImport {
             val coordinate = if (ref.startsWith("libs.")) catalog.library(ref.removePrefix("libs."))?.coordinate else ref.trim('"', '\'')
             val group = coordinate?.substringBefore(':') ?: continue
             if (group !in BUNDLED_KSP_GROUPS) notes.add(
-                "$module: the KSP processor ${coordinate.substringBeforeLast(':')} is not bundled with CodeAssist, so the " +
+                "$module: the KSP processor ${coordinate.substringBeforeLast(':')} is not bundled with CodePrimer, so the " +
                     "code it generates will not exist here. Room, Moshi, Hilt and Glide are."
             )
         }
@@ -1478,7 +1478,7 @@ object GradleImport {
             return ConvertOutcome(false, "Conversion failed and was rolled back: ${e.message ?: e.javaClass.simpleName}")
         }
         ExternalProjectMarker.clear(root)
-        return ConvertOutcome(true, "Converted to a CodeAssist project.", canRevert = moved.isNotEmpty())
+        return ConvertOutcome(true, "Converted to a CodePrimer project.", canRevert = moved.isNotEmpty())
     }
 
     /** Restore a converted project: move the backed-up Gradle files back and re-enter compatibility mode. */

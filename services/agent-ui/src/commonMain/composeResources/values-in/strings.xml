@@ -39,7 +39,7 @@
     <string name="chat_usage_cached">tersimpan</string>
     <string name="chat_antigravity_warning">Eksperimental. Menggunakan akun Google melalui endpoint Antigravity, yang melanggar Persyaratan Layanan Google dan pernah menyebabkan akun diblokir. Tempel token refresh atau akses OAuth (opsional sebagai token|projectId).</string>
     <string name="chat_antigravity_signin">Masuk dengan Google</string>
-    <string name="chat_antigravity_waiting">Menunggu browser — setujui akses, lalu kembali ke CodeAssist</string>
+    <string name="chat_antigravity_waiting">Menunggu browser — setujui akses, lalu kembali ke CodePrimer</string>
     <string name="chat_cancel">Batal</string>
     <string name="chat_attach">Lampirkan</string>
     <string name="chat_attach_image">Gambar</string>

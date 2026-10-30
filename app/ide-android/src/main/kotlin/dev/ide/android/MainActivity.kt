@@ -328,7 +328,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 error != null -> Splash("Failed to start: $error")
-                else -> Splash("Starting CodeAssist…")
+                else -> Splash("Starting CodePrimer…")
             }
         }
     }

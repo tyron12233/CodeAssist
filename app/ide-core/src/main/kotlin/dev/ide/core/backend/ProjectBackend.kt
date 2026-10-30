@@ -340,7 +340,7 @@ internal class ProjectBackend(
         return withContext(Dispatchers.IO) {
             runCatching {
                 val next = mgr.importProjectFolder(Paths.get(sourceRootPath))
-                    ?: return@runCatching UiProjectResult(false, "That folder isn't a CodeAssist or Gradle project.")
+                    ?: return@runCatching UiProjectResult(false, "That folder isn't a CodePrimer or Gradle project.")
                 ctx.swapEngine(next)
                 UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
             }.getOrElse { e ->
@@ -450,7 +450,7 @@ internal class ProjectBackend(
                     files = preview.entries.map { UiPackagedEntry(it.path, it.size) },
                     compatible = compatible,
                     incompatibleReason = if (compatible) null
-                    else "This package was created by a newer version of CodeAssist. Update to import it.",
+                    else "This package was created by a newer version of CodePrimer. Update to import it.",
                     screenshots = preview.screenshots,
                 )
             }.getOrNull()
@@ -464,7 +464,7 @@ internal class ProjectBackend(
                 val next = mgr.importProject(archivePath, projectName)
                     ?: return@runCatching UiProjectResult(
                         false,
-                        "That file isn't a CodeAssist project package, or it needs a newer version of CodeAssist.",
+                        "That file isn't a CodePrimer project package, or it needs a newer version of CodePrimer.",
                     )
                 ctx.swapEngine(next)
                 UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())

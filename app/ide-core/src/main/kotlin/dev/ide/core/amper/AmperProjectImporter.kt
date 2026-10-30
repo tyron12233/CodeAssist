@@ -86,7 +86,7 @@ class AmperProjectImporter : ProjectImporter {
             runCatching { withAllTargets(root, dir, byDir, catalog, platform, notes) }
                 .getOrElse { notes += "${dir.name}: module.yaml could not be read (${it.message})"; null }
         }
-        if (modules.isEmpty()) return SyncOutcome.failed("No Amper module has a product CodeAssist can build.")
+        if (modules.isEmpty()) return SyncOutcome.failed("No Amper module has a product CodePrimer can build.")
         val model = ExternalProjectModel(name = root.fileName?.toString() ?: "amper-project", buildSystemId = id, modules = modules)
         return SyncOutcome(model, notes.map { SyncMessage(SyncSeverity.WARNING, it) })
     }
@@ -179,7 +179,7 @@ class AmperProjectImporter : ProjectImporter {
                 Triple(if (choice == "android") Kind.ANDROID_LIB else Kind.JVM, choice ?: "common", true)
             }
             else -> {
-                notes += "$name: an Amper `$type` module has nothing CodeAssist can build, so it was left out."
+                notes += "$name: an Amper `$type` module has nothing CodePrimer can build, so it was left out."
                 return null
             }
         }
@@ -364,7 +364,7 @@ class AmperProjectImporter : ProjectImporter {
             }
             ref.startsWith("\$compose.") -> {
                 val coord = GradleImport.composeAccessorCoordinate(ref.removePrefix("\$compose."), composeVersion)
-                if (coord == null) { notes += "$module: `$ref` is not a Compose artifact CodeAssist knows"; null }
+                if (coord == null) { notes += "$module: `$ref` is not a Compose artifact CodePrimer knows"; null }
                 else ExternalLibrary(coord, scope)
             }
             ref.startsWith("\$kotlin.") -> {
@@ -378,9 +378,9 @@ class AmperProjectImporter : ProjectImporter {
                 }
                 ExternalLibrary("org.jetbrains.kotlin:$artifact:$kotlinVersion", scope)
             }
-            ref.startsWith("$") -> { notes += "$module: `$ref` names a catalog CodeAssist does not read"; null }
+            ref.startsWith("$") -> { notes += "$module: `$ref` names a catalog CodePrimer does not read"; null }
             ref.count { it == ':' } >= 2 -> ExternalLibrary(ref, scope)
-            else -> { notes += "$module: `$ref` is not a dependency CodeAssist can read"; null }
+            else -> { notes += "$module: `$ref` is not a dependency CodePrimer can read"; null }
         }
     }
 
