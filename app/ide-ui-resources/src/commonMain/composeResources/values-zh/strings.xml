@@ -2,11 +2,11 @@
 <resources>
     <string name="projects">项目</string>
     <string name="a_new_build_system">全新的构建系统</string>
-    <string name="a_new_build_system_content"><![CDATA[CodeAssist 已基于全新端内构建系统重构。新版本采用独立的项目配置，因此旧版本工程不兼容，无法打开。
+    <string name="a_new_build_system_content"><![CDATA[CodeAssist 已基于全新的端内构建系统重构。新版本采用独立的项目配置，因此旧版本的项目不兼容，无法自动打开。
 
-请立即将工程备份为.zip压缩包，保障项目文件安全，后续可在新项目内重新导入。]]></string>
+请立即将项目备份为 .zip 压缩包，你的源文件会保持安全，之后可以将它们重新添加到新项目中。]]></string>
     <string name="preparing_backup">准备备份…</string>
-    <string name="backup_projects">备份工程项目</string>
+    <string name="backup_projects">备份项目</string>
     <string name="got_it">知道了</string>
     <string name="help_improve_codeassist">帮助我们改进 CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[共享匿名性能运行数据，帮助我们定位卡顿、崩溃问题并针对性修复。
@@ -18,8 +18,8 @@
     <string name="allow">允许</string>
     <string name="no_thanks">不需要</string>
     <string name="on_device">本地设备</string>
-    <string name="on_device_title">原生运行于Android系统的完整开发环境</string>
-    <string name="on_device_content">无需PC，即可编写、预览、构建 Android、Java、Kotlin 项目</string>
+    <string name="on_device_title">真正的 IDE，就在你的手机上。</string>
+    <string name="on_device_content">无需电脑，即可端到端编写、浏览和构建 Android 与 Java 项目。</string>
     <string name="continue">继续</string>
     <string name="maybe_later">稍后再说</string>
     <string name="skip_for_now">稍后再说</string>
@@ -31,7 +31,7 @@
     <string name="block_editing_content">Java代码一键切换积木视图，源码与积木逐字节实时双向同步</string>
     <string name="build_and_run">构建 &amp; 运行</string>
     <string name="build_and_run_title">在设备上构建完整的APK安装包</string>
-    <string name="build_and_run_content">完成解析、编译、Dex转换、打包、签名，直接在本机安装APK</string>
+    <string name="build_and_run_content">依次完成解析、编译、Dex 转换、打包和签名，然后直接安装到你的手机上。</string>
     <string name="command_palette">命令面板</string>
     <string name="command_palette_title">一键跳转任意位置</string>
     <string name="command_palette_content">全局搜索输入框，一键检索命令、文件、代码符号，快捷操作一站式直达</string>
@@ -43,10 +43,10 @@
     <string name="xml_content">支持Android XML标签、属性、资源代码补全，并实时进行语法校验</string>
     <string name="your_files">项目文件</string>
     <string name="your_files_title">项目文件存放于独立文件夹中</string>
-    <string name="your_files_content">项目文件存储于应用独立目录，任意文件管理器均可查看、编辑，也可复制至电脑修改；无需额外权限，无任何隐藏文件</string>
+    <string name="your_files_content">项目存放在应用存储中，可从任意文件管理器打开，放入图标、布局或资源文件，也可以在电脑上编辑。无需特殊权限，没有任何隐藏内容。</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">基于 Jetpack Compose 全新重构</string>
-    <string name="jetpack_compose_content">CodeAssist 运行更快、操作更流畅，全界面原生搭载 Jetpack Compose，支持 @Preview 实时预览。</string>
+    <string name="jetpack_compose_content">更快、更流畅的 CodeAssist，全界面采用原生 Compose，支持 @Preview 实时预览。</string>
     <string name="create_your_first_project">创建你的第一个项目</string>
     <string name="open_a_project">打开现有项目或创建一个新的项目</string>
     <string name="new_project">新建项目</string>
@@ -58,18 +58,18 @@
     <string name="import_by">作者：%1$s</string>
     <string name="import_section_contents">内容</string>
     <string name="import_more">还有 %1$d 项</string>
-    <string name="import_incompatible">导入该项目工程包需要更高版本的CodeAssist！</string>
+    <string name="import_incompatible">此项目包需要更高版本的 CodeAssist 才能导入。</string>
     <string name="import_deps_bundled">已内置依赖库</string>
-    <string name="import_failed">无法导入该项目工程包！</string>
+    <string name="import_failed">无法导入项目包。</string>
     <string name="import_unrecognized_title">该文件导入失败!</string>
-    <string name="import_unrecognized">CodeAssist 无法识别此文件！请选择 .caproj 项目工程包或项目的 .zip 压缩包进行导入。</string>
+    <string name="import_unrecognized">CodeAssist 无法识别此文件。请选择 .caproj 项目包或项目的 .zip 压缩包进行导入。</string>
     <string name="import_as_title">导入为</string>
     <string name="import_as_hint">项目名称</string>
     <string name="import_destination">导入到 %1$s</string>
     <string name="import_show_files">显示全部 %1$d 个文件</string>
     <string name="import_hide_files">隐藏文件</string>
     <!-- Gradle project import (best-effort compatibility mode) -->
-    <string name="import_gradle_title">导入 Gradle 项目</string>
+    <string name="import_gradle_title">导入项目</string>
     <string name="clone_repository_title">从 Git 克隆</string>
     <string name="clone_repository_subtitle">从 GitHub 或任何 Git 服务器复制仓库到新项目。</string>
     <string name="import_gradle_subtitle">打开现有的 Gradle 构建（尽力而为）</string>
@@ -106,7 +106,7 @@
     <string name="export_description_label">项目描述 (选填)</string>
     <string name="export_description_hint">该项目具备什么功能？</string>
     <string name="export_action">导出</string>
-    <string name="export_share">分享工程项目</string>
+    <string name="export_share">分享项目</string>
     <string name="export_failed">导出失败！</string>
     <string name="export_exporting">正在导出…</string>
     <string name="export_success_title">项目导出成功！</string>
@@ -134,8 +134,8 @@
     <string name="export_format_gradle">Gradle 项目</string>
     <string name="export_format_gradle_desc">一个 .zip 文件，包含你的源代码和生成的 Gradle 构建文件，适用于 Android Studio 或 gradle 构建。</string>
     <string name="export_gradle_title">生成的内容</string>
-    <string name="export_gradle_contents"><![CDATA[settings.gradle.kts、每个模块的 build.gradle.kts、gradle.properties 和 Gradle wrapper 设置，全部从你的项目生成：模块、依赖、SDK 级别、构建类型、风味和构建功能。]]></string>
-    <string name="export_gradle_caveat"><![CDATA[尽力而为。构建文件是从项目模型生成的，而非从实际运行的构建生成，因此在使用前请先阅读。依赖声明为 Maven 坐标，Gradle 在首次同步时下载它们，因此该同步需要网络连接。]]></string>
+    <string name="export_gradle_contents">settings.gradle.kts、每个模块的 build.gradle.kts、gradle.properties 和 Gradle wrapper 设置，全部从你的项目生成：模块、依赖、SDK 级别、构建类型、风味和构建功能。</string>
+    <string name="export_gradle_caveat">尽力而为。构建文件是从项目模型生成的，而非从实际运行的构建生成，因此在使用前请先阅读。依赖声明为 Maven 坐标，Gradle 在首次同步时下载它们，因此该同步需要网络连接。</string>
     <string name="export_gradle_wrapper_note">不包含 gradlew 脚本：Android Studio 会在首次同步时添加它们，或者运行一次 gradle wrapper。</string>
     <string name="export_success_subtitle_gradle">你的 Gradle 项目已就绪。</string>
     <string name="export_notes_title">值得检查</string>
@@ -147,7 +147,7 @@
     <string name="join_the_community">加入交流社区</string>
     <string name="join_the_community_content">可在Discord内交流、寻求帮助、分享你开发的项目</string>
     <string name="support_title">支持 CodeAssist</string>
-    <string name="support_content">本项目由我业余独立开发的，坚持免费开源。如果它帮助到了你，赞助或收藏项目仓库便是极大的鼓励支持</string>
+    <string name="support_content">本项目由我在业余时间开发，并坚持对所有人免费。如果它对你有帮助，赞助或点个 Star 都是莫大的鼓励。</string>
     <string name="support_chip_free">100% 免费</string>
     <string name="support_chip_open_source">开源</string>
     <string name="support_sponsor">赞助</string>
@@ -164,12 +164,15 @@
     <string name="support_ad_privacy_desc">查看或更改你的广告隐私选择。</string>
     <string name="support_ad_privacy_button">管理</string>
     <string name="ad_label">广告</string>
-    <string name="no_project_yet">还没有项目哦~新建项目即可开始开发</string>
+    <string name="no_project_yet">还没有项目。新建一个项目即可开始。</string>
     <string name="your_projects">你的项目</string>
     <string name="project_kind_android">Android</string>
+    <string name="project_kind_gradle">Gradle</string>
+    <!-- A folder no project format recognized, listed so it can still be opened. -->
     <string name="project_kind_files">文件</string>
+    <string name="project_kind_codeassist">CodeAssist</string>
     <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
-         does not fit and the "Opened" is carried by the context. -->
+    does not fit and the "Opened" is carried by the context. -->
     <string name="project_age_just_now">刚刚</string>
     <plurals name="project_age_minutes">
         <item quantity="one">%1$d 分钟前</item>
@@ -222,12 +225,13 @@
     <string name="templates_no_match">没有与“%1$s”匹配的模板。</string>
     <string name="backup">备份</string>
     <string name="delete_project">删除项目</string>
-    <string name="delete_project_content">“%1$s” 及其所有文件将被永久删除，无法撤销！要执行删除操作吗？</string>
+    <string name="delete_project_content">“%1$s”及其所有文件将被永久删除。此操作无法撤销。</string>
     <string name="cancel">取消</string>
     <string name="color_picker_title">自定义颜色</string>
     <string name="color_hue">色相</string>
     <string name="color_saturation">饱和度</string>
     <string name="color_lightness">明度</string>
+    <string name="color_opacity">不透明度</string>
     <string name="delete">删除</string>
     <string name="project_name">项目名称</string>
     <string name="package_name">包名</string>
@@ -239,8 +243,7 @@
         <item quantity="one">从旧版本恢复了 %1$d 个项目</item>
         <item quantity="other">从旧版本恢复了 %1$d 个项目</item>
     </plurals>
-    <string name="recovered_projects_content">旧版Gradle项目以兼容模式打开，部分功能受限，重新配置依赖后可完整构建；原始文件完整保留，不会丢失。</string>
-
+    <string name="recovered_projects_content">这些项目使用 Gradle，以受限的兼容模式打开，部分功能可能无法使用，并且在重新添加依赖之前可能无法构建。你的原始文件会安全保留在存储文件夹中。</string>
 
     <!-- ============================================================ -->
     <!-- Migrated UI strings (bulk localization pass) -->
@@ -299,7 +302,7 @@
     <string name="filetree_open_in_file_manager">在文件管理器中打开</string>
     <string name="filetree_import_files">导入文件</string>
     <string name="filetree_change_view">改变视图</string>
-    <string name="filetree_scope_project">工程项目</string>
+    <string name="filetree_scope_project">项目</string>
     <string name="filetree_scope_all_files">全部文件</string>
     <string name="filetree_more_actions">更多操作</string>
     <string name="filetree_new_file">创建文件</string>
@@ -332,7 +335,6 @@
     <string name="filetree_file">文件</string>
     <string name="filetree_directory">目录</string>
     <string name="filetree_new_in">在 %1$s 中新建</string>
-
 
     <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">构建</string>
@@ -412,6 +414,7 @@
     <string name="symbolbar_duplicate_line">复制行</string>
     <string name="symbolbar_next_problem">下一个问题</string>
     <string name="symbolbar_customize">自定义符号</string>
+    <string name="symbolbar_hide_keyboard">隐藏键盘</string>
     <string name="symbolbar_comment">行注释</string>
     <string name="symed_pin">固定到固定行</string>
     <string name="symed_unpin">取消固定</string>
@@ -585,7 +588,7 @@
     <string name="home_challenges">每日</string>
     <!-- Home / Projects tab, Material 3 Expressive redesign -->
     <string name="home_your_projects">你的项目</string>
-    <string name="home_account">账户</string>
+    <string name="home_account">账号</string>
     <string name="home_search_projects">搜索项目</string>
     <string name="home_no_match">没有与“%1$s”匹配的项目。</string>
     <string name="home_sort">排序项目</string>
@@ -1071,6 +1074,12 @@
         <item quantity="one">%1$d 个问题</item>
         <item quantity="other">%1$d 个问题</item>
     </plurals>
+    <plurals name="layout_preview_resource_errors">
+        <item quantity="one">一个资源错误会导致此布局无法渲染</item>
+        <item quantity="other">有 %1$d 个资源错误，导致此布局无法渲染</item>
+    </plurals>
+    <string name="layout_preview_resource_errors_last_render">在此之前，预览会保留上一次成功渲染的结果。</string>
+    <string name="layout_preview_resource_error_open">打开此错误对应的文件</string>
     <string name="edoverlay_rename_kind">重命名 %1$s</string>
     <string name="edoverlay_renaming">正在重命名…</string>
     <string name="edoverlay_rename_hint">按 Enter 重命名“%1$s”，按 Esc 取消</string>
@@ -1241,6 +1250,7 @@
     <string name="insp_off_again_slow">再次关闭，仍然太慢：来自 %2$s 的“%1$s”</string>
     <string name="insp_off_again_failing">再次关闭，仍然出错：来自 %2$s 的“%1$s”</string>
     <plurals name="insp_off_many">
+        <item quantity="one">%1$d 个插件检查项因拖慢编辑器已被关闭</item>
         <item quantity="other">%1$d 个插件检查项因拖慢编辑器已被关闭</item>
     </plurals>
     <string name="insp_turn_back_on">重新开启</string>
@@ -1249,15 +1259,15 @@
     <string name="insp_row_off_failing">多次出错，本次会话已关闭。</string>
     <string name="settings_advanced">高级</string>
     <string name="settings_code_style">代码样式</string>
-    <string name="settings_code_style_subtitle">按语言配置格式化方案和实时预览</string>
+    <string name="settings_code_style_subtitle">各语言的格式化规则</string>
     <string name="settings_symbols">符号与宏</string>
     <string name="settings_symbols_subtitle">自定义键盘符号栏和文本宏</string>
     <string name="settings_sdk_manager">SDK 管理器</string>
-    <string name="settings_sdk_manager_subtitle">下载 Android SDK 和 JDK 源码</string>
+    <string name="settings_sdk_manager_subtitle">下载 Android 平台、SDK 与 JDK 源代码</string>
     <string name="settings_keystore_manager">密钥库管理器</string>
     <string name="settings_keystore_manager_subtitle">创建、导入和管理签名密钥库</string>
     <string name="settings_plugins">插件</string>
-    <string name="settings_plugins_subtitle">启用或禁用内置插件</string>
+    <string name="settings_plugins_subtitle">启用或禁用内置插件和已安装插件</string>
     <string name="settings_storage">存储</string>
     <string name="settings_storage_subtitle">查看空间占用并释放空间</string>
     <string name="storage_total_used">总占用</string>
@@ -1310,14 +1320,14 @@
     <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">密钥库管理器</string>
     <string name="keystore_section_title">签名密钥库</string>
-    <string name="keystore_section_description"><![CDATA[创建或导入用于签署发布构建的密钥库。密钥库只保存一次，可跨项目共用；可在模块的“签名”标签页为构建类型分配密钥库。]]></string>
+    <string name="keystore_section_description">创建或导入用于签署发布构建的密钥库。密钥库只保存一次，可跨项目共用；可在模块的“签名”标签页为构建类型分配密钥库。</string>
     <string name="keystore_assign_to_build">分配给构建（项目签名）</string>
     <string name="keystore_empty">暂无密钥库。创建或导入一个密钥库以签署发布构建。</string>
     <string name="keystore_deleted">已删除 %1$s</string>
     <string name="keystore_row_subtitle">%1$s · 密钥：%2$s</string>
     <string name="keystore_sha256">SHA-256 %1$s</string>
     <string name="keystore_expires">约在 %1$s 过期</string>
-    <string name="keystore_cert_unreadable"><![CDATA[无法读取证书（密码可能已变更）。]]></string>
+    <string name="keystore_cert_unreadable">无法读取证书（密码可能已变更）。</string>
     <string name="keystore_create_title">新建密钥库</string>
     <string name="keystore_name">名称</string>
     <string name="keystore_key_alias">密钥别名</string>
@@ -1357,6 +1367,14 @@
     <string name="sdk_download_installing">正在安装…</string>
     <string name="sdk_installed">已安装</string>
     <string name="sdk_resume">继续</string>
+    <string name="sdk_platforms">Android SDK 平台</string>
+    <string name="sdk_platforms_desc">模块编译和代码补全所依据的 android.jar，与其 compileSdk 相匹配。未安装对应平台的模块会使用默认平台。</string>
+    <string name="sdk_platform_tools">平台工具</string>
+    <string name="sdk_platform_tools_desc">adb：“运行”通过它把应用安装并启动到连接此电脑的手机或模拟器上。</string>
+    <string name="sdk_license_title">许可协议</string>
+    <string name="sdk_license_accept">接受</string>
+    <string name="sdk_license_decline">拒绝</string>
+    <string name="sdk_license_unavailable">无法加载许可文本。请检查网络连接后重试。</string>
 
     <!-- dep (DependenciesScreen) — enums use @Composable label() extensions -->
     <string name="dep_declared">已声明</string>
@@ -1690,13 +1708,14 @@
 
     <string name="modcfg_platform_sdk">平台 SDK</string>
     <string name="modcfg_platform_sdk_auto">自动（%1$s）</string>
+    <string name="modcfg_platform_missing">compileSdk %1$d 未安装，因此此模块按 API %2$d 编译并提供代码补全。请在 SDK 管理器中安装 Android SDK Platform %1$d。</string>
 
     <!-- AI coding agent -->
 
     <!-- Settings page content (localizes the built-in pages declared in ide-core/BuiltInSettingsPages.kt +
-         SettingsBackend). Rendered generically; the UI overlay (SettingsLocalization.kt) uses these where a
-         key exists and falls back to the backend-supplied English for plugin pages and the device-specific
-         Build Runtime descriptions. -->
+    SettingsBackend). Rendered generically; the UI overlay (SettingsLocalization.kt) uses these where a
+    key exists and falls back to the backend-supplied English for plugin pages and the device-specific
+    Build Runtime descriptions. -->
     <!-- Page titles (keyed by page id) -->
     <string name="set_page_appearance">外观</string>
     <string name="set_page_editor">编辑器</string>
@@ -1737,7 +1756,7 @@
     <string name="set_editor_code_font">代码字体</string>
     <string name="set_editor_code_font_monospace">系统等宽字体</string>
     <string name="set_editor_ligatures">字体连字</string>
-    <string name="set_editor_ligatures_desc">当代码字体支持时，渲染编程连字（-> != >= …）</string>
+    <string name="set_editor_ligatures_desc">当代码字体支持时，渲染编程连字（-&gt; != &gt;= …）</string>
     <string name="set_editor_inlay">内嵌提示</string>
     <string name="set_editor_inlay_desc">以内嵌方式显示推断类型和参数名提示</string>
     <string name="set_editor_semantic">语义高亮</string>
@@ -1805,7 +1824,7 @@
     <string name="set_br_r8heap">R8 独立 VM 堆内存</string>
     <string name="set_br_dexoff">堆外 Dex 转换阈值</string>
     <string name="set_br_dexbatch">Dex 合并批大小</string>
-    <string name="set_br_dexbatch_desc">大型项目Dex转换支持分批次合并类：小批次省内存、包体积略大；大体积打包更紧凑、内存消耗更高。仅数千类以上工程需要调整此选项。</string>
+    <string name="set_br_dexbatch_desc">对于非常大的应用，最后的 dex 转换步骤会分批合并类，因此无需一次性将所有类都载入内存。批次越小，内存占用越低（适合低内存设备），但 APK 会略大（类之间共享压缩更少）；批次越大，打包越紧凑，但每次合并需要更多内存。大多数应用不会遇到这种情况——只有类数量超过几千个时才会生效。</string>
     <string name="set_br_dexfork">最大并发 Dex 进程数</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">分享性能分析数据</string>
@@ -1816,7 +1835,7 @@
     <string name="set_privacy_logs">查看日志</string>
     <string name="set_privacy_logs_desc">最近的编辑器、分析和构建活动</string>
     <string name="set_privacy_logs_btn">打开</string>
-    <string name="set_privacy_backup">备份工程项目</string>
+    <string name="set_privacy_backup">备份项目</string>
     <string name="set_privacy_backup_desc">将每个项目分别导出为 zip</string>
     <string name="set_privacy_backup_btn">备份</string>
 
@@ -1841,7 +1860,7 @@
     <!-- Resource preview pane -->
     <string name="respreview_no_preview">此文件暂无预览</string>
     <string name="respreview_render_drawable_failed">无法渲染此 Drawable</string>
-    <string name="respreview_unsupported">不支持：&lt;%1$s>，%2$s</string>
+    <string name="respreview_unsupported">不支持：&lt;%1$s&gt;，%2$s</string>
     <string name="respreview_no_colors">此文件未声明任何颜色</string>
     <string name="respreview_unresolved">（未解析）</string>
     <string name="respreview_decode_image_failed">无法解码此图片</string>
@@ -2055,9 +2074,50 @@
         <item quantity="one">%1$d 个项目</item>
         <item quantity="other">%1$d 个项目</item>
     </plurals>
+
+    <!-- Editor color scheme -->
+    <string name="colors_title">编辑器配色</string>
+    <string name="colors_scheme">配色方案</string>
+    <string name="colors_scheme_desc">编辑器渲染代码所使用的配色</string>
+    <string name="colors_preview">预览</string>
+    <string name="colors_preview_hint">点按示例中的任意内容，即可跳转到为它着色的条目。</string>
+    <string name="colors_builtin_notice">%1$s 是内置方案，你的修改会保存到一个副本中。</string>
+    <string name="colors_editing_copy">正在编辑副本：%1$s</string>
+    <string name="colors_duplicate">创建副本</string>
+    <string name="colors_rename">重命名</string>
+    <string name="colors_delete">删除方案</string>
+    <string name="colors_delete_confirm">删除 %1$s？此操作无法撤销。</string>
+    <string name="colors_reset">全部重置</string>
+    <string name="colors_import">导入</string>
+    <string name="colors_export">导出</string>
+    <string name="colors_copy">复制 JSON</string>
+    <string name="colors_copied">方案已复制到剪贴板</string>
+    <string name="colors_paste">粘贴 JSON</string>
+    <string name="colors_paste_hint">粘贴已导出的方案</string>
+    <string name="colors_import_failed">这不是有效的配色方案文件</string>
+    <string name="colors_imported">已导入 %1$s</string>
+    <string name="colors_scheme_name">方案名称</string>
+    <string name="colors_foreground">文字颜色</string>
+    <string name="colors_background">背景</string>
+    <string name="colors_background_none">无</string>
+    <string name="colors_clear">清除</string>
+    <string name="colors_bold">粗体</string>
+    <string name="colors_italic">斜体</string>
+    <string name="colors_underline">下划线</string>
+    <string name="colors_strikethrough">删除线</string>
+    <string name="colors_inherit">继承自 %1$s</string>
+    <string name="colors_inherit_desc">跟随父条目，而不使用此条目自身的默认值</string>
+    <string name="colors_inherited_from">继承自 %1$s</string>
+    <string name="colors_customized">已自定义</string>
+    <string name="colors_default">默认</string>
+    <string name="colors_overlay_note">叠加在符号已有样式之上。</string>
+    <string name="colors_reset_entry">重置此条目</string>
+    <string name="settings_colors">编辑器配色</string>
+    <string name="settings_colors_subtitle">语法、界面与行号栏颜色</string>
     <string name="close_project_title">关闭 %1$s？</string>
     <string name="close_project_body">你将返回项目列表。</string>
     <plurals name="close_project_unsaved">
+        <item quantity="one">%1$d 个文件有未保存的更改，将先保存。</item>
         <item quantity="other">%1$d 个文件有未保存的更改，将先保存。</item>
     </plurals>
     <string name="close_project_building">仍有构建正在运行。</string>
@@ -2139,6 +2199,163 @@
     <string name="block_scope_loading">正在查找此作用域可调用的函数…</string>
     <string name="block_scope_none">此作用域没有可调用的内容。</string>
     <string name="block_lambda_page">Lambda</string>
-    <string name="sdk_platform_tools">平台工具</string>
-    <string name="sdk_platform_tools_desc">adb：“运行”通过它把应用安装并启动到连接此电脑的手机或模拟器上。</string>
+    <string name="switcher_title">切换器</string>
+    <string name="switcher_recent_title">最近文件</string>
+    <string name="switcher_hint">松开 Ctrl 即可打开 · Del 关闭标签页</string>
+    <string name="switcher_recent_hint">输入以筛选 · Enter 打开 · Esc 关闭</string>
+    <string name="switcher_no_match">没有匹配的文件</string>
+    <string name="shortcut_no_build_task">此处没有可单独构建的内容，请改用“运行”。</string>
+    <string name="shortcut_nothing_to_reopen">没有可重新打开的已关闭标签页</string>
+    <!-- Explore store shelves and charts -->
+    <plurals name="store_projects">
+        <item quantity="one">%1$d 个项目</item>
+        <item quantity="other">%1$d 个项目</item>
+    </plurals>
+    <string name="store_publisher_spotlight">发布者聚焦</string>
+    <string name="store_verified_publisher">已认证发布者</string>
+    <!-- Lowercase on purpose: it sits beside the chart title as a quiet status word. -->
+    <string name="store_chart_live">实时</string>
+    <string name="store_chart_updated_hourly">每小时更新</string>
+    <string name="store_kind_sample_app">示例应用</string>
+    <!-- Shown instead of an install count below ten. -->
+    <string name="store_installs_new">新</string>
+    <!-- %1$s is the count, already abbreviated (48K, 1.2M). -->
+    <plurals name="store_installs">
+        <item quantity="one">%1$s 次安装</item>
+        <item quantity="other">%1$s 次安装</item>
+    </plurals>
+    <plurals name="store_likes">
+        <item quantity="one">%1$s 个赞</item>
+        <item quantity="other">%1$s 个赞</item>
+    </plurals>
+    <plurals name="store_reviews">
+        <item quantity="one">%1$s 条评价</item>
+        <item quantity="other">%1$s 条评价</item>
+    </plurals>
+    <plurals name="store_ghost_switches_on">
+        <item quantity="one">项目达到 %1$d 个时开启。</item>
+        <item quantity="other">项目达到 %1$d 个时开启。</item>
+    </plurals>
+    <!-- Plugin consent dialog -->
+    <string name="plugin_consent_title">允许 %1$s 运行吗？</string>
+    <string name="plugin_consent_declares">它声明将：</string>
+    <string name="plugin_consent_warning">插件在 CodeAssist 内部运行，对你项目和账号的访问权限与 IDE 本身相同。它没有沙箱隔离，上方列出的能力也不会被强制执行。仅当你信任其发布者时才允许运行。</string>
+    <string name="plugin_consent_deny">不允许</string>
+    <string name="plugin_consent_publisher_unknown">无法识别发布者：此软件包没有可读取的签名证书。</string>
+    <string name="plugin_consent_signed_by">签名者：%1$s。来自同一发布者的更新会沿用此证书。</string>
+    <string name="plugin_consent_cap_ui_action">向命令面板和菜单添加命令</string>
+    <string name="plugin_consent_cap_ui_settings_page">在设置中添加页面</string>
+    <string name="plugin_consent_cap_ui_tool_window">在 IDE 中添加工具窗口</string>
+    <string name="plugin_consent_cap_ui_screen">在 IDE 中添加界面</string>
+    <string name="plugin_consent_cap_ui_overlay">在任意界面上方显示提示</string>
+    <string name="plugin_consent_cap_ui_editor_action">在编辑器光标处添加操作</string>
+    <string name="plugin_consent_cap_ui_editor_preview">为部分文件添加预览窗格</string>
+    <string name="plugin_consent_cap_ui_key_binding">占用键盘快捷键</string>
+    <string name="plugin_consent_cap_ui_editor_decoration">标记文件中的文本</string>
+    <string name="plugin_consent_cap_ui_editor_layer">在编辑器内放置自己的控件</string>
+    <string name="plugin_consent_cap_ui_editor_painter">在编辑器中绘制内容</string>
+    <string name="plugin_consent_cap_ui_editor_language">为编辑器中的某种语言提供着色和注释，包括 IDE 已支持的语言</string>
+    <string name="plugin_consent_cap_ui_color_attribute">在编辑器配色方案中添加条目，并更改内置条目的外观</string>
+    <string name="plugin_consent_cap_ui_new_file_template">在“新建”菜单中添加文件类型</string>
+    <string name="plugin_consent_cap_lang_backend">让编辑器支持一种语言：解析、补全和错误检查</string>
+    <string name="plugin_consent_cap_model_module_type">添加一种模块类型，以及用于创建该模块的模板</string>
+    <string name="plugin_consent_cap_model_facet">在模块中保存自己的配置</string>
+    <string name="plugin_consent_cap_interp_run">在 IDE 内运行项目代码，以便预览或运行</string>
+    <string name="plugin_consent_cap_build_task">为构建添加步骤</string>
+    <string name="plugin_consent_cap_build_source_generator">向模块中生成源代码</string>
+    <string name="plugin_consent_cap_build_run_task">在“运行”选择器中添加条目</string>
+    <string name="plugin_consent_cap_fs_read">读取项目中的文件</string>
+    <string name="plugin_consent_cap_fs_write">修改项目中的文件</string>
+    <string name="plugin_consent_cap_net">发起网络请求</string>
+    <!-- Daily challenge tab -->
+    <string name="challenge_title">每日挑战</string>
+    <string name="challenge_subtitle">每天一道题</string>
+    <string name="challenge_todays_top">今日榜首</string>
+    <string name="challenge_full_board">完整榜单</string>
+    <string name="challenge_previous_days">往期</string>
+    <string name="challenge_stat_solved_today">今日已解出</string>
+    <string name="challenge_stat_featured">精选</string>
+    <string name="challenge_stat_attempts">次尝试</string>
+    <string name="challenge_sign_in_to_solve">登录后作答</string>
+    <string name="challenge_solved_open_again">已解出。再次打开</string>
+    <string name="challenge_keep_going">继续加油</string>
+    <string name="challenge_solve_today">解出今日挑战</string>
+    <string name="challenge_signed_out_note">浏览对所有人开放。只有提交答案和上榜才需要账号。</string>
+    <string name="challenge_solved_in">用时 %1$s</string>
+    <!-- %1$s is a complexity class such as O(n log n). -->
+    <string name="challenge_meta_time">耗时 %1$s</string>
+    <string name="challenge_meta_memory">内存 %1$s</string>
+    <string name="challenge_streak">连续天数</string>
+    <string name="challenge_longest">最长连续</string>
+    <string name="challenge_solved">已解出</string>
+    <string name="challenge_solved_cd">已解出</string>
+    <string name="challenge_offline_title">无法连接挑战服务器</string>
+    <string name="challenge_offline_body">请检查网络连接，然后下拉刷新。</string>
+    <string name="challenge_none_title">今日暂无挑战</string>
+    <string name="challenge_none_body">下一道题将在 UTC 午夜发布。</string>
+    <string name="challenge_difficulty_easy">简单</string>
+    <string name="challenge_difficulty_medium">中等</string>
+    <string name="challenge_difficulty_hard">困难</string>
+    <!-- Daily challenge leaderboard -->
+    <string name="challenge_leaderboard">排行榜</string>
+    <string name="challenge_today">今日</string>
+    <string name="challenge_everyone_else">其他参与者</string>
+    <string name="challenge_board_empty_title">还没有人解出</string>
+    <string name="challenge_board_empty_body">第一个上榜的人将定下节奏。</string>
+    <!-- Daily challenge solve screen -->
+    <string name="challenge_pane_problem">题目</string>
+    <string name="challenge_pane_code">代码</string>
+    <string name="challenge_constraints">约束条件</string>
+    <string name="challenge_examples">示例</string>
+    <string name="challenge_show_hint">显示提示</string>
+    <string name="challenge_input">输入</string>
+    <string name="challenge_output">输出</string>
+    <string name="challenge_reset">重置</string>
+    <string name="challenge_indexing">正在建立索引，代码建议仍在补全中</string>
+    <string name="challenge_preparing">正在准备工作区</string>
+    <string name="challenge_run_failed">运行失败。</string>
+    <string name="challenge_did_not_compile">未通过编译</string>
+    <plurals name="challenge_examples_all_pass">
+        <item quantity="one">%1$d 个示例通过</item>
+        <item quantity="other">全部 %1$d 个示例均通过</item>
+    </plurals>
+    <string name="challenge_examples_failed">%2$d 个示例中有 %1$d 个未通过</string>
+    <string name="challenge_example_threw">示例 %1$d：预期 %2$s，实际抛出了 %3$s</string>
+    <string name="challenge_example_got">示例 %1$d：预期 %2$s，实际为 %3$s</string>
+    <string name="challenge_example_nothing">无</string>
+    <string name="challenge_hidden_tests_decide">判定由隐藏测试决定。准备好后即可提交。</string>
+    <string name="challenge_running">运行中</string>
+    <string name="challenge_run_examples">运行示例</string>
+    <string name="challenge_judging">评测中</string>
+    <string name="challenge_submit">提交</string>
+    <!-- Daily challenge verdict sheet -->
+    <string name="challenge_keep_improving">继续改进</string>
+    <string name="challenge_back_to_code">返回代码</string>
+    <string name="challenge_done">完成</string>
+    <string name="challenge_tests_passed">%2$d 项测试中通过 %1$d 项</string>
+    <string name="challenge_judged_on_server">由服务器评测</string>
+    <string name="challenge_verdict_not_judged">未评测</string>
+    <string name="challenge_verdict_accepted">通过</string>
+    <string name="challenge_verdict_wrong_answer">答案错误</string>
+    <string name="challenge_verdict_runtime_error">运行时崩溃</string>
+    <string name="challenge_verdict_timeout">运行超时</string>
+    <string name="challenge_verdict_memory_limit">内存超限</string>
+    <string name="challenge_verdict_rejected">无法测量</string>
+    <string name="challenge_verdict_unknown">出了问题</string>
+    <string name="challenge_matched_reference">你的成绩与参考解持平</string>
+    <string name="challenge_reference_faster">参考解更快</string>
+    <string name="challenge_metric_time">耗时</string>
+    <string name="challenge_metric_memory">内存</string>
+    <string name="challenge_metric_runtime">运行时</string>
+    <string name="challenge_metric_allocated">分配量</string>
+    <string name="challenge_complexity_note">复杂度根据程序在六种输入规模下的增长情况推断，并与以相同方式测量的参考解进行对比。内存统计所有分配，包括答案本身。</string>
+    <string name="challenge_reference_value">参考 %1$s</string>
+    <string name="challenge_score">得分</string>
+    <string name="challenge_rank">排名</string>
+    <string name="challenge_rank_of">第 %1$d 名 / 共 %2$d 人</string>
+    <string name="challenge_hidden_tests_note">隐藏测试不会显示。请把自认为会失败的用例补进你的推理中，而不是写进代码里。</string>
+    <string name="challenge_how_it_scaled">规模增长情况</string>
+    <string name="challenge_exponent">指数 %1$s</string>
+    <string name="challenge_legend_yours">你的</string>
+    <string name="challenge_legend_reference">参考</string>
 </resources>
