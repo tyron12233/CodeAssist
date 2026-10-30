@@ -4,10 +4,13 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.KotlinPluginLoading
+import dev.ide.build.TaskName
 import dev.ide.build.resolveFor
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinOutputDir
+import dev.ide.build.engine.testKotlinOutputDir
+import dev.ide.build.jvm.test.TestJavaCompileTask
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
@@ -26,6 +29,7 @@ import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -118,6 +122,23 @@ class KotlinBuildWiringTest {
                 "the module's kotlin-classes output must be part of its class outputs (so it is packaged into " +
                     "the jar and joins the run/dex runtime classpath)",
             )
+        }
+    }
+
+    /**
+     * `compileTestJava` compiles against the Kotlin test output as one classpath entry. Appended with a bare `+`, a
+     * Path binds `plus(Iterable)` and joins as its name segments instead: dropped here, and on device (working dir
+     * `/`) the first segment resolved to `/storage`, which the incremental compiler then failed to walk.
+     */
+    @Test
+    fun compileTestJavaSeesTheKotlinTestOutput() {
+        testEnv("kt-test-classpath") { env ->
+            val (_, project) = buildWorkspace(env.dir, env.platform)
+            val app = project.modules.single()
+            val kotlinTestOut = Files.createDirectories(testKotlinOutputDir(app))
+            val task = TestJavaCompileTask(app, TaskName(":app:compileTestJava"), bootClasspath = emptyList())
+            val declared = task.inputs.declaredPaths()
+            assertTrue(kotlinTestOut.toAbsolutePath().normalize().toString() in declared, "declared: $declared")
         }
     }
 

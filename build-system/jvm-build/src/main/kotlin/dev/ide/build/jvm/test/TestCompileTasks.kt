@@ -87,7 +87,7 @@ class TestJavaCompileTask(
     private val module: Module,
     override val name: TaskName,
     private val bootClasspath: List<Path>,
-    private val testClasspath: () -> List<Path> = { testCompileClasspath(module) + testKotlinOutputDir(module) },
+    private val testClasspath: () -> List<Path> = { testCompileClasspath(module).plusElement(testKotlinOutputDir(module)) },
     private val out: Path = testOutputDir(module),
     private val sources: () -> List<Path> = { testJavaSourceFiles(module) },
 ) : Task {

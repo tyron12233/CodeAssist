@@ -274,7 +274,7 @@ class PreviewResourceLinker(
         base: List<Path>, manifest: Path, edited: Path, packageName: String, minSdk: Int, targetSdk: Int,
     ): String = digest {
         put("full v1 rewriter ${PreviewLayoutRewriter.VERSION}")
-        for (a in (base + manifest).sortedBy { it.toString() }) putFileSig(a)
+        for (a in base.plusElement(manifest).sortedBy { it.toString() }) putFileSig(a)
         put(edited.toString()); put(packageName); put("$minSdk/$targetSdk")
     }
 
@@ -526,7 +526,7 @@ class PreviewResourceLinker(
     private fun cacheKey(base: List<Path>, manifest: Path, editedLayout: Path, liveText: String): String =
         digest {
             put("rewriter " + PreviewLayoutRewriter.VERSION)
-            for (a in (base + manifest).sortedBy { it.toString() }) putFileSig(a)
+            for (a in base.plusElement(manifest).sortedBy { it.toString() }) putFileSig(a)
             put(editedLayout.toString())
             update(liveText.toByteArray())
         }

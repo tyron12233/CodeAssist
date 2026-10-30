@@ -132,7 +132,7 @@ class JavaPlugin(
         tasks.register(procRes) { ProcessResourcesTask(procRes, resourceRoots(module), resourcesDir(module)) }
 
         val classes = TaskName(":${module.name}:classes")
-        tasks.register(classes) { LifecycleTask(classes, trackedDirs = classOutputs(module) + resourcesDir(module)) }
+        tasks.register(classes) { LifecycleTask(classes, trackedDirs = classOutputs(module).plusElement(resourcesDir(module))) }
             .configure { dependsOn(compile, procRes) }
 
         val jar = if (withJar) {

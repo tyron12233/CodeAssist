@@ -81,7 +81,7 @@ object AndroidLibraries {
         val candidates = libraryRoots(module, DependencyScope.TEST_IMPLEMENTATION, variant).filter { it !in appRoots }
         val tested = classify(candidates, candidates, emptyList(), explodeRoot)
         val appJars = (app.dexJars + app.compileJars).distinct()
-        fun duplicatesApp(jar: Path) = dedupeJarsForAndroidDex(appJars + jar).size < appJars.size + 1
+        fun duplicatesApp(jar: Path) = dedupeJarsForAndroidDex(appJars.plusElement(jar)).size < appJars.size + 1
         // Then by class: two artifacts with different names can still define the same classes (the old
         // `kotlinx-coroutines-core` and its `-jvm` successor both arrive through androidx.test), and D8 refuses a
         // program that defines a class twice. A class the app or an earlier test library has is left out.

@@ -987,7 +987,7 @@ class AndroidBuildSystem(
             tasks.task(compileTestJava, appCompiles + listOfNotNull(compileTestKotlin.takeIf { kotlin != null })) {
                 TestJavaCompileTask(
                     app, compileTestJava, bootClasspath,
-                    testClasspath = { testClasspath + kotlinOut }, out = javaOut, sources = { androidTestJavaSourceFiles(app) },
+                    testClasspath = { testClasspath.plusElement(kotlinOut) }, out = javaOut, sources = { androidTestJavaSourceFiles(app) },
                 )
             }
             // Resources: the test libraries' own (androidx.test's activity themes), linked under the test package.
@@ -1233,7 +1233,7 @@ class AndroidBuildSystem(
             registerTests(
                 tasks, m, test, step = { TaskName(":${m.name}:$it") }, variantConfigs = configs,
                 mainOutputs = classDirs + buildDir.resolve("resources"), kotlinMain = libKotlin,
-                compileClasspath = classpath.toList() + classesOut, platform = compileBootclasspath, bootClasspath = bootClasspath,
+                compileClasspath = classpath.toList().plusElement(classesOut), platform = compileBootclasspath, bootClasspath = bootClasspath,
                 mainTasks = listOf(classes), testRoot = classesOut.parent, level = level,
             )
         }
@@ -1283,7 +1283,7 @@ class AndroidBuildSystem(
             }
         }
         tasks.task(compileJava, mainTasks + listOfNotNull(compileKotlin.takeIf { kotlin != null })) {
-            TestJavaCompileTask(m, compileJava, bootClasspath, testClasspath = { testClasspath + kotlinOut }, out = javaOut)
+            TestJavaCompileTask(m, compileJava, bootClasspath, testClasspath = { testClasspath.plusElement(kotlinOut) }, out = javaOut)
         }
         val platformSet = platform.map { it.toAbsolutePath().normalize() }.toSet()
         val hostHasAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess
