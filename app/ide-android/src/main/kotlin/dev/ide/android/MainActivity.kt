@@ -177,10 +177,12 @@ class MainActivity : ComponentActivity() {
                         pendingPick = onPicked
                         // Custom extensions (e.g. .caproj) have no registered MIME, so when any of them lacks one fall
                         // back to */* and let the caller validate the picked file (narrowing to the known ones would
-                        // hide the rest); only all-known extensions narrow the SAF picker.
+                        // hide the rest); only all-known extensions narrow the SAF picker. No extensions means any
+                        // file: an empty MIME list matches nothing, and the picker opens with no items and no roots.
                         val mimes = extensions.mapNotNull { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+                        val any = extensions.isEmpty() || mimes.size < extensions.size
                         try {
-                            pickLauncher.launch(if (mimes.size < extensions.size) arrayOf("*/*") else mimes.toTypedArray())
+                            pickLauncher.launch(if (any) arrayOf("*/*") else mimes.toTypedArray())
                         } catch (e: ActivityNotFoundException) {
                             // Some ROMs ship no SAF/documents provider; don't crash — signal cancel + tell the user.
                             pendingPick = null

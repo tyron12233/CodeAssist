@@ -138,6 +138,9 @@ private val WIDE_LAYOUT = 840.dp
 /** The preview column's width in the wide layout: room for the four mask labels at full length. */
 private val PREVIEW_PANE = 420.dp
 
+/** The raster formats an image layer is picked from; the layer keeps the file's own format. */
+private val IMAGE_EXTENSIONS = listOf("png", "jpg", "jpeg", "webp")
+
 /** A colour the user is choosing: where the picker starts, and what to do with the result. */
 private class ColourRequest(val initial: Long, val onPick: (Long) -> Unit)
 
@@ -450,7 +453,7 @@ private fun ForegroundCard(state: AppIconStudioState, onChooseIcon: () -> Unit, 
             }
             if (fileActions.canPickFile) {
                 OutlinedButton(
-                    onClick = { fileActions.pickFile { path -> if (path != null) state.setForegroundImage(path) } },
+                    onClick = { fileActions.pickFile(IMAGE_EXTENSIONS) { path -> if (path != null) state.setForegroundImage(path) } },
                 ) {
                     Icon(CaIcons.image, null, Modifier.size(16.dp))
                     Spacer(Modifier.size(Ca.spacing.s2))
@@ -542,7 +545,7 @@ private fun BackgroundCard(
             ) {
                 if (fileActions.canPickFile) {
                     OutlinedButton(
-                        onClick = { fileActions.pickFile { path -> if (path != null) state.setBackgroundImage(path) } },
+                        onClick = { fileActions.pickFile(IMAGE_EXTENSIONS) { path -> if (path != null) state.setBackgroundImage(path) } },
                     ) {
                         Icon(CaIcons.image, null, Modifier.size(16.dp))
                         Spacer(Modifier.size(Ca.spacing.s2))
