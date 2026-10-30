@@ -10,6 +10,7 @@ import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.debug
+import dev.ide.build.engine.info
 import dev.ide.build.engine.kotlinOutputDir
 import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.testCompileClasspath
@@ -17,6 +18,7 @@ import dev.ide.build.engine.testJavaSourceFiles
 import dev.ide.build.engine.testKotlinOutputDir
 import dev.ide.build.engine.testKotlinSourceFiles
 import dev.ide.build.engine.testOutputDir
+import dev.ide.build.engine.withHeartbeat
 import dev.ide.build.resolveFor
 import dev.ide.lang.jdt.build.javaFailureSummary
 import dev.ide.lang.jdt.build.reportJavaProblems
@@ -70,12 +72,15 @@ class TestKotlinCompileTask(
         if (kt.isEmpty()) return TaskResult.Success
         val classpath = classpath()
         val resolved = plugins.resolveFor(module, classpath + bootClasspath)
-        val r = compiler.compile(
-            kt, javaSources(), classpath, out, levelOf(module.languageLevel),
-            bootClasspath = bootClasspath,
-            compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            friendPaths = friends().filter { Files.isDirectory(it) },
-        )
+        val r = ctx.withHeartbeat("Compiling Kotlin tests") {
+            compiler.compile(
+                kt, javaSources(), classpath, out, levelOf(module.languageLevel),
+                bootClasspath = bootClasspath,
+                compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
+                friendPaths = friends().filter { Files.isDirectory(it) },
+                status = { ctx.info(it) },
+            )
+        }
         ctx.reportKotlinProblems(r)
         return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))
     }

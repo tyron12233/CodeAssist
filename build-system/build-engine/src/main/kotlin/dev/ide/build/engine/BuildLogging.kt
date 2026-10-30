@@ -6,6 +6,11 @@ import dev.ide.build.BuildLogLevel
 import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.TaskContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Level-aware logging for build tasks, and the one place a tool's raw output is made fit to read.
@@ -52,6 +57,36 @@ fun TaskContext.error(message: String) = buildLog.log(BuildLogEntry(message, Bui
 fun TaskContext.report(diagnostic: BuildDiagnostic) {
     diagnostics.report(diagnostic)
     buildLog.log(BuildLogEntry(diagnostic.toLogLine(), diagnostic.severity.asLogLevel()))
+}
+
+/** How often [withHeartbeat] says a long step is still running. */
+private const val HEARTBEAT_MS = 30_000L
+
+/**
+ * Run [block], a long blocking tool call, off the caller's thread, logging `[what]: still running (2m 30s)`
+ * every [everyMs] until it returns. A full compile on a slow phone takes minutes and prints nothing of its own,
+ * and a step that stays silent that long reads as frozen.
+ */
+suspend fun <T> TaskContext.withHeartbeat(what: String, everyMs: Long = HEARTBEAT_MS, block: () -> T): T =
+    coroutineScope {
+        val started = System.nanoTime()
+        val beat = launch {
+            while (true) {
+                delay(everyMs)
+                info("$what: still running (${formatElapsed(System.nanoTime() - started)})")
+            }
+        }
+        try {
+            withContext(Dispatchers.IO) { block() }
+        } finally {
+            beat.cancel()
+        }
+    }
+
+/** `45s`, `2m 05s`. */
+internal fun formatElapsed(nanos: Long): String {
+    val total = nanos / 1_000_000_000
+    return if (total < 60) "${total}s" else "${total / 60}m ${(total % 60).toString().padStart(2, '0')}s"
 }
 
 /** Report a batch of structured problems (see [report]). */

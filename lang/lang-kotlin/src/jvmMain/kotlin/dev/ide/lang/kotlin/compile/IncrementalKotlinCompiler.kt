@@ -57,6 +57,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         friendPaths: List<Path> = emptyList(),
         /** Opt-in requirement markers (`-opt-in`); see [KotlinCompileRequest.optIns]. */
         optIns: List<String> = emptyList(),
+        /** Progress lines for the build log: which path the compile took, and what the backend is doing. */
+        status: (String) -> Unit = {},
     ): Result {
         val kt = kotlinSources.map { it.toAbsolutePath().normalize() }.filter { Files.isRegularFile(it) }
         if (kt.isEmpty()) {                              // no Kotlin left → nothing to emit; clear stale state
@@ -74,7 +76,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         // No usable baseline, the interop/classpath context moved, or a source was deleted → full rebuild.
         val removed = prev != null && (prev.srcHash.keys - srcHash.keys).isNotEmpty()
         if (prev == null || prev.context != context || removed) {
-            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns)
+            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns, status)
         }
 
         // The manifest must describe exactly what is in the output dir. If a prior run left them out of sync —
@@ -84,7 +86,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         // depends on (a spurious "unresolved reference"). A full rebuild is the only safe move. (Generalizes the
         // old dirty-empty-only tamper check to every path.)
         if (currentClasses(outputDir).toSet() != prev.abi.keys) {
-            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns)
+            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns, status)
         }
 
         val dirty = kt.filter { prev.srcHash[it] != srcHash[it] }
@@ -95,8 +97,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
             return Result(true, emptyList(), Mode.NOOP)
         }
 
-        return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, prev, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns)
-            ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns)
+        return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, prev, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns, status)
+            ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns, status)
     }
 
     /** Whole-module compile into a clean output dir; records a fresh manifest. */
@@ -106,9 +108,11 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         javaSig: Map<Path, JavaSig>,
         compilerPlugins: List<Path>, pluginOptions: List<String>,
         commonSources: List<Path>, friendPaths: List<Path>, optIns: List<String>,
+        status: (String) -> Unit,
     ): Result {
         clearDir(outputDir)
         Files.createDirectories(outputDir)
+        status("Full compile of ${kt.size} Kotlin file(s) against ${classpath.size} classpath entries")
         val r = compiler.compile(
             KotlinCompileRequest(
                 kotlinSources = kt, javaSources = javaSources, classpath = classpath, outputDir = outputDir,
@@ -116,6 +120,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
                 pluginOptions = pluginOptions,
                 commonSources = commonSources, friendPaths = friendPaths, optIns = optIns,
             ),
+            status,
         )
         if (!r.success) {
             // The output dir was just cleared and the compile failed, so it now holds a wiped/partial class set.
@@ -146,6 +151,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         javaSig: Map<Path, JavaSig>, prev: State,
         compilerPlugins: List<Path>, pluginOptions: List<String>,
         commonSources: List<Path>, friendPaths: List<Path>, optIns: List<String>,
+        status: (String) -> Unit,
     ): Result? {
         val dirtyOwned = dirty.flatMap { prev.srcToOut[it].orEmpty() }.toSet()           // their prior outputs
         val cleanOwned = (kt - dirty.toSet()).flatMap { prev.srcToOut[it].orEmpty() }.toSet()
@@ -174,6 +180,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         Files.createDirectories(stagingDir)
 
         // friendPaths=[cleanDir] keeps same-module `internal` access working across the source/binary split.
+        status("Recompiling ${dirty.size} changed Kotlin file(s)")
         val r = compiler.compile(
             KotlinCompileRequest(
                 kotlinSources = dirty, javaSources = javaSources, classpath = listOf(cleanDir) + classpath,
@@ -182,6 +189,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
                 pluginOptions = pluginOptions,
                 commonSources = commonSources, optIns = optIns,
             ),
+            status,
         )
         // A staging (dirty-only) compile failure is NOT reported as the build's failure — fall back to [full]
         // (the caller's `?: full(...)`), which is always correct. Recompiling one file against the rest as a

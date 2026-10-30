@@ -29,9 +29,11 @@ import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.debug
+import dev.ide.build.engine.info
 import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.toolOutput
 import dev.ide.build.engine.warn
+import dev.ide.build.engine.withHeartbeat
 import dev.ide.build.resolveFor
 import dev.ide.lang.jdt.build.javaFailureSummary
 import dev.ide.lang.jdt.build.reportJavaProblems
@@ -788,13 +790,16 @@ internal class AndroidKotlinCompileTask(
         if (kt.isEmpty()) return TaskResult.Success
         // Apply the compiler plugins that match the module (e.g. Compose when the runtime is on the classpath).
         val resolved = plugins.resolveFor(module, classpath + bootClasspath)
-        val r = compiler.compile(
-            kt, javaSources(), classpath, outClasses, level,
-            bootClasspath = bootClasspath,
-            compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            commonSources = commonSources(kt),
-            optIns = optIns(),
-        )
+        val r = ctx.withHeartbeat("Compiling Kotlin") {
+            compiler.compile(
+                kt, javaSources(), classpath, outClasses, level,
+                bootClasspath = bootClasspath,
+                compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
+                commonSources = commonSources(kt),
+                optIns = optIns(),
+                status = { ctx.info(it) },
+            )
+        }
         ctx.reportKotlinProblems(r)
         return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))
     }

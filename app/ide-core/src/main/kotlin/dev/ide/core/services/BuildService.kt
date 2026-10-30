@@ -948,7 +948,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> assemble $variant · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     )
                 }
 
@@ -974,7 +974,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> bundle $variant (.aab) · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     ) { log -> log("Signed bundle: $aab") }
                 }
 
@@ -1000,7 +1000,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> assembleAar $variant (.aar) · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     ) { log -> log("Packaged AAR: $aar") }
                 }
 
@@ -1100,7 +1100,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> $label $variant · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     ) { log ->
                         installer.installAndLaunch(apk, launchPkg, target, log)
                         if (isPlugin) {
@@ -1174,8 +1174,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
      * is empty on a machine's first Android build, so every library is dexed from scratch — the slow part of
      * a cold build. We reassure the user the next build reuses the cache, but only when there are enough
      * libraries that dexing is actually felt; a tiny app dexes fast and the notice would just be noise.
+     *
+     * A minified [variant] gets no notice: R8 dexes the whole app itself and never fills the library dex
+     * cache, so the notice would claim a first build on every release build, and the next one is no faster.
      */
-    private fun firstBuildDexBanner(module: Module): String? {
+    private fun firstBuildDexBanner(module: Module, variant: String? = null): String? {
+        if (variant != null && minifies(module, variant)) return null
         val depCount = runCatching {
             module.classpath(DependencyScope.RUNTIME_ONLY).entries.count { it.kind == ClasspathEntryKind.LIBRARY }
         }.getOrDefault(0)
@@ -1193,6 +1197,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             notes += "This module's minSdk is $minSdk. Below API 26, on-device dexing must desugar the whole " + "library classpath, which is significantly slower and re-dexes every library when dependencies " + "change. If your app can require API 26+, raising minSdk makes library dexing far faster and cacheable."
         }
         return notes.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+    }
+
+    /** Whether [variant] of [module] is built through R8 (`minifyEnabled`) rather than D8 library dexing. */
+    private fun minifies(module: Module, variant: String): Boolean {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return false
+        val v = AndroidVariants.select(module, variant) ?: return false
+        return facet.buildType(v.buildTypeName)?.minifyEnabled == true
     }
 
     /** Whether the shared dex cache already holds any dexed output (so a build isn't the cold first one). */
