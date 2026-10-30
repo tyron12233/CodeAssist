@@ -233,6 +233,8 @@ interface Aapt2 {
         protoFormat: Boolean = false,   // aapt2 `--proto-format`: emit proto resources (R8 resource shrinking input)
         overlays: List<Path> = emptyList(), // aapt2 `-R` overlays applied on top of [compiled]
         rTxt: Path? = null,             // aapt2 `--output-text-symbols`: the R symbol table (`R.txt`) for an AAR
+        includes: List<Path> = emptyList(), // more `-I` tables after [androidJar], to resolve references against
+        packageId: Int? = null,         // aapt2 `--package-id`; null keeps the app id 0x7f
     ): ToolResult
 
     /**

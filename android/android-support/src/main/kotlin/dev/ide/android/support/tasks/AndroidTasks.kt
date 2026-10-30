@@ -363,13 +363,21 @@ internal class GenerateLibraryRTask(
     private val aapt2: Aapt2,
     /** When set, aapt2 also writes the R symbol table (`R.txt`) here — the AAR ships it for consumers. */
     private val rTxt: Path? = null,
+    /**
+     * The library's dependencies' resources, linked by [LinkLibraryDependencyResourcesTask]: references into
+     * them resolve, while the R still holds only this library's own resources. Skipped when absent.
+     */
+    private val dependencyTable: Path? = null,
 ) : Task {
+    private fun table(): Path? = dependencyTable?.takeIf { Files.isRegularFile(it) }
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             dirPaths("res", resDirs)
             if (Files.isRegularFile(manifest)) filePaths("manifest", listOf(manifest))
             property("package", packageName)
             property("androidJar", androidJar.toString())
+            table()?.let { filePaths("dependencyTable", listOf(it)) }
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
         dirPath("R", genDir)
@@ -394,6 +402,7 @@ internal class GenerateLibraryRTask(
             throwawayAp,
             nonFinalIds = true,
             rTxt = rTxt,
+            includes = listOfNotNull(table()),
         )
         ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link (library R) failed")
@@ -419,6 +428,74 @@ internal class GenerateLibraryRTask(
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" + "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n"
         )
         return synthManifest
+    }
+}
+
+/**
+ * `linkDependencyResources`: link the resources an `android-lib` depends on (its dependency library modules'
+ * and AARs') into one throwaway table for [GenerateLibraryRTask] to link the library's own resources against.
+ * A library's own XML may use them like any app does (`?attr/colorSurface` from Material in a theme,
+ * `@string/x` from a dependency module), but its own link sees only its own resources, so without this every
+ * such reference fails "resource ... not found".
+ *
+ * The table is linked under the LIBRARY's package name, since aapt2 resolves an unqualified reference by the
+ * compiling package's name, and at package id 0x7e, because the library's own link takes 0x7f and an included
+ * table can't share it. Ids are throwaway either way: the app assigns the real ones when it links.
+ *
+ * [resDirs] go lowest priority first, each later one an overlay over the earlier (as the app's merge orders
+ * them). A failed link is not the library's error: it warns and drops the table, leaving `generateR` to link as
+ * before, which still succeeds for a library that references nothing outside itself.
+ */
+internal class LinkLibraryDependencyResourcesTask(
+    override val name: TaskName,
+    private val resDirs: List<Path>,
+    private val androidJar: Path,
+    private val packageName: String,
+    private val minSdk: Int,
+    private val compiledDir: Path,
+    private val scratchDir: Path,
+    private val table: Path,
+    private val aapt2: Aapt2,
+) : Task {
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("res", resDirs)
+            property("package", packageName)
+            property("androidJar", androidJar.toString())
+        }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("table", table) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        Files.deleteIfExists(table)
+        val compile = aapt2.compile(resDirs, compiledDir)
+        val archives = compile.archives
+        if (!compile.result.success || archives.isEmpty()) {
+            if (!compile.result.success) ctx.warn("Could not compile the dependencies' resources; ${name.value} skipped")
+            return TaskResult.Success
+        }
+        val manifest = scratchDir.resolve("AndroidManifest.xml")
+        Files.createDirectories(scratchDir)
+        manifest.writeText(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n"
+        )
+        val r = aapt2.link(
+            archives.take(1), manifest, androidJar, packageName, emptyList(), minSdk, minSdk,
+            scratchDir.resolve("gen"), table,
+            overlays = archives.drop(1),
+            packageId = DEPENDENCY_PACKAGE_ID,
+        )
+        if (!r.success) {
+            Files.deleteIfExists(table)
+            ctx.warn("Could not link the dependencies' resources; ${name.value} skipped")
+            ctx.debug(r.log.joinToString("\n"))
+        }
+        return TaskResult.Success
+    }
+
+    private companion object {
+        const val DEPENDENCY_PACKAGE_ID = 0x7e
     }
 }
 

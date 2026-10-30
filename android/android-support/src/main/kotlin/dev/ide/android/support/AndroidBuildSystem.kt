@@ -17,6 +17,7 @@ import dev.ide.android.support.tasks.DexExternalLibsTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateAarRJarTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
+import dev.ide.android.support.tasks.LinkLibraryDependencyResourcesTask
 import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.tasks.GenerateBuildConfigTask
@@ -1092,7 +1093,23 @@ class AndroidBuildSystem(
         val rRoot = buildDir.resolve("intermediates").resolve("r")
         val generateR = TaskName(":${m.name}:generateR")
         val compileR = TaskName(":${m.name}:compileR")
-        tasks.task(generateR) {
+        // The resources this library's own XML may reference: its dependency modules' and AARs', in the order
+        // the app merges them. Linked once into a table `generateR` links against, and only relinked when they
+        // change; no task when there are none.
+        val depResDirs = depAndroidLibs.flatMap {
+            contentRoots(it, AndroidVariants.matchLibraryVariant(it, consumerVariant, consumerFacet), ContentRole.ANDROID_RES)
+        } + libs.resDirs
+        val linkDepRes = TaskName(":${m.name}:linkDependencyResources")
+        val depTable = rRoot.resolve("dependencies.ap_")
+        if (depResDirs.isNotEmpty()) {
+            tasks.task(linkDepRes) {
+                LinkLibraryDependencyResourcesTask(
+                    linkDepRes, depResDirs, androidJar, facet.namespace, facet.minSdk,
+                    rRoot.resolve("dependency-res"), rRoot.resolve("dependency-link"), depTable, aapt2,
+                )
+            }
+        }
+        tasks.task(generateR, if (depResDirs.isNotEmpty()) listOf(linkDepRes) else emptyList()) {
             GenerateLibraryRTask(
                 generateR,
                 srcRoots(ContentRole.ANDROID_RES),
@@ -1106,6 +1123,7 @@ class AndroidBuildSystem(
                 rRoot.resolve("AndroidManifest.xml"),
                 aapt2,
                 rTxt = rRoot.resolve("R.txt"),   // the symbol table an AAR ships (assembleAar reads it)
+                dependencyTable = depTable.takeIf { depResDirs.isNotEmpty() },
             )
         }
         // The lib's own (non-final) R as R.jar bytecode — compile-only, kept OUT of the dexed output, so the
