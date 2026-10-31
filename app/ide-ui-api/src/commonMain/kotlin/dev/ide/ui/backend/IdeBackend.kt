@@ -2090,6 +2090,8 @@ data class UiSettings(
     val alwaysShowToolWindowActions: Boolean = false,
     /** Open a run's terminal full screen instead of docking it in the wide layout. */
     val runFullScreen: Boolean = false,
+    /** Date-windowed seasonal touches (Halloween's bats and Home card); off turns every season off. */
+    val seasonalTouches: Boolean = true,
     val editorFontScale: Float = 1f,
     /** "jetbrains" (bundled JetBrains Mono) | "monospace" (system monospace). */
     val codeFont: String = "jetbrains",
@@ -2111,6 +2113,8 @@ data class UiSettings(
     val wrapIndent: Boolean = true,
     /** Draggable bar along the editor's bottom edge while a line runs past the view; none when [wordWrap]. */
     val horizontalScrollbar: Boolean = true,
+    /** "line" | "block" | "underline" | "candle" (the editor's `CaretStyle` ids). */
+    val caretStyle: String = "line",
     /** Free (two-axis) touch scrolling: a single drag pans both axes (off = orientation-locked). */
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font. */
@@ -2137,7 +2141,7 @@ data class UiSettings(
  * [Dynamic] follows the device wallpaper (Material You, Android 12+; falls back to Violet elsewhere). A
  * preset / Custom always overrides wallpaper dynamic color.
  */
-enum class UiAccent { Dynamic, Lime, Violet, Teal, Orange, Custom }
+enum class UiAccent { Dynamic, Lime, Violet, Teal, Orange, Pumpkin, Custom }
 
 /**
  * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,

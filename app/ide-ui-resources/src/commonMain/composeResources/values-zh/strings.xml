@@ -609,6 +609,17 @@
     <string name="home_share">分享</string>
     <string name="home_delete">删除</string>
     <string name="home_dismiss">关闭</string>
+    <string name="halloween_title">万圣节快乐</string>
+    <string name="halloween_offer">为 IDE 换上节日装扮：南瓜主题、诡异的编辑器配色，还有蜡烛样式的光标。</string>
+    <string name="halloween_dress_up">换装</string>
+    <string name="halloween_not_now">以后再说</string>
+    <string name="halloween_applied">装扮完成。可以随时在设置中更改。</string>
+    <string name="halloween_undo">撤销</string>
+    <string name="halloween_over_title">万圣节结束了</string>
+    <string name="halloween_over_body">要把主题、编辑器配色和光标恢复原样吗？</string>
+    <string name="halloween_put_back">恢复原样</string>
+    <string name="halloween_keep">保留</string>
+    <string name="halloween_boo">嘘！</string>
     <string name="home_resume_title">从上次离开的地方继续</string>
     <string name="home_account_title">账号与工具</string>
     <string name="home_settings_tools">设置与工具</string>

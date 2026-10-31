@@ -1,5 +1,10 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.HalloweenBackdrop
+import dev.ide.ui.components.HauntedGhost
+import dev.ide.ui.components.SeasonalEmptyArt
+import dev.ide.ui.theme.LocalSeason
+import dev.ide.ui.theme.Season
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.text.BasicTextField
@@ -239,6 +244,11 @@ fun ProjectsHomeScreen(
      */
     accountRequested: Boolean = false,
     onAccountRequestHandled: () -> Unit = {},
+    /**
+     * A seasonal card (Halloween's), shown above the project list. A slot rather than data so this screen does
+     * not need to know which season it is or what dressing up changes; null shows nothing.
+     */
+    seasonalCard: (@Composable (Modifier) -> Unit)? = null,
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
     // Deleting wipes the project from disk and nothing else in this flow asks first.
@@ -282,12 +292,15 @@ fun ProjectsHomeScreen(
             onRequestRename = onRenameProject?.let { { project: ProjectInfo -> pendingRename = project } },
             showLegacyRecovery = showLegacyRecovery,
             onDismissLegacyRecovery = onDismissLegacyRecovery,
+            seasonalCard = seasonalCard,
             bell = bell,
             onOpenAccount = { sheet = HomeSheet.Account },
             onJoinDiscord = onJoinDiscord,
         )
     } else
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
+      // Behind everything, so the list scrolls over it; draws nothing outside the Halloween season.
+      HalloweenBackdrop()
       PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
@@ -345,6 +358,10 @@ fun ProjectsHomeScreen(
                     savedCount = 0,
                     onSelect = { segment = it },
                 )
+            }
+
+            if (seasonalCard != null) {
+                item("seasonal") { seasonalCard(Modifier.padding(horizontal = PhoneListInset).padding(top = 16.dp)) }
             }
 
             if (showLegacyRecovery) {
@@ -873,7 +890,9 @@ private fun EmptyList(inset: Dp = PhoneListInset, top: Dp = 24.dp) {
             .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Symbol(CaSymbols.folderOpen, contentDescription = null, size = 40.dp, tint = c.outlineVariant)
+        SeasonalEmptyArt(size = 56.dp) {
+            Symbol(CaSymbols.folderOpen, contentDescription = null, size = 40.dp, tint = c.outlineVariant)
+        }
         Text(
             stringResource(Res.string.home_empty_list),
             style = MaterialTheme.typography.bodyLarge,
@@ -1224,6 +1243,7 @@ private fun WideProjectsHome(
     onRequestRename: ((ProjectInfo) -> Unit)?,
     showLegacyRecovery: Boolean,
     onDismissLegacyRecovery: () -> Unit,
+    seasonalCard: (@Composable (Modifier) -> Unit)?,
     bell: (@Composable () -> Unit)?,
     onOpenAccount: () -> Unit,
     onJoinDiscord: (() -> Unit)?,
@@ -1239,6 +1259,7 @@ private fun WideProjectsHome(
     }
     val sidebarShown = LocalHomeSidebarShown.current
     BoxWithConstraints(Modifier.fillMaxSize().background(c.background)) {
+        HalloweenBackdrop()
         val showKind = maxWidth >= ProjectsKindColumnBreakpoint
         Column(Modifier.widthIn(max = ProjectsWideMaxWidth).fillMaxSize().padding(horizontal = 28.dp)) {
             Row(
@@ -1289,6 +1310,7 @@ private fun WideProjectsHome(
                 SortChooser(sort) { sort = it }
             }
             // Every gap down the wide column is 16dp: the search row already leaves 8 below itself.
+            seasonalCard?.invoke(Modifier.padding(top = 8.dp, bottom = 8.dp))
             if (showLegacyRecovery) LegacyRecoveryNotice(onDismissLegacyRecovery, inset = 0.dp, top = 8.dp)
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
@@ -1299,12 +1321,18 @@ private fun WideProjectsHome(
                         if (projects.isEmpty()) {
                             EmptyList(inset = 0.dp, top = if (showLegacyRecovery) 16.dp else 8.dp)
                         } else {
-                            Text(
-                                stringResource(Res.string.home_no_match, query.trim()),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = c.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 24.dp),
-                            )
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 24.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                if (LocalSeason.current == Season.Halloween) HauntedGhost(44.dp)
+                                Text(
+                                    stringResource(Res.string.home_no_match, query.trim()),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = c.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

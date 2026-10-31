@@ -30,6 +30,12 @@ object BuiltInSettingsPages {
      *  Read once at startup by the UI app state through [REOPEN_LAST_PROJECT_KEY]. */
     const val REOPEN_LAST_PROJECT = "reopenLastProject"
 
+    /** The launcher icon (Appearance), offered only where an [AppIcons.host] can switch it. */
+    const val APP_ICON = "appIcon"
+    const val APP_ICON_KEY = "settings.$APPEARANCE.$APP_ICON"
+    const val APP_ICON_DEFAULT = "default"
+    const val APP_ICON_PUMPKIN = "pumpkin"
+
     /** Full preference key of [REOPEN_LAST_PROJECT]. */
     const val REOPEN_LAST_PROJECT_KEY = "settings.$APPEARANCE.$REOPEN_LAST_PROJECT"
 
@@ -159,7 +165,7 @@ object BuiltInSettingsPages {
     )
 
     private val appearance = page(APPEARANCE, "Appearance", "moon", 0) {
-        listOf(
+        listOfNotNull(
             SettingControl.Choice(
                 "themeMode", "Theme", "Use a fixed theme or follow the operating system",
                 default = d.themeMode,
@@ -178,6 +184,7 @@ object BuiltInSettingsPages {
                     SettingControl.Choice.Option(IdeSettings.ACCENT_VIOLET, "Violet"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_TEAL, "Teal"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_PUMPKIN, "Pumpkin"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_CUSTOM, "Custom"),
                 ),
             ),
@@ -185,6 +192,18 @@ object BuiltInSettingsPages {
                 "accentColor", "Custom color", "Pick any color; the full Material You theme regenerates from it",
                 default = d.accentColor,
             ),
+            // Read per call, so it appears once the host has installed its switcher.
+            AppIcons.host?.let { host ->
+                SettingControl.Choice(
+                    APP_ICON, "App icon",
+                    "The icon your launcher shows. Some launchers take a few seconds to update, and may remove a home screen shortcut to the old icon",
+                    default = host.current(),
+                    options = listOf(
+                        SettingControl.Choice.Option(APP_ICON_DEFAULT, "Default"),
+                        SettingControl.Choice.Option(APP_ICON_PUMPKIN, "Pumpkin"),
+                    ),
+                )
+            },
             SettingControl.Toggle(
                 "toolWindowActions", "Always show tool window actions",
                 "Keep the buttons in tool window headers visible. Off shows them only while the pointer is over a tool window or it is the one you're working in (mouse and trackpad only)",
@@ -199,6 +218,11 @@ object BuiltInSettingsPages {
                 "runFullScreen", "Full-screen Run output",
                 "Open a running program's output full screen, as on a phone in portrait. Off docks it beside the editor on wide screens and phones in landscape",
                 default = d.runFullScreen,
+            ),
+            SettingControl.Toggle(
+                "seasonal", "Seasonal touches",
+                "Small decorations around holidays, like bats after a successful build at Halloween. Your theme and editor only change if you choose to dress up",
+                default = d.seasonalTouches,
             ),
             SettingControl.Toggle(
                 REOPEN_LAST_PROJECT, "Reopen last project on launch",
@@ -217,6 +241,16 @@ object BuiltInSettingsPages {
                 options = listOf(
                     SettingControl.Choice.Option(IdeSettings.CODE_FONT_JETBRAINS, "JetBrains Mono"),
                     SettingControl.Choice.Option(IdeSettings.CODE_FONT_MONOSPACE, "System monospace"),
+                ),
+            ),
+            SettingControl.Choice(
+                "caretStyle", "Caret style", "How the text cursor is drawn",
+                default = d.caretStyle,
+                options = listOf(
+                    SettingControl.Choice.Option(IdeSettings.CARET_LINE, "Line"),
+                    SettingControl.Choice.Option(IdeSettings.CARET_BLOCK, "Block"),
+                    SettingControl.Choice.Option(IdeSettings.CARET_UNDERLINE, "Underline"),
+                    SettingControl.Choice.Option(IdeSettings.CARET_CANDLE, "Candle"),
                 ),
             ),
             SettingControl.Toggle("fontLigatures", "Font ligatures", "Render programming ligatures (-> != >= …) when the code font has them", default = d.fontLigatures),

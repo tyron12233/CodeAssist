@@ -660,6 +660,17 @@
     <string name="home_share">مشاركة</string>
     <string name="home_delete">حذف</string>
     <string name="home_dismiss">تجاهل</string>
+    <string name="halloween_title">هالوين سعيد</string>
+    <string name="halloween_offer">ألبِس بيئة التطوير زيّ الموسم: سمة اليقطين، وألوان محرر مخيفة، وشمعة بدلًا من المؤشر.</string>
+    <string name="halloween_dress_up">تزيين</string>
+    <string name="halloween_not_now">ليس الآن</string>
+    <string name="halloween_applied">اكتمل التزيين. يمكنك تغيير أي شيء من الإعدادات.</string>
+    <string name="halloween_undo">تراجع</string>
+    <string name="halloween_over_title">انتهى الهالوين</string>
+    <string name="halloween_over_body">هل تريد إعادة السمة وألوان المحرر والمؤشر كما كانت؟</string>
+    <string name="halloween_put_back">إعادتها</string>
+    <string name="halloween_keep">الإبقاء عليها</string>
+    <string name="halloween_boo">بوو!</string>
     <string name="home_resume_title">تابع من حيث توقفت</string>
     <string name="home_account_title">الحساب والأدوات</string>
     <string name="home_settings_tools">الإعدادات والأدوات</string>

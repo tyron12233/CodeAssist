@@ -80,6 +80,10 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.rename_failed
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.material3.MaterialTheme
+import dev.ide.ui.theme.Season
+import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.Dispatchers
@@ -165,6 +169,8 @@ fun CodeEditor(
     horizontalScrollbar: Boolean = true,
     /** Render programming ligatures (`->`, `!=`, …) when the code font provides them (Settings → Editor; on). */
     fontLigatures: Boolean = true,
+    /** How the caret is drawn (Settings → Editor → Caret style). */
+    caretStyle: CaretStyle = CaretStyle.Line,
     /**
      * The editor is covered by an app-level overlay (the file-tree / build-console sheet on a phone, the command
      * palette, a destination sheet). The floating popups are separate Popup windows that would otherwise sit ON
@@ -200,6 +206,7 @@ fun CodeEditor(
             wrapIndent,
             horizontalScrollbar,
             fontLigatures,
+            caretStyle,
             obscured,
             onEditorAction,
             onOtherFileEdits,
@@ -232,6 +239,7 @@ private fun CodeEditorContent(
     wrapIndent: Boolean = true,
     horizontalScrollbar: Boolean = true,
     fontLigatures: Boolean = true,
+    caretStyle: CaretStyle = CaretStyle.Line,
     obscured: Boolean = false,
     onEditorAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
     /** Applies a code action's edits to files other than this one; see [rememberEditorActionsController]. */
@@ -284,6 +292,30 @@ private fun CodeEditorContent(
             blinkOn = !blinkOn
         }
     }
+    // The candle caret's clock. Ticked at ~16 fps rather than every frame: a flame only has to look alive, and
+    // this redraws just the caret layer. Stops whenever the editor is unfocused or another style is chosen.
+    val flameTime = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(caretStyle, isFocused) {
+        if (caretStyle != CaretStyle.Candle || !isFocused) return@LaunchedEffect
+        while (true) {
+            delay(60.milliseconds)
+            flameTime.floatValue += 0.06f
+        }
+    }
+    // Embers the candle throws off on each edit, on the same clock (so they only move while the flame does).
+    val embers = remember { EmberField() }
+    val lastEmberEdit = remember { intArrayOf(editorSession.editCount) }
+    LaunchedEffect(editorSession.editCount) {
+        val edits = editorSession.editCount
+        if (edits == lastEmberEdit[0]) return@LaunchedEffect
+        lastEmberEdit[0] = edits
+        if (caretStyle != CaretStyle.Candle || !isFocused) return@LaunchedEffect
+        // The flame's tip sits about a fifth of a line above the caret's line top (see drawCandle).
+        val caret = interaction.caretContent
+        embers.spawn(caret.x, caret.y - metrics.lineHeight * 0.15f, flameTime.floatValue)
+    }
+    // The Halloween overlays (cobweb, ghost, slime drips) only during the season, with Seasonal touches on.
+    val halloween = LocalSeason.current == Season.Halloween
 
     // The editor pane's window bounds, so the completion popup can size the list to the room below the caret.
     var paneTopInWindow by remember(path) { mutableFloatStateOf(0f) }
@@ -1214,6 +1246,7 @@ private fun CodeEditorContent(
                         handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
                         handleColor = colors.accent,
                         animatedSelection = animatedSel,
+                        spookyErrors = halloween,
                     )
                 },
         )
@@ -1224,7 +1257,11 @@ private fun CodeEditorContent(
         Spacer(
             Modifier
                 .matchParentSize()
-                .graphicsLayer { alpha = if (isFocused && blinkOn && editorSession.selection.collapsed) 1f else 0f }
+                .graphicsLayer {
+                    // A candle does not blink; its flame flickering is the at-rest motion.
+                    val lit = blinkOn || caretStyle == CaretStyle.Candle
+                    alpha = if (isFocused && lit && editorSession.selection.collapsed) 1f else 0f
+                }
                 .drawBehind {
                     if (!editorSession.selection.collapsed) return@drawBehind
                     drawCaret(
@@ -1235,8 +1272,34 @@ private fun CodeEditorContent(
                         codeTop = caretClip.codeTop,
                         lineHeight = metrics.lineHeight,
                         color = drawColors.caret,
+                        style = caretStyle,
+                        charWidth = metrics.charWidth,
+                        flameTime = if (caretStyle == CaretStyle.Candle) flameTime.floatValue else 0f,
                     )
+                    if (caretStyle == CaretStyle.Candle && !embers.isEmpty()) {
+                        clipRect(left = gutterWidthPx, top = caretClip.codeTop) {
+                            with(embers) {
+                                draw(flameTime.floatValue, geometry.vOffset.floatValue, geometry.hOffset.floatValue, metrics.lineHeight)
+                            }
+                        }
+                    }
                 },
+        )
+
+        // Halloween: a cobweb in the corner of an idle editor, and once a session a ghost drifting across it. Both
+        // are overlays keyed on edits and caret moves, so typing brushes them away and the code layer never redraws.
+        val activity = editorSession.editCount to editorSession.selection.start
+        EditorCobweb(
+            activity = activity,
+            enabled = halloween,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+        EditorGhost(
+            activity = activity,
+            enabled = halloween,
+            background = drawColors.background,
+            modifier = Modifier.matchParentSize(),
         )
 
         if (horizontalScrollbar) {

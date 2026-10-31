@@ -217,15 +217,86 @@ private val LimeDark = darkColorScheme(
     errorContainer = Color(0xFF723523), onErrorContainer = Color(0xFFFFDBD1),
 )
 
+// ---- Pumpkin / night: the second COMPLETE scheme, for the same reason as lime ----
+//
+// Orange is already a preset, and on the shared cool ramp it reads as a warning color. What makes this one a
+// jack-o'-lantern is the ground it sits on: in dark, a plum-black night with the orange as the light in it;
+// in light, a warm candle-lit paper. The tertiary is a witch's-hat purple so the counter-accent still says
+// Halloween where the orange does not reach. Source colors: primary #F27D16, tertiary #7B4BB5, a plum
+// neutral in dark and a warm one in light.
+
+private val PumpkinLight = lightColorScheme(
+    primary = Color(0xFF964900), onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFFFDCC2), onPrimaryContainer = Color(0xFF311300),
+    inversePrimary = Color(0xFFFFB77A),
+    secondary = Color(0xFF755845), onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFFFDCC6), onSecondaryContainer = Color(0xFF2B1709),
+    tertiary = Color(0xFF704BA2), onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFEDDCFF), onTertiaryContainer = Color(0xFF290055),
+    background = Color(0xFFFFF8F5),
+    onBackground = Color(0xFF221A16),
+    surface = Color(0xFFFFF8F5),
+    onSurface = Color(0xFF221A16),
+    surfaceVariant = Color(0xFFF2DFD3),
+    onSurfaceVariant = Color(0xFF52443B),
+    surfaceTint = Color(0xFF964900),
+    inverseSurface = Color(0xFF382E2A),
+    inverseOnSurface = Color(0xFFFFEDE4),
+    outline = Color(0xFF84746A),
+    outlineVariant = Color(0xFFD7C3B7),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFFFFF8F5),
+    surfaceDim = Color(0xFFE7D7CF),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFFF1EA),
+    surfaceContainer = Color(0xFFFCEBE2),
+    surfaceContainerHigh = Color(0xFFF6E5DC),
+    surfaceContainerHighest = Color(0xFFF0DFD7),
+    error = Color(0xFFBA1A1A), onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6), onErrorContainer = Color(0xFF410002),
+)
+
+private val PumpkinDark = darkColorScheme(
+    primary = Color(0xFFFFB77A), onPrimary = Color(0xFF4F2500),
+    primaryContainer = Color(0xFF8A4600), onPrimaryContainer = Color(0xFFFFDCC2),
+    inversePrimary = Color(0xFF964900),
+    secondary = Color(0xFFE5BFA8), onSecondary = Color(0xFF432B1C),
+    secondaryContainer = Color(0xFF5C4131), onSecondaryContainer = Color(0xFFFFDCC6),
+    tertiary = Color(0xFFD7BAFF), onTertiary = Color(0xFF3F1B6B),
+    tertiaryContainer = Color(0xFF573484), onTertiaryContainer = Color(0xFFEDDCFF),
+    background = Color(0xFF161216),
+    onBackground = Color(0xFFEAE0E4),
+    surface = Color(0xFF161216),
+    onSurface = Color(0xFFEAE0E4),
+    surfaceVariant = Color(0xFF4A4045),
+    onSurfaceVariant = Color(0xFFCEC2C8),
+    surfaceTint = Color(0xFFFFB77A),
+    inverseSurface = Color(0xFFEAE0E4),
+    inverseOnSurface = Color(0xFF342F33),
+    outline = Color(0xFF978C92),
+    outlineVariant = Color(0xFF4A4045),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF3D373C),
+    surfaceDim = Color(0xFF161216),
+    surfaceContainerLowest = Color(0xFF110D11),
+    surfaceContainerLow = Color(0xFF1F1A1E),
+    surfaceContainer = Color(0xFF231E22),
+    surfaceContainerHigh = Color(0xFF2E282C),
+    surfaceContainerHighest = Color(0xFF393337),
+    error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
+)
+
 /** The fixed expressive [ColorScheme] for an [accent] in the given mode (the non-dynamic fallback). */
 fun expressiveColorScheme(accent: CaAccent, dark: Boolean): ColorScheme {
-    // Lime carries its own neutrals (see above) and returns early; the rest share one ramp.
+    // Lime and Pumpkin carry their own neutrals (see above) and return early; the rest share one ramp.
     if (accent == CaAccent.Lime) return if (dark) LimeDark else LimeLight
+    if (accent == CaAccent.Pumpkin) return if (dark) PumpkinDark else PumpkinLight
     val roles = when (accent) {
         CaAccent.Violet -> if (dark) VioletDark else VioletLight
         CaAccent.Teal -> if (dark) TealDark else TealLight
         CaAccent.Orange -> if (dark) OrangeDark else OrangeLight
-        CaAccent.Lime -> error("handled above")
+        CaAccent.Lime, CaAccent.Pumpkin -> error("handled above")
     }
     return (if (dark) NeutralDark else NeutralLight).withAccent(roles)
 }

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.SeasonalEmptyArt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -168,7 +169,9 @@ fun StoreSearchScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 56.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Symbol(CaSymbols.searchOff, contentDescription = null, size = 44.dp, tint = c.outlineVariant)
+                SeasonalEmptyArt(size = 60.dp) {
+                    Symbol(CaSymbols.searchOff, contentDescription = null, size = 44.dp, tint = c.outlineVariant)
+                }
                 Text(
                     // A blank query that finds nothing is an empty store, not a search that missed.
                     state.error

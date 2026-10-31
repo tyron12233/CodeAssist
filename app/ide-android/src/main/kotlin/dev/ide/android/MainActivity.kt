@@ -1,5 +1,7 @@
 package dev.ide.android
 
+import dev.ide.core.settings.AppIcons
+import dev.ide.core.settings.BuiltInSettingsPages
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -87,6 +89,8 @@ class MainActivity : ComponentActivity() {
         // `SystemBarStyle.dark` here forced light icons even in light mode.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Lets Settings offer "App icon"; the engine shared with the desktop has no launcher of its own.
+        AppIcons.host = AndroidAppIcons(applicationContext)
         // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
         // taken for a file to import.
         if (!takeAuthRedirect(intent) && !takeStoreLink(intent)) inbound.value = extractStream(intent)
@@ -101,6 +105,9 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                     session = s; backend = s.backend
+                    // Bring the launcher in line with the saved choice. They only disagree after something
+                    // reset one and not the other, such as a backup restored onto a fresh install.
+                    s.backend.settings.preference(BuiltInSettingsPages.APP_ICON_KEY)?.let { AppIcons.host?.apply(it) }
                     AndroidFrameMetrics.register(this@MainActivity, s.backend)
                     // A redirect that landed mid-bootstrap now has somewhere to go.
                     deliverAuthRedirect()

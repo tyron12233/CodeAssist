@@ -2,6 +2,7 @@ package dev.ide.ui.editor
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -137,6 +138,8 @@ internal fun DrawScope.drawEditor(
      *  the interpolated span of an in-progress expand animation. The logical selection is already the final
      *  range (caret/handles reflect it); this only grows the highlight. */
     animatedSelection: Pair<Int, Int>? = null,
+    /** Halloween: hang slime drips under error squiggles (static, see [slimeDrips]). */
+    spookyErrors: Boolean = false,
 ): Float {
     val doc = session.doc
     val sel = session.selection
@@ -418,10 +421,12 @@ internal fun DrawScope.drawEditor(
                 if (c1 <= c0) continue
                 val v0 = rawToVisual(line, c0)
                 val v1 = rawToVisual(line, c1)
+                val drips = spookyErrors && seg.severity == UiSeverity.Error
                 if (!wrap) {
                     val x0 = textLeft + layout.getHorizontalPosition(v0, usePrimaryDirection = true)
                     val x1 = textLeft + layout.getHorizontalPosition(v1, usePrimaryDirection = true)
                     wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f)
+                    if (drips) slimeDrips(slimeColor(color), x0, x1, lineTop(line) + lineH - 1f, lineH, line * 31 + c0)
                 } else {
                     val firstSub = layout.getLineForOffset(v0)
                     val lastSub = layout.getLineForOffset(v1)
@@ -429,6 +434,7 @@ internal fun DrawScope.drawEditor(
                         val x0 = textLeft + (if (s == firstSub) layout.getHorizontalPosition(v0, usePrimaryDirection = true) else layout.getLineLeft(s))
                         val x1 = textLeft + (if (s == lastSub) layout.getHorizontalPosition(v1, usePrimaryDirection = true) else layout.getLineRight(s))
                         wavyUnderline(color, x0, x1, lineTop(line) + s * lineH + lineH - 2f)
+                        if (drips) slimeDrips(slimeColor(color), x0, x1, lineTop(line) + s * lineH + lineH - 1f, lineH, line * 31 + c0 + s)
                     }
                 }
             }
@@ -605,13 +611,69 @@ internal fun DrawScope.drawCaret(
     codeTop: Float,
     lineHeight: Float,
     color: Color,
+    style: CaretStyle = CaretStyle.Line,
+    /** One monospace cell, which [CaretStyle.Block] and [CaretStyle.Underline] cover. */
+    charWidth: Float = 0f,
+    /** Seconds on a running clock, for [CaretStyle.Candle]'s flicker; ignored by the other styles. */
+    flameTime: Float = 0f,
 ) {
     val cx = caretContent.x - hOff
     val cy = caretContent.y - vOff
-    if (cy + lineHeight <= codeTop || cy >= size.height) return
+    // The candle's flame rises above its own line, so its row can still show while the line itself is under
+    // the sticky headers' bottom edge; the clip below is what keeps it off the headers.
+    val rise = if (style == CaretStyle.Candle) lineHeight * 0.5f else 0f
+    if (cy + lineHeight <= codeTop - rise || cy >= size.height) return
     clipRect(left = gutterWidth, top = codeTop, right = size.width, bottom = size.height) {
-        drawRect(color, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineHeight))
+        val cell = if (charWidth > 0f) charWidth else lineHeight * 0.6f
+        when (style) {
+            CaretStyle.Line -> drawRect(color, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineHeight))
+            // Translucent, so the character under it stays readable without redrawing the text inverted.
+            CaretStyle.Block -> drawRect(color.copy(alpha = color.alpha * 0.45f), Offset(cx, cy), Size(cell, lineHeight))
+            CaretStyle.Underline -> {
+                val h = 2.dp.toPx()
+                drawRect(color, Offset(cx, cy + lineHeight - h), Size(cell, h))
+            }
+            CaretStyle.Candle -> drawCandle(cx, cy, lineHeight, color, flameTime)
+        }
     }
+}
+
+/**
+ * A wax candle in the caret's place: the stick spans the lower part of the line, in the caret color so it
+ * still follows the scheme, and a two-tone flame sits on the wick. The flame's height and lean are a sum of
+ * unrelated sines, so the flicker never visibly repeats.
+ */
+private fun DrawScope.drawCandle(cx: Float, cy: Float, lineHeight: Float, color: Color, t: Float) {
+    val stickW = 3.dp.toPx()
+    val stickTop = cy + lineHeight * 0.28f
+    drawRect(color, Offset(cx - stickW / 2f, stickTop), Size(stickW, cy + lineHeight - stickTop))
+    // A darker wick, so the flame reads as sitting on something rather than floating.
+    val wickH = 1.5.dp.toPx()
+    drawRect(Color(0xFF3A2A1E), Offset(cx - 0.5.dp.toPx(), stickTop - wickH), Size(1.dp.toPx(), wickH))
+
+    val flicker = 1f + 0.09f * kotlin.math.sin(t * 11f) + 0.05f * kotlin.math.sin(t * 17.3f + 1f)
+    val lean = 0.7.dp.toPx() * kotlin.math.sin(t * 7.1f)
+    val base = stickTop - wickH * 0.4f
+    val h = lineHeight * 0.48f * flicker
+    val w = 4.2.dp.toPx()
+
+    // A soft halo that fades to nothing, so it lights the text around the flame instead of sitting on it.
+    val glowCenter = Offset(cx + lean * 0.5f, base - h * 0.45f)
+    drawCircle(
+        Brush.radialGradient(listOf(Color(0xFFFF9A2E).copy(alpha = 0.28f), Color.Transparent), glowCenter, h * 0.95f),
+        radius = h * 0.95f,
+        center = glowCenter,
+    )
+    drawPath(flamePath(cx, base, w, h, lean), Color(0xFFFF8A1F))
+    drawPath(flamePath(cx, base, w * 0.5f, h * 0.6f, lean * 0.6f), Color(0xFFFFE27A))
+}
+
+/** A teardrop standing on ([cx], [base]): round at the bottom, its tip [h] above and [lean] to the side. */
+private fun flamePath(cx: Float, base: Float, w: Float, h: Float, lean: Float) = Path().apply {
+    moveTo(cx, base)
+    cubicTo(cx - w, base, cx - w * 0.7f, base - h * 0.55f, cx + lean, base - h)
+    cubicTo(cx + w * 0.7f, base - h * 0.55f, cx + w, base, cx, base)
+    close()
 }
 
 /** Cap on pinned sticky-header rows (deeper nesting drops the outermost), so they never eat the viewport. */

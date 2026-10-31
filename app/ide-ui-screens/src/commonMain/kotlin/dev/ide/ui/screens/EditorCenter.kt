@@ -61,6 +61,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.editor.BlockEditor
+import dev.ide.ui.editor.CaretStyle
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.engine.DaemonPass
 import dev.ide.ui.editor.core.isLarge
@@ -400,6 +401,7 @@ internal fun EditorCenter(
                                 wrapIndent = state.wrapIndentEnabled,
                                 horizontalScrollbar = state.horizontalScrollbarEnabled,
                                 fontLigatures = state.fontLigaturesEnabled,
+                                caretStyle = CaretStyle.fromId(state.caretStyle),
                                 // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
                                 // specific composable. The editor tools (incl. the Code/Blocks/Preview switch) are pinned
                                 // to the breadcrumb row, so they're already visible — making the view change easy to undo.

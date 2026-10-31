@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Halloween launcher icon's night sky, the same plum as the in-app Halloween card. -->
+    <color name="ic_launcher_pumpkin_background">#2E1C38</color>
+</resources>

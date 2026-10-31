@@ -15,3 +15,5 @@ actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 actual fun nowMillis(): Long = System.currentTimeMillis()
 
 actual fun localHourOfDay(): Int = java.time.LocalTime.now().hour
+
+actual fun localMonthDay(): Int = java.time.LocalDate.now().let { it.monthValue * 100 + it.dayOfMonth }

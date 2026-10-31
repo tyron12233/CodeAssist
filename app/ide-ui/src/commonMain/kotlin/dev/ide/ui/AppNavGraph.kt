@@ -1,5 +1,7 @@
 package dev.ide.ui
 
+import dev.ide.ui.components.HalloweenCard
+import dev.ide.ui.components.HalloweenCardMode
 import dev.ide.ui.generated.resources.home_account
 import dev.ide.ui.generated.resources.notif_title
 import dev.ide.ui.icons.CaSymbols
@@ -738,7 +740,19 @@ private fun ProjectPickerRoute(
 ) {
     val backend = app.backend
     var notificationsVisible by remember { mutableStateOf(false) }
+    val halloween = remember(app) { HalloweenDressUp(app) }
+    val halloweenMode = halloween.mode()
     ProjectsHomeScreen(
+        seasonalCard = halloweenMode?.let { mode ->
+            { cardModifier ->
+                HalloweenCard(
+                    mode = mode,
+                    onPrimary = if (mode == HalloweenCardMode.Offer) halloween::dressUp else halloween::putBack,
+                    onSecondary = if (mode == HalloweenCardMode.Applied) halloween::putBack else halloween::dismiss,
+                    modifier = cardModifier,
+                )
+            }
+        },
         bell = { NotificationBell(backend, onClick = { notificationsVisible = true }) },
         accountRequested = accountRequested,
         onAccountRequestHandled = onAccountRequestHandled,

@@ -38,6 +38,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.HomeTab
 import dev.ide.ui.components.AppNavBar
+import dev.ide.ui.components.HalloweenGlyph
+import dev.ide.ui.components.HalloweenNavGlyph
+import dev.ide.ui.components.SeasonalAppNavBar
 import dev.ide.ui.components.NavDestination
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.home_challenges
@@ -45,9 +48,18 @@ import dev.ide.ui.generated.resources.home_learn
 import dev.ide.ui.generated.resources.home_store
 import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Motion
+import dev.ide.ui.theme.Season
 import dev.ide.ui.theme.Symbol
 import org.jetbrains.compose.resources.stringResource
+
+/** The tabs that wear a Halloween glyph, by tab id. Challenges keeps its bolt. */
+private val HalloweenTabs = mapOf(
+    HomeTab.Projects.name to HalloweenGlyph.Pumpkin,
+    HomeTab.Store.name to HalloweenGlyph.Bat,
+    HomeTab.Learn.name to HalloweenGlyph.WitchHat,
+)
 
 /** From this width the home tabs sit beside a sidebar instead of above a bottom bar. */
 private val HomeSidebarBreakpoint = 840.dp
@@ -91,6 +103,8 @@ fun HomeScreen(
     // contributed, a tab this build no longer has) reaches here, and a tap must never be able to take the app
     // down. An unknown id selects nothing.
     val select: (String) -> Unit = { id -> HomeTab.entries.firstOrNull { it.name == id }?.let(onSelectTab) }
+    // Halloween dresses three of the tabs up; the labels, and so what a screen reader says, stay the same.
+    val seasonal = if (LocalSeason.current == Season.Halloween) HalloweenTabs else emptyMap()
     val content: @Composable (Modifier) -> Unit = { modifier ->
         Crossfade(
             targetState = tab,
@@ -116,6 +130,7 @@ fun HomeScreen(
                     selectedId = tab.name,
                     onSelect = select,
                     counts = mapOf(HomeTab.Projects.name to projectCount),
+                    seasonal = seasonal,
                     footer = sidebarFooter,
                 )
                 CompositionLocalProvider(LocalHomeSidebarShown provides true) {
@@ -131,7 +146,11 @@ fun HomeScreen(
             Column(Modifier.fillMaxSize()) {
                 content(Modifier.weight(1f).fillMaxWidth())
                 if (!keyboardOpen) {
-                    AppNavBar(destinations = destinations, selectedId = tab.name, onSelect = select)
+                    if (seasonal.isEmpty()) {
+                        AppNavBar(destinations = destinations, selectedId = tab.name, onSelect = select)
+                    } else {
+                        SeasonalAppNavBar(destinations = destinations, selectedId = tab.name, onSelect = select, seasonal = seasonal)
+                    }
                 }
             }
         }
@@ -145,6 +164,7 @@ private fun HomeSidebar(
     selectedId: String,
     onSelect: (String) -> Unit,
     counts: Map<String, Int?>,
+    seasonal: Map<String, HalloweenGlyph>,
     footer: (@Composable ColumnScope.() -> Unit)?,
 ) {
     val c = MaterialTheme.colorScheme
@@ -168,6 +188,7 @@ private fun HomeSidebar(
                         label = d.label,
                         selected = d.id == selectedId,
                         count = counts[d.id],
+                        seasonalGlyph = seasonal[d.id],
                         role = Role.Tab,
                         onClick = { onSelect(d.id) },
                     )
@@ -192,6 +213,8 @@ fun HomeSidebarItem(
     count: Int? = null,
     /** A count drawn as an alert (the inbox's unread notifications) rather than a quiet total. */
     countIsAlert: Boolean = false,
+    /** A Halloween glyph drawn in place of [glyph] (see [HalloweenNavGlyph]); null keeps [glyph]. */
+    seasonalGlyph: HalloweenGlyph? = null,
     role: Role = Role.Button,
     onClick: () -> Unit,
 ) {
@@ -211,7 +234,11 @@ fun HomeSidebarItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Symbol(glyph, contentDescription = null, size = 20.dp, filled = selected)
+            if (seasonalGlyph != null) {
+                HalloweenNavGlyph(seasonalGlyph, selected, size = 20.dp, tint = if (selected) c.onSecondaryContainer else c.onSurfaceVariant)
+            } else {
+                Symbol(glyph, contentDescription = null, size = 20.dp, filled = selected)
+            }
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,

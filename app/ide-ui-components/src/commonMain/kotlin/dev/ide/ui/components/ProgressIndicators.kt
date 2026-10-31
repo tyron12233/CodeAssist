@@ -133,7 +133,7 @@ fun LinearProgressIndicator(
  * setting while the app is open.
  */
 @Composable
-private fun motionIsAnimated(): Boolean {
+internal fun motionIsAnimated(): Boolean {
     val scope = rememberCoroutineScope()
     return (scope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
 }

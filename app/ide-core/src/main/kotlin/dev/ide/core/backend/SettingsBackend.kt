@@ -4,6 +4,7 @@ import dev.ide.analysis.AnalyzerId
 import dev.ide.core.BackendContext
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.plugins.PluginChangeKind
+import dev.ide.core.settings.AppIcons
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.IdeSettings
@@ -317,6 +318,10 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             BuiltInSettingsPages.ANALYSIS -> if (key == BuiltInSettingsPages.PERF_LOGGING) {
                 PerfTrace.applyUserPreference(readSetting(page.id, key, project = false)?.toBooleanStrictOrNull() ?: false)
             }
+            // The launcher icon is the host's to change; the UI never sees it, so it is applied here.
+            BuiltInSettingsPages.APPEARANCE -> if (key == BuiltInSettingsPages.APP_ICON) {
+                readSetting(page.id, key, project = false)?.let { AppIcons.host?.apply(it) }
+            }
             else -> if (!isBuiltIn(page.id)) page.onChanged(key, scopedReader(page)) // plugin pages react themselves
         }
     }
@@ -500,6 +505,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             IdeSettings.ACCENT_LIME -> UiAccent.Lime
             IdeSettings.ACCENT_TEAL -> UiAccent.Teal
             IdeSettings.ACCENT_ORANGE -> UiAccent.Orange
+            IdeSettings.ACCENT_PUMPKIN -> UiAccent.Pumpkin
             IdeSettings.ACCENT_CUSTOM -> UiAccent.Custom
             IdeSettings.ACCENT_VIOLET -> UiAccent.Violet
             else -> UiAccent.Lime
@@ -507,6 +513,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         customAccentColor = accentColor,
         alwaysShowToolWindowActions = alwaysShowToolWindowActions,
         runFullScreen = runFullScreen,
+        seasonalTouches = seasonalTouches,
         editorFontScale = editorFontScale,
         codeFont = codeFont,
         fontLigatures = fontLigatures,
@@ -525,6 +532,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         wordWrap = wordWrap,
         wrapIndent = wrapIndent,
         horizontalScrollbar = horizontalScrollbar,
+        caretStyle = caretStyle,
         twoAxisScroll = twoAxisScroll,
         pinchZoom = pinchZoom,
         softKeyboardSuggestions = softKeyboardSuggestions,

@@ -614,6 +614,17 @@ We never collect your code, file or project names, which features you use, or an
     <string name="home_share">Share</string>
     <string name="home_delete">Delete</string>
     <string name="home_dismiss">Dismiss</string>
+    <string name="halloween_title">Happy Halloween</string>
+    <string name="halloween_offer">Dress the IDE up for the season: a pumpkin theme, spooky editor colors and a candle for a caret.</string>
+    <string name="halloween_dress_up">Dress up</string>
+    <string name="halloween_not_now">Not now</string>
+    <string name="halloween_applied">All dressed up. You can change any of it in Settings.</string>
+    <string name="halloween_undo">Undo</string>
+    <string name="halloween_over_title">Halloween is over</string>
+    <string name="halloween_over_body">Put your theme, editor colors and caret back the way they were?</string>
+    <string name="halloween_put_back">Put it back</string>
+    <string name="halloween_keep">Keep it</string>
+    <string name="halloween_boo">Boo!</string>
     <string name="home_resume_title">Pick up where you left off</string>
     <string name="home_account_title">Account and tools</string>
     <string name="home_settings_tools">Settings and tools</string>

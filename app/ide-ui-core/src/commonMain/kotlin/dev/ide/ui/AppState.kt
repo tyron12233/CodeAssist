@@ -803,6 +803,8 @@ class IdeUiState(
     var wrapIndentEnabled by mutableStateOf(true)
     /** Draggable bar along the editor's bottom edge while a line runs past the view; none while wrapping. */
     var horizontalScrollbarEnabled by mutableStateOf(true)
+    /** How the editor draws its caret, as a `CaretStyle` id ("line", "block", "underline", "candle"). */
+    var caretStyle by mutableStateOf("line")
     /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */
     var twoAxisScrollEnabled by mutableStateOf(true)
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
@@ -886,6 +888,7 @@ class IdeUiState(
         wordWrapEnabled = s.wordWrap
         wrapIndentEnabled = s.wrapIndent
         horizontalScrollbarEnabled = s.horizontalScrollbar
+        caretStyle = s.caretStyle
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom
         softKeyboardSuggestions = s.softKeyboardSuggestions

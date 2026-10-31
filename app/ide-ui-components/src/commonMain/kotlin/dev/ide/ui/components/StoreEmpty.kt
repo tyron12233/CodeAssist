@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -71,6 +72,8 @@ import dev.ide.ui.generated.resources.store_step_submit_body
 import dev.ide.ui.generated.resources.store_step_submit_title
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.theme.LocalSeason
+import dev.ide.ui.theme.Season
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
@@ -108,13 +111,21 @@ fun EmptyStoreHero(
         modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp),
     ) {
         Box(Modifier.clipToBounds()) {
-            Symbol(
-                CaSymbols.deployedCode,
-                contentDescription = null,
-                size = 160.dp,
-                tint = c.onPrimaryContainer.copy(alpha = 0.13f),
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 24.dp, y = 34.dp),
-            )
+            if (LocalSeason.current == Season.Halloween) {
+                // The watermark becomes a ghost haunting the empty shelves; faint, like the glyph it replaces.
+                HauntedGhost(
+                    140.dp,
+                    Modifier.align(Alignment.BottomEnd).offset(x = 18.dp, y = 22.dp).graphicsLayer { alpha = 0.35f },
+                )
+            } else {
+                Symbol(
+                    CaSymbols.deployedCode,
+                    contentDescription = null,
+                    size = 160.dp,
+                    tint = c.onPrimaryContainer.copy(alpha = 0.13f),
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 24.dp, y = 34.dp),
+                )
+            }
             Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
                 Eyebrow(stringResource(Res.string.store_hero_eyebrow_open), color = c.onPrimaryContainer.copy(alpha = 0.75f))
                 Text(

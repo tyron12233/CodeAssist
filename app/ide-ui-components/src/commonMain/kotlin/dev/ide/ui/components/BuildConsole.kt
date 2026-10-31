@@ -328,7 +328,9 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        SeasonalBuildGlyph(state.status, size = 18.dp) {
+            Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text(
             stringResource(Res.string.buildc_build),
             color = MaterialTheme.colorScheme.onSurface,
@@ -565,12 +567,16 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
             )
             Text("$done/$total", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.fillMaxWidth().height(3.dp),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        )
+        if (isHalloween()) {
+            PumpkinProgress(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp))
+        } else {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            )
+        }
     }
 }
 

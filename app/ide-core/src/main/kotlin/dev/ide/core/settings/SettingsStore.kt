@@ -27,11 +27,12 @@ class SettingsStore(
         val d = IdeSettings()
         return IdeSettings(
             themeMode = oneOf("appearance.themeMode", d.themeMode, IdeSettings.THEME_LIGHT, IdeSettings.THEME_DARK, IdeSettings.THEME_SYSTEM),
-            accent = oneOf("appearance.accent", d.accent, IdeSettings.ACCENT_DYNAMIC, IdeSettings.ACCENT_LIME, IdeSettings.ACCENT_VIOLET, IdeSettings.ACCENT_TEAL, IdeSettings.ACCENT_ORANGE, IdeSettings.ACCENT_CUSTOM),
+            accent = oneOf("appearance.accent", d.accent, IdeSettings.ACCENT_DYNAMIC, IdeSettings.ACCENT_LIME, IdeSettings.ACCENT_VIOLET, IdeSettings.ACCENT_TEAL, IdeSettings.ACCENT_ORANGE, IdeSettings.ACCENT_PUMPKIN, IdeSettings.ACCENT_CUSTOM),
             accentColor = get(key("appearance.accentColor"))?.trim()?.toLongOrNull() ?: d.accentColor,
             alwaysShowToolWindowActions = bool("appearance.toolWindowActions", d.alwaysShowToolWindowActions),
             rightToolWindowBar = bool("appearance.rightToolWindowBar", d.rightToolWindowBar),
             runFullScreen = bool("appearance.runFullScreen", d.runFullScreen),
+            seasonalTouches = bool("appearance.seasonal", d.seasonalTouches),
             // Stored as an integer percent (100 = 1.0×) so the generic IntSlider and this typed view agree.
             editorFontScale = (int("editor.fontScale", (d.editorFontScale * 100).toInt()) / 100f).coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE),
             codeFont = oneOf("editor.codeFont", d.codeFont, IdeSettings.CODE_FONT_JETBRAINS, IdeSettings.CODE_FONT_MONOSPACE),
@@ -42,6 +43,7 @@ class SettingsStore(
             wordWrap = bool("editor.wordWrap", d.wordWrap),
             wrapIndent = bool("editor.wrapIndent", d.wrapIndent),
             horizontalScrollbar = bool("editor.horizontalScrollbar", d.horizontalScrollbar),
+            caretStyle = oneOf("editor.caretStyle", d.caretStyle, IdeSettings.CARET_LINE, IdeSettings.CARET_BLOCK, IdeSettings.CARET_UNDERLINE, IdeSettings.CARET_CANDLE),
             twoAxisScroll = bool("editor.twoAxisScroll", d.twoAxisScroll),
             pinchZoom = bool("editor.pinchZoom", d.pinchZoom),
             softKeyboardSuggestions = bool("editor.softKeyboardSuggestions", d.softKeyboardSuggestions),
@@ -146,6 +148,7 @@ class SettingsStore(
         put("appearance.toolWindowActions", s.alwaysShowToolWindowActions.toString())
         put("appearance.rightToolWindowBar", s.rightToolWindowBar.toString())
         put("appearance.runFullScreen", s.runFullScreen.toString())
+        put("appearance.seasonal", s.seasonalTouches.toString())
         put("editor.fontScale", (s.editorFontScale * 100).toInt().toString())
         put("editor.codeFont", s.codeFont)
         put("editor.fontLigatures", s.fontLigatures.toString())
@@ -155,6 +158,7 @@ class SettingsStore(
         put("editor.wordWrap", s.wordWrap.toString())
         put("editor.wrapIndent", s.wrapIndent.toString())
         put("editor.horizontalScrollbar", s.horizontalScrollbar.toString())
+        put("editor.caretStyle", s.caretStyle)
         put("editor.twoAxisScroll", s.twoAxisScroll.toString())
         put("editor.pinchZoom", s.pinchZoom.toString())
         put("editor.softKeyboardSuggestions", s.softKeyboardSuggestions.toString())

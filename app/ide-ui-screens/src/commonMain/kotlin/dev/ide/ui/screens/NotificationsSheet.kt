@@ -1,5 +1,8 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.HauntedGhost
+import dev.ide.ui.theme.LocalSeason
+import dev.ide.ui.theme.Season
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -138,6 +141,7 @@ fun NotificationsSheet(
                     Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    if (LocalSeason.current == Season.Halloween) HauntedGhost(56.dp, Modifier.padding(bottom = 8.dp))
                     Text(
                         stringResource(Res.string.notif_empty),
                         style = MaterialTheme.typography.titleMedium,

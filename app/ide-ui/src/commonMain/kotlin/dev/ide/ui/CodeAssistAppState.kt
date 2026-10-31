@@ -1168,6 +1168,7 @@ internal fun accentOf(settings: UiSettings): CaAccent = when (settings.accent) {
     UiAccent.Teal -> CaAccent.Teal
     UiAccent.Orange -> CaAccent.Orange
     UiAccent.Violet -> CaAccent.Violet
+    UiAccent.Pumpkin -> CaAccent.Pumpkin
     else -> CaAccent.Lime
 }
 

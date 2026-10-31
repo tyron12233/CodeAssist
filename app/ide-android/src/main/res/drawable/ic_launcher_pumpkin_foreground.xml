@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Halloween launcher icon's foreground: a lit jack-o'-lantern inside the adaptive icon's 66dp safe zone,
+     the same drawing as the in-app pumpkin (HalloweenArt.drawPumpkin) at 48dp wide. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Stem, under the body's top edge. -->
+    <path
+        android:fillColor="#5B7A2A"
+        android:pathData="M51.6,31.2 L56.4,31.2 L56.4,44 L51.6,44 Z" />
+    <!-- The two outer lobes, darker, so the ribs read without lines. -->
+    <path
+        android:fillColor="#D9701A"
+        android:pathData="M30,56 a13.44,20 0 1,0 26.88,0 a13.44,20 0 1,0 -26.88,0 Z" />
+    <path
+        android:fillColor="#D9701A"
+        android:pathData="M51.12,56 a13.44,20 0 1,0 26.88,0 a13.44,20 0 1,0 -26.88,0 Z" />
+    <path
+        android:fillColor="#F28C28"
+        android:pathData="M42.71,56 a11.29,20 0 1,0 22.58,0 a11.29,20 0 1,0 -22.58,0 Z" />
+    <!-- The glowing face. -->
+    <path
+        android:fillColor="#FFC94A"
+        android:pathData="M40.1,55.6 L48.7,55.6 L43.4,48.8 Z M59.3,55.6 L67.9,55.6 L64.6,48.8 Z" />
+    <path
+        android:fillColor="#FFC94A"
+        android:pathData="M40.55,60.8 L43.24,63.6 L45.93,60.8 L48.62,63.6 L51.31,60.8 L54,63.6 L56.69,60.8 L59.38,63.6 L62.07,60.8 L64.76,63.6 L67.45,60.8 Q54,74.4 40.55,60.8 Z" />
+</vector>

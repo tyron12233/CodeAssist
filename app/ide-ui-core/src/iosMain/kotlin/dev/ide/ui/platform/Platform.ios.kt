@@ -3,7 +3,9 @@ package dev.ide.ui.platform
 import dev.ide.platform.ioDispatcher as platformIoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import platform.Foundation.NSCalendar
+import platform.Foundation.NSCalendarUnitDay
 import platform.Foundation.NSCalendarUnitHour
+import platform.Foundation.NSCalendarUnitMonth
 import platform.Foundation.NSDate
 import platform.Foundation.timeIntervalSince1970
 
@@ -25,3 +27,10 @@ actual fun nowMillis(): Long = (NSDate().timeIntervalSince1970 * 1000.0).toLong(
 
 actual fun localHourOfDay(): Int =
     NSCalendar.currentCalendar.component(NSCalendarUnitHour, fromDate = NSDate()).toInt()
+
+actual fun localMonthDay(): Int {
+    val calendar = NSCalendar.currentCalendar
+    val now = NSDate()
+    return calendar.component(NSCalendarUnitMonth, fromDate = now).toInt() * 100 +
+        calendar.component(NSCalendarUnitDay, fromDate = now).toInt()
+}

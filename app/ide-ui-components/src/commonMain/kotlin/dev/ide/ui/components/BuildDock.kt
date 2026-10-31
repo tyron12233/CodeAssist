@@ -262,11 +262,20 @@ fun BuildDock(
                             .background(notch, RoundedCornerShape(Ca.radius.pill)),
                     )
                     if (buildState.status == RunStatus.Running) {
-                        LinearProgressIndicator(
-                            Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = androidx.compose.ui.graphics.Color.Transparent,
-                        )
+                        if (isHalloween()) {
+                            // A pumpkin chase along the top edge, parted around the grab notch.
+                            PumpkinProgress(
+                                progress = null,
+                                modifier = Modifier.fillMaxWidth().height(8.dp).align(Alignment.TopCenter).padding(horizontal = 12.dp),
+                                gap = 44.dp,
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = androidx.compose.ui.graphics.Color.Transparent,
+                            )
+                        }
                     }
                 }
             }
@@ -327,14 +336,16 @@ private fun BuildStatusChip(status: RunStatus, onClick: () -> Unit) {
                 .clickable(interaction, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            when (status) {
-                RunStatus.Running ->
-                    CircularProgressIndicator(Modifier.size(15.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-                RunStatus.Succeeded ->
-                    Icon(CaIcons.check, stringResource(Res.string.buildc_build_succeeded), Modifier.size(15.dp), tint = Ide.colors.success)
-                RunStatus.Failed ->
-                    Icon(CaIcons.close, stringResource(Res.string.buildc_build_failed), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
-                RunStatus.Idle -> {}
+            SeasonalBuildGlyph(status, size = 20.dp) {
+                when (status) {
+                    RunStatus.Running ->
+                        CircularProgressIndicator(Modifier.size(15.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                    RunStatus.Succeeded ->
+                        Icon(CaIcons.check, stringResource(Res.string.buildc_build_succeeded), Modifier.size(15.dp), tint = Ide.colors.success)
+                    RunStatus.Failed ->
+                        Icon(CaIcons.close, stringResource(Res.string.buildc_build_failed), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
+                    RunStatus.Idle -> {}
+                }
             }
         }
     }
