@@ -2,6 +2,7 @@ package dev.ide.ui.components
 
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.platform.claimWindowTitleBar
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.ext.AppCommands
 import androidx.compose.foundation.layout.widthIn
@@ -274,9 +275,13 @@ fun EditorTopBar(
             )
             if (compatibilityMode) CompatModeChip(compact = compact, onClick = onCompatClick)
             IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
-            // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works). A desktop
-            // has the keyboard for it and the tab's unsaved dot for the state, so only touch hosts show it.
-            if (compact || touchInput) {
+            // Save/undo/redo stay inline wherever a keyboard can't be assumed. A desktop window has one, so the
+            // shortcuts and the tab's unsaved dot cover them there. A phone or tablet keeps them even while a
+            // mouse drives it (DeX, an external display): the pointer says nothing about a keyboard, and keying
+            // this off the last pointer event made the buttons blink out on every mouse move (#1735).
+            val inlineEditActions = compact || isMobilePlatform || touchInput
+            // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
+            if (inlineEditActions) {
                 IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
             }
             if (compact) {
@@ -311,10 +316,10 @@ fun EditorTopBar(
                     onZenMode = onZenMode,
                 )
             } else {
-                // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only on touch (no
-                // keyboard there); the console and preview toggles live on the left stripe and the breadcrumb row;
-                // find, reformat, imports and inlay hints move into the ⋯ menu below.
-                if (touchInput && hasActiveFile) {
+                // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only where there may
+                // be no keyboard (see inlineEditActions); the console and preview toggles live on the left stripe
+                // and the breadcrumb row; find, reformat, imports and inlay hints move into the ⋯ menu below.
+                if (inlineEditActions && hasActiveFile) {
                     IconButtonCa(CaIcons.undo, stringResource(Res.string.undo), onUndo, tint = if (canUndo) null else dim)
                     IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
                 }
