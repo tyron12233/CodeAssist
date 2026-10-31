@@ -14,8 +14,8 @@ enum class Season(
     /** Last day, inclusive, same encoding. */
     private val through: Int,
 ) {
-    /** The week before Halloween through the morning after (Nov 1), when people are still finishing their builds. */
-    Halloween(from = 1024, through = 1101),
+    /** The week before Halloween through the week after (Nov 7), so the season gets a full week either side. */
+    Halloween(from = 1024, through = 1107),
     ;
 
     fun contains(monthDay: Int): Boolean = monthDay in from..through

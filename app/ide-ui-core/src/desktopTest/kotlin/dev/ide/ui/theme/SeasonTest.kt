@@ -8,12 +8,13 @@ import kotlin.test.assertNull
 class SeasonTest {
 
     @Test
-    fun halloweenRunsFromTheWeekBeforeThroughTheMorningAfter() {
+    fun halloweenRunsFromTheWeekBeforeThroughTheWeekAfter() {
         assertNull(Season.at(1023))
         assertEquals(Season.Halloween, Season.at(1024))
         assertEquals(Season.Halloween, Season.at(1031))
         assertEquals(Season.Halloween, Season.at(1101))
-        assertNull(Season.at(1102))
+        assertEquals(Season.Halloween, Season.at(1107))
+        assertNull(Season.at(1108))
         assertNull(Season.at(101))
     }
 
