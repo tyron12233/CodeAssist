@@ -292,15 +292,33 @@ fun PumpkinProgress(progress: (() -> Float)?, modifier: Modifier = Modifier, gap
 }
 
 /** Centers of the pumpkins that fit across this canvas, skipping any whose center falls in a centered [gap]. */
-private fun DrawScope.pumpkinSlots(gap: Float): List<Float> {
-    val w = size.height * 1.2f
-    val pitch = w + size.height * 0.55f
-    val count = floor((size.width + size.height * 0.55f) / pitch).toInt()
+private fun DrawScope.pumpkinSlots(gap: Float): List<Float> = pumpkinSlots(size.width, size.height, gap)
+
+/**
+ * Centers of the pumpkins that fit across a [width] x [height] row, skipping any whose center falls in a
+ * centered [gap].
+ *
+ * The pumpkins are sized from the height, so the count is roughly width / height. A collapsed or animating
+ * build dock lays this out at full width and ZERO height while a build runs: the division gave infinity,
+ * `toInt()` turned that into Int.MAX_VALUE, and every frame asked for a list of two billion floats. That was
+ * 3.35.0's OutOfMemoryError while building. A row too short to draw is empty, and the count is capped.
+ */
+internal fun pumpkinSlots(width: Float, height: Float, gap: Float): List<Float> {
+    if (!(height >= MIN_PUMPKIN_PX) || !(width > 0f)) return emptyList()
+    val w = height * 1.2f
+    val pitch = w + height * 0.55f
+    val count = floor((width + height * 0.55f) / pitch).toInt().coerceAtMost(MAX_PUMPKINS)
     if (count <= 0) return emptyList()
-    val start = (size.width - (count * pitch - size.height * 0.55f)) / 2f + w / 2f
-    val mid = size.width / 2f
+    val start = (width - (count * pitch - height * 0.55f)) / 2f + w / 2f
+    val mid = width / 2f
     return List(count) { start + it * pitch }.filter { gap <= 0f || abs(it - mid) > gap / 2f + w / 2f }
 }
+
+/** Below this a pumpkin is not visible, and the row would be thousands of them. */
+private const val MIN_PUMPKIN_PX = 2f
+
+/** More than any bar is wide enough for at a visible size; a hard ceiling whatever the layout says. */
+private const val MAX_PUMPKINS = 64
 
 /** One pumpkin [height] tall: an unlit silhouette in [dim], with the lit pumpkin faded in by [lit] (0..1). */
 private fun DrawScope.drawLitPumpkin(center: Offset, height: Float, lit: Float, dim: Color) {
