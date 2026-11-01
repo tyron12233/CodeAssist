@@ -1118,6 +1118,9 @@ dependencies {
     implementation(libs.play.services.ads) {
         exclude(group = "com.google.protobuf", module = "protobuf-javalite")
     }
+    // Play services (ads, base, basement) still declare androidx.fragment 1.0/1.1, which Play Console flags as
+    // an outdated SDK. Nothing here uses fragments; this only lifts the resolved version.
+    implementation(libs.androidx.fragment)
     // UMP/GDPR consent (User Messaging Platform). Gathered on launch BEFORE MobileAds.initialize, so EEA/UK
     // users see a certified consent form and personalized-ad fill isn't blocked. See AdConsentManager.
     implementation(libs.user.messaging.platform)
