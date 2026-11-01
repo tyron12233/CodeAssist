@@ -245,10 +245,10 @@ fun ChatDrawer(
         hasClipboardImage = fileActions::hasClipboardImage,
     )
 
+    val headerModels = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() }
+    val onPickModel: (String) -> Unit = { backend.agent.setModel(it); cfg = backend.agent.config() }
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxSize()) {
-            val headerModels = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() }
-            val onPickModel: (String) -> Unit = { backend.agent.setModel(it); cfg = backend.agent.config() }
             val onCycleMode = {
                 backend.agent.setPermissionMode(nextMode(cfg.mode))
                 cfg = backend.agent.config()
@@ -257,7 +257,7 @@ fun ChatDrawer(
             // chip and the menu go into it rather than a second header row.
             val hosted = ToolWindowHeaderActions(
                 leading = {
-                    ModelPicker(agent = backend.agent, cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it }, onPick = onPickModel)
+                    ModelPicker(cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it })
                 },
                 actions = {
                     ModeChip(cfg.mode, onCycleMode)
@@ -272,12 +272,10 @@ fun ChatDrawer(
             if (!hosted) {
                 ChatChrome {
                     ChatHeader(
-                        agent = backend.agent,
                         cfg = cfg,
                         models = headerModels,
                         modelMenuOpen = modelMenuOpen,
                         onModelMenu = { modelMenuOpen = it },
-                        onPickModel = onPickModel,
                         onManage = { showProviders = true },
                         onHistory = { showHistory = true },
                         onUsage = { showUsage = true },
@@ -340,6 +338,9 @@ fun ChatDrawer(
                     )
                 }
             }
+        }
+        if (modelMenuOpen) {
+            ModelPickerOverlay(backend.agent, cfg, headerModels, onPick = onPickModel, onDismiss = { modelMenuOpen = false })
         }
         if (showProviders) {
             AgentProvidersSheet(backend) {
@@ -461,12 +462,10 @@ private fun SuggestionRow(title: String, detail: String, onClick: () -> Unit) {
 
 @Composable
 private fun ChatHeader(
-    agent: AgentService,
     cfg: UiAgentConfig,
     models: List<UiAgentModel>,
     modelMenuOpen: Boolean,
     onModelMenu: (Boolean) -> Unit,
-    onPickModel: (String) -> Unit,
     onManage: () -> Unit,
     onHistory: () -> Unit,
     onUsage: () -> Unit,
@@ -491,7 +490,7 @@ private fun ChatHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            ModelPicker(agent = agent, cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
+            ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu)
         }
         ModeChip(cfg.mode, onCycleMode)
         ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage)
@@ -552,17 +551,14 @@ private fun HeaderMenuItem(icon: ImageVector, label: String, onClick: () -> Unit
 
 @Composable
 private fun ModelPicker(
-    agent: AgentService,
     cfg: UiAgentConfig,
     models: List<UiAgentModel>,
     open: Boolean,
     onOpen: (Boolean) -> Unit,
-    onPick: (String) -> Unit,
 ) {
-    val provider = cfg.providers.firstOrNull { it.id == cfg.selectedProvider }
-    val current = cfg.model.ifBlank { provider?.defaultModel ?: "" }
+    val current = currentModel(cfg)
     val label = models.firstOrNull { it.id == current }?.displayName
-        ?: current.ifBlank { provider?.displayName ?: "" }
+        ?: current.ifBlank { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.displayName ?: "" }
     Box {
         Row(
             Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable { onOpen(true) },
@@ -574,20 +570,39 @@ private fun ModelPicker(
             Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    if (open) {
-        // Re-read when the picker opens: a pick or a star made inside it changes both.
-        var favorites by remember(open) { mutableStateOf(agent.favoriteModels()) }
-        val recents = remember(open) { agent.recentModels() }
-        ModelPickerDialog(
-            models = models,
-            current = current,
-            favorites = favorites,
-            recents = recents,
-            onPick = onPick,
-            onToggleFavorite = { id, fav -> agent.setModelFavorite(id, fav); favorites = agent.favoriteModels() },
-            onDismiss = { onOpen(false) },
-        )
-    }
+}
+
+/** The selected model's id, or the provider's default when none is chosen. */
+private fun currentModel(cfg: UiAgentConfig): String =
+    cfg.model.ifBlank { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.defaultModel ?: "" }
+
+/**
+ * The model picker's dialog. [CenteredDialog] is an in-layout overlay (a full-size scrim + a centred card), not a
+ * window of its own, so it must be composed where it can fill the chat: at the drawer's root, beside the other
+ * sheets. Composed next to the picker's chip it landed inside the tool window's header row, which it stretched
+ * to the whole drawer's height while squeezing itself into the row's leftover width: the header floated in the
+ * middle, the conversation got no height at all, and the dialog was a dark sliver with nothing in it.
+ */
+@Composable
+private fun ModelPickerOverlay(
+    agent: AgentService,
+    cfg: UiAgentConfig,
+    models: List<UiAgentModel>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Read once per opening: a pick or a star made inside it changes both.
+    var favorites by remember { mutableStateOf(agent.favoriteModels()) }
+    val recents = remember { agent.recentModels() }
+    ModelPickerDialog(
+        models = models,
+        current = currentModel(cfg),
+        favorites = favorites,
+        recents = recents,
+        onPick = onPick,
+        onToggleFavorite = { id, fav -> agent.setModelFavorite(id, fav); favorites = agent.favoriteModels() },
+        onDismiss = onDismiss,
+    )
 }
 
 /**

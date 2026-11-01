@@ -30,6 +30,10 @@ import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertTrue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.layout.onGloballyPositioned
 
 /**
  * Off-screen PNGs of the chat drawer in both themes, so the Material 3 / Material You restyle can be
@@ -164,6 +168,48 @@ class ChatDrawerSnapshot {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
                 ChatDrawer(backend(stepsState(live = true)), onClose = {})
             }
+        }
+    }
+
+    /**
+     * Opening the model picker from a tool window's header leaves the header a strip and the conversation in place.
+     * The picker's dialog is an in-layout overlay; composed beside the chip it landed in the host header's row,
+     * stretched that row to the drawer's full height and left the conversation none (a phone report, in Arabic,
+     * of the header floating mid-drawer over an empty panel).
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun openingTheModelPickerFromAHostHeaderKeepsTheLayout() {
+        var headerPx = 0
+        var bodyPx = 0
+        // 312dp: the phone drawer's width on a 360dp screen.
+        val scene = ImageComposeScene(width = 624, height = 1600, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                val slots = dev.ide.ui.components.rememberToolWindowHeaderSlots()
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.onGloballyPositioned { headerPx = it.size.height }) {
+                        dev.ide.ui.components.ToolWindowHeader("AI", slots.of("ai"), onHide = {})
+                    }
+                    Box(Modifier.weight(1f).fillMaxSize().onGloballyPositioned { bodyPx = it.size.height }) {
+                        androidx.compose.runtime.CompositionLocalProvider(dev.ide.ui.components.LocalToolWindowHeader provides slots.of("ai")) {
+                            ChatDrawer(backend(UiAgentChatState(messages = emptyList(), busy = false)), onClose = {})
+                        }
+                    }
+                }
+            }
+        }
+        try {
+            for (frame in 0..20) scene.render(frame * 16_666_667L)
+            assertTrue(headerPx in 1..160, "header before opening: $headerPx px")
+            // The model chip sits just after the title, at the start of the header.
+            val chip = Offset(120f, headerPx / 2f)
+            scene.sendPointerEvent(PointerEventType.Press, chip)
+            scene.sendPointerEvent(PointerEventType.Release, chip)
+            for (frame in 21..60) scene.render(frame * 16_666_667L)
+            assertTrue(headerPx in 1..160, "the picker stretched the header to $headerPx px")
+            assertTrue(bodyPx > 1200, "the conversation was squeezed to $bodyPx px")
+        } finally {
+            scene.close()
         }
     }
 
