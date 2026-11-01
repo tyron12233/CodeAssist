@@ -182,7 +182,9 @@ class AdControllerEventsTest {
     @Test
     fun onlyRealSettingChangesAreRecorded() {
         val backend = TrackingBackend()
-        val ads = AdController(backend, ReadyAdHost("build-1"))
+        var now = 0L
+        val ads = AdController(backend, ReadyAdHost("build-1")) { now }
+        now = ADS_OFF_LOCK_MS // past the fresh install's turn-off lock
         ads.updateAdsEnabled(true)
         ads.updateInterstitialsEnabled(false, via = "prompt")
         ads.updateAdsEnabled(false)

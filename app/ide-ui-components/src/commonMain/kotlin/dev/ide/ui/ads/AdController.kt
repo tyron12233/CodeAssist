@@ -19,6 +19,13 @@ const val INTERSTITIALS_ENABLED_PREF = "ads.interstitials.enabled"
 /** The [AdHost.installStamp] the stored [ADS_ENABLED_PREF] value belongs to — see [AdController]. */
 const val ADS_ENABLED_STAMP_PREF = "ads.enabled.stamp"
 
+/** When (epoch ms) the latest install or update turned ads back on, starting the [ADS_OFF_LOCK_MS] window in
+ *  which they can't be turned off again. Absent for an install that has not been reset since this shipped. */
+const val ADS_OFF_LOCK_SINCE_PREF = "ads.offLock.since"
+
+/** How long after an install or update ads stay on before the user can turn them off again: 24 hours. */
+const val ADS_OFF_LOCK_MS: Long = 24L * 60 * 60 * 1000
+
 /** How many long builds an install has run past the threshold, up to [FREE_LONG_BUILDS] (see [BuildAdPacing]). */
 const val LONG_BUILDS_PREF = "ads.interstitials.longBuilds"
 
@@ -44,12 +51,14 @@ private const val ADS_SETTING = "ads_setting"
 class AdController(
     private val backend: IdeBackend,
     val host: AdHost,
+    /** Wall clock (epoch ms) for the turn-off lock; replaceable in tests. */
+    private val nowMs: () -> Long = { dev.ide.ui.platform.nowMillis() },
 ) {
     /** True for the first launch after a fresh install: no ads stamp has been recorded yet. Read before
      *  [initialAdsEnabled] records one. */
     private val firstSession = host.installStamp != null && backend.settings.preference(ADS_ENABLED_STAMP_PREF) == null
 
-    var adsEnabled by mutableStateOf(initialAdsEnabled(backend, host))
+    var adsEnabled by mutableStateOf(initialAdsEnabled(backend, host, nowMs))
         private set
 
     /** The user's separate choice about full-screen ads. Read after [adsEnabled], whose install reset also
@@ -77,20 +86,47 @@ class AdController(
     /** Open the host's ad consent / privacy-options form. Call only when [privacyOptionsRequired]. */
     fun showPrivacyOptions() = host.showPrivacyOptions()
 
-    /** Turn ads on/off for free and persist the choice. [via] says where the user did it, for analytics. */
-    fun updateAdsEnabled(enabled: Boolean, via: String = "settings") {
+    /**
+     * Milliseconds until ads may be turned off again, or 0 when they may be now. An install or update turns ads
+     * back on and holds them on for [ADS_OFF_LOCK_MS] from the first launch of that build, so each update gets a
+     * real chance to show them (most installs that turned ads off did it before seeing a single build ad). A
+     * clock set back before the lock started reads as unlocked rather than stretching the wait.
+     */
+    fun offLockRemainingMs(): Long {
+        if (!host.available) return 0
+        val since = backend.settings.preference(ADS_OFF_LOCK_SINCE_PREF)?.toLongOrNull() ?: return 0
+        val now = nowMs()
+        if (now < since) return 0
+        return (since + ADS_OFF_LOCK_MS - now).coerceAtLeast(0)
+    }
+
+    /** Whether ads can't be turned off right now (see [offLockRemainingMs]). Turning them ON is never locked. */
+    val offLocked: Boolean get() = offLockRemainingMs() > 0
+
+    /**
+     * Turn ads on/off for free and persist the choice. [via] says where the user did it, for analytics. Turning
+     * them off is refused while [offLocked]; returns whether the choice was applied.
+     */
+    fun updateAdsEnabled(enabled: Boolean, via: String = "settings"): Boolean {
+        if (!enabled && adsEnabled && offLocked) return false
         if (enabled != adsEnabled) track(ADS_SETTING, mapOf("setting" to "all", "on" to enabled.flag(), "via" to via))
         adsEnabled = enabled
         backend.settings.setPreference(ADS_ENABLED_PREF, enabled.toString())
+        return true
     }
 
-    /** Turn full-screen ads on/off on their own (native ads unaffected) and persist the choice. */
-    fun updateInterstitialsEnabled(enabled: Boolean, via: String = "settings") {
+    /**
+     * Turn full-screen ads on/off on their own (native ads unaffected) and persist the choice. Turning them off is
+     * refused while [offLocked]; returns whether the choice was applied.
+     */
+    fun updateInterstitialsEnabled(enabled: Boolean, via: String = "settings"): Boolean {
+        if (!enabled && interstitialsEnabled && offLocked) return false
         if (enabled != interstitialsEnabled) {
             track(ADS_SETTING, mapOf("setting" to "fullscreen", "on" to enabled.flag(), "via" to via))
         }
         interstitialsEnabled = enabled
         backend.settings.setPreference(INTERSTITIALS_ENABLED_PREF, enabled.toString())
+        return true
     }
 
     /** When full-screen ads may show over a build: see [BuildAdPacing]. */
@@ -164,15 +200,17 @@ private val clockStart = TimeSource.Monotonic.markNow()
  * build. Ads being free to turn off only works if each update gets to ask again, so a stored "off" choice is
  * kept for as long as the app keeps the same [AdHost.installStamp] (every launch of one installation) and
  * dropped when that stamp changes (a fresh install or an update). The new stamp is recorded at the same time,
- * so the reset happens once and the user's next choice sticks until the next update. Hosts that can't identify
- * the build (a null stamp — desktop) never reset.
+ * so the reset happens once and the user's next choice sticks until the next update. The reset also starts the
+ * [ADS_OFF_LOCK_MS] window in which ads can't be turned off again. Hosts that can't identify the build (a null
+ * stamp — desktop) never reset.
  */
-private fun initialAdsEnabled(backend: IdeBackend, host: AdHost): Boolean {
+private fun initialAdsEnabled(backend: IdeBackend, host: AdHost, nowMs: () -> Long): Boolean {
     val stamp = host.installStamp
     if (stamp != null && backend.settings.preference(ADS_ENABLED_STAMP_PREF) != stamp) {
         backend.settings.setPreference(ADS_ENABLED_PREF, true.toString())
         backend.settings.setPreference(INTERSTITIALS_ENABLED_PREF, true.toString())
         backend.settings.setPreference(ADS_ENABLED_STAMP_PREF, stamp)
+        backend.settings.setPreference(ADS_OFF_LOCK_SINCE_PREF, nowMs().toString())
         return true
     }
     return backend.settings.preference(ADS_ENABLED_PREF)?.toBooleanStrictOrNull() ?: true

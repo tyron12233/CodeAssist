@@ -21,6 +21,8 @@ internal sealed interface SettingsToast {
     data class Message(val text: String) : SettingsToast
     data object BackupReady : SettingsToast
     data object NotificationsEnabled : SettingsToast
+    /** Ads were turned back on by an install or update and can't be turned off for [remainingMs] more. */
+    data class AdsOffLocked(val remainingMs: Long) : SettingsToast
 }
 
 /**
@@ -71,7 +73,13 @@ internal class SettingsScreenState(
     /** Apply a control edit: mirror it, then persist it (the injected ads toggles have their own store). */
     fun set(pageId: String, key: String, encoded: String, onSettingsChanged: () -> Unit) {
         values["$pageId.$key"] = encoded
-        if (ads != null && pageId == PRIVACY_PAGE_ID && key == SHOW_ADS_KEY) {
+        if (ads != null && pageId == PRIVACY_PAGE_ID && (key == SHOW_ADS_KEY || key == SHOW_INTERSTITIALS_KEY) &&
+            encoded.toBooleanStrictOrNull() == false && ads.offLocked
+        ) {
+            // Too soon after an install or update: the switch springs back on and says when it can go off.
+            values["$pageId.$key"] = true.toString()
+            show(SettingsToast.AdsOffLocked(ads.offLockRemainingMs()))
+        } else if (ads != null && pageId == PRIVACY_PAGE_ID && key == SHOW_ADS_KEY) {
             val on = encoded.toBooleanStrictOrNull() ?: true
             if (!on && ads.interstitialsEnabled) {
                 // Ask first: the switch stays on until the user picks what to turn off.
@@ -91,15 +99,17 @@ internal class SettingsScreenState(
     /** The prompt's lighter choice: keep the ads in lists and panels, turn off only the full-screen ones. */
     fun turnOffFullScreenAdsOnly() {
         adsOffPrompt = false
-        ads?.updateInterstitialsEnabled(false, via = "prompt")
-        values["$PRIVACY_PAGE_ID.$SHOW_INTERSTITIALS_KEY"] = false.toString()
+        if (ads?.updateInterstitialsEnabled(false, via = "prompt") == true) {
+            values["$PRIVACY_PAGE_ID.$SHOW_INTERSTITIALS_KEY"] = false.toString()
+        }
     }
 
     /** The prompt's full choice: turn every ad off. */
     fun turnOffAllAds() {
         adsOffPrompt = false
-        ads?.updateAdsEnabled(false, via = "prompt")
-        values["$PRIVACY_PAGE_ID.$SHOW_ADS_KEY"] = false.toString()
+        if (ads?.updateAdsEnabled(false, via = "prompt") == true) {
+            values["$PRIVACY_PAGE_ID.$SHOW_ADS_KEY"] = false.toString()
+        }
     }
 
     /** Close the prompt without changing anything. */

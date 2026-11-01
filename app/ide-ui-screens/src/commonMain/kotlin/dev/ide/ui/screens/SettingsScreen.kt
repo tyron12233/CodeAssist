@@ -92,6 +92,8 @@ import dev.ide.ui.generated.resources.ads_off_title
 import dev.ide.ui.generated.resources.support_show_interstitials_desc
 import dev.ide.ui.generated.resources.support_show_interstitials
 import dev.ide.ui.generated.resources.support_show_ads_desc
+import dev.ide.ui.generated.resources.ads_off_locked
+import org.jetbrains.compose.resources.pluralStringResource
 import dev.ide.ui.generated.resources.support_ad_privacy
 import dev.ide.ui.generated.resources.support_ad_privacy_desc
 import dev.ide.ui.generated.resources.support_ad_privacy_button
@@ -154,9 +156,13 @@ fun SettingsScreen(
     // writes route to the controller below, not the backend store.
     val ads = LocalAds.current
     val showAdsTitle = stringResource(Res.string.support_show_ads)
-    val showAdsDesc = stringResource(Res.string.support_show_ads_desc)
     val showInterstitialsTitle = stringResource(Res.string.support_show_interstitials)
-    val showInterstitialsDesc = stringResource(Res.string.support_show_interstitials_desc)
+    // Right after an install or update ads can't be turned off yet (AdController.offLockRemainingMs): both
+    // toggles say so in place of their usual description, and say it again if flipped.
+    val offLockHours = ads?.offLockRemainingMs()?.takeIf { it > 0 }?.let(::lockHours)
+    val offLockedDesc = offLockHours?.let { pluralStringResource(Res.plurals.ads_off_locked, it, it) }
+    val showAdsDesc = offLockedDesc ?: stringResource(Res.string.support_show_ads_desc)
+    val showInterstitialsDesc = offLockedDesc ?: stringResource(Res.string.support_show_interstitials_desc)
     val adPrivacyTitle = stringResource(Res.string.support_ad_privacy)
     val adPrivacyDesc = stringResource(Res.string.support_ad_privacy_desc)
     val adPrivacyButton = stringResource(Res.string.support_ad_privacy_button)
@@ -164,7 +170,7 @@ fun SettingsScreen(
     // privacy-options entry becomes required, this recomputes and the "Manage ad consent" action appears.
     val privacyOptionsRequired = ads?.privacyOptionsRequired == true
     val state = rememberSettingsScreenState(backend, ads)
-    val pages = remember(view, state.structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, adPrivacyTitle) {
+    val pages = remember(view, state.structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, showInterstitialsDesc, adPrivacyTitle) {
         val base = backend.settings.settingsPages().filter {
             when (view) {
                 SettingsView.All -> true
@@ -236,6 +242,7 @@ fun SettingsScreen(
                 is SettingsToast.Message -> t.text
                 SettingsToast.BackupReady -> stringResource(Res.string.settings_backup_ready)
                 SettingsToast.NotificationsEnabled -> stringResource(Res.string.build_notif_enabled)
+                is SettingsToast.AdsOffLocked -> lockHours(t.remainingMs).let { pluralStringResource(Res.plurals.ads_off_locked, it, it) }
             }
             ToastBar(toastText, Modifier.align(Alignment.BottomCenter))
             if (state.adsOffPrompt) AdsOffPrompt(state)
@@ -582,3 +589,6 @@ private fun AdsOffPrompt(state: SettingsScreenState) {
         },
     )
 }
+
+/** Whole hours left on the ads turn-off lock, rounded up so the last hour still reads "1 hour", not "0". */
+internal fun lockHours(remainingMs: Long): Int = ((remainingMs + 3_599_999L) / 3_600_000L).toInt().coerceAtLeast(1)

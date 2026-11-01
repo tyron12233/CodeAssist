@@ -61,4 +61,33 @@ class AdsOffPromptTest {
         assertFalse(state.adsOffPrompt)
         assertFalse(ads.adsEnabled)
     }
+
+    /** Right after an install or update the switch can't go off: it stays on, says why, and asks nothing. */
+    @Test
+    fun theSwitchSpringsBackDuringTheTurnOffLock() {
+        val backend = object : StubBackend() {
+            val prefs = mutableMapOf<String, String>()
+            override fun preference(key: String): String? = prefs[key]
+            override fun setPreference(key: String, value: String) { prefs[key] = value }
+        }
+        val host = object : dev.ide.ui.backend.AdHost {
+            override val available = true
+            override val installStamp = "build-2"
+            @androidx.compose.runtime.Composable
+            override fun NativeAd(placement: dev.ide.ui.backend.AdPlacement, modifier: androidx.compose.ui.Modifier) = Unit
+        }
+        val ads = dev.ide.ui.ads.AdController(backend, host) { 1_000_000L }
+        val state = SettingsScreenState(backend, ads, CoroutineScope(Dispatchers.Unconfined))
+
+        for (key in listOf(SHOW_ADS_KEY, SHOW_INTERSTITIALS_KEY)) {
+            state.set(PRIVACY_PAGE_ID, key, "false") {}
+            assertEquals("true", state.values["$PRIVACY_PAGE_ID.$key"], "$key went off during the lock")
+            assertEquals(SettingsToast.AdsOffLocked(dev.ide.ui.ads.ADS_OFF_LOCK_MS), state.toast)
+        }
+        assertFalse(state.adsOffPrompt)
+        assertTrue(ads.adsEnabled)
+        assertTrue(ads.interstitialsEnabled)
+        assertEquals(24, lockHours(dev.ide.ui.ads.ADS_OFF_LOCK_MS))
+        assertEquals(1, lockHours(1))
+    }
 }

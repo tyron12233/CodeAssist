@@ -159,6 +159,14 @@
     <string name="support_show_ads_desc">إظهار الإعلانات في التطبيق. يمكنك إيقاف تشغيلها في أي وقت.</string>
     <string name="support_show_interstitials">إعلانات ملء الشاشة</string>
     <string name="support_show_interstitials_desc">إعلانات ملء الشاشة من حين لآخر أثناء عمليات البناء الطويلة وبعد إنهاء الدروس.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="zero">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعة.</item>
+        <item quantity="one">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد ساعة واحدة.</item>
+        <item quantity="two">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد ساعتين.</item>
+        <item quantity="few">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعات.</item>
+        <item quantity="many">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعة.</item>
+        <item quantity="other">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعة.</item>
+    </plurals>
     <string name="ads_off_title">إيقاف الإعلانات؟</string>
     <string name="ads_off_body">يمكنك إيقاف إعلانات ملء الشاشة فقط والإبقاء على الإعلانات الأصغر في القوائم واللوحات.</string>
     <string name="ads_off_all">كل الإعلانات</string>

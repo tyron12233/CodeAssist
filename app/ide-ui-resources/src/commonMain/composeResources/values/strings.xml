@@ -156,6 +156,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_show_ads_desc">Show ads in the app. You can turn them off at any time.</string>
     <string name="support_show_interstitials">Full-screen ads</string>
     <string name="support_show_interstitials_desc">Occasional full-screen ads during long builds and after finished lessons.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="one">Ads stay on for a day after an install or update. You can turn them off in %1$d hour.</item>
+        <item quantity="other">Ads stay on for a day after an install or update. You can turn them off in %1$d hours.</item>
+    </plurals>
     <string name="ads_off_title">Turn off ads?</string>
     <string name="ads_off_body">You can turn off only the full-screen ads and keep the smaller ads in lists and panels.</string>
     <string name="ads_off_all">All ads</string>

@@ -93,6 +93,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="support_show_ads_desc">Tampilkan iklan di aplikasi. Anda dapat mematikannya kapan saja.</string>
     <string name="support_show_interstitials">Iklan layar penuh</string>
     <string name="support_show_interstitials_desc">Sesekali iklan layar penuh saat build lama dan setelah pelajaran selesai.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="other">Iklan tetap aktif selama sehari setelah instal atau pembaruan. Anda dapat menonaktifkannya dalam %1$d jam.</item>
+    </plurals>
     <string name="ads_off_title">Matikan iklan?</string>
     <string name="ads_off_body">Anda dapat mematikan hanya iklan layar penuh dan tetap menampilkan iklan kecil di daftar dan panel.</string>
     <string name="ads_off_all">Semua iklan</string>

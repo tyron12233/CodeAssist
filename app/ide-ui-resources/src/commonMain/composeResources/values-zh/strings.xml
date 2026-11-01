@@ -156,6 +156,9 @@
     <string name="support_show_ads_desc">应用内可能会展示广告，但你可以随时关闭</string>
     <string name="support_show_interstitials">全屏广告</string>
     <string name="support_show_interstitials_desc">在长时间构建和完成课程后偶尔显示全屏广告。</string>
+    <plurals name="ads_off_locked">
+        <item quantity="other">安装或更新后，广告会保持开启一天。%1$d 小时后即可关闭。</item>
+    </plurals>
     <string name="ads_off_title">关闭广告？</string>
     <string name="ads_off_body">你可以只关闭全屏广告，保留列表和面板中的小广告。</string>
     <string name="ads_off_all">全部广告</string>
