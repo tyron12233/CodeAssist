@@ -42,7 +42,7 @@ import org.jetbrains.compose.resources.stringResource
  * How long a build must keep running before it counts as "long" and becomes eligible for a full-screen ad.
  * Short / incremental builds finish before this and never trigger one.
  */
-private const val LONG_BUILD_THRESHOLD_MS = 5_000L
+internal const val LONG_BUILD_THRESHOLD_MS = 5_000L
 
 /** Minimum gap between two build interstitials, so an edit-and-run loop doesn't pop an ad on every build. */
 private const val BUILD_INTERSTITIAL_MIN_INTERVAL_MS = 4 * 60_000L
@@ -73,6 +73,21 @@ internal suspend fun preloadWhileIdle(firstDelayMs: Long, active: () -> Boolean,
     }
 }
 
+/**
+ * How long a build that just started runs before the console footer's banner appears: [quickMs] normally, but
+ * when the full-screen ad is set to show at [LONG_BUILD_THRESHOLD_MS], until just after that, so the banner
+ * doesn't load and draw only to be covered a second later. If the ad does show, the banner waits for it to close.
+ */
+fun buildBannerDelayMs(ads: AdController, quickMs: Long): Long {
+    val interstitialDue = ads.interstitialsActive &&
+        ads.host.interstitialState == "ready" &&
+        ads.buildPacing.wouldShow(ads.host.lowMemoryDevice)
+    return if (interstitialDue) maxOf(quickMs, LONG_BUILD_THRESHOLD_MS + INTERSTITIAL_DECISION_GRACE_MS) else quickMs
+}
+
+/** How long after the threshold the banner gives the full-screen ad to come up. */
+private const val INTERSTITIAL_DECISION_GRACE_MS = 1_500L
+
 /** How long the "build finished while the ad was open" notice stays up. */
 private const val RESULT_NOTICE_MS = 4_000L
 
@@ -102,6 +117,17 @@ class BuildAdPacing(
     /** Whether an ad could show over a later build this session, cooldown and last outcome aside: whether
      *  loading one is worth it. */
     fun mayShowLater(lowMemory: Boolean): Boolean = !lowMemory && !firstSession && seen >= FREE_LONG_BUILDS
+
+    /**
+     * Whether a build starting now would get the full-screen ad if it runs past the threshold, given the ad is
+     * loaded: [skipReason]'s checks without counting the build. The build console's banner waits for that
+     * decision rather than appearing just before the ad covers it.
+     */
+    fun wouldShow(lowMemory: Boolean): Boolean {
+        val last = lastShownMs
+        return !lowMemory && !firstSession && seen >= FREE_LONG_BUILDS && !lastBuildFailed &&
+            (last == null || nowMs() - last >= BUILD_INTERSTITIAL_MIN_INTERVAL_MS)
+    }
 
     /** Count a build that is still running at the threshold, and say why it gets no ad (null: show one). */
     fun skipReason(lowMemory: Boolean): String? {

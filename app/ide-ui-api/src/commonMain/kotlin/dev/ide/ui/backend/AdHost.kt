@@ -42,7 +42,8 @@ enum class AdPlacement {
  * [dev.ide.ui.CodeAssistApp]; [None] (the default) means "this platform has no ads".
  *
  * Ad slots are NATIVE — the host renders them inside the app's own card chrome (see
- * [dev.ide.ui.components.AdSlot]), never as banners. The one exception is a single full-screen interstitial
+ * [dev.ide.ui.components.AdSlot]). Banners appear in two places only, in the same chrome: a native slot that no
+ * native ad filled, and the build console's footer while a build runs ([BannerAd]). The one full-screen exception is a single full-screen interstitial
  * shown occasionally at natural breaks ([preloadInterstitial]/[showInterstitial]) — currently a long-running
  * build finishing its wait and a completed tutorial lesson. Whether ads are shown at all — native slots AND
  * that interstitial — is decided in common by [dev.ide.ui.ads.AdController] from the user's "show ads" and
@@ -86,6 +87,17 @@ interface AdHost {
      */
     @Composable
     fun NativeAd(placement: AdPlacement, modifier: Modifier)
+
+    /**
+     * Render a banner ad for [placement] inside the shared card chrome, with [modifier] applied to the card.
+     * Used where a native card doesn't fit the moment: the build console's footer while a build runs (see
+     * [dev.ide.ui.components.BuildRunningBannerSlot]). Like [NativeAd], called only while ads are active, and
+     * drawing nothing (no card, no padding) until a banner has loaded or when none fills. A native slot whose
+     * native request fills nothing may also fall back to a banner, but that happens inside the host's
+     * [NativeAd]. No-op where unsupported (desktop; the default).
+     */
+    @Composable
+    fun BannerAd(placement: AdPlacement, modifier: Modifier) {}
 
     /**
      * Begin loading the full-screen interstitial ahead of showing it (idempotent — a repeat call while one is

@@ -258,10 +258,11 @@ fun BuildConsole(
                 BuildTab.Logcat -> LtrContent { LogcatTab(appLog) { backend?.build?.clearAppLog() } }
             }
         }
-        // A compact native ad in the console footer, only while nothing is building — a natural pause, never
-        // over a running build — and only in a console tall enough to spare the room. Renders nothing unless ads
-        // are active.
-        if (!running) FooterAdSlot(AdPlacement.BUILD_CONSOLE, paneHeight)
+        // The console footer's ad: a compact native card while nothing is building (a natural pause), and a
+        // banner a few seconds into a running build, while the log is being watched rather than tapped. Each only
+        // in a console tall enough to spare the room; neither renders unless ads are active.
+        if (running) BuildRunningBannerSlot(paneHeight, Modifier.chromePadding())
+        else FooterAdSlot(AdPlacement.BUILD_CONSOLE, paneHeight)
     }
     }
     }

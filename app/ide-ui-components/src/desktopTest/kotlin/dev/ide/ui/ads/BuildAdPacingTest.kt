@@ -33,6 +33,27 @@ class BuildAdPacingTest {
         assertEquals((1..FREE_LONG_BUILDS).toList(), persisted)
     }
 
+    /** [BuildAdPacing.wouldShow] predicts [BuildAdPacing.skipReason] without counting the build. */
+    @Test
+    fun wouldShowMatchesTheSkipDecisionWithoutCounting() {
+        val grace = pacing(seen = FREE_LONG_BUILDS - 1)
+        assertFalse(grace.wouldShow(lowMemory = false))
+        assertTrue(persisted.isEmpty())
+
+        val p = pacing()
+        assertTrue(p.wouldShow(lowMemory = false))
+        assertFalse(p.wouldShow(lowMemory = true))
+        p.lastBuildFailed = true
+        assertFalse(p.wouldShow(lowMemory = false))
+        p.lastBuildFailed = false
+        assertNull(p.skipReason(lowMemory = false))
+        p.shown()
+        assertFalse(p.wouldShow(lowMemory = false))
+        now += 4 * 60_000L
+        assertTrue(p.wouldShow(lowMemory = false))
+        assertFalse(pacing(firstSession = true).wouldShow(lowMemory = false))
+    }
+
     @Test
     fun theFirstSessionShowsNone() {
         val p = pacing(seen = FREE_LONG_BUILDS, firstSession = true)

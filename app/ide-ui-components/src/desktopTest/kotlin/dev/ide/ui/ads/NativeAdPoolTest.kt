@@ -3,6 +3,7 @@ package dev.ide.ui.ads
 import dev.ide.ui.backend.AdPlacement
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -218,6 +219,55 @@ class NativeAdPoolTest {
         val third = net.pool.lease(AdPlacement.CHALLENGE)
         net.pool.acquire(third)
         assertEquals(2, net.requestCount)
+    }
+
+    /** A slot whose request fails is told so (the host fills it with a banner), and a native ad clears it. */
+    @Test
+    fun aFailedRequestMarksTheSlotUntilANativeAdArrives() {
+        val net = FakeNetwork()
+        val slot = net.pool.lease(AdPlacement.STORE)
+        var changes = 0
+        slot.onChange = { changes++ }
+        net.pool.acquire(slot)
+        assertFalse(slot.nativeFailed)
+
+        net.failOldest()
+        assertTrue(slot.nativeFailed)
+        assertEquals(1, changes)
+        net.pool.release(slot)
+
+        // Back within the backoff: no request, but the slot knows at once that native has nothing for it.
+        val again = net.pool.lease(AdPlacement.STORE)
+        net.pool.acquire(again)
+        assertEquals(1, net.requestCount)
+        assertTrue(again.nativeFailed)
+        net.pool.release(again)
+
+        net.clock += NATIVE_AD_FAILURE_BACKOFF_MS
+        val later = net.pool.lease(AdPlacement.STORE)
+        net.pool.acquire(later)
+        assertFalse(later.nativeFailed)
+        net.fill()
+        assertFalse(later.nativeFailed)
+        assertEquals("store-0", later.ad)
+    }
+
+    /** A slot already showing an ad keeps it when its refresh request fails: it is not marked failed. */
+    @Test
+    fun aFailedRefreshDoesNotMarkASlotThatHasAnAd() {
+        val net = FakeNetwork()
+        val first = net.pool.lease(AdPlacement.LEARN)
+        net.pool.acquire(first)
+        val (_, callbacks) = net.fill()
+        callbacks.impression()
+        net.pool.release(first)
+
+        net.clock += NATIVE_AD_REFRESH_AFTER_MS
+        val second = net.pool.lease(AdPlacement.LEARN)
+        net.pool.acquire(second)
+        net.failOldest()
+        assertFalse(second.nativeFailed)
+        assertEquals("learn-0", second.ad)
     }
 
     @Test

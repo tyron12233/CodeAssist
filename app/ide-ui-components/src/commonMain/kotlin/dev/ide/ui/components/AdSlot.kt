@@ -10,15 +10,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.ads.buildBannerDelayMs
+import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.ad_label
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -47,6 +55,34 @@ val AdFooterMinPaneHeight = 520.dp
 fun FooterAdSlot(placement: AdPlacement, paneHeight: Dp, modifier: Modifier = Modifier) {
     if (paneHeight < AdFooterMinPaneHeight) return
     AdSlot(placement, modifier)
+}
+
+/** How long a build runs before the console footer shows a banner, so a quick incremental build never flashes one. */
+const val BUILD_BANNER_DELAY_MS = 3_000L
+
+/** The console height a running build's footer banner needs: the banner and its card take about 110dp. */
+val BuildBannerMinPaneHeight = 360.dp
+
+/**
+ * The build console footer's banner while a build runs ([AdHost.BannerAd]). The console only draws its native
+ * footer ([FooterAdSlot]) between builds; during one, people watch the log without tapping, so a banner there
+ * gets seen without inviting stray clicks. Compose it only while the build runs: it appears after
+ * [BUILD_BANNER_DELAY_MS] (or once the full-screen build ad has had its turn, when one is due:
+ * [buildBannerDelayMs]), never while the full-screen build ad is up (it would sit unseen behind it), and not on
+ * low-memory devices, where the build interstitial is skipped for the same reason (an ad WebView next to an
+ * on-device build). Renders nothing unless ads are active.
+ */
+@Composable
+fun BuildRunningBannerSlot(paneHeight: Dp, modifier: Modifier = Modifier) {
+    val ads = LocalAds.current ?: return
+    if (!ads.adsActive || paneHeight < BuildBannerMinPaneHeight) return
+    var due by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(buildBannerDelayMs(ads, BUILD_BANNER_DELAY_MS))
+        due = true
+    }
+    if (!due || ads.host.lowMemoryDevice || ads.host.interstitialShowing) return
+    ads.host.BannerAd(AdPlacement.BUILD_CONSOLE, modifier)
 }
 
 /**

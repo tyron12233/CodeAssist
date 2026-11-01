@@ -45,6 +45,8 @@ userMessagingPlatform = "4.0.0"        # com.google.android.ump — UMP/GDPR con
 admobMediationMeta = "6.22.0.1"        # com.google.ads.mediation:facebook — Meta Audience Network adapter (native-capable)
 admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pangle adapter (native-capable)
 admobMediationMintegral = "17.1.71.0"  # com.google.ads.mediation:mintegral — Mintegral adapter (native-capable)
+admobMediationUnity = "4.21.0.0"       # com.google.ads.mediation:unity — Unity Ads adapter (banner + interstitial; no native)
+unityAds = "4.21.0"                    # com.unity3d.ads:unity-ads — the Unity Ads SDK the adapter drives (Maven Central)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
 # Eclipse JGit: the pure-Java Git implementation behind :vcs-impl. The 6.10.x line targets Java 11
@@ -201,6 +203,10 @@ user-messaging-platform = { module = "com.google.android.ump:user-messaging-plat
 admob-mediation-meta = { module = "com.google.ads.mediation:facebook", version.ref = "admobMediationMeta" }
 admob-mediation-pangle = { module = "com.google.ads.mediation:pangle", version.ref = "admobMediationPangle" }
 admob-mediation-mintegral = { module = "com.google.ads.mediation:mintegral", version.ref = "admobMediationMintegral" }
+# Unity Ads has no native format: it fills the banners (native-slot fallback, build footer) and the interstitial.
+# Its adapter does not pull the Unity SDK in, so both are declared.
+admob-mediation-unity = { module = "com.google.ads.mediation:unity", version.ref = "admobMediationUnity" }
+unity-ads = { module = "com.unity3d.ads:unity-ads", version.ref = "unityAds" }
 # The stub android.jar (every method throws "Stub!"): compileOnly for :applog-runtime, whose tiny debug
 # log-bridge (ContentProvider + LocalSocket forwarder) is compiled against the framework APIs but never links
 # them (they resolve against the real android.jar when the runtime jar is dexed into a user's app). Ancient

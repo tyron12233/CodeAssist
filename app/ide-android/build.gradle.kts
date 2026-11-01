@@ -465,6 +465,18 @@ val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?:
 val realAdmobInterstitialUnitId = (findProperty("ADMOB_INTERSTITIAL_UNIT_ID") as String?)
     ?: System.getenv("ADMOB_INTERSTITIAL_UNIT_ID")
     ?: "ca-app-pub-7523005242346905/6735189457"
+// Google's TEST adaptive-banner unit, used by debug/profile/minified for both banner uses below.
+val testAdmobBannerUnitId = "ca-app-pub-3940256099942544/9214589741"
+// The real banner units, baked in like the ids above. A blank one turns that banner off in release: AndroidAdHost
+// then shows nothing where it would go. ADMOB_BANNER_UNIT_ID is the banner a native slot
+// falls back to when no native ad fills; ADMOB_BUILD_BANNER_UNIT_ID is the console-footer banner while a build
+// runs, and falls back to the first one when left blank. Overridable like the others (-P or env).
+val realAdmobBannerUnitId = (findProperty("ADMOB_BANNER_UNIT_ID") as String?)
+    ?: System.getenv("ADMOB_BANNER_UNIT_ID")
+    ?: "ca-app-pub-7523005242346905/7699599336"
+val realAdmobBuildBannerUnitId = (findProperty("ADMOB_BUILD_BANNER_UNIT_ID") as String?)
+    ?: System.getenv("ADMOB_BUILD_BANNER_UNIT_ID")
+    ?: ""
 // Per-placement native units, keyed by AdPlacement name, so the AdMob report splits native earnings by screen.
 // A placement left blank falls back to the shared native unit above, and several placements may share one
 // unit. Each is overridable via -PADMOB_NATIVE_UNIT_<PLACEMENT> (or the env var of the same name). Reaches
@@ -562,6 +574,8 @@ android {
         buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
         buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
         buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
+        buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
+        buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
     }
 
     buildFeatures {
@@ -635,6 +649,8 @@ android {
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$realAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$realAdmobInterstitialUnitId\"")
             buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"$realAdmobNativeUnitsByPlacement\"")
+            buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$realAdmobBannerUnitId\"")
+            buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$realAdmobBuildBannerUnitId\"")
         }
         // A release-like, non-debuggable build that's still installable locally (signed with the debug key).
         // Use this — never `debug` — to judge runtime/typing/recomposition performance: a `debuggable` app
@@ -657,6 +673,8 @@ android {
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
             buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
+            buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
+            buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
         }
         // EXPERIMENTAL, non-shipping: an R8-minified build used only to measure how far the app's own
         // dex (~61% of the APK, mostly the bundled Kotlin compiler + IntelliJ platform) can shrink. The
@@ -683,6 +701,8 @@ android {
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
             buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
+            buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
+            buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
         }
     }
 
@@ -1113,6 +1133,14 @@ dependencies {
         exclude(group = "com.google.protobuf", module = "protobuf-javalite")
     }
     implementation(libs.admob.mediation.mintegral) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
+    // Unity Ads: banner + interstitial demand only (it has no native format). The Unity SDK pulls
+    // protobuf-kotlin-lite -> protobuf-javalite, excluded for the same dup-class reason as above.
+    implementation(libs.admob.mediation.unity) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
+    implementation(libs.unity.ads) {
         exclude(group = "com.google.protobuf", module = "protobuf-javalite")
     }
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our

@@ -20,10 +20,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -71,6 +76,10 @@ private val webViewAvailable: Boolean by lazy {
  * after `MobileAds.initialize(...)`.
  *
  * There is no purchase flow: ads are removed for free via the in-app toggle.
+ *
+ * Banners ([BannerAds]) appear in two places: a native slot whose request filled nothing shows a banner instead
+ * (`AD_BANNER_UNIT_ID`), and the build console's footer shows one while a build runs ([BannerAd],
+ * `AD_BUILD_BANNER_UNIT_ID`). A build without those units (a release before they exist) shows neither.
  *
  * The one non-native placement is the full-screen interstitial ([preloadInterstitial]/[showInterstitial]):
  * a real AdMob `InterstitialAd` shown occasionally at natural breaks (a long-running build, a finished tutorial
@@ -212,7 +221,8 @@ class AndroidAdHost(
     // native request waits here instead of reaching the SDK: the first request stands up AdMob's WebView on
     // the main thread, most of a second of frozen frames while the engine is still opening the project. Main
     // thread only, like the pool.
-    private var started = false
+    // Compose state, so a banner slot composed before launch settled asks for its banner once ads start.
+    private var started by mutableStateOf(false)
     private val held = mutableListOf<Pair<AdPlacement, NativeAdPool.Callbacks<NativeAd>>>()
 
     /**
@@ -238,7 +248,11 @@ class AndroidAdHost(
     fun close() {
         held.clear()
         nativeAds.close()
+        banners.close()
     }
+
+    // Banners: the fallback for a native slot nothing filled, and the build console's footer during a build.
+    private val banners = BannerAds(contextProvider = { activityProvider() })
 
     private fun loadNativeAd(placement: AdPlacement, callbacks: NativeAdPool.Callbacks<NativeAd>): Boolean {
         if (started) return sendNativeAd(placement, callbacks)
@@ -286,19 +300,24 @@ class AndroidAdHost(
     override fun NativeAd(placement: AdPlacement, modifier: Modifier) {
         val lease = remember(placement) { nativeAds.lease(placement) }
         var ad by remember(lease) { mutableStateOf(lease.ad) }
+        var nativeFailed by remember(lease) { mutableStateOf(lease.nativeFailed) }
         // Only a slot that is actually on screen asks for an ad. A lazy list composes (prefetches) the next item
         // before it scrolls into view, and a slot further down a page can be composed but never reached; a
         // request for either loads an ad nobody sees.
         var onScreen by remember(lease) { mutableStateOf(false) }
 
         DisposableEffect(lease) {
-            lease.onChange = { ad = lease.ad }
+            lease.onChange = {
+                ad = lease.ad
+                nativeFailed = lease.nativeFailed
+            }
             onDispose { nativeAds.release(lease) }
         }
         LaunchedEffect(lease, onScreen) {
             if (onScreen) {
                 nativeAds.acquire(lease)
                 ad = lease.ad
+                nativeFailed = lease.nativeFailed
             }
         }
 
@@ -330,6 +349,69 @@ class AndroidAdHost(
                         nativeAds.bound(lease)
                     },
                 )
+            } else if (nativeFailed && banners.hasUnit(BannerKind.NativeFallback)) {
+                // No native ad filled this placement: a banner takes the slot instead (its networks include
+                // ones with no native demand). A native ad that arrives later replaces it.
+                BannerBody(placement, BannerKind.NativeFallback, modifier)
+            }
+        }
+    }
+
+    @Composable
+    override fun BannerAd(placement: AdPlacement, modifier: Modifier) {
+        if (!banners.hasUnit(BannerKind.BuildFooter)) return
+        var onScreen by remember(placement) { mutableStateOf(false) }
+        val markerHeight = with(LocalDensity.current) { 1.toDp() }
+        Column(Modifier.fillMaxWidth()) {
+            // The same on-screen marker as NativeAd: a console that's composed but out of view requests nothing.
+            Box(
+                Modifier.fillMaxWidth().height(markerHeight).onGloballyPositioned { coordinates ->
+                    if (!onScreen && coordinates.isAttached && coordinates.boundsInWindow().height > 0f) onScreen = true
+                }
+            )
+            if (onScreen) BannerBody(placement, BannerKind.BuildFooter, modifier)
+        }
+    }
+
+    /**
+     * A banner in the shared card chrome, with [modifier] on the card. The card is laid out from the start, so the
+     * banner can be sized to the width inside it, but it takes no height and draws nothing until the banner has
+     * loaded: like a native slot, an unfilled banner slot collapses.
+     */
+    @Composable
+    private fun BannerBody(placement: AdPlacement, kind: BannerKind, modifier: Modifier) {
+        var widthPx by remember { mutableStateOf(0) }
+        val widthDp = with(LocalDensity.current) { widthPx.toDp().value.toInt() }
+        var banner by remember { mutableStateOf<Banner?>(null) }
+        DisposableEffect(placement, kind, widthDp, started) {
+            val acquired = if (started && webViewAvailable && widthDp > 0) {
+                banners.acquire(BannerKey(placement, kind, widthDp))
+            } else null
+            banner = acquired
+            onDispose {
+                banner = null
+                acquired?.let(banners::release)
+            }
+        }
+        val shown = banner?.takeIf { it.loaded }
+        Box(
+            Modifier.fillMaxWidth().clipToBounds().layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, if (shown != null) placeable.height else 0) { placeable.place(0, 0) }
+            }
+        ) {
+            NativeAdCard(modifier) {
+                Box(Modifier.fillMaxWidth().onSizeChanged { widthPx = it.width }, contentAlignment = Alignment.Center) {
+                    // Keyed, so a different banner (the slot's width changed) gets its own view holder.
+                    if (shown != null) key(shown) {
+                        AndroidView(
+                            factory = {
+                                (shown.view.parent as? ViewGroup)?.removeView(shown.view)
+                                shown.view
+                            },
+                        )
+                    }
+                }
             }
         }
     }
