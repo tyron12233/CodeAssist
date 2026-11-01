@@ -260,12 +260,34 @@ internal fun KotlinResolver.bestOverload(
         if (key.first > bestKey.first ||
             (key.first == bestKey.first && key.second > bestKey.second) ||
             (key.first == bestKey.first && key.second == bestKey.second && key.third > bestKey.third) ||
-            (key == bestKey && paramMoreSpecific(c, best))
+            (key == bestKey && paramMoreSpecific(c, best)) ||
+            (key == bestKey && overridesWithNarrowerReturn(c, best))
         ) {
             best = c; bestKey = key
         }
     }
     return best
+}
+
+/**
+ * Whether [a] is an override of [b] with a narrower return type: the same parameter list, and a return type
+ * that is a strict subtype of [b]'s. Both arrive as candidates because a member is collected once per supertype
+ * that declares it, in lookup order, and the narrowest override is the one the call actually binds to.
+ * `MutableList<T>.iterator()` reaches `Collection.iterator(): Iterator<T>` through `List` before
+ * `MutableCollection.iterator(): MutableIterator<T>`, and taking the first made `it.remove()` on a list's
+ * iterator "Unresolved reference: remove".
+ */
+private fun overridesWithNarrowerReturn(a: KotlinSymbol, b: KotlinSymbol): Boolean {
+    if (a.paramTypes.size != b.paramTypes.size) return false
+    for (i in a.paramTypes.indices) {
+        val ap = a.paramTypes[i] ?: return false
+        val bp = b.paramTypes[i] ?: return false
+        if (ap.qualifiedName != bp.qualifiedName) return false
+    }
+    val ar = a.type as? KotlinType ?: return false
+    val br = b.type as? KotlinType ?: return false
+    if (ar.isTypeParameter || br.isTypeParameter || ar.qualifiedName == br.qualifiedName) return false
+    return br.isAssignableFrom(ar)
 }
 
 /** The most-specific ranking key for [sym] at [call] (higher is more specific): function-type parameter over
