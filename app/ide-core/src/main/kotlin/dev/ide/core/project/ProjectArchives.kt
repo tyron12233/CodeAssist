@@ -1,5 +1,6 @@
 package dev.ide.core.project
 
+import dev.ide.platform.ProjectFiles
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -36,8 +37,10 @@ object ProjectArchives {
      *
      * Skipped while unpacking: macOS's `__MACOSX` resource forks and `.DS_Store`, build outputs and the Gradle
      * cache (`build/`, `.gradle/`; the import would drop them anyway, and they are most of a zipped project's
-     * bytes), and installable packages and raw dex (`.apk`, `.aab`, `.dex`, ...), which are build products,
-     * never sources. An entry whose name would land outside [dest] fails the whole archive.
+     * bytes), and installable packages, raw dex and compiled classes (`.apk`, `.aab`, `.dex`, ...). Both only
+     * outside a source tree ([ProjectFiles]): a package named `build` or an `.apk` under `src/main/assets` is
+     * the project's own. Libraries (`.jar`, `.aar`, `.so`) always come through. An entry whose name would land
+     * outside [dest] fails the whole archive.
      */
     fun extract(archive: Path, dest: Path, inspect: (Path) -> ImportableKind): Contents? {
         val zip = try {
@@ -110,7 +113,8 @@ object ProjectArchives {
         return found
     }
 
-    private val PACKAGES = listOf(".apk", ".apks", ".aab", ".xapk", ".dex")
+    /** Only `build/`: other output-looking names (`bin/`, `out/`) are too likely to be the user's own here. */
+    private val IMPORT_OUTPUT_DIRS = setOf("build")
 
     private fun skipped(name: String): Boolean {
         val segments = name.split('/').filter { it.isNotEmpty() }
@@ -118,7 +122,7 @@ object ProjectArchives {
         if (segments.first() == "__MACOSX" || segments.last() == ".DS_Store") return true
         // A directory segment named so; the last segment of a file entry is the file itself.
         val dirs = if (name.endsWith("/")) segments else segments.dropLast(1)
-        if (dirs.any { it == "build" || it == ".gradle" }) return true
-        return !name.endsWith("/") && PACKAGES.any { segments.last().endsWith(it, ignoreCase = true) }
+        if (dirs.any { it == ".gradle" }) return true
+        return ProjectFiles.isBuildOutput(name, isDirectory = name.endsWith("/"), outputDirs = IMPORT_OUTPUT_DIRS)
     }
 }

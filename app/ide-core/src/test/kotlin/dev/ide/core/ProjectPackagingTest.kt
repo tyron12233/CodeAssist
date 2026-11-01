@@ -92,6 +92,39 @@ class ProjectPackagingTest {
         }
     }
 
+    /** A source package named `build` (or `exports`) is the project's; only a module's own output folder is not. */
+    @Test
+    fun keepsSourcePackagesNamedLikeOutputFolders() {
+        withTempDir("cm-caproj-buildpkg") { root ->
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            var src = ""
+            var module = ""
+            manager.create("java-console", mapOf("name" to "Pkg Names", "packageName" to "com.acme.p")).use { ide ->
+                src = ide.workspaceRoot.toString()
+                module = ide.moduleNames().first()
+            }
+            val base = Paths.get(src)
+            fun write(rel: String) = base.resolve(rel).also { Files.createDirectories(it.parent); Files.writeString(it, "x") }
+            write("$module/src/main/java/com/acme/build/Config.java")
+            write("$module/src/main/java/com/acme/exports/Csv.java")
+            write("$module/libs/widget.aar")
+            write("$module/src/main/jniLibs/arm64-v8a/libnative.so")
+            write("$module/build/classes/Out.class")
+            val meta = ProjectPackaging.ExportMeta(
+                "Pkg Names", false, null, listOf(ProjectPackaging.ModuleSpec(module, module, "java-lib")),
+                createdBy = CaprojFormat.APP_NAME, exportedAt = 1L,
+            )
+            val pkg = root.resolve("names.caproj")
+            ProjectPackaging.export(base, pkg, ProjectPackaging.ExportOptions(false, "", ""), null, meta)
+            val paths = ProjectPackaging.readPreview(pkg)!!.entries.map { it.path }.toSet()
+            assertTrue("$module/src/main/java/com/acme/build/Config.java" in paths, "a package named build is source: $paths")
+            assertTrue("$module/src/main/java/com/acme/exports/Csv.java" in paths)
+            assertTrue("$module/libs/widget.aar" in paths)
+            assertTrue("$module/src/main/jniLibs/arm64-v8a/libnative.so" in paths)
+            assertFalse(paths.any { it.startsWith("$module/build/") }, "the module's build output stays out")
+        }
+    }
+
     @Test
     fun roundTripsExploreStoreMetadataAndScreenshots() {
         withTempDir("cm-caproj-store") { root ->

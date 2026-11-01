@@ -1,5 +1,6 @@
 package dev.ide.core.project
 
+import dev.ide.platform.ProjectFiles
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
@@ -769,7 +770,9 @@ class ProjectManager private constructor(
         if (name == "android.jar" || name == "debug.keystore") return true
         val rel = root.relativize(file).toString().replace(File.separatorChar, '/')
         if (rel.contains(".platform/caches/")) return true
-        return rel.split('/').any { it == "build" || it == "exports" || it == ".gradle" || it == TRASH_DIR }
+        if (rel.split('/').any { it == ".gradle" || it == TRASH_DIR }) return true
+        // `build/` and `exports/` are output only outside a source tree; a package named `build` is source.
+        return ProjectFiles.isBuildOutput(rel, isDirectory = false, outputDirs = COPY_OUTPUT_DIRS, products = false)
     }
 
     // --- shareable project packages (.caproj) ---
@@ -978,7 +981,8 @@ class ProjectManager private constructor(
             stream.forEach { path ->
                 val rel = src.relativize(path).toString().replace(File.separatorChar, '/')
                 if (rel.contains(".platform/caches/") ||
-                    rel.split('/').any { it == "build" || it == ".gradle" }
+                    rel.split('/').any { it == ".gradle" } ||
+                    ProjectFiles.isBuildOutput(rel, isDirectory = Files.isDirectory(path), outputDirs = setOf("build"), products = false)
                 ) return@forEach
                 val target = dest.resolve(src.relativize(path).toString())
                 if (Files.isDirectory(path)) Files.createDirectories(target)

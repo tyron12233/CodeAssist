@@ -31,13 +31,10 @@ kotlin {
             implementation(project(":store-api"))
             // The dependency-free JSON reader every response goes through.
             implementation(project(":platform-json"))
-            implementation(libs.kotlinx.coroutines.core)
-        }
-
-        jvmMain.dependencies {
-            // The logging facade, for transport failures that should reach the console rather than be
-            // swallowed. Kotlin/JVM, which is why `storeLog` is a seam rather than a direct call.
+            // ProjectFiles: the one rule for what is build output, shared with the IDE's own copiers. Also the
+            // logging facade, which only JVM code reaches (hence `storeLog` is a seam, not a direct call).
             implementation(project(":platform-core"))
+            implementation(libs.kotlinx.coroutines.core)
         }
 
         jvmTest.dependencies {

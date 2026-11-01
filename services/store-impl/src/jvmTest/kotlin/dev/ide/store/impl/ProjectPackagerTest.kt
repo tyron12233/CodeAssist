@@ -177,6 +177,44 @@ class ProjectPackagerTest {
         assertFalse(r.zipEntries.any { it.endsWith(".apk") })
     }
 
+    /**
+     * The project's own binaries travel. Every `.so`, `.aar` and `.jar` used to be dropped by extension, so a
+     * project shipped without its `libs/` and `jniLibs/` and did not build once installed. A source package
+     * named like a build folder (`build`, `out`, `bin`, `keystore`) was dropped by name the same way.
+     */
+    @Test
+    fun theProjectsOwnLibrariesAndSourcePackagesArePackaged() {
+        val root = project()
+        fun write(path: String) = File(root, path).apply { parentFile.mkdirs(); writeText("x") }
+        val kept = listOf(
+            "app/libs/widget.aar",
+            "app/libs/helper.jar",
+            "app/src/main/jniLibs/arm64-v8a/libnative.so",
+            "app/src/main/resources/lib/x86_64/libbridge.so",
+            "gradle/wrapper/gradle-wrapper.jar",
+            "app/src/main/java/com/example/build/Config.java",
+            "app/src/main/java/com/example/out/Printer.java",
+            "app/src/main/java/com/example/bin/Codec.java",
+            "app/src/main/java/com/example/keystore/Vault.java",
+            "app/src/main/assets/logs/sample.log",
+        )
+        val dropped = listOf(
+            "app/build/intermediates/merged_native_libs/libnative.so",
+            "app/build/outputs/aar/app-release.aar",
+            "app/release/app-release.apk",
+            "app/.cxx/Debug/libnative.so",
+            "classes.dex",
+            "keystore/upload.txt",
+        )
+        (kept + dropped).forEach(::write)
+        val r = pack(root)
+        kept.forEach { assertContains(r.zipEntries, it) }
+        dropped.forEach { path -> assertFalse(path in r.zipEntries, "$path is build output or a key folder: ${r.zipEntries}") }
+        // Signing material stays out even inside a source tree.
+        write("app/src/main/assets/release.jks")
+        assertFalse("app/src/main/assets/release.jks" in pack(root).zipEntries)
+    }
+
     /** Exclusions are reported so the submit screen can prove the keystore was left out. */
     @Test
     fun exclusionsAreReportedNotSilentlyDropped() {

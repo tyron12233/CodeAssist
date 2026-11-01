@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
 import dev.ide.core.project.CaprojFormat
+import dev.ide.platform.ProjectFiles
 import dev.ide.ui.backend.IdeBackend
 import java.io.File
 
@@ -84,8 +85,12 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
         }.getOrElse { dest.deleteRecursively(); null }
     }
 
-    /** Recursively copy the SAF document [parentDocId] (a directory) under [treeUri] into [destDir]. */
-    private fun copyDocTree(treeUri: Uri, parentDocId: String, destDir: File) {
+    /**
+     * Recursively copy the SAF document [parentDocId] (a directory) under [treeUri] into [destDir]. [relDir] is
+     * the project-relative path of [destDir] ("" at the root), for telling a module's `build/` output from a
+     * source package that happens to be called `build`.
+     */
+    private fun copyDocTree(treeUri: Uri, parentDocId: String, destDir: File, relDir: String = "") {
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
         val resolver = activity.contentResolver
         resolver.query(
@@ -102,14 +107,18 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
             val mimeIdx = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
             while (c.moveToNext()) {
                 val childName = c.getString(nameIdx) ?: continue
+                val isDir = c.getString(mimeIdx) == DocumentsContract.Document.MIME_TYPE_DIR
+                val childRel = if (relDir.isEmpty()) childName else "$relDir/$childName"
                 // Skip regenerable build outputs / IDE metadata to keep the copy small (the engine's importer
-                // drops build/.gradle too, so leaving them out here just saves a redundant round-trip).
-                if (childName == "build" || childName == ".gradle" || childName == ".idea") continue
+                // drops build/.gradle too, so leaving them out here just saves a redundant round-trip). A
+                // `build` folder under `src/` is a source package, not output, and is copied.
+                if (childName == ".gradle" || childName == ".idea") continue
+                if (isDir && ProjectFiles.isBuildOutput(childRel, isDirectory = true, outputDirs = setOf("build"), products = false)) continue
                 val childId = c.getString(idIdx)
                 val child = File(destDir, childName)
-                if (c.getString(mimeIdx) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                if (isDir) {
                     child.mkdirs()
-                    copyDocTree(treeUri, childId, child)
+                    copyDocTree(treeUri, childId, child, childRel)
                 } else {
                     val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
                     resolver.openInputStream(docUri)?.use { input -> child.outputStream().use { input.copyTo(it) } }

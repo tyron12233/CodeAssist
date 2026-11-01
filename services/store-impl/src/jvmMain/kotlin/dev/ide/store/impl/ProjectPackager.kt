@@ -1,5 +1,6 @@
 package dev.ide.store.impl
 
+import dev.ide.platform.ProjectFiles
 import dev.ide.store.PackagedFile
 import dev.ide.store.PackagedProject
 import dev.ide.store.StoreResult
@@ -16,9 +17,13 @@ import java.util.zip.ZipOutputStream
  *
  *  - **Secrets.** A keystore, `keystore.properties`, `local.properties`, a `.env`. Uploading a signing
  *    key to a public catalog would be unrecoverable, so these are matched by name and never packaged.
- *  - **Build output.** `build/`, `.gradle/`, `.kotlin/`, `bin/`, `out/`. Large, machine-specific, and
- *    regenerated on the recipient's machine anyway.
- *  - **Local state.** `.git/`, `.idea/`, `.DS_Store`. History and editor state are not part of a template.
+ *  - **Build output**, as [ProjectFiles] defines it: `build/`, `bin/`, `out/` and the like, plus installable
+ *    packages, dex and compiled classes, but only OUTSIDE a source tree. Large, machine-specific, and
+ *    regenerated on the recipient's machine anyway. Decided by where a file is, not just its name: a package
+ *    called `build` under `src/` is source, and the project's own libraries (`.aar` files in `libs/`, `.so` files in `jniLibs/`,
+ *    `.so`/`.jar` under `src/main/resources`) travel, because the project does not build without them.
+ *  - **Local state.** `.git/`, `.idea/`, `.gradle/`, `.kotlin/`, `.DS_Store`. History and editor state are
+ *    not part of a template.
  *  - **Resolved-dependency state.** `.platform/libraries.json`, `sdks.json` and the `.deps-*` markers say
  *    what the submitter's device resolved and where it put it. The recipient must resolve for themselves;
  *    shipping the answer without the cache it points at is worse than shipping nothing.
@@ -108,9 +113,16 @@ class ProjectPackager(
     private fun isExcluded(f: File, rel: String): Boolean {
         val name = f.name
         if (rel in EXCLUDED_PATHS) return true
-        if (f.isDirectory) return name in EXCLUDED_DIRS
+        if (ProjectFiles.isToolState(rel)) return true
+        if (f.isDirectory) {
+            if (ProjectFiles.isBuildOutput(rel, isDirectory = true)) return true
+            // A folder of signing keys beside a module; under `src/` the same name is just a package.
+            return name == KEYSTORE_DIR && !ProjectFiles.inSourceTree(rel)
+        }
         if (name in EXCLUDED_FILES) return true
-        return EXCLUDED_SUFFIXES.any { name.endsWith(it, ignoreCase = true) }
+        if (SECRET_SUFFIXES.any { name.endsWith(it, ignoreCase = true) }) return true
+        if (!ProjectFiles.inSourceTree(rel) && LOCAL_SUFFIXES.any { name.endsWith(it, ignoreCase = true) }) return true
+        return ProjectFiles.isBuildOutput(rel, isDirectory = false)
     }
 
     companion object {
@@ -153,10 +165,8 @@ class ProjectPackager(
             ".platform/open-tabs.txt",
         )
 
-        private val EXCLUDED_DIRS = setOf(
-            "build", ".gradle", ".kotlin", ".idea", ".git", "bin", "out", "node_modules",
-            ".externalNativeBuild", ".cxx", "captures", "keystore",
-        )
+        /** Signing keys kept in a folder of their own; excluded outside a source tree (see [isExcluded]). */
+        private const val KEYSTORE_DIR = "keystore"
 
         /**
          * Names that must never be uploaded. `local.properties` holds an SDK path, `keystore.properties`
@@ -167,13 +177,15 @@ class ProjectPackager(
             "google-services.json", "agent.properties",
         )
 
-        private val EXCLUDED_SUFFIXES = listOf(
+        /** Signing material, excluded wherever it is, source tree included. */
+        private val SECRET_SUFFIXES = listOf(
             // `.ks` is the extension the IDE's own bundled debug keystore uses (`.platform/debug.ks`), so it
             // has to be here beside `.jks`/`.keystore` or signing material ships with the project.
-            ".jks", ".keystore", ".ks", ".p12", ".pem", ".iml", ".log",
-            // Runnable code: a store project is source, and PayloadExtractor drops these on install anyway.
-            ".apk", ".apks", ".aab", ".xapk", ".dex", ".class", ".jar", ".aar", ".so",
+            ".jks", ".keystore", ".ks", ".p12", ".pem",
         )
+
+        /** IDE module files and logs, excluded outside a source tree (a `.log` under `resources/` is content). */
+        private val LOCAL_SUFFIXES = listOf(".iml", ".log")
     }
 }
 

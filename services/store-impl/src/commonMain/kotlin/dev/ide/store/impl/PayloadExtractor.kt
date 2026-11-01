@@ -1,5 +1,6 @@
 package dev.ide.store.impl
 
+import dev.ide.platform.ProjectFiles
 import dev.ide.store.StoreResult
 import dev.ide.store.impl.platform.StoreFs
 import dev.ide.store.impl.platform.joinPath
@@ -19,9 +20,10 @@ import dev.ide.store.impl.platform.parentPath
  *    escape by another route. Only regular files and directories are extracted.
  *  - **Size and count ceilings.** A zip bomb is small on disk and enormous unpacked, so the *uncompressed*
  *    total is capped, not just the download.
- *  - **No executables.** A store project is source. A packaged app, dex, jar, native library or compiled
- *    class in the archive is dropped, so a download never puts runnable code on disk; the project builds
- *    its own from the source it ships.
+ *  - **No build output.** An installable package, dex or compiled class outside a source tree, anything in a
+ *    build-output directory, and tool state are dropped ([ProjectFiles]); the project builds its own. The
+ *    project's own libraries (`.aar` files in `libs/`, `.so` files in `jniLibs/`, a jar under `src/main/resources`) are kept, since
+ *    it does not build without them; they were reviewed with the rest of the submission.
  *
  * Nothing is moved into place until every entry has passed: extraction goes to a staging directory and is
  * renamed at the end, so a rejected archive leaves no half-written project behind.
@@ -69,7 +71,7 @@ class PayloadExtractor(
                 // repair itself. Stripping on extract means an old payload heals on install rather than
                 // waiting for its author to republish.
                 if (entryName(entry.name) in STRIPPED_ON_INSTALL) continue
-                if (isExecutable(entry.name)) continue
+                if (isBuildOutput(entry.name)) continue
                 uncompressed += entry.size
                 if (uncompressed > maxUncompressedBytes) {
                     return fail(
@@ -127,15 +129,11 @@ class PayloadExtractor(
             ".platform/open-tabs.txt",
         )
 
-        /** Endings of files that carry runnable code: never extracted (see the class notes). Mirrors the
-         *  executable part of `ProjectPackager.EXCLUDED_SUFFIXES`, which keeps them out of new archives. */
-        internal val EXECUTABLE_SUFFIXES = listOf(
-            ".apk", ".apks", ".aab", ".xapk", ".dex", ".jar", ".aar", ".so", ".class",
-        )
-
-        internal fun isExecutable(name: String): Boolean {
-            val lower = name.lowercase()
-            return EXECUTABLE_SUFFIXES.any { lower.endsWith(it) }
+        /** Build output and tool state, never extracted (see the class notes). The same rule
+         *  `ProjectPackager` uses to keep them out of new archives. */
+        internal fun isBuildOutput(name: String): Boolean {
+            val rel = entryName(name)
+            return ProjectFiles.isToolState(rel) || ProjectFiles.isBuildOutput(rel, isDirectory = false)
         }
 
         /** A zip entry name as a `/`-separated relative path, with any leading `./` removed. */
