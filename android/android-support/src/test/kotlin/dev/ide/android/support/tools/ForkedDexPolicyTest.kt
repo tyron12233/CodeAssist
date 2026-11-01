@@ -2,6 +2,7 @@ package dev.ide.android.support.tools
 
 import dev.ide.testkit.withTempDir
 import java.nio.file.Files
+import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -28,6 +29,25 @@ class ForkedDexPolicyTest {
         val r = Subprocess.run(listOf("/nonexistent/dalvikvm64", "-Xmx1536m"))
         assertFalse(r.success)
         assertTrue(r.processFailed)
+    }
+
+    @Test
+    fun aVmThatCannotLoadTheToolIsAProcessFailure() {
+        // The reported failure: dalvikvm64 started with an r8.dex.zip that had gone missing, printed
+        // "Unable to locate class 'com/android/tools/r8/D8'" and exited 1, and dexExtLibs failed outright
+        // instead of dexing in-process. ART's wording first, then a real JVM launched over an empty classpath.
+        val art = Subprocess.run(listOf("/bin/sh", "-c",
+            "echo \"Unable to locate class 'com/android/tools/r8/D8'\"; " +
+                "echo 'java.lang.ClassNotFoundException: com.android.tools.r8.D8'; exit 1"))
+        assertFalse(art.success)
+        assertTrue(art.processFailed, "a VM that never loaded the tool reached no verdict: ${art.log}")
+
+        withTempDir("empty-cp") { empty ->
+            val java = Paths.get(System.getProperty("java.home"), "bin", "java").toString()
+            val jvm = Subprocess.run(listOf(java, "-cp", empty.resolve("r8.dex.zip").toString(), "com.android.tools.r8.D8"))
+            assertFalse(jvm.success)
+            assertTrue(jvm.processFailed, "the JVM's missing-main-class launch is a process failure too: ${jvm.log}")
+        }
     }
 
     @Test
