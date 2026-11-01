@@ -78,12 +78,27 @@ jniLibs/arm64-v8a/          unpacked by the installer into an executable directo
   libLLVM.so                  where the code actually lives
   libclang-cpp.so             likewise, for clang
   libc++_shared.so            the STL they were linked against
+  libclang.so                 clang's C API (~0.7 MB), linked against libclang-cpp.so (see below)
+  libndkclangd.so             the resident daemon (~15 KB), an executable despite the name
 
 assets/toolchain/           unpacked by the plugin into its own dataDir on first use
   lib-clang/<ver>/include/    clang's resource headers (stddef.h, stdarg.h, arm_neon.h, …)
   sysroot/usr/include/        bionic + libc++ headers
   sysroot/usr/lib/            crt*.o and the link libraries for one ABI at one API level
 ```
+
+## The resident daemon
+
+`daemon/ndkclangd.c` is a small C program over libclang that keeps each open file's translation unit, and
+the preamble libclang precompiles for it, in memory between requests. The plugin talks to it over
+stdin/stdout (`ClangDaemon.kt`, protocol in the C file's header) for editor completion and error checks;
+builds still run the driver. `./build-llvm-android.sh daemon` rebuilds just the C in seconds against an
+existing package.
+
+**Trap:** LLVM 18's libclang ignores `CLANG_LINK_CLANG_DYLIB` and statically links its own copy of the
+frontend: 28 MB stripped, beside a `libclang-cpp.so` holding the same code. `patch_libclang_dylib` points it
+at clang-cpp, which takes it to 0.7 MB. CMake's Android platform sets `CMAKE_PLATFORM_NO_VERSIONED_SONAME`,
+so its SONAME is a plain `libclang.so` that the installer packages and the loader finds.
 
 ## Two flags the plugin must always pass
 

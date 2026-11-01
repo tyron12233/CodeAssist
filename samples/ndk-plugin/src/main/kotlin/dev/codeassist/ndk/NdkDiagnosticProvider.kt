@@ -74,7 +74,7 @@ class NdkDiagnosticProvider(
 
         target.checkCanceled()
 
-        val diagnostics = runCatching { ClangDiagnostics.parse(result.output, text) }
+        val diagnostics = runCatching { ClangDiagnostics.parse(result.output, text, result.bufferName) }
             .onFailure { log.warn("could not read clang's diagnostics", it) }
             .getOrDefault(emptyList())
 

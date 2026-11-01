@@ -123,7 +123,7 @@ class NdkCompletionContributor(
 internal fun ClangCompletion.toItem(cpp: Boolean): CompletionItem = CompletionItem(
     label = name,
     insertText = name,
-    kind = when {
+    kind = kindFromCursor() ?: when {
         isPattern -> CompletionItemKind.SNIPPET
         isCallable -> CompletionItemKind.METHOD
         // No result type and not callable: clang lists macros and type names this way, and in C almost
@@ -136,3 +136,27 @@ internal fun ClangCompletion.toItem(cpp: Boolean): CompletionItem = CompletionIt
     // the result type is the most useful thing to put there.
     container = resultType?.takeIf { signature != null },
 )
+
+/**
+ * The popup kind for libclang's cursor kind, when the daemon supplied one. Null for a kind with no clear
+ * counterpart, which falls back to the shape-based guess.
+ */
+internal fun ClangCompletion.kindFromCursor(): CompletionItemKind? = when (kind) {
+    null -> null
+    "FunctionDecl", "FunctionTemplate", "CXXMethod", "ConversionFunction", "OverloadCandidate" -> CompletionItemKind.METHOD
+    "Constructor", "Destructor" -> CompletionItemKind.CONSTRUCTOR
+    "FieldDecl" -> CompletionItemKind.FIELD
+    "VarDecl" -> CompletionItemKind.VARIABLE
+    "ParmDecl" -> CompletionItemKind.PARAMETER
+    "EnumConstantDecl" -> CompletionItemKind.ENUM_CONSTANT
+    "EnumDecl" -> CompletionItemKind.ENUM
+    "StructDecl", "UnionDecl", "ClassDecl", "ClassTemplate", "ClassTemplatePartialSpecialization",
+    "TypedefDecl", "TypeAliasDecl", "TypeAliasTemplateDecl" -> CompletionItemKind.CLASS
+    "Namespace", "NamespaceAlias" -> CompletionItemKind.PACKAGE
+    "TemplateTypeParameter", "NonTypeTemplateParameter", "TemplateTemplateParameter" -> CompletionItemKind.TYPE_PARAMETER
+    // A function-like macro is called like a function; an object-like one reads as a constant.
+    "macrodefinition" -> if (isCallable) CompletionItemKind.METHOD else CompletionItemKind.KEYWORD
+    // Keywords and code patterns: a pattern carries placeholders to fill in, a keyword does not.
+    "NotImplemented" -> if (signature != null && signature != name) CompletionItemKind.SNIPPET else CompletionItemKind.KEYWORD
+    else -> null
+}

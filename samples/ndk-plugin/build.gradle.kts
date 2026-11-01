@@ -58,8 +58,8 @@ android {
         // The IDE's own floor: this code runs inside the IDE's process.
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
     }
 
     // Signed with the same upload key the IDE is, when one is configured, so the published plugin APK is a
@@ -147,5 +147,6 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(project(":language-api"))
     testImplementation(project(":analysis-api"))
+    testImplementation(project(":build-api"))
     testImplementation(project(":project-model-api"))
 }

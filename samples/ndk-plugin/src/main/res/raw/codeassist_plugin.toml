@@ -1,9 +1,9 @@
 [plugin]
 id = "dev.codeassist.ndk"
 name = "NDK (C/C++)"
-version = "1.2.0"
+version = "1.3.0"
 apiVersion = 4
-description = "Compiles C and C++ on the device with a bundled clang and lld for Android arm64: C/C++ editing with the compiler's own errors and completion, JNI between Java/Kotlin and C++ (missing-function checks with a fix, navigation both ways), and Native C++ app, activity and library templates."
+description = "Compiles C and C++ on the device with a bundled clang and lld for Android arm64: a resident clang for fast completion and errors, semantic highlighting, Run for C/C++ console programs in the Run console, JNI between Java/Kotlin and C++ (missing-function checks with a fix, navigation both ways), and Native C++ app, activity, library and console templates."
 entryPoints = ["dev.codeassist.ndk.NdkPlugin"]
 uiEntryPoints = ["dev.codeassist.ndk.NdkUiPlugin"]
 capabilities = [
@@ -11,6 +11,7 @@ capabilities = [
     "ui.editorLanguage",
     "ui.editorDecoration",
     "ui.newFileTemplate",
+    "ui.colorAttribute",
     "lang.backend",
     "build.task",
     "model.facet",

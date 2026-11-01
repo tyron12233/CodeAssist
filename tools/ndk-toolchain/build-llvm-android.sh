@@ -73,6 +73,21 @@ apply_patches() {
         perl -0pi -e 's/target_link_libraries\(obj\.\$\{target\} \$\{ARGN\}\)/target_link_libraries(obj.\${target} \${type} \${ARGN})/' "$f"
     done
     patch_lld_elf_only
+    patch_libclang_dylib
+}
+
+# libclang (the C API the resident daemon links) does not honour CLANG_LINK_CLANG_DYLIB in LLVM 18: it lists
+# clangAST, clangSema, ... as LINK_LIBS, so it statically links its own copy of the whole frontend -- 28 MB
+# stripped, sitting beside the libclang-cpp.so that already holds exactly that code. Pointing it at clang-cpp
+# instead makes it the thin C layer it is meant to be.
+patch_libclang_dylib() {
+    local cm="$SRC/clang/tools/libclang/CMakeLists.txt"
+    [ -f "$cm" ] || return 0
+    grep -q 'CodeAssist: link the C API against clang-cpp' "$cm" && return 0
+    log "patching libclang: link clang-cpp instead of a private copy of the frontend"
+    perl -0pi -e 's/(set\(LIBS\n  clangAST\n.*?\n\)\n)/$1\n# CodeAssist: link the C API against clang-cpp when the frontend is a shared library.\nif (CLANG_LINK_CLANG_DYLIB)\n  set(LIBS clang-cpp)\nendif()\n/s' "$cm"
+    grep -q 'CodeAssist: link the C API against clang-cpp' "$cm" \
+        || { echo "the libclang patch did not apply; has its CMakeLists changed?" >&2; exit 1; }
 }
 
 # Build lld with the ELF flavor alone.
@@ -234,7 +249,10 @@ stage_cross() {
         -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY
 
     log "building clang, lld and the llvm driver (this is the long one)"
-    "$NINJA" -C "$CROSS_BUILD" -j "$JOBS" clang lld llvm-driver
+    # libclang is clang's stable C API (clang-c/Index.h), which the resident daemon (daemon/ndkclangd.c) links
+    # against: it keeps translation units and their preambles in memory between requests. With
+    # CLANG_LINK_CLANG_DYLIB it links libclang-cpp.so rather than copying it, so it is a thin layer.
+    "$NINJA" -C "$CROSS_BUILD" -j "$JOBS" clang lld llvm-driver libclang
 }
 
 # Lay the result out the way the plugin packages it: the three exec-ables and the two shared libraries as
@@ -293,6 +311,9 @@ stage_package() {
     cp "$CROSS_BUILD/lib/libLLVM.so."*              "$OUT/jniLibs/arm64-v8a/libLLVM.so" 2>/dev/null \
         || cp "$CROSS_BUILD/lib/libLLVM.so"         "$OUT/jniLibs/arm64-v8a/libLLVM.so"
     cp "$CROSS_BUILD/lib/libclang-cpp.so"*          "$OUT/jniLibs/arm64-v8a/libclang-cpp.so" 2>/dev/null || true
+    # The C API. CMake's Android platform sets CMAKE_PLATFORM_NO_VERSIONED_SONAME, so its SONAME is the plain
+    # `libclang.so` the installer needs (a `libclang.so.13` would be neither packaged nor found).
+    cp "$CROSS_BUILD/lib/libclang.so"               "$OUT/jniLibs/arm64-v8a/libclang.so"
     # The STL the toolchain itself was linked against, from the NDK rather than from our build.
     find "$NDK" -name libc++_shared.so -path '*aarch64*' -print -quit \
         | xargs -I{} cp {} "$OUT/jniLibs/arm64-v8a/libc++_shared.so"
@@ -354,9 +375,40 @@ stage_package() {
             "$OUT/assets/toolchain/native_app_glue/"
     fi
 
+    stage_daemon
+
     log "sizes"
     du -sh "$OUT/jniLibs" "$OUT/assets" 2>/dev/null
     ls -la "$OUT/jniLibs/arm64-v8a"
+}
+
+# The resident daemon: one small C program over libclang that keeps each open file's translation unit, and
+# its precompiled preamble, in memory, so completion and error checks pay neither a process launch nor a
+# preamble load per request. Packaged as `libndkclangd.so` for the same reason the driver is a `lib*.so`: it
+# is the only shape the installer unpacks into an executable directory. A stage of its own so the C can be
+# rebuilt in seconds against an existing package, without touching LLVM.
+stage_daemon() {
+    local toolchain="$NDK/toolchains/llvm/prebuilt"
+    toolchain="$toolchain/$(ls "$toolchain" | head -1)"
+    local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    [ -f "$OUT/jniLibs/arm64-v8a/libclang.so" ] || { echo "no libclang.so in $OUT; run the package stage" >&2; exit 1; }
+    log "building the resident daemon"
+    "$toolchain/bin/aarch64-linux-android$ANDROID_API-clang" -O2 -std=c11 -Wall -Wextra \
+        -I"$SRC/clang/include" \
+        "$here/daemon/ndkclangd.c" \
+        -L"$OUT/jniLibs/arm64-v8a" -lclang \
+        -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 \
+        -o "$OUT/jniLibs/arm64-v8a/libndkclangd.so"
+    "$toolchain/bin/llvm-strip" --strip-all "$OUT/jniLibs/arm64-v8a/libndkclangd.so"
+
+    # The Run launcher: runs a user's console program in a pseudo-terminal (see daemon/ndkrun.c). Needs only
+    # bionic, whose openpty() has been there since API 23.
+    log "building the Run launcher"
+    "$toolchain/bin/aarch64-linux-android$ANDROID_API-clang" -O2 -std=c11 -Wall -Wextra \
+        "$here/daemon/ndkrun.c" \
+        -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 \
+        -o "$OUT/jniLibs/arm64-v8a/libndkrun.so"
+    "$toolchain/bin/llvm-strip" --strip-all "$OUT/jniLibs/arm64-v8a/libndkrun.so"
 }
 
 case "${1:-all}" in
@@ -364,6 +416,7 @@ case "${1:-all}" in
     native) stage_native ;;
     cross) stage_cross ;;
     package) stage_package ;;
+    daemon) stage_daemon ;;
     all) stage_deps; stage_native; stage_cross; stage_package ;;
     *) echo "unknown stage: $1" >&2; exit 2 ;;
 esac

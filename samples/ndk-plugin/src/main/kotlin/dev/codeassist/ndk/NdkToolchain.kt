@@ -181,8 +181,11 @@ class NdkToolchain(
     val sharedCxxRuntime: Path?
         get() = root.resolve("sysroot/usr/lib/aarch64-linux-android/libc++_shared.so").takeIf { Files.isRegularFile(it) }
 
-    /** What a tool printed, and whether it succeeded. */
-    data class ToolResult(val ok: Boolean, val output: String)
+    /**
+     * What a tool printed, and whether it succeeded. [bufferName] is the name diagnostics in [output] give the
+     * checked buffer: `<stdin>` from the command line, the file's own path from the resident daemon.
+     */
+    data class ToolResult(val ok: Boolean, val output: String, val bufferName: String = "<stdin>")
 
     /**
      * Compile [source] to [output]. [cpp] selects the C++ driver, which is `--driver-mode=g++` rather than a
@@ -231,7 +234,8 @@ class NdkToolchain(
         cpp: Boolean,
         extraFlags: List<String> = emptyList(),
         cancellation: ToolCancellation? = null,
-    ): ToolResult = withPreamble(source, text, cpp, extraFlags, usableBefore = text.length, what = "check", cancellation) { driver, preamble ->
+    ): ToolResult = viaDaemon("check", source, text, cpp, extraFlags, cancellation = cancellation)
+        ?: withPreamble(source, text, cpp, extraFlags, usableBefore = text.length, what = "check", cancellation) { driver, preamble ->
         run(
             buildList {
                 add(driver.toString()); add("clang")
@@ -273,7 +277,8 @@ class NdkToolchain(
         cpp: Boolean,
         extraFlags: List<String> = emptyList(),
         cancellation: ToolCancellation? = null,
-    ): ToolResult = withPreamble(source, text, cpp, extraFlags, usableBefore = offset, what = "completion", cancellation) { driver, preamble ->
+    ): ToolResult = viaDaemon("complete", source, text, cpp, extraFlags, line, column, cancellation)
+        ?: withPreamble(source, text, cpp, extraFlags, usableBefore = offset, what = "completion", cancellation) { driver, preamble ->
         run(
             buildList {
                 add(driver.toString()); add("clang")
@@ -297,6 +302,69 @@ class NdkToolchain(
             workingDir = source.parent,
             cancellation = cancellation,
         )
+    }
+
+    /**
+     * Classify the identifiers in [text] (see the daemon's `tokens` command and [ClangSemanticTokens]). Only
+     * the resident daemon can answer this -- it needs the parsed file it keeps -- so on a toolchain without
+     * one, or when it is unavailable, the answer is null and the editor keeps its lexical colours.
+     */
+    fun semanticTokens(source: Path, text: String, cpp: Boolean, extraFlags: List<String>): ToolResult? =
+        viaDaemon("tokens", source, text, cpp, extraFlags, cancellation = null)
+
+    // -----------------------------------------------------------------------------------------------
+    // The resident daemon (see ClangDaemon)
+    // -----------------------------------------------------------------------------------------------
+
+    /** Null on a toolchain built before the daemon existed: then everything runs clang per request. */
+    private val daemon: ClangDaemon? by lazy {
+        val executable = reg.nativeLibrary(ClangDaemon.LIB) ?: return@lazy null
+        if (!Files.isRegularFile(executable)) return@lazy null
+        ClangDaemon(executable, executable.parent, reg.dataDir.resolve("daemon"), log)
+    }
+
+    /**
+     * Ask the resident daemon, or answer null for the caller to run clang itself.
+     *
+     * Null covers every way the daemon cannot help: there is none, it died, it timed out, or it could not
+     * parse the file at all. The one exception is a request cancelled while it waited its turn, which must
+     * not fall through to a launch of its own -- that is answered as cancelled here.
+     *
+     * The arguments are the command line's minus what libclang supplies itself (`-fsyntax-only`, the input
+     * name), with `-x` naming the language because there is no extension on a buffer to infer it from.
+     */
+    private fun viaDaemon(
+        command: String,
+        source: Path,
+        text: String,
+        cpp: Boolean,
+        extraFlags: List<String>,
+        line: Int = 0,
+        column: Int = 0,
+        cancellation: ToolCancellation?,
+    ): ToolResult? {
+        val daemon = daemon ?: return null
+        val started = System.nanoTime()
+        val args = buildList {
+            addAll(commonFlags())
+            addAll(extraFlags)
+            // libclang precompiles each file's preamble itself; this makes it instantiate the headers'
+            // templates into it once, as PreambleCache does for the command line. Measured on the emulator:
+            // a check went 46-56 -> 16-25 ms. Same caveat as there; C has no templates.
+            if (cpp) add("-fpch-instantiate-templates")
+            add("-x"); add(languageFor(source, cpp))
+        }
+        val reply = daemon.request(command, source.toString(), text, args, line, column, cancellation = cancellation,
+            onTurn = { waited -> if (waited > 5) log.debug("clang $command waited $waited ms for the daemon") })
+        if (reply == null) {
+            return if (cancellation?.isCancelled == true) ToolResult(false, "cancelled") else null
+        }
+        if (!reply.ok) {
+            log.info("the resident clang could not $command ${source.fileName}: ${reply.payload.take(200)}")
+            return null
+        }
+        log.debug("clang $command: ${(System.nanoTime() - started) / 1_000_000} ms (daemon)")
+        return ToolResult(true, reply.payload, bufferName = source.toString())
     }
 
     // -----------------------------------------------------------------------------------------------
@@ -409,6 +477,31 @@ class NdkToolchain(
         libs: List<String> = emptyList(),
         cpp: Boolean = false,
         stl: String = "c++_static",
+    ): ToolResult = link(objects, output, libs, cpp, stl, shared = true)
+
+    /**
+     * Link [objects] into a program at [output], for Run.
+     *
+     * The same flags as [linkShared] minus `-shared`: Android executables are position-independent by
+     * default, which is also what lets one set of `-fPIC` objects serve both the library a build packages
+     * and the program Run starts. Aligned to 16 KB like every other output, because Android 15 refuses to
+     * map a 4 KB-aligned program at all ("program alignment (4096) cannot be smaller than system page size").
+     */
+    fun linkExecutable(
+        objects: List<Path>,
+        output: Path,
+        libs: List<String> = emptyList(),
+        cpp: Boolean = false,
+        stl: String = "c++_static",
+    ): ToolResult = link(objects, output, libs, cpp, stl, shared = false)
+
+    private fun link(
+        objects: List<Path>,
+        output: Path,
+        libs: List<String>,
+        cpp: Boolean,
+        stl: String,
+        shared: Boolean,
     ): ToolResult {
         val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
         val linker = linker ?: return ToolResult(false, "no linker for this device's ABI")
@@ -418,7 +511,7 @@ class NdkToolchain(
                 add(driver.toString()); add("clang")
                 if (cpp) add("--driver-mode=g++")
                 addAll(commonFlags())
-                add("-shared")
+                if (shared) add("-shared")
                 add("-Wl,--no-undefined")
                 if (cpp) when (stl) {
                     "c++_static" -> add("-static-libstdc++")
@@ -438,6 +531,16 @@ class NdkToolchain(
             }
         )
     }
+
+    /**
+     * The Run launcher (`libndkrun.so`, tools/ndk-toolchain/daemon/ndkrun.c), which runs a program in a
+     * pseudo-terminal. Null on a toolchain built before it existed; Run then uses plain pipes.
+     */
+    val runLauncher: Path?
+        get() = reg.nativeLibrary(RUN_LAUNCHER_LIB)?.takeIf { Files.isRegularFile(it) }
+
+    /** The directory the toolchain's own libraries are in, for a child process's `LD_LIBRARY_PATH`. */
+    val libraryDir: Path? get() = driver?.parent
 
     /**
      * What to tell clang the buffer is.
@@ -544,6 +647,9 @@ class NdkToolchain(
 
         /** `libld-gnu-lld.so`: the same binary under a name that reaches lld and tells it to be GNU-flavored. */
         const val LINKER_LIB = "ld-gnu-lld"
+
+        /** `libndkrun.so`: runs a user's console program in a pseudo-terminal. */
+        const val RUN_LAUNCHER_LIB = "ndkrun"
 
         const val ASSET_ARCHIVE = "assets/toolchain.zip"
         const val LLVM_MAJOR = "18"

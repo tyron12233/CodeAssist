@@ -186,4 +186,31 @@ class LineColTest {
         val lines = LineOffsets("abc")
         assertEquals(1 to 4, lines.lineColOf(999))
     }
+
+    @Test
+    fun `the daemon's lines carry the cursor kind`() {
+        val c = ClangCompletions.parse("COMPLETION(CXXMethod): size : [#size_type#]size()[# const#]").single()
+        assertEquals("size", c.name)
+        assertEquals("CXXMethod", c.kind)
+        assertEquals(CompletionItemKind.METHOD, c.toItem(cpp = true).kind)
+
+        val field = ClangCompletions.parse("COMPLETION(FieldDecl): first : [#int#]first").single()
+        assertEquals(CompletionItemKind.FIELD, field.toItem(cpp = true).kind)
+
+        val macro = ClangCompletions.parse("COMPLETION(macrodefinition): TAG : TAG").single()
+        assertEquals(CompletionItemKind.KEYWORD, macro.toItem(cpp = false).kind)
+
+        val fnMacro = ClangCompletions.parse("COMPLETION(macrodefinition): MAX : MAX(<#a#>, <#b#>)").single()
+        assertEquals(CompletionItemKind.METHOD, fnMacro.toItem(cpp = false).kind)
+
+        assertNull(ClangCompletions.parse("COMPLETION: size : [#size_type#]size()").single().kind)
+    }
+
+    @Test
+    fun `nested optional groups are unwrapped all the way`() {
+        val c = ClangCompletions.parse(
+            "COMPLETION(CXXMethod): substr : [#basic_string#]substr({#<#size_type pos = 0#>{#, <#size_type n = npos#>#}#})[# const#]"
+        ).single()
+        assertEquals("substr(size_type pos = 0, size_type n = npos)", c.signature)
+    }
 }

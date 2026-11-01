@@ -242,6 +242,26 @@ class NdkTemplatesTest {
         assertEquals(false, module.facets.getValue("ndk")["nativeActivity"])
     }
 
+    // ---- the console app ----------------------------------------------------------------------------
+
+    @Test
+    fun `the console template writes a main that Run will find, in a plain java-lib`() {
+        val s = generate(NativeConsoleTemplate())
+        assertEquals(setOf("app/src/main/cpp/main.cpp", "README.md"), s.files.keys)
+        assertTrue(NativeMain.definesMain(s.files.getValue("app/src/main/cpp/main.cpp")), "Run looks for this main")
+        val module = s.module()
+        assertEquals("java-lib", module.typeId)
+        assertEquals(setOf("ndk"), module.facets.keys)
+        assertEquals(emptyList<String>(), module.facets.getValue("ndk")["linkLibraries"])
+    }
+
+    @Test
+    fun `choosing C writes main_c`() {
+        val s = generate(NativeConsoleTemplate(), NdkTemplateSupport.LANGUAGE to NdkTemplateSupport.LANG_C)
+        assertEquals(setOf("app/src/main/cpp/main.c", "README.md"), s.files.keys)
+        assertTrue(NativeMain.definesMain(s.files.getValue("app/src/main/cpp/main.c")))
+    }
+
     private fun generate(
         template: dev.ide.model.template.ProjectTemplate,
         vararg args: Pair<String, String>,

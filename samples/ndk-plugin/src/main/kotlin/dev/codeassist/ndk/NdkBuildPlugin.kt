@@ -97,7 +97,9 @@ class NdkBuildPlugin(
 
 /**
  * Compiles every source the facet names and links them into one shared library at
- * `<libDir>/<abi>/lib<name>.so`.
+ * `<libDir>/<abi>/lib<name>.so` -- or, with [executableDir], into a program at `<executableDir>/<abi>/<module>`
+ * for Run. The two share their objects: everything is compiled `-fPIC`, which a position-independent
+ * executable links as readily as a library does, so running a module after building it compiles nothing.
  *
  * Incremental per source: each object keeps the dependency file clang wrote beside it, and a source is only
  * compiled again when it, or a header it included, is newer than its object, or when the flags changed.
@@ -112,9 +114,13 @@ internal class NdkCompileTask(
     private val libDir: Path,
     private val toolchain: () -> NdkToolchain?,
     private val log: Logger,
+    /** Link a program into this directory instead of the shared library; see [NdkRunTaskProvider]. */
+    private val executableDir: Path? = null,
 ) : Task {
 
     private val moduleDir: Path get() = Paths.get(module.dir.path)
+
+    private val executable: Boolean get() = executableDir != null
 
     /** Every C and C++ file under the facet's source directories. */
     private fun sources(): List<Path> = facet.sourceDirs
@@ -139,7 +145,8 @@ internal class NdkCompileTask(
         }
         .sorted()
 
-    private fun outputFor(abi: String): Path = libDir.resolve(abi).resolve("lib${facet.libraryName}.so")
+    internal fun outputFor(abi: String): Path =
+        executableDir?.resolve(abi)?.resolve(module.name) ?: libDir.resolve(abi).resolve("lib${facet.libraryName}.so")
 
     private val objRoot: Path get() = buildDir.resolve("intermediates").resolve("ndk").resolve("obj")
 
@@ -161,6 +168,7 @@ internal class NdkCompileTask(
             // rebuild even though not a byte of source moved.
             property("facet", NdkFacetCodec.encode(facet).toString())
             property("libDir", libDir.toString())
+            property("executableDir", executableDir?.toString())
         }
 
     override val outputs: TaskOutputs
@@ -202,7 +210,7 @@ internal class NdkCompileTask(
             ctx.checkCanceled()
             val result = buildAbi(ctx, toolchain, version, sources, abi)
             if (result != null) return result
-            removeLegacyOutput(ctx, abi)
+            if (!executable) removeLegacyOutput(ctx, abi)
         }
         return TaskResult.Success
     }
@@ -297,18 +305,20 @@ internal class NdkCompileTask(
             appendLine(facet.linkLibraries.joinToString(" "))
             appendLine("cpp=$cpp stl=${facet.stl}")
         }
-        val linkStampFile = objDir.resolve("link.stamp")
+        // Separate stamps: linking the program must not make the library look up to date, or the reverse.
+        val linkStampFile = objDir.resolve(if (executable) "link-exe.stamp" else "link.stamp")
         if (!NativeIncremental.needsLink(stale.isNotEmpty(), out, objects, linkStamp, readStamp(linkStampFile))) {
             ctx.logger()("ndk: ${out.fileName} for $abi is up to date")
             return null
         }
 
-        ctx.progress.report(stale.size.toDouble() / (stale.size + 1), "Linking lib${facet.libraryName}.so")
-        val linked = toolchain.linkShared(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl)
+        ctx.progress.report(stale.size.toDouble() / (stale.size + 1), "Linking ${out.fileName}")
+        val linked = if (executable) toolchain.linkExecutable(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl)
+        else toolchain.linkShared(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl)
         report(ctx, linked.output, null)
         if (!linked.ok) {
             runCatching { Files.deleteIfExists(linkStampFile) }
-            return TaskResult.Failed("ndk: lib${facet.libraryName}.so did not link")
+            return TaskResult.Failed("ndk: ${out.fileName} did not link")
         }
         packageCxxRuntime(ctx, toolchain, cpp, out)?.let { return it }
         writeStamp(linkStampFile, linkStamp)
