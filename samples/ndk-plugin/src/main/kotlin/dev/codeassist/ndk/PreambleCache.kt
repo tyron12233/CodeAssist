@@ -48,7 +48,7 @@ internal class PreambleCache(
     ) {
         val key: String by lazy {
             val digest = MessageDigest.getInstance("SHA-256")
-            for (part in listOf(toolchainStamp, if (cpp) "c++" else "c", sourceDir.toString()) + flags + text) {
+            for (part in listOf(FORMAT, toolchainStamp, if (cpp) "c++" else "c", sourceDir.toString()) + flags + text) {
                 digest.update(part.toByteArray(Charsets.UTF_8))
                 digest.update(0)
             }
@@ -172,6 +172,12 @@ internal class PreambleCache(
 
     companion object {
         private const val TMP = ".tmp"
+
+        /**
+         * Bumped when the way a .pch is BUILT changes in a way its key does not otherwise see (2: built with
+         * -fpch-instantiate-templates), so a cache from an older plugin is rebuilt rather than reused.
+         */
+        private const val FORMAT = "2"
         private const val MAX_FAILED = 32
 
         /**

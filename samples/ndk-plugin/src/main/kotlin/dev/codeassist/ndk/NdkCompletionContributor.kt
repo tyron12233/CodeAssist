@@ -6,8 +6,6 @@ import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.platform.log.Logger
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.nio.file.Paths
 
 /**
@@ -71,11 +69,12 @@ class NdkCompletionContributor(
         val (line, column) = LineOffsets(text).lineColOf(wordStart)
         val cpp = NdkPlugin.CPP_SUFFIXES.any { path.fileName.toString().endsWith(it) }
 
-        val result = withContext(Dispatchers.IO) {
+        // Killed with the request: a popup superseded by the next keystroke must not keep its clang running.
+        val result = killableTool { cancellation ->
             when (toolchain.prepare()) {
                 is NdkToolchain.Status.Unavailable -> null
                 is NdkToolchain.Status.Ready ->
-                    toolchain.complete(path, text, line, column, wordStart, cpp, NdkFlags.editor(facet, toolchain, cpp))
+                    toolchain.complete(path, text, line, column, wordStart, cpp, NdkFlags.editor(facet, toolchain, cpp), cancellation)
             }
         } ?: return null
 

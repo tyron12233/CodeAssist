@@ -199,6 +199,11 @@ headers and skips those bytes of the buffer, so it parses only the user's own co
 - clang refuses a `.pch` whose headers changed since it was built ("has been modified since the AST
   file"). The request is then re-run without it and the preamble is rebuilt.
 - The four most recently used are kept, at about 8 MB each.
+- C++ preambles are built with `-fpch-instantiate-templates`, so the templates the headers use are
+  instantiated once into the `.pch` instead of at the end of every check. That halved the error check (in
+  the IDE, ~52 -> ~27 ms on the template's `native-lib.cpp`). The rare price: code that explicitly
+  specializes a template after a header already used it can see a false "explicit specialization after
+  instantiation" in the editor. The build never uses the `.pch`, so it is unaffected.
 
 Measured in the IDE on the emulator (arm64, API 37), on `native-lib.cpp` from the Native C++ App template:
 
@@ -211,6 +216,12 @@ Two process costs also went: `prepare()` launched `clang --version` before **eve
 process), and `Process.waitFor(timeout, unit)` on Android polls by sleeping in steps of up to 100 ms, so a
 25 ms compile came back ~100 ms late. The timeout is now a watchdog that kills the process, and the read
 blocks on `waitFor()` without a timeout.
+
+**A superseded request kills its clang.** The analysis engine cancels a file's pass when the user types
+again, and completion cancels a superseded popup; `killableTool` turns that coroutine cancellation into
+`destroyForcibly()` on the process (`ToolCancellation`), so a check nobody will see stops instead of
+competing for the CPU with the one that replaced it. On Android, killing the process closes its streams and
+the pending read throws `InterruptedIOException`; that is treated as the expected end of a run we stopped.
 
 ## JNI
 
