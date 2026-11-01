@@ -152,6 +152,19 @@
                         android:host="store"
                         android:scheme="codeassist" />
             </intent-filter>
+            <!-- `codeassist://agent`: the "Back to CodeAssist" button on the page the browser shows after
+                 "Sign in with OpenRouter" (dev.ide.core.agent.OpenRouterSignIn.RETURN_LINK). It carries no data;
+                 the key has already reached the app over the loopback redirect. MainActivity only brings the
+                 app forward for it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                        android:host="agent"
+                        android:scheme="codeassist" />
+            </intent-filter>
         </activity>
 
         <!-- The launcher entries. Exactly one is enabled at a time (AndroidAppIcons switches them, enabling

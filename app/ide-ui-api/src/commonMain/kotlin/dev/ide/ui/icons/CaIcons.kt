@@ -228,6 +228,13 @@ object CaIcons {
         s("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
     )
 
+    /** [star], filled: a starred (favorite) item. */
+    val starFilled = build(
+        "star-filled",
+        s("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
+        f("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
+    )
+
     /** A 2x2 rounded grid — the Projects Store / browse destination. */
     val grid = build(
         "grid",

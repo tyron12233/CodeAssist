@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
         AppIcons.host = AndroidAppIcons(applicationContext)
         // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
         // taken for a file to import.
-        if (!takeAuthRedirect(intent) && !takeStoreLink(intent)) inbound.value = extractStream(intent)
+        if (!takeAuthRedirect(intent) && !takeStoreLink(intent) && !takeAgentReturn(intent)) inbound.value = extractStream(intent)
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement). Failure resolves
         // too, so a consent hiccup never blocks the IDE. The SDK itself starts later, once launch has settled
         // (see the LaunchedEffect below the ad host).
@@ -364,6 +364,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (takeAuthRedirect(intent)) return
         if (takeStoreLink(intent)) return
+        if (takeAgentReturn(intent)) return
         extractStream(intent)?.let { inbound.value = it }
     }
 
@@ -380,6 +381,18 @@ class MainActivity : ComponentActivity() {
         if (!dev.ide.store.StoreLink.isStoreLink(url)) return false
         // A bare `codeassist://store` names no item, which the app reads as "the Store tab".
         storeLink.value = dev.ide.store.StoreLink.itemId(url) ?: ""
+        intent.data = null
+        return true
+    }
+
+    /**
+     * Claim [intent] if it is the "Back to CodeAssist" link from the OpenRouter sign-in page. Arriving here already
+     * brought the app forward, which is all it is for; the URI is cleared so it is never read as a file to open.
+     */
+    private fun takeAgentReturn(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_VIEW) return false
+        val data = intent.data ?: return false
+        if (data.scheme != "codeassist" || data.host != "agent") return false
         intent.data = null
         return true
     }

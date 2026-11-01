@@ -106,6 +106,7 @@ import dev.ide.ui.itemsKeyed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import dev.ide.ui.backend.FileActions
+import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentCommand
 import dev.ide.ui.backend.UiAgentMention
@@ -148,6 +149,7 @@ import dev.ide.agent.ui.generated.resources.chat_usage_cached
 import dev.ide.agent.ui.generated.resources.chat_usage_input
 import dev.ide.agent.ui.generated.resources.chat_usage_output
 import dev.ide.agent.ui.generated.resources.chat_manage_keys
+import dev.ide.agent.ui.generated.resources.chat_usage
 import dev.ide.agent.ui.generated.resources.chat_empty_body
 import dev.ide.agent.ui.generated.resources.chat_empty_title
 import dev.ide.agent.ui.generated.resources.chat_mode_ask
@@ -195,6 +197,8 @@ fun ChatDrawer(
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var showProviders by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showUsage by remember { mutableStateOf(false) }
+    val usageLimits by backend.agent.usageLimits.collectAsState()
     var modelMenuOpen by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -202,6 +206,8 @@ fun ChatDrawer(
 
     // Fetch the provider's live model list when the drawer opens or the provider changes.
     LaunchedEffect(cfg.selectedProvider) { backend.agent.refreshModels() }
+    // Which limit matters depends on the provider and on whether the model is a free one.
+    LaunchedEffect(cfg.selectedProvider, cfg.model, cfg.configured) { backend.agent.refreshUsageLimits() }
 
     fun submit() {
         val text = input.text.trim()
@@ -251,7 +257,7 @@ fun ChatDrawer(
             // chip and the menu go into it rather than a second header row.
             val hosted = ToolWindowHeaderActions(
                 leading = {
-                    ModelPicker(cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it }, onPick = onPickModel)
+                    ModelPicker(agent = backend.agent, cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it }, onPick = onPickModel)
                 },
                 actions = {
                     ModeChip(cfg.mode, onCycleMode)
@@ -259,12 +265,14 @@ fun ChatDrawer(
                         onNew = { backend.agent.newSession() },
                         onHistory = { showHistory = true },
                         onManage = { showProviders = true },
+                        onUsage = { showUsage = true },
                     )
                 },
             )
             if (!hosted) {
                 ChatChrome {
                     ChatHeader(
+                        agent = backend.agent,
                         cfg = cfg,
                         models = headerModels,
                         modelMenuOpen = modelMenuOpen,
@@ -272,6 +280,7 @@ fun ChatDrawer(
                         onPickModel = onPickModel,
                         onManage = { showProviders = true },
                         onHistory = { showHistory = true },
+                        onUsage = { showUsage = true },
                         onCycleMode = onCycleMode,
                         onNew = { backend.agent.newSession() },
                         onClose = onClose,
@@ -305,6 +314,7 @@ fun ChatDrawer(
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
                         )
                     }
+                    UsageWarningStrip(usageLimits, onOpen = { showUsage = true })
                     Suggestions(
                         backend = backend,
                         input = input,
@@ -336,6 +346,9 @@ fun ChatDrawer(
                 showProviders = false
                 cfg = backend.agent.config()
             }
+        }
+        if (showUsage) {
+            AgentUsageSheet(backend) { showUsage = false }
         }
         if (showHistory) {
             AgentHistorySheet(backend) {
@@ -448,6 +461,7 @@ private fun SuggestionRow(title: String, detail: String, onClick: () -> Unit) {
 
 @Composable
 private fun ChatHeader(
+    agent: AgentService,
     cfg: UiAgentConfig,
     models: List<UiAgentModel>,
     modelMenuOpen: Boolean,
@@ -455,6 +469,7 @@ private fun ChatHeader(
     onPickModel: (String) -> Unit,
     onManage: () -> Unit,
     onHistory: () -> Unit,
+    onUsage: () -> Unit,
     onCycleMode: () -> Unit,
     onNew: () -> Unit,
     onClose: (() -> Unit)?,
@@ -476,10 +491,10 @@ private fun ChatHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
+            ModelPicker(agent = agent, cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
         }
         ModeChip(cfg.mode, onCycleMode)
-        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage)
+        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage)
         if (onClose != null) HideToolWindowButton(onClose)
     }
 }
@@ -513,7 +528,7 @@ private fun ModeChip(mode: UiAgentPermissionMode, onCycleMode: () -> Unit) {
 
 /** The header's occasional actions, in one menu so the title and the model name keep room to read. */
 @Composable
-private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit) {
+private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit, onUsage: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 28)
@@ -521,6 +536,7 @@ private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> U
             HeaderMenuItem(CaIcons.plus, stringResource(Res.string.chat_new)) { menuOpen = false; onNew() }
             HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
             HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
+            HeaderMenuItem(CaIcons.info, stringResource(Res.string.chat_usage)) { menuOpen = false; onUsage() }
         }
     }
 }
@@ -536,6 +552,7 @@ private fun HeaderMenuItem(icon: ImageVector, label: String, onClick: () -> Unit
 
 @Composable
 private fun ModelPicker(
+    agent: AgentService,
     cfg: UiAgentConfig,
     models: List<UiAgentModel>,
     open: Boolean,
@@ -556,14 +573,20 @@ private fun ModelPicker(
             val chevron by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
             Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        CaDropdownMenu(expanded = open, onDismissRequest = { onOpen(false) }) {
-            models.forEach { model ->
-                DropdownMenuItem(
-                    text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) },
-                    onClick = { onPick(model.id); onOpen(false) },
-                )
-            }
-        }
+    }
+    if (open) {
+        // Re-read when the picker opens: a pick or a star made inside it changes both.
+        var favorites by remember(open) { mutableStateOf(agent.favoriteModels()) }
+        val recents = remember(open) { agent.recentModels() }
+        ModelPickerDialog(
+            models = models,
+            current = current,
+            favorites = favorites,
+            recents = recents,
+            onPick = onPick,
+            onToggleFavorite = { id, fav -> agent.setModelFavorite(id, fav); favorites = agent.favoriteModels() },
+            onDismiss = { onOpen(false) },
+        )
     }
 }
 

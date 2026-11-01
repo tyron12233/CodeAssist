@@ -25,6 +25,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -41,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentProvider
+import dev.ide.ui.backend.UiOpenRouterSignIn
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.chat_add_backup_key
 import dev.ide.agent.ui.generated.resources.chat_api_key
@@ -50,12 +54,20 @@ import dev.ide.agent.ui.generated.resources.chat_backup_keys_hint
 import dev.ide.agent.ui.generated.resources.chat_base_url
 import dev.ide.agent.ui.generated.resources.chat_ca_cert
 import dev.ide.agent.ui.generated.resources.chat_ca_cert_hint
+import dev.ide.agent.ui.generated.resources.chat_cancel
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_connected
 import dev.ide.agent.ui.generated.resources.chat_done
 import dev.ide.agent.ui.generated.resources.chat_gateway_hint
 import dev.ide.agent.ui.generated.resources.chat_hide
 import dev.ide.agent.ui.generated.resources.chat_model
+import dev.ide.agent.ui.generated.resources.chat_openrouter_connected
+import dev.ide.agent.ui.generated.resources.chat_openrouter_connected_free
+import dev.ide.agent.ui.generated.resources.chat_openrouter_failed
+import dev.ide.agent.ui.generated.resources.chat_openrouter_hint
+import dev.ide.agent.ui.generated.resources.chat_openrouter_or_paste
+import dev.ide.agent.ui.generated.resources.chat_openrouter_sign_in
+import dev.ide.agent.ui.generated.resources.chat_openrouter_waiting
 import dev.ide.agent.ui.generated.resources.chat_providers_subtitle
 import dev.ide.agent.ui.generated.resources.chat_providers_title
 import dev.ide.agent.ui.generated.resources.chat_remove_key
@@ -74,6 +86,9 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
     var cfg by remember { mutableStateOf(backend.agent.config()) }
+    val signIn by backend.agent.openRouterSignIn.collectAsState()
+    // The sign-in saved a key and switched provider/model behind this sheet's back; re-read it.
+    LaunchedEffect(signIn) { if (signIn is UiOpenRouterSignIn.Connected) cfg = backend.agent.config() }
     CenteredDialog(visible = true, onDismiss = onClose) {
         Column(
             Modifier.widthIn(max = 460.dp)
@@ -112,6 +127,11 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                         onSetKey = { backend.agent.setProviderKey(provider.id, it) },
                         onSetBackupKeys = { backend.agent.setProviderBackupKeys(provider.id, it) },
                         onSetGateway = { url, model, ca -> backend.agent.setGateway(url, model, ca) },
+                        signIn = if (provider.id == OPENROUTER && backend.agent.openRouterSignInSupported()) {
+                            { OpenRouterSignInBlock(backend, signIn) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -131,9 +151,12 @@ private fun ProviderCard(
     onSetKey: (String) -> Unit,
     onSetBackupKeys: (List<String>) -> Unit,
     onSetGateway: (String, String, String) -> Unit,
+    /** A browser sign-in offered above the key field (OpenRouter), or null. */
+    signIn: (@Composable () -> Unit)? = null,
 ) {
     val isGateway = provider.id == "gateway"
-    var key by remember(provider.id) { mutableStateOf(provider.apiKey) }
+    // Keyed on the stored key too: a browser sign-in replaces it while the sheet is open.
+    var key by remember(provider.id, provider.apiKey) { mutableStateOf(provider.apiKey) }
     var backups by remember(provider.id) { mutableStateOf(provider.backupKeys) }
     var baseUrl by remember(provider.id) { mutableStateOf(oneLine(gatewayBaseUrl)) }
     var model by remember(provider.id) { mutableStateOf(gatewayModel) }
@@ -173,6 +196,7 @@ private fun ProviderCard(
             }
         }
         if (selected) {
+            signIn?.invoke()
             SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key)) { key = it; onSetKey(it) }
             BackupKeys(backups) { backups = it; onSetBackupKeys(it) }
             if (isGateway) {
@@ -187,6 +211,60 @@ private fun ProviderCard(
         }
     }
 }
+
+/**
+ * "Sign in with OpenRouter": opens the browser on OpenRouter's consent page and reports where the sign-in stands.
+ * The key it brings back lands in the field below, so pasting a key by hand stays possible.
+ */
+@Composable
+private fun OpenRouterSignInBlock(backend: IdeBackend, state: UiOpenRouterSignIn) {
+    val uriHandler = LocalUriHandler.current
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (state == UiOpenRouterSignIn.Waiting) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(Res.string.chat_openrouter_waiting),
+                    color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    stringResource(Res.string.chat_cancel),
+                    color = scheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill))
+                        .clickable { backend.agent.cancelOpenRouterSignIn() }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+            }
+        } else {
+            PrimaryButton(
+                stringResource(Res.string.chat_openrouter_sign_in),
+                onClick = {
+                    backend.agent.beginOpenRouterSignIn()?.let { url ->
+                        runCatching { uriHandler.openUri(url) }.onFailure { backend.agent.cancelOpenRouterSignIn() }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                icon = CaIcons.key,
+            )
+        }
+        val status = when (state) {
+            is UiOpenRouterSignIn.Connected -> state.freeModel
+                ?.let { stringResource(Res.string.chat_openrouter_connected_free, it) }
+                ?: stringResource(Res.string.chat_openrouter_connected)
+            is UiOpenRouterSignIn.Failed -> stringResource(Res.string.chat_openrouter_failed, state.message)
+            else -> stringResource(Res.string.chat_openrouter_hint)
+        }
+        Text(
+            status,
+            color = if (state is UiOpenRouterSignIn.Failed) scheme.error else scheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(stringResource(Res.string.chat_openrouter_or_paste), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private const val OPENROUTER = "openrouter"
 
 /**
  * The keys tried after the main one, in order, when a key hits a rate or usage limit or is rejected. Each row is a

@@ -25,6 +25,7 @@ import dev.ide.agent.impl.RequestPacer
 import dev.ide.agent.impl.HistoryCompactor
 import dev.ide.agent.impl.KeyFailoverClient
 import dev.ide.agent.impl.OkHttpLlmTransport
+import dev.ide.agent.impl.OpenRouterUsage
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
 import dev.ide.agent.mcp.CodeAssistMcpServer
@@ -56,6 +57,10 @@ import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiAgentRole
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
+import dev.ide.ui.backend.UiOpenRouterSignIn
+import dev.ide.ui.backend.UiAgentUsageLimits
+import dev.ide.ui.backend.UiUsageMeter
+import dev.ide.ui.backend.UiUsageMeterKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -399,10 +404,29 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     override fun setModel(model: String) {
-        val selected = pref("provider") ?: registry.providers.firstOrNull()?.id ?: "anthropic"
+        val selected = selectedProviderId()
         val field = if (selected == GATEWAY) "gatewayModel" else "model.$selected"
         ctx.manager?.setPreference("settings.$AI_PAGE.$field", model)
+        if (model.isNotBlank()) {
+            val recents = (listOf(model) + recentModels().filter { it != model }).take(MAX_RECENT_MODELS)
+            ctx.manager?.setPreference("settings.$AI_PAGE.recentModels.$selected", recents.joinToString("\n"))
+        }
         resetLoop()
+    }
+
+    private fun selectedProviderId(): String = pref("provider") ?: registry.providers.firstOrNull()?.id ?: "anthropic"
+
+    private fun prefList(key: String): List<String> =
+        pref(key).orEmpty().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+    override fun recentModels(): List<String> = prefList("recentModels.${selectedProviderId()}")
+
+    override fun favoriteModels(): Set<String> = prefList("favoriteModels.${selectedProviderId()}").toSet()
+
+    override fun setModelFavorite(model: String, favorite: Boolean) {
+        val current = favoriteModels()
+        val next = if (favorite) current + model else current - model
+        ctx.manager?.setPreference("settings.$AI_PAGE.favoriteModels.${selectedProviderId()}", next.sorted().joinToString("\n"))
     }
 
     override fun selectProvider(id: String) {
@@ -427,6 +451,61 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayCaCert", caCert)
         resetLoop()
     }
+
+    private val openRouter = OpenRouterSignIn(transport, scope) { key, freeModel ->
+        setProviderKey(OPENROUTER, key)
+        selectProvider(OPENROUTER)
+        if (freeModel != null) setModel(freeModel)
+        refreshModels()
+        refreshUsageLimits()
+    }
+
+    override fun openRouterSignInSupported(): Boolean = true
+
+    override val openRouterSignIn: StateFlow<UiOpenRouterSignIn> get() = openRouter.state
+
+    override fun beginOpenRouterSignIn(): String? = openRouter.begin()
+
+    override fun cancelOpenRouterSignIn() = openRouter.cancel()
+
+    private val _usageLimits = MutableStateFlow<UiAgentUsageLimits?>(null)
+    override val usageLimits: StateFlow<UiAgentUsageLimits?> = _usageLimits.asStateFlow()
+    private var usageJob: Job? = null
+
+    override fun refreshUsageLimits() {
+        val cfg = resolveConfig()
+        val name = registry.provider(cfg.selectedId)?.displayName ?: "This provider"
+        val key = cfg.keys.firstOrNull()
+        if (cfg.selectedId != OPENROUTER || key == null) {
+            _usageLimits.value = UiAgentUsageLimits(providerName = name, reported = false)
+            return
+        }
+        val usingFree = cfg.model.endsWith(":free")
+        usageJob?.cancel()
+        usageJob = scope.launch {
+            _usageLimits.value = try {
+                OpenRouterUsage.fetch(transport, key).toUi(name, usingFree)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                (_usageLimits.value?.takeIf { it.reported } ?: UiAgentUsageLimits(name, reported = true))
+                    .copy(error = e.message ?: "OpenRouter did not answer.", usingFreeModel = usingFree)
+            }
+        }
+    }
+
+    private fun OpenRouterUsage.toUi(name: String, usingFree: Boolean): UiAgentUsageLimits {
+        val meters = buildList {
+            freeRequestsLimit?.let { limit ->
+                add(UiUsageMeter(UiUsageMeterKind.FREE_REQUESTS, (freeRequestsUsed ?: 0).toDouble(), limit.toDouble(), freeResetsAtMs))
+            }
+            budgetLimitUsd?.let { limit ->
+                add(UiUsageMeter(UiUsageMeterKind.SPEND, budgetUsedUsd ?: 0.0, limit, budgetResetsAtMs))
+            }
+        }
+        return UiAgentUsageLimits(name, reported = true, meters, spentTodayUsd, spentMonthUsd, usingFree)
+    }
+
 
     override fun refreshModels() {
         val cfg = resolveConfig()
@@ -695,6 +774,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     private fun afterTurn(userId: Long?) {
+        // Each step of the turn was a request against the account's limits; show where they stand now.
+        refreshUsageLimits()
         if (userId != null && checkpoints.hasChanges(userId)) {
             _chatState.update { s ->
                 s.copy(messages = s.messages.map { if (it.id == userId) it.copy(canUndo = true) else it })
@@ -1103,6 +1184,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+        private const val OPENROUTER = "openrouter"
+        private const val MAX_RECENT_MODELS = 5
 
         /** The `settings.ai.*` pref backing the FTP asset server toggle (`ftpServer`). */
         const val FTP_PREF = "ftpServer"

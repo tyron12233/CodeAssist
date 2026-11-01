@@ -1829,6 +1829,15 @@ interface AgentService {
     /** Set the active model (persisted). */
     fun setModel(model: String)
 
+    /** The current provider's starred models, pinned to the top of the model picker. */
+    fun favoriteModels(): Set<String> = emptySet()
+
+    /** Star or unstar [model] for the current provider (persisted). */
+    fun setModelFavorite(model: String, favorite: Boolean) {}
+
+    /** The current provider's most recently chosen models, newest first (recorded by [setModel]). */
+    fun recentModels(): List<String> = emptyList()
+
     /** Choose the active provider (a built-in id, or "gateway" for the custom OpenAI-compatible entry). */
     fun selectProvider(id: String)
 
@@ -1841,6 +1850,28 @@ interface AgentService {
     /** Configure the custom OpenAI-compatible gateway (base URL + model name, and an optional extra CA
      *  certificate PEM to trust for an endpoint behind a private/regional CA — blank = system trust only). */
     fun setGateway(baseUrl: String, model: String, caCert: String)
+
+    /** Whether this backend can run "Sign in with OpenRouter" (a browser sign-in that returns a key). */
+    fun openRouterSignInSupported(): Boolean = false
+
+    /** Where the current OpenRouter sign-in stands. */
+    val openRouterSignIn: StateFlow<UiOpenRouterSignIn> get() = OPEN_ROUTER_SIGN_IN_IDLE
+
+    /**
+     * Start an OpenRouter sign-in and return the URL to open in the browser, or null when it could not start (the
+     * reason is in [openRouterSignIn]). On success the key is saved, OpenRouter is selected, and an account with
+     * no credits is moved onto a free model.
+     */
+    fun beginOpenRouterSignIn(): String? = null
+
+    /** Abandon a pending OpenRouter sign-in. */
+    fun cancelOpenRouterSignIn() {}
+
+    /** The selected provider's usage against its limits, or null before the first read (see [refreshUsageLimits]). */
+    val usageLimits: StateFlow<UiAgentUsageLimits?> get() = USAGE_LIMITS_NONE
+
+    /** Re-read [usageLimits] from the provider. Also done by the backend after every turn. */
+    fun refreshUsageLimits() {}
 
     /** Send a user message; streams the agent's response into [chatState]. Queued
      *  [UiAgentChatState.pendingAttachments] go with it. */
@@ -1924,3 +1955,50 @@ interface AgentService {
         override fun answerPermission(id: Int, decision: UiAgentPermissionDecision) {}
     }
 }
+
+/** The state of "Sign in with OpenRouter" (see [AgentService.beginOpenRouterSignIn]). */
+sealed interface UiOpenRouterSignIn {
+    data object Idle : UiOpenRouterSignIn
+
+    /** The browser is open; waiting for OpenRouter to send the user back. */
+    data object Waiting : UiOpenRouterSignIn
+
+    /** The key is saved. [freeModel] is the free model the account was moved onto, or null if it kept its own. */
+    data class Connected(val freeModel: String?) : UiOpenRouterSignIn
+
+    data class Failed(val message: String) : UiOpenRouterSignIn
+}
+
+private val OPEN_ROUTER_SIGN_IN_IDLE: StateFlow<UiOpenRouterSignIn> = MutableStateFlow(UiOpenRouterSignIn.Idle)
+
+/**
+ * The selected provider's usage against its limits, like Claude's usage meters. [reported] is false for a
+ * provider that gives apps no way to read them (only OpenRouter does today), in which case [meters] is empty.
+ */
+data class UiAgentUsageLimits(
+    val providerName: String,
+    val reported: Boolean,
+    val meters: List<UiUsageMeter> = emptyList(),
+    val spentTodayUsd: Double? = null,
+    val spentMonthUsd: Double? = null,
+    /** Whether the selected model is a free one, so the free-request meter is the one that matters now. */
+    val usingFreeModel: Boolean = false,
+    /** Why the last read failed, or null. [meters] then hold the previous read, if any. */
+    val error: String? = null,
+)
+
+/** One bar: [used] of [limit] (requests, or US dollars for [UiUsageMeterKind.SPEND]), resetting at [resetsAtMs]. */
+data class UiUsageMeter(val kind: UiUsageMeterKind, val used: Double, val limit: Double, val resetsAtMs: Long?) {
+    val fraction: Float get() = if (limit <= 0) 1f else (used / limit).toFloat().coerceIn(0f, 1f)
+    val remaining: Double get() = (limit - used).coerceAtLeast(0.0)
+}
+
+enum class UiUsageMeterKind {
+    /** Requests to free models today. */
+    FREE_REQUESTS,
+
+    /** Dollars spent against a spending cap. */
+    SPEND,
+}
+
+private val USAGE_LIMITS_NONE: StateFlow<UiAgentUsageLimits?> = MutableStateFlow(null)
