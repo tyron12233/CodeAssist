@@ -18,8 +18,10 @@ import java.nio.file.Paths
  * with their real parameters. That is the whole reason this plugin ships no language server — a second
  * frontend would be another 25 MB and another thing to disagree with the first.
  *
- * What it costs is a parse per request. The engine debounces, and this caches on the exact buffer and offset,
- * so a popup that is re-opened or re-filtered at the same place is free.
+ * What it costs is a parse per request. The headers at the top of the file are precompiled once and loaded
+ * rather than re-parsed (see [ClangPreamble]), so that parse is the user's own code; on top of that the
+ * engine debounces, and this caches on the buffer outside the word being typed, so narrowing a popup
+ * re-filters what clang already said instead of asking again.
  */
 class NdkCompletionContributor(
     private val toolchain: () -> NdkToolchain?,
@@ -58,10 +60,12 @@ class NdkCompletionContributor(
         val facet = facetOf(params) ?: NdkFlags.facetFor(path) ?: NdkFacet()
 
         // Keyed on the buffer and the position, NOT the prefix: clang is asked at the start of the word being
-        // typed, so every keystroke within one word is the same query and must not re-run the compiler. The
-        // facet is part of it, since a different standard offers different members.
+        // typed, so every keystroke within one word is the same query and must not re-run the compiler. That
+        // means the word itself is cut out of the key -- hashing the whole buffer, as this once did, changed
+        // the key on every keystroke and re-ran clang for each one. The facet is part of it, since a
+        // different standard offers different members.
         val wordStart = params.replacementRange.start
-        val key = listOf(params.document.file.path, text.hashCode(), wordStart, facet.hashCode())
+        val key = listOf(params.document.file.path, keyText(text, params), wordStart, facet.hashCode())
         synchronized(this) { if (cachedKey == key) return cached }
 
         val (line, column) = LineOffsets(text).lineColOf(wordStart)
@@ -71,7 +75,7 @@ class NdkCompletionContributor(
             when (toolchain.prepare()) {
                 is NdkToolchain.Status.Unavailable -> null
                 is NdkToolchain.Status.Ready ->
-                    toolchain.complete(path, text, line, column, cpp, NdkFlags.editor(facet, toolchain, cpp))
+                    toolchain.complete(path, text, line, column, wordStart, cpp, NdkFlags.editor(facet, toolchain, cpp))
             }
         } ?: return null
 
@@ -89,6 +93,13 @@ class NdkCompletionContributor(
             cached = candidates
         }
         return candidates
+    }
+
+    /** The hash of the buffer with the word being typed taken out: the part that decides what clang answers. */
+    private fun keyText(text: String, params: CompletionParams): Int {
+        val start = params.replacementRange.start.coerceIn(0, text.length)
+        val end = maxOf(params.replacementRange.end, params.offset).coerceIn(start, text.length)
+        return text.substring(0, start).hashCode() * 31 + text.substring(end).hashCode()
     }
 
     /**

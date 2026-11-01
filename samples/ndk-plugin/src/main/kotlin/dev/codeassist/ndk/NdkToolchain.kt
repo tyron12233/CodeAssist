@@ -8,7 +8,10 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipInputStream
 import kotlin.io.path.exists
 import kotlin.io.path.readText
@@ -64,8 +67,8 @@ class NdkToolchain(
      * Make the toolchain usable, unpacking the read-only half if this is the first run, and report what the
      * compiler says about itself.
      *
-     * Safe to call repeatedly and from anywhere: the unpack happens once, and everything after it is a
-     * process launch.
+     * Safe to call repeatedly and from anywhere: the unpack and the version check happen once, and every call
+     * after that answers from memory.
      */
     @Synchronized
     fun prepare(): Status {
@@ -80,10 +83,18 @@ class NdkToolchain(
             }
             unpacked = true
         }
+        // Asked once per process, not per call. Every completion and every error check calls this first, and
+        // launching `clang --version` each time was a second process per keystroke for an answer that cannot
+        // change while the IDE runs: an updated plugin is only picked up by a restart. A failure is not kept,
+        // so a toolchain that did not run is asked again next time.
+        ready?.let { return it }
         val version = run(listOf(driver.toString(), "clang", "--version"))
-        return if (version.ok) Status.Ready(version.output.lineSequence().firstOrNull().orEmpty())
+        return if (version.ok) Status.Ready(version.output.lineSequence().firstOrNull().orEmpty()).also { ready = it }
         else Status.Unavailable("The compiler did not run: ${version.output.take(200)}")
     }
+
+    @Volatile
+    private var ready: Status.Ready? = null
 
     /**
      * Unpack `assets/toolchain.zip` into [root], once per version.
@@ -218,14 +229,14 @@ class NdkToolchain(
         text: String,
         cpp: Boolean,
         extraFlags: List<String> = emptyList(),
-    ): ToolResult {
-        val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
-        return run(
+    ): ToolResult = withPreamble(source, text, cpp, extraFlags, usableBefore = text.length, what = "check") { driver, preamble ->
+        run(
             buildList {
                 add(driver.toString()); add("clang")
                 if (cpp) add("--driver-mode=g++")
                 addAll(commonFlags())
                 addAll(extraFlags)
+                addAll(preambleFlags(preamble))
                 add("-fsyntax-only")
                 // Positions only, in a form worth parsing: no caret art, no colour escapes, and explicit
                 // source ranges so a diagnostic underlines the construct rather than a single character.
@@ -243,27 +254,29 @@ class NdkToolchain(
     }
 
     /**
-     * Ask clang what could be typed at [line]:[column] (both 1-based) in the buffer [text].
+     * Ask clang what could be typed at [line]:[column] (both 1-based) in the buffer [text]. [offset] is the
+     * same position as a char offset, which decides whether the precompiled preamble can be used: not when
+     * the position is inside it, as it is while typing an `#include`.
      *
      * The same compiler, the same flags and the same include path as the build, so what the popup offers is
-     * what will actually compile. It is a whole parse per request, which is why the caller debounces and
-     * caches rather than asking on every keystroke.
+     * what will actually compile.
      */
     fun complete(
         source: Path,
         text: String,
         line: Int,
         column: Int,
+        offset: Int,
         cpp: Boolean,
         extraFlags: List<String> = emptyList(),
-    ): ToolResult {
-        val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
-        return run(
+    ): ToolResult = withPreamble(source, text, cpp, extraFlags, usableBefore = offset, what = "completion") { driver, preamble ->
+        run(
             buildList {
                 add(driver.toString()); add("clang")
                 if (cpp) add("--driver-mode=g++")
                 addAll(commonFlags())
                 addAll(extraFlags)
+                addAll(preambleFlags(preamble))
                 add("-fsyntax-only")
                 // The position is named against `-`, the same name the buffer arrives under on stdin.
                 add("-Xclang"); add("-code-completion-at=-:$line:$column")
@@ -278,6 +291,90 @@ class NdkToolchain(
             timeoutSeconds = 20,
             stdin = text,
             workingDir = source.parent,
+        )
+    }
+
+    // -----------------------------------------------------------------------------------------------
+    // The precompiled preamble (see ClangPreamble / PreambleCache)
+    // -----------------------------------------------------------------------------------------------
+
+    private val preambles: PreambleCache by lazy {
+        PreambleCache(reg.dataDir.resolve("preambles"), log, build = ::buildPreamble)
+    }
+
+    /**
+     * Run [invoke] with the buffer's precompiled preamble when one is built, and without it otherwise.
+     *
+     * Without one, the request costs what it always did and a build is queued for next time. With one,
+     * clang loads the headers instead of parsing them; if it refuses the file because a header has changed
+     * since, the request is re-run without it and the preamble is rebuilt, so a stale cache can cost one
+     * extra launch but never a wrong answer.
+     */
+    private fun withPreamble(
+        source: Path,
+        text: String,
+        cpp: Boolean,
+        extraFlags: List<String>,
+        usableBefore: Int,
+        what: String,
+        invoke: (driver: Path, preamble: PreambleCache.Ready?) -> ToolResult,
+    ): ToolResult {
+        val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
+        val started = System.nanoTime()
+        fun timed(result: ToolResult, how: String): ToolResult {
+            log.debug("clang $what: ${(System.nanoTime() - started) / 1_000_000} ms $how")
+            return result
+        }
+
+        val end = ClangPreamble.end(text)
+        val sourceDir = source.parent
+        if (end == 0 || end > usableBefore || sourceDir == null) return timed(invoke(driver, null), "(no preamble)")
+
+        val request = PreambleCache.Request(
+            text = text.substring(0, end),
+            cpp = cpp,
+            flags = extraFlags,
+            sourceDir = sourceDir,
+            toolchainStamp = layoutStamp(),
+        )
+        val ready = preambles.readyOrQueue(request, ClangPreamble.utf8Length(text, end))
+            ?: return timed(invoke(driver, null), "(preamble queued)")
+
+        val result = invoke(driver, ready)
+        if (!PreambleCache.isStale(result.output)) return timed(result, "(preamble)")
+        log.info("a precompiled preamble went stale: ${result.output.lineSequence().firstOrNull().orEmpty().take(200)}")
+        preambles.rebuild(request)
+        return timed(invoke(driver, null), "(stale preamble, rebuilt)")
+    }
+
+    /** The two flags that load a precompiled preamble and skip the bytes of the buffer it stands for. */
+    private fun preambleFlags(preamble: PreambleCache.Ready?): List<String> =
+        if (preamble == null) emptyList()
+        else listOf("-include-pch", preamble.pch.toString(), "-Xclang", "-preamble-bytes=${preamble.bytes},1")
+
+    /**
+     * Compile a preamble, already written to [header], into [pch].
+     *
+     * As a HEADER of the source's language, with the source's flags and from the source's directory, so it
+     * means what those lines mean at the top of the file: relative `-I` flags resolve from the same place, and
+     * `-iquote` stands in for the directory a quote-include is looked up in first, which for this file would
+     * be the cache directory rather than the source's.
+     */
+    private fun buildPreamble(request: PreambleCache.Request, header: Path, pch: Path): ToolResult {
+        val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
+        return run(
+            buildList {
+                add(driver.toString()); add("clang")
+                if (request.cpp) add("--driver-mode=g++")
+                addAll(commonFlags())
+                addAll(request.flags)
+                add("-iquote"); add(request.sourceDir.toString())
+                add("-x"); add(if (request.cpp) "c++-header" else "c-header")
+                add(header.toString())
+                add("-o"); add(pch.toString())
+            },
+            timeoutSeconds = 60,
+            workingDir = request.sourceDir,
         )
     }
 
@@ -375,21 +472,34 @@ class NdkToolchain(
                 }
                 .start()
 
-            // Write the buffer and CLOSE, before reading a byte back. The other order deadlocks as soon as
-            // the input is larger than the pipe buffer: the compiler blocks writing diagnostics that nobody
-            // is draining, while we block writing source that it is not reading.
-            if (stdin != null) {
-                runCatching { process.outputStream.use { it.write(stdin.toByteArray()) } }
-            } else {
-                runCatching { process.outputStream.close() }
-            }
-
-            val output = process.inputStream.bufferedReader().readText()
-            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+            // The timeout is a watchdog that kills the process, NOT `waitFor(timeout, unit)`. On Android that
+            // overload is java.lang.Process's default, which polls by sleeping in steps of up to 100 ms, so a
+            // compiler that finished in 25 ms was reported ~100 ms later -- measured on the emulator, it was
+            // most of what a completion request cost once the preamble was precompiled. It also only started
+            // counting after stdout closed, so it never caught a process that hung with stdout open.
+            val timedOut = AtomicBoolean(false)
+            val watchdog = WATCHDOG.schedule({
+                timedOut.set(true)
                 process.destroyForcibly()
-                return ToolResult(false, "timed out after ${timeoutSeconds}s\n$output")
+            }, timeoutSeconds, TimeUnit.SECONDS)
+
+            try {
+                // Write the buffer and CLOSE, before reading a byte back. The other order deadlocks as soon as
+                // the input is larger than the pipe buffer: the compiler blocks writing diagnostics that nobody
+                // is draining, while we block writing source that it is not reading.
+                if (stdin != null) {
+                    runCatching { process.outputStream.use { it.write(stdin.toByteArray()) } }
+                } else {
+                    runCatching { process.outputStream.close() }
+                }
+
+                val output = process.inputStream.bufferedReader().readText()
+                val exit = process.waitFor()
+                if (timedOut.get()) return ToolResult(false, "timed out after ${timeoutSeconds}s\n$output")
+                ToolResult(exit == 0, output.trim())
+            } finally {
+                watchdog.cancel(false)
             }
-            ToolResult(process.exitValue() == 0, output.trim())
         } catch (t: Throwable) {
             log.warn("could not run ${command.firstOrNull()}", t)
             ToolResult(false, t.message ?: t.toString())
@@ -397,6 +507,11 @@ class NdkToolchain(
     }
 
     companion object {
+        /** Kills a tool that outlives its timeout. One daemon thread for every toolchain; it only ever waits. */
+        private val WATCHDOG: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "ndk-tool-watchdog").apply { isDaemon = true }
+        }
+
         /** `libllvmtools.so`: clang, ar, nm, strip and the rest, selected by the first argument. */
         const val DRIVER_LIB = "llvmtools"
 

@@ -181,8 +181,36 @@ clang's candidate format is chunked (`[#void#]push_back(<#const value_type &__x#
 be stripped rather than shown. It carries no *kind*, so the shape implies it: a parameter list means
 something callable, `Pattern` is a snippet, a bare name is a macro in C and a type in C++.
 
-Asked once per word, not per keystroke: the cache is keyed on the buffer and the **start** of the word being
-typed, so narrowing a prefix re-filters what clang already said instead of re-parsing.
+Asked once per word, not per keystroke: the cache is keyed on the buffer **outside** the word being typed and
+the word's start, so narrowing a prefix re-filters what clang already said instead of re-parsing. (It used to
+hash the whole buffer, which changed on every keystroke and re-ran clang for each one.)
+
+## The precompiled preamble
+
+Nearly all of a completion or error check used to be re-parsing the headers: `#include <string>` is tens of
+thousands of lines of libc++. `ClangPreamble` finds the run of `#include`s and directives at the top of the
+file (cut at a line start, never inside an open `#if`), `PreambleCache` compiles it once into a `.pch` under
+`<dataDir>/preambles` (keyed on its text, the flags, the language, the source directory and the toolchain),
+and every request after that passes `-include-pch <pch> -Xclang -preamble-bytes=<n>,1`. clang loads the
+headers and skips those bytes of the buffer, so it parses only the user's own code.
+
+- A request whose preamble is not built yet runs uncached and queues the build on one background thread.
+  The newest queued request wins, so typing a new `#include` builds once, not once per keystroke.
+- clang refuses a `.pch` whose headers changed since it was built ("has been modified since the AST
+  file"). The request is then re-run without it and the preamble is rebuilt.
+- The four most recently used are kept, at about 8 MB each.
+
+Measured in the IDE on the emulator (arm64, API 37), on `native-lib.cpp` from the Native C++ App template:
+
+| | before | after |
+| --- | --- | --- |
+| completion after `hello.` | ~450 ms: a 242 ms parse, plus a `--version` launch, plus up to 100 ms of polling on each of the two (see below) | 32-47 ms |
+| error check | the same, around a ~210 ms parse | ~52 ms |
+
+Two process costs also went: `prepare()` launched `clang --version` before **every** request (now once per
+process), and `Process.waitFor(timeout, unit)` on Android polls by sleeping in steps of up to 100 ms, so a
+25 ms compile came back ~100 ms late. The timeout is now a watchdog that kills the process, and the read
+blocks on `waitFor()` without a timeout.
 
 ## JNI
 
