@@ -1117,11 +1117,22 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 else -> {
                     val contributed = contributedAction(id) ?: return fail("Unknown task: $id")
                     val (label, action) = contributed
+                    // A contributor running an interactive program asked for the Run console: open the same
+                    // session a built-in console run gets and hand its I/O to the graph before it starts.
+                    val console = action.console
+                    if (console != null) {
+                        val sessionId = runConsoleSeq.incrementAndGet()
+                        val io = RunProgramIo(sessionId, label, console.title)
+                        currentRunIo = io
+                        _runConsole.value = RunConsoleUi(sessionId, label, console.title)
+                        console.io = io
+                    }
                     launch(
                         label,
                         action.graph,
                         action.header,
                         action.banner,
+                        onComplete = if (console != null) ::finalizeRunConsole else null,
                         onSuccess = action.onSuccess
                     )
                 }

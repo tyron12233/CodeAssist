@@ -662,9 +662,13 @@ private fun EditorDaemonEffect(
     daemon.onDecorations = { active.session.applyDecorations(it.ranges, it.gutter, it.inlays) }
     daemon.appliesTo = { pass ->
         when (pass) {
-            // Semantic coloring + folding are Java/Kotlin; @Preview markers are Kotlin-only; diagnostics + inlay
-            // apply to every backend (they no-op for languages that don't provide them).
-            DaemonPass.SEMANTIC, DaemonPass.FOLDS ->
+            // Semantic coloring is asked of every file's backend: Java and Kotlin have highlighters, and so do XML
+            // and a plugin's language (the NDK plugin's C/C++), which this gate used to shut out by extension. A
+            // backend with no highlighter answers empty at once, so the pass costs nothing for plain text.
+            DaemonPass.SEMANTIC -> true
+            // Folding stays Java/Kotlin; @Preview markers are Kotlin-only; diagnostics + inlay apply to every
+            // backend (they no-op for languages that don't provide them).
+            DaemonPass.FOLDS ->
                 active.path.endsWith(".java") || active.path.endsWith(".kt") || active.path.endsWith(
                     ".kts"
                 )

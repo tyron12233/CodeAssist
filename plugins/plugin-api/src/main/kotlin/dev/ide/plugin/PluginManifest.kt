@@ -341,8 +341,17 @@ const val PLUGIN_API_VERSION: Int = 4
  *  - `dev.ide.plugin.action.ActionContext.workspaceServices` and `dev.ide.model.ModuleSources.setFacetData`.
  *    An action was handed paths and no model, so "add this feature to the module" had no module to add it
  *    to; and nothing a plugin could reach would set a facet and save it.
+ *
+ * `3.2.0` lets a plugin's own Run row run an interactive program in the Run console:
+ * `dev.ide.build.RunAction.console` and `dev.ide.build.RunConsole`. A contributed row could only stream into
+ * the build log, or run JVM bytecode through `BuildContext.programInterpreter`; a native program (the NDK
+ * plugin's C and C++ console apps) had no way to reach the terminal, its input bar or its Stop. The host now
+ * opens the console session for a row that asks and hands its `ProgramIo` to the graph. Additive, and a
+ * property rather than a constructor parameter, so `RunAction`'s published constructor is unchanged;
+ * [PLUGIN_API_VERSION] stays at `4`, and on a `3.1.0` host the setter throws a `NoSuchMethodError` a plugin
+ * can catch.
  */
-const val PLUGIN_SPI_VERSION: String = "3.1.0"
+const val PLUGIN_SPI_VERSION: String = "3.2.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
