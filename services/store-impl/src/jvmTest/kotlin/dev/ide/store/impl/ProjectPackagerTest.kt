@@ -60,6 +60,7 @@ class ProjectPackagerTest {
         write(".platform/.deps-unresolved", "androidx.foo:bar=Not resolved.")
         write(".platform/settings.properties", "tree.expanded.Project=/Users/someone/projects/x")
         write(".platform/open-tabs.txt", "#v2\n0\n/Users/someone/projects/x/app/A.kt\t0\t0\ttext")
+        write(".platform/libs/widget-1a2b3c4d/classes.jar", "EXPLODED-AAR")
         write(".platform/debug.ks", "BINARY-KEYSTORE")
         // A source folder that happens to be named `caches` is not the same thing.
         write("app/src/main/resources/caches/data.txt", "keep me")
@@ -97,6 +98,8 @@ class ProjectPackagerTest {
             assertFalse(rel in packed.zipEntries, "$rel must not be packaged: ${packed.zipEntries}")
             assertContains(packed.excluded, rel)
         }
+        // Exploded local AARs are rebuilt from the project's own .aar on the recipient's open.
+        assertTrue(packed.zipEntries.none { it.startsWith(".platform/libs/") }, "exploded AARs were packaged: ${packed.zipEntries}")
         // The model itself still travels, or the install is a folder rather than a project.
         assertTrue(".platform/workspace.json" in packed.zipEntries, "the model must travel")
     }

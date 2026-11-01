@@ -159,6 +159,10 @@ class ProjectPackager(
             ".platform/sdks.json",
             ".platform/.deps-reconciled",
             ".platform/.deps-unresolved",
+            // Local AARs exploded on the submitter's device, in directories named by a hash of THEIR
+            // absolute path. A copy of the project's own `.aar`, which travels: the recipient's open
+            // re-registers the library from it (DependencyService.healLocalLibraries) and explodes it anew.
+            ".platform/libs",
             // Editor state, carrying absolute paths from the submitter's device: which tabs were open and
             // which tree nodes were expanded. Useless to the recipient and leaks their directory layout.
             ".platform/settings.properties",
