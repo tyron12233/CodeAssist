@@ -63,6 +63,7 @@ import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.learn_all
 import dev.ide.ui.generated.resources.learn_documentation
 import dev.ide.ui.generated.resources.learn_continue
+import dev.ide.ui.generated.resources.learn_continue_meta
 import dev.ide.ui.generated.resources.learn_lessons_done
 import dev.ide.ui.generated.resources.learn_module_meta
 import dev.ide.ui.generated.resources.learn_resume_lesson
@@ -192,7 +193,6 @@ private fun ContinueCard(resume: UiResumePoint, catalog: UiLearnCatalog, onResum
     val track = catalog.tracks.firstOrNull { it.id == resume.trackId }
     val total = track?.lessons?.size ?: 0
     val index = track?.lessons?.indexOfFirst { it.id == resume.lessonId }?.takeIf { it >= 0 } ?: 0
-    val minutes = track?.lessons?.sumOf { it.estMinutes } ?: 0
     Surface(
         shape = CaShapes.Continue,
         color = c.secondaryContainer,
@@ -210,9 +210,12 @@ private fun ContinueCard(resume: UiResumePoint, catalog: UiLearnCatalog, onResum
                         color = c.onSecondaryContainer,
                         modifier = Modifier.padding(top = 3.dp),
                     )
+                    // The ring is this lesson's progress, so the line names the lesson ("Lesson 1 of 5 · Hello,
+                    // Kotlin"). It used the track's "N of M lessons" with the lesson's 0-based position, which read
+                    // "0 of 5 lessons" beside a ring at 33%.
                     SupportingOnContainer(
                         text = if (total > 0) {
-                            stringResource(Res.string.learn_module_meta, index, total, minutes)
+                            stringResource(Res.string.learn_continue_meta, index + 1, total, resume.lessonTitle)
                         } else {
                             resume.lessonTitle
                         },

@@ -953,6 +953,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- Learn tab, Material 3 Expressive redesign -->
     <string name="learn_lessons_done">%1$d lessons done</string>
     <string name="learn_module_meta">%1$d of %2$d lessons · %3$d min</string>
+    <string name="learn_continue_meta">Lesson %1$d of %2$d · %3$s</string>
     <string name="learn_resume_lesson">Resume lesson %1$d</string>
     <string name="learn_minutes">%1$d min</string>
     <string name="learn_lessons_progress">%1$d / %2$d lessons</string>

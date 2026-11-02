@@ -947,6 +947,7 @@
     <!-- Learn tab, Material 3 Expressive redesign -->
     <string name="learn_lessons_done">已完成 %1$d 节课</string>
     <string name="learn_module_meta">%2$d 节课中的第 %1$d 节 · %3$d 分钟</string>
+    <string name="learn_continue_meta">第 %1$d 节，共 %2$d 节 · %3$s</string>
     <string name="learn_resume_lesson">继续第 %1$d 节课</string>
     <string name="learn_minutes">%1$d 分钟</string>
     <string name="learn_lessons_progress">%1$d / %2$d 节课</string>
