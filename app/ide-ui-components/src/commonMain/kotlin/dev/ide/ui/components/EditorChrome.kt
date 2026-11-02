@@ -1562,12 +1562,17 @@ fun TabsStripPreview() {
  *  moves the segments change — the row crossfades (and resizes) between states rather than snapping. */
 @Composable
 fun Breadcrumb(segments: List<String>) {
+    // Rest at the END: the deepest segment (the file, the symbol at the caret) is the one worth reading, and in a
+    // narrow bar beside the view-mode buttons it was the one cut off ("activity_main.xm"). The leading folders
+    // scroll off instead, a swipe away.
+    val scroll = rememberScrollState()
+    LaunchedEffect(segments, scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
     Row(
         Modifier
             .fillMaxWidth()
             .height(32.dp)
             .background(Ide.colors.editorBg)
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(scroll)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
