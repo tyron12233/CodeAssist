@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -108,6 +109,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
             VcsIconButton(CaIcons.plus, stringResource(Res.string.vcs_new_branch), { creating = true })
         },
         large = false,
+        snackbarHost = { FeedbackStrip(feedback, Modifier.navigationBarsPadding()) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             VcsField(
@@ -117,7 +119,6 @@ internal fun BranchesScreen(ctx: ScreenContext) {
                 leading = CaIcons.search,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            FeedbackStrip(feedback)
             if (filtered.isEmpty()) {
                 VcsEmptyState(
                     icon = CaIcons.gitBranch,

@@ -257,6 +257,12 @@ internal class VcsFeedback {
 @Composable
 internal fun rememberVcsFeedback(): VcsFeedback = remember { VcsFeedback() }
 
+/**
+ * The result of the last action, dismissed by a tap or after a few seconds. A full screen shows it in its
+ * scaffold's snackbar slot, over the content: in the layout it pushed the list down when it appeared and pulled it
+ * back up when it timed out, moving the row under a finger about to tap (Delete on the branch below). The Git
+ * panel, which has no scaffold, still shows it inline.
+ */
 @Composable
 internal fun FeedbackStrip(feedback: VcsFeedback, modifier: Modifier = Modifier) {
     val text = feedback.message.value ?: return
