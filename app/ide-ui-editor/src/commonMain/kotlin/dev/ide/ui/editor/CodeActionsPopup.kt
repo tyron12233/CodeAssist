@@ -157,7 +157,7 @@ fun CodeActionsMenu(
     Column(
         Modifier
             .width(width)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         val compactions = remember(actions) { importCompactions(actions) }
@@ -329,7 +329,7 @@ fun DiagnosticSheet(
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Ide.colors.glassThick, sheetShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, sheetShape)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, sheetShape)
                 .pointerInput(Unit) { detectTapGestures { } } // swallow taps so the panel itself doesn't dismiss
                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -363,7 +363,7 @@ fun DiagnosticPopup(
         Column(
             modifier
                 .widthIn(min = 280.dp, max = 480.dp)
-                .background(Ide.colors.glassThick, shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
                 .border(1.dp, Ide.colors.glassEdge, shape)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {

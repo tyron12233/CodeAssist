@@ -127,7 +127,7 @@ internal fun RenamePopup(
     LaunchedEffect(Unit) { focus.requestFocus() }
     Column(
         modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
@@ -187,7 +187,7 @@ internal fun GoToLinePopup(
     }
     Column(
         modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
@@ -230,7 +230,7 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
     val content = remember(doc, codeStyle) { doc.doc?.takeIf { it.isNotBlank() }?.let { parseQuickDoc(it, codeStyle) } }
     Column(
         modifier.widthIn(max = 440.dp).heightIn(max = 360.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(14.dp),
     ) {
@@ -428,7 +428,7 @@ internal fun SelectionToolbar(
         Modifier
             .entrancePop()
             .shadow(12.dp, shape, clip = false)
-            .background(Ide.colors.glassThick, shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
             .border(1.dp, Ide.colors.glassEdge, shape)
             .padding(horizontal = 4.dp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
