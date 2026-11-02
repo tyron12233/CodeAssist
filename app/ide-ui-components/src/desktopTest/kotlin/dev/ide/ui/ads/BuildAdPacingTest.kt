@@ -228,4 +228,14 @@ class AdControllerEventsTest {
         // An existing install has no long-build count yet: it starts past the grace, not back at zero.
         assertNull(AdController(updated, ReadyAdHost("build-1")).buildPacing.skipReason(lowMemory = false))
     }
+
+    /** A console run past its compile belongs to the program: no build ad over a prompt the user is answering. */
+    @Test
+    fun noBuildAdWhileTheProgramItselfRuns() {
+        val running = dev.ide.ui.backend.RunConsoleUi(1, "app", "Main", phase = dev.ide.ui.backend.RunPhase.Running)
+        assertTrue(programIsRunning(running))
+        assertFalse(programIsRunning(running.copy(phase = dev.ide.ui.backend.RunPhase.Building)), "still compiling: an ad may show")
+        assertFalse(programIsRunning(running.copy(phase = dev.ide.ui.backend.RunPhase.Finished)))
+        assertFalse(programIsRunning(null), "an ordinary build has no console run")
+    }
 }

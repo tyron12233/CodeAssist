@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.RunStatus
+import dev.ide.ui.backend.RunPhase
+import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.buildc_build_failed
 import dev.ide.ui.generated.resources.buildc_build_succeeded
@@ -199,6 +201,11 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
                 // Reached only if the build is STILL running: collectLatest cancels this block the moment the
                 // status leaves Running (finished / failed / stopped), so a short build never gets here.
                 if (!ads.interstitialsActive) return@collectLatest
+                // Checked before the pacing, so it neither counts as a long build nor starts a cooldown.
+                if (programIsRunning(backend.build.runConsole.value)) {
+                    ads.interstitialSkipped("program_running")
+                    return@collectLatest
+                }
                 val reason = pacing.skipReason(ads.host.lowMemoryDevice)
                 if (reason != null) {
                     ads.interstitialSkipped(reason)
@@ -234,6 +241,14 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
         BuildResultNotice(result) { finishedBehindAd = null }
     }
 }
+
+/**
+ * Whether the user's own program is executing in the Run console. A console run keeps the build Running for as
+ * long as the program does, so a program waiting at a prompt crossed the long-build threshold and the ad came up
+ * over it, swallowing the line being typed into it (seen on the emulator). Past the compile, the screen is the
+ * program's.
+ */
+internal fun programIsRunning(console: RunConsoleUi?): Boolean = console?.phase == RunPhase.Running
 
 /** A small pill near the bottom of the screen with a build's outcome. Tap to dismiss. */
 @Composable
