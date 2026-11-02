@@ -78,6 +78,7 @@
     <string name="vcs_branches_none">لا توجد فروع مطابقة.</string>
     <string name="vcs_new_branch">فرع جديد</string>
     <string name="vcs_new_branch_hint">اسم الفرع</string>
+    <string name="vcs_new_branch_from">يبدأ من %1$s</string>
     <string name="vcs_create">إنشاء</string>
     <string name="vcs_current_branch">الحالي</string>
     <string name="vcs_merge_into">الدمج في %1$s</string>

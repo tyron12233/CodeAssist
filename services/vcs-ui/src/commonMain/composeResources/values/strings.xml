@@ -78,6 +78,7 @@
     <string name="vcs_branches_none">No branches match.</string>
     <string name="vcs_new_branch">New branch</string>
     <string name="vcs_new_branch_hint">Branch name</string>
+    <string name="vcs_new_branch_from">Starts from %1$s</string>
     <string name="vcs_create">Create</string>
     <string name="vcs_current_branch">Current</string>
     <string name="vcs_merge_into">Merge into %1$s</string>

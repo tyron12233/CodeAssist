@@ -78,6 +78,7 @@
     <string name="vcs_branches_none">没有匹配的分支。</string>
     <string name="vcs_new_branch">新建分支</string>
     <string name="vcs_new_branch_hint">分支名称</string>
+    <string name="vcs_new_branch_from">基于 %1$s</string>
     <string name="vcs_create">创建</string>
     <string name="vcs_current_branch">当前</string>
     <string name="vcs_merge_into">合并到 %1$s</string>
