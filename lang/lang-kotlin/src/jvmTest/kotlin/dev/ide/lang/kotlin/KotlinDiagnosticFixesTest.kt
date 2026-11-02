@@ -49,6 +49,12 @@ class KotlinDiagnosticFixesTest {
     }
 
     @Test
+    fun removingTheOnlyImportLeavesOneBlankLine() {
+        val code = "package demo\n\nimport kotlin.math.max\n\nfun f() = 1\n"
+        assertEquals("package demo\n\nfun f() = 1\n", fixed(code, KotlinDiagnosticCodes.UNUSED_IMPORT, "Remove unused import"))
+    }
+
+    @Test
     fun removesAnUnusedLocalWithAPureInitializer() {
         val code = "package demo\nfun f() {\n    val x = 1\n    println(\"hi\")\n}\n"
         assertEquals(

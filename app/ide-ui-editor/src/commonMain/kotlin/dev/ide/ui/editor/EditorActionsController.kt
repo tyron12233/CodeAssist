@@ -364,11 +364,27 @@ internal class EditorActionsController(
                 val st = e.start.coerceIn(0, len)
                 RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
             }
-            var caret = ctxStart
-            for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
-            session.applyEdits(edits, TextRange(caret.coerceAtLeast(0)))
+            session.applyEdits(edits, TextRange(caretAfterEdits(ctxStart, edits)))
         }
     }
+}
+
+/**
+ * Where a caret at [caret] belongs once [edits] are spliced in: shifted by the net size of the edits wholly
+ * before it, and placed at the end of the replacement when an edit covers it. Shifting by an edit that
+ * CONTAINS the caret (a fix deleting the very line it sits on) moved it back past the edit's start, into the
+ * middle of a word on an earlier line, where completion then popped up.
+ */
+internal fun caretAfterEdits(caret: Int, edits: List<RangeEdit>): Int {
+    var shift = 0
+    var landed: Int? = null
+    for (e in edits.sortedBy { it.start }) {
+        when {
+            e.end <= caret -> shift += e.text.length - (e.end - e.start)
+            e.start <= caret -> landed = e.start + shift + e.text.length // covers the caret
+        }
+    }
+    return (landed ?: (caret + shift)).coerceAtLeast(0)
 }
 
 /** A one-shot selection-expand animation request (see [EditorActionsController.selectionExpand]): grow the

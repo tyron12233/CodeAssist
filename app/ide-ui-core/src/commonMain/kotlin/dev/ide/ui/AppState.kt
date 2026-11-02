@@ -1320,17 +1320,21 @@ class IdeUiState(
      * Reflect a completed project-wide rename in the open tabs. The rename wrote every reference site to
      * disk, so each clean tab is re-read (a no-op for files it didn't touch — those keep their session, undo
      * and caret). The active tab follows the backing-file rename to [newPath] when the file itself was
-     * renamed. Tabs with unsaved edits are left untouched so a rename never clobbers in-progress work.
+     * renamed. A tab with unsaved edits is reloaded only when its file is exactly its buffer with one name
+     * renamed (see [isIdentifierRenameOf]), so a rename never clobbers in-progress work.
      */
     fun reloadAfterRename(activePath: String?, newPath: String?) {
         scope.launch {
             for (f in openFiles.toList()) {
                 if (f.readOnly) continue
                 val followsFileRename = newPath != null && f.path == activePath
-                if (!followsFileRename && f.modified) continue
                 val diskPath = if (followsFileRename) newPath!! else f.path
                 val text = readTabText(diskPath) ?: continue
                 if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
+                // A tab with unsaved edits is taken from disk only when the file is exactly its buffer with one
+                // name renamed: the rename computed its edits over that buffer and wrote the result, so nothing of
+                // the user's is lost. Anything else is a divergence that stays theirs to resolve.
+                if (!followsFileRename && f.modified && !isIdentifierRenameOf(f.text, text)) continue
                 // The read suspends, and a tab closed meanwhile shifts every index after it.
                 val i = openFiles.indexOfFirst { it.tabId == f.tabId }.takeIf { it >= 0 } ?: continue
                 val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
@@ -1680,3 +1684,26 @@ class PendingRun(val action: () -> Unit)
 
 /** Tabs the user is closing while they hold unsaved edits (see [IdeUiState.unsavedClose]). */
 class PendingClose(val files: List<OpenFile>)
+
+/**
+ * Whether [after] is [before] with one identifier replaced by another at some of its occurrences, and nothing
+ * else changed: what a rename applied over a tab's unsaved edits leaves on disk.
+ */
+internal fun isIdentifierRenameOf(before: String, after: String): Boolean {
+    if (before == after) return false
+    val a = IDENTIFIER_RUNS.findAll(before).map { it.value }.toList()
+    val b = IDENTIFIER_RUNS.findAll(after).map { it.value }.toList()
+    if (a.size != b.size) return false
+    var pair: Pair<String, String>? = null
+    for (i in a.indices) {
+        if (a[i] == b[i]) continue
+        val p = a[i] to b[i]
+        if (!IDENTIFIER.matches(p.first) || !IDENTIFIER.matches(p.second)) return false
+        if (pair == null) pair = p else if (pair != p) return false
+    }
+    return pair != null
+}
+
+/** Identifier runs and single other characters: the tokens [isIdentifierRenameOf] compares. */
+private val IDENTIFIER_RUNS = Regex("""[\p{L}_][\p{L}\p{N}_]*|[\s\S]""")
+private val IDENTIFIER = Regex("""[\p{L}_][\p{L}\p{N}_]*""")

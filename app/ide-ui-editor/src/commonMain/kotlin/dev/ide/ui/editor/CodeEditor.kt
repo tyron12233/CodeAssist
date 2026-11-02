@@ -389,9 +389,16 @@ private fun CodeEditorContent(
         val text = editorSession.doc.text
         val caret = editorSession.selection.start
         scope.launch {
-            val options = runCatching { backend.editor.navigationOptions(path, text, caret) }.getOrDefault(emptyList())
+            val resolved = runCatching { backend.editor.navigationOptions(path, text, caret) }.getOrDefault(emptyList())
             // Touch has no rename shortcut, so the menu is where a renameable symbol offers it.
             val renameable = runCatching { backend.editor.prepareRename(path, text, caret) }.getOrNull()
+            // Nor a Find Usages one. Usages are a project-wide search, too slow to run for every menu that opens,
+            // so a symbol (one that resolves to a declaration, or can be renamed) gets the entry with no targets
+            // yet and the search runs when it is picked.
+            val symbol = renameable != null || resolved.any { it.kind == UiNavKind.DECLARATION }
+            val options = if (symbol && resolved.none { it.kind == UiNavKind.USAGES }) {
+                (resolved + UiNavOption(UiNavKind.USAGES, emptyList())).sortedBy { it.kind.ordinal }
+            } else resolved
             navMenu = NavMenuState.Menu(options, renameable)
             // Resolve the code actions too. Nothing is resolved proactively off a diagnostic line, so
             // without this the menu's Quick fixes / Intentions / Actions sections would be empty exactly
@@ -1550,7 +1557,10 @@ private fun CodeEditorContent(
             metrics = metrics,
             gutterWidthPx = gutterWidthPx,
             onOption = { opt ->
-                if (opt.targets.size == 1) {
+                if (opt.kind == UiNavKind.USAGES && opt.targets.isEmpty()) {
+                    navMenu = null
+                    runNav(UiNavKind.USAGES) // the lazily-searched entry (see openNavMenu)
+                } else if (opt.targets.size == 1) {
                     navMenu = null
                     onNavigate(opt.targets[0].path, opt.targets[0].offset)
                 } else {

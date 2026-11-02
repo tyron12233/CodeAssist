@@ -183,7 +183,8 @@ internal object KotlinQuickFixes {
         fun removeImport(): KotlinImportFix? {
             val imp = enclosing<KtImportDirective>() ?: return null
             val r = imp.textRange
-            return edit("Remove unused import", deleteLines(text, r.startOffset, r.endOffset))
+            // The only import goes with one of the blank lines around it, not leaving two in a row.
+            return edit("Remove unused import", deleteLines(text, r.startOffset, r.endOffset, collapseBlank = true))
         }
 
         fun removeLocal(): KotlinImportFix? {

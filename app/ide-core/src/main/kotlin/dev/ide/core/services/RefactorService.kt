@@ -208,7 +208,7 @@ internal class RefactorService(
         }
         val fileAbs = file.toAbsolutePath().normalize()
         val renameFile = if (target.isType && fileAbs.fileName?.toString() == "${target.oldName}.java") fileAbs else null
-        return apply(target.oldName, name, refs, renameFile, ".java", note = null)
+        return apply(target.oldName, name, refs, renameFile, ".java", note = null, focal = fileAbs to text)
     }
 
     private suspend fun renameKotlin(file: Path, text: String, offset: Int, name: String): RenameOutcome {
@@ -229,7 +229,7 @@ internal class RefactorService(
             "Java files that mention '${target.name}' were not changed: $names"
         }
         val renameFile = target.fileNamedAfter?.let { Paths.get(it).toAbsolutePath().normalize() }
-        return apply(target.name, name, refs, renameFile, ".kt", note)
+        return apply(target.name, name, refs, renameFile, ".kt", note, focal = file.toAbsolutePath().normalize() to text)
     }
 
     /**
@@ -239,6 +239,8 @@ internal class RefactorService(
      */
     private suspend fun apply(
         oldName: String, newName: String, refs: List<Pair<Path, TextRange>>, renameFile: Path?, extension: String, note: String?,
+        /** The file the rename started from and the editor's text of it, which is the text the ranges were found in. */
+        focal: Pair<Path, String>,
     ): RenameOutcome {
         val byPath = LinkedHashMap<Path, MutableSet<TextRange>>()
         refs.forEach { (p, r) -> byPath.getOrPut(p) { LinkedHashSet() } += r }
@@ -248,7 +250,7 @@ internal class RefactorService(
         val changed = ArrayList<Path>()
         // Each file's edits descending, so earlier offsets stay valid while later ones are replaced.
         for ((path, ranges) in byPath) {
-            val current = textOf(path) ?: continue
+            val current = (if (path == focal.first) focal.second else textOf(path)) ?: continue
             val sb = StringBuilder(current)
             var applied = 0
             for (r in ranges.sortedByDescending { it.start }) {
