@@ -404,8 +404,10 @@ Kotlin support is **beta**. The list below reflects what ships today and what is
   identified by its declaration; a call resolves to the overload it binds to, so Find Usages tells overloads
   apart while Rename moves them together with the override family (Java overrides included); locals and privates search
   only their scope; a top-level class's own file is renamed with it), and a Java symbol's Kotlin references are
-  found and renamed with it. Not yet: Java code that uses a Kotlin declaration (light classes) is reported, not
-  rewritten; a Java getter used as a Kotlin property (`getName()` / `.name`); named-argument labels.
+  found and renamed with it, and Java code using a Kotlin declaration (through its light class, overloads told
+  apart by parameter types, a property's `getX()`/`setX()` accessors included) is found and renamed too. Not yet:
+  a Java getter used as a Kotlin property (`getName()` / `.name`); named-argument labels; Kotlin top-level
+  functions called from Java through their file facade (`UtilKt.f()`).
 - **More quick-fixes**: create function/class from an unresolved reference, change a type on `kt.typeMismatch`,
   "Opt in" for `kt.optInUsage`. (Shipped in `KotlinQuickFixes`: remove unused import / local / private member,
   `_` for an unused lambda parameter, `var`↔`val`, drop a redundant `?.` / `!!` / cast / elvis / projection /

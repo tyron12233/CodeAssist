@@ -115,6 +115,14 @@ class KotlinEditorFeatures(
     var javaSourceLocator: (fqn: String, member: String?) -> NavTarget? = { _, _ -> null }
 
     /**
+     * Where Java type [fqn] declares the method [member] whose parameters fit [paramTypes] (Kotlin type names, an
+     * empty entry fitting anything), or null when it declares none. Set by the host; the default asks
+     * [javaSourceLocator], which matches by name alone.
+     */
+    var javaMemberLocator: (fqn: String, member: String, paramTypes: List<String>?) -> NavTarget? =
+        { fqn, member, _ -> javaSourceLocator(fqn, member) }
+
+    /**
      * Gutter "implementations/overrides" markers for [file]'s last parse: one per INHERITABLE type declaration
      * (an interface, or an `open`/`abstract`/`sealed` class — a `final` class / object / enum / annotation is
      * skipped, nothing can extend it) that actually has direct inheritors in the [dev.ide.index.SubtypeIndex].
@@ -873,7 +881,7 @@ class KotlinEditorFeatures(
         val sig = signatureOf(decl)
         fun sourceMemberOf(typeFqn: String): Pair<String, Int>? =
             memberDeclaredIn(typeFqn, name, sig)?.let { (file, at) -> file.path to at }
-                ?: javaMemberDeclaredIn(typeFqn, name)?.let { it.file.path to it.offset }
+                ?: javaMemberDeclaredIn(typeFqn, name, sig)?.let { it.file.path to it.offset }
         val roots = LinkedHashSet<String>().apply { add(ownerFqn) }
         if (overrides) {
             for (st in service.supertypesOf(ownerFqn)) {
@@ -921,12 +929,14 @@ class KotlinEditorFeatures(
      * one), or null. Java's own lookup falls back to the class itself when the member is not there, which is
      * not an answer to this question, so only a method or field counts.
      */
-    private fun javaMemberDeclaredIn(typeFqn: String, name: String): NavTarget? {
-        // Java sees Kotlin classes too (as light classes) and matches members by NAME alone, so asked about a
-        // Kotlin class it would answer with an overload [memberDeclaredIn] just rejected. Kotlin types are this
-        // side's to judge; only a type with no Kotlin source is a Java one.
+    private fun javaMemberDeclaredIn(typeFqn: String, name: String, sig: MemberSignature? = null): NavTarget? {
+        // Java sees Kotlin classes too (as light classes), so asked about a Kotlin class it would answer with an
+        // overload [memberDeclaredIn] just rejected. Kotlin types are this side's to judge; only a type with no
+        // Kotlin source is a Java one. A function's parameters pick the Java overload (a type written with a
+        // type parameter fits anything).
         if (service.sourceFileDeclaringType(typeFqn) != null) return null
-        return javaSourceLocator(typeFqn, name)?.takeIf { it.kind == "method" || it.kind == "field" }
+        val paramTypes = sig?.let { s -> s.types.map { t -> if (s.mentionsTypeParameter(t)) "" else t } }
+        return javaMemberLocator(typeFqn, name, paramTypes)?.takeIf { it.kind == "method" || it.kind == "field" }
     }
 
     /**
@@ -943,9 +953,12 @@ class KotlinEditorFeatures(
             return types.indices.all { i ->
                 val b = types[i]
                 val c = other.types[i]
-                b == c || b.isEmpty() || c.isEmpty() || typeParameters.any { tp -> Regex("""\b${Regex.escape(tp)}\b""").containsMatchIn(b) }
+                b == c || b.isEmpty() || c.isEmpty() || mentionsTypeParameter(b)
             }
         }
+
+        fun mentionsTypeParameter(type: String): Boolean =
+            typeParameters.any { tp -> Regex("""\b${Regex.escape(tp)}\b""").containsMatchIn(type) }
     }
 
     private fun signatureOf(decl: KtNamedDeclaration): MemberSignature? {
@@ -989,7 +1002,7 @@ class KotlinEditorFeatures(
                     continue
                 }
                 // A Java class in the project extending the Kotlin one.
-                javaMemberDeclaredIn(sub.fqn, name)?.let { out += it.copy(label = label) }
+                javaMemberDeclaredIn(sub.fqn, name, sig)?.let { out += it.copy(label = label) }
             }
         }
         return out.sortedBy { it.label }

@@ -446,6 +446,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         get() = features.javaSourceLocator
         set(value) { features.javaSourceLocator = value }
 
+    /** See [KotlinEditorFeatures.javaMemberLocator]. */
+    var javaMemberLocator: (fqn: String, member: String, paramTypes: List<String>?) -> NavTarget?
+        get() = features.javaMemberLocator
+        set(value) { features.javaMemberLocator = value }
+
     fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: NavKind): List<NavTarget> =
         features.navigationTargets(file, text, offset, kind)
 

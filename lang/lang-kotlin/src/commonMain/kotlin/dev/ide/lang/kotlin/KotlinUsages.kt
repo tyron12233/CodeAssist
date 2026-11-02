@@ -29,6 +29,10 @@ class KotlinUsageTarget internal constructor(
 ) {
     /** Rename edits Kotlin declarations; a Java or library symbol is renamed (if at all) from its own side. */
     val renameable: Boolean get() = declarations.isNotEmpty()
+
+    /** Whether the declaration at [path]:[offset] (its name) is this target: how a reference resolved by
+     *  another language (Java, through a light class) is matched. */
+    fun isDeclaredAt(path: String, offset: Int): Boolean = usageIdentity(path, offset) in identities
 }
 
 internal fun usageIdentity(path: String, offset: Int): String = "$path#$offset"

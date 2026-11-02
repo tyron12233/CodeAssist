@@ -126,7 +126,7 @@ internal class RefactorService(
      */
     fun usages(file: Path, text: String, offset: Int): List<Pair<Path, TextRange>> {
         if (ctx.analysisDisabled(file)) return emptyList()
-        if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.let(kotlin::usages).orEmpty()
+        if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.let(::kotlinTargetUsages).orEmpty()
         val refs = findReferences(file, text, offset)
         if (refs.isEmpty()) return refs
         val module = ctx.moduleForFile(file) ?: return refs
@@ -143,6 +143,44 @@ internal class RefactorService(
         return i.takeIf { Character.isJavaIdentifierStart(text[it]) }
     }
 
+    /** A Kotlin target's references: in Kotlin, and in the Java code that reaches it through its light class. */
+    private fun kotlinTargetUsages(target: KotlinUsageTarget): List<Pair<Path, TextRange>> =
+        kotlin.usages(target) + javaRefsToKotlin(target)
+
+    /**
+     * The Java references to Kotlin [target], each the range of the name Java writes: the declaration's own, or
+     * for a property its accessor (`getName()` / `setName()`, or `isOpen()` / `setOpen()` for an `isOpen`).
+     * Every whole-word occurrence in a project Java file is resolved with Java's go-to-declaration, which lands a
+     * light-class member on its Kotlin declaration, and kept when that is the target's. A local or private Kotlin
+     * symbol is out of Java's reach.
+     */
+    private fun javaRefsToKotlin(target: KotlinUsageTarget): List<Pair<Path, TextRange>> {
+        if (target.scope != null || !target.renameable) return emptyList()
+        val names = javaNamesOf(target)
+        val out = ArrayList<Pair<Path, TextRange>>()
+        for (f in ctx.projectJavaFiles()) {
+            val path = f.toAbsolutePath().normalize()
+            val text = textOf(path) ?: continue
+            for (name in names) {
+                if (!text.contains(name)) continue
+                for (m in Regex("""\b${Regex.escape(name)}\b""").findAll(text)) {
+                    val decl = runCatching { ctx.javaDeclarationAt(path, text, m.range.first) }.getOrNull() ?: continue
+                    if (target.isDeclaredAt(decl.first.toString(), decl.second)) out += path to TextRange(m.range.first, m.range.last + 1)
+                }
+            }
+        }
+        return out
+    }
+
+    /** The names Java writes [target] by: its own, and for a property its getter and setter. */
+    private fun javaNamesOf(target: KotlinUsageTarget): List<String> =
+        if (target.kind == "property") listOf(target.name) + accessorsOf(target.name).toList() else listOf(target.name)
+
+    /** A Kotlin property's JVM getter and setter names: `getName`/`setName`, or `isOpen`/`setOpen` for `isOpen`. */
+    private fun accessorsOf(property: String): Pair<String, String> =
+        if (property.length > 2 && property.startsWith("is") && property[2].isUpperCase()) property to "set" + property.substring(2)
+        else "get" + property.replaceFirstChar { it.uppercaseChar() } to "set" + property.replaceFirstChar { it.uppercaseChar() }
+
     /** `package.Name` for a top-level Java type [name] declared in [path]. */
     private fun javaTypeFqn(path: Path, name: String): String {
         val pkg = textOf(path)?.let { PACKAGE.find(it)?.groupValues?.get(1) }.orEmpty()
@@ -156,7 +194,7 @@ internal class RefactorService(
      */
     fun findReferences(file: Path, text: String, offset: Int): List<Pair<Path, TextRange>> {
         if (ctx.analysisDisabled(file)) return emptyList()
-        if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.let(kotlin::usages).orEmpty()
+        if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.let(::kotlinTargetUsages).orEmpty()
         if (!file.toString().endsWith(".java")) return emptyList()
         val module = ctx.moduleForFile(file) ?: return emptyList()
         return try {
@@ -225,20 +263,18 @@ internal class RefactorService(
             val t = textOf(path) ?: return@flatMap emptyList()
             runCatching { renameHitAt(m, path, t, r.start)?.let { javaRefs(m, path, t, it) } }.getOrNull().orEmpty()
         }
-        val refs = declarations + kotlin.usages(target) + javaOverrideRefs
-        // Java code reaching a Kotlin declaration goes through light classes this side does not resolve against,
-        // so it is not rewritten. Saying where it is beats leaving it to the next build to find.
-        val touched = refs.map { it.first }.toSet()
-        val javaFiles = if (target.scope != null) emptyList() else ctx.projectJavaFiles().filter { f ->
-            val abs = f.toAbsolutePath().normalize()
-            abs !in touched && textOf(abs)?.let { containsWord(it, target.name) } == true
-        }
-        val note = javaFiles.takeIf { it.isNotEmpty() }?.let { files ->
-            val names = files.take(3).joinToString(", ") { it.fileName.toString() } + if (files.size > 3) ", …" else ""
-            "Java files that mention '${target.name}' were not changed: $names"
-        }
+        val refs = declarations + kotlinTargetUsages(target) + javaOverrideRefs
+        // Java calls a property through its accessors, which take the new name too.
+        val accessorRenames = if (target.kind == "property") {
+            val (oldGet, oldSet) = accessorsOf(target.name)
+            val (newGet, newSet) = accessorsOf(name)
+            mapOf(oldGet to newGet, oldSet to newSet)
+        } else emptyMap()
         val renameFile = target.fileNamedAfter?.let { Paths.get(it).toAbsolutePath().normalize() }
-        return apply(target.name, name, refs, renameFile, ".kt", note, focal = file.toAbsolutePath().normalize() to text)
+        return apply(
+            target.name, name, refs, renameFile, ".kt", note = null, focal = file.toAbsolutePath().normalize() to text,
+            alsoReplace = accessorRenames,
+        )
     }
 
     /**
@@ -250,6 +286,8 @@ internal class RefactorService(
         oldName: String, newName: String, refs: List<Pair<Path, TextRange>>, renameFile: Path?, extension: String, note: String?,
         /** The file the rename started from and the editor's text of it, which is the text the ranges were found in. */
         focal: Pair<Path, String>,
+        /** Other texts a range may hold and what each becomes: a property's Java accessor names. */
+        alsoReplace: Map<String, String> = emptyMap(),
     ): RenameOutcome {
         val byPath = LinkedHashMap<Path, MutableSet<TextRange>>()
         refs.forEach { (p, r) -> byPath.getOrPut(p) { LinkedHashSet() } += r }
@@ -265,8 +303,8 @@ internal class RefactorService(
             for (r in ranges.sortedByDescending { it.start }) {
                 if (r.start < 0 || r.end > sb.length) continue
                 val found = sb.substring(r.start, r.end)
-                if (found != oldName && found != "`$oldName`") continue
-                sb.replace(r.start, r.end, newName)
+                val replacement = if (found == oldName || found == "`$oldName`") newName else alsoReplace[found] ?: continue
+                sb.replace(r.start, r.end, replacement)
                 applied++
             }
             if (applied == 0) continue

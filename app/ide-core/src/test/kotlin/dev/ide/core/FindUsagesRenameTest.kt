@@ -120,6 +120,66 @@ class FindUsagesRenameTest {
         }
     } }
 
+    /** Java code using Kotlin declarations: found and renamed with them, overloads and property accessors included. */
+    @Test
+    fun javaCallersOfKotlinDeclarationsAreFoundAndRenamed() { withTempDir("java-callers") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val src = ide.coreSrc().resolve("com/example/core")
+            val pet = src.resolve("Pet.kt")
+            val parrot = src.resolve("Parrot.java")
+            val owner = src.resolve("Owner.java")
+            ide.save(
+                pet,
+                "package com.example.core\n\nopen class Pet {\n    var title: String = \"\"\n" +
+                    "    open fun greet(times: Int) {}\n    open fun greet(name: String) {}\n}\n",
+            )
+            ide.save(
+                parrot,
+                "package com.example.core;\n\npublic class Parrot extends Pet {\n" +
+                    "    @Override public void greet(String name) {}\n    @Override public void greet(int times) {}\n}\n",
+            )
+            ide.save(
+                owner,
+                "package com.example.core;\n\nclass Owner {\n    void walk(Pet p) {\n        p.greet(3);\n        p.greet(\"hi\");\n" +
+                    "        p.setTitle(p.getTitle() + \"!\");\n        Pet q = new Pet();\n    }\n}\n",
+            )
+            val deadline = System.currentTimeMillis() + 180_000
+            while (ide.indexStatus.value.message != "Indexed" && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            val petText = Files.readString(pet)
+            val ownerText = Files.readString(owner)
+            val parrotText = Files.readString(parrot)
+
+            // Find Usages on one overload finds the Java call that binds to it, not the other overload's.
+            val greetInt = petText.indexOf("greet(times")
+            eventually("Owner's greet(3) is a usage of greet(times: Int)") {
+                usages(ide, pet, "greet(times").any { it.startsWith("Owner.java:5") }
+            }
+            assertTrue(usages(ide, pet, "greet(times").none { it.startsWith("Owner.java:6") }, "greet(\"hi\") is the other overload")
+
+            // Go to Implementation picks the Java override with the matching parameters.
+            val impl = ide.navigationTargets(pet, petText, greetInt, NavKind.IMPLEMENTATION)
+            assertEquals(listOf(parrotText.indexOf("greet(int")), impl.filter { it.file.path.endsWith("Parrot.java") }.map { it.offset })
+
+            // A property is reached from Java through its accessors.
+            assertTrue(usages(ide, pet, "title").any { it.startsWith("Owner.java:7") }, "getTitle()/setTitle()")
+
+            // Renaming the property renames the accessors Java calls.
+            val titleOutcome = runBlocking { ide.rename(pet, petText, petText.indexOf("title"), "caption") }
+            assertTrue(titleOutcome.success, titleOutcome.message)
+            assertTrue(Files.readString(owner).contains("p.setCaption(p.getCaption() + \"!\")"), Files.readString(owner))
+
+            // Renaming the class renames Java's uses of it.
+            val petNow = Files.readString(pet)
+            val classOutcome = runBlocking { ide.rename(pet, petNow, petNow.indexOf("Pet"), "Animal2") }
+            assertTrue(classOutcome.success, classOutcome.message)
+            assertTrue(Files.readString(parrot).contains("extends Animal2"), Files.readString(parrot))
+            assertTrue(Files.readString(owner).contains("Animal2 q = new Animal2()"), Files.readString(owner))
+            assertTrue(Files.readString(owner).contains("void walk(Animal2 p)"), Files.readString(owner))
+            assertEquals(ownerText.length - 2 * "Pet".length + 2 * "Animal2".length + 2 * ("Caption".length - "Title".length) +
+                "Animal2".length - "Pet".length, Files.readString(owner).length, "nothing else changed")
+        }
+    } }
+
     @Test
     fun aJavaClassIsFoundAndRenamedInKotlinToo() { withTempDir("rename-java") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->

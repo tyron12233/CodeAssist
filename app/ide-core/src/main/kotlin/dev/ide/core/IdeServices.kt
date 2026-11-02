@@ -621,6 +621,7 @@ class IdeServices private constructor(
 
         override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
         override fun projectKotlinFiles() = this@IdeServices.projectFilesEndingWith(".kt")
+        override fun javaDeclarationAt(file: Path, text: String, offset: Int) = this@IdeServices.javaDeclarationAt(file, text, offset)
         override fun isValidJavaIdentifier(s: String) = this@IdeServices.isValidJavaIdentifier(s)
         override val composePreviewRunner get() = this@IdeServices.composePreviewRunner
         override fun analyzerFor(module: Module, language: LanguageId) =
@@ -2538,6 +2539,7 @@ class IdeServices private constructor(
                     it.isAndroidModule =
                         module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
                     it.javaSourceLocator = { fqn, member -> javaSourceTarget(module, fqn, member) }
+                    it.javaMemberLocator = { fqn, member, paramTypes -> javaSourceTarget(module, fqn, member, paramTypes) }
                     it.apiContext = { apiLevelContext(module.id) }
                     it.permissionContext = { permissionContext(module.id) }
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
@@ -3249,7 +3251,7 @@ class IdeServices private constructor(
             )
             is dev.ide.lang.java.navigate.JavaNavLocation.Generated ->
                 openJavaBufferDeclaring(loc.topLevelFqn)?.let { it to loc.offset }
-                    ?: kotlinLightClassLocation(loc.classFqn, loc.member)
+                    ?: kotlinLightClassLocation(loc.classFqn, loc.member, loc.paramCount, loc.paramTypes)
                     ?: return@mapNotNull null
         }
         dev.ide.lang.kotlin.NavTarget(store.vfs.fileFor(path), offset, t.label, t.kind)
@@ -3257,10 +3259,26 @@ class IdeServices private constructor(
 
     /** A Kotlin file's go-to into the project's Java source: the class [fqn] or its [member], resolved by the
      *  Java analyzer of [module]. */
-    private fun javaSourceTarget(module: Module, fqn: String, member: String?): dev.ide.lang.kotlin.NavTarget? {
+    private fun javaSourceTarget(
+        module: Module, fqn: String, member: String?, paramTypes: List<String>? = null,
+    ): dev.ide.lang.kotlin.NavTarget? {
         val java = analyzerFor(module) as? dev.ide.lang.java.JavaSourceAnalyzer ?: return null
-        val target = runCatching { java.declarationOf(fqn, member) }.getOrNull() ?: return null
+        val target = runCatching { java.declarationOf(fqn, member, paramTypes) }.getOrNull() ?: return null
         return javaNavTargets(null, listOf(target)).firstOrNull()
+    }
+
+    /**
+     * Where the symbol a reference at [offset] in Java [file] resolves to is declared (file, name offset), through
+     * Java's go-to-declaration: a Java declaration, or a Kotlin one reached through its light class. Null when it
+     * resolves to nothing or to a library.
+     */
+    internal fun javaDeclarationAt(file: Path, text: String, offset: Int): Pair<Path, Int>? {
+        val java = javaAnalyzerFor(file) ?: return null
+        val raw = runCatching {
+            java.navigationTargets(store.vfs.fileFor(file), text, offset, dev.ide.lang.java.navigate.JavaNavKind.DECLARATION)
+        }.getOrNull() ?: return null
+        val t = javaNavTargets(file, raw).firstOrNull { it.kind != "library" } ?: return null
+        return Paths.get(t.file.path).toAbsolutePath().normalize() to t.offset
     }
 
     /** The open `.java` buffer whose top-level class is [fqn]. */
@@ -3268,11 +3286,13 @@ class IdeServices private constructor(
         javaOverlayEntries.entries.firstOrNull { (path, e) -> e.fqcn == fqn && openDocuments.containsKey(path) }?.key
 
     /** Where the Kotlin declaration rendered as light class [classFqn]'s [member] is. */
-    private fun kotlinLightClassLocation(classFqn: String, member: String?): Pair<Path, Int>? {
+    private fun kotlinLightClassLocation(
+        classFqn: String, member: String?, paramCount: Int? = null, paramTypes: List<String>? = null,
+    ): Pair<Path, Int>? {
         val path = Paths.get(kotlinLightClasses.fileDeclaring(classFqn) ?: return null)
         val text = openDocuments[path] ?: runCatching { path.readText() }.getOrNull() ?: return null
         val offset = runCatching {
-            dev.ide.lang.kotlin.synthetic.LightClassDeclarations.offsetOf(path.fileName.toString(), text, classFqn, member)
+            dev.ide.lang.kotlin.synthetic.LightClassDeclarations.offsetOf(path.fileName.toString(), text, classFqn, member, paramCount, paramTypes)
         }.getOrDefault(0)
         return path to offset
     }

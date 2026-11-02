@@ -46,6 +46,10 @@ sealed interface JavaNavLocation {
         val topLevelFqn: String,
         val member: String?,
         val offset: Int,
+        /** For a method, its parameter count, which tells overloads of [member] apart. */
+        val paramCount: Int? = null,
+        /** For a method, its parameter types' simple names (`int`, `String`, `List`): overloads of one arity. */
+        val paramTypes: List<String>? = null,
     ) : JavaNavLocation
 
     /** A compiled class on the classpath. [classFqn] is the outermost class; [member] the member or nested
@@ -91,9 +95,15 @@ class JavaNavigation(
      * a nested class, or the getter behind a Kotlin property name). Null for a class that is not source: the
      * caller reaches compiled classes its own way.
      */
-    fun declarationOf(fqn: String, member: String?): JavaNavTarget? {
+    fun declarationOf(fqn: String, member: String?, paramTypes: List<String>? = null): JavaNavTarget? {
         val cls = facade.findClass(fqn, GlobalSearchScope.allScope(facade.project)) ?: return null
         if (cls is PsiCompiledElement) return null
+        // With [paramTypes], the one overload whose parameters fit, and nothing else: a member that is not
+        // declared here must not be answered with the class or a same-named overload.
+        if (member != null && paramTypes != null) {
+            val m = cls.findMethodsByName(member, false).firstOrNull { parametersFit(it, paramTypes) } ?: return null
+            return target(m, from = null)
+        }
         val e: PsiElement = member?.let { name ->
             val cap = name.replaceFirstChar { it.uppercaseChar() }
             cls.findMethodsByName(name, false).firstOrNull()
@@ -104,6 +114,26 @@ class JavaNavigation(
         } ?: cls
         return target(e, from = null)
     }
+
+    /**
+     * Whether [method]'s parameters fit [kotlinTypes]: the same count, and each type the same simple name once a
+     * Kotlin name is mapped to Java's (`Int` is `int` or `Integer`, `Any` is `Object`, ...). An empty entry is a
+     * type not known (or a type parameter) and fits anything.
+     */
+    private fun parametersFit(method: PsiMethod, kotlinTypes: List<String>): Boolean {
+        val params = method.parameterList.parameters
+        if (params.size != kotlinTypes.size) return false
+        return params.indices.all { i ->
+            val k = simpleTypeName(kotlinTypes[i])
+            if (k.isEmpty()) return@all true
+            val j = simpleTypeName(params[i].type.presentableText)
+            j == k || j in (KOTLIN_TO_JAVA[k] ?: emptySet()) || (k.endsWith("Array") && j.endsWith("[]"))
+        }
+    }
+
+    /** `java.util.List<String>?` -> `List`. */
+    private fun simpleTypeName(text: String): String =
+        text.substringBefore('<').removeSuffix("?").trim().substringAfterLast('.')
 
     private fun targetsFor(kind: JavaNavKind, caret: Caret, file: PsiJavaFile): List<JavaNavTarget> {
         val elements = when (kind) {
@@ -222,6 +252,9 @@ class JavaNavigation(
             topLevelFqn = outermost(owner).qualifiedName ?: return null,
             member = member,
             offset = offset,
+            paramCount = (e as? PsiMethod)?.takeIf { !it.isConstructor }?.parameterList?.parametersCount,
+            paramTypes = (e as? PsiMethod)?.takeIf { !it.isConstructor }?.parameterList?.parameters
+                ?.map { simpleTypeName(it.type.presentableText) },
         )
     }
 
@@ -261,3 +294,13 @@ class JavaNavigation(
         const val MAX_IMPLEMENTATIONS = 100
     }
 }
+
+/** Kotlin type names and the Java ones a parameter of that type can be written as. */
+private val KOTLIN_TO_JAVA: Map<String, Set<String>> = mapOf(
+    "Int" to setOf("int", "Integer"), "Long" to setOf("long", "Long"), "Short" to setOf("short", "Short"),
+    "Byte" to setOf("byte", "Byte"), "Char" to setOf("char", "Character"), "Boolean" to setOf("boolean", "Boolean"),
+    "Float" to setOf("float", "Float"), "Double" to setOf("double", "Double"), "Any" to setOf("Object"),
+    "Unit" to setOf("void"), "MutableList" to setOf("List"), "MutableMap" to setOf("Map"), "MutableSet" to setOf("Set"),
+    "MutableCollection" to setOf("Collection"), "MutableIterable" to setOf("Iterable"), "CharSequence" to setOf("CharSequence"),
+)
+

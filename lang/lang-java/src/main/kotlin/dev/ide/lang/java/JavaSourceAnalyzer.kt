@@ -241,8 +241,8 @@ class JavaSourceAnalyzer private constructor(
         IntellijPsiHost.withParseLock { navigation.targets(psiOf(file, text), offset, kind) }
 
     /** Where the source class [fqn], or its [member], is declared, for a go-to from another language. */
-    fun declarationOf(fqn: String, member: String?): JavaNavTarget? =
-        IntellijPsiHost.withParseLock { navigation.declarationOf(fqn, member) }
+    fun declarationOf(fqn: String, member: String?, paramTypes: List<String>? = null): JavaNavTarget? =
+        IntellijPsiHost.withParseLock { navigation.declarationOf(fqn, member, paramTypes) }
 
     /** The go-to actions that have a target at [offset], each with its targets. */
     fun navigationOptions(file: VirtualFile, text: CharSequence, offset: Int): List<Pair<JavaNavKind, List<JavaNavTarget>>> =

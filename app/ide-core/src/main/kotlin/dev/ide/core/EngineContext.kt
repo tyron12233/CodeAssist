@@ -149,6 +149,10 @@ internal interface EngineContext {
     /** Every project `.kt` file across all modules' source roots — the Kotlin usage-sweep candidates. */
     fun projectKotlinFiles(): List<Path>
 
+    /** Where the reference at [offset] in Java [file] resolves (file, name offset), by Java's go-to-declaration;
+     *  a Kotlin declaration is reached through its light class. Null when nothing in the project. */
+    fun javaDeclarationAt(file: Path, text: String, offset: Int): Pair<Path, Int>?
+
     /** True if [s] is a valid Java identifier (and not a reserved word) — the rename validator. */
     fun isValidJavaIdentifier(s: String): Boolean
 
