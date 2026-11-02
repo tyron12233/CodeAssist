@@ -17,6 +17,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.runtime.IntState
+import androidx.compose.runtime.NonSkippableComposable
+import androidx.compose.runtime.State
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -345,7 +352,8 @@ private fun CodeEditorContent(
     // while the DRAWN highlight grows from the previous range to it over a short tween (1f = settled). Keyed on
     // the request token so each expansion (and each step of a chain) restarts the growth from the new base.
     val expandProgress = remember { Animatable(1f) }
-    var expandAnimToken by remember { mutableIntStateOf(-1) }
+    val expandAnimTokenState = remember { mutableIntStateOf(-1) }
+    var expandAnimToken by expandAnimTokenState
     LaunchedEffect(acts.selectionExpand?.token) {
         val e = acts.selectionExpand ?: return@LaunchedEffect
         expandAnimToken = e.token // mark this request's animation as started (drawBehind treats not-yet-started as 0f)
@@ -353,19 +361,20 @@ private fun CodeEditorContent(
         expandProgress.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
     }
     val find = rememberFindReplaceController(path, editorSession)
-    var gotoLineOpen by remember(path) { mutableStateOf(false) }
-    var quickDoc by remember(path) { mutableStateOf<UiQuickDoc?>(null) }
-    var rename by remember(path) { mutableStateOf<RenameUiState?>(null) }
-    var renameBusy by remember(path) { mutableStateOf(false) }
-    var renameError by remember(path) { mutableStateOf<String?>(null) }
-    // The source-navigation dropdown / target picker (Go to Declaration / Implementation / Type / Super).
-    var navMenu by remember(path) { mutableStateOf<NavMenuState?>(null) }
+    // The prompts, menus and popups over the editor (go-to-line, quick doc, rename, Go to menu, context menu,
+    // hover problem popup). Held together so [EditorDialogsLayer] can render them; the locals below keep their
+    // names for the code here that opens and closes them.
+    val popups = remember(path) { EditorPopupState() }
+    var gotoLineOpen by popups::gotoLineOpen
+    var quickDoc by popups::quickDoc
+    var rename by popups::rename
+    var renameBusy by popups::renameBusy
+    var renameError by popups::renameError
+    var navMenu by popups::navMenu
     // Mouse: the hover popups, the Ctrl/⌘ link and the right-click menu (see EditorMouseSupport).
     val hover = remember(path) { EditorHoverState() }
-    var contextMenuAt by remember(path) { mutableStateOf<Offset?>(null) }
-    // The problem popup opened by resting the pointer on a problem, by the sheet group it opened (a click that
-    // opens another group replaces it, and must not be closed when the hover hides).
-    var hoverSheetGroup by remember(path) { mutableStateOf<List<UiDiagnostic>?>(null) }
+    var contextMenuAt by popups::contextMenuAt
+    var hoverSheetGroup by popups::hoverSheetGroup
 
     /** Run one source go-to for [kind] (a keyboard shortcut): exactly one target navigates immediately; 0 or
      *  many open the dropdown (a "nothing found" note, or a target picker). */
@@ -1144,7 +1153,6 @@ private fun CodeEditorContent(
         }
     }
 
-    var pointerOverGutter by remember { mutableStateOf(false) }
     Box(
         modifier
             .background(colors.editorBg)
@@ -1154,108 +1162,46 @@ private fun CodeEditorContent(
                 paneBottomInWindow = it.positionInWindow().y + it.size.height
             },
     ) {
-        Box(
-            Modifier
-                .editorInput(
-                    session = editorSession,
-                    geometry = geometry,
-                    interaction = interaction,
-                    acts = acts,
-                    completion = completion,
-                    focus = focus,
-                    editorIme = editorIme,
-                    scope = scope,
-                    softKeyboardSuggestions = softKeyboardSuggestions,
-                    metrics = metrics,
-                    gutterWidthPx = gutterWidthPx,
-                    wrapActive = geometry.wrapActive,
-                    pinchZoom = pinchZoom,
-                    liveScale = liveScale,
-                    onFontScaleChange = onFontScaleChange,
-                    useTwoAxisScroll = twoAxisScroll,
-                    scroll2D = geometry.scroll2D,
-                    vScroll = geometry.vScroll,
-                    hScroll = geometry.hScroll,
-                    onViewportSize = { geometry.viewport.value = it },
-                    onContentPositioned = { geometry.contentInWindow.value = it },
-                    onFocusedChange = { isFocused = it },
-                    onDismissQuickDoc = { quickDoc = null },
-                    onPreviewKey = ::onPreviewKey,
-                    onKey = ::handleKey,
-                    hover = hover,
-                    onContextMenu = ::openContextMenu,
-                    onLinkClick = { offset ->
-                        editorSession.setCaret(offset)
-                        runNav(UiNavKind.DECLARATION)
-                    },
-                )
-                // A text (I-beam) cursor over the code, and the normal arrow over the gutter, as in IntelliJ. Reads
-                // the hover position on the Initial pass without consuming it, so the editor's input is untouched.
-                .pointerInput(gutterWidthPx) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (event.type == PointerEventType.Move || event.type == PointerEventType.Enter) {
-                                pointerOverGutter = event.changes.first().position.x < gutterWidthPx
-                            }
-                        }
-                    }
-                }
-                .pointerHoverIcon(
-                    when {
-                        hover.link != null -> PointerIcon.Hand // Ctrl/⌘ held over an identifier: a link
-                        pointerOverGutter -> PointerIcon.Default
-                        else -> PointerIcon.Text
-                    },
-                )
-                .drawBehind {
-                    // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
-                    // state → this draw re-runs per frame while it animates). Before the tween has started for
-                    // this request, treat progress as 0 (draw the pre-expand span) so the final range never
-                    // flashes for a frame. Null once settled.
-                    val expand = acts.selectionExpand
-                    val animatedSel: Pair<Int, Int>? = if (expand != null) {
-                        val ep = if (expandAnimToken == expand.token) expandProgress.value else 0f
-                        if (ep < 1f) {
-                            val mn = expand.fromMin + ((expand.toMin - expand.fromMin) * ep).toInt()
-                            val mx = expand.fromMax + ((expand.toMax - expand.fromMax) * ep).toInt()
-                            mn to mx
-                        } else null
-                    } else null
-                    caretClip.codeTop = drawEditor(
-                        session = editorSession,
-                        metrics = metrics,
-                        gutterWidth = gutterWidthPx,
-                        vOff = geometry.vOffset.floatValue,
-                        hOff = geometry.hOffset.floatValue,
-                        layoutFor = renderState::layoutFor,
-                        compositeLayoutFor = renderState::compositeLayoutFor,
-                        rawToVisual = renderState.renderCache::rawToVisual,
-                        foldModel = editorSession.foldModel,
-                        vlayout = geometry.vlayout,
-                        wrap = geometry.wrapActive,
-                        foldableStartLines = renderState.foldableStartLines,
-                        foldStripWidth = renderState.foldStripPx,
-                        hoveredLine = interaction.hoveredLine,
-                        numberLayout = renderState::numberLayout,
-                        diagByLine = diagByLine,
-                        bracketPair = bracketPair,
-                        findMatches = if (find.open) find.matches else emptyList(),
-                        currentMatch = find.currentIndex,
-                        occurrences = occurrences,
-                        templateFields = snippet?.fieldRanges().orEmpty(),
-                        decoByLine = renderState.decoByLine,
-                        filePath = path,
-                        painters = painters,
-                        indentColsFor = renderState::indentColsFor,
-                        stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
-                        colors = drawColors,
-                        handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
-                        handleColor = colors.accent,
-                        animatedSelection = animatedSel,
-                        spookyErrors = halloween,
-                    )
-                },
+        EditorCanvasLayer(
+            editorSession = editorSession,
+            path = path,
+            geometry = geometry,
+            interaction = interaction,
+            renderState = renderState,
+            metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+            wrapActive = geometry.wrapActive,
+            acts = acts,
+            completion = completion,
+            find = find,
+            hover = hover,
+            focus = focus,
+            scope = scope,
+            softKeyboardSuggestions = softKeyboardSuggestions,
+            pinchZoom = pinchZoom,
+            liveScale = liveScale,
+            onFontScaleChange = onFontScaleChange,
+            twoAxisScroll = twoAxisScroll,
+            caretClip = caretClip,
+            expandProgress = expandProgress,
+            expandAnimToken = expandAnimTokenState,
+            diagByLine = diagByLine,
+            bracketPair = bracketPair,
+            occurrences = occurrences,
+            templateFields = { snippet?.fieldRanges().orEmpty() },
+            painters = painters,
+            drawColors = drawColors,
+            handleColor = colors.accent,
+            halloween = halloween,
+            onFocusedChange = { isFocused = it },
+            onDismissQuickDoc = { quickDoc = null },
+            onPreviewKey = ::onPreviewKey,
+            onKey = ::handleKey,
+            onContextMenu = ::openContextMenu,
+            onLinkClick = { offset ->
+                editorSession.setCaret(offset)
+                runNav(UiNavKind.DECLARATION)
+            },
         )
 
         // The caret, in a layer of its own (see [drawCaret]). The blink is read in the layer block, so it changes
@@ -1441,160 +1387,382 @@ private fun CodeEditorContent(
             gutterWidthPx = gutterWidthPx,
         )
 
-        // go-to-line prompt — a small centered card; jumps the caret (the into-view effect scrolls to it)
-        if (gotoLineOpen) {
-            GoToLinePopup(
-                lineCount = editorSession.doc.lineCount,
-                onGo = { line, col ->
-                    val d = editorSession.doc
-                    val l = (line - 1).coerceIn(0, d.lineCount - 1)
-                    val off = (d.lineStart(l) + (col - 1).coerceAtLeast(0)).coerceAtMost(d.lineEnd(l))
-                    editorSession.setCaret(off)
-                    gotoLineOpen = false
-                    runCatching { focus.requestFocus() }
-                },
-                onCancel = { gotoLineOpen = false; runCatching { focus.requestFocus() } },
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        }
-
-        // quick-documentation popup — a floating card; dismissed by Esc, a tap, or a navigation/edit key.
-        quickDoc?.let { QuickDocPopup(it, Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) }
-
-        // rename prompt — a small centered card over the editor
-        rename?.let { r ->
-            RenamePopup(
-                state = r,
-                busy = renameBusy,
-                error = renameError,
-                onChange = { rename = r.copy(newName = it) },
-                onCommit = { commitRename() },
-                onCancel = {
-                    if (!renameBusy) {
-                        rename = null; renameError = null
-                    }
-                },
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        }
-
-        // diagnostic sheet: every diagnostic in the tapped area, plus the selected one's full (scrollable)
-        // message and its fixes, docked at the pane bottom
-        // With a mouse it is a popup anchored at the problem; on touch the bottom sheet, sized for a thumb.
-        val fromHover = hoverSheetGroup != null && hoverSheetGroup === acts.sheetGroup
-        if ((engaged || fromHover) && acts.sheetGroup.isNotEmpty()) {
-            if (!isMobilePlatform || !interaction.lastInputWasTouch) {
-                val anchor = (acts.sheetGroup.getOrNull(acts.sheetSelected) ?: acts.sheetGroup.first()).startOffset
-                DiagnosticPopup(
-                    diagnostics = acts.sheetGroup,
-                    selected = acts.sheetSelected,
-                    actions = acts.sheetActions,
-                    onSelect = { acts.selectSheet(it) },
-                    onPick = { acts.applySheetFix(it) },
-                    onDismiss = { acts.closeSheet() },
-                    position = rememberLinePosition(
-                        anchor.coerceIn(0, editorSession.doc.length), { geometry.caretGeometry(it) },
-                        metrics.lineHeight, gutterWidthPx,
-                    ),
-                    modifier = if (fromHover) Modifier.trackPopupHover(hover) else Modifier,
-                )
-            } else {
-                DiagnosticSheet(
-                    diagnostics = acts.sheetGroup,
-                    selected = acts.sheetSelected,
-                    actions = acts.sheetActions,
-                    onSelect = { acts.selectSheet(it) },
-                    onPick = { acts.applySheetFix(it) },
-                    onDismiss = { acts.closeSheet() },
-                )
-            }
-        }
-
-        // The hovered symbol's documentation, beside it.
-        (hover.info as? HoverInfo.Doc)?.let { info ->
-            if (!obscured) HoverDocPopup(info, hover, { geometry.caretGeometry(it) }, metrics.lineHeight, gutterWidthPx)
-        }
-        // The Ctrl/⌘ link under the pointer.
-        hover.link?.let { LinkUnderline(it, { off -> geometry.caretGeometry(off) }, metrics.lineHeight) }
-        // The right-click menu, at the pointer.
-        contextMenuAt?.let { at ->
-            EditorContextMenu(
-                at = at,
-                hasSelection = !editorSession.selection.collapsed,
-                readOnly = readOnly,
-                pluginMenu = acts.editorMenu,
-                // Resolved again on pick: moving the caret to the click re-runs the editor's own availability
-                // pass, which can clear what the right-click resolved.
-                onShowActions = {
-                    scope.launch {
-                        acts.resolveContextMenu()
-                        if (acts.available.isNotEmpty()) acts.openMenu()
-                    }
-                },
-                onCommand = { runEditorCommand(it) },
-                onCut = { editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
-                onCopy = { editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
-                onPaste = { clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) } },
-                onSelectAll = { editorSession.selectAll() },
-                onPluginAction = { acts.invokeMenuAction(it.id) },
-                onDismiss = {
-                    contextMenuAt = null
-                    focus.requestFocus()
-                },
-            )
-        }
-
-        // source-navigation dropdown — the Go-to menu (from long-press / shortcuts) and its target picker,
-        // anchored under the caret like the code-actions menu.
-        NavMenuLayer(
-            state = navMenu,
-            actions = acts.available,
-            menu = acts.editorMenu,
-            onMenuAction = { item -> navMenu = null; acts.invokeMenuAction(item.id) },
-            engaged = engaged,
-            caretOffset = caretOffset,
-            caretGeometry = { geometry.caretGeometry(it) },
+        EditorDialogsLayer(
+            popups = popups,
+            editorSession = editorSession,
+            acts = acts,
+            find = find,
+            hover = hover,
+            interaction = interaction,
+            geometry = geometry,
             metrics = metrics,
             gutterWidthPx = gutterWidthPx,
-            onOption = { opt ->
-                if (opt.kind == UiNavKind.USAGES && opt.targets.isEmpty()) {
-                    navMenu = null
-                    runNav(UiNavKind.USAGES) // the lazily-searched entry (see openNavMenu)
-                } else if (opt.targets.size == 1) {
-                    navMenu = null
-                    onNavigate(opt.targets[0].path, opt.targets[0].offset)
-                } else {
-                    navMenu = NavMenuState.Results(opt.targets)
+            engaged = engaged,
+            obscured = obscured,
+            readOnly = readOnly,
+            caretOffset = caretOffset,
+            focus = focus,
+            scope = scope,
+            commands = object : EditorDialogCommands {
+                override fun onCommitRename() = commitRename()
+                override fun onStartRename() = startRename()
+                override fun onRunNav(kind: UiNavKind) = runNav(kind)
+                override fun onEditorCommand(id: String) = runEditorCommand(id)
+                override fun onNavigateTo(path: String, offset: Int) = onNavigate(path, offset)
+            },
+        )
+    }
+}
+
+
+/**
+ * The code canvas: the input chain (IME, keys, gestures, hover, pinch) and the one `drawBehind` that paints the
+ * text, gutter and in-text overlays. Extracted from [CodeEditorContent] so ART can compile that method (see the
+ * note above [CompletionPopupLayer]). Non-skippable on purpose: it reads holder fields that are plain vars
+ * refreshed on each recomposition of the parent, so it must recompose exactly when the inline block did. The
+ * expand-selection token and the template fields are still read in the draw phase, as before.
+ */
+@NonSkippableComposable
+@Composable
+private fun EditorCanvasLayer(
+    editorSession: EditorSession,
+    path: String,
+    geometry: EditorGeometry,
+    interaction: EditorInteraction,
+    renderState: EditorRenderState,
+    metrics: EditorMetrics,
+    gutterWidthPx: Float,
+    wrapActive: Boolean,
+    acts: EditorActionsController,
+    completion: CompletionController,
+    find: FindReplaceController,
+    hover: EditorHoverState,
+    focus: FocusRequester,
+    scope: CoroutineScope,
+    softKeyboardSuggestions: Boolean,
+    pinchZoom: Boolean,
+    liveScale: State<Float>,
+    onFontScaleChange: (Float) -> Unit,
+    twoAxisScroll: Boolean,
+    caretClip: CaretClip,
+    expandProgress: Animatable<Float, AnimationVector1D>,
+    expandAnimToken: IntState,
+    diagByLine: Map<Int, List<DiagSeg>>,
+    bracketPair: Pair<Int, Int>?,
+    occurrences: List<Match>,
+    templateFields: () -> List<IntRange>,
+    painters: EditorPainters,
+    drawColors: EditorDrawColors,
+    handleColor: Color,
+    halloween: Boolean,
+    onFocusedChange: (Boolean) -> Unit,
+    onDismissQuickDoc: () -> Unit,
+    onPreviewKey: (KeyEvent) -> Boolean,
+    onKey: (KeyEvent) -> Boolean,
+    onContextMenu: (Offset) -> Unit,
+    onLinkClick: (Int) -> Unit,
+) {
+    var pointerOverGutter by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .editorInput(
+                session = editorSession,
+                geometry = geometry,
+                interaction = interaction,
+                acts = acts,
+                completion = completion,
+                focus = focus,
+                editorIme = editorSession.ime,
+                scope = scope,
+                softKeyboardSuggestions = softKeyboardSuggestions,
+                metrics = metrics,
+                gutterWidthPx = gutterWidthPx,
+                wrapActive = wrapActive,
+                pinchZoom = pinchZoom,
+                liveScale = liveScale,
+                onFontScaleChange = onFontScaleChange,
+                useTwoAxisScroll = twoAxisScroll,
+                scroll2D = geometry.scroll2D,
+                vScroll = geometry.vScroll,
+                hScroll = geometry.hScroll,
+                onViewportSize = { geometry.viewport.value = it },
+                onContentPositioned = { geometry.contentInWindow.value = it },
+                onFocusedChange = onFocusedChange,
+                onDismissQuickDoc = onDismissQuickDoc,
+                onPreviewKey = onPreviewKey,
+                onKey = onKey,
+                hover = hover,
+                onContextMenu = onContextMenu,
+                onLinkClick = onLinkClick,
+            )
+            // A text (I-beam) cursor over the code, and the normal arrow over the gutter, as in IntelliJ. Reads
+            // the hover position on the Initial pass without consuming it, so the editor's input is untouched.
+            .pointerInput(gutterWidthPx) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Move || event.type == PointerEventType.Enter) {
+                            pointerOverGutter = event.changes.first().position.x < gutterWidthPx
+                        }
+                    }
+                }
+            }
+            .pointerHoverIcon(
+                when {
+                    hover.link != null -> PointerIcon.Hand // Ctrl/⌘ held over an identifier: a link
+                    pointerOverGutter -> PointerIcon.Default
+                    else -> PointerIcon.Text
+                },
+            )
+            .drawBehind {
+                // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
+                // state → this draw re-runs per frame while it animates). Before the tween has started for
+                // this request, treat progress as 0 (draw the pre-expand span) so the final range never
+                // flashes for a frame. Null once settled.
+                val expand = acts.selectionExpand
+                val animatedSel: Pair<Int, Int>? = if (expand != null) {
+                    val ep = if (expandAnimToken.intValue == expand.token) expandProgress.value else 0f
+                    if (ep < 1f) {
+                        val mn = expand.fromMin + ((expand.toMin - expand.fromMin) * ep).toInt()
+                        val mx = expand.fromMax + ((expand.toMax - expand.fromMax) * ep).toInt()
+                        mn to mx
+                    } else null
+                } else null
+                caretClip.codeTop = drawEditor(
+                    session = editorSession,
+                    metrics = metrics,
+                    gutterWidth = gutterWidthPx,
+                    vOff = geometry.vOffset.floatValue,
+                    hOff = geometry.hOffset.floatValue,
+                    layoutFor = renderState::layoutFor,
+                    compositeLayoutFor = renderState::compositeLayoutFor,
+                    rawToVisual = renderState.renderCache::rawToVisual,
+                    foldModel = editorSession.foldModel,
+                    vlayout = geometry.vlayout,
+                    wrap = geometry.wrapActive,
+                    foldableStartLines = renderState.foldableStartLines,
+                    foldStripWidth = renderState.foldStripPx,
+                    hoveredLine = interaction.hoveredLine,
+                    numberLayout = renderState::numberLayout,
+                    diagByLine = diagByLine,
+                    bracketPair = bracketPair,
+                    findMatches = if (find.open) find.matches else emptyList(),
+                    currentMatch = find.currentIndex,
+                    occurrences = occurrences,
+                    templateFields = templateFields(),
+                    decoByLine = renderState.decoByLine,
+                    filePath = path,
+                    painters = painters,
+                    indentColsFor = renderState::indentColsFor,
+                    stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
+                    colors = drawColors,
+                    handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
+                    handleColor = handleColor,
+                    animatedSelection = animatedSel,
+                    spookyErrors = halloween,
+                )
+            },
+    )
+}
+
+/** What [EditorDialogsLayer] asks of the editor that owns it: the editor's own operations, by name. */
+private interface EditorDialogCommands {
+    fun onCommitRename()
+    fun onStartRename()
+    fun onRunNav(kind: UiNavKind)
+    fun onEditorCommand(id: String): Boolean
+    fun onNavigateTo(path: String, offset: Int)
+}
+
+/**
+ * The prompts, menus and popups over the editor: go-to-line, quick doc, rename, the problem popup/sheet, hover
+ * docs and the Ctrl/⌘ link, the right-click menu, the Go to menu and the find bar. Extracted from
+ * [CodeEditorContent] so ART can compile that method; non-skippable so it recomposes exactly when the inline
+ * block did (it reads holder fields that are plain vars).
+ */
+@NonSkippableComposable
+@Composable
+private fun BoxScope.EditorDialogsLayer(
+    popups: EditorPopupState,
+    editorSession: EditorSession,
+    acts: EditorActionsController,
+    find: FindReplaceController,
+    hover: EditorHoverState,
+    interaction: EditorInteraction,
+    geometry: EditorGeometry,
+    metrics: EditorMetrics,
+    gutterWidthPx: Float,
+    engaged: Boolean,
+    obscured: Boolean,
+    readOnly: Boolean,
+    caretOffset: Int,
+    focus: FocusRequester,
+    scope: CoroutineScope,
+    commands: EditorDialogCommands,
+) {
+    @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
+    var gotoLineOpen by popups::gotoLineOpen
+    val quickDoc = popups.quickDoc
+    var rename by popups::rename
+    val renameBusy = popups.renameBusy
+    var renameError by popups::renameError
+    var navMenu by popups::navMenu
+    var contextMenuAt by popups::contextMenuAt
+    val hoverSheetGroup = popups.hoverSheetGroup
+
+    // go-to-line prompt — a small centered card; jumps the caret (the into-view effect scrolls to it)
+    if (gotoLineOpen) {
+        GoToLinePopup(
+            lineCount = editorSession.doc.lineCount,
+            onGo = { line, col ->
+                val d = editorSession.doc
+                val l = (line - 1).coerceIn(0, d.lineCount - 1)
+                val off = (d.lineStart(l) + (col - 1).coerceAtLeast(0)).coerceAtMost(d.lineEnd(l))
+                editorSession.setCaret(off)
+                gotoLineOpen = false
+                runCatching { focus.requestFocus() }
+            },
+            onCancel = { gotoLineOpen = false; runCatching { focus.requestFocus() } },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+    }
+
+    // quick-documentation popup — a floating card; dismissed by Esc, a tap, or a navigation/edit key.
+    quickDoc?.let { QuickDocPopup(it, Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) }
+
+    // rename prompt — a small centered card over the editor
+    rename?.let { r ->
+        RenamePopup(
+            state = r,
+            busy = renameBusy,
+            error = renameError,
+            onChange = { rename = r.copy(newName = it) },
+            onCommit = { commands.onCommitRename() },
+            onCancel = {
+                if (!renameBusy) {
+                    rename = null; renameError = null
                 }
             },
-            onAction = { a -> val i = acts.available.indexOf(a); navMenu = null; if (i >= 0) acts.applyAt(i) },
-            onPick = { navMenu = null; onNavigate(it.path, it.offset) },
-            onRename = { navMenu = null; startRename() },
-            onDismiss = { navMenu = null },
+            modifier = Modifier.align(Alignment.TopCenter),
         )
+    }
 
-        // find / replace bar, docked at the top of the editor
-        if (find.open) {
-            FindReplaceBar(
-                query = find.query,
-                replace = find.replaceWith,
-                replaceMode = find.replaceMode,
-                options = find.options,
-                matchCount = find.matches.size,
-                currentIndex = if (find.matches.isEmpty()) -1 else find.currentIndex,
-                regexError = find.regexError,
-                onQueryChange = { find.query = it },
-                onReplaceChange = { find.replaceWith = it },
-                onToggleReplaceMode = { find.replaceMode = !find.replaceMode },
-                onOptionsChange = { find.options = it },
-                onPrev = { find.goto(find.currentIndex - 1) },
-                onNext = { find.goto(find.currentIndex + 1) },
-                onReplaceOne = { find.replaceCurrent() },
-                onReplaceAll = { find.replaceAll() },
-                onClose = { find.open = false; runCatching { focus.requestFocus() } },
-                modifier = Modifier.align(Alignment.TopCenter),
+    // diagnostic sheet: every diagnostic in the tapped area, plus the selected one's full (scrollable)
+    // message and its fixes, docked at the pane bottom
+    // With a mouse it is a popup anchored at the problem; on touch the bottom sheet, sized for a thumb.
+    val fromHover = hoverSheetGroup != null && hoverSheetGroup === acts.sheetGroup
+    if ((engaged || fromHover) && acts.sheetGroup.isNotEmpty()) {
+        if (!isMobilePlatform || !interaction.lastInputWasTouch) {
+            val anchor = (acts.sheetGroup.getOrNull(acts.sheetSelected) ?: acts.sheetGroup.first()).startOffset
+            DiagnosticPopup(
+                diagnostics = acts.sheetGroup,
+                selected = acts.sheetSelected,
+                actions = acts.sheetActions,
+                onSelect = { acts.selectSheet(it) },
+                onPick = { acts.applySheetFix(it) },
+                onDismiss = { acts.closeSheet() },
+                position = rememberLinePosition(
+                    anchor.coerceIn(0, editorSession.doc.length), { geometry.caretGeometry(it) },
+                    metrics.lineHeight, gutterWidthPx,
+                ),
+                modifier = if (fromHover) Modifier.trackPopupHover(hover) else Modifier,
+            )
+        } else {
+            DiagnosticSheet(
+                diagnostics = acts.sheetGroup,
+                selected = acts.sheetSelected,
+                actions = acts.sheetActions,
+                onSelect = { acts.selectSheet(it) },
+                onPick = { acts.applySheetFix(it) },
+                onDismiss = { acts.closeSheet() },
             )
         }
+    }
+
+    // The hovered symbol's documentation, beside it.
+    (hover.info as? HoverInfo.Doc)?.let { info ->
+        if (!obscured) HoverDocPopup(info, hover, { geometry.caretGeometry(it) }, metrics.lineHeight, gutterWidthPx)
+    }
+    // The Ctrl/⌘ link under the pointer.
+    hover.link?.let { LinkUnderline(it, { off -> geometry.caretGeometry(off) }, metrics.lineHeight) }
+    // The right-click menu, at the pointer.
+    contextMenuAt?.let { at ->
+        EditorContextMenu(
+            at = at,
+            hasSelection = !editorSession.selection.collapsed,
+            readOnly = readOnly,
+            pluginMenu = acts.editorMenu,
+            // Resolved again on pick: moving the caret to the click re-runs the editor's own availability
+            // pass, which can clear what the right-click resolved.
+            onShowActions = {
+                scope.launch {
+                    acts.resolveContextMenu()
+                    if (acts.available.isNotEmpty()) acts.openMenu()
+                }
+            },
+            onCommand = { commands.onEditorCommand(it) },
+            onCut = { editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
+            onCopy = { editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
+            onPaste = { clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) } },
+            onSelectAll = { editorSession.selectAll() },
+            onPluginAction = { acts.invokeMenuAction(it.id) },
+            onDismiss = {
+                contextMenuAt = null
+                focus.requestFocus()
+            },
+        )
+    }
+
+    // source-navigation dropdown — the Go-to menu (from long-press / shortcuts) and its target picker,
+    // anchored under the caret like the code-actions menu.
+    NavMenuLayer(
+        state = navMenu,
+        actions = acts.available,
+        menu = acts.editorMenu,
+        onMenuAction = { item -> navMenu = null; acts.invokeMenuAction(item.id) },
+        engaged = engaged,
+        caretOffset = caretOffset,
+        caretGeometry = { geometry.caretGeometry(it) },
+        metrics = metrics,
+        gutterWidthPx = gutterWidthPx,
+        onOption = { opt ->
+            if (opt.kind == UiNavKind.USAGES && opt.targets.isEmpty()) {
+                navMenu = null
+                commands.onRunNav(UiNavKind.USAGES) // the lazily-searched entry (see openNavMenu)
+            } else if (opt.targets.size == 1) {
+                navMenu = null
+                commands.onNavigateTo(opt.targets[0].path, opt.targets[0].offset)
+            } else {
+                navMenu = NavMenuState.Results(opt.targets)
+            }
+        },
+        onAction = { a -> val i = acts.available.indexOf(a); navMenu = null; if (i >= 0) acts.applyAt(i) },
+        onPick = { navMenu = null; commands.onNavigateTo(it.path, it.offset) },
+        onRename = { navMenu = null; commands.onStartRename() },
+        onDismiss = { navMenu = null },
+    )
+
+    // find / replace bar, docked at the top of the editor
+    if (find.open) {
+        FindReplaceBar(
+            query = find.query,
+            replace = find.replaceWith,
+            replaceMode = find.replaceMode,
+            options = find.options,
+            matchCount = find.matches.size,
+            currentIndex = if (find.matches.isEmpty()) -1 else find.currentIndex,
+            regexError = find.regexError,
+            onQueryChange = { find.query = it },
+            onReplaceChange = { find.replaceWith = it },
+            onToggleReplaceMode = { find.replaceMode = !find.replaceMode },
+            onOptionsChange = { find.options = it },
+            onPrev = { find.goto(find.currentIndex - 1) },
+            onNext = { find.goto(find.currentIndex + 1) },
+            onReplaceOne = { find.replaceCurrent() },
+            onReplaceAll = { find.replaceAll() },
+            onClose = { find.open = false; runCatching { focus.requestFocus() } },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 }
 
