@@ -45,6 +45,7 @@ import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import dev.ide.platform.DeviceMemory
+import dev.ide.platform.MemoryTier
 import dev.ide.platform.log.Log
 import dev.ide.ui.ads.NativeAdPool
 import dev.ide.ui.backend.AdHost
@@ -119,7 +120,10 @@ class AndroidAdHost(
     override var interstitialShowing: Boolean by mutableStateOf(false)
         private set
 
-    override val lowMemoryDevice: Boolean get() = DeviceMemory.isLow
+    // Physical RAM, not the IDE's memory tier: see AndroidMemory.lowPhysicalMemory. A user who forced "Low
+    // memory mode" on is telling us the device struggles, so that still counts.
+    override val lowMemoryDevice: Boolean
+        get() = AndroidMemory.lowPhysicalMemory || (DeviceMemory.isLow && DeviceMemory.detected == MemoryTier.NORMAL)
 
     override fun preloadInterstitial() {
         // AdMob load must run on the main thread; hop there defensively if a caller ever invokes us off it.

@@ -131,8 +131,9 @@ interface AdHost {
     val interstitialState: String get() = "none"
 
     /**
-     * Whether the device is short of memory. Full-screen ads skip builds here: the ad's WebView next to an
-     * on-device build makes the system more likely to kill one of them. False by default.
+     * Whether the device is short of physical memory. Full-screen ads skip builds here: the ad's WebView next to
+     * an on-device build makes the system more likely to kill one of them. That is decided by RAM, so a host
+     * should not count a merely small Java heap. False by default.
      */
     val lowMemoryDevice: Boolean get() = false
 
