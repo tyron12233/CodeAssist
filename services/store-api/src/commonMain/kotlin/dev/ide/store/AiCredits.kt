@@ -89,6 +89,9 @@ interface AiCreditsService {
      */
     fun proxyBaseUrl(): String? = null
 
+    /** A second proxy to try when [proxyBaseUrl] cannot be reached or fails before answering; null for none. */
+    fun proxyFallbackUrl(): String? = null
+
     /** Whether a session is live or can be restored, without a network call. */
     fun signedIn(): Boolean = false
 

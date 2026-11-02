@@ -89,3 +89,40 @@ class AppendOnlyHistoryTest {
         assertEquals(1, second.count { it.role == dev.ide.agent.LlmRole.SYSTEM }, "the context is written once")
     }
 }
+
+/** A conversation past the size the provider takes is summarized mid-task, and the task carries on from it. */
+class AutoCompactTest {
+    @Test
+    fun aLongConversationIsSummarizedAndTheTurnContinues() {
+        val requests = mutableListOf<LlmRequest>()
+        val events = mutableListOf<AgentEvent>()
+        val client = LlmClient { request ->
+            requests += request
+            val asksForSummary = request.messages.lastOrNull()?.content?.any {
+                it is dev.ide.agent.ContentPart.Text && it.text.startsWith("This conversation is getting too long")
+            } == true
+            val reply = if (asksForSummary) "SUMMARY: building a login screen in Login.kt." else "Done."
+            listOf(LlmStreamEvent.TextDelta(reply), LlmStreamEvent.Completed(StopReason.END_TURN)).asFlow()
+        }
+        val loop = AgentLoop(
+            client, "m", SimpleToolRegistry(builtinTools(FakeWorkspace())), AllowAllGate, { "system" },
+            autoCompactChars = 500,
+        )
+        loop.restore(
+            listOf(
+                dev.ide.agent.LlmMessage.user("x".repeat(400)),
+                dev.ide.agent.LlmMessage.assistant(listOf(dev.ide.agent.ContentPart.Text("y".repeat(400)))),
+            ),
+            dropThinking = false,
+        )
+        runBlocking { loop.send("now add a forgot-password link", AgentEventSink { events += it }) }
+
+        assertEquals(2, requests.size, "one summary request, then the real one")
+        assertTrue(events.any { it is AgentEvent.Compacted })
+        val sent = requests[1].messages.flatMap { m -> m.content.filterIsInstance<dev.ide.agent.ContentPart.Text>().map { it.text } }
+        assertTrue(sent.any { it.startsWith("SUMMARY:") }, "the task goes on from the summary")
+        assertTrue(sent.none { it == "x".repeat(400) }, "the old messages are gone")
+        // The summary is not shown as the answer.
+        assertTrue(events.filterIsInstance<AgentEvent.AssistantTextDelta>().none { it.text.startsWith("SUMMARY") })
+    }
+}

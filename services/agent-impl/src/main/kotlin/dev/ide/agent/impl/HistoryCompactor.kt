@@ -84,7 +84,8 @@ class HistoryCompactor(
         }
     }
 
-    private fun size(history: List<LlmMessage>): Int = history.sumOf { m ->
+    /** The transcript's size as this compactor counts it: characters, an image as [IMAGE_CHARS]. */
+    fun size(history: List<LlmMessage>): Int = history.sumOf { m ->
         m.content.sumOf { part ->
             when (part) {
                 is ContentPart.Text -> part.text.length

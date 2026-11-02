@@ -54,6 +54,11 @@ class AgentLoop(
     private val effort: String? = null,
     /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
     private val compactor: HistoryCompactor = HistoryCompactor(),
+    /**
+     * When the (already trimmed) transcript is still bigger than this many characters, the loop summarizes it and
+     * carries on from the summary, mid-task if need be. Null never does; the user can still run /compact.
+     */
+    private val autoCompactChars: Int? = null,
     /** Keeps requests under the provider's per-minute limits; null sends as fast as the loop runs. */
     private val pacer: RequestPacer? = null,
     /** Records what each mutating call changed, for diffs and undo; null records nothing. */
@@ -87,6 +92,12 @@ class AgentLoop(
 
         /** Below this many output tokens a tool-using turn is not worth sending; the credit error is reported. */
         const val MIN_CREDIT_MAX_TOKENS = 1024
+
+        /** Asks for a summary in the middle of a task, so the task can carry on from it. */
+        const val COMPACT_MID_TASK = "This conversation is getting too long to send. Summarize it so the work can " +
+            "continue from your summary alone: the user's goal and requirements, decisions made, which files you " +
+            "created or changed and what is in them now, what is done, what is left, and any error you were " +
+            "fixing. Be specific about file paths and names. Reply with the summary only."
 
         /** Sent on the final turn once the iteration cap is hit; no tools are offered alongside it. */
         const val COMPACT = "Summarize this conversation so far so it can continue from your summary alone. " +
@@ -169,9 +180,16 @@ class AgentLoop(
         var rateLimitWaits = 0
         var creditRetries = 0
         var truncationRetries = 0
+        var compacted = false
         // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
         var total = TokenUsage()
         while (iteration++ < maxIterations) {
+            val limit = autoCompactChars
+            // Once per turn: a summary that is itself too big would otherwise be summarized again and again.
+            if (limit != null && !compacted && history.size > 2 && compactor.size(compactor.compact(history)) > limit) {
+                compacted = true
+                autoCompact(sink)
+            }
             val request = LlmRequest(
                 model = model,
                 system = systemPrompt(),
@@ -315,6 +333,36 @@ class AgentLoop(
         history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
         sink.emit(AgentEvent.TurnCompleted(turn.stopReason, turn.usage))
         return true
+    }
+
+    /**
+     * [compactConversation] in the middle of a turn: the summary is not shown as an answer, and the turn carries on
+     * from it. Leaves the history alone when the summary cannot be had, so the request goes out as it would have
+     * (and fails on its size, which says what to do).
+     */
+    private suspend fun autoCompact(sink: AgentEventSink) {
+        pairHistory()
+        val before = compactor.size(compactor.compact(history))
+        val request = LlmRequest(
+            model = model,
+            system = systemPrompt(),
+            messages = compactor.compact(history) + LlmMessage.user(COMPACT_MID_TASK),
+            tools = emptyList(),
+            maxTokens = requestMaxTokens,
+            thinking = false,
+            effort = effort,
+        )
+        pace(request, sink)
+        val turn = Turn()
+        client.chat(request).collect { event -> turn.consume(event, AgentEventSink { }) }
+        if (turn.failure != null || turn.text.isBlank()) return
+        history.clear()
+        compactor.reset()
+        history += LlmMessage.user("Continue the earlier conversation. Here is where it got to.")
+        history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
+        history += LlmMessage.user("Carry on with the task from where you left off.")
+        appendSessionContext()
+        sink.emit(AgentEvent.Compacted(before, compactor.size(history)))
     }
 
     /** Waits, visibly, when sending [request] now would break a known per-minute limit, then records it. */

@@ -132,3 +132,44 @@ class SessionContextCachingTest {
         assertEquals(listOf("make it blue"), cached(messages))
     }
 }
+
+/** The Cloudflare Worker is primary and the Supabase function the fallback, for a proxy that cannot answer at all. */
+class FreeProxyFallbackTest {
+    private class Scripted(private val primaryStatus: Int?) : LlmTransport {
+        val urls = mutableListOf<String>()
+        override fun sse(request: SseRequest): Flow<String> {
+            urls += request.url
+            if (request.url.startsWith("https://worker")) {
+                return kotlinx.coroutines.flow.flow {
+                    throw LlmHttpException("primary failed", statusCode = primaryStatus)
+                }
+            }
+            return flowOf()
+        }
+    }
+
+    private val request = LlmRequest(CodeAssistFreeProvider.HAIKU, "system", listOf(LlmMessage.user("hi")))
+
+    private fun run(status: Int?): Pair<Scripted, List<LlmStreamEvent>> = runBlocking {
+        val t = Scripted(status)
+        val provider = CodeAssistFreeProvider(t, listOf("https://worker.example", "https://supabase.example/ai-proxy")) { "jwt" }
+        t to provider.client(ProviderConfig("x")).chat(request).toList()
+    }
+
+    @Test
+    fun anUnreachableOrFailingPrimaryFallsBack() {
+        for (status in listOf(null, 503)) {
+            val (t, events) = run(status)
+            assertEquals(2, t.urls.size, "status $status")
+            assertTrue(t.urls[1].startsWith("https://supabase.example"))
+            assertTrue(events.none { it is LlmStreamEvent.Failed })
+        }
+    }
+
+    @Test
+    fun aRefusalIsNotRetriedElsewhere() {
+        val (t, events) = run(400)
+        assertEquals(1, t.urls.size)
+        assertTrue(events.single() is LlmStreamEvent.Failed)
+    }
+}

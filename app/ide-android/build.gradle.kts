@@ -449,6 +449,9 @@ val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAs
 // back to the test ids so a fork builds fine with AdMob unconfigured. The App id reaches the manifest through
 // the `admobAppId` placeholder; the native ad-unit id is a BuildConfig field AndroidAdHost reads. One native
 // ad unit serves every placement that has no unit of its own (see below). OFFICIAL RELEASES MUST SET BOTH real ids.
+/** The Cloudflare Worker that serves CodeAssist Free AI (see supabase/cloudflare/ai-proxy). */
+val DEFAULT_AI_PROXY_URL = "https://codeassist-ai-proxy.lucena-tyronscott.workers.dev"
+
 val testAdmobAppId = "ca-app-pub-3940256099942544~3347511713"
 val testAdmobNativeUnitId = "ca-app-pub-3940256099942544/2247696110"
 // Google's TEST interstitial unit — the full-screen "long build" ad (AndroidAdHost.showBuildInterstitial).
@@ -566,6 +569,10 @@ android {
         val judgeUrl = (findProperty("JUDGE_URL") as String?) ?: System.getenv("JUDGE_URL")
             ?: "https://codeassist-judge.vercel.app"
         buildConfigField("String", "JUDGE_URL", "\"$judgeUrl\"")
+        // CodeAssist Free AI's primary proxy (a Cloudflare Worker); the Supabase `ai-proxy` function is its fallback.
+        // Blank uses the Supabase function alone.
+        val aiProxyUrl = (findProperty("AI_PROXY_URL") as String?) ?: System.getenv("AI_PROXY_URL") ?: DEFAULT_AI_PROXY_URL
+        buildConfigField("String", "AI_PROXY_URL", "\"$aiProxyUrl\"")
 
         // Where the store's public files (project zips, screenshots, icons) are mirrored, in Cloudflare R2 (see
         // supabase/functions/r2-mirror). The app reads there first and falls back to Supabase Storage on any miss,

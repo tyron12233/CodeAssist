@@ -24,10 +24,14 @@ import kotlinx.coroutines.withContext
  */
 class CodeAssistFreeProvider(
     transport: LlmTransport,
-    private val baseUrl: String,
+    /** The proxies to use, in order: the first is primary, the rest are tried when it fails before answering. */
+    private val baseUrls: List<String>,
     /** A current access token, or null when signed out. May block on a refresh; called off the main thread. */
     private val accessToken: () -> String?,
 ) : LlmProvider {
+    constructor(transport: LlmTransport, baseUrl: String, accessToken: () -> String?) :
+        this(transport, listOf(baseUrl), accessToken)
+
     private val anthropic = AnthropicProvider(transport)
 
     override val id: String = ID
@@ -46,8 +50,33 @@ class CodeAssistFreeProvider(
                 emit(LlmStreamEvent.Failed(SIGNED_OUT_MESSAGE, null))
                 return@flow
             }
-            emitAll(anthropic.client(ProviderConfig(token, baseUrl, null)).chat(request))
+            for ((n, base) in baseUrls.withIndex()) {
+                val hasNext = n < baseUrls.lastIndex
+                var answered = false
+                var fallBack = false
+                anthropic.client(ProviderConfig(token, base, null)).chat(request).collect { event ->
+                    // A proxy that fails before saying anything (unreachable, or the platform refused to run it)
+                    // is skipped for the next one. Once anything has streamed, the reply is this proxy's.
+                    if (!answered && hasNext && event is LlmStreamEvent.Failed && proxyUnavailable(event)) {
+                        fallBack = true
+                    } else if (!fallBack) {
+                        answered = true
+                        emit(event)
+                    }
+                }
+                if (!fallBack) return@flow
+            }
         }
+    }
+
+    /**
+     * A failure that is about the proxy rather than the request: no response at all, or a 5xx. The proxies'
+     * own refusals (out of points, signed out) are 400s and go straight to the user.
+     */
+    private fun proxyUnavailable(event: LlmStreamEvent.Failed): Boolean {
+        val http = event.cause as? LlmHttpException ?: return event.cause != null
+        val status = http.statusCode ?: return true
+        return status >= 500
     }
 
     /** The proxy serves exactly these; there is nothing to discover. */

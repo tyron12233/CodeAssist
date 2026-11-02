@@ -104,6 +104,12 @@ sealed interface AgentEvent {
      */
     data class Waiting(val untilEpochMs: Long, val reason: String) : AgentEvent
 
+    /**
+     * The conversation grew past what the provider takes, so the loop replaced its older part with a model-written
+     * summary and carried on. [beforeChars] and [afterChars] are the history's size around it.
+     */
+    data class Compacted(val beforeChars: Int, val afterChars: Int) : AgentEvent
+
     /** Tool call [id] changed these files (recorded so the turn can be reviewed and reverted). */
     data class FilesChanged(val id: String, val changes: List<FileChange>) : AgentEvent
 

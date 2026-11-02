@@ -139,7 +139,7 @@ object AndroidIde {
         if (supabaseAccounts != null) {
             manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.AI_CREDITS_SERVICE) {
                 dev.ide.store.impl.SupabaseAiCreditsService(
-                    BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY, supabaseAccounts,
+                    BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY, supabaseAccounts, proxyUrl = BuildConfig.AI_PROXY_URL,
                 )
             }
         }

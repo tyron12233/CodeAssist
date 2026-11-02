@@ -108,7 +108,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
      * first entry is the default, so someone who has never pasted a key starts on the one option that needs none.
      */
     private val registry: dev.ide.agent.LlmProviderRegistry = run {
-        val free = freeAiCredits.proxyBaseUrl()?.let { base -> CodeAssistFreeProvider(transport, base) { freeAiCredits.accessToken() } }
+        val free = freeAiCredits.proxyBaseUrl()?.let { base ->
+            CodeAssistFreeProvider(transport, listOfNotNull(base, freeAiCredits.proxyFallbackUrl())) { freeAiCredits.accessToken() }
+        }
         dev.ide.agent.SimpleLlmProviderRegistry(listOfNotNull(free) + AgentProviders.defaults(transport))
     }
 
@@ -776,8 +778,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
         val model = cfg.model.ifBlank { provider.defaultModel }
         val maxIterations = prefInt("maxIterations") ?: DEFAULT_MAX_ITERATIONS
-        // The free tier's proxy allows 16K output per step (it clamps anything larger); writing a file takes the
-        // whole file as one tool call's arguments, which 8K cut off mid-call.
+        // The free tier's proxy allows 32K output per step (the Supabase fallback clamps to 16K); writing a file
+        // takes the whole file as one tool call's arguments, which 8K cut off mid-call.
         val maxTokens = prefInt("maxTokens") ?: if (cfg.selectedId == FREE_AI) FREE_AI_MAX_TOKENS else DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
         val webSearch = prefBool("webSearch", default = true)
@@ -804,7 +806,14 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             thinkingBudget = thinkingBudget,
             webSearch = webSearch,
             effort = effort,
-            compactor = if (provider.managesContext) HistoryCompactor.serverManaged() else HistoryCompactor(),
+            // The free tier's proxy sees the whole request before Anthropic trims anything, so the conversation is
+            // trimmed here too, and summarized once trimming is not enough.
+            compactor = when {
+                cfg.selectedId == FREE_AI -> HistoryCompactor(triggerChars = FREE_AI_TRIM_CHARS, targetChars = FREE_AI_TRIM_CHARS / 2)
+                provider.managesContext -> HistoryCompactor.serverManaged()
+                else -> HistoryCompactor()
+            },
+            autoCompactChars = if (cfg.selectedId == FREE_AI) FREE_AI_COMPACT_CHARS else null,
             pacer = pacer,
             checkpoints = checkpoints,
         )
@@ -996,6 +1005,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             }
             is AgentEvent.TodosUpdated -> _chatState.update { s ->
                 s.copy(todos = event.todos.map { UiAgentTodo(it.content, todoStatus(it.status)) })
+            }
+            is AgentEvent.Compacted -> _chatState.update { s ->
+                // Ahead of the reply in progress, so the note reads where it happened.
+                val note = UiAgentMessage(msgIds.incrementAndGet(), UiAgentRole.ASSISTANT, text = AUTO_COMPACTED)
+                val at = s.messages.indexOfLast { it.id == assistantId }.takeIf { it >= 0 } ?: s.messages.size
+                s.copy(messages = s.messages.take(at) + note + s.messages.drop(at))
             }
             is AgentEvent.Waiting -> mutateAssistant(assistantId) {
                 it.copy(waitUntilMs = event.untilEpochMs, waitReason = event.reason)
@@ -1354,8 +1369,15 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val FREE_AI = CodeAssistFreeProvider.ID
         /** Stands in for the free tier's key; the provider ignores it and sends the session's access token. */
         private const val FREE_AI_SESSION_KEY = "codeassist-session"
+        /** Free tier: old tool results are trimmed once the conversation passes this many characters (~50K tokens). */
+        private const val FREE_AI_TRIM_CHARS = 200_000
+        /** Free tier: still bigger than this after trimming (~80K tokens), it is summarized and carries on. */
+        private const val FREE_AI_COMPACT_CHARS = 320_000
+        private const val AUTO_COMPACTED =
+            "The conversation got long, so its earlier part was summarized to keep going. Details from before may be shorter now."
+
         /** Output tokens per step on the free tier: the proxy's own cap. */
-        private const val FREE_AI_MAX_TOKENS = 16_000
+        private const val FREE_AI_MAX_TOKENS = 32_000
         /** Set once [adoptFreeAiAsDefault] has run on this install. */
         private const val FREE_AI_DEFAULT_ADOPTED = "freeAiDefaultAdopted"
         private const val OPENROUTER = "openrouter"

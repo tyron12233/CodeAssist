@@ -20,6 +20,11 @@ class SupabaseAiCreditsService(
     url: String,
     private val apiKey: String,
     private val accounts: SupabaseAccountService,
+    /**
+     * The primary proxy (the Cloudflare Worker), or blank to use the Supabase `ai-proxy` function alone. When set,
+     * the Supabase function is the fallback.
+     */
+    private val proxyUrl: String = "",
     connectTimeoutMs: Int = 10_000,
     readTimeoutMs: Int = 20_000,
 ) : AiCreditsService {
@@ -30,7 +35,15 @@ class SupabaseAiCreditsService(
 
     override fun available(): Boolean = configured && accounts.authAvailable()
 
-    override fun proxyBaseUrl(): String? = if (configured) "$base/functions/v1/ai-proxy" else null
+    private val supabaseProxy = "$base/functions/v1/ai-proxy"
+
+    override fun proxyBaseUrl(): String? = when {
+        !configured -> null
+        proxyUrl.isNotBlank() -> proxyUrl.trimEnd('/')
+        else -> supabaseProxy
+    }
+
+    override fun proxyFallbackUrl(): String? = if (configured && proxyUrl.isNotBlank()) supabaseProxy else null
 
     override fun signedIn(): Boolean = configured && accounts.hasStoredSession()
 
