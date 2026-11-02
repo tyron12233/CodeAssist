@@ -31,6 +31,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -289,6 +291,23 @@ class CodeAssistAppStateTest {
         assertEquals(Screen.Hub, app.screen)
         app.navigateBack()
         assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** Back from a Settings page lands on the row the user opened, not at the top of the list. */
+    @Test
+    fun theSettingsListKeepsItsPlaceUntilSettingsIsLeft() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openHub(Screen.Projects)
+        val scroll = app.hubListScroll
+        app.navigateTo(Screen.Storage)
+        app.navigateBack()
+        assertSame(scroll, app.hubListScroll, "kept through a visit to one of its pages")
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+        assertNotSame(scroll, app.hubListScroll, "a fresh list next time Settings is opened")
     }
 
     @Test

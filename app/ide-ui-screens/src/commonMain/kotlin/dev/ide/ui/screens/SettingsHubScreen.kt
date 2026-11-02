@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -84,6 +85,8 @@ fun SettingsHubScreen(
     sections: List<HubSection>,
     onBack: () -> Unit,
     onOpen: (HubTarget) -> Unit,
+    /** The list's scroll; hoist it to keep the position across a visit to one of its destinations. */
+    listScroll: ScrollState = rememberScrollState(),
 ) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
@@ -103,7 +106,7 @@ fun SettingsHubScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(listScroll),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             sections.forEachIndexed { index, section ->

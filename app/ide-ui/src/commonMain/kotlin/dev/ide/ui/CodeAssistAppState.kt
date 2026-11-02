@@ -1,5 +1,6 @@
 package dev.ide.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -137,9 +138,19 @@ class CodeAssistAppState(
         get() = currentScreen
         private set(value) {
             if (value != currentScreen && !navigatesAsStack(value)) backStack.clear()
+            // Leaving Settings altogether: the next visit starts at the top of its list.
+            if (isHubPane(currentScreen) && !isHubPane(value)) hubListScroll = ScrollState(0)
             navigatingBack = false
             currentScreen = value
         }
+
+    /**
+     * Where the phone Settings list is scrolled. Held here rather than in the list, which leaves composition
+     * while one of its pages is open: Back from a page then landed at the top of a list several screens long
+     * instead of on the row the user had opened.
+     */
+    var hubListScroll: ScrollState by mutableStateOf(ScrollState(0))
+        private set
 
     /**
      * The screens that open each other freely rather than in a fixed order: a listing links to its

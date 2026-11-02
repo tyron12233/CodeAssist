@@ -664,6 +664,7 @@ private fun AppRoute(
             sections = rememberHubSections(app, state),
             onBack = { app.navigateTo(app.hubReturn) },
             onOpen = { openHubTarget(app, it) },
+            listScroll = app.hubListScroll,
         )
 
         Screen.Settings -> SettingsRoute(app, state, codeFont, fileActions, app.settingsPageId)
