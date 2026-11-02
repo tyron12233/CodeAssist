@@ -19,6 +19,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -313,14 +315,17 @@ private fun InteractiveStep(
 
         // Action row.
         val checkFailedMsg = stringResource(Res.string.learn_check_failed)
+        // On a phone the two links and the button do not fit one row, and the Row squeezed the button until its
+        // label broke ("Run &" over "Check"). The links take what is left after the button and wrap instead.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (step.hints.isNotEmpty() && hintsShown < step.hints.size) {
-                TextAction(stringResource(Res.string.learn_need_hint), CaIcons.lightbulb) { hintsShown++ }
+            FlowRow(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                if (step.hints.isNotEmpty() && hintsShown < step.hints.size) {
+                    TextAction(stringResource(Res.string.learn_need_hint), CaIcons.lightbulb) { hintsShown++ }
+                }
+                if (step.solution.isNotBlank() && !showSolution) {
+                    TextAction(stringResource(Res.string.learn_show_solution), CaIcons.eye) { showSolution = true }
+                }
             }
-            if (step.solution.isNotBlank() && !showSolution) {
-                TextAction(stringResource(Res.string.learn_show_solution), CaIcons.eye) { showSolution = true }
-            }
-            Spacer(Modifier.weight(1f))
             PlayerButton(
                 if (running) stringResource(Res.string.learn_running) else stringResource(Res.string.learn_run_check),
                 primary = true,
