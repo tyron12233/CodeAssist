@@ -931,7 +931,7 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(MODULE_RESOURCES, ServiceScopeLevel.WORKSPACE) { getService(ANDROID_RESOURCE_SERVICE) }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
-            RefactorService(getService(ENGINE_CONTEXT))
+            RefactorService(getService(ENGINE_CONTEXT), getService(KOTLIN_EDITOR_SERVICE))
         }
         reg.service(APP_RENAME_SERVICE, ServiceScopeLevel.WORKSPACE) {
             AppRenameService(getService(ENGINE_CONTEXT))

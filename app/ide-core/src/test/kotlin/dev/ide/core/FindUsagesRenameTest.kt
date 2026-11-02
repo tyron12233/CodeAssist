@@ -1,0 +1,99 @@
+package dev.ide.core
+
+import dev.ide.lang.kotlin.NavKind
+import dev.ide.testkit.withTempDir
+import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * Find Usages and Rename through the real engine, on the Java demo project with Kotlin files added to `:core`:
+ * Kotlin symbols across Kotlin files, and a Java class used from Kotlin, which must be found and renamed on
+ * both sides.
+ */
+class FindUsagesRenameTest {
+
+    private fun IdeServices.coreSrc(): Path = sourceRoots(modules().first { it.name == "core" }).first()
+
+    private fun setUp(ide: IdeServices): Triple<Path, Path, Path> {
+        val src = ide.coreSrc().resolve("com/example/core")
+        val circle = src.resolve("Circle.kt")
+        val use = src.resolve("Use.kt")
+        ide.save(circle, "package com.example.core\n\nclass Circle(val r: Double) {\n    fun area() = r * r\n}\n")
+        ide.save(
+            use,
+            "package com.example.core\n\nfun use(): Double {\n    val c = Circle(2.0)\n    println(Greeter().greet(\"k\"))\n    return c.area()\n}\n",
+        )
+        // Query once the project is indexed, the way the editor meets it. A lookup made mid-index can remember
+        // a Java type as unknown until the next edit (go-to-declaration shares that), which is not under test.
+        val deadline = System.currentTimeMillis() + 180_000
+        while (ide.indexStatus.value.message != "Indexed" && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        return Triple(circle, use, src.resolve("Greeter.java"))
+    }
+
+    private fun usages(ide: IdeServices, file: Path, needle: String): List<String> {
+        val text = Files.readString(file)
+        return ide.navigationTargets(file, text, text.indexOf(needle), NavKind.USAGES).map { it.label }
+    }
+
+    private fun eventually(what: String, timeoutMs: Long = 60_000, check: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (runCatching(check).getOrDefault(false)) return
+            Thread.sleep(100)
+        }
+        throw AssertionError("timed out waiting until $what")
+    }
+
+    @Test
+    fun findsKotlinUsagesOfAKotlinClass() { withTempDir("usages-kt") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val (circle, _, _) = setUp(ide)
+            eventually("Circle's usage in Use.kt is found") {
+                usages(ide, circle, "Circle(").any { it.startsWith("Use.kt:4") && "Circle(2.0)" in it }
+            }
+            assertTrue(usages(ide, circle, "area").any { it.startsWith("Use.kt:6") }, "the member call c.area()")
+        }
+    } }
+
+    @Test
+    fun renamesAKotlinClassAndItsFile() { withTempDir("rename-kt") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val (circle, use, _) = setUp(ide)
+            eventually("Circle resolves from Use.kt") { usages(ide, circle, "Circle(").isNotEmpty() }
+            val text = Files.readString(circle)
+            val info = assertNotNull(ide.prepareRename(circle, text, text.indexOf("Circle")))
+            assertEquals("Circle" to "class", info.oldName to info.kind)
+
+            val outcome = runBlocking { ide.rename(circle, text, text.indexOf("Circle"), "Round") }
+            assertTrue(outcome.success, outcome.message)
+            val renamed = circle.resolveSibling("Round.kt")
+            assertEquals(renamed.toString(), outcome.newPath, "the file named after the class follows it")
+            assertTrue(Files.readString(renamed).contains("class Round("))
+            assertTrue(Files.readString(use).contains("val c = Round(2.0)"), Files.readString(use))
+            assertFalse(Files.exists(circle))
+        }
+    } }
+
+    @Test
+    fun aJavaClassIsFoundAndRenamedInKotlinToo() { withTempDir("rename-java") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val (_, use, greeter) = setUp(ide)
+            eventually("Greeter's Kotlin usage is found from the Java declaration") {
+                usages(ide, greeter, "Greeter {").any { it.startsWith("Use.kt:5") }
+            }
+            assertTrue(usages(ide, greeter, "Greeter {").any { it.startsWith("Formatter.java") }, "and the Java ones")
+
+            val text = Files.readString(greeter)
+            val outcome = runBlocking { ide.rename(greeter, text, text.indexOf("Greeter {"), "Welcomer") }
+            assertTrue(outcome.success, outcome.message)
+            assertTrue(Files.readString(use).contains("println(Welcomer().greet(\"k\"))"), Files.readString(use))
+            assertTrue(Files.exists(greeter.resolveSibling("Welcomer.java")))
+        }
+    } }
+}

@@ -146,6 +146,9 @@ internal interface EngineContext {
     /** Every project `.java` file across all modules' source roots — the rename reference-sweep candidates. */
     fun projectJavaFiles(): List<Path>
 
+    /** Every project `.kt` file across all modules' source roots — the Kotlin usage-sweep candidates. */
+    fun projectKotlinFiles(): List<Path>
+
     /** True if [s] is a valid Java identifier (and not a reserved word) — the rename validator. */
     fun isValidJavaIdentifier(s: String): Boolean
 

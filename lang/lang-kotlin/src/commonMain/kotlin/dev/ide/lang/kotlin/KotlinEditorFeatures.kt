@@ -1,5 +1,11 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtClassBody
+import dev.ide.kotlin.syntax.psi.KtImportDirective
+import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
+import dev.ide.kotlin.syntax.psi.KtPackageDirective
+import dev.ide.kotlin.syntax.psi.KtPrimaryConstructor
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtCallableDeclaration
 import dev.ide.kotlin.syntax.psi.KtClass
@@ -63,6 +69,7 @@ import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
+import dev.ide.lang.dom.TextRange
 
 /**
  * A parameter list rendered for a signature line: declared types where there are any, the parameter's own
@@ -650,6 +657,250 @@ class KotlinEditorFeatures(
         return listOf(KotlinImportFix("Add remaining branches", listOf(e))) + fixes
     }
 
+    /**
+     * How directly [file] sees top-level [symbol] by its simple name, lower is closer: not top-level at all (a
+     * local or member, already scoped), explicitly imported, the file's own package, a star or default import,
+     * and last, a package the file does not import (reachable only by a fix, never by the compiler).
+     */
+    private fun visibilityRank(symbol: Symbol, file: KtFile): Int {
+        val pkg = (symbol as? KotlinSymbol)?.packageName ?: return 0
+        val imports = file.importDirectives
+        if (imports.any { !it.isAllUnder && it.importedFqName?.asString() == (if (pkg.isEmpty()) symbol.name else "$pkg.${symbol.name}") }) return 1
+        if (pkg == file.packageFqName.asString()) return 2
+        if (imports.any { it.isAllUnder && it.importedFqName?.asString() == pkg } ||
+            dev.ide.lang.kotlin.symbols.DefaultImports.isDefaultImported(pkg)
+        ) return 3
+        return 4
+    }
+
+    // ---- Find Usages / Rename -------------------------------------------------------------------------
+
+    /**
+     * The symbol Find Usages or Rename at [offset] acts on: the declaration whose name the caret is on, else
+     * what the reference under the caret resolves to. Null when nothing resolves. [readSource] reads another
+     * file's current text (an open buffer's, else the disk's), for a declaration that lives elsewhere.
+     */
+    fun usageTargetAt(
+        file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?,
+    ): KotlinUsageTarget? {
+        val ktFile = KotlinParserHost.parse(file.name, text)
+        if (ktFile.textLength == 0) return null
+        val parsed = KotlinParsedFile(ktFile, file, 0L)
+        refreshOverlay(); syncFocal(parsed) // once, for the file being edited; the sweep resolves without it
+        declarationNamedAt(ktFile, offset)?.let { return targetFor(it, file.path, ktFile) }
+        val off = offset.coerceIn(0, ktFile.textLength - 1)
+        val ref = refAt(ktFile, off) ?: return null
+        val (path, at) = identityAt(parsed, ref.textRange.startOffset, KotlinResolver(ktFile, parsed, service)) ?: return null
+        if (isKotlinSourcePath(path)) {
+            val declKt = if (path == file.path) ktFile
+            else KotlinParserHost.parse(path.substringAfterLast('/'), readSource(path) ?: return null)
+            declarationNamedAt(declKt, at, exact = true)?.let { return targetFor(it, path, declKt) }
+        }
+        // Declared in Java source or a library: its usages can be found, but Rename is not this side's.
+        return KotlinUsageTarget(ref.getReferencedName(), "symbol", setOf(usageIdentity(path, at)), emptyList(), null, emptySet(), null)
+    }
+
+    /** A target for a symbol declared outside Kotlin (Java source), known by its declaration's location. */
+    fun usageTargetForDeclaration(path: String, offset: Int, name: String, importFqn: String?): KotlinUsageTarget =
+        KotlinUsageTarget(name, "symbol", setOf(usageIdentity(path, offset)), emptyList(), null, setOfNotNull(importFqn), null)
+
+    /**
+     * Every reference to [target] in [file]'s [text], name ranges in offset order, its declarations excluded.
+     * One resolver serves the whole file, and the focal file is left alone (see [resolveWith]).
+     */
+    fun usagesIn(file: VirtualFile, text: CharSequence, target: KotlinUsageTarget): List<TextRange> {
+        val scope = target.scope
+        if (scope != null && scope.first != file.path) return emptyList()
+        if (!containsIdentifier(text, target.name)) return emptyList()
+        val ktFile = KotlinParserHost.parse(file.name, text)
+        val parsed = KotlinParsedFile(ktFile, file, 0L)
+        val resolver = KotlinResolver(ktFile, parsed, service)
+        val out = ArrayList<TextRange>()
+        for (ref in ktFile.collectDescendantsOfType<KtNameReferenceExpression>()) {
+            if (ref.getReferencedName() != target.name) continue
+            val r = ref.textRange
+            if (scope != null && (r.startOffset < scope.second.start || r.endOffset > scope.second.end)) continue
+            if (ref.getParentOfType<KtImportDirective>(strict = true) != null) continue // matched by FQN below
+            if (ref.getParentOfType<KtPackageDirective>(strict = true) != null) continue
+            val (path, at) = identityAt(parsed, r.startOffset, resolver) ?: continue
+            if (usageIdentity(path, at) in target.identities) out += TextRange(r.startOffset, r.endOffset)
+        }
+        // An import names the symbol by FQN, which resolution does not visit: its last segment is the name.
+        for (imp in ktFile.importDirectives) {
+            val fqn = imp.importedFqName?.asString() ?: continue
+            if (fqn !in target.importFqns) continue
+            val end = imp.importedReference?.textRange?.endOffset ?: continue
+            val start = end - target.name.length
+            if (start >= 0 && text.subSequence(start, end).toString() == target.name) out += TextRange(start, end)
+        }
+        return out.distinct().sortedBy { it.start }
+    }
+
+    /** The declaration (file path, name offset) the reference at [offset] resolves to, through [resolver]. */
+    private fun identityAt(parsed: KotlinParsedFile, offset: Int, resolver: KotlinResolver): Pair<String, Int>? {
+        val node = parsed.nodeAt(offset) as? KotlinDomNode ?: return null
+        val symbol = (resolveWith(node, resolver) as? ResolveResult.Resolved)?.symbol as? KotlinSymbol
+        // A source declaration is read straight off the symbol, which costs no parse.
+        if (symbol != null && symbol.origin.fromSource) {
+            (symbol.declaration() as? KotlinDomNode)?.let { dn ->
+                val at = (dn.psi as? KtNamedDeclaration)?.nameIdentifier?.textRange?.startOffset ?: dn.range.start
+                return dn.owner.file.path to at
+            }
+        }
+        val leaf = parsed.ktFile.findElementAt(offset)
+        val t = declarationTargets(symbol, typeRefFqnAt(parsed.ktFile, leaf)).firstOrNull() ?: return null
+        return t.file.path to t.offset
+    }
+
+    private fun isKotlinSourcePath(path: String): Boolean =
+        !path.startsWith("library://") && (path.endsWith(".kt") || path.endsWith(".kts"))
+
+    /** The name reference at [offset], or just before it (a caret at the end of a name). */
+    private fun refAt(ktFile: KtFile, offset: Int): KtNameReferenceExpression? {
+        for (o in listOf(offset, offset - 1)) {
+            if (o < 0) continue
+            val ref = ktFile.findElementAt(o)?.let { it as? KtNameReferenceExpression ?: it.getParentOfType<KtNameReferenceExpression>() }
+            if (ref != null) return ref
+        }
+        return null
+    }
+
+    /**
+     * The declaration whose NAME is at [offset]: the caret anywhere on it (or just past it), or with [exact],
+     * the name starting exactly there (a resolved declaration location).
+     */
+    private fun declarationNamedAt(ktFile: KtFile, offset: Int, exact: Boolean = false): KtNamedDeclaration? {
+        val probes = if (exact) listOf(offset) else listOf(offset, offset - 1)
+        for (o in probes) {
+            if (o < 0 || o >= ktFile.textLength) continue
+            var n: KtElement? = ktFile.findElementAt(o)
+            while (n != null) {
+                if (n is KtNamedDeclaration) {
+                    val id = n.nameIdentifier?.textRange
+                    if (id != null && (if (exact) id.startOffset == offset else o >= id.startOffset && o < id.endOffset)) return n
+                }
+                if (n is KtBlockExpression || n is KtClassBody) break
+                n = n.parent
+            }
+        }
+        return null
+    }
+
+    /** The target for a Kotlin source declaration [decl] in [path]: it, its overloads and its override family. */
+    private fun targetFor(decl: KtNamedDeclaration, path: String, kt: KtFile): KotlinUsageTarget? {
+        val name = decl.name ?: return null
+        val ids = LinkedHashSet<String>()
+        val decls = ArrayList<Pair<String, TextRange>>()
+        fun add(p: String, at: Int) {
+            if (ids.add(usageIdentity(p, at))) decls += p to TextRange(at, at + name.length)
+        }
+        decl.nameIdentifier?.let { add(path, it.textRange.startOffset) } ?: return null
+        val scope = scopeOf(decl, kt)
+        if (decl is KtNamedFunction && (decl.parent is KtFile || decl.parent is KtClassBody)) {
+            decl.parent?.children?.filterIsInstance<KtNamedFunction>()
+                ?.filter { it !== decl && it.name == name }
+                ?.forEach { f -> f.nameIdentifier?.let { add(path, it.textRange.startOffset) } }
+        }
+        overrideFamily(decl, name).forEach { (p, at) -> add(p, at) }
+        val fileNamed = path.takeIf {
+            decl is KtClassOrObject && decl.parent is KtFile && path.substringAfterLast('/').substringBeforeLast('.') == name
+        }
+        return KotlinUsageTarget(name, kindOf(decl, scope != null), ids, decls, scope?.let { path to it }, importFqnsOf(decl, kt), fileNamed)
+    }
+
+    private fun kindOf(decl: KtNamedDeclaration, local: Boolean): String = when (decl) {
+        is KtClassOrObject -> "class"
+        is KtNamedFunction -> "function"
+        is KtParameter -> "parameter"
+        is KtProperty -> if (local && decl.parent is KtBlockExpression) "variable" else "property"
+        else -> "symbol"
+    }
+
+    /**
+     * Where references to [decl] can be: a parameter's function or lambda, a local's block, a private member's
+     * class, a private top-level's file. Null when anywhere in the project.
+     */
+    private fun scopeOf(decl: KtNamedDeclaration, kt: KtFile): TextRange? {
+        fun KtElement.range() = TextRange(textRange.startOffset, textRange.endOffset)
+        if (decl is KtParameter) {
+            val owner = decl.parent?.parent ?: decl.parent
+            if (owner is KtPrimaryConstructor) {
+                if (decl.valOrVarKeyword == null) return owner.getParentOfType<KtClassOrObject>()?.range()
+                // A constructor `val`/`var` is a member: scoped like one.
+            } else return (owner ?: decl).range()
+        }
+        var n: KtElement? = decl.parent
+        while (n != null) {
+            when (n) {
+                is KtBlockExpression -> return n.range()
+                is KtClassBody, is KtFile -> break
+            }
+            n = n.parent
+        }
+        if (decl.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
+            val owner = decl.getParentOfType<KtClassOrObject>(strict = true)
+            return owner?.range() ?: kt.range()
+        }
+        return null
+    }
+
+    /**
+     * For a member, the members of the same name it overrides and that override it, declared in project
+     * Kotlin source: (file path, name offset) each. Starts from the topmost overridden member so siblings in
+     * the hierarchy come along too. Empty for anything that is not an open, abstract or overriding member.
+     */
+    private fun overrideFamily(decl: KtNamedDeclaration, name: String): List<Pair<String, Int>> {
+        if (decl !is KtNamedFunction && decl !is KtProperty && decl !is KtParameter) return emptyList()
+        if (decl is KtParameter && decl.valOrVarKeyword == null) return emptyList()
+        val owner = decl.getParentOfType<KtClassOrObject>(strict = true) ?: return emptyList()
+        val ownerFqn = owner.fqName?.asString() ?: return emptyList()
+        val inInterface = owner is KtClass && owner.isInterface()
+        val overrides = decl.hasModifier(KtTokens.OVERRIDE_KEYWORD)
+        val inheritable = inInterface || overrides || decl.hasModifier(KtTokens.OPEN_KEYWORD) || decl.hasModifier(KtTokens.ABSTRACT_KEYWORD)
+        if (!inheritable) return emptyList()
+        val out = ArrayList<Pair<String, Int>>()
+        // A member DECLARED in [typeFqn], not one it inherits: `declaringClassFqn` is only set for binary
+        // callables, so a source member is placed by the class its declaration sits in.
+        fun sourceMemberOf(typeFqn: String): Pair<String, Int>? =
+            service.membersNamed(typeFqn, emptyList(), name).firstNotNullOfOrNull { s ->
+                if (!s.origin.fromSource) return@firstNotNullOfOrNull null
+                val dn = s.declaration() as? KotlinDomNode ?: return@firstNotNullOfOrNull null
+                val d = dn.psi as? KtNamedDeclaration ?: return@firstNotNullOfOrNull null
+                if (d.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() != typeFqn) return@firstNotNullOfOrNull null
+                d.nameIdentifier?.textRange?.startOffset?.let { dn.owner.file.path to it }
+            }
+        val roots = LinkedHashSet<String>().apply { add(ownerFqn) }
+        if (overrides) {
+            for (st in service.supertypesOf(ownerFqn)) {
+                val m = sourceMemberOf(st.qualifiedName) ?: continue
+                out += m; roots += st.qualifiedName
+            }
+        }
+        val seen = HashSet<String>(roots)
+        val queue = ArrayDeque(roots)
+        while (queue.isNotEmpty() && seen.size < 500) {
+            val t = queue.removeFirst()
+            for (sub in service.directInheritors(t)) {
+                if (!seen.add(sub.fqn)) continue
+                sourceMemberOf(sub.fqn)?.let { out += it }
+                queue.addLast(sub.fqn)
+            }
+        }
+        return out
+    }
+
+    /** The FQNs an import can name [decl] by: a top-level declaration, a class, a member of an object. */
+    private fun importFqnsOf(decl: KtNamedDeclaration, kt: KtFile): Set<String> {
+        val name = decl.name ?: return emptySet()
+        if (decl is KtClassOrObject) return setOfNotNull(decl.fqName?.asString())
+        if (decl.parent is KtFile) {
+            val pkg = kt.packageFqName.asString()
+            return setOf(if (pkg.isEmpty()) name else "$pkg.$name")
+        }
+        val obj = (decl.parent as? KtClassBody)?.parent as? KtObjectDeclaration
+        return setOfNotNull(obj?.fqName?.asString()?.let { "$it.$name" })
+    }
+
     /** The innermost function enclosing [offset] (the suspend-override diagnostic anchors on its name). */
     private fun functionCovering(ktFile: KtFile, offset: Int): KtNamedFunction? {
         var n: KtElement? =
@@ -773,7 +1024,16 @@ class KotlinEditorFeatures(
         refreshOverlay() // go-to-definition must reach a symbol just declared in another open file
         val parsed = kdn.owner
         syncFocal(parsed) // ...and one declared in the same buffer being edited
-        val resolver = KotlinResolver(parsed.ktFile, parsed, service)
+        return resolveWith(kdn, KotlinResolver(parsed.ktFile, parsed, service))
+    }
+
+    /**
+     * [resolve] without the freshness hooks, over a [resolver] the caller owns. For a sweep across many files
+     * (Find Usages, Rename): making each scanned file the focal one would rebuild the symbol model and drop
+     * the source memos once per file, and would take the focus off the file actually being edited.
+     */
+    private fun resolveWith(kdn: KotlinDomNode, resolver: KotlinResolver): ResolveResult {
+        val parsed = kdn.owner
         val psi = kdn.psi as? KtNameReferenceExpression ?: return ResolveResult.Unresolved
         val name = psi.getReferencedName()
 
@@ -791,7 +1051,11 @@ class KotlinEditorFeatures(
             // is an exact index scan instead of materializing every top-level callable on the classpath (the
             // empty-prefix query is uncapped) only to filter it down to one name here.
             resolver.scopeSymbolsAt(psi.textRange.startOffset, namePrefix = name, exactName = true)
-                .firstOrNull { it.name == name }
+                .filter { it.name == name }
+                // The scan answers same-named top-level callables from every package, so taking the first sent
+                // a call to an imported `greet` to an unrelated `greet` elsewhere in the project. The one the
+                // file can actually see wins.
+                .minByOrNull { visibilityRank(it, parsed.ktFile) }
 
         val sym: Symbol? = if (qualified != null) {
             // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) navigates to the member of
@@ -814,7 +1078,7 @@ class KotlinEditorFeatures(
             typeParameterInScope(psi, name) ?: typeNamed(name, resolver) ?: projectTypeAlias(name)
                 ?: inScope()
         } else {
-            namedArgumentParameter(psi, name, parsed) ?: inScope() ?: typeNamed(name, resolver)
+            namedArgumentParameter(psi, name, parsed, resolver) ?: inScope() ?: typeNamed(name, resolver)
         }
         return sym?.let { ResolveResult.Resolved(it) } ?: ResolveResult.Unresolved
     }
@@ -874,7 +1138,9 @@ class KotlinEditorFeatures(
      * names are consulted. Navigation does not follow (a library parameter has no declaration here), but the
      * reference stops reading as an error.
      */
-    private fun namedArgumentParameter(psi: KtNameReferenceExpression, name: String, parsed: KotlinParsedFile): KotlinSymbol? {
+    private fun namedArgumentParameter(
+        psi: KtNameReferenceExpression, name: String, parsed: KotlinParsedFile, resolver: KotlinResolver,
+    ): KotlinSymbol? {
         val argument = psi.getParentOfType<KtValueArgument>(strict = true) ?: return null
         if (argument.getArgumentName()?.text?.trim() != name) return null
         val call = argument.getParentOfType<KtCallExpression>(strict = true) ?: return null
@@ -882,7 +1148,8 @@ class KotlinEditorFeatures(
         // Resolve the callee the way any other reference is resolved, rather than asking the scope: the
         // commonest named-argument call is on a RECEIVER (`list.joinToString(prefix = "[")`), and its callee
         // is found through the receiver's members, which the scope knows nothing about.
-        val target = (resolve(parsed.nodeAt(callee.textRange.startOffset)) as? ResolveResult.Resolved)
+        val calleeNode = parsed.nodeAt(callee.textRange.startOffset) as? KotlinDomNode ?: return null
+        val target = (resolveWith(calleeNode, resolver) as? ResolveResult.Resolved)
             ?.symbol as? KotlinSymbol ?: return null
         // The callee must actually declare the name, or this is a typo and the diagnostic should say so.
         return if (name in target.paramNames) KotlinSymbol(name, SymbolKind.PARAMETER, owner = target) else null

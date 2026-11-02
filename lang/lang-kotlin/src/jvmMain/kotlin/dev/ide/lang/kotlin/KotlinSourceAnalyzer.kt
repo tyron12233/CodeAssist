@@ -454,6 +454,18 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     fun builtinStub(fqn: String): String? = features.builtinStub(fqn)
 
+    /** What Find Usages / Rename at [offset] acts on; see [KotlinEditorFeatures.usageTargetAt]. */
+    fun usageTargetAt(file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?): KotlinUsageTarget? =
+        features.usageTargetAt(file, text, offset, readSource)
+
+    /** See [KotlinEditorFeatures.usageTargetForDeclaration]. */
+    fun usageTargetForDeclaration(path: String, offset: Int, name: String, importFqn: String?): KotlinUsageTarget =
+        features.usageTargetForDeclaration(path, offset, name, importFqn)
+
+    /** References to [target] in [file]'s [text]; see [KotlinEditorFeatures.usagesIn]. */
+    fun usagesIn(file: VirtualFile, text: CharSequence, target: KotlinUsageTarget): List<dev.ide.lang.dom.TextRange> =
+        features.usagesIn(file, text, target)
+
     /** Whether [file]'s last parse contains syntax errors; a preview must not interpret such a file. See
      *  [KotlinPreviewLowering.hasSyntaxErrors] for why. */
     fun hasSyntaxErrors(file: VirtualFile): Boolean =

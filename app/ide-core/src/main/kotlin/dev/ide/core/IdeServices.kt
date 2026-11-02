@@ -620,6 +620,7 @@ class IdeServices private constructor(
         }
 
         override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
+        override fun projectKotlinFiles() = this@IdeServices.projectFilesEndingWith(".kt")
         override fun isValidJavaIdentifier(s: String) = this@IdeServices.isValidJavaIdentifier(s)
         override val composePreviewRunner get() = this@IdeServices.composePreviewRunner
         override fun analyzerFor(module: Module, language: LanguageId) =
@@ -3105,6 +3106,11 @@ class IdeServices private constructor(
         offset: Int,
         kind: dev.ide.lang.kotlin.NavKind,
     ): List<dev.ide.lang.kotlin.NavTarget> {
+        if (kind == dev.ide.lang.kotlin.NavKind.USAGES) {
+            val usages = runCatching { refactor.usages(file, text, offset) }
+                .onFailure { navigationLog.warn("find usages failed in $file", it) }.getOrNull().orEmpty()
+            if (usages.isNotEmpty()) return usages.map { (path, range) -> usageNavTarget(path, range.start) }
+        }
         val targets = kotlinEditor.navigationTargets(file, text, offset, kind)
         if (targets.isNotEmpty()) return targets
         val java = javaNavKind(kind)?.let { k ->
@@ -3191,6 +3197,17 @@ class IdeServices private constructor(
     }
 
     private val navigationLog by lazy { Log.logger("ide.navigation") }
+
+    /** A Find Usages row: `File.kt:line  the line's code`, landing on [offset] in [path]. */
+    private fun usageNavTarget(path: Path, offset: Int): dev.ide.lang.kotlin.NavTarget {
+        val text = openDocuments[path.toAbsolutePath().normalize()] ?: runCatching { path.readText() }.getOrNull().orEmpty()
+        val at = offset.coerceIn(0, text.length)
+        val line = text.substring(0, at).count { it == '\n' } + 1
+        val lineStart = text.lastIndexOf('\n', at - 1) + 1
+        val lineEnd = text.indexOf('\n', at).let { if (it < 0) text.length else it }
+        val snippet = text.substring(lineStart, lineEnd).trim().let { if (it.length > 70) it.take(67) + "..." else it }
+        return dev.ide.lang.kotlin.NavTarget(store.vfs.fileFor(path), at, "${path.fileName}:$line  $snippet", "usage")
+    }
 
     /** The Java analyzer of [file]'s module, for a `.java` file in one. */
     private fun javaAnalyzerFor(file: Path): dev.ide.lang.java.JavaSourceAnalyzer? {
@@ -3803,6 +3820,18 @@ class IdeServices private constructor(
             }
         }
         return out
+    }
+
+    /** Every file across the workspace's modules' source roots whose name ends with [suffix]. */
+    private fun projectFilesEndingWith(suffix: String): List<Path> {
+        val out = ArrayList<Path>()
+        for (m in modules()) for (root in sourceRoots(m)) {
+            if (!Files.isDirectory(root)) continue
+            runCatching {
+                Files.walk(root).use { s -> s.filter { it.toString().endsWith(suffix) }.forEach { out.add(it) } }
+            }
+        }
+        return out.distinct()
     }
 
     /** Every `.java`/`.kt` file across the workspace's modules (for the move-time import sweep). */
