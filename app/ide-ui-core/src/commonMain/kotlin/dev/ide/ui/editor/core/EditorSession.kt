@@ -854,7 +854,15 @@ class EditorSession(
             // different amount than the IME delivered, so its model is now stale. Forced when the edit changed
             // no text (skip-over closer): no extracted-text push follows, so even a monitoring IME needs the
             // restart — its mirror already holds the char it committed and nothing else will evict it.
-            if (edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1) {
+            //
+            // An auto-closed pair is the exception: the text before the caret and the caret itself are exactly
+            // what the IME committed, only the closer after the caret is extra. The selection push already
+            // tells the IME where the caret is, a mirroring IME gets the closer through the extracted-text push,
+            // and a restart here costs typed characters: the keystrokes the IME already sent after the opener
+            // land on the old, now inactive connection and are dropped (`"Sys` typed fast came out as `""`).
+            val closedPair = edit.start == selMin && edit.end == selMax && edit.caret == selMin + 1 &&
+                edit.text.length > 1 && edit.text.startsWith(text)
+            if (!closedPair && (edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1)) {
                 resyncIme(force = edit.start == edit.end && edit.text.isEmpty())
             }
         } else {
