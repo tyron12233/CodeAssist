@@ -76,7 +76,7 @@ private fun ErrorCard(err: UiError, onDismiss: () -> Unit) {
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(Ide.colors.glassThick, shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
             .border(1.dp, Ide.colors.glassEdge, shape)
             .padding(20.dp),
     ) {

@@ -70,7 +70,7 @@ fun MigrationNotice(visible: Boolean, onBackup: suspend () -> Unit, onDismiss: (
                 onDismiss = onDismiss,
                 modifier = Modifier
                     .width(460.dp)
-                    .background(Ide.colors.glassThick, shape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
                     .border(1.dp, Ide.colors.glassEdge, shape)
                     .padding(28.dp),
             )
