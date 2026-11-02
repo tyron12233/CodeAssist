@@ -220,7 +220,8 @@ class KotlinEditorFeatures(
     private fun targetsFor(kind: NavKind, symbol: KotlinSymbol?, leaf: KtElement?, typeRefFqn: String?): List<NavTarget> = when (kind) {
         NavKind.DECLARATION -> declarationTargets(symbol, typeRefFqn)
         NavKind.TYPE_DECLARATION -> typeDeclarationTargets(symbol)
-        NavKind.IMPLEMENTATION -> implementationTargets(typeRefFqn ?: contextTypeFqn(symbol, leaf))
+        NavKind.IMPLEMENTATION -> (if (typeRefFqn == null) memberImplementationTargets(symbol, leaf) else null)
+            ?: implementationTargets(typeRefFqn ?: contextTypeFqn(symbol, leaf))
         NavKind.SUPER -> superTargets(symbol, leaf)
         NavKind.USAGES, NavKind.RELATED -> emptyList()
     }
@@ -859,16 +860,8 @@ class KotlinEditorFeatures(
         val inheritable = inInterface || overrides || decl.hasModifier(KtTokens.OPEN_KEYWORD) || decl.hasModifier(KtTokens.ABSTRACT_KEYWORD)
         if (!inheritable) return emptyList()
         val out = ArrayList<Pair<String, Int>>()
-        // A member DECLARED in [typeFqn], not one it inherits: `declaringClassFqn` is only set for binary
-        // callables, so a source member is placed by the class its declaration sits in.
         fun sourceMemberOf(typeFqn: String): Pair<String, Int>? =
-            service.membersNamed(typeFqn, emptyList(), name).firstNotNullOfOrNull { s ->
-                if (!s.origin.fromSource) return@firstNotNullOfOrNull null
-                val dn = s.declaration() as? KotlinDomNode ?: return@firstNotNullOfOrNull null
-                val d = dn.psi as? KtNamedDeclaration ?: return@firstNotNullOfOrNull null
-                if (d.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() != typeFqn) return@firstNotNullOfOrNull null
-                d.nameIdentifier?.textRange?.startOffset?.let { dn.owner.file.path to it }
-            }
+            memberDeclaredIn(typeFqn, name)?.let { (file, at) -> file.path to at }
         val roots = LinkedHashSet<String>().apply { add(ownerFqn) }
         if (overrides) {
             for (st in service.supertypesOf(ownerFqn)) {
@@ -887,6 +880,74 @@ class KotlinEditorFeatures(
             }
         }
         return out
+    }
+
+    /**
+     * The member named [name] DECLARED in source type [typeFqn] (not one it inherits), as its file and name
+     * offset. `declaringClassFqn` is only set for binary callables, so a source member is placed by the class its
+     * declaration sits in.
+     */
+    private fun memberDeclaredIn(typeFqn: String, name: String): Pair<VirtualFile, Int>? =
+        service.membersNamed(typeFqn, emptyList(), name).firstNotNullOfOrNull { s ->
+            if (!s.origin.fromSource) return@firstNotNullOfOrNull null
+            val dn = s.declaration() as? KotlinDomNode ?: return@firstNotNullOfOrNull null
+            val d = dn.psi as? KtNamedDeclaration ?: return@firstNotNullOfOrNull null
+            if (d.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() != typeFqn) return@firstNotNullOfOrNull null
+            d.nameIdentifier?.textRange?.startOffset?.let { dn.owner.file to it }
+        }
+
+    /**
+     * Go to Implementation on a MEMBER: the members of the same name declared in the subtypes of its class, at
+     * every level, so `Shape.area` lists `Circle.area` and `Square.area` rather than the classes. A subtype in a
+     * library that declares the member opens read-only. Null when the caret is not on a member (a type, a local,
+     * a top-level function), so the caller lists the type's inheritors as before; empty when nothing overrides it.
+     */
+    private fun memberImplementationTargets(symbol: KotlinSymbol?, leaf: KtElement?): List<NavTarget>? {
+        val (ownerFqn, name) = memberAt(symbol, leaf) ?: return null
+        val out = ArrayList<NavTarget>()
+        val seen = hashSetOf(ownerFqn)
+        val queue = ArrayDeque(listOf(ownerFqn))
+        while (queue.isNotEmpty() && seen.size < 500) {
+            for (sub in service.directInheritors(queue.removeFirst())) {
+                if (!seen.add(sub.fqn)) continue
+                queue.addLast(sub.fqn)
+                val label = "$name  ·  ${sub.fqn.substringAfterLast('.')}"
+                val source = memberDeclaredIn(sub.fqn, name)
+                if (source != null) {
+                    out += NavTarget(source.first, source.second, label, "method")
+                } else if (service.isClasspathType(sub.fqn) &&
+                    service.membersNamed(sub.fqn, emptyList(), name).any { it.declaringClassFqn == sub.fqn }
+                ) {
+                    out += NavTarget(LibraryFile(libraryPath(sub.fqn, name)), 0, label, "library")
+                }
+            }
+        }
+        return out.sortedBy { it.label }
+    }
+
+    /**
+     * The member under the caret as (owning class FQN, name): the function or property whose NAME the caret is on
+     * in a class, or a reference resolving to one. Null for anything else, an extension included (it overrides
+     * nothing).
+     */
+    private fun memberAt(symbol: KotlinSymbol?, leaf: KtElement?): Pair<String, String>? {
+        leaf ?: return null
+        // On a declaration's own name: the symbol does not resolve there, the tree answers.
+        val decl = generateSequence(leaf) { it.parent }.take(3).filterIsInstance<KtNamedDeclaration>().firstOrNull()
+        if (decl != null && decl.nameIdentifier?.textRange?.let { leaf.textRange.startOffset in it.startOffset until it.endOffset } == true) {
+            val isMember = decl is KtNamedFunction || decl is KtProperty || (decl is KtParameter && decl.valOrVarKeyword != null)
+            if (!isMember || (decl as? KtCallableDeclaration)?.receiverTypeReference != null) return null
+            val owner = decl.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() ?: return null
+            return owner to (decl.name ?: return null)
+        }
+        symbol ?: return null
+        if (symbol.kind != SymbolKind.METHOD && symbol.kind != SymbolKind.FIELD) return null
+        if (symbol.isExtension) return null
+        val owner = if (symbol.origin.fromSource) {
+            ((symbol.declaration() as? KotlinDomNode)?.psi as? KtElement)
+                ?.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString()
+        } else symbol.declaringClassFqn
+        return owner?.let { it to symbol.name }
     }
 
     /** The FQNs an import can name [decl] by: a top-level declaration, a class, a member of an object. */

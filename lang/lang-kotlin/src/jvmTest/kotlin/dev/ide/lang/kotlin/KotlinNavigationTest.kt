@@ -160,9 +160,56 @@ class KotlinNavigationTest {
         assertTrue(nav("Use5.kt", code, NavKind.DECLARATION).isEmpty(), "a numeric literal has no declaration")
     }
 
+    // --- Go to Implementation on a member: the overriding members, at every level ---
+
+    private val shapes = SHAPES
+
+    private fun implementations(file: String, code: String) = nav(file, code, NavKind.IMPLEMENTATION).map { it.label }
+
+    @Test
+    fun implementationOfAMemberDeclarationListsItsOverrides() {
+        val code = shapes.replaceFirst("abstract fun area", "abstract fun ar|ea")
+        assertEquals(
+            listOf("area  ·  Circle", "area  ·  Ring", "area  ·  Square"),
+            implementations("Shapes.kt", code),
+            "every override, the grandchild Ring included, not the classes",
+        )
+    }
+
+    @Test
+    fun implementationOfACallListsTheOverridesOfWhatItCalls() {
+        val code = "package demo\nfun total(s: Shape) = s.ar|ea()"
+        assertEquals(listOf("area  ·  Circle", "area  ·  Ring", "area  ·  Square"), implementations("UseShapes.kt", code))
+    }
+
+    @Test
+    fun implementationOfAPropertyListsOnlyTheTypesThatOverrideIt() {
+        val code = shapes.replaceFirst("open val name", "open val na|me")
+        assertEquals(listOf("name  ·  Square"), implementations("Shapes.kt", code))
+    }
+
+    @Test
+    fun aMemberNothingOverridesHasNoImplementations() {
+        val code = shapes.replaceFirst("fun fixed", "fun fix|ed")
+        assertEquals(emptyList(), implementations("Shapes.kt", code), "not the class's subclasses instead")
+    }
+
+    @Test
+    fun implementationOfATypeStillListsItsSubclasses() {
+        val code = shapes.replaceFirst("abstract class Shape", "abstract class Sha|pe")
+        val labels = implementations("Shapes.kt", code)
+        assertTrue(labels.any { it.startsWith("Circle") } && labels.any { it.startsWith("Square") }, "got $labels")
+    }
+
     companion object {
+        private val SHAPES = "package demo\n" +
+            "abstract class Shape { abstract fun area(): Double; open val name: String = \"shape\"; fun fixed() = 1 }\n" +
+            "open class Circle : Shape() { override fun area() = 1.0 }\n" +
+            "class Ring : Circle() { override fun area() = 2.0 }\n" +
+            "class Square : Shape() { override fun area() = 4.0; override val name = \"sq\" }\n"
+
         val srcDir: Path = tempProject(
-            mapOf("Lib.kt" to "package demo\nclass Foo\ninterface Base { fun f() }\n"),
+            mapOf("Lib.kt" to "package demo\nclass Foo\ninterface Base { fun f() }\n", "Shapes.kt" to SHAPES),
         )
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
     }
