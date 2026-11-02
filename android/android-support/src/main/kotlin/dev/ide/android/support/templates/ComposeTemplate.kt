@@ -131,6 +131,7 @@ object JetpackComposeAppTemplate : ProjectTemplate {
             import android.os.Bundle
             import androidx.activity.ComponentActivity
             import androidx.activity.compose.setContent
+            import androidx.activity.enableEdgeToEdge
             import androidx.compose.foundation.layout.Box
             import androidx.compose.foundation.layout.Column
             import androidx.compose.foundation.layout.safeDrawingPadding
@@ -142,9 +143,10 @@ object JetpackComposeAppTemplate : ProjectTemplate {
             class MainActivity : ComponentActivity() {
                 override fun onCreate(savedInstanceState: Bundle?) {
                     super.onCreate(savedInstanceState)
+                    // Android 15 and later draw the app under the status and navigation bars. This picks bar
+                    // icons that stay readable, and safeDrawingPadding keeps the content clear of the bars.
+                    enableEdgeToEdge()
                     setContent {
-                        // Android 15 and later draw the app under the status and navigation bars:
-                        // safeDrawingPadding keeps the content clear of them.
                         Box(Modifier.safeDrawingPadding()) { Greeting("World") }
                     }
                 }
