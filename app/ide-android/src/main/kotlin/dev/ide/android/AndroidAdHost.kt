@@ -44,6 +44,9 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.google.android.gms.ads.rewarded.ServerSideVerificationOptions
 import dev.ide.platform.DeviceMemory
 import dev.ide.platform.MemoryTier
 import dev.ide.platform.log.Log
@@ -211,6 +214,116 @@ class AndroidAdHost(
     private fun interstitialClosed() {
         interstitialShowing = false
         FullScreenAdGate.adClosed()
+    }
+
+    // Rewarded: the one ad the user asks for, in exchange for CodeAssist Free AI points. Loaded on demand (and the
+    // next one right after a view, so a second tap is instant), and never tied to the "show ads" toggle: that
+    // switch is about ads the user did not ask for. Main thread only, like the interstitial.
+    @Volatile private var rewarded: RewardedAd? = null
+    @Volatile private var rewardedLoadedAt = 0L
+    private var loadingRewarded = false
+    private val rewardedWaiters = mutableListOf<(RewardedAd?) -> Unit>()
+
+    override val rewardedAvailable: Boolean
+        get() = started && webViewAvailable && BuildConfig.AD_REWARDED_UNIT_ID.isNotBlank()
+
+    override fun showRewarded(userId: String, onResult: (earned: Boolean) -> Unit) {
+        mainHandler.post {
+            if (!rewardedAvailable || userId.isBlank()) {
+                onResult(false)
+                return@post
+            }
+            val ready = rewarded?.takeIf { SystemClock.elapsedRealtime() - rewardedLoadedAt < INTERSTITIAL_MAX_AGE_MS }
+            rewarded = null
+            if (ready != null) presentRewarded(ready, userId, onResult)
+            else loadRewarded { ad -> if (ad == null) onResult(false) else presentRewarded(ad, userId, onResult) }
+        }
+    }
+
+    private fun loadRewarded(then: (RewardedAd?) -> Unit) {
+        rewardedWaiters += then
+        if (loadingRewarded) return
+        val ctx = activityProvider()?.applicationContext
+        val finish = { ad: RewardedAd? ->
+            loadingRewarded = false
+            val waiting = rewardedWaiters.toList()
+            rewardedWaiters.clear()
+            // One ad serves one view: the first waiter gets it, any other is told no and can tap again.
+            waiting.forEachIndexed { i, w -> w(if (i == 0) ad else null) }
+        }
+        if (ctx == null) {
+            finish(null)
+            return
+        }
+        loadingRewarded = true
+        runCatching {
+            RewardedAd.load(
+                ctx,
+                BuildConfig.AD_REWARDED_UNIT_ID,
+                AdRequest.Builder().build(),
+                object : RewardedAdLoadCallback() {
+                    override fun onAdLoaded(ad: RewardedAd) {
+                        adLog.info("rewarded loaded (unit ${BuildConfig.AD_REWARDED_UNIT_ID})")
+                        finish(ad)
+                    }
+
+                    override fun onAdFailedToLoad(error: LoadAdError) {
+                        adLog.warn(
+                            "rewarded failed (unit ${BuildConfig.AD_REWARDED_UNIT_ID}): " +
+                                "code=${error.code} domain=${error.domain} message=${error.message}"
+                        )
+                        finish(null)
+                    }
+                },
+            )
+        }.onFailure { e ->
+            adLog.warn("rewarded load skipped (no WebView / SDK unavailable): ${e.message}")
+            finish(null)
+        }
+    }
+
+    /** Keep one loaded for the next tap. */
+    private fun preloadRewarded() {
+        if (rewarded != null || loadingRewarded) return
+        loadRewarded { ad ->
+            if (ad != null) {
+                rewarded = ad
+                rewardedLoadedAt = SystemClock.elapsedRealtime()
+            }
+        }
+    }
+
+    private fun presentRewarded(ad: RewardedAd, userId: String, onResult: (Boolean) -> Unit) {
+        val activity = activityProvider()
+        if (activity == null) {
+            onResult(false)
+            return
+        }
+        // Google's signed reward callback carries this id to the `ai-reward` function, which is the only thing
+        // that credits points. The app's own reward listener below only decides whether to re-read the wallet.
+        ad.setServerSideVerificationOptions(ServerSideVerificationOptions.Builder().setUserId(userId).build())
+        var earned = false
+        var done = false
+        val finish = { result: Boolean ->
+            if (!done) {
+                done = true
+                FullScreenAdGate.adClosed()
+                onResult(result)
+            }
+        }
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                finish(earned)
+                preloadRewarded()
+            }
+
+            override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                adLog.warn("rewarded failed to show: code=${error.code} message=${error.message}")
+                finish(false)
+            }
+        }
+        FullScreenAdGate.adShown()
+        runCatching { ad.show(activity) { earned = true } }.onFailure { finish(false) }
     }
 
     // Native ads outlive the slots that show them (see NativeAdPool): a slot that leaves and comes back, or a

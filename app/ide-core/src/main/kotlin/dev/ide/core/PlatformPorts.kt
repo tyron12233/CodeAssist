@@ -68,6 +68,11 @@ val STORE_MODERATION_SERVICE = ServiceKey<dev.ide.store.StoreModerationService>(
  *  reports challenges unavailable, and the tab explains itself rather than failing. */
 val DAILY_CHALLENGE_SERVICE = ServiceKey<dev.ide.store.DailyChallengeService>("platform.dailyChallenges")
 
+/** CodeAssist Free AI: the points wallet and the proxy's address. Registered by the launcher next to the store
+ *  account service, whose session it borrows. Absent resolves to a service that reports the tier unavailable,
+ *  and the agent offers bring-your-own-key providers only. */
+val AI_CREDITS_SERVICE = ServiceKey<dev.ide.store.AiCreditsService>("platform.aiCredits")
+
 /**
  * A host that can raise an OS-level notification.
  *

@@ -1886,6 +1886,15 @@ interface AgentService {
     /** Re-read [usageLimits] from the provider. Also done by the backend after every turn. */
     fun refreshUsageLimits() {}
 
+    /** The CodeAssist Free AI wallet: whether the tier exists in this build, the sign-in, and the points. */
+    val freeAi: StateFlow<UiFreeAiState> get() = FREE_AI_NONE
+
+    /** Re-read [freeAi] from the server. Also done by the backend after every free-tier turn. */
+    fun refreshFreeAi() {}
+
+    /** Read the usage summary into [UiFreeAiState.usage], for the Usage sheet. */
+    fun refreshFreeAiUsage() {}
+
     /** Send a user message; streams the agent's response into [chatState]. Queued
      *  [UiAgentChatState.pendingAttachments] go with it. */
     fun send(text: String)
@@ -2015,3 +2024,76 @@ enum class UiUsageMeterKind {
 }
 
 private val USAGE_LIMITS_NONE: StateFlow<UiAgentUsageLimits?> = MutableStateFlow(null)
+
+/**
+ * The CodeAssist Free AI wallet as the chat shows it. One point is $0.001 of model usage. Points are spent from
+ * today's free allowance first ([freePoints], resets at midnight UTC), then from [earnedPoints] (sign-up bonus
+ * and watched ads, kept).
+ */
+data class UiFreeAiState(
+    /** Whether this build can use the free tier at all (a Supabase config and sign-in exist). */
+    val available: Boolean = false,
+    val signedIn: Boolean = false,
+    /** True while a read is in flight and nothing has been read yet. */
+    val loading: Boolean = false,
+    /** The account id; a rewarded ad carries it so the server can credit the right wallet. */
+    val userId: String? = null,
+    /** False when the tier is switched off or this month's budget is spent. */
+    val enabled: Boolean = true,
+    val points: Int = 0,
+    val freePoints: Int = 0,
+    val earnedPoints: Int = 0,
+    val dailyFreePoints: Int = 0,
+    val adPoints: Int = 0,
+    val adsLeftToday: Int = 0,
+    val adDailyCap: Int = 0,
+    /** The last read's failure, for display; null when the last read worked. */
+    val error: String? = null,
+    /** What each model costs, for the model picker. Empty until the first wallet read. */
+    val models: List<UiFreeAiModel> = emptyList(),
+    /** The usage summary for the Usage sheet; null until [AgentService.refreshFreeAiUsage] has read it. */
+    val usage: UiFreeAiUsage? = null,
+)
+
+/** The signed-in user's CodeAssist Free AI usage. Points are to one decimal. */
+data class UiFreeAiUsage(
+    val points: Double,
+    val freePointsLeft: Double,
+    val dailyFreePoints: Int,
+    val dailyCapPoints: Int,
+    val resetsAtMs: Long,
+    val adPoints: Int,
+    val adsToday: Int,
+    val adDailyCap: Int,
+    val spentToday: Double,
+    val stepsToday: Int,
+    val spentWeek: Double,
+    val stepsWeek: Int,
+    /** Last 7 days, most expensive model first: model id, points, steps. */
+    val byModelWeek: List<Triple<String, Double, Int>> = emptyList(),
+    val recent: List<UiFreeAiStep> = emptyList(),
+)
+
+/** One request to the model and what it cost. */
+data class UiFreeAiStep(
+    val atMs: Long,
+    val model: String,
+    val points: Double,
+    val input: Int,
+    val output: Int,
+    val cacheRead: Int,
+    val cacheWrite: Int,
+    val webSearches: Int,
+)
+
+/** One CodeAssist Free AI model's price. [pointsPerStep] is per request to the model; a reply may take several. */
+data class UiFreeAiModel(
+    val id: String,
+    val pointsPerStep: Double,
+    /** The balance a request on this model needs before it may start. */
+    val minPoints: Int,
+    /** False when the budget guard has switched the model off for the rest of the month. */
+    val available: Boolean,
+)
+
+private val FREE_AI_NONE: StateFlow<UiFreeAiState> = MutableStateFlow(UiFreeAiState())

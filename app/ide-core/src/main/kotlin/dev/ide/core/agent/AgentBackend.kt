@@ -20,6 +20,7 @@ import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
 import dev.ide.agent.impl.ApiKeyPool
 import dev.ide.agent.impl.CheckpointWorkspace
+import dev.ide.agent.impl.CodeAssistFreeProvider
 import dev.ide.agent.impl.LlmErrorKind
 import dev.ide.agent.impl.RequestPacer
 import dev.ide.agent.impl.HistoryCompactor
@@ -32,6 +33,7 @@ import dev.ide.agent.mcp.CodeAssistMcpServer
 import dev.ide.agent.mcp.FtpServer
 import dev.ide.agent.mcp.HttpMcpServer
 import dev.ide.agent.toolSchema
+import dev.ide.core.AI_CREDITS_SERVICE
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
 import dev.ide.platform.log.Log
@@ -59,6 +61,7 @@ import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiOpenRouterSignIn
 import dev.ide.ui.backend.UiAgentUsageLimits
+import dev.ide.ui.backend.UiFreeAiState
 import dev.ide.ui.backend.UiUsageMeter
 import dev.ide.ui.backend.UiUsageMeterKind
 import kotlinx.coroutines.CancellationException
@@ -91,7 +94,48 @@ import kotlin.io.path.readText
 internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private val transport = OkHttpLlmTransport()
-    private val registry = AgentProviders.registry(transport)
+    /**
+     * CodeAssist Free AI, when the launcher wired it (a Supabase config and sign-in exist). Resolved like the store
+     * ports; absent on desktop builds without Supabase and in tests, where the provider list is BYO-key only.
+     */
+    private val freeAiCredits: dev.ide.store.AiCreditsService =
+        ctx.manager?.applicationContainer?.getServiceOrNull(AI_CREDITS_SERVICE)
+            ?.takeIf { it.available() && it.proxyBaseUrl() != null }
+            ?: dev.ide.store.AiCreditsService.Unsupported
+
+    /**
+     * The built-in providers, with the free tier FIRST when this build has it: with no provider chosen yet the
+     * first entry is the default, so someone who has never pasted a key starts on the one option that needs none.
+     */
+    private val registry: dev.ide.agent.LlmProviderRegistry = run {
+        val free = freeAiCredits.proxyBaseUrl()?.let { base -> CodeAssistFreeProvider(transport, base) { freeAiCredits.accessToken() } }
+        dev.ide.agent.SimpleLlmProviderRegistry(listOfNotNull(free) + AgentProviders.defaults(transport))
+    }
+
+    init {
+        adoptFreeAiAsDefault()
+    }
+
+    /**
+     * Once per install, move a user whose selected provider cannot work (no key, or a gateway with no URL) onto
+     * CodeAssist Free AI. A user with a working key keeps their provider; a user who never picked one already
+     * lands on the free tier, because it is first in [registry]. Recorded as done whatever the outcome, so a later
+     * deliberate choice of a keyless provider (to paste a key into it) is never undone.
+     */
+    private fun adoptFreeAiAsDefault() {
+        if (registry.provider(FREE_AI) == null) return
+        val manager = ctx.manager ?: return
+        if (pref(FREE_AI_DEFAULT_ADOPTED) == "true") return
+        manager.setPreference("settings.$AI_PAGE.$FREE_AI_DEFAULT_ADOPTED", "true")
+        val selected = pref("provider") ?: return
+        if (selected == FREE_AI) return
+        val usable = if (selected == GATEWAY) {
+            !pref("gatewayBaseUrl").isNullOrBlank()
+        } else {
+            !pref(keyField(selected)).isNullOrBlank() || backupKeys(selected).isNotEmpty()
+        }
+        if (!usable) manager.setPreference("settings.$AI_PAGE.provider", FREE_AI)
+    }
     private val workspace = IdeAgentWorkspace(ctx)
 
     /** The agent's own writes go through this, so each turn's changes can be shown as diffs and reverted. */
@@ -284,7 +328,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         return ResolvedConfig(
             selectedId = selected,
             clientProviderId = selected,
-            apiKey = pref(keyField(selected)),
+            // The free tier has no key: the provider fetches the session's token per request. A placeholder stands
+            // in for it while signed in, which is what makes the config "ready" and the key pool non-empty.
+            apiKey = if (selected == FREE_AI) FREE_AI_SESSION_KEY.takeIf { freeAiCredits.signedIn() } else pref(keyField(selected)),
             model = chosenModel(selected) ?: preferredModels[selected] ?: provider?.defaultModel.orEmpty(),
             baseUrl = null,
             backupKeys = backupKeys(selected),
@@ -312,6 +358,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         "gemini" -> model.startsWith("gemini") || model.startsWith("gemma") || model.startsWith("models/")
         "openai" -> !model.startsWith("claude") && !model.startsWith("gemini") && '/' !in model
         "openrouter" -> '/' in model
+        FREE_AI -> model.startsWith("claude-")
         else -> true
     }
 
@@ -376,8 +423,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 p.id, p.displayName,
                 p.models.map { UiAgentModel(it.id, it.displayName) },
                 p.defaultModel,
-                apiKey = pref(keyField(p.id)).orEmpty(),
-                backupKeys = backupKeys(p.id),
+                apiKey = if (p.id == FREE_AI) FREE_AI_SESSION_KEY.takeIf { freeAiCredits.signedIn() }.orEmpty()
+                else pref(keyField(p.id)).orEmpty(),
+                backupKeys = if (p.id == FREE_AI) emptyList() else backupKeys(p.id),
             )
         }
         // A synthetic "Custom gateway" entry (OpenAI-compatible endpoint); its client is the OpenAI provider.
@@ -467,6 +515,77 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     override fun beginOpenRouterSignIn(): String? = openRouter.begin()
 
     override fun cancelOpenRouterSignIn() = openRouter.cancel()
+
+    // Signed-in is read from the stored session (no network), so the chat does not flash a sign-in prompt at a
+    // signed-in user before the first wallet read lands.
+    private val _freeAiState = MutableStateFlow(
+        UiFreeAiState(available = freeAiCredits.available(), signedIn = freeAiCredits.signedIn()),
+    )
+    override val freeAi: StateFlow<UiFreeAiState> get() = _freeAiState.asStateFlow()
+    private var freeAiJob: Job? = null
+
+    override fun refreshFreeAi() {
+        if (!freeAiCredits.available()) {
+            _freeAiState.value = UiFreeAiState(available = false)
+            return
+        }
+        if (!freeAiCredits.signedIn()) {
+            _freeAiState.value = UiFreeAiState(available = true, signedIn = false)
+            return
+        }
+        freeAiJob?.cancel()
+        _freeAiState.update { it.copy(available = true, signedIn = true, loading = it.userId == null) }
+        freeAiJob = scope.launch(Dispatchers.IO) {
+            val next = when (val r = freeAiCredits.wallet()) {
+                is dev.ide.store.StoreResult.Ok -> r.value.let { w ->
+                    UiFreeAiState(
+                        available = true, signedIn = true, userId = w.userId, enabled = w.enabled,
+                        points = w.points, freePoints = w.freePoints, earnedPoints = w.earnedPoints,
+                        dailyFreePoints = w.dailyFreePoints, adPoints = w.adPoints,
+                        adsLeftToday = w.adsLeftToday, adDailyCap = w.adDailyCap,
+                        models = w.models.map {
+                            dev.ide.ui.backend.UiFreeAiModel(it.id, it.pointsPerStep, it.minPoints, it.available)
+                        },
+                    )
+                }
+                is dev.ide.store.StoreResult.Failed ->
+                    if (r.status == 401) UiFreeAiState(available = true, signedIn = false)
+                    else _freeAiState.value.copy(loading = false, error = r.message)
+                is dev.ide.store.StoreResult.Unavailable -> _freeAiState.value.copy(loading = false, error = r.reason)
+            }
+            _freeAiState.value = if (next.signedIn) next.copy(usage = next.usage ?: _freeAiState.value.usage) else next
+            // Signing in or out changes whether the free tier is usable; the loop is rebuilt on the next send.
+            resetLoop()
+        }
+    }
+
+    private var freeAiUsageJob: Job? = null
+
+    override fun refreshFreeAiUsage() {
+        if (!freeAiCredits.available() || !freeAiCredits.signedIn()) return
+        freeAiUsageJob?.cancel()
+        freeAiUsageJob = scope.launch(Dispatchers.IO) {
+            when (val r = freeAiCredits.usage()) {
+                is dev.ide.store.StoreResult.Ok -> r.value.let { u ->
+                    val usage = dev.ide.ui.backend.UiFreeAiUsage(
+                        points = u.points, freePointsLeft = u.freePointsLeft, dailyFreePoints = u.dailyFreePoints,
+                        dailyCapPoints = u.dailyCapPoints, resetsAtMs = u.resetsAtMs, adPoints = u.adPoints,
+                        adsToday = u.adsToday, adDailyCap = u.adDailyCap, spentToday = u.spentToday,
+                        stepsToday = u.stepsToday, spentWeek = u.spentWeek, stepsWeek = u.stepsWeek,
+                        byModelWeek = u.byModelWeek.map { Triple(it.model, it.points, it.steps) },
+                        recent = u.recent.map {
+                            dev.ide.ui.backend.UiFreeAiStep(
+                                it.atMs, it.model, it.points, it.input, it.output, it.cacheRead, it.cacheWrite, it.webSearches,
+                            )
+                        },
+                    )
+                    _freeAiState.update { it.copy(usage = usage, error = null) }
+                }
+                is dev.ide.store.StoreResult.Failed -> _freeAiState.update { it.copy(error = r.message) }
+                is dev.ide.store.StoreResult.Unavailable -> _freeAiState.update { it.copy(error = r.reason) }
+            }
+        }
+    }
 
     private val _usageLimits = MutableStateFlow<UiAgentUsageLimits?>(null)
     override val usageLimits: StateFlow<UiAgentUsageLimits?> = _usageLimits.asStateFlow()
@@ -610,8 +729,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
         if (!cfg.ready) {
             appendError(
-                if (cfg.selectedId == GATEWAY) "Add the gateway's base URL to use the agent. Tap the key icon to manage providers."
-                else "Add an API key to use the agent. Tap the key icon to manage providers.",
+                when (cfg.selectedId) {
+                    GATEWAY -> "Add the gateway's base URL to use the agent. Tap the key icon to manage providers."
+                    FREE_AI -> "Sign in to use CodeAssist Free AI. Tap the key icon, then sign in with GitHub or Google."
+                    else -> "Add an API key to use the agent. Tap the key icon to manage providers."
+                },
             )
             return null
         }
@@ -776,6 +898,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun afterTurn(userId: Long?) {
         // Each step of the turn was a request against the account's limits; show where they stand now.
         refreshUsageLimits()
+        if (resolveConfig().selectedId == FREE_AI) refreshFreeAi()
         if (userId != null && checkpoints.hasChanges(userId)) {
             _chatState.update { s ->
                 s.copy(messages = s.messages.map { if (it.id == userId) it.copy(canUndo = true) else it })
@@ -1184,6 +1307,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+        /** CodeAssist Free AI ([CodeAssistFreeProvider]). */
+        const val FREE_AI = CodeAssistFreeProvider.ID
+        /** Stands in for the free tier's key; the provider ignores it and sends the session's access token. */
+        private const val FREE_AI_SESSION_KEY = "codeassist-session"
+        /** Set once [adoptFreeAiAsDefault] has run on this install. */
+        private const val FREE_AI_DEFAULT_ADOPTED = "freeAiDefaultAdopted"
         private const val OPENROUTER = "openrouter"
         private const val MAX_RECENT_MODELS = 5
 

@@ -166,6 +166,10 @@ internal fun ModelPickerDialog(
     onPick: (String) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
+    /** A price label per model id (CodeAssist Free AI's points per step); models without one show none. */
+    prices: Map<String, String> = emptyMap(),
+    /** Shown under the title when [prices] is not empty: what the unit means. */
+    priceNote: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val vendors = remember(models) { models.mapNotNull { modelVendor(it.id) }.distinct().sorted() }
@@ -200,6 +204,9 @@ internal fun ModelPickerDialog(
                     modifier = Modifier.weight(1f),
                 )
                 IconButtonCa(CaIcons.close, stringResource(Res.string.chat_close), onDismiss, iconSize = 16, boxSize = 30)
+            }
+            if (prices.isNotEmpty() && priceNote != null) {
+                Text(priceNote, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             SearchField(query, stringResource(Res.string.chat_models_search, models.size), searchFocus) { query = it }
             if (vendors.size > 1 || hasFree) {
@@ -250,6 +257,7 @@ internal fun ModelPickerDialog(
                             model = model,
                             selected = model.id == current,
                             favorite = model.id in favorites,
+                            price = prices[model.id],
                             onPick = { onPick(model.id); onDismiss() },
                             onToggleFavorite = { onToggleFavorite(model.id, model.id !in favorites) },
                         )
@@ -323,7 +331,14 @@ private fun SectionHeading(text: String) {
 }
 
 @Composable
-private fun ModelRow(model: UiAgentModel, selected: Boolean, favorite: Boolean, onPick: () -> Unit, onToggleFavorite: () -> Unit) {
+private fun ModelRow(
+    model: UiAgentModel,
+    selected: Boolean,
+    favorite: Boolean,
+    price: String? = null,
+    onPick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(Ca.radius.md)
     Row(
@@ -343,6 +358,7 @@ private fun ModelRow(model: UiAgentModel, selected: Boolean, favorite: Boolean, 
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                 )
                 if (isFreeModel(model.id)) Chip(stringResource(Res.string.chat_models_free), fill = scheme.tertiaryContainer, textColor = scheme.onTertiaryContainer)
+                if (price != null) Chip(price, fill = scheme.primaryContainer, textColor = scheme.onPrimaryContainer)
             }
             if (model.id != model.displayName) {
                 Text(

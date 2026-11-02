@@ -137,6 +137,25 @@ interface AdHost {
      */
     val lowMemoryDevice: Boolean get() = false
 
+    /**
+     * Whether this host can show a REWARDED ad: the one ad the user asks for, in exchange for CodeAssist Free AI
+     * points. Independent of the "show ads" preference on purpose: turning passive ads off must not take away
+     * the user's way to earn points, and nothing here is shown unless the user taps for it. Still subject to ad
+     * consent where consent applies. False where unsupported (desktop; the default).
+     */
+    val rewardedAvailable: Boolean get() = false
+
+    /**
+     * Show a rewarded ad for the signed-in account [userId], loading one first if none is ready, and call
+     * [onResult] once the ad has closed (or failed): true when the viewer earned the reward.
+     *
+     * [userId] travels to Google as the ad's server-side verification user id, and the points are credited by
+     * the server only when Google's SIGNED callback for this view arrives. [onResult] being true means "go and
+     * re-read the wallet", never "add points here". Called on the main thread. Never call this from an ad
+     * placement or tie it to anything but an explicit tap: rewards for ads are allowed only on rewarded units.
+     */
+    fun showRewarded(userId: String, onResult: (earned: Boolean) -> Unit) = onResult(false)
+
     /** A no-op bridge for hosts without ads (desktop; the default). */
     object None : AdHost {
         override val available: Boolean = false

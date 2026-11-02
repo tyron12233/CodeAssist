@@ -42,6 +42,16 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import dev.ide.agent.ui.generated.resources.free_ai_card_pitch
+import dev.ide.agent.ui.generated.resources.free_ai_card_title
+import dev.ide.agent.ui.generated.resources.free_ai_in_use
+import dev.ide.agent.ui.generated.resources.free_ai_section_byok
+import dev.ide.agent.ui.generated.resources.free_ai_use_this
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiOpenRouterSignIn
@@ -78,64 +88,104 @@ import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The AI provider / key manager. An opaque dialog listing each provider (plus a first-class "Custom gateway"
- * for OpenAI-compatible endpoints) as a selectable card; the active card expands to a masked, show/hide API
- * key field (and, for the gateway, a base URL + model). Everything auto-saves through [dev.ide.ui.backend.AgentService].
+ * The AI provider / key manager, as a full-screen page (the app's [ExpressiveScaffold], over the whole window rather
+ * than inside the chat panel). CodeAssist Free AI leads as its own card: the sign-in, or the points and the
+ * rewarded-ad button. The bring-your-own-key providers follow as selectable cards; the active one expands to its key
+ * fields (and, for the custom gateway, a base URL + model). Everything auto-saves through
+ * [dev.ide.ui.backend.AgentService], so the back arrow is the only way out it needs.
  * Reached from the chat header's key button and the empty-state call to action. See docs/agentic-coding.md.
  */
 @Composable
 internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
     var cfg by remember { mutableStateOf(backend.agent.config()) }
     val signIn by backend.agent.openRouterSignIn.collectAsState()
-    // The sign-in saved a key and switched provider/model behind this sheet's back; re-read it.
+    val freeAi by backend.agent.freeAi.collectAsState()
+    // The sign-in saved a key and switched provider/model behind this page's back; re-read it.
     LaunchedEffect(signIn) { if (signIn is UiOpenRouterSignIn.Connected) cfg = backend.agent.config() }
-    CenteredDialog(visible = true, onDismiss = onClose) {
-        Column(
-            Modifier.widthIn(max = 460.dp)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(Ca.radius.xl))
-                // Opaque: a key field is the last thing that should be legible-depending-on-what-is-behind-it.
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.xl))
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(CaIcons.key, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(Res.string.chat_providers_title),
-                    color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButtonCa(CaIcons.close, stringResource(Res.string.chat_close), onClose, iconSize = 16, boxSize = 30)
-            }
-            Text(stringResource(Res.string.chat_providers_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            Column(
-                Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                cfg.providers.forEach { provider ->
-                    ProviderCard(
-                        provider = provider,
-                        selected = provider.id == cfg.selectedProvider,
-                        gatewayBaseUrl = cfg.gatewayBaseUrl,
-                        gatewayModel = cfg.gatewayModel,
-                        gatewayCaCert = cfg.gatewayCaCert,
-                        onSelect = { backend.agent.selectProvider(provider.id); cfg = backend.agent.config() },
-                        onSetKey = { backend.agent.setProviderKey(provider.id, it) },
-                        onSetBackupKeys = { backend.agent.setProviderBackupKeys(provider.id, it) },
-                        onSetGateway = { url, model, ca -> backend.agent.setGateway(url, model, ca) },
-                        signIn = if (provider.id == OPENROUTER && backend.agent.openRouterSignInSupported()) {
-                            { OpenRouterSignInBlock(backend, signIn) }
-                        } else {
-                            null
-                        },
+    LaunchedEffect(freeAi.signedIn) { cfg = backend.agent.config() }
+    val free = cfg.providers.firstOrNull { it.id == FREE_AI_PROVIDER }
+    val select = { id: String -> backend.agent.selectProvider(id); cfg = backend.agent.config() }
+
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            ExpressiveScaffold(
+                title = stringResource(Res.string.chat_providers_title),
+                onBack = onClose,
+            ) { padding ->
+                Column(
+                    Modifier.fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(padding)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .widthIn(max = 640.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (free != null) {
+                        FreeAiCard(backend, selected = cfg.selectedProvider == FREE_AI_PROVIDER) { select(FREE_AI_PROVIDER) }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        stringResource(Res.string.free_ai_section_byok),
+                        color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                     )
+                    Text(stringResource(Res.string.chat_providers_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    cfg.providers.filter { it.id != FREE_AI_PROVIDER }.forEach { provider ->
+                        ProviderCard(
+                            provider = provider,
+                            selected = provider.id == cfg.selectedProvider,
+                            gatewayBaseUrl = cfg.gatewayBaseUrl,
+                            gatewayModel = cfg.gatewayModel,
+                            gatewayCaCert = cfg.gatewayCaCert,
+                            onSelect = { select(provider.id) },
+                            onSetKey = { backend.agent.setProviderKey(provider.id, it) },
+                            onSetBackupKeys = { backend.agent.setProviderBackupKeys(provider.id, it) },
+                            onSetGateway = { url, model, ca -> backend.agent.setGateway(url, model, ca) },
+                            signIn = if (provider.id == OPENROUTER && backend.agent.openRouterSignInSupported()) {
+                                { OpenRouterSignInBlock(backend, signIn) }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(24.dp))
                 }
             }
-            PrimaryButton(stringResource(Res.string.chat_done), onClose, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * CodeAssist Free AI's card: what it is, then the sign-in (signed out) or the wallet and the rewarded-ad button
+ * (signed in), and a button to switch to it while another provider is in use.
+ */
+@Composable
+private fun FreeAiCard(backend: IdeBackend, selected: Boolean, onSelect: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(Ca.radius.xl)
+    val container = if (selected) scheme.secondaryContainer else scheme.surfaceContainerHigh
+    val onContainer = if (selected) scheme.onSecondaryContainer else scheme.onSurface
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(shape)
+            .background(container, shape)
+            .border(1.dp, if (selected) scheme.primary else scheme.outlineVariant, shape)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SparkleBadge(size = 36, animated = false)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(Res.string.free_ai_card_title),
+                    color = onContainer, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
+                )
+                Text(stringResource(Res.string.free_ai_card_pitch), color = onContainer.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+            }
+            if (selected) Chip(stringResource(Res.string.free_ai_in_use), fill = scheme.primary, textColor = scheme.onPrimary)
+        }
+        FreeAiBlock(backend)
+        if (!selected) {
+            PrimaryButton(stringResource(Res.string.free_ai_use_this), onSelect, Modifier.fillMaxWidth(), icon = CaIcons.sparkle)
         }
     }
 }
@@ -155,6 +205,8 @@ private fun ProviderCard(
     signIn: (@Composable () -> Unit)? = null,
 ) {
     val isGateway = provider.id == "gateway"
+    // CodeAssist Free AI runs on the store sign-in, not a key: its card shows the wallet instead of key fields.
+    val keyless = provider.id == FREE_AI_PROVIDER
     // Keyed on the stored key too: a browser sign-in replaces it while the sheet is open.
     var key by remember(provider.id, provider.apiKey) { mutableStateOf(provider.apiKey) }
     var backups by remember(provider.id) { mutableStateOf(provider.backupKeys) }
@@ -197,8 +249,10 @@ private fun ProviderCard(
         }
         if (selected) {
             signIn?.invoke()
-            SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key)) { key = it; onSetKey(it) }
-            BackupKeys(backups) { backups = it; onSetBackupKeys(it) }
+            if (!keyless) {
+                SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key)) { key = it; onSetKey(it) }
+                BackupKeys(backups) { backups = it; onSetBackupKeys(it) }
+            }
             if (isGateway) {
                 // A single-line field shows only the first line of a multi-line paste, so a pasted "URL + key" block
                 // looked like a clean URL while the rest still went into requests. Flatten it so all of it is visible.

@@ -465,6 +465,14 @@ val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?:
 val realAdmobInterstitialUnitId = (findProperty("ADMOB_INTERSTITIAL_UNIT_ID") as String?)
     ?: System.getenv("ADMOB_INTERSTITIAL_UNIT_ID")
     ?: "ca-app-pub-7523005242346905/6735189457"
+// Rewarded ads: the one ad a user asks for, in exchange for CodeAssist Free AI points. Google's TEST rewarded unit
+// for non-shipping builds. The real unit's server-side verification callback is the `ai-reward` Supabase function,
+// which is what credits the points; a fork pointing at its own AdMob account must set up the same callback, and
+// passing a blank id hides the "watch an ad" button in release.
+val testAdmobRewardedUnitId = "ca-app-pub-3940256099942544/5224354917"
+val realAdmobRewardedUnitId = (findProperty("ADMOB_REWARDED_UNIT_ID") as String?)
+    ?: System.getenv("ADMOB_REWARDED_UNIT_ID")
+    ?: "ca-app-pub-7523005242346905/8159191965"
 // Google's TEST adaptive-banner unit, used by debug/profile/minified for both banner uses below.
 val testAdmobBannerUnitId = "ca-app-pub-3940256099942544/9214589741"
 // The real banner units, baked in like the ids above. A blank one turns that banner off in release: AndroidAdHost
@@ -570,9 +578,18 @@ android {
         // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids
         // below, and `profile` (a local perf build) is forced back to test. The App id reaches the manifest
         // via ${admobAppId}; the native ad-unit id is read from BuildConfig by AndroidAdHost.
-        manifestPlaceholders["admobAppId"] = testAdmobAppId
+        // -PREAL_REWARDED_ADS=true: debug only, for testing the CodeAssist Free AI reward loop end to end. Google's
+        // TEST rewarded unit never calls the `ai-reward` server, so with it a watched ad credits nothing. This swaps
+        // in the real app id + real rewarded unit (the other units stay Google's test ones). Use it ONLY on an
+        // emulator or a device registered as an AdMob test device, which get test ads from the real unit.
+        val realRewardedForTesting = (findProperty("REAL_REWARDED_ADS") as String?) == "true"
+        manifestPlaceholders["admobAppId"] = if (realRewardedForTesting) realAdmobAppId else testAdmobAppId
         buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
         buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+        buildConfigField(
+            "String", "AD_REWARDED_UNIT_ID",
+            "\"${if (realRewardedForTesting) realAdmobRewardedUnitId else testAdmobRewardedUnitId}\"",
+        )
         buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
         buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
         buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
@@ -648,6 +665,7 @@ android {
             manifestPlaceholders["admobAppId"] = realAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$realAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$realAdmobInterstitialUnitId\"")
+            buildConfigField("String", "AD_REWARDED_UNIT_ID", "\"$realAdmobRewardedUnitId\"")
             buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"$realAdmobNativeUnitsByPlacement\"")
             buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$realAdmobBannerUnitId\"")
             buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$realAdmobBuildBannerUnitId\"")
@@ -672,6 +690,7 @@ android {
             manifestPlaceholders["admobAppId"] = testAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+            buildConfigField("String", "AD_REWARDED_UNIT_ID", "\"$testAdmobRewardedUnitId\"")
             buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
             buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
             buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
@@ -700,6 +719,7 @@ android {
             manifestPlaceholders["admobAppId"] = testAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+            buildConfigField("String", "AD_REWARDED_UNIT_ID", "\"$testAdmobRewardedUnitId\"")
             buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
             buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
             buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")

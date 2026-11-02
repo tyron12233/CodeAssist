@@ -135,6 +135,14 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(DAILY_CHALLENGE_SERVICE) {
             buildDailyChallenges(supabaseAccounts)
         }
+        // CodeAssist Free AI rides on the same session: the proxy takes the user's access token as its key.
+        if (supabaseAccounts != null) {
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.AI_CREDITS_SERVICE) {
+                dev.ide.store.impl.SupabaseAiCreditsService(
+                    BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY, supabaseAccounts,
+                )
+            }
+        }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
             buildRunnerFactory = { svc ->

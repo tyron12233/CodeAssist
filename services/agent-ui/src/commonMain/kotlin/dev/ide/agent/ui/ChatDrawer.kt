@@ -129,6 +129,8 @@ import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.chat_add_key
+import dev.ide.agent.ui.generated.resources.free_ai_model_points
+import dev.ide.agent.ui.generated.resources.free_ai_model_points_note
 import dev.ide.agent.ui.generated.resources.chat_attach
 import dev.ide.agent.ui.generated.resources.chat_attach_file
 import dev.ide.agent.ui.generated.resources.chat_attach_image
@@ -200,6 +202,13 @@ fun ChatDrawer(
     var showHistory by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
     val usageLimits by backend.agent.usageLimits.collectAsState()
+    // CodeAssist Free AI selected with nobody signed in: the chat prompts for a sign-in instead of a key. For the
+    // free tier "configured" IS "signed in", so this reads the same snapshot as the rest of the drawer.
+    val freeAi by backend.agent.freeAi.collectAsState()
+    val needsFreeSignIn = cfg.selectedProvider == FREE_AI_PROVIDER && !cfg.configured
+    var showFreeSignIn by remember { mutableStateOf(false) }
+    // The sign-in happens in the browser and lands through the store's deep link; re-read the config when it does.
+    LaunchedEffect(freeAi.signedIn) { cfg = backend.agent.config() }
     var modelMenuOpen by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -213,6 +222,11 @@ fun ChatDrawer(
     fun submit() {
         val text = input.text.trim()
         if (text.isEmpty()) return
+        if (needsFreeSignIn) {
+            // Keep what they typed; it goes out once they are signed in.
+            showFreeSignIn = true
+            return
+        }
         input = TextFieldValue("")
         if (text.startsWith("/")) {
             val name = text.removePrefix("/").substringBefore(' ').lowercase()
@@ -289,7 +303,13 @@ fun ChatDrawer(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (chat.messages.isEmpty()) {
-                    EmptyState(configured = cfg.configured, onManage = { showProviders = true })
+                    if (needsFreeSignIn) {
+                        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                            FreeAiSignInPrompt(backend, onUseOwnKey = { showProviders = true })
+                        }
+                    } else {
+                        EmptyState(configured = cfg.configured, onManage = { showProviders = true })
+                    }
                 } else {
                     Transcript(
                         chat.messages,
@@ -314,6 +334,9 @@ fun ChatDrawer(
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
                         )
                     }
+                    if (cfg.selectedProvider == FREE_AI_PROVIDER) {
+                        FreeAiStrip(backend, onManage = { showProviders = true })
+                    }
                     UsageWarningStrip(usageLimits, onOpen = { showUsage = true })
                     Suggestions(
                         backend = backend,
@@ -327,7 +350,9 @@ fun ChatDrawer(
                     )
                     Composer(
                     value = input,
-                    configured = cfg.configured,
+                    // Signed out on the free tier the composer stays usable: typing and pressing send is what
+                    // brings up the sign-in.
+                    configured = cfg.configured || needsFreeSignIn,
                     busy = chat.busy,
                     images = imageSources,
                     activeFilePath = activeFilePath,
@@ -352,6 +377,13 @@ fun ChatDrawer(
         }
         if (showUsage) {
             AgentUsageSheet(backend) { showUsage = false }
+        }
+        if (showFreeSignIn) {
+            FreeAiSignInDialog(
+                backend,
+                onUseOwnKey = { showProviders = true },
+                onDismiss = { showFreeSignIn = false; cfg = backend.agent.config() },
+            )
         }
         if (showHistory) {
             AgentHistorySheet(backend) {
@@ -585,6 +617,12 @@ private fun currentModel(cfg: UiAgentConfig): String =
  * to the whole drawer's height while squeezing itself into the row's leftover width: the header floated in the
  * middle, the conversation got no height at all, and the dialog was a dark sliver with nothing in it.
  */
+/** Points to one decimal, without a trailing ".0": 1.3, 20, 126.4. */
+internal fun formatPoints(points: Double): String {
+    val tenths = kotlin.math.round(points * 10).toLong()
+    return if (tenths % 10 == 0L) (tenths / 10).toString() else "${tenths / 10}.${tenths % 10}"
+}
+
 @Composable
 private fun ModelPickerOverlay(
     agent: AgentService,
@@ -596,7 +634,16 @@ private fun ModelPickerOverlay(
     // Read once per opening: a pick or a star made inside it changes both.
     var favorites by remember { mutableStateOf(agent.favoriteModels()) }
     val recents = remember { agent.recentModels() }
+    // On CodeAssist Free AI each model is labelled with what a step costs in points.
+    val freeAi by agent.freeAi.collectAsState()
+    val onFreeAi = cfg.selectedProvider == FREE_AI_PROVIDER
+    val pointsLabel = stringResource(Res.string.free_ai_model_points)
+    val prices = if (!onFreeAi) emptyMap() else freeAi.models.filter { it.pointsPerStep > 0 }.associate { m ->
+        m.id to pointsLabel.replace("%1\$s", formatPoints(m.pointsPerStep))
+    }
     ModelPickerDialog(
+        prices = prices,
+        priceNote = if (onFreeAi) stringResource(Res.string.free_ai_model_points_note) else null,
         models = models,
         current = currentModel(cfg),
         favorites = favorites,
@@ -1321,7 +1368,7 @@ private fun Composer(
  * separately-branded panel bolted into the IDE.
  */
 @Composable
-private fun SparkleBadge(size: Int, animated: Boolean = false) {
+internal fun SparkleBadge(size: Int, animated: Boolean = false) {
     val breathe = rememberInfiniteTransition(label = "sparkle")
     val pulse by breathe.animateFloat(
         initialValue = 0.9f,

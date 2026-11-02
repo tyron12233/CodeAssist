@@ -52,6 +52,7 @@ import dev.ide.agent.ui.generated.resources.chat_usage_spent
 import dev.ide.agent.ui.generated.resources.chat_usage_steps_note
 import dev.ide.agent.ui.generated.resources.chat_usage_subtitle
 import dev.ide.agent.ui.generated.resources.chat_usage_title
+import dev.ide.agent.ui.generated.resources.free_ai_usage_title
 import dev.ide.agent.ui.generated.resources.chat_usage_unreported
 import dev.ide.agent.ui.generated.resources.chat_usage_used_of
 import dev.ide.ui.backend.IdeBackend
@@ -78,7 +79,17 @@ private const val WARN_FRACTION = 0.8f
 @Composable
 internal fun AgentUsageSheet(backend: IdeBackend, onClose: () -> Unit) {
     val limits by backend.agent.usageLimits.collectAsState()
-    LaunchedEffect(Unit) { backend.agent.refreshUsageLimits() }
+    // CodeAssist Free AI has no provider-reported limits: its numbers come from our own server.
+    val onFreeAi = remember { backend.agent.config().selectedProvider == FREE_AI_PROVIDER }
+    val refresh = {
+        if (onFreeAi) {
+            backend.agent.refreshFreeAi()
+            backend.agent.refreshFreeAiUsage()
+        } else {
+            backend.agent.refreshUsageLimits()
+        }
+    }
+    LaunchedEffect(Unit) { refresh() }
     val now = rememberMinuteClock()
     val scheme = MaterialTheme.colorScheme
     CenteredDialog(visible = true, onDismiss = onClose) {
@@ -94,14 +105,14 @@ internal fun AgentUsageSheet(backend: IdeBackend, onClose: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(Res.string.chat_usage_title),
+                    stringResource(if (onFreeAi) Res.string.free_ai_usage_title else Res.string.chat_usage_title),
                     color = scheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                IconButtonCa(CaIcons.refresh, stringResource(Res.string.chat_usage_refresh), { backend.agent.refreshUsageLimits() }, iconSize = 16, boxSize = 30)
+                IconButtonCa(CaIcons.refresh, stringResource(Res.string.chat_usage_refresh), { refresh() }, iconSize = 16, boxSize = 30)
                 IconButtonCa(CaIcons.close, stringResource(Res.string.chat_close), onClose, iconSize = 16, boxSize = 30)
             }
-            UsageBody(limits, now)
+            if (onFreeAi) FreeAiUsageBody(backend, now) else UsageBody(limits, now)
             PrimaryButton(stringResource(Res.string.chat_done), onClose, Modifier.fillMaxWidth())
         }
     }
@@ -201,7 +212,7 @@ internal fun UsageWarningStrip(limits: UiAgentUsageLimits?, onOpen: () -> Unit) 
 }
 
 @Composable
-private fun UsageBar(fraction: Float, height: Int = 8) {
+internal fun UsageBar(fraction: Float, height: Int = 8) {
     val scheme = MaterialTheme.colorScheme
     val fill: Color = when {
         fraction >= 1f -> scheme.error
@@ -219,7 +230,7 @@ private fun activeKind(limits: UiAgentUsageLimits): UiUsageMeterKind =
     if (limits.usingFreeModel || limits.meters.none { it.kind == UiUsageMeterKind.SPEND }) UiUsageMeterKind.FREE_REQUESTS else UiUsageMeterKind.SPEND
 
 @Composable
-private fun resetsIn(atMs: Long, now: Long): String {
+internal fun resetsIn(atMs: Long, now: Long): String {
     val minutes = ((atMs - now) / 60_000).coerceAtLeast(1)
     return if (minutes >= 48 * 60) {
         stringResource(Res.string.chat_usage_resets_dh, (minutes / 1440).toInt(), (minutes % 1440 / 60).toInt())
