@@ -1704,6 +1704,7 @@ class IdeServices private constructor(
     /** Drop the cached synthetic classes so the next analyze/complete regenerates them (e.g. after a res edit),
      *  and list the Kotlin source roots again (files may have come or gone). */
     fun invalidateSyntheticClasses() {
+        resFilesEpoch.incrementAndGet() // files may have come or gone under res/: re-walk before trusting the repo
         kotlinLightClasses.rescan()
         kotlinLightGeneration.incrementAndGet()
         invalidateResourceSynthetics()
@@ -1739,6 +1740,8 @@ class IdeServices private constructor(
         syntheticCache = null
         kotlinSyntheticCache.clear()
         repoCache.clear()
+        resDiskFingerprints.clear()
+        resourceModel.clear()
         customViewCache.clear()
         frameworkResCache.clear()
     }
@@ -2637,6 +2640,7 @@ class IdeServices private constructor(
         // The preview caches' fingerprints track res/source FILES but not the dependency classpath, which
         // changes here (deps/SDK/facet/language-level edits) — so drop them to force a rebuild.
         repoCache.clear()
+        resDiskFingerprints.clear() // the res dir set itself can change with the dependencies
         customViewCache.clear()
         // A dependency/facet change can add or drop library View subclasses (and the seed hierarchy), so the
         // source-view snapshot must recompute on next use, not just on a source save.
@@ -4737,6 +4741,25 @@ class IdeServices private constructor(
 
     private val repoCache = ConcurrentHashMap<String, CachedRepo>()
 
+    /** Parses res XML per file and remembers each, so a rebuild for one edited buffer re-parses only that file. */
+    private val resourceModel = dev.ide.android.support.resources.CachingResourceModel()
+
+    /**
+     * The on-disk half of a module's res fingerprint, reused while [resFilesEpoch] is unchanged and it is younger
+     * than [RES_DISK_FINGERPRINT_TTL_MS]. Computing it walks and stats every `.xml` under every res dir, AAR
+     * dependencies included, and the repository is asked for several times per completion and per diagnostics
+     * pass; on device that walk is a FUSE stat storm. The IDE's own file operations bump the epoch (they arrive
+     * as VFS events, which call [invalidateSyntheticClasses]); the TTL bounds how long a write from outside the
+     * IDE can go unseen. Unsaved edits don't need a walk at all: they are in the buffer half of the fingerprint.
+     */
+    private class DiskFingerprint(val epoch: Long, val at: Long, val value: String)
+    private val resDiskFingerprints = ConcurrentHashMap<String, DiskFingerprint>()
+    private val resFilesEpoch = java.util.concurrent.atomic.AtomicLong()
+
+    /** Content hash of each open res buffer, remembered per text instance (the overlay stores the same String). */
+    private class BufferHash(val text: String, val hash: String)
+    private val resBufferHashes = ConcurrentHashMap<Path, BufferHash>()
+
     /** Serializes resource-repository builds so concurrent first-callers (analysis + preview on project open)
      *  don't each launch a full parse of the same dependency `res/` set. */
     private val repoBuildLock = Any()
@@ -4823,12 +4846,12 @@ class IdeServices private constructor(
         // Fingerprint the res FILES on disk PLUS any open editor buffer of a res `.xml` under those dirs — so an
         // UNSAVED edit (a just-typed `<string>`) produces a fresh fingerprint and rebuilds the repository, and
         // the synthetic `R` sees the new resource before the file is saved (matching the live XML `@string/` path).
-        val fp = filesFingerprint(resDirs, ".xml") + resourceBufferFingerprint(resDirs)
+        val fp = resDiskFingerprint(key, resDirs) + resourceBufferFingerprint(resDirs)
         repoCache[key]?.let { if (it.fingerprint == fp) return it }
         return synchronized(repoBuildLock) {
             val cur = repoCache[key]
             if (cur != null && cur.fingerprint == fp) cur
-            else runCatching { AndroidResources.repository(module, store.workspace, textOverride = ::resourceBufferText) }
+            else runCatching { AndroidResources.repository(module, store.workspace, resourceModel, textOverride = ::resourceBufferText) }
                 .getOrNull()?.let { CachedRepo(fp, it).also { c -> repoCache[key] = c } }
         }
     }
@@ -4843,9 +4866,21 @@ class IdeServices private constructor(
         val norm = resDirs.map { it.toAbsolutePath().normalize() }
         return openDocuments.entries.asSequence()
             .filter { (p, _) -> p.toString().endsWith(".xml") && norm.any { p.startsWith(it) } }
-            .map { (p, text) -> "$p:${dev.ide.platform.ContentHash.of(text).value}" }
+            .map { (p, text) -> "$p:${bufferHash(p, text)}" }
             .sorted().joinToString("|", prefix = "|buf:")
             .takeIf { it != "|buf:" } ?: ""
+    }
+
+    private fun resDiskFingerprint(moduleKey: String, resDirs: List<Path>): String {
+        val epoch = resFilesEpoch.get()
+        val now = System.currentTimeMillis()
+        resDiskFingerprints[moduleKey]?.let { if (it.epoch == epoch && now - it.at < RES_DISK_FINGERPRINT_TTL_MS) return it.value }
+        return filesFingerprint(resDirs, ".xml").also { resDiskFingerprints[moduleKey] = DiskFingerprint(epoch, now, it) }
+    }
+
+    private fun bufferHash(path: Path, text: String): String {
+        resBufferHashes[path]?.let { if (it.text === text) return it.hash }
+        return dev.ide.platform.ContentHash.of(text).value.also { resBufferHashes[path] = BufferHash(text, it) }
     }
 
     /** The shared merged repository instance for [module] (see [resourceRepository]), or null. */
@@ -5284,6 +5319,8 @@ class IdeServices private constructor(
     }
 
     companion object {
+        /** How long a module's on-disk res fingerprint is trusted without a VFS event (see [resDiskFingerprints]). */
+        private const val RES_DISK_FINGERPRINT_TTL_MS = 3_000L
         private const val PERMISSION_CONTEXT_TTL_NANOS = 2_000_000_000L
         private const val PLATFORM_PERMISSION = "android.permission."
         /** The name of the library [ensureKotlinStdlib] adds, and the prefix of a kotlin-stdlib jar. */
