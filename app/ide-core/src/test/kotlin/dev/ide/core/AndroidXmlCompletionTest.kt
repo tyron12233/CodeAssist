@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -250,6 +251,29 @@ class AndroidXmlCompletionTest {
         val local = complete("<TextView android:text=\"@string/|\"", svc = svc)
         assertTrue(local.none { it.startsWith("@android:") }, "framework resources must not flood a local ref: $local")
         assertTrue("@string/app_name" in local, "local resources still complete: $local")
+    }
+
+    /**
+     * A set that leaves out what a longer prefix would bring in must say it is incomplete, or the editor narrows
+     * it locally as the user types and the gated items never appear (`@and` → `@android:co` showed no framework
+     * colour, only `@color/androidx_…`).
+     */
+    @Test
+    fun aResultMissingGatedCandidatesIsIncomplete() {
+        fun incomplete(src: String): Boolean {
+            var flag = false
+            runTest {
+                val offset = src.indexOf('|')
+                val text = src.removeRange(offset, offset + 1)
+                flag = service.complete(CompletionRequest(Doc(text, "res/layout/a.xml"), offset, CompletionTrigger.Explicit)).isIncomplete
+            }
+            return flag
+        }
+        assertTrue(incomplete("<TextView android:textColor=\"@and|\""), "framework refs come at @android")
+        assertTrue(incomplete("<TextView android:textColor=\"?an|\""), "framework theme attrs come at ?android")
+        assertTrue(incomplete("<TextView too|"), "tools: attributes come at tools")
+        assertFalse(incomplete("<TextView android:textColor=\"@android:color/|\""), "the framework set is in")
+        assertFalse(incomplete("<TextView android:textColor=\"@color/|\""), "a local ref gates nothing")
     }
 
     @Test

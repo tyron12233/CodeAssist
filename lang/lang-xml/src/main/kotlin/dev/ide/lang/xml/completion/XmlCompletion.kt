@@ -36,8 +36,9 @@ class XmlCompletion(
         result.setReplacementRange(pos.replacementRange)
         if (pos.kind == XmlCompletionKind.UNKNOWN) return
 
-        val candidates =
-            contributors().flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
+        val all = contributors()
+        val candidates = all.flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
+        if (all.any { runCatching { it.isIncomplete(pos) }.getOrDefault(false) }) result.markIncomplete()
         val items = candidates.filter { matchesPrefix(it, pos.prefix) }
             .sortedWith(compareBy({ it.sortPriority }, { it.label.lowercase() }))
         result.addAllElements(items)
