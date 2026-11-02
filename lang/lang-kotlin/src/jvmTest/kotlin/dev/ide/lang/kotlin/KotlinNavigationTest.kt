@@ -195,6 +195,20 @@ class KotlinNavigationTest {
     }
 
     @Test
+    fun implementationOfAnOverloadListsOnlyItsOwnOverrides() {
+        val ofString = SHAPES.replaceFirst("open fun print(s", "open fun pri|nt(s")
+        assertEquals(listOf("print  ·  Fancy"), implementations("Shapes.kt", ofString))
+        val ofInt = SHAPES.replaceFirst("open fun print(x", "open fun pri|nt(x")
+        assertEquals(emptyList(), implementations("Shapes.kt", ofInt), "Fancy overrides the String overload only")
+    }
+
+    @Test
+    fun aGenericMemberIsOverriddenWithTheConcreteType() {
+        val code = SHAPES.replaceFirst("abstract fun put", "abstract fun pu|t")
+        assertEquals(listOf("put  ·  StrBox"), implementations("Shapes.kt", code), "`put(x: String)` overrides `put(x: T)`")
+    }
+
+    @Test
     fun implementationOfATypeStillListsItsSubclasses() {
         val code = shapes.replaceFirst("abstract class Shape", "abstract class Sha|pe")
         val labels = implementations("Shapes.kt", code)
@@ -206,7 +220,11 @@ class KotlinNavigationTest {
             "abstract class Shape { abstract fun area(): Double; open val name: String = \"shape\"; fun fixed() = 1 }\n" +
             "open class Circle : Shape() { override fun area() = 1.0 }\n" +
             "class Ring : Circle() { override fun area() = 2.0 }\n" +
-            "class Square : Shape() { override fun area() = 4.0; override val name = \"sq\" }\n"
+            "class Square : Shape() { override fun area() = 4.0; override val name = \"sq\" }\n" +
+            "open class Printer { open fun print(x: Int) {}; open fun print(s: String) {} }\n" +
+            "class Fancy : Printer() { override fun print(s: String) {} }\n" +
+            "abstract class Box<T> { abstract fun put(x: T) }\n" +
+            "class StrBox : Box<String>() { override fun put(x: String) {} }\n"
 
         val srcDir: Path = tempProject(
             mapOf("Lib.kt" to "package demo\nclass Foo\ninterface Base { fun f() }\n", "Shapes.kt" to SHAPES),

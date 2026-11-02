@@ -80,6 +80,34 @@ class FindUsagesRenameTest {
         }
     } }
 
+    /** A Java class overriding a Kotlin member: listed as an implementation, and renamed with the member. */
+    @Test
+    fun aJavaOverrideOfAKotlinMemberIsAnImplementationAndIsRenamedWithIt() { withTempDir("impl-java") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val src = ide.coreSrc().resolve("com/example/core")
+            val animal = src.resolve("Animal.kt")
+            val dog = src.resolve("Dog.java")
+            val kennel = src.resolve("Kennel.java")
+            ide.save(animal, "package com.example.core\n\nopen class Animal {\n    open fun sound(): String = \"\"\n}\n")
+            ide.save(dog, "package com.example.core;\n\npublic class Dog extends Animal {\n    @Override public String sound() { return \"woof\"; }\n}\n")
+            ide.save(kennel, "package com.example.core;\n\nclass Kennel {\n    String hear(Dog d) { return d.sound(); }\n}\n")
+            val deadline = System.currentTimeMillis() + 180_000
+            while (ide.indexStatus.value.message != "Indexed" && System.currentTimeMillis() < deadline) Thread.sleep(50)
+
+            val text = Files.readString(animal)
+            val at = text.indexOf("sound")
+            eventually("Dog.sound is listed as an implementation") {
+                ide.navigationTargets(animal, text, at, NavKind.IMPLEMENTATION).any { it.label == "sound  ·  Dog" && it.file.path.endsWith("Dog.java") }
+            }
+
+            val outcome = runBlocking { ide.rename(animal, text, at, "speak") }
+            assertTrue(outcome.success, outcome.message)
+            assertTrue(Files.readString(animal).contains("open fun speak()"))
+            assertTrue(Files.readString(dog).contains("public String speak()"), Files.readString(dog))
+            assertTrue(Files.readString(kennel).contains("d.speak()"), "the Java call to the override; " + Files.readString(kennel))
+        }
+    } }
+
     @Test
     fun aJavaClassIsFoundAndRenamedInKotlinToo() { withTempDir("rename-java") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->

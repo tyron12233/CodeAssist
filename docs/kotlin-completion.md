@@ -401,7 +401,8 @@ Kotlin support is **beta**. The list below reflects what ships today and what is
 ### Planned / TODO
 
 - **Find usages / rename follow-ups.** Shipped: Kotlin Find Usages and Rename (`KotlinUsageTarget`: a symbol is
-  identified by its declaration; overloads and the override family move together; locals and privates search
+  identified by its declaration; a call resolves to the overload it binds to, so Find Usages tells overloads
+  apart while Rename moves them together with the override family (Java overrides included); locals and privates search
   only their scope; a top-level class's own file is renamed with it), and a Java symbol's Kotlin references are
   found and renamed with it. Not yet: Java code that uses a Kotlin declaration (light classes) is reported, not
   rewritten; a Java getter used as a Kotlin property (`getName()` / `.name`); named-argument labels.

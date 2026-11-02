@@ -18,12 +18,12 @@ class KotlinUsagesTest {
 
     private fun text(file: String): String = Files.readString(srcDir.resolve(file))
 
-    private fun target(file: String, needle: String, nth: Int = 0): KotlinUsageTarget? {
+    private fun target(file: String, needle: String, nth: Int = 0, forRename: Boolean = false): KotlinUsageTarget? {
         val t = text(file)
         var at = -1
         repeat(nth + 1) { at = t.indexOf(needle, at + 1) }
         check(at >= 0) { "'$needle' not in $file" }
-        return analyzer.usageTargetAt(DiskFile(srcDir.resolve(file)), t, at, ::readSource)
+        return analyzer.usageTargetAt(DiskFile(srcDir.resolve(file)), t, at, ::readSource, includeOverloads = forRename)
     }
 
     /** Every usage of [target] project-wide, as `File.kt:<text from the usage to the end of its line>`. */
@@ -75,9 +75,26 @@ class KotlinUsagesTest {
     }
 
     @Test
-    fun overloadsMoveTogether() {
-        val t = assertNotNull(target("Util.kt", "pad"))
-        assertEquals(2, t.declarations.size, "both `pad` overloads; got ${t.declarations}")
+    fun findUsagesTellsOverloadsApart() {
+        val ofInt = assertNotNull(target("Util.kt", "pad"))
+        assertEquals(1, ofInt.declarations.size, "Find Usages is about this overload only; got ${ofInt.declarations}")
+        assertEquals(listOf("Pads.kt:pad(1)"), usages(ofInt), "the Int call, not the String one")
+        val ofString = assertNotNull(target("Util.kt", "pad", nth = 1))
+        assertEquals(listOf("Pads.kt:pad(\"s\")"), usages(ofString))
+    }
+
+    @Test
+    fun renameMovesOverloadsTogether() {
+        val t = assertNotNull(target("Util.kt", "pad", forRename = true))
+        assertEquals(2, t.declarations.size, "both `pad` overloads, so a rename always leaves code that compiles; got ${t.declarations}")
+        assertEquals(listOf("Pads.kt:pad(1)", "Pads.kt:pad(\"s\")"), usages(t))
+    }
+
+    @Test
+    fun aCallResolvesToTheOverloadItBindsTo() {
+        val fromStringCall = assertNotNull(target("Pads.kt", "pad(\"s\")"))
+        val stringDecl = text("Util.kt").indexOf("pad(s: String)")
+        assertEquals(stringDecl, fromStringCall.declarations.single().second.start, "the String overload, not the first `pad`")
     }
 
     @Test
@@ -146,6 +163,14 @@ class KotlinUsagesTest {
                 fun other() {
                     val count = 2
                     println(count)
+                }
+            """.trimIndent() + "\n",
+            "Pads.kt" to """
+                package demo.util
+
+                fun usePads() {
+                    pad(1)
+                    pad("s")
                 }
             """.trimIndent() + "\n",
             "Other.kt" to """

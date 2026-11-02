@@ -61,11 +61,14 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
         return analyzer.navigationTargets(ctx.store.vfs.fileFor(file), text, offset, kind)
     }
 
-    /** What Find Usages / Rename at [offset] in [file]'s live buffer acts on, or null (not Kotlin, nothing there). */
-    fun usageTarget(file: Path, text: String, offset: Int): KotlinUsageTarget? {
+    /**
+     * What Find Usages / Rename at [offset] in [file]'s live buffer acts on, or null (not Kotlin, nothing there).
+     * [forRename] takes the symbol's overloads along (see `KotlinEditorFeatures.targetFor`).
+     */
+    fun usageTarget(file: Path, text: String, offset: Int, forRename: Boolean = false): KotlinUsageTarget? {
         if (!isKotlin(file)) return null
         val analyzer = kotlinAnalyzer(file) ?: return null
-        return analyzer.usageTargetAt(ctx.store.vfs.fileFor(file), text, offset) { p -> textOf(Paths.get(p)) }
+        return analyzer.usageTargetAt(ctx.store.vfs.fileFor(file), text, offset, { p -> textOf(Paths.get(p)) }, forRename)
     }
 
     /**

@@ -683,19 +683,21 @@ class KotlinEditorFeatures(
      */
     fun usageTargetAt(
         file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?,
+        /** Rename takes the overloads declared beside the symbol along (see [targetFor]); Find Usages does not. */
+        includeOverloads: Boolean = false,
     ): KotlinUsageTarget? {
         val ktFile = KotlinParserHost.parse(file.name, text)
         if (ktFile.textLength == 0) return null
         val parsed = KotlinParsedFile(ktFile, file, 0L)
         refreshOverlay(); syncFocal(parsed) // once, for the file being edited; the sweep resolves without it
-        declarationNamedAt(ktFile, offset)?.let { return targetFor(it, file.path, ktFile) }
+        declarationNamedAt(ktFile, offset)?.let { return targetFor(it, file.path, ktFile, includeOverloads) }
         val off = offset.coerceIn(0, ktFile.textLength - 1)
         val ref = refAt(ktFile, off) ?: return null
         val (path, at) = identityAt(parsed, ref.textRange.startOffset, KotlinResolver(ktFile, parsed, service)) ?: return null
         if (isKotlinSourcePath(path)) {
             val declKt = if (path == file.path) ktFile
             else KotlinParserHost.parse(path.substringAfterLast('/'), readSource(path) ?: return null)
-            declarationNamedAt(declKt, at, exact = true)?.let { return targetFor(it, path, declKt) }
+            declarationNamedAt(declKt, at, exact = true)?.let { return targetFor(it, path, declKt, includeOverloads) }
         }
         // Declared in Java source or a library: its usages can be found, but Rename is not this side's.
         return KotlinUsageTarget(ref.getReferencedName(), "symbol", setOf(usageIdentity(path, at)), emptyList(), null, emptySet(), null)
@@ -787,8 +789,15 @@ class KotlinEditorFeatures(
         return null
     }
 
-    /** The target for a Kotlin source declaration [decl] in [path]: it, its overloads and its override family. */
-    private fun targetFor(decl: KtNamedDeclaration, path: String, kt: KtFile): KotlinUsageTarget? {
+    /**
+     * The target for a Kotlin source declaration [decl] in [path]: it and its override family, and with
+     * [includeOverloads] the same-named functions declared beside it with theirs.
+     *
+     * Find Usages tells overloads apart (a call resolves to the overload it binds to). Rename moves them together:
+     * should one call site resolve to the wrong overload, renaming a single overload would leave that call
+     * broken, while renaming the set always leaves code that compiles.
+     */
+    private fun targetFor(decl: KtNamedDeclaration, path: String, kt: KtFile, includeOverloads: Boolean): KotlinUsageTarget? {
         val name = decl.name ?: return null
         val ids = LinkedHashSet<String>()
         val decls = ArrayList<Pair<String, TextRange>>()
@@ -797,12 +806,13 @@ class KotlinEditorFeatures(
         }
         decl.nameIdentifier?.let { add(path, it.textRange.startOffset) } ?: return null
         val scope = scopeOf(decl, kt)
-        if (decl is KtNamedFunction && (decl.parent is KtFile || decl.parent is KtClassBody)) {
+        val family = arrayListOf(decl)
+        if (includeOverloads && decl is KtNamedFunction && (decl.parent is KtFile || decl.parent is KtClassBody)) {
             decl.parent?.children?.filterIsInstance<KtNamedFunction>()
                 ?.filter { it !== decl && it.name == name }
-                ?.forEach { f -> f.nameIdentifier?.let { add(path, it.textRange.startOffset) } }
+                ?.forEach { f -> f.nameIdentifier?.let { add(path, it.textRange.startOffset); family += f } }
         }
-        overrideFamily(decl, name).forEach { (p, at) -> add(p, at) }
+        for (member in family) overrideFamily(member, name).forEach { (p, at) -> add(p, at) }
         val fileNamed = path.takeIf {
             decl is KtClassOrObject && decl.parent is KtFile && path.substringAfterLast('/').substringBeforeLast('.') == name
         }
@@ -860,8 +870,10 @@ class KotlinEditorFeatures(
         val inheritable = inInterface || overrides || decl.hasModifier(KtTokens.OPEN_KEYWORD) || decl.hasModifier(KtTokens.ABSTRACT_KEYWORD)
         if (!inheritable) return emptyList()
         val out = ArrayList<Pair<String, Int>>()
+        val sig = signatureOf(decl)
         fun sourceMemberOf(typeFqn: String): Pair<String, Int>? =
-            memberDeclaredIn(typeFqn, name)?.let { (file, at) -> file.path to at }
+            memberDeclaredIn(typeFqn, name, sig)?.let { (file, at) -> file.path to at }
+                ?: javaMemberDeclaredIn(typeFqn, name)?.let { it.file.path to it.offset }
         val roots = LinkedHashSet<String>().apply { add(ownerFqn) }
         if (overrides) {
             for (st in service.supertypesOf(ownerFqn)) {
@@ -887,14 +899,62 @@ class KotlinEditorFeatures(
      * offset. `declaringClassFqn` is only set for binary callables, so a source member is placed by the class its
      * declaration sits in.
      */
-    private fun memberDeclaredIn(typeFqn: String, name: String): Pair<VirtualFile, Int>? =
-        service.membersNamed(typeFqn, emptyList(), name).firstNotNullOfOrNull { s ->
-            if (!s.origin.fromSource) return@firstNotNullOfOrNull null
-            val dn = s.declaration() as? KotlinDomNode ?: return@firstNotNullOfOrNull null
-            val d = dn.psi as? KtNamedDeclaration ?: return@firstNotNullOfOrNull null
-            if (d.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() != typeFqn) return@firstNotNullOfOrNull null
-            d.nameIdentifier?.textRange?.startOffset?.let { dn.owner.file to it }
+    private fun memberDeclaredIn(typeFqn: String, name: String, sig: MemberSignature? = null): Pair<VirtualFile, Int>? {
+        val declared = service.membersNamed(typeFqn, emptyList(), name).mapNotNull { s ->
+            if (!s.origin.fromSource) return@mapNotNull null
+            val dn = s.declaration() as? KotlinDomNode ?: return@mapNotNull null
+            val d = dn.psi as? KtNamedDeclaration ?: return@mapNotNull null
+            if (d.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() != typeFqn) return@mapNotNull null
+            d to dn.owner.file
+        }.distinctBy { it.first.textRange.startOffset }
+        // Of several overloads, the one with the same parameters: the same types, else types that differ only where
+        // the base's mentions a type parameter (a generic `fun f(x: T)` is overridden as `f(x: String)`).
+        val pick = if (sig == null) declared.firstOrNull() else {
+            declared.firstOrNull { signatureOf(it.first)?.types == sig.types }
+                ?: declared.firstOrNull { c -> signatureOf(c.first)?.let { sig.accepts(it) } == true }
         }
+        return pick?.let { (d, file) -> d.nameIdentifier?.textRange?.startOffset?.let { file to it } }
+    }
+
+    /**
+     * The member named [name] declared in the project's JAVA type [typeFqn] (a Java class extending a Kotlin
+     * one), or null. Java's own lookup falls back to the class itself when the member is not there, which is
+     * not an answer to this question, so only a method or field counts.
+     */
+    private fun javaMemberDeclaredIn(typeFqn: String, name: String): NavTarget? =
+        javaSourceLocator(typeFqn, name)?.takeIf { it.kind == "method" || it.kind == "field" }
+
+    /**
+     * A function's parameter types as normalized text (`""` where unknown), and the type parameter names in scope
+     * at its declaration (its own and its classes'). Null for a property, which has no parameters to tell apart.
+     */
+    private class MemberSignature(val types: List<String>, val typeParameters: Set<String> = emptySet()) {
+        val arity: Int get() = types.size
+
+        /** Whether [other] (a subtype's member) can override this: the same arity, each parameter the same type,
+         *  unknown on either side, or one this signature writes with a type parameter. */
+        fun accepts(other: MemberSignature): Boolean {
+            if (other.arity != arity) return false
+            return types.indices.all { i ->
+                val b = types[i]
+                val c = other.types[i]
+                b == c || b.isEmpty() || c.isEmpty() || typeParameters.any { tp -> Regex("""\b${Regex.escape(tp)}\b""").containsMatchIn(b) }
+            }
+        }
+    }
+
+    private fun signatureOf(decl: KtNamedDeclaration): MemberSignature? {
+        val fn = decl as? KtNamedFunction ?: return null
+        val typeParameters = HashSet<String>()
+        fn.typeParameters.mapNotNullTo(typeParameters) { it.name }
+        generateSequence(fn.getParentOfType<KtClassOrObject>(strict = true)) { it.getParentOfType<KtClassOrObject>(strict = true) }
+            .forEach { c -> (c as? KtClass)?.typeParameters?.mapNotNullTo(typeParameters) { it.name } }
+        return MemberSignature(fn.valueParameters.map { normalizeType(it.typeReference?.text) }, typeParameters)
+    }
+
+    /** A type's text with the spaces and package qualifiers taken out, so `kotlin.String` reads as `String`. */
+    private fun normalizeType(text: String?): String =
+        (text ?: "").replace(Regex("""\s"""), "").replace(Regex("""\b(?:[a-z_]\w*\.)+(?=[A-Z])"""), "")
 
     /**
      * Go to Implementation on a MEMBER: the members of the same name declared in the subtypes of its class, at
@@ -903,7 +963,7 @@ class KotlinEditorFeatures(
      * a top-level function), so the caller lists the type's inheritors as before; empty when nothing overrides it.
      */
     private fun memberImplementationTargets(symbol: KotlinSymbol?, leaf: KtElement?): List<NavTarget>? {
-        val (ownerFqn, name) = memberAt(symbol, leaf) ?: return null
+        val (ownerFqn, name, sig) = memberAt(symbol, leaf) ?: return null
         val out = ArrayList<NavTarget>()
         val seen = hashSetOf(ownerFqn)
         val queue = ArrayDeque(listOf(ownerFqn))
@@ -912,14 +972,19 @@ class KotlinEditorFeatures(
                 if (!seen.add(sub.fqn)) continue
                 queue.addLast(sub.fqn)
                 val label = "$name  ·  ${sub.fqn.substringAfterLast('.')}"
-                val source = memberDeclaredIn(sub.fqn, name)
+                val source = memberDeclaredIn(sub.fqn, name, sig)
                 if (source != null) {
                     out += NavTarget(source.first, source.second, label, "method")
-                } else if (service.isClasspathType(sub.fqn) &&
-                    service.membersNamed(sub.fqn, emptyList(), name).any { it.declaringClassFqn == sub.fqn }
-                ) {
-                    out += NavTarget(LibraryFile(libraryPath(sub.fqn, name)), 0, label, "library")
+                    continue
                 }
+                if (service.isClasspathType(sub.fqn)) {
+                    val declared = service.membersNamed(sub.fqn, emptyList(), name)
+                        .filter { it.declaringClassFqn == sub.fqn && (sig == null || it.paramTypes.size == sig.arity) }
+                    if (declared.isNotEmpty()) out += NavTarget(LibraryFile(libraryPath(sub.fqn, name)), 0, label, "library")
+                    continue
+                }
+                // A Java class in the project extending the Kotlin one.
+                javaMemberDeclaredIn(sub.fqn, name)?.let { out += it.copy(label = label) }
             }
         }
         return out.sortedBy { it.label }
@@ -930,7 +995,7 @@ class KotlinEditorFeatures(
      * in a class, or a reference resolving to one. Null for anything else, an extension included (it overrides
      * nothing).
      */
-    private fun memberAt(symbol: KotlinSymbol?, leaf: KtElement?): Pair<String, String>? {
+    private fun memberAt(symbol: KotlinSymbol?, leaf: KtElement?): Triple<String, String, MemberSignature?>? {
         leaf ?: return null
         // On a declaration's own name: the symbol does not resolve there, the tree answers.
         val decl = generateSequence(leaf) { it.parent }.take(3).filterIsInstance<KtNamedDeclaration>().firstOrNull()
@@ -938,16 +1003,21 @@ class KotlinEditorFeatures(
             val isMember = decl is KtNamedFunction || decl is KtProperty || (decl is KtParameter && decl.valOrVarKeyword != null)
             if (!isMember || (decl as? KtCallableDeclaration)?.receiverTypeReference != null) return null
             val owner = decl.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString() ?: return null
-            return owner to (decl.name ?: return null)
+            return Triple(owner, decl.name ?: return null, signatureOf(decl))
         }
         symbol ?: return null
         if (symbol.kind != SymbolKind.METHOD && symbol.kind != SymbolKind.FIELD) return null
         if (symbol.isExtension) return null
+        val sourceDecl = if (symbol.origin.fromSource) (symbol.declaration() as? KotlinDomNode)?.psi as? KtNamedDeclaration else null
         val owner = if (symbol.origin.fromSource) {
-            ((symbol.declaration() as? KotlinDomNode)?.psi as? KtElement)
-                ?.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString()
+            sourceDecl?.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString()
         } else symbol.declaringClassFqn
-        return owner?.let { it to symbol.name }
+        val sig = sourceDecl?.let(::signatureOf)
+            ?: if (symbol.kind == SymbolKind.METHOD) {
+                // A library member: a type-parameter slot reads as unknown, which any override's type satisfies.
+                MemberSignature(symbol.paramTypes.map { t -> if ((t as? KotlinType)?.isTypeParameter == true) "" else normalizeType(t?.qualifiedName) })
+            } else null
+        return owner?.let { Triple(it, symbol.name, sig) }
     }
 
     /** The FQNs an import can name [decl] by: a top-level declaration, a class, a member of an object. */
@@ -1140,6 +1210,14 @@ class KotlinEditorFeatures(
                 ?: inScope()
         } else {
             namedArgumentParameter(psi, name, parsed, resolver) ?: inScope() ?: typeNamed(name, resolver)
+        }
+        // A CALL binds to one overload, which the name lookups above do not choose between (they take the first
+        // same-named member). The call resolution the diagnostics use does, so navigation, Find Usages and Go to
+        // Implementation land on the overload actually called.
+        if (callee != null && sym is KotlinSymbol && sym.kind == SymbolKind.METHOD) {
+            resolver.resolveCalleeFunction(callee)
+                ?.takeIf { it.name == name && it.kind == SymbolKind.METHOD }
+                ?.let { return ResolveResult.Resolved(it) }
         }
         return sym?.let { ResolveResult.Resolved(it) } ?: ResolveResult.Unresolved
     }

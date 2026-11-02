@@ -170,7 +170,7 @@ internal class RefactorService(
     /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable. */
     fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
         if (ctx.analysisDisabled(file)) return null
-        if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.takeIf { it.renameable }?.let { RenameInfo(it.name, it.kind) }
+        if (isKotlin(file)) return kotlin.usageTarget(file, text, offset, forRename = true)?.takeIf { it.renameable }?.let { RenameInfo(it.name, it.kind) }
         if (!file.toString().endsWith(".java")) return null
         val module = ctx.moduleForFile(file) ?: return null
         return try {
@@ -213,16 +213,25 @@ internal class RefactorService(
 
     private suspend fun renameKotlin(file: Path, text: String, offset: Int, name: String): RenameOutcome {
         if (!isValidKotlinName(name)) return RenameOutcome(false, "'$name' is not a valid Kotlin name.")
-        val target = kotlin.usageTarget(file, text, offset)
+        val target = kotlin.usageTarget(file, text, offset, forRename = true)
             ?: return RenameOutcome(false, "Place the caret on a symbol to rename.")
         if (!target.renameable) return RenameOutcome(false, "'${target.name}' is not declared in this project's Kotlin code.")
         if (name == target.name) return RenameOutcome(false, "The new name is the same as the current one.")
         val declarations = target.declarations.map { (p, r) -> Paths.get(p).toAbsolutePath().normalize() to r }
-        val refs = declarations + kotlin.usages(target)
+        // A Java class overriding the member is part of its family: its declaration is in [declarations], and the
+        // Java code calling that override is found by the Java side, from the override's own name.
+        val javaOverrideRefs = declarations.filter { it.first.toString().endsWith(".java") }.flatMap { (path, r) ->
+            val m = ctx.moduleForFile(path) ?: return@flatMap emptyList()
+            val t = textOf(path) ?: return@flatMap emptyList()
+            runCatching { renameHitAt(m, path, t, r.start)?.let { javaRefs(m, path, t, it) } }.getOrNull().orEmpty()
+        }
+        val refs = declarations + kotlin.usages(target) + javaOverrideRefs
         // Java code reaching a Kotlin declaration goes through light classes this side does not resolve against,
         // so it is not rewritten. Saying where it is beats leaving it to the next build to find.
+        val touched = refs.map { it.first }.toSet()
         val javaFiles = if (target.scope != null) emptyList() else ctx.projectJavaFiles().filter { f ->
-            textOf(f.toAbsolutePath().normalize())?.let { containsWord(it, target.name) } == true
+            val abs = f.toAbsolutePath().normalize()
+            abs !in touched && textOf(abs)?.let { containsWord(it, target.name) } == true
         }
         val note = javaFiles.takeIf { it.isNotEmpty() }?.let { files ->
             val names = files.take(3).joinToString(", ") { it.fileName.toString() } + if (files.size > 3) ", …" else ""
