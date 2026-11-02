@@ -771,8 +771,9 @@ private fun SymbolRow(
                 style = if (isAction) MaterialTheme.typography.bodyMedium else Ide.type.codeSmall,
                 fontWeight = FontWeight.Medium,
             )
+            // An action key's default label IS its action name; repeating it underneath says nothing.
             val subtitle = when {
-                isAction -> actionLabel(key.action!!)
+                isAction -> actionLabel(key.action!!).takeIf { it != key.label }
                 key.insert != key.label -> key.insert
                 else -> null
             }
