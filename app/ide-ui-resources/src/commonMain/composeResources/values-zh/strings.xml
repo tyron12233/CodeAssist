@@ -1949,6 +1949,7 @@
     <string name="icons_add_as">添加为</string>
     <string name="icons_add_count">将 %1$d 个添加到项目</string>
     <string name="icons_batch_added">已添加 %1$d 个</string>
+    <string name="icons_added">已添加 %1$s</string>
     <string name="icons_batch_existing">%1$d 个已在项目中</string>
     <string name="icons_batch_failed">无法添加 %1$s</string>
     <string name="icons_copy_to">复制到其他文件夹</string>

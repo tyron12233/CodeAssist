@@ -1971,6 +1971,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="icons_add_as">Add as</string>
     <string name="icons_add_count">Add %1$d to project</string>
     <string name="icons_batch_added">Added %1$d</string>
+    <string name="icons_added">Added %1$s</string>
     <string name="icons_batch_existing">%1$d already in the project</string>
     <string name="icons_batch_failed">Couldn't add %1$s</string>
     <string name="icons_copy_to">Copy to another folder</string>

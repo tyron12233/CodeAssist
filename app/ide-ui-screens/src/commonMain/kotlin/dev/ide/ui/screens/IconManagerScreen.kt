@@ -103,6 +103,7 @@ import dev.ide.ui.generated.resources.icons_add_count
 import dev.ide.ui.generated.resources.icons_app_icon_short
 import dev.ide.ui.generated.resources.icons_app_icon_subtitle
 import dev.ide.ui.generated.resources.icons_app_icon_title
+import dev.ide.ui.generated.resources.icons_added
 import dev.ide.ui.generated.resources.icons_batch_added
 import dev.ide.ui.generated.resources.icons_batch_existing
 import dev.ide.ui.generated.resources.icons_batch_failed
@@ -216,6 +217,13 @@ fun IconManagerScreen(
         LaunchedEffect(text) {
             snackbar.showSnackbar(text)
             state.dismissMessage()
+        }
+    }
+    state.added?.let { name ->
+        val text = stringResource(Res.string.icons_added, name)
+        LaunchedEffect(name) {
+            snackbar.showSnackbar(text)
+            state.dismissAdded()
         }
     }
     state.batchOutcome?.let { outcome ->

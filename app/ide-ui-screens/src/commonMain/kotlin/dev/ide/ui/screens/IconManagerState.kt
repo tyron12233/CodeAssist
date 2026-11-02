@@ -156,6 +156,10 @@ internal class IconManagerState(
     var batchOutcome: BatchOutcome? by mutableStateOf(null)
         private set
 
+    /** The resource a single import just wrote, for the screen to confirm; cleared once shown. */
+    var added: String? by mutableStateOf(null)
+        private set
+
     // --- searching every section ---
 
     /** Matches for the current query in each repository other than the selected one (empty with no query). */
@@ -362,6 +366,10 @@ internal class IconManagerState(
 
     fun dismissBatchOutcome() {
         batchOutcome = null
+    }
+
+    fun dismissAdded() {
+        added = null
     }
 
     /**
@@ -606,7 +614,13 @@ internal class IconManagerState(
             when {
                 result.ok -> {
                     message = null
+                    // Said out loud: the sheet looks the same after a successful add as before it.
+                    added = request.name
                     refreshSection()
+                    // The Project section (and its match count) now has one more icon, whichever section is open.
+                    if (tab != IconTab.Project) {
+                        projectIcons = runCatching { backend.icons.projectIcons() }.getOrDefault(projectIcons)
+                    }
                     result.path?.let(onDone)
                 }
 

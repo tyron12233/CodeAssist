@@ -2022,6 +2022,7 @@
     <string name="icons_add_as">الإضافة باسم</string>
     <string name="icons_add_count">إضافة %1$d إلى المشروع</string>
     <string name="icons_batch_added">أُضيفت %1$d</string>
+    <string name="icons_added">أُضيف %1$s</string>
     <string name="icons_batch_existing">%1$d موجودة في المشروع مسبقًا</string>
     <string name="icons_batch_failed">تعذّرت إضافة %1$s</string>
     <string name="icons_copy_to">نسخ إلى مجلد آخر</string>
