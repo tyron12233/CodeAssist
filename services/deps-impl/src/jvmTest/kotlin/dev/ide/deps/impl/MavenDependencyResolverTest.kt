@@ -1305,6 +1305,49 @@ class MavenDependencyResolverTest {
         assertFalse(found.indexUnavailable, "the index answered; it just had nothing")
     }
 
+    /**
+     * Central's relevance buries the library people mean under same-named forks (com.google.code.gson:gson came
+     * 8th for "gson", behind de.gerdi-project:GSON). A bare name also searches the exact artifact id, and the
+     * well-known publisher's artifact leads.
+     */
+    @Test
+    fun aBareNameFindsTheWellKnownLibraryFirst() {
+        val files = FakeRepo()
+        files.putCentralSearch(
+            PRIMARY_SEARCH, "gson",
+            listOf(Triple("de.gerdi-project", "GSON", "6.0.6"), Triple("org.mattshoe.shoebox", "Kdux.gson", "1.0.6")),
+        )
+        files.putCentralNameSearch(PRIMARY_SEARCH, "gson", listOf("com.firework.gson" to 300L, "com.google.code.gson" to 200L))
+
+        val hits = runBlocking { searchResolver(files).search("gson") }
+
+        assertEquals("com.google.code.gson:gson", hits.first().coordinate.let { "${it.group}:${it.name}" })
+        assertTrue(hits.any { it.coordinate.group == "de.gerdi-project" }, "the full-text hits are still offered")
+    }
+
+    @Test
+    fun theNewestOfAPublishersSameNamedArtifactsLeads() {
+        // com.squareup.okhttp3:okhttp is the maintained one; com.squareup.okhttp:okhttp stopped at 2.7.5.
+        val ranked = rankSearchHits(
+            "okhttp",
+            listOf(
+                RankedHit(ArtifactCandidate(Coordinate("com.squareup.okhttp", "okhttp", "2.7.5"), "jar"), 1_456_500_234_000),
+                RankedHit(ArtifactCandidate(Coordinate("io.github.someone.okhttp3", "okhttp", "4.0"), "jar"), 1_800_000_000_000),
+                RankedHit(ArtifactCandidate(Coordinate("com.squareup.okhttp3", "okhttp", "5.5.1"), "jar"), 1_792_637_235_000),
+            ),
+        )
+        assertEquals(listOf("com.squareup.okhttp3", "com.squareup.okhttp", "io.github.someone.okhttp3"), ranked.map { it.coordinate.group })
+    }
+
+    @Test
+    fun aGroupQualifiedQueryKeepsTheIndexOrder() {
+        val hits = listOf(
+            RankedHit(ArtifactCandidate(Coordinate("x.y", "b", "1"), "jar"), 1),
+            RankedHit(ArtifactCandidate(Coordinate("com.google.x", "a", "1"), "jar"), 2),
+        )
+        assertEquals(listOf("b", "a"), rankSearchHits("x.y:b", hits).map { it.coordinate.name })
+    }
+
     private fun searchResolver(files: FakeRepo): MavenDependencyResolver {
         val tmp = createTempDirectory("deps-search-hosts")
         val lfs = LocalFileSystem(tmp)
@@ -1410,6 +1453,15 @@ class MavenDependencyResolverTest {
             }
             val url = "$endpoint?q=$query&rows=25&wt=json"
             byUrl[url] = """{"response":{"numFound":${docs.size},"docs":[$json]}}""".toByteArray()
+        }
+
+        /** Central's answer to the exact-name search (`a:<name>`) a bare query also makes, with publish times. */
+        fun putCentralNameSearch(endpoint: String, name: String, docs: List<Pair<String, Long>>) {
+            val json = docs.joinToString(",") { (g, ts) ->
+                """{"g":"$g","a":"$name","latestVersion":"1.0","p":"jar","timestamp":$ts}"""
+            }
+            byUrl["$endpoint?q=a%3A$name&rows=100&wt=json"] =
+                """{"response":{"numFound":${docs.size},"docs":[$json]}}""".toByteArray()
         }
 
         /** Publish under an arbitrary repository base, so a coordinate can exist in one repo and not another. */
