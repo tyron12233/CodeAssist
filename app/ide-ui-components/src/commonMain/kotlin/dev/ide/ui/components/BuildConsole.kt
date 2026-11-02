@@ -1115,7 +1115,14 @@ private fun LogLineRow(
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.TopStart)
-                    .graphicsLayer { translationX = reveal() - slotPx },
+                    .graphicsLayer {
+                        val r = reveal()
+                        translationX = r - slotPx
+                        // Parked, it sits one slot to the left of the row's start, but the row is padded on
+                        // that side and a label wider than the slot minus the padding showed its last digits
+                        // there at rest ("8 > Task :app:..."). Hidden until a drag brings it in.
+                        alpha = (r / slotPx).coerceIn(0f, 1f)
+                    },
             )
         }
         return
