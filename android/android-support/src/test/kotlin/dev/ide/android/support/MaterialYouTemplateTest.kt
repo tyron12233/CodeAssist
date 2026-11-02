@@ -78,6 +78,22 @@ class MaterialYouTemplateTest {
         }
     }
 
+    /** targetSdk 35+ is edge to edge: both variants enable it properly and pad the root for the system bars. */
+    @Test
+    fun bothVariantsHandleEdgeToEdge() {
+        withScaffold { scaffold, root ->
+            MaterialYouAppTemplate.generate(scaffold, args(mapOf("language" to "kotlin")))
+            val kt = root.resolve("app/src/main/kotlin/com/example/app/MainActivity.kt").readText()
+            assertTrue("enableEdgeToEdge()" in kt && "setOnApplyWindowInsetsListener(findViewById(R.id.main))" in kt, kt)
+            assertTrue("android:id=\"@+id/main\"" in root.resolve("app/src/main/res/layout/activity_main.xml").readText())
+        }
+        withScaffold { scaffold, root ->
+            MaterialYouAppTemplate.generate(scaffold, args())
+            val java = root.resolve("app/src/main/java/com/example/app/MainActivity.java").readText()
+            assertTrue("EdgeToEdge.enable(this);" in java && "setOnApplyWindowInsetsListener(findViewById(R.id.main)" in java, java)
+        }
+    }
+
     @Test
     fun kotlinVariantEmitsKotlinActivity() {
         withScaffold { scaffold, root ->
