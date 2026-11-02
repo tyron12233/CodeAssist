@@ -1,5 +1,8 @@
 package dev.ide.ui.editor.core
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 /**
  * The editor's line-indexed text model. The bytes live in a [Rope] ([buffer]) so an edit rebuilds only the
  * O(log N) nodes on the path to the cut instead of copying the whole document (the old `String`+`buildString`
@@ -25,8 +28,21 @@ class EditorDocument private constructor(
      * The full document as a `String`, materialized lazily from the rope and cached for this revision. The
      * one O(N) step in the pipeline — but paid at most once per edit, and skipped entirely for intermediate
      * documents in a batch (IME composition, completion accept) that no one ever reads.
+     *
+     * Publication-safe: [awaitText] builds it on a background thread while the UI thread may read it too (the
+     * rope is immutable, so two racing builds produce equal strings and one wins).
      */
-    val text: String by lazy(LazyThreadSafetyMode.NONE) { materialized ?: buffer.toString() }
+    private val textLazy = lazy(LazyThreadSafetyMode.PUBLICATION) { materialized ?: buffer.toString() }
+    val text: String get() = textLazy.value
+
+    /**
+     * [text], built on a background thread when this revision has not built it yet. For the editor's own
+     * asynchronous readers (completion, signature help, code actions, the highlighting daemon, the structure
+     * fetch): they read the buffer after a typing pause, and whichever came first used to pay the O(N) copy on
+     * the UI thread. Read [EditorSession.doc] and the caret first, then await this, so they agree.
+     */
+    suspend fun awaitText(): String =
+        if (textLazy.isInitialized()) textLazy.value else withContext(Dispatchers.Default) { textLazy.value }
 
     /** The text as a [CharSequence] for near-caret reads (smart edits, word boundaries) — no String copy. */
     val chars: CharSequence get() = buffer

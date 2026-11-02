@@ -145,9 +145,10 @@ class EditorEngineDaemon(
     /**
      * [restart] with the text supplied lazily, read only once the reparse delay has passed. The host restarts
      * on every keystroke and most restarts are superseded inside the delay, so materializing the buffer up
-     * front would build a whole-file String per keystroke for runs that never start.
+     * front would build a whole-file String per keystroke for runs that never start. The provider may suspend,
+     * so the host can build that String off the UI thread ([dev.ide.ui.editor.core.EditorDocument.awaitText]).
      */
-    fun restart(text: () -> String) {
+    fun restart(text: suspend () -> String) {
         val myRev = ++revision
         job?.cancel()
         inlayJob?.cancel()

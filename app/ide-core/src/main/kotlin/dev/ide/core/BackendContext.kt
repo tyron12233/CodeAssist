@@ -52,7 +52,8 @@ internal interface BackendContext {
     suspend fun <T> interactive(op: String = "", block: suspend () -> T): T
 
     /** Background editor lane (analysis/hints/semantic/folding): preempts preview, preempted by interactive.
-     *  The block may suspend (a provider may do out-of-process work off the worker). [op] labels the crash
+     *  A preempted call does NOT fail: it waits for the interactive work to finish and runs again, so callers
+     *  see either the result or their own cancellation. The block may suspend (a provider may do out-of-process work off the worker). [op] labels the crash
      *  breadcrumb — pass a distinct value per sub-op so a native death is not attributed to the whole lane. */
     suspend fun <T> background(op: String = "", block: suspend () -> T): T
 
