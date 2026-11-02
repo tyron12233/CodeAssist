@@ -140,8 +140,8 @@ private fun LessonRow(index: Int, lesson: UiLessonSummary, accent: Color, done: 
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(lesson.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(lesson.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // A dot SEPARATES the parts; leading with one ("· 4 min") read as a bullet on its own.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = MaterialTheme.colorScheme.outline)
                 Text(stringResource(Res.string.learn_minutes, lesson.estMinutes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 if (done) {
                     Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = MaterialTheme.colorScheme.outline)
