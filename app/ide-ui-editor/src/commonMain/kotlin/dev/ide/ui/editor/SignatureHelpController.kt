@@ -63,7 +63,7 @@ internal class SignatureHelpController(private val backend: IdeBackend, private 
         // call on the engine, ahead of the completion the same keystroke asked for); the panel already showing
         // stays up meanwhile, so the wait is only visible on first entering the parentheses.
         delay(SIGNATURE_HELP_DELAY)
-        val text = session.doc.text
+        val text = session.doc.awaitText() // off the UI thread when this revision has not built it yet
         help = runCatching { backend.editor.signatureHelp(path, text, caret) }.getOrNull()
     }
 }

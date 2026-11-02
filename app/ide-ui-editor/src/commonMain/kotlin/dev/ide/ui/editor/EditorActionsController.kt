@@ -117,7 +117,8 @@ internal class EditorActionsController(
         delay(ACTIONS_SETTLE_DELAY)
         availStart = start
         availEnd = end
-        val result = runCatching { backend.editor.actionsAt(path, session.doc.text, availStart, availEnd) }.getOrNull().orEmpty()
+        val text = session.doc.awaitText() // off the UI thread when this revision has not built it yet
+        val result = runCatching { backend.editor.actionsAt(path, text, availStart, availEnd) }.getOrNull().orEmpty()
         available = result
         when {
             result.isEmpty() -> menuOpen = false
@@ -160,8 +161,9 @@ internal class EditorActionsController(
                 availEnd = sel.max.coerceIn(availStart, len)
             }
             scope.launch {
+                val text = session.doc.awaitText()
                 available = runCatching {
-                    backend.editor.actionsAt(path, session.doc.text, availStart, availEnd)
+                    backend.editor.actionsAt(path, text, availStart, availEnd)
                 }.getOrNull().orEmpty()
                 if (available.isEmpty()) menuOpen = false
             }

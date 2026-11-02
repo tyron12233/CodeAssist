@@ -79,8 +79,10 @@ internal class CompletionController(
         inFlightTokenStart = tokenStart
         job = scope.launch {
             if (!immediate) delay(delayMs.milliseconds)
-            val text = session.doc.text
+            // The document and caret together, then the text off the UI thread (see EditorDocument.awaitText).
+            val doc = session.doc
             val caret = session.selection.start
+            val text = doc.awaitText()
             val res = runCatching { backend.editor.complete(path, text, caret) }.getOrNull()
                 ?: return@launch
             val sameToken = res.replaceStart == current?.tokenStart

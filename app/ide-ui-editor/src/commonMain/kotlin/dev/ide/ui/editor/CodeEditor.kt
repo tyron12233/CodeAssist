@@ -757,7 +757,7 @@ private fun CodeEditorContent(
         if (largeFile) { geometry.editorStructure.value = emptyList(); return@LaunchedEffect }
         delay(300.milliseconds)
         geometry.editorStructure.value =
-            runCatching { backend.editor.fileStructure(path, editorSession.doc.text) }.getOrDefault(emptyList())
+            runCatching { backend.editor.fileStructure(path, editorSession.doc.awaitText()) }.getOrDefault(emptyList())
     }
 
     // Gutter swatches for the colors/drawables the buffer's resource references resolve to (debounced, like the
@@ -767,7 +767,7 @@ private fun CodeEditorContent(
         if (largeFile || !swatchable) { editorSession.applyResourceSwatches(emptyList()); return@LaunchedEffect }
         delay(400.milliseconds)
         editorSession.applyResourceSwatches(
-            runCatching { backend.editor.resourceSwatches(path, editorSession.doc.text) }.getOrDefault(emptyList()),
+            runCatching { backend.editor.resourceSwatches(path, editorSession.doc.awaitText()) }.getOrDefault(emptyList()),
         )
     }
 
@@ -2010,7 +2010,7 @@ private fun rememberOccurrences(session: EditorSession, doc: EditorDocument, wor
     LaunchedEffect(doc, word, largeFile) {
         if (largeFile || word == null) return@LaunchedEffect // a whole-file scan is too costly on a large buffer
         delay(OCCURRENCE_SETTLE_MS)
-        val text = doc.text // shared with the analysis pass, which reads the same revision
+        val text = doc.awaitText() // shared with the analysis pass, which reads the same revision
         val found = withContext(Dispatchers.Default) {
             findMatches(text, word, FindOptions(caseSensitive = true, wholeWord = true))
                 .takeIf { it.size >= 2 } // only meaningful when it appears more than once

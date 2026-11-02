@@ -696,7 +696,7 @@ private fun EditorDaemonEffect(
         daemon.autoReparseDelayMs = state.reparseDelayMs
         // The document is an immutable snapshot; its text is materialized only if this run survives the delay.
         val doc = active.session.doc
-        daemon.restart { doc.text }
+        daemon.restart { doc.awaitText() }
     }
     // Re-run the daemon when the workspace index finishes building. A file opened (e.g. a restored tab) while
     // the index is still building is analyzed against an incomplete classpath/symbol index and can show stale
@@ -710,7 +710,7 @@ private fun EditorDaemonEffect(
         state.backend.editor.diagnosticsInvalidated.collect { paths ->
             if (active.path in paths) {
                 val doc = active.session.doc
-                daemon.restart { doc.text }
+                daemon.restart { doc.awaitText() }
             }
         }
     }
@@ -720,7 +720,7 @@ private fun EditorDaemonEffect(
         wasIndexing = indexStatus.building
         if (prev == true && !indexStatus.building) {
             val doc = active.session.doc
-            daemon.restart { doc.text }
+            daemon.restart { doc.awaitText() }
         }
     }
 }
