@@ -97,7 +97,10 @@ internal fun BreadcrumbBar(
             canPreview = canPreview,
             blocksEnabled = state.blocksEnabled,
             contributed = ViewModeRegistry.forFile(active.path),
-        ) { active.viewMode = it }
+        ) {
+            if (it != active.viewMode) state.countViewMode(active.path, it)
+            active.viewMode = it
+        }
     }
 }
 

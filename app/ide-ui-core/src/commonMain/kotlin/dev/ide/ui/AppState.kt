@@ -1,5 +1,6 @@
 package dev.ide.ui
 
+import dev.ide.ui.backend.UiFeatures
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -428,6 +429,7 @@ class IdeUiState(
 
     /** Show [id] on its side, in place of whichever window was showing there. */
     fun showToolWindow(id: String) {
+        if (shownAt[sideOf(id)] != id) backend.diagnostics.countFeature(UiFeatures.toolWindow(id))
         shownAt[sideOf(id)] = id
         if (naturalSide(id) == ToolWindowSide.Left && id !in ToolWindowIds.BOTTOM) rememberLeft(id)
     }
@@ -520,6 +522,31 @@ class IdeUiState(
 
     /** RIGHT rail: tap an icon to open/switch; tap the selected one to collapse (the phone swipe routes here too). */
     fun toggleRightPanel(id: String) { selectedRightPanel = if (selectedRightPanel == id) null else id }
+
+    /**
+     * Count the user switching [path]'s tab to [mode], as the feature that view is: the Compose, layout or resource
+     * preview, the block editor, or split. Called where the user picks a view (the view switch, a preview gutter
+     * icon), not where a tab is restored into one, so a reopened session doesn't count as a use.
+     */
+    fun countViewMode(path: String, mode: EditorViewMode) {
+        val feature = when (mode) {
+            EditorViewMode.Preview -> previewFeatureOf(path)
+            EditorViewMode.Blocks -> UiFeatures.VIEW_BLOCKS
+            EditorViewMode.Split -> UiFeatures.VIEW_SPLIT
+            else -> null
+        } ?: return
+        backend.diagnostics.countFeature(feature)
+    }
+
+    private fun previewFeatureOf(path: String): String {
+        val p = path.replace('\\', '/').lowercase()
+        return when {
+            p.endsWith(".kt") -> UiFeatures.PREVIEW_COMPOSE
+            p.endsWith(".xml") && p.substringBeforeLast('/').substringAfterLast('/').substringBefore('-') == "layout" ->
+                UiFeatures.PREVIEW_LAYOUT
+            else -> UiFeatures.PREVIEW_RESOURCE
+        }
+    }
     /** Open (and switch to) a RIGHT panel — the mobile right-overlay switcher uses this. */
     fun selectRightPanel(id: String) { selectedRightPanel = id }
 
@@ -603,7 +630,13 @@ class IdeUiState(
         get() = isToolWindowShown(ToolWindowIds.BUILD)
         set(value) { if (value) showToolWindow(ToolWindowIds.BUILD) else hideToolWindow(ToolWindowIds.BUILD) }
 
-    var paletteOpen by mutableStateOf(false)
+    private var paletteOpenState by mutableStateOf(false)
+    var paletteOpen: Boolean
+        get() = paletteOpenState
+        set(value) {
+            if (value && !paletteOpenState) backend.diagnostics.countFeature(UiFeatures.COMMAND_PALETTE)
+            paletteOpenState = value
+        }
 
     /** The scope tab the palette opens on (a `PaletteFilter` name: Files, Symbols, ...); null = All. Set by the
      *  go-to shortcuts just before they open it. */

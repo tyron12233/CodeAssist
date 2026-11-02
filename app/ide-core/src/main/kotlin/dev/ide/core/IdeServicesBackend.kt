@@ -5,6 +5,7 @@ import dev.ide.core.build.BuildFailureKind
 import dev.ide.core.build.BuildRunner
 import dev.ide.core.perf.MemSample
 import dev.ide.core.perf.PerfSampler
+import dev.ide.core.perf.UsageCounter
 import dev.ide.core.plugins.AgentPlugin
 import dev.ide.core.plugins.VcsPlugin
 import dev.ide.core.project.ProjectManager
@@ -707,9 +708,32 @@ class IdeServicesBackend(
         else -> null
     }
 
+    /**
+     * Which wording the user's "granted" answered: [ANALYTICS_SCOPE_USAGE] once it named feature usage. A consent
+     * from before that (the sheet then promised "never which features you use") keeps performance data flowing
+     * but counts no usage, and the sheet asks again.
+     */
+    private fun consentCoversUsage(): Boolean =
+        analyticsConsent() == true && manager?.preference(ANALYTICS_SCOPE_PREF) == ANALYTICS_SCOPE_USAGE
+
+    override fun analyticsNeedsAsking(): Boolean =
+        analyticsAvailable() && (analyticsConsent() == null || (analyticsConsent() == true && !consentCoversUsage()))
+
     override fun setAnalyticsConsent(granted: Boolean) {
         manager?.setPreference(ANALYTICS_CONSENT_PREF, if (granted) "granted" else "denied")
+        // The sheet the user just answered is the current wording, so a yes covers usage and a no covers nothing.
+        manager?.setPreference(ANALYTICS_SCOPE_PREF, if (granted) ANALYTICS_SCOPE_USAGE else "")
         analytics.enabled = granted
+        if (!granted) usage.clear()
+    }
+
+    /** Feature-use counts, reported per feature when telemetry is flushed ([flushTelemetry], [close]). */
+    private val usage = UsageCounter { feature, count ->
+        track(dev.ide.analytics.Events.FEATURE_USED, mapOf("feature" to feature, "count" to count.toString()))
+    }
+
+    override fun countFeature(feature: String) {
+        if (consentCoversUsage()) usage.count(feature)
     }
 
     override fun track(event: String, props: Map<String, String>) {
@@ -800,6 +824,7 @@ class IdeServicesBackend(
             runCatching { perf.flushAll() }
             runCatching { frames.flushAll() }
             runCatching { frameCpu.flushAll() }
+            runCatching { usage.flushAll() }
             runCatching { analytics.flush() }
         }
     }
@@ -811,6 +836,7 @@ class IdeServicesBackend(
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
         runCatching { frames.flushAll() }
         runCatching { frameCpu.flushAll() }
+        runCatching { usage.flushAll() }
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
         // The version-control backend holds an open repository handle and its own refresh coroutine.
@@ -826,6 +852,8 @@ class IdeServicesBackend(
 
     private companion object {
         const val ANALYTICS_CONSENT_PREF = "analytics.consent"
+        const val ANALYTICS_SCOPE_PREF = "analytics.consent.scope"
+        const val ANALYTICS_SCOPE_USAGE = "usage"
     }
 
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */

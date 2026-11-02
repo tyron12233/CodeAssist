@@ -26,6 +26,9 @@ internal class DiagnosticsBackend(private val ctx: BackendContext) : Diagnostics
     override fun analyticsConsent(): Boolean? = ctx.analyticsConsent()
     override fun setAnalyticsConsent(granted: Boolean) = ctx.setAnalyticsConsent(granted)
     override fun track(event: String, props: Map<String, String>) = ctx.track(event, props)
+    override fun analyticsNeedsAsking(): Boolean = ctx.analyticsNeedsAsking()
+    override fun recordPerf(event: String, ms: Long, dims: Map<String, String>) = ctx.recordPerf(event, ms, dims)
+    override fun countFeature(feature: String) = ctx.countFeature(feature)
 
     override fun recentLogs(): List<UiLogEntry> = Log.recent().map { r ->
         UiLogEntry(

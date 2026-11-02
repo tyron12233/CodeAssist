@@ -1,5 +1,6 @@
 package dev.ide.core.backend
 
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.core.BackendContext
 import dev.ide.core.plugins.VcsPlugin
 import dev.ide.core.project.ImportableKind
@@ -197,6 +198,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         // repository it was saved in, so a repository identity is usually a stale copy of it, and preferring
         // that meant a later edit in Settings was silently ignored.
         val commit = withRepository { repo -> repo.commit(message, configuredIdentity() ?: repo.identity(), amend) }
+        ctx.countFeature(UiFeatures.GIT_COMMIT)
         ok(VcsMessage.COMMITTED, commit.shortId)
     }
 

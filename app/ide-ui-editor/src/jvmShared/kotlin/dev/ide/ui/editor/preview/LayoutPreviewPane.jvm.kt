@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
@@ -167,11 +168,27 @@ actual fun LayoutPreviewPane(
     // the status changes (notably Running → Succeeded), at which point the libraries are dexed and the real
     // render proceeds instead of the build-required prompt.
     val buildStatus = backend.build.buildState.collectAsState().value.status
+    val layoutRendered = remember(path) { booleanArrayOf(false) }
     LaunchedEffect(path, text, request, lpBackend, depsResolving, buildStatus) {
         // The effect re-launches (cancelling the prior) on every keystroke; this delay coalesces a typing
         // burst into a single render. The fetch runs on the backend's preview lane, off the UI thread.
         delay(PREVIEW_DEBOUNCE_MS)
+        val started = System.nanoTime()
         val next = lpBackend?.layoutPreview(path, text, request)
+        if (lpBackend != null) {
+            // Render time for analytics, the first render of this layout apart from re-renders after an edit, and
+            // which renderer answered: the real views (an image came back) or the owned fallback.
+            backend.diagnostics.recordPerf(
+                UiFeatures.PREVIEW_PERF_EVENT, (System.nanoTime() - started) / 1_000_000,
+                mapOf(
+                    "kind" to "layout",
+                    "first" to (!layoutRendered[0]).toString(),
+                    "ok" to (next != null && next.resourceErrors.isEmpty()).toString(),
+                    "renderer" to if (next?.renderedImage != null || next?.renderedNativeImage != null) "real" else "owned",
+                ),
+            )
+            layoutRendered[0] = true
+        }
         resourceErrors = next?.resourceErrors.orEmpty()
         // With no render yet, the error result is the only thing to show.
         if (resourceErrors.isEmpty() || result == null) result = next

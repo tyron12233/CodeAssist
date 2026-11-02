@@ -109,6 +109,8 @@ internal interface BackendContext {
     fun analyticsAvailable(): Boolean
     fun analyticsConsent(): Boolean?
     fun setAnalyticsConsent(granted: Boolean)
+    fun analyticsNeedsAsking(): Boolean
+    fun countFeature(feature: String)
 
     /** Record an editor-latency sample (completion/analysis) into the aggregated perf sampler (flushed by the
      *  aggregator on close). */

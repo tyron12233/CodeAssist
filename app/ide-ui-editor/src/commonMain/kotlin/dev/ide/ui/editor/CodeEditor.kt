@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.backend.UiFeatures
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.geometry.Offset
 import dev.ide.ui.backend.UiDiagnostic
@@ -375,6 +376,7 @@ private fun CodeEditorContent(
     /** Run one source go-to for [kind] (a keyboard shortcut): exactly one target navigates immediately; 0 or
      *  many open the dropdown (a "nothing found" note, or a target picker). */
     fun runNav(kind: UiNavKind) {
+        backend.diagnostics.countFeature(UiFeatures.navigation(kind.name))
         val text = editorSession.doc.text
         val caret = editorSession.selection.start
         scope.launch {
@@ -413,6 +415,7 @@ private fun CodeEditorContent(
     }
 
     fun showQuickDoc() {
+        backend.diagnostics.countFeature(UiFeatures.QUICK_DOC)
         val caret = editorSession.selection.start
         val text = editorSession.doc.text
         scope.launch {
@@ -488,6 +491,7 @@ private fun CodeEditorContent(
                 .getOrElse { UiRenameResult(false, it.message ?: renameFailedMsg) }
             renameBusy = false
             if (result.success) {
+                backend.diagnostics.countFeature(UiFeatures.RENAME)
                 rename = null; onRenamed(result.newPath)
             } else renameError = result.message
         }
@@ -643,6 +647,7 @@ private fun CodeEditorContent(
     // Reformat Code: the minimal edits to reformat the whole buffer, or just the selection when
     // `[rangeStart, rangeEnd)` is non-empty.
     suspend fun runFormat(rangeStart: Int, rangeEnd: Int) = applyBufferEdits { text ->
+        backend.diagnostics.countFeature(UiFeatures.FORMAT)
         if (rangeEnd > rangeStart) backend.editor.formatRange(path, text, rangeStart, rangeEnd)
         else backend.editor.formatDocument(path, text)
     }
@@ -1398,6 +1403,7 @@ private fun CodeEditorContent(
                 override fun onCommitRename() = commitRename()
                 override fun onStartRename() = startRename()
                 override fun onRunNav(kind: UiNavKind) = runNav(kind)
+                override fun onNavUsed(kind: UiNavKind) = backend.diagnostics.countFeature(UiFeatures.navigation(kind.name))
                 override fun onEditorCommand(id: String) = runEditorCommand(id)
                 override fun onNavigateTo(path: String, offset: Int) = onNavigate(path, offset)
             },
@@ -1561,6 +1567,8 @@ private interface EditorDialogCommands {
     fun onCommitRename()
     fun onStartRename()
     fun onRunNav(kind: UiNavKind)
+    /** A Go to menu entry was picked that navigates without running [onRunNav] (its targets were resolved). */
+    fun onNavUsed(kind: UiNavKind)
     fun onEditorCommand(id: String): Boolean
     fun onNavigateTo(path: String, offset: Int)
 }
@@ -1722,8 +1730,10 @@ private fun BoxScope.EditorDialogsLayer(
                 commands.onRunNav(UiNavKind.USAGES) // the lazily-searched entry (see openNavMenu)
             } else if (opt.targets.size == 1) {
                 navMenu = null
+                commands.onNavUsed(opt.kind)
                 commands.onNavigateTo(opt.targets[0].path, opt.targets[0].offset)
             } else {
+                commands.onNavUsed(opt.kind)
                 navMenu = NavMenuState.Results(opt.targets)
             }
         },

@@ -9,11 +9,11 @@ Cadangkan proyek Anda ke file .zip sekarang, file sumber Anda tetap aman, dan An
     <string name="backup_projects">Cadangkan proyek</string>
     <string name="got_it">Mengerti</string>
     <string name="help_improve_codeassist">Bantu tingkatkan CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Bagikan data performa anonim agar kami dapat melihat apa yang lambat dan gagal, serta memperbaiki hal yang benar.
+    <string name="help_improve_codeassist_content"><![CDATA[Bagikan data penggunaan dan performa anonim agar kami dapat melihat apa yang lambat, apa yang gagal, dan fitur mana yang paling diandalkan, serta memperbaiki hal yang benar.
 
-Kami mengumpulkan: versi aplikasi dan model perangkat Anda, berapa lama waktu build, pengindeksan, dan penyelesaian kode, keberhasilan/kegagalan build, laporan kerusakan yang dibersihkan, serta kapan iklan ditampilkan atau ditutup dan perubahan pengaturan iklan Anda.
+Kami mengumpulkan: versi aplikasi dan model perangkat Anda, berapa lama waktu build, pengindeksan, penyelesaian kode, dan pratinjau, keberhasilan/kegagalan build, laporan kerusakan yang dibersihkan, seberapa sering setiap fitur digunakan (misalnya berapa kali pratinjau tata letak atau Cari Penggunaan dibuka), serta kapan iklan ditampilkan atau ditutup dan perubahan pengaturan iklan Anda.
 
-Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang Anda gunakan, atau apa pun yang mengidentifikasi Anda. Anda dapat mengubah ini kapan saja di bawah Lainnya saat proyek terbuka.]]></string>
+Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik, atau apa pun yang mengidentifikasi Anda. Anda dapat mengubah ini kapan saja di bagian Lainnya saat proyek terbuka.]]></string>
     <string name="learn_more">Pelajari lebih lanjut</string>
     <string name="allow">Izinkan</string>
     <string name="no_thanks">Tidak, terima kasih</string>
@@ -1146,7 +1146,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="set_br_dexbatch_desc">Pada aplikasi yang sangat besar, langkah dexing terakhir menggabungkan kelas dalam batch agar tidak memerlukan semuanya di memori sekaligus. Batch lebih kecil menjaga memori itu tetap rendah (baik untuk perangkat memori rendah) tetapi membuat APK sedikit lebih besar (kompresi antar kelas lebih sedikit); batch lebih besar mengemas lebih rapat tetapi memerlukan lebih banyak memori per merge. Sebagian besar aplikasi tidak pernah mencapai ini, hanya berlaku setelah beberapa ribu kelas.</string>
     <string name="set_br_dexfork">Maksimum dex fork bersamaan</string>
     <string name="set_privacy_analytics">Bagikan analitik performa</string>
-    <string name="set_privacy_analytics_desc">Hanya metrik performa dan iklan anonim, tidak pernah kode atau nama file Anda</string>
+    <string name="set_privacy_analytics_desc">Hanya jumlah penggunaan fitur serta metrik performa dan iklan anonim, tidak pernah kode atau nama file Anda</string>
     <string name="set_privacy_clear">Bersihkan cache</string>
     <string name="set_privacy_clear_desc">Bebaskan cache dependensi / bahasa / pratinjau yang dapat dibuat ulang (tidak pernah sumber)</string>
     <string name="set_privacy_clear_btn">Bersihkan</string>

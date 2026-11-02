@@ -9,11 +9,11 @@ Faça um backup dos seus projetos em um arquivo .zip agora, seus arquivos de có
     <string name="backup_projects">Fazer backup dos projetos</string>
     <string name="got_it">Entendi</string>
     <string name="help_improve_codeassist">Ajude a melhorar o CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Compartilhe dados anônimos de desempenho para que possamos ver o que está lento e o que está falhando, e corrigir as coisas certas.
+    <string name="help_improve_codeassist_content"><![CDATA[Compartilhe dados anônimos de uso e desempenho para que possamos ver o que está lento, o que está falhando e quais recursos as pessoas mais usam, e corrigir as coisas certas.
 
-Coletamos: a versão do seu aplicativo e modelo de dispositivo, quanto tempo levam as compilações, a indexação e a conclusão do código, sucesso/falha da compilação, relatórios de erros limpos e quando anúncios são exibidos ou fechados e alterações nas suas configurações de anúncios.
+Coletamos: a versão do app e o modelo do seu dispositivo, quanto tempo levam as compilações, a indexação, o preenchimento de código e as pré-visualizações, o sucesso ou a falha da compilação, relatórios de falhas limpos, com que frequência cada recurso é usado (por exemplo, quantas vezes a pré-visualização de layout ou Localizar usos foi aberta), e quando os anúncios são exibidos ou fechados e as alterações nas suas configurações de anúncios.
 
-Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você usa ou qualquer coisa que o identifique. Você pode alterar isso a qualquer momento em Mais enquanto um projeto estiver aberto.]]></string>
+Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita ou qualquer coisa que identifique você. Você pode alterar isso a qualquer momento em Mais enquanto um projeto estiver aberto.]]></string>
     <string name="learn_more">Saiba mais</string>
     <string name="allow">Permitir</string>
     <string name="no_thanks">Não, obrigado</string>
@@ -1198,7 +1198,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_br_dexbatch_desc">Em um app muito grande, a etapa final de dexing mescla as classes em lotes para não precisar de todas na memória de uma vez. Lotes menores mantêm essa memória baixa (bom para dispositivos com pouca memória), mas deixam o APK um pouco maior (menos compressão compartilhada entre classes); lotes maiores compactam melhor, mas precisam de mais memória por mesclagem. A maioria dos apps nunca chega a isso, só entra em ação a partir de alguns milhares de classes.</string>
     <string name="set_br_dexfork">Máximo de processos de dex simultâneos</string>
     <string name="set_privacy_analytics">Compartilhar análise de desempenho</string>
-    <string name="set_privacy_analytics_desc">Apenas métricas anônimas de desempenho e de anúncios, nunca seu código ou nomes de arquivos</string>
+    <string name="set_privacy_analytics_desc">Apenas contagens de uso e métricas anônimas de desempenho e anúncios, nunca seu código ou nomes de arquivos</string>
     <string name="set_privacy_clear">Limpar caches</string>
     <string name="set_privacy_clear_desc">Liberar caches regeneráveis de dependências / linguagem / visualização (nunca o código-fonte)</string>
     <string name="set_privacy_clear_btn">Limpar</string>

@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.backend.UiFeatures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -357,6 +358,7 @@ internal class EditorActionsController(
             val result = runCatching { backend.editor.applyAction(path, text, ctxStart, ctxEnd, act.id) }
                 .getOrNull() ?: return@launch
             if (result.isEmpty) return@launch
+            backend.diagnostics.countFeature(UiFeatures.QUICK_FIX)
             // The other files first: editing another tab has to make it active, and doing that after this
             // buffer's edit would move the caret away from where the fix just put it.
             if (result.others.isNotEmpty()) runCatching { onOtherFileEdits(result.others) }

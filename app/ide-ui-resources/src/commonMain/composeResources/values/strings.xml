@@ -9,11 +9,11 @@ Back up your projects to a .zip now, your source files stay safe, and you can re
     <string name="backup_projects">Back up projects</string>
     <string name="got_it">Got it</string>
     <string name="help_improve_codeassist">Help improve CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing, and fix the right things.
+    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous usage and performance data so we can see what's slow, what's failing, and which features people rely on, and fix the right things.
 
-We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, scrubbed crash reports, and when ads are shown or closed and changes to your ad settings.
+We collect: your app version and device model, how long builds, indexing, code completion, and previews take, build success/failure, scrubbed crash reports, how often each feature is used (for example, how many times the layout preview or Find Usages was opened), and when ads are shown or closed and changes to your ad settings.
 
-We never collect your code, file or project names, which features you use, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
+We never collect your code, file or project names, what you type, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
     <string name="learn_more">Learn more</string>
     <string name="allow">Allow</string>
     <string name="no_thanks">No thanks</string>
@@ -1846,7 +1846,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_br_dexfork">Max concurrent dex forks</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">Share performance analytics</string>
-    <string name="set_privacy_analytics_desc">Anonymous performance and ad metrics only, never your code or file names</string>
+    <string name="set_privacy_analytics_desc">Anonymous usage counts, performance and ad metrics, never your code or file names</string>
     <string name="set_privacy_clear">Clear caches</string>
     <string name="set_privacy_clear_desc">Free regenerable dependency / language / preview caches (never source)</string>
     <string name="set_privacy_clear_btn">Clear</string>

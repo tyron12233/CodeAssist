@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.backend.UiFeatures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -105,6 +106,7 @@ internal class CompletionController(
      *  (frequently accepted items rank higher on later completions). Fire-and-forget. */
     fun noteAccepted(item: UiCompletionItem) {
         scope.launch { runCatching { backend.editor.completionAccepted(path, item.label) } }
+        backend.diagnostics.countFeature(UiFeatures.COMPLETION_ACCEPT)
     }
 
     /** Close the popup + cancel any in-flight request (Esc / accept / click-away / non-identifier). */

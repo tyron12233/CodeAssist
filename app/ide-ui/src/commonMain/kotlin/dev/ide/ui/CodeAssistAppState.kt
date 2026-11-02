@@ -1,5 +1,6 @@
 package dev.ide.ui
 
+import dev.ide.ui.backend.UiFeatures
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -140,6 +141,7 @@ class CodeAssistAppState(
             if (value != currentScreen && !navigatesAsStack(value)) backStack.clear()
             // Leaving Settings altogether: the next visit starts at the top of its list.
             if (isHubPane(currentScreen) && !isHubPane(value)) hubListScroll = ScrollState(0)
+            if (value != currentScreen) backend.diagnostics.countFeature(UiFeatures.screen(value.name))
             navigatingBack = false
             currentScreen = value
         }
@@ -274,7 +276,8 @@ class CodeAssistAppState(
     /** Opt-in analytics: prompt only when collection is available and the user has not decided yet (null). The
      *  re-toggle lives in the editor's More menu (a settings surface), not permanently on the project picker. */
     var showAnalytics: Boolean by mutableStateOf(
-        backend.diagnostics.analyticsAvailable() && backend.diagnostics.analyticsConsent() == null
+        // Also asks again someone who agreed to an older wording that didn't cover all that is collected now.
+        backend.diagnostics.analyticsAvailable() && backend.diagnostics.analyticsNeedsAsking()
     )
         private set
 

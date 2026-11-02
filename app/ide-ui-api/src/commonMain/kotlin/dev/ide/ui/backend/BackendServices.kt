@@ -1800,8 +1800,21 @@ interface DiagnosticsService {
     /** Record the user's analytics decision. */
     fun setAnalyticsConsent(granted: Boolean) {}
 
+    /**
+     * Whether to show the consent sheet: the user hasn't answered, or agreed to an older wording that didn't
+     * cover everything collected now (feature usage). Answering it again records consent to the current wording.
+     */
+    fun analyticsNeedsAsking(): Boolean = analyticsConsent() == null
+
     /** Record an analytics [event] (performance metrics only; never user content). */
     fun track(event: String, props: Map<String, String> = emptyMap()) {}
+
+    /** Record one [ms] sample of a latency metric ([dev.ide.analytics.Events] `*_perf`), summarized with the
+     *  others in its window. [dims] split the metric; they must come from closed sets, never user content. */
+    fun recordPerf(event: String, ms: Long, dims: Map<String, String> = emptyMap()) {}
+
+    /** Count one use of [feature] (a [dev.ide.analytics.Features] id). Kept only with consent to usage data. */
+    fun countFeature(feature: String) {}
 }
 
 /**

@@ -1,6 +1,7 @@
 package dev.ide.agent.ui
 
 
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.ui.components.*
 
 import androidx.compose.animation.AnimatedVisibility
@@ -225,6 +226,7 @@ fun ChatDrawer(
                 return
             }
         }
+        backend.diagnostics.countFeature(UiFeatures.AI_MESSAGE)
         backend.agent.send(text)
     }
 

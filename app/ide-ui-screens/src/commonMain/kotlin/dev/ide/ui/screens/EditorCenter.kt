@@ -407,6 +407,7 @@ internal fun EditorCenter(
                                 // to the breadcrumb row, so they're already visible — making the view change easy to undo.
                                 onPreview = { fn ->
                                     active.previewTarget = fn
+                                    if (active.viewMode != EditorViewMode.Preview) state.countViewMode(active.path, EditorViewMode.Preview)
                                     active.viewMode = EditorViewMode.Preview
                                 },
                                 // A plugin editor action goes through the same dispatcher as the toolbar's, so its

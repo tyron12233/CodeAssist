@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import kotlin.time.TimeSource
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -151,6 +153,26 @@ fun ComposePreviewPane(
     // host even sees it. Either way the on-screen render is stale, so the badge shows a loading state.
     var busy by remember(path) { mutableStateOf(false) }
     val loading = host != null && (busy || (live && renderText != text))
+
+    // Preview render time for analytics: from the host going busy (lowering + interpreting) to it settling. The
+    // first render of a file pays for lowering everything; later ones are re-renders after an edit, so they are
+    // reported apart (`first`). Whether it worked is read a beat after it settles, because the host reports its
+    // problems in the same frame but after the busy flag.
+    val renderStart = remember(path) { arrayOfNulls<TimeSource.Monotonic.ValueTimeMark>(1) }
+    val rendered = remember(path) { booleanArrayOf(false) }
+    LaunchedEffect(busy) {
+        if (busy) return@LaunchedEffect
+        val start = renderStart[0] ?: return@LaunchedEffect
+        renderStart[0] = null
+        val ms = start.elapsedNow().inWholeMilliseconds
+        delay(250)
+        val ok = problems.none { it.level == PreviewIssueLevel.ERROR }
+        backend.diagnostics.recordPerf(
+            UiFeatures.PREVIEW_PERF_EVENT, ms,
+            mapOf("kind" to "compose", "first" to (!rendered[0]).toString(), "ok" to ok.toString()),
+        )
+        rendered[0] = true
+    }
 
     // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
@@ -364,7 +386,10 @@ fun ComposePreviewPane(
                                 renderText,
                                 state.night,
                                 { problems = it },
-                                { busy = it },
+                                { b ->
+                                    if (b && !busy) renderStart[0] = TimeSource.Monotonic.markNow()
+                                    busy = b
+                                },
                                 contentMod
                             )
                         }
