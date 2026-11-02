@@ -88,6 +88,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_title
 import dev.ide.vcs.ui.generated.resources.vcs_add_ignores
 import dev.ide.vcs.ui.generated.resources.vcs_amend
 import dev.ide.vcs.ui.generated.resources.vcs_branch
+import dev.ide.vcs.ui.generated.resources.vcs_no_repo_branch
 import dev.ide.vcs.ui.generated.resources.vcs_cancel
 import dev.ide.vcs.ui.generated.resources.vcs_clean_body
 import dev.ide.vcs.ui.generated.resources.vcs_clean_title
@@ -293,7 +294,9 @@ private fun PanelHeader(
 private fun BranchChip(status: UiVcsStatus, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val label = when {
-        !status.present -> stringResource(Res.string.vcs_branch)
+        // Not a repository yet: there is no branch, and repeating the "Branch" caption as the value read as a
+        // placeholder that never got filled in ("Branch / Branch").
+        !status.present -> stringResource(Res.string.vcs_no_repo_branch)
         status.detached -> stringResource(Res.string.vcs_detached)
         status.branch.isNotBlank() -> status.branch
         status.unborn -> stringResource(Res.string.vcs_no_commits)

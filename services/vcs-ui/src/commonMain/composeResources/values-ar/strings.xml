@@ -21,6 +21,7 @@
     <string name="vcs_branch">الفرع</string>
     <string name="vcs_detached">‏HEAD منفصل</string>
     <string name="vcs_no_commits">لا إيداعات بعد</string>
+    <string name="vcs_no_repo_branch">لا يوجد مستودع</string>
     <string name="vcs_up_to_date">محدَّث</string>
     <string name="vcs_not_pushed_yet">لم يُدفع بعد</string>
     <string name="vcs_fetch">جلب</string>

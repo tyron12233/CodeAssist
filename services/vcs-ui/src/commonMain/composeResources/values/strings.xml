@@ -21,6 +21,7 @@
     <string name="vcs_branch">Branch</string>
     <string name="vcs_detached">Detached HEAD</string>
     <string name="vcs_no_commits">No commits yet</string>
+    <string name="vcs_no_repo_branch">No repository</string>
     <string name="vcs_up_to_date">Up to date</string>
     <string name="vcs_not_pushed_yet">Not pushed yet</string>
     <string name="vcs_fetch">Fetch</string>
