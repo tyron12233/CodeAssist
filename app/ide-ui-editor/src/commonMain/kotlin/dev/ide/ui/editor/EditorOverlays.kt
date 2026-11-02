@@ -525,6 +525,10 @@ private fun Modifier.toolbarItemEntrance(index: Int): Modifier {
 /** Floor for the list so it stays usable (≈1.5 rows) even when the caret is near the pane's bottom. */
 internal val MinListHeight = 64.dp
 
+/** Below this much room under the caret line, the completion list goes above the line when there is more room
+ *  there (about three and a half rows). */
+internal val ComfortableListHeight = 160.dp
+
 /** Generous ceiling for the list: it otherwise fills the room below the caret (re-expanding as the user
  *  scrolls), so this only keeps it sane on a tall desktop window. */
 internal val MaxListHeight = 560.dp

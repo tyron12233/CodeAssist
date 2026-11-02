@@ -1800,10 +1800,16 @@ private fun BoxScope.CompletionPopupLayer(
         BoxWithConstraints(Modifier.matchParentSize()) {
             val compact = maxWidth < 600.dp
             val popupWidth = if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
-            // Fill the room below the caret line so the list auto-expands. Bounded by a generous ceiling.
+            // Fill the room below the caret line so the list auto-expands, bounded by a generous ceiling. With
+            // only a sliver below (the caret near the pane bottom) and more room above, size it to the room above
+            // instead: [belowLineInPane] then places it above the line.
             val (_, _, anchorTop) = caretGeometry(anchor)
             val roomBelowPx = constraints.maxHeight - (anchorTop + metrics.lineHeight) - gapPx - marginPx
-            val listMax = with(density) { roomBelowPx.toDp() }.coerceIn(MinListHeight, MaxListHeight)
+            val roomAbovePx = anchorTop - gapPx - marginPx
+            val roomPx = if (roomBelowPx < with(density) { ComfortableListHeight.toPx() } && roomAbovePx > roomBelowPx) {
+                roomAbovePx
+            } else roomBelowPx
+            val listMax = with(density) { roomPx.toDp() }.coerceIn(MinListHeight, MaxListHeight)
             val items = shown.items
             Box(
                 Modifier.belowLineInPane(
