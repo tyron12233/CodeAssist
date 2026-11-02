@@ -158,13 +158,14 @@ object JetpackComposeAppTemplate : ProjectTemplate {
             }
 
             // Press the Preview button in the editor toolbar to render these through the Compose interpreter.
-            @Preview
+            // showBackground gives them the white an app window has; without it the text sits on the canvas.
+            @Preview(showBackground = true)
             @Composable
             fun GreetingPreview() {
                 Greeting("Compose")
             }
 
-            @Preview
+            @Preview(showBackground = true)
             @Composable
             fun CardPreview() {
                 Column {
