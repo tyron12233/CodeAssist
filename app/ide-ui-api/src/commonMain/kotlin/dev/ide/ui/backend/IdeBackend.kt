@@ -1494,7 +1494,9 @@ data class TreeNode(
     /**
      * For a (possibly compacted) `Package` node, one entry per package level — its dotted package name and
      * directory — so a New-Class action can target any intermediate level (e.g. `com.tyron` inside a
-     * collapsed `com.tyron.codeassist`). Empty for non-package nodes.
+     * collapsed `com.tyron.codeassist`). A compacted `Folder` in the All-Files view (`src/main/java`, a chain
+     * of single-child directories shown as one row) carries one entry per level the same way, with a
+     * `/`-joined cumulative label (`src`, `src/main`, `src/main/java`). Empty otherwise.
      */
     val packageSegments: List<PackageSegment> = emptyList(),
     /**

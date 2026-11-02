@@ -46,6 +46,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -604,7 +608,9 @@ private fun TreeRowContent(
 
     // Taller, finger-friendly rows on touch; denser on desktop where pointer precision is higher.
     val rowHeight = if (touchInput) 40.dp else 30.dp
-    Box(modifier) {
+    val indentStep = treeIndentStep()
+    val guideColor = MaterialTheme.colorScheme.outlineVariant
+    Box(modifier.drawBehind { drawIndentGuides(depth, indentStep, guideColor) }) {
         // Rows read as inset rounded pills (the sidebar idiom of the design system) rather than
         // full-bleed stripes — the selection highlight is clipped to the pill.
         Row(
@@ -638,7 +644,7 @@ private fun TreeRowContent(
                     onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
                 )
                 .secondaryClickable(enabled = hasMenu) { menuOpen = true }
-                .padding(start = (6 + depth * 16).dp, end = 6.dp),
+                .padding(start = TREE_ROW_INSET + indentStep * depth, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (isExpandable) {
@@ -676,7 +682,7 @@ private fun TreeRowContent(
                 )
             } else {
                 Text(
-                    node.name,
+                    node.displayName(),
                     color = when {
                         isActive -> MaterialTheme.colorScheme.onSecondaryContainer
                         // Derived build output, IntelliJ-style: dimmed so it reads as generated, not source.
@@ -686,7 +692,9 @@ private fun TreeRowContent(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    // Cut in the middle: siblings tend to share a prefix (`AnalysisManager`, `AnalysisReport`),
+                    // so the end of the name is what tells them apart.
+                    overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -888,8 +896,9 @@ private fun NewActionItems(
     close: () -> Unit,
 ) {
     // The package chain is forwarded so the dialog can switch levels (`com` vs `com.example`); empty for a
-    // plain folder / res context.
-    val segs = node.packageSegments
+    // plain folder / res context. A compacted folder chain also carries segments, but the dialog labels its
+    // chips "Package", so those stay behind (each folder level has its own New menu on the row's label).
+    val segs = if (node.kind == NodeKind.Package) node.packageSegments else emptyList()
     if (isSourceContext && targetDir != null) {
         // An `aidl/` root is a package context too, but a Java class does not belong in one, so it offers
         // the AIDL templates instead.
@@ -974,8 +983,8 @@ private fun NewHoverButton(
 }
 
 /**
- * A multi-segment row name drawn as individual segments: a compacted package (`com.example.compose`) or a
- * source-root label (`app/src/main/java`). Each **prefix** segment is tappable and opens a "New ▸" menu
+ * A multi-segment row name drawn as individual segments: a compacted package (`com.example.compose`), a
+ * compacted folder chain in the All-Files view (`src/main/java`), or a source-root label (`app/src/main/java`). Each **prefix** segment is tappable and opens a "New ▸" menu
  * scoped to *that* directory, so a file can be created at a middle level the single row would otherwise hide.
  * The final segment is plain text, so tapping it (like tapping the row elsewhere) falls through to the row's
  * expand/collapse. [allowSource] gates whether the per-segment menu offers typed Java/Kotlin classes (true
@@ -994,27 +1003,32 @@ private fun SegmentedPathLabel(
     modifier: Modifier = Modifier,
 ) {
     val lastIndex = segments.lastIndex
+    // Row measures unweighted children first, so the deepest level (unweighted) gets its width before the
+    // prefix levels (weighted, not filling) share what is left and ellipsize. In a narrow drawer that keeps
+    // `java/com/acme/feature` reading as `java/c…/a…/feature`, not a full prefix with the leaf squeezed out.
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         segments.forEachIndexed { i, seg ->
             if (i > 0) Text(separator, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
-            // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf.
-            val leaf = seg.packageName.substringAfterLast('.').substringAfterLast('/')
+            // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf. Split on
+            // this row's own separator only: a folder may have a dot in its name (`.github`, `v1.2`).
+            val leaf = seg.packageName.substringAfterLast(separator)
             if (i == lastIndex) {
                 Text(
                     leaf,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.MiddleEllipsis,
                 )
             } else {
                 var open by remember { mutableStateOf(false) }
-                Box {
+                Box(Modifier.weight(1f, fill = false)) {
                     Text(
                         leaf,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .clip(RoundedCornerShape(Ca.radius.xs))
                             .clickable { open = true }
@@ -1041,9 +1055,12 @@ private fun SegmentedPathLabel(
 }
 
 /** The segments to render this row's name as (tappable middle levels), or empty for a plain single-level row:
- *  a compacted package's chain, or a source-root label's directory ancestors derived from [TreeNode.dirPath]. */
+ *  a compacted package's chain, a compacted folder chain, or a source-root label's directory ancestors derived
+ *  from [TreeNode.dirPath]. */
 private fun TreeNode.segmentsForLabel(): List<PackageSegment> = when (kind) {
     NodeKind.Package -> packageSegments
+    // A compacted folder chain in the All-Files view (`src/main/java`), built with its levels by the backend.
+    NodeKind.Folder -> packageSegments
     NodeKind.SourceRoot -> deriveDirSegments()
     else -> emptyList()
 }
@@ -1066,6 +1083,52 @@ private fun TreeNode.deriveDirSegments(): List<PackageSegment> {
         val abs = dirParts.subList(0, dirParts.size - (labels.size - 1 - k)).joinToString("/")
         PackageSegment(cumulative, abs)
     }
+}
+
+/** The row's padding before its first level: the pill's 6dp inset is outside it, this is inside. */
+private val TREE_ROW_INSET = 6.dp
+
+/** Outer horizontal inset of a row's pill ([TreeRowContent]'s `padding(horizontal = 6.dp)`). */
+private val TREE_PILL_INSET = 6.dp
+
+/** Half the caret glyph's 14dp width: guides run under the caret of the level they belong to. */
+private val CARET_CENTER = 7.dp
+
+/**
+ * How far each nesting level shifts a row. Tighter on touch, where the tree lives in a ~300dp drawer and a deep
+ * package (`src/main/java/com/acme/feature`) would otherwise spend half the width on indent; the guide lines
+ * carry the structure the smaller step no longer shows on its own.
+ */
+@Composable
+private fun treeIndentStep(): Dp = if (touchInput) 12.dp else 16.dp
+
+/**
+ * One faint vertical line per ancestor level, under that ancestor's caret, as in VS Code and IntelliJ. They span
+ * the row's full height so they join up across rows, which is what makes "inside this folder" versus "a sibling
+ * of it" readable at a glance.
+ */
+private fun DrawScope.drawIndentGuides(depth: Int, step: Dp, color: Color) {
+    if (depth <= 0) return
+    val stroke = 1.dp.toPx()
+    for (level in 0 until depth) {
+        val x = (TREE_PILL_INSET + TREE_ROW_INSET + step * level + CARET_CENTER).toPx()
+        drawLine(color, Offset(x, 0f), Offset(x, size.height), strokeWidth = stroke)
+    }
+}
+
+/**
+ * The name a row shows. A Java or Kotlin source file drops its extension, as IntelliJ does, because the J/K
+ * badge beside it already says what it is and on a phone those five characters are part of the name that would
+ * otherwise be cut. `.kts` scripts keep theirs (`build.gradle.kts` reads wrong without it).
+ */
+internal fun TreeNode.displayName(): String {
+    if (kind != NodeKind.File) return name
+    val ext = when (iconId) {
+        "java" -> ".java"
+        "kotlin" -> ".kt"
+        else -> return name
+    }
+    return if (name.endsWith(ext) && name.length > ext.length) name.dropLast(ext.length) else name
 }
 
 @Composable
