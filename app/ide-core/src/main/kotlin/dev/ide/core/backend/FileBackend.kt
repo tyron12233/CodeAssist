@@ -38,12 +38,21 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         // Picker-safe: with no project open (the lazy-start path), the engine-backed tree builders would hit
         // the non-null `services` accessor. Hand back an empty root so the shared UI state can be constructed
         // before a project is opened; it is rebuilt for real once `openProject` bumps the epoch.
-        if (ctx.servicesOrNull == null) return TreeNode(id = "empty", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "module")
-        return when (mode) {
-            TreeViewMode.Project -> projectTree()
-            TreeViewMode.AllFiles -> allFilesTree()
+        if (ctx.servicesOrNull == null) return emptyTree()
+        return try {
+            when (mode) {
+                TreeViewMode.Project -> projectTree()
+                TreeViewMode.AllFiles -> allFilesTree()
+            }
+        } catch (e: IllegalStateException) {
+            // The tree is built off the main thread, and closing the project mid-walk makes the next
+            // `ctx.services` read throw "No project is open" (seen in the field from IdeUiState.loadTree). There
+            // is no tree to show then; anything else is a real failure and still propagates.
+            if (ctx.servicesOrNull == null) emptyTree() else throw e
         }
     }
+
+    private fun emptyTree() = TreeNode(id = "empty", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "module")
 
     // File-tree expansion is remembered per project + view mode in the project's generic settings store
     // (`.platform/settings.properties`), keyed by the stable path-based TreeNode ids. Empty stored value =

@@ -249,6 +249,12 @@ fun ProjectsHomeScreen(
      * not need to know which season it is or what dressing up changes; null shows nothing.
      */
     seasonalCard: (@Composable (Modifier) -> Unit)? = null,
+    /**
+     * False while the host is still reading the project list from disk (it does that off the main thread).
+     * The empty "no projects yet" state is held back until then, so a user with projects does not see it
+     * flash on launch.
+     */
+    projectsLoaded: Boolean = true,
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
     // Deleting wipes the project from disk and nothing else in this flow asks first.
@@ -279,6 +285,7 @@ fun ProjectsHomeScreen(
     if (maxWidth >= ProjectsWideBreakpoint) {
         WideProjectsHome(
             projects = ordered,
+            projectsLoaded = projectsLoaded,
             now = now,
             icons = icons,
             loadIcon = loadIcon,
@@ -389,7 +396,7 @@ fun ProjectsHomeScreen(
                     )
                 }
             } else {
-                item("empty") { EmptyList() }
+                if (projectsLoaded) item("empty") { EmptyList() }
             }
 
             // A native ad below the project list — an idle "between tasks" spot, never over the actions.
@@ -1230,6 +1237,7 @@ private enum class ProjectSort { Recent, Name }
 @Composable
 private fun WideProjectsHome(
     projects: List<ProjectInfo>,
+    projectsLoaded: Boolean,
     now: Long,
     icons: ProjectIconCache,
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)?,
@@ -1316,7 +1324,7 @@ private fun WideProjectsHome(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                if (shown.isEmpty()) {
+                if (shown.isEmpty() && projectsLoaded) {
                     item("empty") {
                         if (projects.isEmpty()) {
                             EmptyList(inset = 0.dp, top = if (showLegacyRecovery) 16.dp else 8.dp)

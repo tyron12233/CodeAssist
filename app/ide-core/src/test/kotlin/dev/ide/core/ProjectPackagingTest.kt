@@ -92,6 +92,40 @@ class ProjectPackagingTest {
         }
     }
 
+    /** A directory the app may not read (left in shared storage by another app) is skipped, not fatal. */
+    @Test
+    fun skipsAnUnreadableDirectoryInsteadOfFailingTheExport() {
+        withTempDir("cm-caproj-denied") { root ->
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            var src = ""
+            var module = ""
+            manager.create("java-console", mapOf("name" to "Denied", "packageName" to "com.acme.d")).use { ide ->
+                src = ide.workspaceRoot.toString()
+                module = ide.moduleNames().first()
+            }
+            val base = Paths.get(src)
+            val locked = base.resolve("$module/locked").also { Files.createDirectories(it) }
+            Files.writeString(locked.resolve("secret.txt"), "x")
+            val lockedFile = locked.toFile()
+            lockedFile.setReadable(false, false); lockedFile.setExecutable(false, false)
+            try {
+                // Running as root (some CI containers) can read it anyway, and then there is nothing to test.
+                if (lockedFile.list() != null) return@withTempDir
+                val meta = ProjectPackaging.ExportMeta(
+                    "Denied", false, null, listOf(ProjectPackaging.ModuleSpec(module, module, "java-lib")),
+                    createdBy = CaprojFormat.APP_NAME, exportedAt = 1L,
+                )
+                val pkg = root.resolve("denied.caproj")
+                ProjectPackaging.export(base, pkg, ProjectPackaging.ExportOptions(false, "", ""), null, meta)
+                val paths = ProjectPackaging.readPreview(pkg)!!.entries.map { it.path }.toSet()
+                assertTrue(paths.any { it.endsWith(".java") }, "the readable sources are still exported: $paths")
+                assertFalse(paths.any { it.contains("/locked/") })
+            } finally {
+                lockedFile.setReadable(true, false); lockedFile.setExecutable(true, false)
+            }
+        }
+    }
+
     /** A source package named `build` (or `exports`) is the project's; only a module's own output folder is not. */
     @Test
     fun keepsSourcePackagesNamedLikeOutputFolders() {

@@ -676,7 +676,8 @@ private fun AppRoute(
  */
 @Composable
 private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
-    val projects = remember(app.epoch, app.projectsRefresh) { app.backend.projects.projects() }
+    LaunchedEffect(app.epoch, app.projectsRefresh) { app.loadProjects() }
+    val projects = app.projectList ?: emptyList()
     if (!app.storeEnabled) {
         ProjectPickerRoute(app, fileActions, projects)
         return
@@ -757,6 +758,7 @@ private fun ProjectPickerRoute(
         accountRequested = accountRequested,
         onAccountRequestHandled = onAccountRequestHandled,
         projects = projects,
+        projectsLoaded = app.projectList != null,
         onOpen = app::openProject,
         // Straight to the full-screen Create-Project gallery, which owns the template picker.
         onNewProject = { app.createProject() },

@@ -3,9 +3,14 @@ package dev.ide.core.project
 import dev.ide.platform.ProjectFiles
 import dev.ide.model.impl.format.Json
 import dev.ide.platform.writeFileAtomically
+import dev.ide.platform.log.Log
 import java.io.File
+import java.io.IOException
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.StandardCopyOption
 import java.util.stream.Collectors
 import java.util.zip.ZipEntry
@@ -182,19 +187,40 @@ object ProjectPackaging {
         return writeFileAtomically(workspace.toString(), renamed.toByteArray(Charsets.UTF_8))
     }
 
-    /** The regular files under [projectDir] that belong in a package (source-of-truth only), minus anything
-     *  under [droppedDirs] (the directories of modules the user left out of the export). */
-    private fun collectProjectFiles(projectDir: Path, droppedDirs: List<String> = emptyList()): List<Path> =
-        Files.walk(projectDir).use { stream ->
-            stream.filter { Files.isRegularFile(it) }
-                .filter { file ->
+    /**
+     * The regular files under [projectDir] that belong in a package (source-of-truth only), minus anything
+     * under [droppedDirs] (the directories of modules the user left out of the export).
+     *
+     * An entry that cannot be read is skipped with a warning rather than failing the export. `Files.walk`
+     * threw an UncheckedIOException (AccessDeniedException) out of the whole walk at the first unreadable
+     * directory, which in the field meant Export and its size estimate failed outright on some projects
+     * (on-device projects live in shared storage, where another app can leave entries we may not read).
+     */
+    private fun collectProjectFiles(projectDir: Path, droppedDirs: List<String> = emptyList()): List<Path> {
+        val out = ArrayList<Path>()
+        Files.walkFileTree(projectDir, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                // walkFileTree reports a symlink as itself; Files.walk + isRegularFile followed it, so keep that.
+                val regular = attrs.isRegularFile || (attrs.isSymbolicLink && Files.isRegularFile(file))
+                if (regular) {
                     val rel = projectDir.relativize(file).toString().replace(File.separatorChar, '/')
-                    !isExcluded(rel, file.fileName.toString()) && !isUnder(rel, droppedDirs)
+                    if (!isExcluded(rel, file.fileName.toString()) && !isUnder(rel, droppedDirs)) out.add(file)
                 }
-                .sorted()
-                // Not Stream.toList(): that is a JDK 16 method, missing on the older ART runtimes this ships to.
-                .collect(Collectors.toList())
-        }
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult {
+                // The root itself failing is a real error (nothing to export), so that still throws.
+                if (file == projectDir) throw exc
+                log.warn("export: skipped $file, it could not be read", exc)
+                return FileVisitResult.CONTINUE
+            }
+        })
+        out.sort()
+        return out
+    }
+
+    private val log = Log.logger("ide.projects")
 
     /** True when [rel] names a file inside one of [dirs] (each a project-relative directory path). */
     private fun isUnder(rel: String, dirs: List<String>): Boolean = dirs.any { rel.startsWith("$it/") }

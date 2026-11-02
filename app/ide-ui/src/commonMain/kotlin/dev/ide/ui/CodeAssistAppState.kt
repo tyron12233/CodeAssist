@@ -278,6 +278,22 @@ class CodeAssistAppState(
         projectsRefresh++
     }
 
+    /**
+     * The picker's project list, or null until it has been read once. Kept here rather than in Home's
+     * composition so returning to Home shows the last list at once while a fresh read runs.
+     */
+    var projectList: List<ProjectInfo>? by mutableStateOf(null)
+        private set
+
+    /**
+     * Read the project list off the main thread. Listing loads every project's model from disk
+     * (`workspace.json` plus each `module.toml`), so on slow storage with many projects it took long enough
+     * on the main thread, inside Home's composition, to show up as an ANR at `ProjectManager.list`.
+     */
+    suspend fun loadProjects() {
+        projectList = withContext(ioDispatcher) { backend.projects.projects() }
+    }
+
     /** The project whose Export dialog is open, and the picked package being previewed for import (path plus
      *  the read manifest/peek). Held here so they survive picker recompositions. */
     var exportTarget: ProjectInfo? by mutableStateOf(null)
