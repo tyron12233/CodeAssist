@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
+import dev.ide.ui.platform.PlatformBackHandler
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.IntState
@@ -50,8 +51,6 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -324,9 +323,6 @@ private fun CodeEditorContent(
     // The Halloween overlays (cobweb, ghost, slime drips) only during the season, with Seasonal touches on.
     val halloween = LocalSeason.current == Season.Halloween
 
-    // The editor pane's window bounds, so the completion popup can size the list to the room below the caret.
-    var paneTopInWindow by remember(path) { mutableFloatStateOf(0f) }
-    var paneBottomInWindow by remember(path) { mutableFloatStateOf(0f) }
 
     // ---- feature controllers (state + async behaviour live in the *Controller classes) ----
     // A read-only buffer (a decompiled / library-source view) never mutates, so completion has nothing to
@@ -1156,11 +1152,7 @@ private fun CodeEditorContent(
     Box(
         modifier
             .background(colors.editorBg)
-            .clipToBounds()
-            .onGloballyPositioned {
-                paneTopInWindow = it.positionInWindow().y
-                paneBottomInWindow = it.positionInWindow().y + it.size.height
-            },
+            .clipToBounds(),
     ) {
         EditorCanvasLayer(
             editorSession = editorSession,
@@ -1279,22 +1271,6 @@ private fun CodeEditorContent(
             visibleLinesOf = { geometry.visibleLineRange() },
         )
 
-        // completion popup, anchored at the token start (extracted so ART can compile these emission blocks).
-        CompletionPopupLayer(
-            completion = completion,
-            shownNow = shownNow,
-            onToken = onToken,
-            engaged = engaged,
-            docLength = docLength,
-            caretGeometry = { geometry.caretGeometry(it) },
-            metrics = metrics,
-            gutterWidthPx = gutterWidthPx,
-            paneTopInWindow = paneTopInWindow,
-            paneBottomInWindow = paneBottomInWindow,
-            safeSelected = safeSelected,
-            onAccept = { accept(it) },
-        )
-
         PreviewGutterIconsLayer(
             session = editorSession,
             metrics = metrics,
@@ -1385,6 +1361,21 @@ private fun CodeEditorContent(
             caretGeometry = { geometry.caretGeometry(it) },
             lineHeightPx = metrics.lineHeight,
             gutterWidthPx = gutterWidthPx,
+        )
+
+        // completion list, under the token start. Drawn in the pane, after the gutter, plugin and in-pane layers so it
+        // covers them (as the popup window it replaced did); the dialogs, menus and find bar below cover it.
+        CompletionPopupLayer(
+            completion = completion,
+            shownNow = shownNow,
+            onToken = onToken,
+            engaged = engaged,
+            docLength = docLength,
+            caretGeometry = { geometry.caretGeometry(it) },
+            metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+            safeSelected = safeSelected,
+            onAccept = { accept(it) },
         )
 
         EditorDialogsLayer(
@@ -1776,7 +1767,7 @@ private fun BoxScope.EditorDialogsLayer(
  *  alive latch) and rendered from `shown` (the last good state) so a keystroke's transient session swap /
  *  filter miss doesn't blink the window shut. */
 @Composable
-private fun CompletionPopupLayer(
+private fun BoxScope.CompletionPopupLayer(
     completion: CompletionController,
     shownNow: ShownCompletion?,
     onToken: Boolean,
@@ -1785,8 +1776,6 @@ private fun CompletionPopupLayer(
     caretGeometry: (Int) -> Triple<Int, Float, Float>,
     metrics: EditorMetrics,
     gutterWidthPx: Float,
-    paneTopInWindow: Float,
-    paneBottomInWindow: Float,
     safeSelected: Int,
     onAccept: (UiCompletionItem?) -> Unit,
 ) {
@@ -1802,35 +1791,29 @@ private fun CompletionPopupLayer(
     if (visible && shown != null && engaged) {
         val density = LocalDensity.current
         val anchor = shown.tokenStart.coerceIn(0, docLength)
-        val (_, anchorX, anchorTop) = caretGeometry(anchor)
-        val lineBottomPx = anchorTop + metrics.lineHeight
         val gapPx = with(density) { 6.dp.roundToPx() }
         val marginPx = with(density) { 8.dp.roundToPx() }
-        val positionProvider = remember(anchorX, lineBottomPx, gapPx, marginPx) {
-            CompletionPopupPositionProvider(
-                anchorX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                lineBottomPx.roundToInt(),
-                gapPx,
-                marginPx,
-            )
-        }
-        // room between the caret line and the pane bottom (which already sits above the keyboard)
-        val caretBottomY = paneTopInWindow + lineBottomPx
-        val roomBelowDp = with(density) { (paneBottomInWindow - caretBottomY - gapPx - marginPx).toDp() }
-
-        Popup(
-            popupPositionProvider = positionProvider,
-            onDismissRequest = { completion.dismiss() },
-            // Non-focusable (typing must reach the editor); click-outside dismissal disabled because every
-            // soft-keyboard tap is a touch outside the popup window and would otherwise blink it shut.
-            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
-        ) {
-            BoxWithConstraints {
-                val compact = maxWidth < 600.dp
-                val popupWidth = if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
-                // Fill the room below the caret so the list auto-expands. Bounded by a generous ceiling.
-                val listMax = roomBelowDp.coerceIn(MinListHeight, MaxListHeight)
-                val items = shown.items
+        // System Back closes the list first, as it did when the list was a popup window.
+        PlatformBackHandler(enabled = true) { completion.dismiss() }
+        // The pane's own bounds (it already sits above the keyboard). In the pane rather than a `Popup`: see
+        // [belowLineInPane].
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            val compact = maxWidth < 600.dp
+            val popupWidth = if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
+            // Fill the room below the caret line so the list auto-expands. Bounded by a generous ceiling.
+            val (_, _, anchorTop) = caretGeometry(anchor)
+            val roomBelowPx = constraints.maxHeight - (anchorTop + metrics.lineHeight) - gapPx - marginPx
+            val listMax = with(density) { roomBelowPx.toDp() }.coerceIn(MinListHeight, MaxListHeight)
+            val items = shown.items
+            Box(
+                Modifier.belowLineInPane(
+                    anchor = { caretGeometry(anchor).let { (_, x, top) -> x to top } },
+                    lineHeightPx = metrics.lineHeight,
+                    gapPx = gapPx,
+                    marginPx = marginPx,
+                    minX = gutterWidthPx.roundToInt(),
+                ),
+            ) {
                 CompletionList(
                     items = items,
                     selectedIndex = safeSelected.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
