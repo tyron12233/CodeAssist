@@ -1393,4 +1393,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="block_lambda_page">Lambda</string>
     <string name="sdk_platform_tools">Herramientas de la plataforma</string>
     <string name="sdk_platform_tools_desc">adb, que Ejecutar usa para instalar y abrir tu app en un teléfono o emulador conectado a este equipo.</string>
+    <string name="you_delete_account">Eliminar cuenta</string>
+    <string name="you_delete_account_title">¿Eliminar tu cuenta?</string>
+    <string name="you_delete_account_body">Esto elimina de forma permanente tu cuenta de CodeAssist y todo lo guardado con ella: tu perfil, proyectos publicados, reseñas, me gusta, seguidos, resultados de retos y puntos de IA. Los proyectos de este dispositivo no se ven afectados. No se puede deshacer.</string>
+    <string name="you_delete_account_deleting">Eliminando…</string>
 </resources>

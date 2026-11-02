@@ -2478,4 +2478,8 @@
     <string name="challenge_legend_reference">المرجع</string>
     <string name="sdk_platform_tools">أدوات المنصة</string>
     <string name="sdk_platform_tools_desc">adb، الذي يستخدمه «تشغيل» لتثبيت تطبيقك وتشغيله على هاتف أو محاكي متصل بهذا الحاسوب.</string>
+    <string name="you_delete_account">حذف الحساب</string>
+    <string name="you_delete_account_title">حذف حسابك؟</string>
+    <string name="you_delete_account_body">سيؤدي هذا إلى حذف حسابك في CodeAssist نهائيًا مع كل ما هو محفوظ معه: ملفك الشخصي، والمشاريع المنشورة، والمراجعات، والإعجابات، والمتابعات، ونتائج التحديات، ونقاط الذكاء الاصطناعي. لن تتأثر المشاريع الموجودة على هذا الجهاز. لا يمكن التراجع عن ذلك.</string>
+    <string name="you_delete_account_deleting">جارٍ الحذف…</string>
 </resources>

@@ -108,7 +108,18 @@ Each acts under its own terms for its part of the service. We may also disclose 
 - Account data, published projects, reviews, challenge results, and AI points and usage records are kept while your account exists.
 - Conversation content sent through CodeAssist Free AI is not stored on our servers. Anthropic's own retention is described in its privacy policy.
 
-To delete your account and the data stored with it, email the address below from, or naming, the account you signed in with. We will delete it within 30 days. To have telemetry removed, send the install identifier shown in the app's analytics settings.
+To have telemetry removed, send the install identifier shown in the app's analytics settings to the address below.
+
+## Deleting your account
+
+You can delete your CodeAssist account at any time:
+
+1. In the app, open the **Store** tab and tap your profile picture to open **You**.
+2. Scroll to the bottom and tap **Delete account**, then confirm.
+
+This permanently deletes the account and everything stored with it: your publisher profile, the projects you published and their files, your reviews, ratings, likes and follows, your daily-challenge results, your CodeAssist Free AI points and usage records, and your push-notification registration. Projects on your device are not affected. Deletion happens immediately and cannot be undone.
+
+If you can no longer open the app, email **contact.tyronscott@gmail.com** from the email address of the GitHub or Google account you signed in with, or naming that account, and ask for your account to be deleted. We will delete it within 30 days and confirm by email.
 
 ## Security
 

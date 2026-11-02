@@ -1083,6 +1083,15 @@ interface StoreService {
 
     fun signOut() {}
 
+    /** Whether this build can delete the signed-in account (the store sign-in is configured). */
+    fun accountDeletionAvailable(): Boolean = false
+
+    /**
+     * Permanently delete the signed-in account and everything stored with it, then sign out. Null on success,
+     * otherwise a message to show. A network call; the backend runs it off the main thread.
+     */
+    suspend fun deleteAccount(): String? = "Account deletion is not available in this build"
+
     // ---- submitting ----
 
     /**

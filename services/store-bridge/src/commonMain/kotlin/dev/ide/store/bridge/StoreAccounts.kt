@@ -144,6 +144,16 @@ class StoreAccounts(
         authStateFlow.value = UiStoreAuthState()
     }
 
+    /** Delete the account (a network call: off the main thread). Null on success, else a message to show. */
+    fun deleteAccount(): String? = when (val r = accounts.deleteAccount()) {
+        is dev.ide.store.StoreResult.Ok -> {
+            authStateFlow.value = UiStoreAuthState()
+            null
+        }
+        is dev.ide.store.StoreResult.Failed -> r.message
+        is dev.ide.store.StoreResult.Unavailable -> r.reason
+    }
+
     /**
      * Re-read whether a session still exists, after a call found out that it does not.
      *

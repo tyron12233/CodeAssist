@@ -1261,4 +1261,8 @@
     <string name="close_project_save_and_close">Сохранить и закрыть</string>
     <string name="sdk_platform_tools">Инструменты платформы</string>
     <string name="sdk_platform_tools_desc">adb: с его помощью «Запуск» устанавливает и открывает приложение на телефоне или эмуляторе, подключённом к этому компьютеру.</string>
+    <string name="you_delete_account">Удалить аккаунт</string>
+    <string name="you_delete_account_title">Удалить аккаунт?</string>
+    <string name="you_delete_account_body">Ваш аккаунт CodeAssist будет удалён навсегда вместе со всем, что с ним связано: профилем, опубликованными проектами, отзывами, лайками, подписками, результатами задач и баллами ИИ. Проекты на этом устройстве не затрагиваются. Отменить это нельзя.</string>
+    <string name="you_delete_account_deleting">Удаление…</string>
 </resources>

@@ -1285,4 +1285,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="close_project_save_and_close">Salvar e fechar</string>
     <string name="sdk_platform_tools">Ferramentas da plataforma</string>
     <string name="sdk_platform_tools_desc">adb, que o Executar usa para instalar e abrir seu app em um celular ou emulador conectado a este computador.</string>
+    <string name="you_delete_account">Excluir conta</string>
+    <string name="you_delete_account_title">Excluir sua conta?</string>
+    <string name="you_delete_account_body">Isso exclui permanentemente sua conta do CodeAssist e tudo o que está salvo nela: seu perfil, projetos publicados, avaliações, curtidas, seguidos, resultados de desafios e pontos de IA. Os projetos neste dispositivo não são afetados. Não é possível desfazer.</string>
+    <string name="you_delete_account_deleting">Excluindo…</string>
 </resources>

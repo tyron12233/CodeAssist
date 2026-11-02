@@ -448,6 +448,10 @@ internal class StoreBackend(
 
     override fun signOut() = accountState.signOut()
 
+    override fun accountDeletionAvailable(): Boolean = accounts.authAvailable()
+
+    override suspend fun deleteAccount(): String? = withContext(storeIo) { accountState.deleteAccount() }
+
     // ---- submitting ----
 
     override fun submissionsAvailable(): Boolean = submissionState.available()

@@ -1205,4 +1205,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="close_project_save_and_close">Simpan &amp; tutup</string>
     <string name="sdk_platform_tools">Alat platform</string>
     <string name="sdk_platform_tools_desc">adb, yang dipakai Jalankan untuk memasang dan membuka aplikasi Anda di ponsel atau emulator yang terhubung ke komputer ini.</string>
+    <string name="you_delete_account">Hapus akun</string>
+    <string name="you_delete_account_title">Hapus akun Anda?</string>
+    <string name="you_delete_account_body">Ini menghapus akun CodeAssist Anda secara permanen beserta semua yang tersimpan: profil, proyek yang diterbitkan, ulasan, suka, mengikuti, hasil tantangan, dan poin AI. Proyek di perangkat ini tidak terpengaruh. Tindakan ini tidak bisa dibatalkan.</string>
+    <string name="you_delete_account_deleting">Menghapus…</string>
 </resources>

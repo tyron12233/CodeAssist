@@ -2377,4 +2377,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="challenge_exponent">exponent %1$s</string>
     <string name="challenge_legend_yours">yours</string>
     <string name="challenge_legend_reference">reference</string>
+    <string name="you_delete_account">Delete account</string>
+    <string name="you_delete_account_title">Delete your account?</string>
+    <string name="you_delete_account_body">This permanently deletes your CodeAssist account and everything stored with it: your profile, published projects, reviews, likes, follows, challenge results, and AI points. Projects on this device are not affected. This can't be undone.</string>
+    <string name="you_delete_account_deleting">Deleting…</string>
 </resources>

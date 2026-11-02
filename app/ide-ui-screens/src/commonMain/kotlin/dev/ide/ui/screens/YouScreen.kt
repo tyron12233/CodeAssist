@@ -48,6 +48,10 @@ import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.StatFigure
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.you_delete_account_deleting
+import dev.ide.ui.generated.resources.you_delete_account_body
+import dev.ide.ui.generated.resources.you_delete_account_title
+import dev.ide.ui.generated.resources.you_delete_account
 import dev.ide.ui.generated.resources.*
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
@@ -106,6 +110,10 @@ fun YouScreen(
     var submissions by remember { mutableStateOf<List<UiStoreSubmission>>(emptyList()) }
     var published by remember { mutableStateOf<List<UiPublishedItem>>(emptyList()) }
     var editing by remember { mutableStateOf(false) }
+    // Deleting the whole account: the confirmation, the call in flight, and its failure if it had one.
+    var confirmAccountDelete by remember { mutableStateOf(false) }
+    var deletingAccount by remember { mutableStateOf(false) }
+    var accountDeleteError by remember { mutableStateOf<String?>(null) }
     // The submission a Delete tap is asking about. Deleting removes the upload from the store, so it asks
     // first, and it names the version: a listing can have several here and the wrong one is the mistake
     // worth preventing.
@@ -236,12 +244,61 @@ fun YouScreen(
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
+                            if (backend.store.accountDeletionAvailable()) {
+                                TextButton(
+                                    onClick = { accountDeleteError = null; confirmAccountDelete = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        stringResource(Res.string.you_delete_account),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                accountDeleteError?.let {
+                                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                         }
                         Spacer(Modifier.height(32.dp))
                     }
                 }
             }
         }
+    }
+
+    // Deleting the account cannot be undone, so it says exactly what goes, and that projects on the device stay.
+    if (confirmAccountDelete) {
+        AlertDialog(
+            onDismissRequest = { if (!deletingAccount) confirmAccountDelete = false },
+            title = { Text(stringResource(Res.string.you_delete_account_title)) },
+            text = { Text(stringResource(Res.string.you_delete_account_body)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !deletingAccount,
+                    onClick = {
+                        deletingAccount = true
+                        scope.launch {
+                            val error = backend.store.deleteAccount()
+                            deletingAccount = false
+                            confirmAccountDelete = false
+                            accountDeleteError = error
+                            // Signed out now: a signed-out You screen has nothing on it, so leave it.
+                            if (error == null) onBack()
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(if (deletingAccount) Res.string.you_delete_account_deleting else Res.string.you_delete_account),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !deletingAccount, onClick = { confirmAccountDelete = false }) {
+                    Text(stringResource(Res.string.cancel))
+                }
+            },
+        )
     }
 
     // Deleting takes the upload out of the store and can take the project row with it, so it asks. The

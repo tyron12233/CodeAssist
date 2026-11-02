@@ -2157,4 +2157,8 @@
     <string name="block_lambda_page">Lambda</string>
     <string name="sdk_platform_tools">平台工具</string>
     <string name="sdk_platform_tools_desc">adb：“运行”通过它把应用安装并启动到连接此电脑的手机或模拟器上。</string>
+    <string name="you_delete_account">删除账号</string>
+    <string name="you_delete_account_title">删除你的账号？</string>
+    <string name="you_delete_account_body">这将永久删除你的 CodeAssist 账号及其保存的所有内容：个人资料、已发布的项目、评价、点赞、关注、挑战成绩和 AI 积分。此设备上的项目不受影响。此操作无法撤销。</string>
+    <string name="you_delete_account_deleting">正在删除…</string>
 </resources>
