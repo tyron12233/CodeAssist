@@ -815,12 +815,15 @@ class EditorSessionTest {
     }
 
     @Test
-    fun skipOverTypingRestartsTheIme() {
+    fun skipOverTypingDoesNotRestartANonMirroringIme() {
+        // The caret and the text before it are what the IME expects; a restart would drop the keystrokes it is
+        // already sending (`abs(1), 2` typed fast came out as `abs(1)2`). A mirroring IME is still restarted:
+        // see monitoringImeIsRestartedOnSkipOverCloser.
         val (s, restarts) = countingImeSession("foo()", 4)
         s.commitText(")") // skip-over inserts nothing, just hops the caret
         assertEquals("foo()", s.doc.text)
         assertEquals(TextRange(5), s.selection)
-        assertEquals(1, restarts(), "a skip-over inserts fewer chars than the IME delivered")
+        assertEquals(0, restarts(), "a skip-over keeps the IME's caret and prefix exact")
     }
 
     @Test

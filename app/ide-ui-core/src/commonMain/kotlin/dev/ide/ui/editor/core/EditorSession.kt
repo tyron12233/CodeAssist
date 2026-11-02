@@ -855,15 +855,22 @@ class EditorSession(
             // no text (skip-over closer): no extracted-text push follows, so even a monitoring IME needs the
             // restart — its mirror already holds the char it committed and nothing else will evict it.
             //
-            // An auto-closed pair is the exception: the text before the caret and the caret itself are exactly
-            // what the IME committed, only the closer after the caret is extra. The selection push already
-            // tells the IME where the caret is, a mirroring IME gets the closer through the extracted-text push,
-            // and a restart here costs typed characters: the keystrokes the IME already sent after the opener
-            // land on the old, now inactive connection and are dropped (`"Sys` typed fast came out as `""`).
+            // An auto-closed pair and a skipped-over closer are the exceptions: the text before the caret and the
+            // caret itself are exactly what the IME committed, only the text after the caret differs. The
+            // selection push already tells the IME where the caret is, and a restart here costs typed
+            // characters: the keystrokes the IME already sent land on the old, now inactive connection and are
+            // dropped (`"Sys` typed fast came out as `""`, `abs(1), 2` as `abs(1)2`). A mirroring IME gets an
+            // auto-closed closer through the extracted-text push; a skip-over pushes no text, so only that IME
+            // is still restarted, to evict the closer its mirror holds.
+            val collapsed = selMin == selMax
             val closedPair = edit.start == selMin && edit.end == selMax && edit.caret == selMin + 1 &&
                 edit.text.length > 1 && edit.text.startsWith(text)
-            if (!closedPair && (edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1)) {
-                resyncIme(force = edit.start == edit.end && edit.text.isEmpty())
+            val skippedOver = collapsed && edit.start == edit.end && edit.text.isEmpty() && edit.caret == selMin + 1
+            when {
+                closedPair -> Unit
+                skippedOver -> if (imeListener?.isSyncingExtractedText() == true) resyncIme(force = true)
+                edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1 ->
+                    resyncIme(force = edit.start == edit.end && edit.text.isEmpty())
             }
         } else {
             // The IME's own commit of a composed word lands here too — it matches the buffer, so no resync.
