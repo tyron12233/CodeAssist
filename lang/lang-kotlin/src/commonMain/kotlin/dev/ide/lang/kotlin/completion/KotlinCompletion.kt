@@ -189,6 +189,12 @@ class KotlinCompletion(
         kdocCompletion(kt, markerLeaf, original, offset, prefix, matcher)?.let { kdocItems ->
             return CompletionResult(kdocItems, isIncomplete = false, replacementRange = replaceRange)
         }
+        // Inside a `//` or `/* */` comment: prose, nothing to complete. Without this the caret's word was classified
+        // as a name reference and the popup offered classes (`// changed` -> ChangedPackages, OnSizeChangedNode),
+        // and the Enter that ends the comment line accepted the first one (seen on the emulator).
+        if (insideComment(kt, offset)) {
+            return CompletionResult(emptyList(), isIncomplete = false, replacementRange = replaceRange)
+        }
         // A label reference (`return@<caret>`, `break@`/`continue@<caret>`, `this@`/`super@<caret>`): offer the
         // enclosing labels, NOT scope locals + type names — which is what a plain name-ref classification would
         // wrongly surface here (a jump target is never a local or a type).
@@ -838,6 +844,14 @@ class KotlinCompletion(
     /** Completion inside a KDoc comment, or null when [leaf] isn't in one. `@param <caret>` → the documented
      *  declaration's parameter names; `@<caret>` → the standard doc tags; anywhere else in the doc → an EMPTY
      *  list (suppresses the scope/keyword completion that would otherwise leak into prose). */
+    /** Whether [offset] sits in a line or block comment. A comment is trivia to this parser, hence the
+     *  trivia-aware lookup ([kdocCompletion] explains why the plain one cannot see it). */
+    private fun insideComment(kt: KtFile, offset: Int): Boolean {
+        val type = kt.findElementAtIncludingTrivia(offset)?.elementType
+            ?: kt.findElementAtIncludingTrivia(offset - 1)?.elementType
+        return type == KtTokens.EOL_COMMENT || type == KtTokens.BLOCK_COMMENT
+    }
+
     private fun kdocCompletion(
         kt: KtFile, leaf: KtElement?, original: String, offset: Int, prefix: String, matcher: PrefixMatcher
     ): List<CompletionItem>? {
