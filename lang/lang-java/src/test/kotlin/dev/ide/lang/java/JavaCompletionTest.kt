@@ -78,6 +78,19 @@ class JavaCompletionTest {
         assertTrue("greet" in labels, "member access should offer greet(); got $labels")
     }
 
+    /** A comment or a string is prose: nothing completes there (the space or Enter continuing it would accept). */
+    @Test
+    fun nothingCompletesInACommentOrAString() {
+        val inString = labelsAt("package com.foo;\nclass Use { void run() { int myLocal = 1; String s = \"hello my|\"; } }")
+        assertEquals(emptyList(), inString, "inside a string literal")
+        val inLineComment = labelsAt("package com.foo;\nclass Use { void run() { int myLocal = 1; // my|\n } }")
+        assertEquals(emptyList(), inLineComment, "inside a // comment")
+        val inBlockComment = labelsAt("package com.foo;\nclass Use { void run() { int myLocal = 1; /* my| */ } }")
+        assertEquals(emptyList(), inBlockComment, "inside a /* */ comment")
+        // Code right after the string still completes.
+        assertTrue("myLocal" in labelsAt("package com.foo;\nclass Use { void run() { int myLocal = 1; String s = \"x\" + my| } }"))
+    }
+
     @Test
     fun nameReferenceSeesLocalsAndMembers() {
         val labels = labelsAt(

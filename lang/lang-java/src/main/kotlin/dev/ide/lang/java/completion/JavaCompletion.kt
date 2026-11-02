@@ -1,5 +1,7 @@
 package dev.ide.lang.java.completion
 
+import com.intellij.psi.PsiLiteralExpression
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiCatchSection
@@ -113,6 +115,15 @@ class JavaCompletion(
         }
         val psi = env.parse(params.document.file.name, spliced)
         val leaf = psi.findElementAt(markerOffset) ?: return
+        // Prose, not code: a comment, or the text of a string/char/text-block literal. Without this the word at
+        // the caret was completed as a name, so `"hello wor"` offered locals and keywords (seen on the emulator)
+        // and the Enter or space that continues the sentence accepted one.
+        if (leaf is PsiComment || PsiTreeUtil.getParentOfType(leaf, PsiComment::class.java, false) != null ||
+            (leaf.parent as? PsiLiteralExpression)?.let { it.value is String || it.value is Char } == true
+        ) {
+            result.stopHere()
+            return
+        }
 
         // Declaration-name position (`Foo <caret>` / `Foo f` being retyped): the marker is a variable NAME, not
         // a reference — suggest names derived from the type instead of scope/type candidates.
