@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.completion
 
+import dev.ide.lang.kotlin.KotlinQuickFixes
 import dev.ide.kotlin.syntax.psi.KtAnnotationEntry
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
@@ -813,19 +814,7 @@ class KotlinCompletion(
         val whenExpr = climbTo<KtWhenExpression>(leaf) ?: return null
         val subject = whenExpr.subjectExpression ?: return null
         val fqn = (resolver.inferType(subject) ?: return null).qualifiedName
-        val covered = HashSet<String>()
-        for (entry in whenExpr.entries) for (cond in entry.conditions) when (cond) {
-            is KtWhenConditionIsPattern ->
-                cond.typeReference?.text?.substringBefore('<')?.substringAfterLast('.')?.trim()?.let { covered += it }
-            is KtWhenConditionWithExpression ->
-                cond.expression?.text?.substringAfterLast('.')?.trim()?.let { if (MARKER !in it) covered += it }
-        }
-        val branches = service.sealedSubclassesOf(fqn)?.let { subs ->
-            subs.map { it.substringAfterLast('.') }.filter { it !in covered }.map { "is $it -> TODO()" }
-        } ?: service.enumConstantsOf(fqn).map { it.name }.filter { it !in covered }.let { missing ->
-            val simple = fqn.substringAfterLast('.')
-            missing.map { "$simple.$it -> TODO()" }
-        }
+        val branches = KotlinQuickFixes.missingWhenBranches(whenExpr, fqn, service, ignore = MARKER)
         if (branches.isEmpty()) return null
         val indent = lineIndentAt(leaf?.containingFile?.text ?: "", offset)
         return CompletionItem(

@@ -401,8 +401,11 @@ Kotlin support is **beta**. The list below reflects what ships today and what is
 ### Planned / TODO
 
 - **Find usages and rename** for Kotlin symbols (Java rename ships; Kotlin is not yet wired).
-- **More quick-fixes / intentions** keyed off the existing diagnostics (make `var`, add non-null assertion,
-  remove redundant cast, remove unused import/symbol, add `override`).
+- **More quick-fixes**: create function/class from an unresolved reference, change a type on `kt.typeMismatch`,
+  "Opt in" for `kt.optInUsage`. (Shipped in `KotlinQuickFixes`: remove unused import / local / private member,
+  `_` for an unused lambda parameter, `var`↔`val`, drop a redundant `?.` / `!!` / cast / elvis / projection /
+  template braces, property access syntax, safe call or `!!` on a nullable receiver, add/remove `override`,
+  and "Add remaining branches" / "Add 'else' branch" on a non-exhaustive `when`.)
 - **Visibility diagnostics** (using an `internal`/`private` declaration out of scope).
 - **Inference improvements** — see *Known limitations* below.
 

@@ -574,6 +574,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     fun suspendModifierFix(file: VirtualFile, offset: Int): KotlinImportFix? = features.suspendModifierFix(file, offset)
 
+    /** The quick fixes for one of this analyzer's diagnostics; see [KotlinEditorFeatures.diagnosticFixes]. */
+    fun diagnosticFixes(file: VirtualFile, code: String, start: Int, end: Int, message: String): List<KotlinImportFix> =
+        features.diagnosticFixes(file, code, start, end, message)
+
     /** The minSdk check's quick fixes (`@RequiresApi`, an `SDK_INT` guard); see [KotlinEditorFeatures.newApiFixes]. */
     fun newApiFixes(file: VirtualFile, offset: Int, level: Int): List<KotlinImportFix> = features.newApiFixes(file, offset, level)
 

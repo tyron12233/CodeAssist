@@ -22,6 +22,7 @@ import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
 import dev.ide.kotlin.syntax.psi.KtUserType
 import dev.ide.kotlin.syntax.psi.KtValueArgument
 import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
+import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.findElementAt
 import dev.ide.kotlin.syntax.psi.getParentOfType
 import dev.ide.lang.completion.CompletionContribution
@@ -625,6 +626,28 @@ class KotlinEditorFeatures(
     fun permissionCheckFix(file: VirtualFile, offset: Int, permissions: List<String>, anyOf: Boolean): KotlinImportFix? {
         val parsed = parsedFor(file.path) ?: return null
         return KotlinPermissionFixes.checkFix(parsed.ktFile, offset, permissions, anyOf, service.isKnownType("androidx.core.app.ActivityCompat"))
+    }
+
+    /**
+     * The quick fixes for one of the editor's own diagnostics ([KotlinQuickFixes.CODES]) over `[start, end)`.
+     * All but one are syntactic; a non-exhaustive `when` also gets "Add remaining branches", which has to
+     * enumerate the subject's enum constants or sealed subclasses, offered ahead of "Add 'else' branch".
+     */
+    fun diagnosticFixes(file: VirtualFile, code: String, start: Int, end: Int, message: String): List<KotlinImportFix> {
+        val parsed = parsedFor(file.path) ?: return emptyList()
+        val ktFile = parsed.ktFile
+        val fixes = KotlinQuickFixes.fixes(code, ktFile, start, end, message)
+        if (code != KotlinDiagnosticCodes.WHEN_EXHAUSTIVE) return fixes
+        refreshOverlay(); syncFocal(parsed)
+        val whenExpr = generateSequence(ktFile.findElementAt(start)) { it.parent }
+            .filterIsInstance<KtWhenExpression>()
+            .firstOrNull { it.whenKeyword.textRange.startOffset == start } ?: return fixes
+        val subject = whenExpr.subjectExpression ?: return fixes
+        val fqn = KotlinResolver(ktFile, parsed, service).inferType(subject)?.qualifiedName ?: return fixes
+        val branches = KotlinQuickFixes.missingWhenBranches(whenExpr, fqn, service)
+        if (branches.isEmpty()) return fixes
+        val e = KotlinQuickFixes.insertBranches(ktFile.text, whenExpr, branches) ?: return fixes
+        return listOf(KotlinImportFix("Add remaining branches", listOf(e))) + fixes
     }
 
     /** The innermost function enclosing [offset] (the suspend-override diagnostic anchors on its name). */
