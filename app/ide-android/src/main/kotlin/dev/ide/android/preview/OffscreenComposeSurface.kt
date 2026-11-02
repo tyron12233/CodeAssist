@@ -3,6 +3,8 @@ package dev.ide.android.preview
 import android.app.Presentation
 import android.content.Context
 import android.graphics.PixelFormat
+import android.graphics.drawable.ColorDrawable
+import android.graphics.Color
 import android.hardware.HardwareBuffer
 import android.hardware.display.DisplayManager
 import android.media.Image
@@ -185,6 +187,12 @@ class OffscreenComposeSurface(
                 setGravity(Gravity.TOP or Gravity.START)
                 clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                 decorView.setPadding(0, 0, 0, 0)
+                // A Dialog's window carries the theme's opaque dialog background, which the frame captured: every
+                // composable that draws no background of its own came out on the dark dialog colour, painting
+                // over the card the IDE draws behind the frame (white, or the @Preview's showBackground colour),
+                // so the starter template's "Hello, Compose!" read as dark text on dark grey. Transparent, the
+                // frame carries only what the composable drew and the card shows through, as in Android Studio.
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             }
             p.show()
             presentation = p
