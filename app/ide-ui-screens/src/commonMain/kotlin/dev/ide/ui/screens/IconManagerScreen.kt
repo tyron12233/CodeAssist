@@ -426,6 +426,10 @@ private fun SectionTabs(state: IconManagerState) {
             Tab(
                 selected = state.tab == tab,
                 onClick = { state.selectTab(tab) },
+                // Both colours: M3's Tab defaults the unselected one to the selected one, which painted every tab
+                // in the accent colour as if all three were selected.
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(sectionLabel(tab), maxLines = 1, style = MaterialTheme.typography.titleSmall)
