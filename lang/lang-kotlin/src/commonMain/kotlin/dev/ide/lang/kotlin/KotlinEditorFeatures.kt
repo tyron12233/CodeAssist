@@ -921,8 +921,13 @@ class KotlinEditorFeatures(
      * one), or null. Java's own lookup falls back to the class itself when the member is not there, which is
      * not an answer to this question, so only a method or field counts.
      */
-    private fun javaMemberDeclaredIn(typeFqn: String, name: String): NavTarget? =
-        javaSourceLocator(typeFqn, name)?.takeIf { it.kind == "method" || it.kind == "field" }
+    private fun javaMemberDeclaredIn(typeFqn: String, name: String): NavTarget? {
+        // Java sees Kotlin classes too (as light classes) and matches members by NAME alone, so asked about a
+        // Kotlin class it would answer with an overload [memberDeclaredIn] just rejected. Kotlin types are this
+        // side's to judge; only a type with no Kotlin source is a Java one.
+        if (service.sourceFileDeclaringType(typeFqn) != null) return null
+        return javaSourceLocator(typeFqn, name)?.takeIf { it.kind == "method" || it.kind == "field" }
+    }
 
     /**
      * A function's parameter types as normalized text (`""` where unknown), and the type parameter names in scope

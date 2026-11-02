@@ -88,7 +88,12 @@ class FindUsagesRenameTest {
             val animal = src.resolve("Animal.kt")
             val dog = src.resolve("Dog.java")
             val kennel = src.resolve("Kennel.java")
-            ide.save(animal, "package com.example.core\n\nopen class Animal {\n    open fun sound(): String = \"\"\n}\n")
+            ide.save(
+                animal,
+                "package com.example.core\n\nopen class Animal {\n    open fun sound(): String = \"\"\n" +
+                    "    open fun greet(times: Int) {}\n    open fun greet(name: String) {}\n}\n\n" +
+                    "class Cat : Animal() {\n    override fun greet(name: String) {}\n}\n",
+            )
             ide.save(dog, "package com.example.core;\n\npublic class Dog extends Animal {\n    @Override public String sound() { return \"woof\"; }\n}\n")
             ide.save(kennel, "package com.example.core;\n\nclass Kennel {\n    String hear(Dog d) { return d.sound(); }\n}\n")
             val deadline = System.currentTimeMillis() + 180_000
@@ -99,6 +104,13 @@ class FindUsagesRenameTest {
             eventually("Dog.sound is listed as an implementation") {
                 ide.navigationTargets(animal, text, at, NavKind.IMPLEMENTATION).any { it.label == "sound  ·  Dog" && it.file.path.endsWith("Dog.java") }
             }
+
+            // Overloads: Cat overrides greet(String) only, and Java must not be asked about a Kotlin class (its
+            // light-class lookup matches by name and would offer Cat.greet(String) for greet(Int)).
+            val greetInt = text.indexOf("greet(times")
+            val greetString = text.indexOf("greet(name")
+            assertEquals(emptyList(), ide.navigationTargets(animal, text, greetInt, NavKind.IMPLEMENTATION).map { it.label })
+            assertEquals(listOf("greet  ·  Cat"), ide.navigationTargets(animal, text, greetString, NavKind.IMPLEMENTATION).map { it.label })
 
             val outcome = runBlocking { ide.rename(animal, text, at, "speak") }
             assertTrue(outcome.success, outcome.message)
