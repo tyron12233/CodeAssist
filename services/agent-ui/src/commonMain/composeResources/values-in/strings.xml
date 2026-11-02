@@ -155,4 +155,10 @@
     <string name="free_ai_in_use">Dipakai</string>
     <string name="free_ai_section_byok">Pakai kunci API sendiri</string>
     <string name="free_ai_use_this">Pakai CodeAssist Free AI</string>
+    <string name="chat_status_thinking">Berpikir…</string>
+    <string name="chat_status_writing">Menulis…</string>
+    <string name="chat_status_running">Menjalankan %1$s</string>
+    <string name="chat_status_waiting">Menunggu…</string>
+    <string name="chat_status_seconds">%1$d dtk</string>
+    <string name="chat_status_minutes">%1$d mnt %2$d dtk</string>
 </resources>

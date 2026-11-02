@@ -128,6 +128,12 @@ import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.chat_status_minutes
+import dev.ide.agent.ui.generated.resources.chat_status_seconds
+import dev.ide.agent.ui.generated.resources.chat_status_waiting
+import dev.ide.agent.ui.generated.resources.chat_status_running
+import dev.ide.agent.ui.generated.resources.chat_status_writing
+import dev.ide.agent.ui.generated.resources.chat_status_thinking
 import dev.ide.agent.ui.generated.resources.chat_add_key
 import dev.ide.agent.ui.generated.resources.free_ai_model_points
 import dev.ide.agent.ui.generated.resources.free_ai_model_points_note
@@ -337,6 +343,7 @@ fun ChatDrawer(
                     if (cfg.selectedProvider == FREE_AI_PROVIDER) {
                         FreeAiStrip(backend, onManage = { showProviders = true })
                     }
+                    if (chat.busy) AgentBusyLine(chat.messages)
                     UsageWarningStrip(usageLimits, onOpen = { showUsage = true })
                     Suggestions(
                         backend = backend,
@@ -892,6 +899,75 @@ private fun ErrorMessage(
     }
 }
 
+/** What a running turn is doing right now, as far as the transcript can tell. */
+internal enum class Activity { THINKING, WRITING, RUNNING_TOOL }
+
+private fun Step.visible(): Boolean = when (this) {
+    is Step.Text -> text.isNotBlank()
+    is Step.Thinking -> text.isNotBlank()
+    is Step.Tools -> calls.isNotEmpty()
+}
+
+/**
+ * The newest step decides: a tool still running, text still arriving, or (anything else) the model thinking. A
+ * trailing step with nothing to draw (an empty thinking block) means a new step has started that is not visible
+ * yet, which is thinking, not the earlier text continuing.
+ */
+private fun activityOf(steps: List<Step>): Activity {
+    val last = steps.lastOrNull() ?: return Activity.THINKING
+    if (!last.visible()) return Activity.THINKING
+    return when (last) {
+        is Step.Tools -> if (last.calls.any { it.status == UiAgentToolStatus.RUNNING }) Activity.RUNNING_TOOL else Activity.THINKING
+        is Step.Text -> Activity.WRITING
+        is Step.Thinking -> Activity.THINKING
+    }
+}
+
+/**
+ * One line over the composer for as long as a turn runs: a pulsing mark, what the agent is doing ("Thinking",
+ * "Running <tool>", "Writing", "Waiting"), and how long the turn has taken, so a long silent step never reads as a
+ * stall. The stop control is the send button beside it.
+ */
+@Composable
+private fun AgentBusyLine(messages: List<UiAgentMessage>) {
+    val msg = messages.lastOrNull { it.role == UiAgentRole.ASSISTANT && it.streaming } ?: return
+    val steps = remember(msg.segments, msg.toolCalls, msg.text, msg.thinking) { stepsOf(msg) }
+    val activity = activityOf(steps)
+    val running = msg.toolCalls.lastOrNull { it.status == UiAgentToolStatus.RUNNING }
+    val label = when {
+        msg.waitUntilMs != null -> stringResource(Res.string.chat_status_waiting)
+        activity == Activity.RUNNING_TOOL && running != null ->
+            stringResource(Res.string.chat_status_running, running.title.lineSequence().first().take(60))
+        activity == Activity.WRITING -> stringResource(Res.string.chat_status_writing)
+        else -> stringResource(Res.string.chat_status_thinking)
+    }
+    // Timed from when this reply started, per message, so a retry starts the clock again.
+    val started = remember(msg.id) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+    var now by remember { mutableStateOf(started) }
+    LaunchedEffect(msg.id) {
+        while (true) {
+            now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+            delay(1000)
+        }
+    }
+    val seconds = ((now - started) / 1000).coerceAtLeast(0)
+    val elapsed = if (seconds < 60) stringResource(Res.string.chat_status_seconds, seconds.toInt())
+    else stringResource(Res.string.chat_status_minutes, (seconds / 60).toInt(), (seconds % 60).toInt())
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CaIcons.sparkle, null, Modifier.size(14.dp), tint = pulseColor(true))
+        Text(
+            label, color = scheme.onSurface, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(elapsed, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
 /** One step as the transcript draws it: a [UiAgentSegment] with its tool ids resolved to their calls. */
 private sealed interface Step {
     data class Text(val text: String) : Step
@@ -938,14 +1014,13 @@ private fun AssistantMessage(msg: UiAgentMessage) {
             }
         }
         msg.waitUntilMs?.let { WaitRow(it, msg.waitReason) }
-        val lastStep = steps.lastOrNull()
+        val activity = activityOf(steps)
         // A blinking caret while the answer is still streaming in.
-        if (msg.streaming && lastStep is Step.Text && lastStep.text.isNotBlank()) TypingCaret()
-        // Something live at the end of a running turn that has nothing streaming yet: before the first token, and
-        // between a finished batch of tools and the model's next step, which otherwise looks stalled.
-        val idle = lastStep == null ||
-            (lastStep is Step.Tools && lastStep.calls.none { it.status == UiAgentToolStatus.RUNNING })
-        if (msg.streaming && msg.waitUntilMs == null && idle) ThinkingStep(thinking = "", live = true)
+        if (msg.streaming && activity == Activity.WRITING) TypingCaret()
+        // Something live at the end of a running turn that has nothing visible streaming: before the first token,
+        // between a finished batch of tools and the model's next step, and while the model reasons without showing
+        // it (current models stream empty thinking blocks by default), all of which otherwise look stalled.
+        if (msg.streaming && msg.waitUntilMs == null && activity == Activity.THINKING) ThinkingStep(thinking = "", live = true)
         // Copy the finished answer.
         DisableSelection {
             if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)

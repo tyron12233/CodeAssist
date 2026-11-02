@@ -167,4 +167,10 @@
     <string name="free_ai_in_use">قيد الاستخدام</string>
     <string name="free_ai_section_byok">استخدم مفتاح API الخاص بك</string>
     <string name="free_ai_use_this">استخدم CodeAssist Free AI</string>
+    <string name="chat_status_thinking">يفكّر…</string>
+    <string name="chat_status_writing">يكتب…</string>
+    <string name="chat_status_running">يشغّل %1$s</string>
+    <string name="chat_status_waiting">في الانتظار…</string>
+    <string name="chat_status_seconds">%1$d ث</string>
+    <string name="chat_status_minutes">%1$d د %2$d ث</string>
 </resources>

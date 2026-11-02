@@ -161,4 +161,10 @@
     <string name="free_ai_in_use">Используется</string>
     <string name="free_ai_section_byok">Свой API-ключ</string>
     <string name="free_ai_use_this">Использовать CodeAssist Free AI</string>
+    <string name="chat_status_thinking">Думает…</string>
+    <string name="chat_status_writing">Пишет…</string>
+    <string name="chat_status_running">Выполняет %1$s</string>
+    <string name="chat_status_waiting">Ожидание…</string>
+    <string name="chat_status_seconds">%1$d с</string>
+    <string name="chat_status_minutes">%1$d мин %2$d с</string>
 </resources>

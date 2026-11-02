@@ -159,4 +159,10 @@
     <string name="free_ai_in_use">In use</string>
     <string name="free_ai_section_byok">Use your own API key</string>
     <string name="free_ai_use_this">Use CodeAssist Free AI</string>
+    <string name="chat_status_thinking">Thinking…</string>
+    <string name="chat_status_writing">Writing…</string>
+    <string name="chat_status_running">Running %1$s</string>
+    <string name="chat_status_waiting">Waiting…</string>
+    <string name="chat_status_seconds">%1$ds</string>
+    <string name="chat_status_minutes">%1$dm %2$ds</string>
 </resources>

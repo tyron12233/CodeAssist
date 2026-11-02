@@ -157,4 +157,10 @@
     <string name="free_ai_in_use">使用中</string>
     <string name="free_ai_section_byok">使用自己的 API 密钥</string>
     <string name="free_ai_use_this">使用 CodeAssist Free AI</string>
+    <string name="chat_status_thinking">思考中…</string>
+    <string name="chat_status_writing">正在输出…</string>
+    <string name="chat_status_running">正在运行 %1$s</string>
+    <string name="chat_status_waiting">等待中…</string>
+    <string name="chat_status_seconds">%1$d 秒</string>
+    <string name="chat_status_minutes">%1$d 分 %2$d 秒</string>
 </resources>
