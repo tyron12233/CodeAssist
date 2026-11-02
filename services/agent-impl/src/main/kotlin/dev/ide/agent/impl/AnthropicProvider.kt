@@ -393,10 +393,27 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
          */
         internal fun strictToolNames(tools: List<dev.ide.agent.ToolSpec>): Set<String> =
             tools.withIndex()
+                // Only schemas written for strict mode (every object closed with additionalProperties:false, as
+                // ToolSchemaBuilder emits). A third-party schema (an MCP server's) that is not would fail the request.
+                .filter { strictCompatible(it.value) }
                 .sortedWith(compareByDescending<IndexedValue<dev.ide.agent.ToolSpec>> { argumentCount(it.value) }.thenBy { it.index })
                 .take(MAX_STRICT_TOOLS)
                 .map { it.value.name }
                 .toSet()
+
+        private fun strictCompatible(spec: dev.ide.agent.ToolSpec): Boolean = runCatching {
+            closedObjects(AgentJson.parseToJsonElement(spec.parameters))
+        }.getOrDefault(false)
+
+        private fun closedObjects(el: kotlinx.serialization.json.JsonElement): Boolean = when (el) {
+            is JsonObject -> {
+                val isObject = "properties" in el || (el["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "object"
+                val closed = !isObject || (el["additionalProperties"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "false"
+                closed && el.values.all(::closedObjects)
+            }
+            is JsonArray -> el.all(::closedObjects)
+            else -> true
+        }
 
         private fun argumentCount(spec: dev.ide.agent.ToolSpec): Int = runCatching {
             AgentJson.parseToJsonElement(spec.parameters).asObj()?.get("properties").asObj()?.size ?: 0

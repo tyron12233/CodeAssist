@@ -803,6 +803,15 @@ data class UiAgentTodo(val content: String, val status: UiAgentTodoStatus)
 /** A saved conversation, for the history list. */
 data class UiAgentSessionSummary(val id: String, val title: String, val updatedAtMs: Long, val messageCount: Int)
 
+/** A saved conversation in any project, for the AI tab's recent chats. */
+data class UiAgentRecentChat(
+    val projectRoot: String,
+    val sessionId: String,
+    val title: String,
+    val updatedAtMs: Long,
+    val messageCount: Int,
+)
+
 /**
  * What one turn cost. [input] is the prompt tokens the provider billed at full rate; [cacheRead] is the part it
  * served from its prompt cache (a fraction of that rate) and [cacheWrite] the part it wrote into the cache this
@@ -870,6 +879,11 @@ data class UiAgentChatState(
     val todos: List<UiAgentTodo> = emptyList(),
     /** The saved conversation this transcript belongs to, or null before the first message. */
     val sessionId: String? = null,
+    /**
+     * A new-app conversation that has not created its project yet (see [AgentService.startNewApp]): the agent can
+     * only choose a template and create the project, and nothing is saved until it has.
+     */
+    val creatingApp: Boolean = false,
 )
 
 data class UiAgentModel(val id: String, val displayName: String)

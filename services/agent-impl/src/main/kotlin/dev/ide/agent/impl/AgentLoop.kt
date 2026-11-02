@@ -59,6 +59,14 @@ class AgentLoop(
      * carries on from the summary, mid-task if need be. Null never does; the user can still run /compact.
      */
     private val autoCompactChars: Int? = null,
+    /**
+     * When the next request is expected to be bigger than this many prompt tokens, the loop summarizes first, the
+     * same as [autoCompactChars]. Measured from what the provider reported for the previous request, so it holds
+     * where a character count cannot: code costs far more tokens per character than prose, and a price step (Haiku
+     * 5.5 bills 5x past a 100K prompt) is drawn in tokens. Null never does. The character limit still applies
+     * before there is a measurement (a fresh or restored conversation).
+     */
+    private val autoCompactTokens: Int? = null,
     /** Keeps requests under the provider's per-minute limits; null sends as fast as the loop runs. */
     private val pacer: RequestPacer? = null,
     /** Records what each mutating call changed, for diffs and undo; null records nothing. */
@@ -68,6 +76,9 @@ class AgentLoop(
     private companion object {
         /** How many rate-limit waits one turn may sit through before it gives up and reports the error. */
         const val MAX_RATE_LIMIT_WAITS = 6
+
+        /** Characters per token for what a step adds (mostly code and tool output), erring on the high side. */
+        const val CHARS_PER_TOKEN = 3
 
         /** The wait when a rate limit names no retry delay. */
         const val DEFAULT_RATE_LIMIT_WAIT_MS = 30_000L
@@ -97,7 +108,7 @@ class AgentLoop(
         const val COMPACT_MID_TASK = "This conversation is getting too long to send. Summarize it so the work can " +
             "continue from your summary alone: the user's goal and requirements, decisions made, which files you " +
             "created or changed and what is in them now, what is done, what is left, and any error you were " +
-            "fixing. Be specific about file paths and names. Reply with the summary only."
+            "fixing. Be specific about file paths and names. Do not call any tools. Reply with the summary only."
 
         /** Sent on the final turn once the iteration cap is hit; no tools are offered alongside it. */
         const val COMPACT = "Summarize this conversation so far so it can continue from your summary alone. " +
@@ -112,9 +123,17 @@ class AgentLoop(
 
     private val history = mutableListOf<LlmMessage>()
 
+    /**
+     * The prompt size the provider reported for the last request, and [HistoryCompactor.size] of what that request
+     * carried. The next request's size is estimated from these plus whatever was added since. Null before the
+     * first measurement and after anything that replaces the history.
+     */
+    private var measuredPrompt: Pair<Int, Int>? = null
+
     fun reset() {
         history.clear()
         compactor.reset()
+        measuredPrompt = null
     }
 
     /** The conversation so far, so a rebuilt loop can carry it over (see [restore]), every tool call answered. */
@@ -131,6 +150,7 @@ class AgentLoop(
     fun restore(messages: List<LlmMessage>, dropThinking: Boolean) {
         history.clear()
         compactor.reset()
+        measuredPrompt = null
         pairToolResults(messages).mapTo(history) { m ->
             if (!dropThinking) m else m.copy(content = m.content.filter { it !is ContentPart.Thinking })
         }
@@ -184,9 +204,8 @@ class AgentLoop(
         // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
         var total = TokenUsage()
         while (iteration++ < maxIterations) {
-            val limit = autoCompactChars
             // Once per turn: a summary that is itself too big would otherwise be summarized again and again.
-            if (limit != null && !compacted && history.size > 2 && compactor.size(compactor.compact(history)) > limit) {
+            if (!compacted && history.size > 2 && tooLongToSend()) {
                 compacted = true
                 autoCompact(sink)
             }
@@ -232,6 +251,7 @@ class AgentLoop(
             }
             rateLimitWaits = 0
             turn.usage?.let { total += it }
+            turn.usage?.promptTokens?.takeIf { it > 0 }?.let { measuredPrompt = it to compactor.size(request.messages) }
 
             history += LlmMessage.assistant(turn.assistantParts())
             val calls = turn.toolCalls()
@@ -329,6 +349,7 @@ class AgentLoop(
         }
         history.clear()
         compactor.reset()
+        measuredPrompt = null
         history += LlmMessage.user("Continue the earlier conversation. Here is where it got to.")
         history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
         sink.emit(AgentEvent.TurnCompleted(turn.stopReason, turn.usage))
@@ -343,26 +364,48 @@ class AgentLoop(
     private suspend fun autoCompact(sink: AgentEventSink) {
         pairHistory()
         val before = compactor.size(compactor.compact(history))
+        // The same system prompt, tools, thinking and effort as the step it replaces, so the whole conversation is
+        // read back from the prompt cache instead of being written to it again: changing the tool set or switching
+        // thinking off would both throw the cached prefix away, on the biggest prompt of the task.
         val request = LlmRequest(
             model = model,
             system = systemPrompt(),
             messages = compactor.compact(history) + LlmMessage.user(COMPACT_MID_TASK),
-            tools = emptyList(),
+            tools = tools.specs(),
             maxTokens = requestMaxTokens,
-            thinking = false,
+            thinking = true,
+            thinkingBudget = thinkingBudget,
+            webSearch = webSearch,
             effort = effort,
         )
         pace(request, sink)
         val turn = Turn()
         client.chat(request).collect { event -> turn.consume(event, AgentEventSink { }) }
-        if (turn.failure != null || turn.text.isBlank()) return
+        // Tools are offered only to keep the prefix identical; a reply that calls one is not a summary.
+        if (turn.failure != null || turn.text.isBlank() || turn.toolCalls().isNotEmpty()) return
         history.clear()
         compactor.reset()
+        measuredPrompt = null
         history += LlmMessage.user("Continue the earlier conversation. Here is where it got to.")
         history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
         history += LlmMessage.user("Carry on with the task from where you left off.")
         appendSessionContext()
         sink.emit(AgentEvent.Compacted(before, compactor.size(history)))
+    }
+
+    /**
+     * Whether the next request should be summarized first: its estimated prompt is over [autoCompactTokens], or,
+     * before any measurement exists, its transcript is over [autoCompactChars].
+     */
+    private fun tooLongToSend(): Boolean {
+        val size = compactor.size(compactor.compact(history))
+        val tokenLimit = autoCompactTokens
+        val measured = measuredPrompt
+        if (tokenLimit != null && measured != null) {
+            val (tokens, sizeThen) = measured
+            return tokens + (size - sizeThen) / CHARS_PER_TOKEN > tokenLimit
+        }
+        return autoCompactChars?.let { size > it } ?: false
     }
 
     /** Waits, visibly, when sending [request] now would break a known per-minute limit, then records it. */

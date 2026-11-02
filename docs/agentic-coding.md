@@ -324,6 +324,91 @@ for user code, no `invokedynamic` bootstrap, minSdk floor). It lists the availab
 permission mode, then appends live project context (modules, the active file, current diagnostics),
 kept after the stable prefix so the grounding stays cache-friendly.
 
+## Connections: MCP servers and skills
+
+Users give the agent more tools by connecting MCP servers, and more know-how by installing skills. Both are
+managed on the chat's **Connections** page (chat menu, or `/mcp` / `/skills`).
+
+**Where they live.** App-wide servers are in `<shared root>/agent/mcp.json`. A project's servers are in
+`.codeassist/mcp.json`, plus the `.mcp.json` that Claude Code and Cursor read. All of these use the same
+`mcpServers` format (`McpServerConfig`), so an existing config works unchanged. A project server hides an
+app-wide one with the same name. Skills live in `<shared root>/agent/skills/<name>/SKILL.md`, and in a
+project under `.codeassist/skills/` and `.claude/skills/` (the Agent Skills format: YAML front matter with
+`name` and `description`). Sign-ins are kept in `<shared root>/agent/mcp-auth.json`.
+
+**Client (`agent-mcp`, package `dev.ide.agent.mcp.client`).** This is our own coroutine client, not the
+SDK's, because the SDK's HTTP transports use `java.net.http`, which Android lacks. `McpClient` does the
+handshake, `tools/list` (paginated) and `tools/call`, answers `ping`, and declares no client capabilities.
+
+Transports:
+- Streamable HTTP (OkHttp; JSON or event-stream answers; session id). It falls back to the legacy HTTP+SSE
+  transport when the POST is refused with a 4xx.
+- Legacy HTTP+SSE.
+- stdio, desktop only. It runs through the login shell so `npx` and `uvx` resolve on a Dock-launched app's
+  bare PATH.
+
+`McpManager` keeps the live set in step with the config, connects in the background, renames tools to
+`mcp__<server>__<tool>`, and maps errors to a per-server status. It retries a call only when the server
+provably did not run it (an expired session, or credentials refused up front), so a mutating tool never
+runs twice.
+
+**Schemas.** Third-party schemas are cut down to the subset every provider accepts (`McpSchemas.normalize`:
+`$ref` inlined, type arrays reduced, unknown keywords dropped). Anthropic's strict mode is applied only to
+schemas written for it (`AnthropicProvider.strictToolNames`). An MCP tool is mutating unless the server
+marks it `readOnlyHint`, so it goes through the same permission prompt as a file edit.
+
+**OAuth (`McpOAuth`).** This follows the MCP authorization spec:
+1. Protected-resource metadata (RFC 9728) from the 401's `WWW-Authenticate`, or from the well-known paths.
+2. Authorization-server metadata (RFC 8414 / OIDC).
+3. Dynamic client registration (RFC 7591) per sign-in, because the loopback port changes.
+4. Authorization-code grant with PKCE S256 and `resource` (RFC 8707). The redirect comes back to a
+   `LoopbackRedirectListener`, the same way as OpenRouter's sign-in.
+5. Tokens are refreshed before they expire, and once more on a 401.
+
+A server that cannot register clients dynamically is used with a header token instead.
+
+**Trust.** A server from a project file can run a command or reach any URL, and a cloned repository is not
+the user's own choice. So it stays `UNTRUSTED` until the user approves it. Approval is keyed by the
+server's URL or command, so pointing it somewhere else needs approving again. Servers added through the
+app are approved as they are saved.
+
+**Prompt.** The tool list in the system prompt names only the built-in tools, plus one line explaining
+`mcp__` tools. Enabled skills are listed by name and description; the body loads on demand through the
+`skill` tool. The servers' `instructions` are included, bounded, as `<mcp-server-notes>`. All of this sits
+in the cached prefix and changes only when a connection or skill changes.
+
+**Code.** `AgentConnections` (ide-core) and `AgentConnectionsSheet` (agent-ui). Tests: `McpClientTest`
+(real Streamable HTTP and stdio servers, fake SSE and OAuth servers), `AgentSkillsTest`,
+`StrictToolsTest`, `AgentConnectionsTest`, and the `ConnectionsSnapshot` renders.
+
+## AI home tab
+
+The home screen's middle tab, drawn as a raised, highlighted button. Its slot is generic: the agent plugin fills it
+through `UiContributionScope.homeTab(HomeTabContribution(AI, …))` (`HomeTabRegistry`), so the shell never
+depends on the agent UI. The tab appears only when the slot is filled (it isn't on iOS).
+`HomeTabContext` gives the tab ways into the project: the editor, a file, and the same Run as the editor's
+button.
+
+The tab (`AgentHomeTab`) has a landing view and a chat view:
+- **Landing:** a "What do you want to build?" prompt with idea chips; the user's recent projects with
+  one-tap actions (explain, fix build errors, add a screen, ask anything); recent chats from every project.
+- **Chat:** the normal `ChatDrawer`, with a back arrow, the project's name, and Run / Open in editor.
+
+**Projects open in the background.** Any project open (a bumped `projectEpoch`) normally jumps the app to the
+editor. That jump is skipped while the AI tab is showing (`CodeAssistAppState`), so the user stays in the
+chat.
+
+**New app.** `AgentService.startNewApp()` starts a conversation in which the agent has only
+`list_project_templates`, `create_project` and `ask_user` (`NewAppTools`), plus a prompt section that tells it
+to clarify, pick a template, create the project and then build it. `create_project` runs the same
+`ProjectService.createProject` as the gallery, filling the template's settings from the app name (the
+package is derived) and the defaults. From the next step on, the same conversation has every tool in the
+new project. Nothing is saved before the project exists.
+
+**Recent chats.** Conversations stay in their projects. `AgentRecentChats` keeps an app-wide index in
+`<shared root>/agent/recent-chats.json`, written whenever a conversation is saved; entries whose
+conversation is gone are dropped.
+
 ## Extensibility
 
 - Add a provider: implement `LlmProvider` and register it (built-ins register in `AgentPlugin`;

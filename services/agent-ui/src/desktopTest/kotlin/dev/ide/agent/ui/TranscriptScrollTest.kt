@@ -29,7 +29,10 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalComposeUiApi::class)
 class TranscriptScrollTest {
 
-    /** A running turn of [paragraphs] paragraphs after two batches of tool calls, the second still in flight. */
+    /**
+     * A running turn: two batches of tool calls (folded into one row, the second batch's last call still in flight),
+     * then an answer of [paragraphs] paragraphs streaming in after them.
+     */
     private fun turn(id: Long, paragraphs: Int): UiAgentMessage {
         val calls = (1..8).map { i ->
             UiAgentToolCall("t$i", "read File$i.kt", if (i == 8) UiAgentToolStatus.RUNNING else UiAgentToolStatus.OK, "40 lines")
@@ -40,8 +43,8 @@ class TranscriptScrollTest {
             text = text, toolCalls = calls, streaming = true,
             segments = listOf(
                 UiAgentSegment.Tools(calls.take(4).map { it.id }),
-                UiAgentSegment.Text(text),
                 UiAgentSegment.Tools(calls.drop(4).map { it.id }),
+                UiAgentSegment.Text(text),
             ),
         )
     }

@@ -575,6 +575,25 @@ class CodeAssistAppStateTest {
     }
 
     @Test
+    fun aProjectOpenedFromTheAiTabKeepsTheUserInTheChat() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        // The AI tab opens (or the agent creates) a project in the background: no jump to the editor.
+        app.selectHomeTab(HomeTab.Ai)
+        backend.openProject("/ws/app")
+        advanceUntilIdle()
+        assertEquals(Screen.Projects, app.screen)
+
+        // Anywhere else, opening a project still lands in the editor.
+        app.selectHomeTab(HomeTab.Projects)
+        backend.openProject("/ws/app")
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    @Test
     fun homeTabStepsBackToThePickerBeforeExiting() = runTest {
         val backend = settled()
         val app = appState(backend)

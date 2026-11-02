@@ -385,7 +385,9 @@ class CodeAssistAppState(
         scope.launch {
             backend.projects.projectEpoch.collect {
                 epoch = it
-                if (it > 0) screen = Screen.Editor
+                // The AI tab opens and creates projects in the background and keeps the user in the chat; the
+                // tab's own buttons take them into the editor.
+                if (it > 0 && !(screen == Screen.Projects && homeTab == HomeTab.Ai)) screen = Screen.Editor
             }
         }
         // Starting a console run (a `run` task) opens a fresh interactive session: keyed on its id, jump to the

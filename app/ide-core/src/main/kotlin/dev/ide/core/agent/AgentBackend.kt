@@ -73,6 +73,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
@@ -214,14 +215,75 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         if (_questionRequest.value?.id == id) pendingQuestion?.complete(answers)
     }
 
-    // ask_user is the chat's alone: an MCP client has no card to answer it with.
-    private val tools = SimpleToolRegistry(builtinTools(checkpoints) + ftpControlTool + askUser)
-
     /** The MCP server's tools write straight to the workspace: an external client's edits are not a chat turn,
      *  and recording them into one would let that turn's Undo revert someone else's work. */
     private val mcpTools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Log.logger("ide.agent")
+
+    /** The MCP servers and skills the user connected (see [AgentConnections]). */
+    private val agentConnections = AgentConnections(ctx, scope)
+
+    // ask_user is the chat's alone: an MCP client has no card to answer it with.
+    private val builtinChatTools: List<AgentTool> = builtinTools(checkpoints) + ftpControlTool + askUser
+
+    /**
+     * The chat's tools: the built-ins, then whatever the connected MCP servers and installed skills add. Read on
+     * every request, so a server that connects mid-conversation is usable from the next step.
+     */
+    /**
+     * A new-app conversation that has not created its project yet ([startNewApp]). While set, the agent sees only
+     * [newAppTools] (and ask_user), whatever project happens to be open behind the AI tab, and nothing is saved.
+     */
+    @Volatile
+    private var creatingApp = false
+
+    private val newAppTools: List<AgentTool> = NewAppTools.tools({ (ctx as? dev.ide.ui.backend.IdeBackend)?.projects }) {
+        creatingApp = false
+        _chatState.update { it.copy(creatingApp = false) }
+        resolveProjectLibraries()
+    } + askUser
+
+    /**
+     * Resolve the open project's declared libraries (a new project's template dependencies), wait for it, and say
+     * how it went. The editor starts this when it opens a project; a project the agent creates from the AI tab is
+     * never shown in the editor, so without this its AndroidX/Compose libraries never reach the classpath.
+     */
+    private suspend fun resolveProjectLibraries(): String? {
+        val deps = ctx.servicesOrNull?.dependencies ?: return null
+        deps.startPendingDependencyResolution()
+        // The resolve runs in the background; wait for it to start, then to finish.
+        val started = kotlinx.coroutines.withTimeoutOrNull(LIBRARIES_START_MS) {
+            deps.depsState.first { it.resolving }
+        } != null
+        val done = if (started) {
+            kotlinx.coroutines.withTimeoutOrNull(LIBRARIES_RESOLVE_MS) { deps.depsState.first { !it.resolving } }
+        } else {
+            deps.depsState.value
+        } ?: return "The project's libraries are still downloading. Builds fail until they finish; check again before building."
+        if (done.unresolved.isEmpty()) return "The project's libraries are resolved and on the classpath."
+        return "These libraries could not be resolved, so code using them will not compile:\n" +
+            done.unresolved.joinToString("\n") { "- ${it.coordinate} (${it.module}): ${it.reason}" } +
+            "\nTell the user; they may need a network connection."
+    }
+
+    /** Conversations across every project, for the AI home tab. */
+    private val recentChatIndex = AgentRecentChats { ctx.manager?.sharedRoot?.resolve("agent")?.resolve("recent-chats.json") }
+
+    private val tools = object : dev.ide.agent.AgentToolRegistry {
+        override val tools: List<AgentTool>
+            get() {
+                if (creatingApp) return newAppTools
+                val extra = agentConnections.tools()
+                if (extra.isEmpty()) return builtinChatTools
+                val builtinNames = builtinChatTools.mapTo(HashSet()) { it.spec.name }
+                return builtinChatTools + extra.filter { it.spec.name !in builtinNames }
+            }
+
+        override fun find(name: String): AgentTool? =
+            if (creatingApp) newAppTools.firstOrNull { it.spec.name == name }
+            else builtinChatTools.firstOrNull { it.spec.name == name } ?: agentConnections.tools().firstOrNull { it.spec.name == name }
+    }
 
     /** The in-app MCP-over-HTTP server, started when the "MCP server" AI setting is on. The server is
      *  opt-in: enabling it is itself the permission to edit the open project, so its tools run under
@@ -736,6 +798,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private var pendingHistory: List<LlmMessage>? = null
 
     override fun newSession() {
+        creatingApp = false
         job?.cancel()
         loop?.reset()
         loop = null
@@ -814,6 +877,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 else -> HistoryCompactor()
             },
             autoCompactChars = if (cfg.selectedId == FREE_AI) FREE_AI_COMPACT_CHARS else null,
+            autoCompactTokens = if (cfg.selectedId == FREE_AI) FREE_AI_COMPACT_TOKENS else null,
             pacer = pacer,
             checkpoints = checkpoints,
         )
@@ -956,11 +1020,35 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     private fun saveSession() {
+        // A new app's conversation has no project to live in until it creates one.
+        if (creatingApp) return
         val state = _chatState.value
         val id = state.sessionId ?: return
         val history = loop?.snapshot() ?: return
-        runCatching { sessionStore.save(id, state.messages, history) }
+        val root = ctx.servicesOrNull?.workspaceRoot ?: return
+        val saved = runCatching { sessionStore.save(id, state.messages, history) }.getOrNull() ?: return
+        runCatching { recentChatIndex.record(root, saved) }
     }
+
+    /**
+     * A tool title with the open project's root taken off its paths: `read app/src/main/…/MainActivity.kt` rather
+     * than the whole `/storage/emulated/0/Android/data/…/projects/<name>/app/…` path, which a phone cuts off long
+     * before the part that says which file it is.
+     */
+    private fun projectRelative(title: String): String {
+        val root = ctx.servicesOrNull?.workspaceRoot?.toString()?.trimEnd('/', '\\') ?: return title
+        if (root.isEmpty()) return title
+        return title.replace("$root/", "").replace("$root\\", "").replace(root, ".")
+    }
+
+    override fun startNewApp() {
+        newSession()
+        creatingApp = true
+        _chatState.value = UiAgentChatState(creatingApp = true)
+    }
+
+    override fun recentChats(): List<dev.ide.ui.backend.UiAgentRecentChat> =
+        runCatching { recentChatIndex.list() }.getOrDefault(emptyList())
 
     private fun applyEvent(assistantId: Long, event: AgentEvent) {
         // Any event after a wait means the wait is over.
@@ -974,7 +1062,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             is AgentEvent.ToolCallStarted -> mutateAssistant(assistantId) {
                 it.copy(
                     toolCalls = it.toolCalls + UiAgentToolCall(
-                        event.id, event.displaySummary, UiAgentToolStatus.RUNNING, input = event.input,
+                        event.id, projectRelative(event.displaySummary), UiAgentToolStatus.RUNNING, input = event.input,
                     ),
                     segments = it.segments.appendTool(event.id),
                 )
@@ -1246,6 +1334,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     override fun deleteSession(id: String) {
         sessionStore.delete(id)
+        ctx.servicesOrNull?.workspaceRoot?.let { root -> runCatching { recentChatIndex.remove(root, id) } }
         if (_chatState.value.sessionId == id) newSession()
     }
 
@@ -1272,7 +1361,46 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     /** The stable half of the prompt: the top-level system prefix, identical for the life of a conversation. */
     private fun systemPrompt(): String =
-        SystemPrompt.grounding(tools.tools.map { it.spec.name }, ctx.servicesOrNull?.let { projectInstructions(it) })
+        if (creatingApp) {
+            SystemPrompt.grounding(tools.tools.map { it.spec.name }, null, listOf(NewAppTools.PROMPT))
+        } else {
+            SystemPrompt.grounding(
+                tools.tools.map { it.spec.name },
+                ctx.servicesOrNull?.let { projectInstructions(it) },
+                agentConnections.promptSections(),
+            )
+        }
+
+    // --- connections: MCP servers and skills ---
+
+    override val connections: StateFlow<dev.ide.ui.backend.UiAgentConnections> get() = agentConnections.state
+
+    override fun refreshConnections() = agentConnections.refresh()
+
+    override fun saveMcpServer(
+        config: dev.ide.ui.backend.UiMcpServerConfig,
+        scope: dev.ide.ui.backend.UiMcpScope,
+        previousName: String?,
+    ): String? = agentConnections.save(config, scope, previousName)
+
+    override fun removeMcpServer(name: String, scope: dev.ide.ui.backend.UiMcpScope) = agentConnections.remove(name, scope)
+
+    override fun setMcpServerEnabled(name: String, scope: dev.ide.ui.backend.UiMcpScope, enabled: Boolean) =
+        agentConnections.setEnabled(name, scope, enabled)
+
+    override fun trustMcpServer(name: String) = agentConnections.trust(name)
+
+    override fun reconnectMcpServer(name: String) = agentConnections.reconnect(name)
+
+    override suspend fun beginMcpSignIn(name: String): String? = agentConnections.beginSignIn(name)
+
+    override fun cancelMcpSignIn() = agentConnections.cancelSignIn()
+
+    override fun signOutMcpServer(name: String) = agentConnections.signOut(name)
+
+    override fun setSkillEnabled(name: String, enabled: Boolean) = agentConnections.setSkillEnabled(name, enabled)
+
+    override fun createSkill(name: String, scope: dev.ide.ui.backend.UiMcpScope): String? = agentConnections.createSkill(name, scope)
 
     /** The last instruction-file read, keyed by path + modification time so the prefix is not re-read from disk
      *  on every request yet still follows an edit to the file. */
@@ -1280,7 +1408,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private var instructionsCache: Pair<String, String?>? = null
 
     /** The volatile half: rides after the history each turn, so refreshing it costs no cached tokens. */
-    private fun sessionContext(): String = SystemPrompt.sessionContext(modePref(), projectContext())
+    private fun sessionContext(): String =
+        SystemPrompt.sessionContext(modePref(), if (creatingApp) "No project is open yet; create one first." else projectContext())
 
     private fun projectContext(): String? {
         val engine = ctx.servicesOrNull ?: return null
@@ -1329,6 +1458,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         private const val COMPACTED = "**Conversation compacted.** "
 
         private val live = CopyOnWriteArrayList<WeakReference<AgentBackend>>()
+        private const val LIBRARIES_START_MS = 5_000L
+        private const val LIBRARIES_RESOLVE_MS = 10 * 60_000L
 
         /** The agent of the project at [root] (the most recently opened one when [root] matches none), for an
          *  editor action that runs outside any one project's backend. */
@@ -1354,6 +1485,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             UiAgentCommand("undo", "Revert the files the agent changed in the last turn"),
             UiAgentCommand("resume", "Open a saved conversation"),
             UiAgentCommand("model", "Choose the model"),
+            UiAgentCommand("mcp", "Manage MCP servers and skills"),
+            UiAgentCommand("skills", "Manage the skills the agent can load"),
         )
 
         private const val INIT_PROMPT = "Explore this project and write an AGENTS.md file at the project root " +
@@ -1371,8 +1504,17 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         private const val FREE_AI_SESSION_KEY = "codeassist-session"
         /** Free tier: old tool results are trimmed once the conversation passes this many characters (~50K tokens). */
         private const val FREE_AI_TRIM_CHARS = 200_000
-        /** Free tier: still bigger than this after trimming (~80K tokens), it is summarized and carries on. */
-        private const val FREE_AI_COMPACT_CHARS = 320_000
+        /**
+         * Free tier: the next prompt is expected past this many tokens, it is summarized and carries on. Well under the
+         * proxy's own clearing (90K), which re-writes the cache on every step once it starts, and under the 100K line
+         * past which Haiku 5.5 bills 5x. A step rarely adds more than 20K.
+         */
+        private const val FREE_AI_COMPACT_TOKENS = 70_000
+        /**
+         * Free tier: the same, by characters, before the provider has reported a prompt size (a fresh or restored
+         * conversation). Code runs about 3 characters a token, so this is roughly [FREE_AI_COMPACT_TOKENS].
+         */
+        private const val FREE_AI_COMPACT_CHARS = 210_000
         private const val AUTO_COMPACTED =
             "The conversation got long, so its earlier part was summarized to keep going. Details from before may be shorter now."
 

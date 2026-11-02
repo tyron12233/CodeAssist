@@ -1,5 +1,9 @@
 package dev.ide.ui
 
+import dev.ide.ui.screens.HomeAiTab
+import dev.ide.ui.ext.HomeTabContext
+import dev.ide.ui.ext.HomeTabContribution
+import dev.ide.ui.ext.HomeTabRegistry
 import dev.ide.ui.components.HalloweenCard
 import dev.ide.ui.components.HalloweenCardMode
 import dev.ide.ui.generated.resources.home_account
@@ -249,7 +253,7 @@ private fun AppRoute(
 ) {
     val backend = app.backend
     when (s) {
-        Screen.Projects -> HomeRoute(app, fileActions)
+        Screen.Projects -> HomeRoute(app, state, fileActions)
 
         Screen.CreateProject -> CreateProjectScreen(
             backend = backend,
@@ -672,11 +676,43 @@ private fun AppRoute(
 }
 
 /**
+ * The AI home tab, when the agent plugin contributes one ([HomeTabRegistry]). Its context reaches the editor and
+ * the Run button: the tab opens or creates a project in the background, and these take the user into it.
+ */
+@Composable
+private fun rememberAiTab(app: CodeAssistAppState, state: IdeUiState, fileActions: FileActions): HomeAiTab? {
+    val contribution = HomeTabRegistry.find(HomeTabContribution.AI) ?: return null
+    val context = remember(app, state, fileActions) {
+        object : HomeTabContext {
+            override val backend get() = app.backend
+            override val fileActions get() = fileActions
+            override fun openEditor() = app.navigateTo(Screen.Editor)
+            override fun openFile(path: String) {
+                state.openAt(path, 0)
+                app.navigateTo(Screen.Editor)
+            }
+            // The same run the editor's Run button starts, with the console open to follow it.
+            override val runProject: (() -> Unit)? = if (state.backend.build.supported()) {
+                {
+                    state.consoleOpen = true
+                    state.requestRun {
+                        val selected = state.selectedRunTask
+                        if (selected != null) state.backend.build.runTask(selected.id) else state.backend.build.runBuild()
+                    }
+                    app.navigateTo(Screen.Editor)
+                }
+            } else null
+        }
+    }
+    return HomeAiTab(contribution.title, contribution.icon) { contribution.content(context) }
+}
+
+/**
  * The landing surface: the project manager on its own, or (behind the Projects Store flag) that manager as
  * one tab of [HomeScreen] alongside the store and Learn.
  */
 @Composable
-private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
+private fun HomeRoute(app: CodeAssistAppState, state: IdeUiState, fileActions: FileActions) {
     LaunchedEffect(app.epoch, app.projectsRefresh) { app.loadProjects() }
     val projects = app.projectList ?: emptyList()
     if (!app.storeEnabled) {
@@ -701,6 +737,7 @@ private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
         learnContent = { LearnRoute(app, fileActions) },
         challengesContent = { ChallengeRoute(app, fileActions) },
         projectCount = projects.size,
+        ai = rememberAiTab(app, state, fileActions),
         sidebarFooter = {
             val unread by app.backend.notifications.unreadCount().collectAsState()
             HomeSidebarItem(

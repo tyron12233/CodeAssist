@@ -125,4 +125,66 @@ class AutoCompactTest {
         // The summary is not shown as the answer.
         assertTrue(events.filterIsInstance<AgentEvent.AssistantTextDelta>().none { it.text.startsWith("SUMMARY") })
     }
+
+    /** A client that reports [promptTokens] for every ordinary step and records what it was sent. */
+    private fun measuringClient(requests: MutableList<LlmRequest>, promptTokens: Int) = LlmClient { request ->
+        requests += request
+        val asksForSummary = request.messages.lastOrNull()?.content?.any {
+            it is dev.ide.agent.ContentPart.Text && it.text.startsWith("This conversation is getting too long")
+        } == true
+        val reply = if (asksForSummary) "SUMMARY: the login screen is done." else "Done."
+        listOf(
+            LlmStreamEvent.TextDelta(reply),
+            LlmStreamEvent.Usage(dev.ide.agent.TokenUsage(inputTokens = 10, cacheReadTokens = promptTokens - 10)),
+            LlmStreamEvent.Completed(StopReason.END_TURN),
+        ).asFlow()
+    }
+
+    @Test
+    fun aMeasuredPromptOverTheTokenLimitIsSummarizedBeforeTheNextStep() {
+        val requests = mutableListOf<LlmRequest>()
+        val events = mutableListOf<AgentEvent>()
+        val loop = AgentLoop(
+            measuringClient(requests, promptTokens = 80_000), "m", SimpleToolRegistry(builtinTools(FakeWorkspace())),
+            AllowAllGate, { "system" },
+            // Far above this short transcript: only the measured token count can trigger it.
+            autoCompactChars = 1_000_000,
+            autoCompactTokens = 70_000,
+        )
+        runBlocking {
+            loop.send("build a login screen", AgentEventSink { events += it })
+            loop.send("now add a forgot-password link", AgentEventSink { events += it })
+        }
+
+        assertEquals(3, requests.size, "the first step, a summary, then the second step")
+        assertTrue(events.any { it is AgentEvent.Compacted })
+        val summary = requests[1]
+        // The summary reuses the cached prefix: the same tools and thinking as the steps around it.
+        assertEquals(requests[0].tools, summary.tools)
+        assertEquals(requests[0].thinking, summary.thinking)
+        assertEquals(requests[0].effort, summary.effort)
+        val sent = requests[2].messages.flatMap { m -> m.content.filterIsInstance<dev.ide.agent.ContentPart.Text>().map { it.text } }
+        assertTrue(sent.any { it.startsWith("SUMMARY:") })
+        assertTrue(sent.none { it == "build a login screen" }, "the old messages are gone")
+    }
+
+    @Test
+    fun aMeasuredPromptUnderTheTokenLimitIsLeftAlone() {
+        val requests = mutableListOf<LlmRequest>()
+        val events = mutableListOf<AgentEvent>()
+        val loop = AgentLoop(
+            measuringClient(requests, promptTokens = 40_000), "m", SimpleToolRegistry(builtinTools(FakeWorkspace())),
+            AllowAllGate, { "system" },
+            // Below this transcript's size: once a measurement exists, tokens decide, not characters.
+            autoCompactChars = 10,
+            autoCompactTokens = 70_000,
+        )
+        runBlocking {
+            loop.send("build a login screen", AgentEventSink { events += it })
+            loop.send("now add a forgot-password link", AgentEventSink { events += it })
+        }
+
+        assertEquals(2, requests.size, "no summary request")
+        assertTrue(events.none { it is AgentEvent.Compacted })
+    }
 }

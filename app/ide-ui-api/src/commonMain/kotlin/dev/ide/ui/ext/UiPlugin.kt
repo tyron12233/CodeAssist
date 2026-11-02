@@ -66,6 +66,9 @@ interface UiContributionScope {
 
     /** Add a kind of file to the file tree's New menu ([NewFileTemplateContribution]). */
     fun newFileTemplate(template: NewFileTemplateContribution): Registration = Registration { }
+
+    /** Fill a slot of the home screen's tabs ([HomeTabContribution]). */
+    fun homeTab(tab: HomeTabContribution): Registration = Registration { }
 }
 
 /**
@@ -187,5 +190,7 @@ object UiPluginHost {
 
         override fun newFileTemplate(template: NewFileTemplateContribution): Registration =
             track(NewFileTemplateRegistry.register(template))
+
+        override fun homeTab(tab: HomeTabContribution): Registration = track(HomeTabRegistry.register(tab))
     }
 }

@@ -84,6 +84,10 @@ fun SeasonalAppNavBar(
         ) {
             destinations.forEach { d ->
                 val selected = d.id == selectedId
+                if (d.highlight) {
+                    HighlightNavItem(d, selected, Modifier.weight(1f)) { onSelect(d.id) }
+                    return@forEach
+                }
                 val pillWidth by animateDpAsState(
                     targetValue = if (selected) 76.dp else 52.dp,
                     animationSpec = CaMotion.defaultSpatial(),

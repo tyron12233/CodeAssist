@@ -1,6 +1,8 @@
 package dev.ide.agent.ui
 
 
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import dev.ide.ui.backend.UiFeatures
 import dev.ide.ui.components.*
 
@@ -28,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -137,6 +140,8 @@ import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.conn_menu
+import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_status_answer
 import dev.ide.agent.ui.generated.resources.chat_status_minutes
 import dev.ide.agent.ui.generated.resources.chat_status_seconds
@@ -209,6 +214,14 @@ fun ChatDrawer(
     modifier: Modifier = Modifier,
     fileActions: FileActions = FileActions.None,
     activeFilePath: String? = null,
+    /** Opens a file in the editor (a skill's SKILL.md); null where the host cannot. */
+    onOpenFile: ((String) -> Unit)? = null,
+    /** A back arrow in place of the sparkle, for a host that shows the chat as its own page (the AI tab). */
+    onBack: (() -> Unit)? = null,
+    /** The header's title instead of the assistant's name (the project being worked on). */
+    title: String? = null,
+    /** Host buttons in the header, before the mode chip (the AI tab's Run and Open in editor). */
+    headerActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val chat by backend.agent.chatState.collectAsState()
     val models by backend.agent.models.collectAsState()
@@ -217,6 +230,7 @@ fun ChatDrawer(
     var showProviders by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
+    var showConnections by remember { mutableStateOf(false) }
     val usageLimits by backend.agent.usageLimits.collectAsState()
     // The agent's ask_user questions, answered in a card over the composer while the turn waits.
     val question by backend.agent.questionRequest.collectAsState()
@@ -252,6 +266,7 @@ fun ChatDrawer(
             when (name) {
                 "resume", "history" -> { showHistory = true; return }
                 "model" -> { modelMenuOpen = true; return }
+                "mcp", "skills", "connections" -> { showConnections = true; return }
             }
             if (backend.agent.runCommand(name, args)) {
                 cfg = backend.agent.config()
@@ -300,6 +315,7 @@ fun ChatDrawer(
                         onHistory = { showHistory = true },
                         onManage = { showProviders = true },
                         onUsage = { showUsage = true },
+                        onConnections = { showConnections = true },
                     )
                 },
             )
@@ -313,9 +329,13 @@ fun ChatDrawer(
                         onManage = { showProviders = true },
                         onHistory = { showHistory = true },
                         onUsage = { showUsage = true },
+                        onConnections = { showConnections = true },
                         onCycleMode = onCycleMode,
                         onNew = { backend.agent.newSession() },
                         onClose = onClose,
+                        onBack = onBack,
+                        title = title,
+                        headerActions = headerActions,
                     )
                 }
             }
@@ -397,6 +417,11 @@ fun ChatDrawer(
         }
         if (showUsage) {
             AgentUsageSheet(backend) { showUsage = false }
+        }
+        if (showConnections) {
+            AgentConnectionsSheet(backend, onOpenFile?.let { open -> { path: String -> showConnections = false; open(path) } }) {
+                showConnections = false
+            }
         }
         if (showFreeSignIn) {
             FreeAiSignInDialog(
@@ -523,19 +548,27 @@ private fun ChatHeader(
     onManage: () -> Unit,
     onHistory: () -> Unit,
     onUsage: () -> Unit,
+    onConnections: () -> Unit,
     onCycleMode: () -> Unit,
     onNew: () -> Unit,
     onClose: (() -> Unit)?,
+    onBack: (() -> Unit)? = null,
+    title: String? = null,
+    headerActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Row(
         Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SparkleBadge(size = 26)
+        if (onBack != null) {
+            IconButtonCa(CaIcons.arrowLeft, stringResource(Res.string.chat_close), onBack, iconSize = 18, boxSize = 32)
+        } else {
+            SparkleBadge(size = 26)
+        }
         Column(Modifier.weight(1f)) {
             Text(
-                stringResource(Res.string.chat_title),
+                title ?: stringResource(Res.string.chat_title),
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -546,8 +579,9 @@ private fun ChatHeader(
             )
             ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu)
         }
+        headerActions?.invoke(this)
         ModeChip(cfg.mode, onCycleMode)
-        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage)
+        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage, onConnections = onConnections)
         if (onClose != null) HideToolWindowButton(onClose)
     }
 }
@@ -581,7 +615,7 @@ private fun ModeChip(mode: UiAgentPermissionMode, onCycleMode: () -> Unit) {
 
 /** The header's occasional actions, in one menu so the title and the model name keep room to read. */
 @Composable
-private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit, onUsage: () -> Unit) {
+private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit, onUsage: () -> Unit, onConnections: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 28)
@@ -589,6 +623,7 @@ private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> U
             HeaderMenuItem(CaIcons.plus, stringResource(Res.string.chat_new)) { menuOpen = false; onNew() }
             HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
             HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
+            HeaderMenuItem(CaIcons.layers, stringResource(Res.string.conn_menu)) { menuOpen = false; onConnections() }
             HeaderMenuItem(CaIcons.info, stringResource(Res.string.chat_usage)) { menuOpen = false; onUsage() }
         }
     }
@@ -1014,15 +1049,21 @@ private fun stepsOf(msg: UiAgentMessage): List<Step> {
 @Composable
 private fun AssistantMessage(msg: UiAgentMessage) {
     val steps = remember(msg.segments, msg.toolCalls, msg.text, msg.thinking) { stepsOf(msg) }
+    // Everything up to the last tool call is the agent's working: its tool calls and the reasoning and narration
+    // between them. It folds into one row, as in the Claude app; what follows the last tool is the answer.
+    val lastTool = steps.indexOfLast { it is Step.Tools && it.calls.isNotEmpty() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (lastTool >= 0) {
+            DisableSelection { WorkBlock(msg.id, steps.subList(0, lastTool + 1), live = msg.streaming && lastTool == steps.lastIndex) }
+        }
         steps.forEachIndexed { i, step ->
-            // The newest step of a running turn is the live one: its reasoning stays open and its tool run stays
-            // expanded until the turn moves past it.
+            if (i <= lastTool) return@forEachIndexed
+            // The newest step of a running turn is the live one: its reasoning stays open until the turn moves on.
             val live = msg.streaming && i == steps.lastIndex
             key(i) {
                 when (step) {
                     is Step.Thinking -> if (step.text.isNotBlank()) ThinkingStep(step.text, live)
-                    is Step.Tools -> if (step.calls.isNotEmpty()) DisableSelection { ToolRun(step.calls, live) }
+                    is Step.Tools -> Unit
                     is Step.Text -> if (step.text.isNotBlank()) AssistantMarkdown(step.text)
                 }
             }
@@ -1073,29 +1114,38 @@ private fun compactTokens(count: Int): String = when {
 }
 
 /**
- * A run of consecutive tool calls. One call is a single compact row. Several get a summary header and stay open
- * while the run is live or still running, then fold to that header once the turn moves past them, so a tool-heavy
- * turn reads as its prose with a line per batch of work. A tap on the header overrides the automatic choice.
+ * A turn's working, folded into one row: how many tools it ran and files it changed, and (folded) what it is doing
+ * or did last. Collapsed by default, even while it runs; opened, it lays out the steps in order (the narration,
+ * the reasoning, each tool call), every tool call openable on its own. A tap on the header is remembered per message.
  */
 @Composable
-private fun ToolRun(calls: List<UiAgentToolCall>, live: Boolean) {
-    if (calls.size == 1) {
-        ToolCallRow(calls[0])
-        return
-    }
-    var choice by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    val expanded = choice ?: (live || calls.any { it.status == UiAgentToolStatus.RUNNING })
+private fun WorkBlock(messageId: Long, steps: List<Step>, live: Boolean) {
+    val calls = remember(steps) { steps.flatMap { (it as? Step.Tools)?.calls.orEmpty() } }
+    var expanded by rememberSaveable(messageId) { mutableStateOf(false) }
     val rail = MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().entranceSlideUp()) {
-        ToolRunHeader(calls, expanded) { choice = !expanded }
-        if (expanded) {
-            // A hairline rail ties the rows to their header, the way a nested list is indented under its parent.
+        ToolRunHeader(calls, expanded) { expanded = !expanded }
+        AnimatedVisibility(expanded) {
             Column(
                 Modifier.fillMaxWidth().padding(start = 8.dp)
                     .drawBehind { drawRect(rail, size = Size(1.dp.toPx(), size.height)) }
-                    .padding(start = 10.dp),
+                    .padding(start = 10.dp, top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                calls.forEach { call -> key(call.id) { ToolCallRow(call) } }
+                steps.forEachIndexed { i, step ->
+                    key(i) {
+                        when (step) {
+                            is Step.Thinking -> if (step.text.isNotBlank()) ThinkingStep(step.text, live && i == steps.lastIndex)
+                            is Step.Tools -> step.calls.forEach { call -> key(call.id) { ToolCallRow(call) } }
+                            is Step.Text -> if (step.text.isNotBlank()) {
+                                // The narration between tool calls, quieter than the answer.
+                                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                                    AssistantMarkdown(step.text)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

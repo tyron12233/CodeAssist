@@ -1898,6 +1898,50 @@ interface AgentService {
     /** Abandon a pending OpenRouter sign-in. */
     fun cancelOpenRouterSignIn() {}
 
+    // --- Connections: MCP servers and skills the agent can use ---
+
+    /** The configured MCP servers (app-wide and this project's) with their live state, and the installed skills. */
+    val connections: StateFlow<UiAgentConnections> get() = CONNECTIONS_NONE
+
+    /** Re-read the config files and skill folders (after the user edited them outside the app). */
+    fun refreshConnections() {}
+
+    /**
+     * Add or change an MCP server in [scope]'s config ([previousName] is its old name when it was renamed).
+     * Returns why it could not be saved, or null.
+     */
+    fun saveMcpServer(config: UiMcpServerConfig, scope: UiMcpScope, previousName: String? = null): String? =
+        "MCP servers are not available in this build."
+
+    fun removeMcpServer(name: String, scope: UiMcpScope) {}
+
+    fun setMcpServerEnabled(name: String, scope: UiMcpScope, enabled: Boolean) {}
+
+    /** Approve a server that came from the project's own config file; until then it is not started. */
+    fun trustMcpServer(name: String) {}
+
+    fun reconnectMcpServer(name: String) {}
+
+    /**
+     * Start a browser sign-in for [name] and return the URL to open, or null when it could not start (the server's
+     * row then carries the reason). The server reconnects by itself when the sign-in completes.
+     */
+    suspend fun beginMcpSignIn(name: String): String? = null
+
+    fun cancelMcpSignIn() {}
+
+    /** Forget [name]'s stored sign-in. */
+    fun signOutMcpServer(name: String) {}
+
+    /** Turn an installed skill off (or back on) for the agent. */
+    fun setSkillEnabled(name: String, enabled: Boolean) {}
+
+    /**
+     * Create a new skill folder with a starter SKILL.md in [scope] and return the file's path (to open in the
+     * editor), or null when it could not be created.
+     */
+    fun createSkill(name: String, scope: UiMcpScope): String? = null
+
     /** The selected provider's usage against its limits, or null before the first read (see [refreshUsageLimits]). */
     val usageLimits: StateFlow<UiAgentUsageLimits?> get() = USAGE_LIMITS_NONE
 
@@ -1940,6 +1984,16 @@ interface AgentService {
 
     /** Delete a saved conversation. */
     fun deleteSession(id: String) {}
+
+    /**
+     * Start a conversation that creates a NEW app. Until the agent creates the project it has only the tools to
+     * choose a template and create it (whatever project is open in the background is left alone); from then on the
+     * same conversation goes on in the new project with every tool.
+     */
+    fun startNewApp() {}
+
+    /** Saved conversations across every project, newest first (for the AI home tab). */
+    fun recentChats(): List<UiAgentRecentChat> = emptyList()
 
     /** Revert the files the agent changed while answering user message [messageId], and every later message. */
     fun undoTurn(messageId: Long) {}
@@ -2010,6 +2064,81 @@ sealed interface UiOpenRouterSignIn {
 }
 
 private val OPEN_ROUTER_SIGN_IN_IDLE: StateFlow<UiOpenRouterSignIn> = MutableStateFlow(UiOpenRouterSignIn.Idle)
+
+private val CONNECTIONS_NONE: StateFlow<UiAgentConnections> = MutableStateFlow(UiAgentConnections())
+
+/** Where an MCP server or skill is configured: for every project, or for this one only. */
+enum class UiMcpScope { APP, PROJECT }
+
+enum class UiMcpTransport { HTTP, SSE, STDIO }
+
+enum class UiMcpStatus {
+    DISABLED,
+    CONNECTING,
+    CONNECTED,
+
+    /** It wants a sign-in (or a token in its headers). */
+    NEEDS_AUTH,
+    FAILED,
+
+    /** A local (command) server on a platform that cannot run one. */
+    UNSUPPORTED,
+
+    /** From the project's config file and not yet approved by the user, so not started. */
+    UNTRUSTED,
+}
+
+/** A server as the user configures it; mirrors one entry of a `.mcp.json` `mcpServers` object. */
+data class UiMcpServerConfig(
+    val name: String,
+    val transport: UiMcpTransport,
+    val url: String = "",
+    val headers: Map<String, String> = emptyMap(),
+    val command: String = "",
+    val args: List<String> = emptyList(),
+    val env: Map<String, String> = emptyMap(),
+)
+
+data class UiMcpServer(
+    val config: UiMcpServerConfig,
+    val scope: UiMcpScope,
+    val enabled: Boolean,
+    val status: UiMcpStatus,
+    val error: String? = null,
+    /** The tools it offers (its own names), while connected. */
+    val tools: List<String> = emptyList(),
+    val signedIn: Boolean = false,
+    /** A browser sign-in for it is waiting for the redirect. */
+    val signInPending: Boolean = false,
+    /** A project server with the same name hides an app-wide one; the hidden one is listed with this set. */
+    val shadowed: Boolean = false,
+)
+
+data class UiAgentSkill(
+    val name: String,
+    val description: String,
+    val scope: UiMcpScope,
+    /** The skill's SKILL.md. */
+    val path: String,
+    val enabled: Boolean,
+)
+
+data class UiAgentConnections(
+    /** Whether this build can connect to MCP servers at all. */
+    val mcpSupported: Boolean = false,
+    /** Whether local (command) servers can run here: desktop only. */
+    val stdioSupported: Boolean = false,
+    val servers: List<UiMcpServer> = emptyList(),
+    val skills: List<UiAgentSkill> = emptyList(),
+    /** The folders skills are read from, to show the user where to put them. */
+    val appSkillsDir: String? = null,
+    val projectSkillsDir: String? = null,
+    /** The config files servers are kept in. */
+    val appConfigFile: String? = null,
+    val projectConfigFile: String? = null,
+    /** A project is open, so per-project servers and skills can be added. */
+    val projectOpen: Boolean = false,
+)
 
 /**
  * The selected provider's usage against its limits, like Claude's usage meters. [reported] is false for a
