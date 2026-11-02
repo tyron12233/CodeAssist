@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.free_ai_ad_failed
@@ -145,11 +146,14 @@ internal fun FreeAiStrip(backend: IdeBackend, onManage: () -> Unit) {
 }
 
 @Composable
-internal fun SignInButtons(backend: IdeBackend) {
+internal fun SignInButtons(backend: IdeBackend, centered: Boolean = false) {
     val uriHandler = LocalUriHandler.current
     val scheme = MaterialTheme.colorScheme
     var waiting by remember { mutableStateOf(false) }
-    Text(stringResource(Res.string.free_ai_pitch), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    Text(
+        stringResource(Res.string.free_ai_pitch), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+        textAlign = if (centered) TextAlign.Center else null,
+    )
     val providers = backend.store.authProviders().ifEmpty { listOf("github") }
     providers.forEach { provider ->
         val label = when (provider) {
@@ -168,7 +172,10 @@ internal fun SignInButtons(backend: IdeBackend) {
         )
     }
     if (waiting) {
-        Text(stringResource(Res.string.free_ai_signing_in), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        Text(
+            stringResource(Res.string.free_ai_signing_in), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall,
+            textAlign = if (centered) TextAlign.Center else null,
+        )
     }
 }
 
@@ -271,8 +278,9 @@ internal fun FreeAiSignInPrompt(backend: IdeBackend, onUseOwnKey: () -> Unit, mo
         Text(
             stringResource(Res.string.free_ai_prompt_title),
             color = scheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
         )
-        SignInButtons(backend)
+        SignInButtons(backend, centered = true)
         Text(
             stringResource(Res.string.free_ai_use_own_key),
             color = scheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,

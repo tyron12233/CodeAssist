@@ -1216,12 +1216,14 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
         Text(
             stringResource(Res.string.chat_empty_title),
             modifier = Modifier.entranceSlideUp(90),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             if (configured) stringResource(Res.string.chat_empty_body) else stringResource(Res.string.chat_need_key),
             modifier = Modifier.entranceSlideUp(150),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
         if (!configured) {
