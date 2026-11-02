@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -374,17 +375,27 @@ private fun StorageToast(toast: String?, modifier: Modifier, onDone: () -> Unit)
 
 // ---- id → color / label / formatting ---------------------------------------------------------------
 
+/**
+ * Each category's colour on the bar and its legend dot. They must all differ, or two segments read as one: the
+ * theme tokens the ids name are not distinct (`run` and `success` are the same green, `accent` and
+ * `accentStrong` the same primary, `warning` and `gitModified` near-identical yellows), so the categories past the
+ * accent get fixed hues of their own, a lighter shade on a dark background.
+ */
 @Composable
-private fun storageColor(colorId: String): Color = when (colorId) {
-    "accent" -> MaterialTheme.colorScheme.primary
-    "accentStrong" -> MaterialTheme.colorScheme.primary
-    "info" -> Ide.colors.info
-    "run" -> Ide.colors.run
-    "success" -> Ide.colors.success
-    "warning" -> Ide.colors.warning
-    "gitModified" -> Ide.colors.gitModified
-    "error" -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.outline
+private fun storageColor(colorId: String): Color {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    fun hue(onDark: Long, onLight: Long) = Color(if (dark) onDark else onLight)
+    return when (colorId) {
+        "accent" -> MaterialTheme.colorScheme.primary                // dependencies
+        "info" -> Ide.colors.info                                    // indexes
+        "run" -> Ide.colors.run                                      // build output
+        "success" -> hue(0xFFB79CF2, 0xFF7E57C2)                     // previews: violet
+        "gitModified" -> Ide.colors.gitModified                      // language caches
+        "warning" -> hue(0xFF7FA7FF, 0xFF3367D6)                     // SDK: blue
+        "accentStrong" -> hue(0xFFF28DBE, 0xFFC2185B)                // project files: pink
+        "error" -> MaterialTheme.colorScheme.error                   // leftovers
+        else -> MaterialTheme.colorScheme.outline
+    }
 }
 
 @Composable
