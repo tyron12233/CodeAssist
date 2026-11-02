@@ -292,6 +292,9 @@ fun ModuleConfigScreen(
         val twoPane = maxWidth >= MODULES_TWO_PANE_BREAKPOINT
         // Two panes always show a module; a phone shows the list until one is picked.
         val shown = selected ?: if (twoPane) list.modules.firstOrNull()?.name else null
+        // The module two panes open by default is as much on screen as one the user picked, so it stays open when
+        // the window narrows to one pane (a phone rotated to portrait went back to the bare list).
+        LaunchedEffect(twoPane, shown) { if (twoPane && selected == null && shown != null) selected = shown }
         PlatformBackHandler(enabled = !twoPane && selected != null) { selected = null }
 
         val detail: @Composable (String, (() -> Unit)?) -> Unit = { name, back ->
