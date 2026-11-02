@@ -82,8 +82,9 @@ import dev.ide.ui.backend.UiActionEdits
 /**
  * [EditorService]: the editor-time language features for the active buffer. Runs on the shared serialized
  * engine dispatcher via the priority lanes ([BackendContext.interactive] for completion,
- * [BackendContext.background] for analysis/hints/etc.); a preemption surfaces as [AnalysisPreempted] for the
- * host to retry. Maps the framework results onto the neutral UI DTOs.
+ * [BackendContext.background] for analysis/hints/etc.). The production background lane waits out a preemption
+ * and re-runs the call, so the `EngineCanceledException` -> [AnalysisPreempted] mappings below only fire for a
+ * host whose lane surfaces preemption (tests' fakes). Maps the framework results onto the neutral UI DTOs.
  */
 /** Quiet period after a per-file pass before the project-wide sweep runs, and its preemption retry policy. */
 private const val PROJECT_ANALYSIS_DELAY_MS = 800L

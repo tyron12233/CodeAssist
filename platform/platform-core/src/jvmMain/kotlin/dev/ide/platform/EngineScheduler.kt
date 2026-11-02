@@ -12,7 +12,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -89,6 +92,8 @@ class EngineScheduler(
     @Volatile private var backgroundToken: CancelToken? = null
     @Volatile private var previewToken: CancelToken? = null
     private val interactivePending = AtomicInteger(0)
+    /** Mirrors [interactivePending] for [awaitInteractiveIdle]; the hot checks read the atomic. */
+    private val interactiveCount = MutableStateFlow(0)
     private val backgroundPending = AtomicInteger(0)
 
     /** Latency-critical engine work (completion): preempts both background and preview lanes. The block is
@@ -96,9 +101,16 @@ class EngineScheduler(
      *  worker frees at the suspension point and the block re-queues on it when the I/O completes. */
     suspend fun <T> interactive(label: String = "", block: suspend () -> T): T {
         observer?.on(EngineLane.INTERACTIVE, EnginePhase.QUEUED, label)
-        interactivePending.incrementAndGet()
+        interactiveCount.value = interactivePending.incrementAndGet()
         backgroundToken?.cancel()
         previewToken?.cancel()
+        // Released ON THE WORKER when the block ends, not after withContext hops back to the caller. The caller
+        // is usually the UI thread, and every background call already queued on the worker runs before that hop
+        // lands: with the count still raised, each of them saw a completion "waiting" and threw itself away.
+        val released = AtomicBoolean(false)
+        val release = {
+            if (released.compareAndSet(false, true)) interactiveCount.value = interactivePending.decrementAndGet()
+        }
         try {
             return withContext(dispatcher) {
                 // Never preempted by another lane, but a request the caller abandoned (the user typed on, so a
@@ -116,11 +128,21 @@ class EngineScheduler(
                 } finally {
                     link?.dispose()
                     editorWorkEndedAt = System.nanoTime()
+                    release()
                 }
             }
         } finally {
-            interactivePending.decrementAndGet()
+            release() // cancelled before the block was dispatched
         }
+    }
+
+    /**
+     * Suspends until no [interactive] call is queued or running. A background caller that was preempted waits
+     * on this instead of polling, so it re-queues the moment the completion is done and never spins while one
+     * is still in flight.
+     */
+    suspend fun awaitInteractiveIdle() {
+        interactiveCount.first { it == 0 }
     }
 
     /**

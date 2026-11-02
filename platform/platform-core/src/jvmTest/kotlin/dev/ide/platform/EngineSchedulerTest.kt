@@ -4,6 +4,8 @@
 package dev.ide.platform
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -82,6 +84,61 @@ class EngineSchedulerTest {
             daemon.join()
             val lowered = events.indexOf("lower:RUNNING")
             assertTrue(lowered > events.indexOf("pass5:DONE"), "the preview ran in the middle of the run: $events")
+        }
+    }
+
+    /**
+     * A background call queued behind a completion must RUN once the completion's block ends, even while the
+     * completion's caller (the UI thread, in the app) is too busy to resume. The pending count used to drop only
+     * after that hop back to the caller, so every call already queued on the worker saw a completion "waiting"
+     * and threw itself away.
+     */
+    @Test
+    fun backgroundQueuedBehindACompletionRunsWhileTheCallerIsBusy() {
+        runBlocking {
+            val ui = java.util.concurrent.Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+            try {
+                val phases = CopyOnWriteArrayList<String>()
+                val sched = EngineScheduler(observer = { _, phase, label -> phases += "$label:$phase" })
+                val bgQueued = CompletableDeferred<Unit>()
+                val completion = launch(ui) {
+                    sched.interactive("completion") {
+                        // Queue a pass behind this completion, then keep the caller's thread busy so the hop
+                        // back to it cannot land before the worker picks up the next call.
+                        launch(Dispatchers.Default) {
+                            bgQueued.complete(Unit)
+                            runCatching { sched.background("pass") { "ran" } }
+                        }
+                        kotlinx.coroutines.runBlocking { bgQueued.await() }
+                        Thread.sleep(30) // let the pass reach the worker's queue
+                        CoroutineScope(ui).launch { Thread.sleep(300) }
+                        Thread.sleep(30) // the blocker now holds the caller's thread
+                        "items"
+                    }
+                }
+                withTimeout(5_000) { completion.join() }
+                assertTrue("pass:DONE" in phases, "the queued pass should have run, saw $phases")
+                assertFalse("pass:PREEMPTED" in phases, "nothing was waiting once the completion ended: $phases")
+            } finally {
+                ui.close()
+            }
+        }
+    }
+
+    /** [EngineScheduler.awaitInteractiveIdle] returns at once when idle and otherwise when the completion ends. */
+    @Test
+    fun awaitInteractiveIdleWakesWhenTheCompletionEnds() {
+        runBlocking {
+            val sched = EngineScheduler()
+            withTimeout(1_000) { sched.awaitInteractiveIdle() }
+            val started = CompletableDeferred<Unit>()
+            val completion = launch(Dispatchers.Default) {
+                sched.interactive { started.complete(Unit); Thread.sleep(200) }
+            }
+            started.await()
+            val waited = timeMs { withTimeout(3_000) { sched.awaitInteractiveIdle() } }
+            completion.join()
+            assertTrue(waited in 120..1_000, "should wake when the completion ends (~200ms), waited ${waited}ms")
         }
     }
 

@@ -67,7 +67,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -254,7 +253,8 @@ class IdeServicesBackend(
             try {
                 return scheduler.background(label = label, block = block)
             } catch (_: EngineCanceledException) {
-                delay(BACKGROUND_RETRY_MS)
+                // Re-queue once the completion that preempted this is done, rather than polling while it runs.
+                scheduler.awaitInteractiveIdle()
             }
         }
     }
@@ -826,9 +826,6 @@ class IdeServicesBackend(
 
     private companion object {
         const val ANALYTICS_CONSENT_PREF = "analytics.consent"
-
-        /** How long a preempted background-lane call waits before running again (a completion's typical span). */
-        const val BACKGROUND_RETRY_MS = 30L
     }
 
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */
