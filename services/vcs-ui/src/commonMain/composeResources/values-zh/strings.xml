@@ -256,7 +256,7 @@
     <string name="vcs_msg_discard_conflicted">%1$s 存在合并冲突。请解决它，或中止合并以撤销全部更改。</string>
     <string name="vcs_msg_resolve_failed">无法将冲突标记为已解决</string>
     <string name="vcs_msg_commit_message_required">请输入提交信息</string>
-    <string name="vcs_msg_identity_required">提交前请在设置中填写你的姓名和邮箱</string>
+    <string name="vcs_msg_identity_required">请设置提交时使用的姓名和邮箱</string>
     <string name="vcs_msg_commit_failed">无法创建提交</string>
     <string name="vcs_msg_create_branch_failed">无法创建分支 %1$s</string>
     <string name="vcs_msg_checkout_failed">无法切换到 %1$s</string>

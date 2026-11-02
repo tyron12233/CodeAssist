@@ -546,6 +546,9 @@ class GitRepositoryTest {
                 // No identity is configured, and the user config lives in an empty app directory.
                 val failure = assertFailsWith<VcsException> { repository.commit("no identity") }
                 assertTrue(failure.message.orEmpty().isNotBlank())
+                // The Git panel recognizes this refusal by its key and opens the accounts screen, where the name and
+                // email are set (vcs-ui GitPanel.needsIdentity). Renaming the key would silently break that.
+                assertEquals("vcs_msg_identity_required", failure.text.message?.key)
             }
         }
     }

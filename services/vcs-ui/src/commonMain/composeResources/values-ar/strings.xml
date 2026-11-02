@@ -256,7 +256,7 @@
     <string name="vcs_msg_discard_conflicted">في %1$s تعارض دمج. احلّه، أو ألغِ الدمج للتراجع عن كل شيء.</string>
     <string name="vcs_msg_resolve_failed">تعذّر وضع علامة على التعارضات كمحلولة</string>
     <string name="vcs_msg_commit_message_required">أدخل رسالة الإيداع</string>
-    <string name="vcs_msg_identity_required">اضبط اسمك وبريدك الإلكتروني في الإعدادات قبل الإيداع</string>
+    <string name="vcs_msg_identity_required">اضبط الاسم والبريد الإلكتروني اللذين تُوقَّع بهما إيداعاتك</string>
     <string name="vcs_msg_commit_failed">تعذّر إنشاء الإيداع</string>
     <string name="vcs_msg_create_branch_failed">تعذّر إنشاء الفرع %1$s</string>
     <string name="vcs_msg_checkout_failed">تعذّر التبديل إلى %1$s</string>

@@ -73,7 +73,7 @@ enum class VcsMessage(val english: String) {
     DISCARD_CONFLICTED("%1\$s has a merge conflict. Resolve it, or abort the merge to undo everything."),
     RESOLVE_FAILED("Could not mark the conflicts resolved"),
     COMMIT_MESSAGE_REQUIRED("Enter a commit message"),
-    IDENTITY_REQUIRED("Set your name and email in Settings before committing"),
+    IDENTITY_REQUIRED("Set the name and email your commits are signed with"),
     COMMIT_FAILED("Could not create the commit"),
     CREATE_BRANCH_FAILED("Could not create branch %1\$s"),
     CHECKOUT_FAILED("Could not switch to %1\$s"),

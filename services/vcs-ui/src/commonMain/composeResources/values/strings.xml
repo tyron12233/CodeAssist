@@ -259,7 +259,7 @@
     <string name="vcs_msg_discard_conflicted">%1$s has a merge conflict. Resolve it, or abort the merge to undo everything.</string>
     <string name="vcs_msg_resolve_failed">Could not mark the conflicts resolved</string>
     <string name="vcs_msg_commit_message_required">Enter a commit message</string>
-    <string name="vcs_msg_identity_required">Set your name and email in Settings before committing</string>
+    <string name="vcs_msg_identity_required">Set the name and email your commits are signed with</string>
     <string name="vcs_msg_commit_failed">Could not create the commit</string>
     <string name="vcs_msg_create_branch_failed">Could not create branch %1$s</string>
     <string name="vcs_msg_checkout_failed">Could not switch to %1$s</string>

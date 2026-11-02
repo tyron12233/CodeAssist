@@ -149,7 +149,9 @@ internal fun GitPanel(ctx: ToolWindowContext) {
         scope.launch {
             val result = block()
             feedback.show(result)
-            if (result.authRequired) ctx.openScreen(VcsService.SCREEN_ACCOUNTS)
+            // Both are fixed on the accounts screen: sign-in, and the name and email a commit is signed with. The
+            // identity refusal said "in Settings", which sent people looking for a page that does not have it.
+            if (result.authRequired || needsIdentity(result)) ctx.openScreen(VcsService.SCREEN_ACCOUNTS)
         }
     }
 
@@ -196,6 +198,10 @@ internal fun GitPanel(ctx: ToolWindowContext) {
         }
     }
 }
+
+/** Whether [result] is a commit refused for want of a name and email (the backend's `IDENTITY_REQUIRED`). */
+internal fun needsIdentity(result: UiVcsResult): Boolean =
+    !result.ok && result.text?.key == "vcs_msg_identity_required"
 
 // ---- header ------------------------------------------------------------------------------------
 
