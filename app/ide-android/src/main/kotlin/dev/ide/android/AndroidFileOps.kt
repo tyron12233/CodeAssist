@@ -52,7 +52,8 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
         }, "apk-install-check").start()
     }
 
-    /** Copy [uri]'s bytes into a new file under [targetDir]; returns the new path or null. */
+    /** Copy [uri]'s bytes into a new file under [targetDir]; returns the new path or null. Blocking provider I/O
+     *  (a cloud document can take seconds), so call it off the main thread. */
     fun importUri(uri: Uri, targetDir: String, backend: IdeBackend): String? = runCatching {
         val name = queryDisplayName(uri) ?: "imported-${System.currentTimeMillis()}"
         val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
@@ -180,11 +181,11 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
     }.getOrElse { Toast.makeText(activity, "Can't share this file", Toast.LENGTH_SHORT).show() }
 
     /** Copy [src]'s bytes into the user-chosen document [uri] (the "Save As"/export destination). */
-    fun exportTo(uri: Uri, src: String) = runCatching {
+    /** Copy [src] into the user-picked [uri]. Blocking I/O: call off the main thread; the caller reports the result. */
+    fun exportTo(uri: Uri, src: String): Boolean = runCatching {
         activity.contentResolver.openOutputStream(uri)
-            ?.use { out -> File(src).inputStream().use { it.copyTo(out) } }
-        Toast.makeText(activity, "Exported ${File(src).name}", Toast.LENGTH_SHORT).show()
-    }.getOrElse { Toast.makeText(activity, "Couldn't export file", Toast.LENGTH_SHORT).show() }
+            ?.use { out -> File(src).inputStream().use { it.copyTo(out) } } != null
+    }.getOrDefault(false)
 
     /**
      * Open the system Files app on CodeAssist's storage (served by `ProjectsDocumentsProvider`) so the user

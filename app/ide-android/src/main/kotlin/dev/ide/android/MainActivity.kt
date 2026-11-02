@@ -116,22 +116,34 @@ class MainActivity : ComponentActivity() {
 
             // POST_NOTIFICATIONS (Android 13+/API 33) is asked for at the FIRST build, not here at launch, so the
             // request lands in context — see BuildNotificationGate (:ide-ui). Nothing to request in this activity.
+            // Activity results arrive on the main thread, but reading a picked document is I/O against whatever
+            // provider owns it, and a cloud one (Drive, a slow SD card) can take seconds: importUri on main showed
+            // up in ANR reports. Every content-resolver read or write below runs on IO and calls back on main.
+            val hostScope = rememberCoroutineScope()
             var pendingTarget by remember { mutableStateOf<String?>(null) }
             var pendingCallback by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
             val importLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
                     val b = backend
                     val target = pendingTarget
-                    val created =
-                        if (b != null && target != null) uris.mapNotNull { fileOps.importUri(it, target, b) } else emptyList()
-                    pendingCallback?.invoke(created)
+                    val cb = pendingCallback
                     pendingTarget = null; pendingCallback = null
+                    if (b == null || target == null || uris.isEmpty()) { cb?.invoke(emptyList()); return@rememberLauncherForActivityResult }
+                    hostScope.launch {
+                        val created = withContext(Dispatchers.IO) { uris.mapNotNull { fileOps.importUri(it, target, b) } }
+                        cb?.invoke(created)
+                    }
                 }
             var pendingPick by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             val pickLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    pendingPick?.invoke(uri?.let { fileOps.copyUriToCache(it) })
+                    val cb = pendingPick
                     pendingPick = null
+                    if (uri == null) { cb?.invoke(null); return@rememberLauncherForActivityResult }
+                    hostScope.launch {
+                        val path = withContext(Dispatchers.IO) { fileOps.copyUriToCache(uri) }
+                        cb?.invoke(path)
+                    }
                 }
             // Camera capture for the AI chat: the camera app writes into a FileProvider URI we hand it.
             var pendingPhoto by remember { mutableStateOf<Pair<File, (String?) -> Unit>?>(null) }
@@ -144,7 +156,6 @@ class MainActivity : ComponentActivity() {
                 }
             // Directory picker (Gradle import): SAF hands back a content:// tree, so copy it into local
             // storage off the main thread and return that path — the copy can be large, hence the coroutine.
-            val hostScope = rememberCoroutineScope()
             var pendingPickDir by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             val pickDirLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -163,7 +174,14 @@ class MainActivity : ComponentActivity() {
                 rememberLauncherForActivityResult(ExportDocumentContract()) { uri ->
                     val src = pendingExport
                     pendingExport = null
-                    if (uri != null && src != null) fileOps.exportTo(uri, src)
+                    if (uri != null && src != null) hostScope.launch {
+                        val ok = withContext(Dispatchers.IO) { fileOps.exportTo(uri, src) }
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (ok) "Exported ${File(src).name}" else "Couldn't export file",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 }
             val fileActions = remember {
                 object : FileActions {
@@ -215,7 +233,9 @@ class MainActivity : ComponentActivity() {
                     override val canPasteImage: Boolean = true
                     override fun hasClipboardImage(): Boolean = fileOps.clipboardHasImage()
                     override fun pasteImage(onPasted: (String?) -> Unit) {
-                        onPasted(fileOps.clipboardImageUri()?.let { fileOps.copyUriToCache(it) })
+                        // The clipboard is read here on main; copying the image out of its provider is not.
+                        val uri = fileOps.clipboardImageUri() ?: return onPasted(null)
+                        hostScope.launch { onPasted(withContext(Dispatchers.IO) { fileOps.copyUriToCache(uri) }) }
                     }
 
                     override val canPickDirectory: Boolean = true
@@ -294,16 +314,20 @@ class MainActivity : ComponentActivity() {
                 val b = backend
                 val uri = inbound.value
                 if (b != null && uri != null) {
-                    val name = fileOps.queryDisplayName(uri) ?: ""
+                    // Provider queries, the tree walk and the copy are all I/O, so none of them run on main.
+                    val (name, type) = withContext(Dispatchers.IO) {
+                        (fileOps.queryDisplayName(uri) ?: "") to runCatching { contentResolver.getType(uri) }.getOrNull()
+                    }
                     val archive = name.endsWith(".zip", ignoreCase = true) ||
-                        contentResolver.getType(uri) in setOf("application/zip", "application/x-zip-compressed")
+                        type in setOf("application/zip", "application/x-zip-compressed")
                     if (name.endsWith(".${CaprojFormat.EXTENSION}", ignoreCase = true) || archive) {
                         val path = withContext(Dispatchers.IO) { fileOps.copyInboundToCache(uri, name) }
                         if (path != null) importPackagePath = path
                         else Toast.makeText(this@MainActivity, "Couldn't open the project file", Toast.LENGTH_SHORT).show()
                     } else {
-                        val target = firstSourceRoot(b.files.fileTree())
-                        val path = if (target != null) fileOps.importUri(uri, target, b) else null
+                        val path = withContext(Dispatchers.IO) {
+                            firstSourceRoot(b.files.fileTree())?.let { target -> fileOps.importUri(uri, target, b) }
+                        }
                         Toast.makeText(
                             this@MainActivity,
                             if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
