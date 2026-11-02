@@ -1838,6 +1838,15 @@ interface AgentService {
     /** A pending write-permission prompt in ASK_EACH mode, or null. */
     val permissionRequest: StateFlow<UiAgentPermissionRequest?>
 
+    /** Multiple-choice questions the agent is waiting on (its `ask_user` tool), or null. */
+    val questionRequest: StateFlow<UiAgentQuestionRequest?> get() = QUESTION_NONE
+
+    /**
+     * Answer the pending [questionRequest]: per question, the chosen option labels plus any text typed for "Other".
+     * Null dismisses the questions; the agent is told and carries on with defaults.
+     */
+    fun answerQuestion(id: Int, answers: List<List<String>>?) {}
+
     /** Providers, the current selection/model, whether a key is configured, and the permission mode. */
     fun config(): UiAgentConfig
 
@@ -2033,6 +2042,21 @@ enum class UiUsageMeterKind {
 }
 
 private val USAGE_LIMITS_NONE: StateFlow<UiAgentUsageLimits?> = MutableStateFlow(null)
+
+private val QUESTION_NONE: StateFlow<UiAgentQuestionRequest?> = MutableStateFlow(null)
+
+/** Questions the agent asked together and is waiting on; answered with [AgentService.answerQuestion]. */
+data class UiAgentQuestionRequest(val id: Int, val questions: List<UiAgentQuestion>)
+
+data class UiAgentQuestion(
+    val question: String,
+    /** A very short label for the question, drawn as a chip. */
+    val header: String,
+    val options: List<UiAgentQuestionOption>,
+    val multiSelect: Boolean,
+)
+
+data class UiAgentQuestionOption(val label: String, val description: String = "")
 
 /**
  * The CodeAssist Free AI wallet as the chat shows it. One point is $0.001 of model usage. Points are spent from

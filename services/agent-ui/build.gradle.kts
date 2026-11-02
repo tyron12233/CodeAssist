@@ -40,6 +40,8 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources) // the chat_* strings live in this module's composeResources/
             implementation(libs.kotlinx.coroutines.core)
+            // A tool call's JSON arguments, shown as readable key/value lines when a tool row is opened.
+            implementation(project(":platform-json"))
         }
 
         // Off-screen rendering, for eyeballing the chat without launching the app (see the snapshot test).

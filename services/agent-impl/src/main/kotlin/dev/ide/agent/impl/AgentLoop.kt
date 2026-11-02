@@ -70,6 +70,18 @@ class AgentLoop(
         /** A provider asking for longer than this is reported rather than waited out. */
         const val MAX_RATE_LIMIT_WAIT_MS = 120_000L
 
+        /** How much of a tool's result the transcript keeps for the user to read (the model gets all of it). */
+        const val MAX_SHOWN_OUTPUT = 20_000
+
+        /** How many times one turn may go again after its reply was cut off at the output limit. */
+        const val MAX_TRUNCATION_RETRIES = 1
+
+        /** Told to the model when its reply was cut off at the output limit. */
+        const val TRUNCATED = "Your previous reply hit the output token limit and was cut off, so the tool call " +
+            "it was writing was lost and did not run. Do it again in smaller pieces: write a large file as a first " +
+            "part with write_file or create_file, then add the rest with edit_file calls of a few hundred lines " +
+            "each. Keep explanations short."
+
         /** How many times one turn may lower its output cap to what the account's credit covers. */
         const val MAX_CREDIT_RETRIES = 2
 
@@ -133,6 +145,7 @@ class AgentLoop(
         // Answered before the new message goes in, so an interrupted call's result sits right after the call.
         pairHistory()
         history += if (images.isEmpty()) LlmMessage.user(userText) else LlmMessage.user(userText, images)
+        appendSessionContext()
         sink.emit(AgentEvent.UserMessage(userText))
         creditCap = null
         runTurns(sink)
@@ -155,13 +168,14 @@ class AgentLoop(
         var iteration = 0
         var rateLimitWaits = 0
         var creditRetries = 0
+        var truncationRetries = 0
         // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
         var total = TokenUsage()
         while (iteration++ < maxIterations) {
             val request = LlmRequest(
                 model = model,
                 system = systemPrompt(),
-                messages = withSessionContext(compactor.compact(history)),
+                messages = compactor.compact(history),
                 tools = tools.specs(),
                 maxTokens = requestMaxTokens,
                 thinking = true,
@@ -203,6 +217,24 @@ class AgentLoop(
 
             history += LlmMessage.assistant(turn.assistantParts())
             val calls = turn.toolCalls()
+            if (calls.isEmpty() && turn.stopReason == StopReason.MAX_TOKENS) {
+                // The reply ran out of output tokens. Usually that is a tool call cut off mid-arguments (a whole
+                // file written in one go), which the provider drops, so ending the turn here would leave the user
+                // with "I'm writing the file now" and nothing written. Say so and let the model go again, smaller.
+                if (truncationRetries < MAX_TRUNCATION_RETRIES) {
+                    truncationRetries++
+                    history += LlmMessage.user(TRUNCATED)
+                    continue
+                }
+                sink.emit(
+                    AgentEvent.Error(
+                        "The reply hit the output limit before it finished, so its last step did not run. " +
+                            "Ask for a smaller change, or for the file to be written in parts.",
+                        null,
+                    ),
+                )
+                return
+            }
             if (calls.isEmpty()) {
                 sink.emit(AgentEvent.TurnCompleted(turn.stopReason, total))
                 return
@@ -334,14 +366,22 @@ class AgentLoop(
      * never stored in [history], so it stays exactly one message long and always sits after everything the
      * provider has already cached.
      */
-    private fun withSessionContext(messages: List<LlmMessage>): List<LlmMessage> {
-        val context = sessionContext()?.takeIf { it.isNotBlank() } ?: return messages
-        // An operator instruction has to follow a user turn (a tool-result run counts as one), so a history
-        // left mid-turn by a cancelled run gets no session context rather than a rejected request.
-        val last = messages.lastOrNull()?.role ?: return messages
-        if (last != LlmRole.USER && last != LlmRole.TOOL) return messages
-        return messages + LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(context)))
+    /**
+     * Writes the session context (permission mode, project) into the history after the user's message, when it
+     * differs from the last one written. Append-only on purpose: it used to be added to every request and dropped
+     * from the next, and a note that moves is an edit to earlier history, which invalidates the prompt cache (and,
+     * on current models, the earlier reasoning) from that point. Haiku 5.5 re-wrote the whole conversation to the
+     * cache on every step that way. Written once and left in place, it is part of a prefix that only grows.
+     */
+    private fun appendSessionContext() {
+        val context = sessionContext()?.takeIf { it.isNotBlank() } ?: return
+        if (context == lastContext()) return
+        history += LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(context)))
     }
+
+    /** The session context last written into the history, if any. */
+    private fun lastContext(): String? = history.lastOrNull { it.role == LlmRole.SYSTEM }
+        ?.content?.filterIsInstance<ContentPart.Text>()?.joinToString("\n") { it.text }
 
     /**
      * Runs the turn's tool calls, preserving their order in the returned results. Read-only calls run
@@ -378,7 +418,7 @@ class AgentLoop(
         }
 
         val summary = runCatching { tool.summarize(args) }.getOrDefault(call.name)
-        sink.emit(AgentEvent.ToolCallStarted(call.id, call.name, summary))
+        sink.emit(AgentEvent.ToolCallStarted(call.id, call.name, summary, input = call.arguments))
 
         if (tool.mutating) {
             // Ask with the change itself in hand when the tool can say what it would do, so the prompt shows a
@@ -409,7 +449,12 @@ class AgentLoop(
         }
         changed?.takeIf { it.isNotEmpty() }?.let { sink.emit(AgentEvent.FilesChanged(call.id, it)) }
         result.event?.let { sink.emit(it) }
-        sink.emit(AgentEvent.ToolCallFinished(call.id, ok = !result.isError, resultSummary = brief(result.content)))
+        sink.emit(
+            AgentEvent.ToolCallFinished(
+                call.id, ok = !result.isError, resultSummary = brief(result.content),
+                output = result.content.take(MAX_SHOWN_OUTPUT), images = result.images,
+            ),
+        )
         return LlmMessage.toolResult(call.id, result.content, result.isError, result.images)
     }
 

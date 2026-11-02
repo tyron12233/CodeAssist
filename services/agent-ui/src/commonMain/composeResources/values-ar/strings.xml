@@ -173,4 +173,16 @@
     <string name="chat_status_waiting">في الانتظار…</string>
     <string name="chat_status_seconds">%1$d ث</string>
     <string name="chat_status_minutes">%1$d د %2$d ث</string>
+    <string name="chat_question_other">غير ذلك</string>
+    <string name="chat_question_other_hint">اكتب إجابتك</string>
+    <string name="chat_question_submit">إرسال</string>
+    <string name="chat_question_skip">تخطٍّ</string>
+    <string name="chat_status_answer">بانتظار إجابتك</string>
+    <string name="chat_question_next">التالي</string>
+    <string name="chat_question_page">%1$d من %2$d</string>
+    <string name="chat_question_previous">السؤال السابق</string>
+    <string name="chat_question_next_page">السؤال التالي</string>
+    <string name="chat_tool_input">المدخلات</string>
+    <string name="chat_tool_result">النتيجة</string>
+    <string name="chat_tool_image">الصورة التي رآها الوكيل</string>
 </resources>

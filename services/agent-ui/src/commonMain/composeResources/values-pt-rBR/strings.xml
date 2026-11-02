@@ -165,4 +165,16 @@
     <string name="chat_status_waiting">Aguardando…</string>
     <string name="chat_status_seconds">%1$d s</string>
     <string name="chat_status_minutes">%1$d min %2$d s</string>
+    <string name="chat_question_other">Outra</string>
+    <string name="chat_question_other_hint">Digite sua resposta</string>
+    <string name="chat_question_submit">Enviar</string>
+    <string name="chat_question_skip">Pular</string>
+    <string name="chat_status_answer">Aguardando sua resposta</string>
+    <string name="chat_question_next">Próxima</string>
+    <string name="chat_question_page">%1$d de %2$d</string>
+    <string name="chat_question_previous">Pergunta anterior</string>
+    <string name="chat_question_next_page">Próxima pergunta</string>
+    <string name="chat_tool_input">Entrada</string>
+    <string name="chat_tool_result">Resultado</string>
+    <string name="chat_tool_image">Imagem que o agente viu</string>
 </resources>

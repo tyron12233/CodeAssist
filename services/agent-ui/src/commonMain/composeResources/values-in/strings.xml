@@ -161,4 +161,16 @@
     <string name="chat_status_waiting">Menunggu…</string>
     <string name="chat_status_seconds">%1$d dtk</string>
     <string name="chat_status_minutes">%1$d mnt %2$d dtk</string>
+    <string name="chat_question_other">Lainnya</string>
+    <string name="chat_question_other_hint">Ketik jawaban Anda</string>
+    <string name="chat_question_submit">Kirim</string>
+    <string name="chat_question_skip">Lewati</string>
+    <string name="chat_status_answer">Menunggu jawaban Anda</string>
+    <string name="chat_question_next">Berikutnya</string>
+    <string name="chat_question_page">%1$d dari %2$d</string>
+    <string name="chat_question_previous">Pertanyaan sebelumnya</string>
+    <string name="chat_question_next_page">Pertanyaan berikutnya</string>
+    <string name="chat_tool_input">Masukan</string>
+    <string name="chat_tool_result">Hasil</string>
+    <string name="chat_tool_image">Gambar yang dilihat agen</string>
 </resources>

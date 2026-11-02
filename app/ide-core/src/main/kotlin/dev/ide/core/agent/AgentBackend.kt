@@ -177,7 +177,43 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
     }
 
-    private val tools = SimpleToolRegistry(builtinTools(checkpoints) + ftpControlTool)
+    // --- ask_user: the agent's multiple-choice questions, answered in the chat ---
+
+    private val _questionRequest = MutableStateFlow<dev.ide.ui.backend.UiAgentQuestionRequest?>(null)
+    override val questionRequest: StateFlow<dev.ide.ui.backend.UiAgentQuestionRequest?> get() = _questionRequest.asStateFlow()
+
+    @Volatile
+    private var pendingQuestion: CompletableDeferred<List<List<String>>?>? = null
+    private val questionIds = AtomicInteger()
+
+    /** Waits like the permission gate: Stop cancels the turn, and the `finally` takes the card down. */
+    private val askUser = dev.ide.agent.impl.askUserTool { questions ->
+        val deferred = CompletableDeferred<List<List<String>>?>()
+        pendingQuestion = deferred
+        _questionRequest.value = dev.ide.ui.backend.UiAgentQuestionRequest(
+            questionIds.incrementAndGet(),
+            questions.map { q ->
+                dev.ide.ui.backend.UiAgentQuestion(
+                    q.question, q.header,
+                    q.options.map { dev.ide.ui.backend.UiAgentQuestionOption(it.label, it.description) },
+                    q.multiSelect,
+                )
+            },
+        )
+        try {
+            deferred.await()
+        } finally {
+            _questionRequest.value = null
+            pendingQuestion = null
+        }
+    }
+
+    override fun answerQuestion(id: Int, answers: List<List<String>>?) {
+        if (_questionRequest.value?.id == id) pendingQuestion?.complete(answers)
+    }
+
+    // ask_user is the chat's alone: an MCP client has no card to answer it with.
+    private val tools = SimpleToolRegistry(builtinTools(checkpoints) + ftpControlTool + askUser)
 
     /** The MCP server's tools write straight to the workspace: an external client's edits are not a chat turn,
      *  and recording them into one would let that turn's Undo revert someone else's work. */
@@ -706,6 +742,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         pendingNotes.clear()
         sessionAllowAll = false
         _permissionRequest.value = null
+        _questionRequest.value = null
         _chatState.value = UiAgentChatState()
     }
 
@@ -739,7 +776,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
         val model = cfg.model.ifBlank { provider.defaultModel }
         val maxIterations = prefInt("maxIterations") ?: DEFAULT_MAX_ITERATIONS
-        val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
+        // The free tier's proxy allows 16K output per step (it clamps anything larger); writing a file takes the
+        // whole file as one tool call's arguments, which 8K cut off mid-call.
+        val maxTokens = prefInt("maxTokens") ?: if (cfg.selectedId == FREE_AI) FREE_AI_MAX_TOKENS else DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
         val webSearch = prefBool("webSearch", default = true)
         // "default" (or unset) leaves the field off the request, so each provider keeps its own default.
@@ -925,7 +964,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             is AgentEvent.AssistantThinkingDelta -> mutateAssistant(assistantId) { it.withThinking(event.text) }
             is AgentEvent.ToolCallStarted -> mutateAssistant(assistantId) {
                 it.copy(
-                    toolCalls = it.toolCalls + UiAgentToolCall(event.id, event.displaySummary, UiAgentToolStatus.RUNNING),
+                    toolCalls = it.toolCalls + UiAgentToolCall(
+                        event.id, event.displaySummary, UiAgentToolStatus.RUNNING, input = event.input,
+                    ),
                     segments = it.segments.appendTool(event.id),
                 )
             }
@@ -935,6 +976,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                         it.copy(
                             status = if (event.ok) UiAgentToolStatus.OK else UiAgentToolStatus.ERROR,
                             detail = event.resultSummary,
+                            output = event.output,
+                            images = event.images.map { img -> dev.ide.ui.backend.UiAgentToolImage(img.mediaType, img.data) },
                         )
                     } else {
                         it
@@ -1311,6 +1354,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val FREE_AI = CodeAssistFreeProvider.ID
         /** Stands in for the free tier's key; the provider ignores it and sends the session's access token. */
         private const val FREE_AI_SESSION_KEY = "codeassist-session"
+        /** Output tokens per step on the free tier: the proxy's own cap. */
+        private const val FREE_AI_MAX_TOKENS = 16_000
         /** Set once [adoptFreeAiAsDefault] has run on this install. */
         private const val FREE_AI_DEFAULT_ADOPTED = "freeAiDefaultAdopted"
         private const val OPENROUTER = "openrouter"

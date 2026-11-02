@@ -58,6 +58,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import dev.ide.agent.ui.generated.resources.chat_tool_result
+import dev.ide.agent.ui.generated.resources.chat_tool_input
+import dev.ide.agent.ui.generated.resources.chat_tool_image
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -128,6 +137,7 @@ import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.chat_status_answer
 import dev.ide.agent.ui.generated.resources.chat_status_minutes
 import dev.ide.agent.ui.generated.resources.chat_status_seconds
 import dev.ide.agent.ui.generated.resources.chat_status_waiting
@@ -208,6 +218,8 @@ fun ChatDrawer(
     var showHistory by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
     val usageLimits by backend.agent.usageLimits.collectAsState()
+    // The agent's ask_user questions, answered in a card over the composer while the turn waits.
+    val question by backend.agent.questionRequest.collectAsState()
     // CodeAssist Free AI selected with nobody signed in: the chat prompts for a sign-in instead of a key. For the
     // free tier "configured" IS "signed in", so this reads the same snapshot as the rest of the drawer.
     val freeAi by backend.agent.freeAi.collectAsState()
@@ -340,10 +352,11 @@ fun ChatDrawer(
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
                         )
                     }
+                    if (chat.busy) AgentBusyLine(chat.messages, awaitingAnswer = question != null)
+                    question?.let { q -> QuestionCard(q) { answers -> backend.agent.answerQuestion(q.id, answers) } }
                     if (cfg.selectedProvider == FREE_AI_PROVIDER) {
                         FreeAiStrip(backend, onManage = { showProviders = true })
                     }
-                    if (chat.busy) AgentBusyLine(chat.messages)
                     UsageWarningStrip(usageLimits, onOpen = { showUsage = true })
                     Suggestions(
                         backend = backend,
@@ -929,12 +942,13 @@ private fun activityOf(steps: List<Step>): Activity {
  * stall. The stop control is the send button beside it.
  */
 @Composable
-private fun AgentBusyLine(messages: List<UiAgentMessage>) {
+private fun AgentBusyLine(messages: List<UiAgentMessage>, awaitingAnswer: Boolean = false) {
     val msg = messages.lastOrNull { it.role == UiAgentRole.ASSISTANT && it.streaming } ?: return
     val steps = remember(msg.segments, msg.toolCalls, msg.text, msg.thinking) { stepsOf(msg) }
     val activity = activityOf(steps)
     val running = msg.toolCalls.lastOrNull { it.status == UiAgentToolStatus.RUNNING }
     val label = when {
+        awaitingAnswer -> stringResource(Res.string.chat_status_answer)
         msg.waitUntilMs != null -> stringResource(Res.string.chat_status_waiting)
         activity == Activity.RUNNING_TOOL && running != null ->
             stringResource(Res.string.chat_status_running, running.title.lineSequence().first().take(60))
@@ -1017,10 +1031,8 @@ private fun AssistantMessage(msg: UiAgentMessage) {
         val activity = activityOf(steps)
         // A blinking caret while the answer is still streaming in.
         if (msg.streaming && activity == Activity.WRITING) TypingCaret()
-        // Something live at the end of a running turn that has nothing visible streaming: before the first token,
-        // between a finished batch of tools and the model's next step, and while the model reasons without showing
-        // it (current models stream empty thinking blocks by default), all of which otherwise look stalled.
-        if (msg.streaming && msg.waitUntilMs == null && activity == Activity.THINKING) ThinkingStep(thinking = "", live = true)
+        // What the agent is doing between visible steps is shown once, by the status line over the composer
+        // (AgentBusyLine), not by a second live row here.
         // Copy the finished answer.
         DisableSelection {
             if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)
@@ -1194,7 +1206,8 @@ private fun ThinkingStep(thinking: String, live: Boolean) {
 private fun ToolCallRow(call: UiAgentToolCall) {
     var open by rememberSaveable(call.id) { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
-    val canOpen = call.detail.isNotBlank()
+    val shownInput = remember(call.input) { prettyArguments(call.input) }
+    val canOpen = call.detail.isNotBlank() || call.output.isNotBlank() || shownInput.isNotBlank() || call.images.isNotEmpty()
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
@@ -1211,22 +1224,104 @@ private fun ToolCallRow(call: UiAgentToolCall) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             if (canOpen && !open) {
+                // What the agent was shown, at a glance: a thumbnail of its image, else the result's first line.
+                val thumb = call.images.firstOrNull()?.let { img -> remember(img.base64) { decodeBase64Image(img.base64) } }
+                if (thumb != null) {
+                    Image(
+                        thumb, stringResource(Res.string.chat_tool_image),
+                        Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else if (call.detail.isNotBlank()) {
+                    Text(
+                        call.detail,
+                        Modifier.widthIn(max = 160.dp),
+                        style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (canOpen) {
+                val rotation by animateFloatAsState(if (open) 0f else -90f, label = "toolChevron")
+                Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(rotation), tint = scheme.onSurfaceVariant)
+            }
+        }
+        if (open) ToolCallDetails(call, shownInput)
+        if (call.changes.isNotEmpty()) Box(Modifier.padding(start = 22.dp, top = 2.dp)) { FileChangesList(call.changes) }
+    }
+}
+
+/** An opened tool call: the images the agent was shown, what it asked the tool for, and what came back. */
+@Composable
+private fun ToolCallDetails(call: UiAgentToolCall, shownInput: String) {
+    val scheme = MaterialTheme.colorScheme
+    var zoomed by remember { mutableStateOf<ImageBitmap?>(null) }
+    Column(Modifier.fillMaxWidth().padding(start = 22.dp, top = 2.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        call.images.forEach { img ->
+            val bitmap = remember(img.base64) { decodeBase64Image(img.base64) } ?: return@forEach
+            Image(
+                bitmap, stringResource(Res.string.chat_tool_image),
+                Modifier.fillMaxWidth().heightIn(max = 420.dp).clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .clickable { zoomed = bitmap },
+                contentScale = ContentScale.Fit,
+            )
+        }
+        if (shownInput.isNotBlank()) ToolSection(stringResource(Res.string.chat_tool_input), shownInput, maxHeight = 180)
+        val result = call.output.ifBlank { call.detail }
+        if (result.isNotBlank()) ToolSection(stringResource(Res.string.chat_tool_result), result, maxHeight = 320)
+    }
+    zoomed?.let { bitmap ->
+        Dialog(onDismissRequest = { zoomed = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black).clickable { zoomed = null },
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(bitmap, stringResource(Res.string.chat_tool_image), Modifier.fillMaxSize().padding(12.dp), contentScale = ContentScale.Fit)
+            }
+        }
+    }
+}
+
+/** A labelled, selectable, scrolling block of monospace text. */
+@Composable
+private fun ToolSection(label: String, text: String, maxHeight: Int) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Box(
+            Modifier.fillMaxWidth().heightIn(max = maxHeight.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(scheme.surfaceContainerHigh)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            SelectionContainer {
                 Text(
-                    call.detail,
-                    Modifier.widthIn(max = 160.dp),
-                    style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    text, color = scheme.onSurface,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 )
             }
         }
-        if (open) {
-            Text(
-                call.detail,
-                Modifier.padding(start = 24.dp, bottom = 4.dp),
-                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
-            )
+    }
+}
+
+/**
+ * A tool call's JSON arguments as `key: value` lines, the way a person would read them; long string values (a
+ * file being written) keep their own line breaks. Empty for a call with no arguments. Falls back to the raw text
+ * when it is not a flat JSON object.
+ */
+internal fun prettyArguments(json: String): String {
+    val trimmed = json.trim()
+    if (trimmed.isEmpty() || trimmed == "{}") return ""
+    val obj = dev.ide.platform.JsonReader.obj(dev.ide.platform.JsonReader.parseOrNull(trimmed)) ?: return trimmed
+    return obj.entries.joinToString("\n") { (key, value) ->
+        val shown = when (value) {
+            is String -> value
+            null -> "null"
+            else -> value.toString()
         }
-        if (call.changes.isNotEmpty()) Box(Modifier.padding(start = 22.dp, top = 2.dp)) { FileChangesList(call.changes) }
+        if ('\n' in shown) "$key:\n$shown" else "$key: $shown"
     }
 }
 

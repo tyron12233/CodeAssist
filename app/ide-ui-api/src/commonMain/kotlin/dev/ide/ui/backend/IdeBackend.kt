@@ -754,7 +754,16 @@ data class UiAgentToolCall(
     val status: UiAgentToolStatus,
     val detail: String = "",
     val changes: List<UiAgentFileChange> = emptyList(),
+    /** What the agent asked the tool for: the call's arguments as sent (JSON). */
+    val input: String = "",
+    /** What the tool gave back, as the agent read it (capped for size). */
+    val output: String = "",
+    /** What the agent was shown: a preview screenshot, an image it opened. */
+    val images: List<UiAgentToolImage> = emptyList(),
 )
+
+/** An image a tool showed the agent, base64-encoded. */
+data class UiAgentToolImage(val mediaType: String, val base64: String)
 
 /**
  * One file's change, before and after (null = the file did not exist on that side). The UI renders the diff

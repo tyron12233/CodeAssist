@@ -89,3 +89,46 @@ class StrictToolCapTest {
         }
     }
 }
+
+/**
+ * The per-step session context moves to the newest turn on every step. A cache breakpoint on it cached a prefix the
+ * next step no longer had, so Haiku 5.5 re-wrote the whole conversation to the cache on every step.
+ */
+class SessionContextCachingTest {
+    private class Recording : LlmTransport {
+        val bodies = mutableListOf<String>()
+        override fun sse(request: SseRequest): Flow<String> {
+            bodies += request.jsonBody
+            return flowOf()
+        }
+    }
+
+    private fun send(model: String): kotlinx.serialization.json.JsonArray = runBlocking {
+        val t = Recording()
+        val messages = listOf(
+            LlmMessage.user("make it blue"),
+            dev.ide.agent.LlmMessage(dev.ide.agent.LlmRole.SYSTEM, listOf(dev.ide.agent.ContentPart.Text("Permission mode: ask."))),
+        )
+        AnthropicProvider(t).client(ProviderConfig("k")).chat(LlmRequest(model, "s", messages)).toList()
+        AgentJson.parseToJsonElement(t.bodies.single()).asObj()!!["messages"].asArr()!!
+    }
+
+    private fun cached(messages: kotlinx.serialization.json.JsonArray): List<String> =
+        messages.flatMap { m -> (m.asObj()!!["content"] as? kotlinx.serialization.json.JsonArray).orEmpty() }
+            .mapNotNull { it.asObj() }.filter { it["cache_control"] != null }.map { it["text"].asStr().orEmpty() }
+
+    @Test
+    fun haiku55GetsASystemMessageAfterTheBreakpoint() {
+        val messages = send("claude-haiku-5-5")
+        assertEquals("system", messages.last().asObj()!!["role"].asStr())
+        assertEquals(listOf("make it blue"), cached(messages))
+    }
+
+    @Test
+    fun aFoldedReminderIsNeverTheBreakpoint() {
+        val messages = send("claude-haiku-4-5")
+        val blocks = messages.single().asObj()!!["content"].asArr()!!
+        assertTrue(blocks.last().asObj()!!["text"].asStr()!!.startsWith("<system-reminder>"))
+        assertEquals(listOf("make it blue"), cached(messages))
+    }
+}
