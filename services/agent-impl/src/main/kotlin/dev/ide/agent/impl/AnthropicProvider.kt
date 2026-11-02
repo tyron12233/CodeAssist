@@ -159,6 +159,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
      */
     private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>, webSearch: Boolean): JsonArray {
         val blocks = ArrayList<JsonObject>(tools.size + 1)
+        val strict = strictToolNames(tools)
         tools.forEach { spec ->
             blocks += buildJsonObject {
                 put("name", spec.name)
@@ -166,8 +167,8 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
                 put("input_schema", AgentJson.parseToJsonElement(spec.parameters))
                 // ToolSchemaBuilder already emits additionalProperties:false plus a required list, which is
                 // what strict mode needs. It guarantees the arguments validate, so a malformed call can no
-                // longer cost a whole extra round trip to discover and correct.
-                put("strict", true)
+                // longer cost a whole extra round trip to discover and correct. Capped: see [strictToolNames].
+                if (spec.name in strict) put("strict", true)
             }
         }
         if (webSearch) {
@@ -361,6 +362,26 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
 
     companion object {
         const val DEFAULT_BASE = "https://api.anthropic.com"
+
+        /** The API refuses a request with more strict tools than this ("Too many strict tools"). */
+        const val MAX_STRICT_TOOLS = 20
+
+        /**
+         * The tools to mark strict when there are more than [MAX_STRICT_TOOLS]: the ones taking the most arguments,
+         * where a malformed call is most likely and costs a whole round trip to correct. A tool with no arguments
+         * gains nothing from strict mode. Ties keep their order, so the choice (and the cached tool prefix) is the
+         * same on every request.
+         */
+        internal fun strictToolNames(tools: List<dev.ide.agent.ToolSpec>): Set<String> =
+            tools.withIndex()
+                .sortedWith(compareByDescending<IndexedValue<dev.ide.agent.ToolSpec>> { argumentCount(it.value) }.thenBy { it.index })
+                .take(MAX_STRICT_TOOLS)
+                .map { it.value.name }
+                .toSet()
+
+        private fun argumentCount(spec: dev.ide.agent.ToolSpec): Int = runCatching {
+            AgentJson.parseToJsonElement(spec.parameters).asObj()?.get("properties").asObj()?.size ?: 0
+        }.getOrDefault(0)
         const val ANTHROPIC_VERSION = "2023-06-01"
         const val INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14"
 
