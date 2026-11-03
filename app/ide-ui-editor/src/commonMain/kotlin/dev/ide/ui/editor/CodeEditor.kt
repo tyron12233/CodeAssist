@@ -1168,6 +1168,8 @@ private fun CodeEditorContent(
     Box(
         modifier
             .background(colors.editorBg)
+            // Before the clip, so the loupe may rise above the editor's top edge (over the breadcrumbs) to show a top line.
+            .editorLoupe(interaction, metrics.lineHeight, background = drawColors.background, outline = colors.separator)
             .clipToBounds(),
     ) {
         EditorCanvasLayer(

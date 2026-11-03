@@ -442,14 +442,27 @@ internal fun Modifier.editorInput(
                 // The handle sits ~a line below its anchor, so the finger covers the row below. Lift the
                 // hit-point back up to the anchored line so dragging tracks what you see.
                 val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
-                drag(down.id) { change ->
-                    val off = geometry.offsetAt(change.position.copy(y = change.position.y - lift))
-                    when (hit) {
-                        'a' -> session.setSelectionRange(session.selection.max, off)
-                        'b' -> session.setSelectionRange(session.selection.min, off)
-                        else -> session.setCaret(off)
+                // The loupe shows the edge being dragged, which the finger and the handle both cover.
+                fun showLoupeAt(offset: Int) {
+                    val (_, x, top) = geometry.caretGeometry(offset)
+                    interaction.loupeSource = Offset(x, top + metrics.lineHeight / 2f)
+                }
+                try {
+                    var moved = false
+                    drag(down.id) { change ->
+                        val off = geometry.offsetAt(change.position.copy(y = change.position.y - lift))
+                        when (hit) {
+                            'a' -> session.setSelectionRange(session.selection.max, off)
+                            'b' -> session.setSelectionRange(session.selection.min, off)
+                            else -> session.setCaret(off)
+                        }
+                        // Not on the grab itself: a tap on a handle should not flash a loupe.
+                        if (!moved && (change.position - down.position).getDistance() > viewConfiguration.touchSlop / 2) moved = true
+                        if (moved) showLoupeAt(off)
+                        change.consume()
                     }
-                    change.consume()
+                } finally {
+                    interaction.loupeSource = null
                 }
                 return@awaitEachGesture
             }
