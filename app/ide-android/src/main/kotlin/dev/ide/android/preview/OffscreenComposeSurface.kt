@@ -182,17 +182,8 @@ class OffscreenComposeSurface(
                 setViewTreeOnBackPressedDispatcherOwner(owner)
                 setContent(content)
             }
-            // Mark the composition's first draw: frames rendered from then on are content, whatever they hold.
-            // Removed on the next loop turn, since a draw listener may not remove itself while it is dispatched.
-            val firstDraw = object : android.view.ViewTreeObserver.OnDrawListener {
-                override fun onDraw() {
-                    if (firstDrawNanos == 0L) {
-                        firstDrawNanos = System.nanoTime()
-                        mainHandler.post { runCatching { view.viewTreeObserver.removeOnDrawListener(this) } }
-                    }
-                }
-            }
-            view.viewTreeObserver.addOnDrawListener(firstDraw)
+            composeView = view
+            armFirstDraw(view)
             p.setContentView(view)
             // A Presentation is a Dialog: its window defaults to WRAP_CONTENT + centre gravity, so the ComposeView
             // can end up inset/centred within the VirtualDisplay rather than filling it from (0,0). That put a gap
@@ -214,6 +205,33 @@ class OffscreenComposeSurface(
             p.show()
             presentation = p
         }
+    }
+
+    @Volatile private var composeView: ComposeView? = null
+
+    /** Mark the composition's next draw: frames rendered from then on are content, whatever they hold. The
+     *  listener is removed on the next loop turn, since a draw listener may not remove itself while dispatched. */
+    private fun armFirstDraw(view: ComposeView) {
+        val firstDraw = object : android.view.ViewTreeObserver.OnDrawListener {
+            override fun onDraw() {
+                if (firstDrawNanos == 0L) {
+                    firstDrawNanos = System.nanoTime()
+                    mainHandler.post { runCatching { view.viewTreeObserver.removeOnDrawListener(this) } }
+                }
+            }
+        }
+        view.viewTreeObserver.addOnDrawListener(firstDraw)
+    }
+
+    /**
+     * Hold frames back again until the composition next draws (main thread). For content that arrives after
+     * [start] (a session opened before its program was ready): what was drawn so far is the empty composition,
+     * which must not reach the IDE as the preview's first frame.
+     */
+    fun rearmContentGate() {
+        contentSeen = false
+        firstDrawNanos = 0L
+        composeView?.let { armFirstDraw(it) }
     }
 
     /**

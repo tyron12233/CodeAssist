@@ -263,7 +263,8 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                 runCatching { withContext(Dispatchers.IO) { remoteClient.warmUp() } }
             }
         }
-        val remoteJars by produceState(emptyArray<String>(), path) {
+        // Null until known: a session opened with no jars and then reopened with the real ones paid for two.
+        val remoteJars by produceState<Array<String>?>(null, path) {
             value = runCatching { backend.composePreviewLibs(path)?.jars?.map { it.toString() }?.toTypedArray() }.getOrNull() ?: emptyArray()
         }
         // The module's res dirs + R namespace, so :preview rebuilds the resource repository itself (it can't
@@ -285,14 +286,15 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible == true) }
         CompositionLocalProvider(LocalConfiguration provides cfg) {
             Box(modifier, contentAlignment = Alignment.Center) {
-                when (val s = state) {
-                    is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                    is PreviewState.Ready -> if (remoteEligible == null) {
-                        CircularProgressIndicator(Modifier.size(28.dp))
-                    } else if (useRemote) {
+                // The remote session opens as soon as its classpath and resource roots are known, WHILE the preview is
+                // still lowering: starting `:preview`'s executor, resources and surface took ~0.8 s that used to
+                // follow the lowering. The program reaches the session when it is ready (update).
+                val remoteNow = remoteEligible == true && useRemote && state !is PreviewState.NotInterpretable
+                if (remoteNow) {
                         // Remote render: wait only for the remote res roots (`:preview` rebuilds its own resources)
                         // — NOT the in-process resource parse, which the isolated path doesn't use.
-                        if (!remoteResReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
+                        val jars = remoteJars
+                        if (!remoteResReady || jars == null) CircularProgressIndicator(Modifier.size(28.dp)) else {
                             // A wrap-to-content preview (no device / widthDp / heightDp / showSystemUi) is rendered
                             // at the device viewport as a MAX bound; the `:preview` measures the composable's
                             // intrinsic size within it and reports it back so the frame is cropped + the card sized
@@ -316,7 +318,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                             val widthPx = (rawW * clamp).toInt().coerceAtLeast(1)
                             val heightPx = (rawH * clamp).toInt().coerceAtLeast(1)
                             RemoteComposePreview(
-                                client = remoteClient, lowered = s.lowered, jars = remoteJars,
+                                client = remoteClient, lowered = (state as? PreviewState.Ready)?.lowered, jars = jars,
                                 resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                                 widthPx = widthPx, heightPx = heightPx, density = density, night = night,
                                 wrapContent = wrapContent,
@@ -328,6 +330,10 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                } else when (val s = state) {
+                    is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
+                    is PreviewState.Ready -> if (remoteEligible == null) {
+                        CircularProgressIndicator(Modifier.size(28.dp))
                     } else {
                         // In-process render (isolation off, or a remote failure fell back here): this composable
                         // builds the VM executor + resource resolver on demand, so that heavy work never runs on
@@ -558,7 +564,8 @@ private fun InProcessComposePreview(
 @Composable
 private fun RemoteComposePreview(
     client: ComposePreviewRemoteClient,
-    lowered: LoweredComposePreview,
+    /** Null while the preview is still lowering: the session opens anyway and gets the program when it arrives. */
+    lowered: LoweredComposePreview?,
     jars: Array<String>,
     resRoots: Array<String>,
     namespace: String,
@@ -630,7 +637,8 @@ private fun RemoteComposePreview(
     // Live edit: push the re-lowered program to the running session (off main — update makes a Binder call).
     LaunchedEffect(sessionEpoch, lowered) {
         val s = sessionBox[0] ?: return@LaunchedEffect
-        withContext(Dispatchers.IO) { s.update(lowered) }
+        val program = lowered ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { s.update(program) }
     }
     // Size / night change: re-target the LIVE session instead of re-opening (a night toggle re-renders on the same
     // off-screen surface; a size change recreates it in `:preview`). oneway, so hop off main. Also fires right
@@ -640,8 +648,9 @@ private fun RemoteComposePreview(
         withContext(Dispatchers.IO) { s.resize(widthPx, heightPx, density, night) }
     }
     // First-frame watchdog: no frame within the deadline → fall back in-process.
-    LaunchedEffect(sessionEpoch) {
-        if (sessionBox[0] != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
+    // Counted from when the session has a program: one opened ahead of its lowering has nothing to draw until then.
+    LaunchedEffect(sessionEpoch, lowered != null) {
+        if (sessionBox[0] != null && lowered != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
     }
 
     // A wrap-to-content preview renders into the fixed device-sized surface with the composable measured at its

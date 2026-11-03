@@ -112,7 +112,8 @@ class ComposePreviewRemoteClient(context: Context) {
      * carries the module jars for library composables the bundled Compose lacks (empty → bundled-only).
      */
     fun openSession(
-        lowered: LoweredComposePreview,
+        /** Null opens the session with nothing to render yet; the program follows with [Session.update]. */
+        lowered: LoweredComposePreview?,
         widthPx: Int,
         heightPx: Int,
         density: Float,
@@ -162,7 +163,7 @@ class ComposePreviewRemoteClient(context: Context) {
         }
         val blob = File(dir, "req-open.blob")
         return runCatching {
-            blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
+            blob.writeBytes(if (lowered == null) ByteArray(0) else ComposePreviewWireCodec.encode(lowered))
             val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, wrapContent, dir.path, sandbox, callback)
             if (id < 0) { dir.deleteRecursively(); null }
             else Session(d, id, runCatching { d.pid() }.getOrDefault(-1), dir)
