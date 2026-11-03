@@ -13,6 +13,14 @@ import dev.ide.ui.backend.UiContentBlock
  * Kotlin exercises use a top-level `fun main()`.
  */
 internal object LearnContent {
+    /**
+     * The bundled catalog's version. Bump it whenever lesson content changes: the app serves whichever of
+     * the bundled and the downloaded catalog has the higher version, so a release carrying new lessons must
+     * outrank the copy it downloaded before, and a published catalog must outrank the release. Format:
+     * `yyyyMMddNN`.
+     */
+    const val VERSION: Long = 2026110401L
+
     val tracks: List<LearnTrackDef> = listOf(
         kotlinBasics(), kotlinNextSteps(), kotlinOo(), kotlinCoroutines(), kotlinPractice(),
         composeIntro(), composeAdvanced(),
@@ -20,9 +28,20 @@ internal object LearnContent {
         androidBasics(),
         gettingStarted(),
     )
+
+    val paths: List<LearnPathDef> = learnPaths()
+
+    val catalog: LearnCatalogDef get() = LearnCatalogDef(VERSION, tracks, paths)
 }
 
 // ---- authoring model ----
+
+/** A whole catalog: what the bundled content builds and what a downloaded one decodes to. */
+internal data class LearnCatalogDef(
+    val version: Long,
+    val tracks: List<LearnTrackDef>,
+    val paths: List<LearnPathDef> = emptyList(),
+)
 
 internal data class LearnTrackDef(
     val id: String,
@@ -34,6 +53,10 @@ internal data class LearnTrackDef(
     /** Groups tracks on the Learn screen: "Kotlin", "Java", "Android", "Get started". */
     val category: String,
     val lessons: List<LearnLessonDef>,
+    /** `"Beginner"` | `"Intermediate"` | `"Advanced"`. */
+    val level: String = "",
+    /** Track ids recommended first. Advisory: the screen says so, nothing is locked. */
+    val prerequisites: List<String> = emptyList(),
 )
 
 internal data class LearnLessonDef(
@@ -43,6 +66,18 @@ internal data class LearnLessonDef(
     val iconId: String = "docText",
     val estMinutes: Int = 5,
     val steps: List<LearnStepDef>,
+    /** `"lesson"` | `"checkpoint"` | `"capstone"` (see [dev.ide.ui.backend.UiLessonKind]). */
+    val kind: String = "lesson",
+)
+
+/** An ordered sequence of tracks toward one goal. */
+internal data class LearnPathDef(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val iconId: String,
+    val accentColor: Long?,
+    val trackIds: List<String>,
 )
 
 internal sealed interface LearnStepDef {
@@ -91,6 +126,45 @@ internal data class ExerciseCheck(
      * answer as a literal. E.g. `["fun add", "add(2, 3)"]` forces defining AND calling the function.
      */
     val requireSource: List<String> = emptyList(),
+    /**
+     * Several runs, each fed its own stdin. When non-empty these replace [expectedOutput] and [mustContain]:
+     * the program has to get every case right, so printing one memorised answer cannot pass.
+     */
+    val cases: List<ExerciseCase> = emptyList(),
+    /** For an `"xml-layout"` exercise: the structure the layout must have. Nothing is run. */
+    val layout: LayoutCheck? = null,
+)
+
+/** One run of a multi-case exercise: the [stdin] it is fed and what its output must be. */
+internal data class ExerciseCase(
+    val stdin: String,
+    val expectedOutput: String? = null,
+    val mustContain: List<String> = emptyList(),
+)
+
+/**
+ * What an Android layout exercise must contain. Every [views] rule must match at least one element, and
+ * with [cleanRender] the layout must also render through the owned engine without a problem (an unknown
+ * tag or a malformed attribute fails it).
+ */
+internal data class LayoutCheck(
+    val views: List<ViewRule>,
+    val cleanRender: Boolean = true,
+)
+
+/**
+ * One element the layout must contain. [tag] is the simple or qualified tag (`"Button"`); [id] is the bare id
+ * name (`"signIn"` for `@+id/signIn`); [parent] is the simple tag of the direct parent; [attrs] maps attribute
+ * names (`"android:orientation"`) to required values; [count] is how many such elements are needed. [label]
+ * is how the learner is told about a rule that is not met ("a Button with id signIn").
+ */
+internal data class ViewRule(
+    val tag: String,
+    val label: String,
+    val id: String? = null,
+    val parent: String? = null,
+    val attrs: Map<String, String> = emptyMap(),
+    val count: Int = 1,
 )
 
 // ---- tiny authoring DSL ----
@@ -125,6 +199,41 @@ private val ACCENT_COMPOSE = 0xFF10A5A8L
 private val ACCENT_COMPOSE2 = 0xFF4285F4L
 
 // ===========================================================================
+// Paths
+// ===========================================================================
+
+/** Ordered goals across tracks. Each id must name a track in [LearnContent.tracks] (LearnContentTest). */
+private fun learnPaths() = listOf(
+    LearnPathDef(
+        id = "path-android",
+        title = "Android developer",
+        subtitle = "From your first line of Kotlin to Compose apps",
+        iconId = "android",
+        accentColor = ACCENT_ANDROID,
+        trackIds = listOf(
+            "getting-started", "kotlin-basics", "kotlin-next", "kotlin-oo",
+            "android-basics", "compose-intro", "compose-advanced",
+        ),
+    ),
+    LearnPathDef(
+        id = "path-kotlin",
+        title = "Kotlin in depth",
+        subtitle = "The language end to end, up to coroutines",
+        iconId = "kotlin",
+        accentColor = ACCENT_KOTLIN,
+        trackIds = listOf("kotlin-basics", "kotlin-next", "kotlin-oo", "kotlin-practice", "kotlin-coroutines"),
+    ),
+    LearnPathDef(
+        id = "path-java",
+        title = "Java foundations",
+        subtitle = "Classes, collections and generics in Java",
+        iconId = "coffee",
+        accentColor = ACCENT_JAVA,
+        trackIds = listOf("getting-started", "java-basics", "java-beyond", "java-more"),
+    ),
+)
+
+// ===========================================================================
 // Kotlin Basics
 // ===========================================================================
 
@@ -136,6 +245,7 @@ private fun kotlinBasics() = LearnTrackDef(
     accentColor = ACCENT_KOTLIN,
     language = "kotlin",
     category = "Kotlin",
+    level = "Beginner",
     lessons = listOf(
         LearnLessonDef(
             id = "kt-hello", title = "Hello, Kotlin", summary = "Print your very first line of output.",
@@ -388,6 +498,126 @@ private fun kotlinBasics() = LearnTrackDef(
                 ),
             ),
         ),
+        LearnLessonDef(
+            id = "kt-basics-checkpoint", title = "Checkpoint: Kotlin Basics", kind = "checkpoint",
+            summary = "Five questions across the whole track. Aim to get them right first time.",
+            iconId = "check", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Quiz(
+                    "kt-cp-q1", "Question 1",
+                    prompt = "Which declaration can be given a new value later?",
+                    options = listOf("val count = 1", "var count = 1", "const val COUNT = 1", "fun count() = 1"),
+                    correctIndex = 1,
+                    explanation = "`var` is reassignable. `val` is read-only once set.",
+                ),
+                LearnStepDef.Quiz(
+                    "kt-cp-q2", "Question 2",
+                    prompt = "What does this print?\n\nval n = 7\nprintln(if (n % 2 == 0) \"even\" else \"odd\")",
+                    options = listOf("even", "odd", "7", "Nothing, it doesn't compile"),
+                    correctIndex = 1,
+                    explanation = "7 % 2 is 1, so the condition is false and the else branch, \"odd\", is the value.",
+                ),
+                LearnStepDef.Quiz(
+                    "kt-cp-q3", "Question 3",
+                    prompt = "How many times does `for (i in 1..4)` run its body?",
+                    options = listOf("3", "4", "5", "It runs forever"),
+                    correctIndex = 1,
+                    explanation = "1..4 includes both ends: 1, 2, 3 and 4.",
+                ),
+                LearnStepDef.Quiz(
+                    "kt-cp-q4", "Question 4",
+                    prompt = "What type does `fun add(a: Int, b: Int) = a + b` return?",
+                    options = listOf("Unit", "Int", "String", "Any"),
+                    correctIndex = 1,
+                    explanation = "An expression body's return type is inferred from the expression: Int + Int is Int.",
+                ),
+                LearnStepDef.Quiz(
+                    "kt-cp-q5", "Question 5",
+                    prompt = "With `val name = \"Ana\"`, which line prints `Hi, Ana!`?",
+                    options = listOf("println(\"Hi, \$name!\")", "println(\"Hi, name!\")", "println(Hi, name)", "print[\"Hi, \" + name]"),
+                    correctIndex = 0,
+                    explanation = "A `\$name` template inside a string is replaced by the variable's value.",
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "kt-basics-capstone", title = "Capstone: Score report", kind = "capstone",
+            summary = "Read real input, loop over it, and report on it.",
+            iconId = "kotlin", estMinutes = 12,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "kt-cap-c", "Reading input",
+                    listOf(
+                        text("So far your programs printed fixed values. Real programs read **input**. `readln()` reads one line of text, and `toInt()` turns it into a number:"),
+                        code(
+                            """
+                            val count = readln().toInt()
+                            for (i in 1..count) {
+                                val line = readln()
+                                println("Line ${'$'}i was ${'$'}line")
+                            }
+                            """
+                        ),
+                        tip("This exercise is checked against several different inputs, so the program has to really work it out every time."),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "kt-cap-i", "Score report",
+                    listOf(
+                        text("The first line of input is how many scores follow. Each score is on its own line. Print three lines:"),
+                        code(
+                            """
+                            Highest: 92
+                            Lowest: 40
+                            Passed: 2 of 3
+                            """,
+                            "plain",
+                        ),
+                        text("A score **passes** when it is 50 or more. For the input `3`, `70`, `92`, `40` the output is exactly the example above."),
+                    ),
+                    starterCode = """
+                        fun main() {
+                            val count = readln().toInt()
+                            // Read `count` scores, one per line, then print:
+                            // Highest: <the biggest score>
+                            // Lowest: <the smallest score>
+                            // Passed: <how many are 50 or more> of <count>
+                        }
+                    """,
+                    language = "kotlin",
+                    hints = listOf(
+                        "Keep three variables while you loop: the highest so far, the lowest so far, and a pass counter.",
+                        "Start highest at Int.MIN_VALUE and lowest at Int.MAX_VALUE, so the first score replaces both.",
+                        "Inside for (i in 1..count), read a score with readln().trim().toInt() and compare it.",
+                    ),
+                    solution = """
+                        fun main() {
+                            val count = readln().toInt()
+                            var highest = Int.MIN_VALUE
+                            var lowest = Int.MAX_VALUE
+                            var passed = 0
+                            for (i in 1..count) {
+                                val score = readln().trim().toInt()
+                                if (score > highest) highest = score
+                                if (score < lowest) lowest = score
+                                if (score >= 50) passed++
+                            }
+                            println("Highest: ${'$'}highest")
+                            println("Lowest: ${'$'}lowest")
+                            println("Passed: ${'$'}passed of ${'$'}count")
+                        }
+                    """,
+                    check = ExerciseCheck(
+                        cases = listOf(
+                            ExerciseCase("3\n70\n92\n40\n", "Highest: 92\nLowest: 40\nPassed: 2 of 3"),
+                            ExerciseCase("1\n50\n", "Highest: 50\nLowest: 50\nPassed: 1 of 1"),
+                            ExerciseCase("4\n10\n49\n30\n20\n", "Highest: 49\nLowest: 10\nPassed: 0 of 4"),
+                            ExerciseCase("5\n100\n99\n51\n50\n77\n", "Highest: 100\nLowest: 50\nPassed: 5 of 5"),
+                        ),
+                    ),
+                ),
+            ),
+        ),
     ),
 )
 
@@ -403,6 +633,7 @@ private fun javaBasics() = LearnTrackDef(
     accentColor = ACCENT_JAVA,
     language = "java",
     category = "Java",
+    level = "Beginner",
     lessons = listOf(
         LearnLessonDef(
             id = "java-hello", title = "Hello, Java", summary = "Your first Java program.",
@@ -663,6 +894,134 @@ private fun javaBasics() = LearnTrackDef(
                 ),
             ),
         ),
+        LearnLessonDef(
+            id = "java-basics-checkpoint", title = "Checkpoint: Java Basics", kind = "checkpoint",
+            summary = "Five questions across the whole track. Aim to get them right first time.",
+            iconId = "check", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Quiz(
+                    "java-cp-q1", "Question 1",
+                    prompt = "Which type holds a whole number like 42?",
+                    options = listOf("int", "String", "boolean", "char"),
+                    correctIndex = 0,
+                    explanation = "`int` is a whole number. `double` would hold a decimal, `String` text.",
+                ),
+                LearnStepDef.Quiz(
+                    "java-cp-q2", "Question 2",
+                    prompt = "What does this print?\n\nint x = 10;\nx = x + 5;\nSystem.out.println(x);",
+                    options = listOf("10", "15", "x + 5", "105"),
+                    correctIndex = 1,
+                    explanation = "x starts at 10 and is replaced by 10 + 5.",
+                ),
+                LearnStepDef.Quiz(
+                    "java-cp-q3", "Question 3",
+                    prompt = "What does a method declared `void` return?",
+                    options = listOf("Nothing", "An int", "A String", "Always null"),
+                    correctIndex = 0,
+                    explanation = "`void` means the method does its work and hands nothing back.",
+                ),
+                LearnStepDef.Quiz(
+                    "java-cp-q4", "Question 4",
+                    prompt = "How many times does `for (int i = 0; i < 3; i++)` run its body?",
+                    options = listOf("2", "3", "4", "It never runs"),
+                    correctIndex = 1,
+                    explanation = "i takes 0, 1 and 2. At 3 the condition i < 3 is false and the loop stops.",
+                ),
+                LearnStepDef.Quiz(
+                    "java-cp-q5", "Question 5",
+                    prompt = "Which expression checks whether two ints a and b are equal?",
+                    options = listOf("a = b", "a == b", "a === b", "a := b"),
+                    correctIndex = 1,
+                    explanation = "`==` compares. A single `=` assigns.",
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "java-basics-capstone", title = "Capstone: Sum and evens", kind = "capstone",
+            summary = "Read numbers with a Scanner and summarise them.",
+            iconId = "java", estMinutes = 12,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "java-cap-c", "Reading input with Scanner",
+                    listOf(
+                        text("`java.util.Scanner` reads input. `nextInt()` reads the next whole number, skipping spaces and line breaks:"),
+                        code(
+                            """
+                            import java.util.Scanner;
+
+                            Scanner in = new Scanner(System.in);
+                            int count = in.nextInt();
+                            for (int i = 0; i < count; i++) {
+                                int value = in.nextInt();
+                            }
+                            """,
+                            "java",
+                        ),
+                        tip("This exercise is checked against several different inputs, so the program has to really work it out every time."),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "java-cap-i", "Sum and evens",
+                    listOf(
+                        text("The input is a count, then that many whole numbers. Print the **sum** of the numbers and how many of them are **even**:"),
+                        code(
+                            """
+                            Sum: 10
+                            Evens: 2
+                            """,
+                            "plain",
+                        ),
+                        text("That is the output for the input `4` followed by `1 2 3 4`. Remember that 0 and negative even numbers are even too."),
+                    ),
+                    starterCode = """
+                        import java.util.Scanner;
+
+                        public class Main {
+                            public static void main(String[] args) {
+                                Scanner in = new Scanner(System.in);
+                                int count = in.nextInt();
+                                // Read `count` numbers, then print:
+                                // Sum: <the total>
+                                // Evens: <how many are even>
+                            }
+                        }
+                    """,
+                    language = "java",
+                    hints = listOf(
+                        "Keep two int variables, a running sum and an even counter, both starting at 0.",
+                        "A number n is even when n % 2 == 0. That works for negative numbers too.",
+                        "Print with System.out.println(\"Sum: \" + sum);",
+                    ),
+                    solution = """
+                        import java.util.Scanner;
+
+                        public class Main {
+                            public static void main(String[] args) {
+                                Scanner in = new Scanner(System.in);
+                                int count = in.nextInt();
+                                int sum = 0;
+                                int evens = 0;
+                                for (int i = 0; i < count; i++) {
+                                    int n = in.nextInt();
+                                    sum += n;
+                                    if (n % 2 == 0) evens++;
+                                }
+                                System.out.println("Sum: " + sum);
+                                System.out.println("Evens: " + evens);
+                            }
+                        }
+                    """,
+                    check = ExerciseCheck(
+                        cases = listOf(
+                            ExerciseCase("4\n1 2 3 4\n", "Sum: 10\nEvens: 2"),
+                            ExerciseCase("3\n-2 7 0\n", "Sum: 5\nEvens: 2"),
+                            ExerciseCase("1\n9\n", "Sum: 9\nEvens: 0"),
+                            ExerciseCase("6\n10 20 30 41 -51 6\n", "Sum: 56\nEvens: 4"),
+                        ),
+                    ),
+                ),
+            ),
+        ),
     ),
 )
 
@@ -678,6 +1037,8 @@ private fun kotlinNextSteps() = LearnTrackDef(
     accentColor = ACCENT_KOTLIN2,
     language = "kotlin",
     category = "Kotlin",
+    level = "Beginner",
+    prerequisites = listOf("kotlin-basics"),
     lessons = listOf(
         LearnLessonDef(
             id = "kt-null", title = "Null safety", summary = "Handle absent values without crashes.",
@@ -984,6 +1345,8 @@ private fun kotlinCoroutines() = LearnTrackDef(
     accentColor = ACCENT_COROUTINES,
     language = "kotlin",
     category = "Kotlin",
+    level = "Advanced",
+    prerequisites = listOf("kotlin-oo"),
     lessons = listOf(
         LearnLessonDef(
             id = "co-intro", title = "Suspend and delay", summary = "Run non-blocking work with delay().",
@@ -1232,6 +1595,8 @@ private fun kotlinOo() = LearnTrackDef(
     accentColor = ACCENT_KOTLIN_OO,
     language = "kotlin",
     category = "Kotlin",
+    level = "Intermediate",
+    prerequisites = listOf("kotlin-next"),
     lessons = listOf(
         LearnLessonDef(
             id = "kt-oo-class", title = "Classes & constructors", summary = "Bundle data with behavior.",
@@ -1504,6 +1869,8 @@ private fun kotlinPractice() = LearnTrackDef(
     accentColor = ACCENT_PRACTICE,
     language = "kotlin",
     category = "Kotlin",
+    level = "Intermediate",
+    prerequisites = listOf("kotlin-next"),
     lessons = listOf(
         LearnLessonDef(
             id = "pr-fizzbuzz", title = "FizzBuzz", summary = "The classic warm-up.",
@@ -1688,6 +2055,8 @@ private fun composeIntro() = LearnTrackDef(
     accentColor = ACCENT_COMPOSE,
     language = "kotlin-compose",
     category = "Compose",
+    level = "Intermediate",
+    prerequisites = listOf("kotlin-next"),
     lessons = listOf(
         LearnLessonDef(
             id = "ci-first", title = "Your first composable", summary = "Describe UI with @Composable, see it render.",
@@ -2118,6 +2487,8 @@ private fun composeAdvanced() = LearnTrackDef(
     accentColor = ACCENT_COMPOSE2,
     language = "kotlin-compose",
     category = "Compose",
+    level = "Advanced",
+    prerequisites = listOf("compose-intro"),
     lessons = listOf(
         LearnLessonDef(
             id = "ca-hoist", title = "State hoisting", summary = "Make composables reusable and testable.",
@@ -2460,6 +2831,8 @@ private fun javaMore() = LearnTrackDef(
     accentColor = ACCENT_JAVA3,
     language = "java",
     category = "Java",
+    level = "Intermediate",
+    prerequisites = listOf("java-beyond"),
     lessons = listOf(
         LearnLessonDef(
             id = "jm-interface", title = "Interfaces", summary = "Program to a contract.",
@@ -2642,6 +3015,8 @@ private fun javaBeyond() = LearnTrackDef(
     accentColor = ACCENT_JAVA2,
     language = "java",
     category = "Java",
+    level = "Intermediate",
+    prerequisites = listOf("java-basics"),
     lessons = listOf(
         LearnLessonDef(
             id = "jb-classes", title = "Classes & objects", summary = "Model things with your own types.",
@@ -2827,6 +3202,8 @@ private fun androidBasics() = LearnTrackDef(
     accentColor = ACCENT_ANDROID,
     language = "none",
     category = "Android",
+    level = "Beginner",
+    prerequisites = listOf("kotlin-basics"),
     lessons = listOf(
         LearnLessonDef(
             id = "and-activity", title = "Activities", summary = "The screens of your app.",
@@ -3091,6 +3468,153 @@ private fun androidBasics() = LearnTrackDef(
                 ),
             ),
         ),
+        LearnLessonDef(
+            id = "and-build-screen", title = "Capstone: Build a sign-in screen", kind = "capstone",
+            summary = "Write a real layout from scratch and watch it render.",
+            iconId = "module.android", estMinutes = 10,
+            steps = listOf(
+                LearnStepDef.Interactive(
+                    "and-build-button", "Add a button",
+                    listOf(
+                        text("Warm up: the layout below has a title. Add a **Button** inside the `LinearLayout` with the id `hello` and the text `Say hello`. The preview updates as you type."),
+                        tip("An id is written `android:id=\"@+id/hello\"`. Every view also needs `layout_width` and `layout_height`."),
+                    ),
+                    starterCode = """
+                        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="20dp"
+                            android:background="#FFFFFFFF">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Welcome"
+                                android:textSize="22sp"
+                                android:textColor="#FF1C1B1F" />
+
+                        </LinearLayout>
+                    """,
+                    language = "xml-layout",
+                    hints = listOf(
+                        "Start a new tag under the TextView: <Button ... />",
+                        "Give it android:id=\"@+id/hello\" and android:text=\"Say hello\".",
+                        "Don't forget android:layout_width=\"wrap_content\" and android:layout_height=\"wrap_content\".",
+                    ),
+                    solution = """
+                        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="20dp"
+                            android:background="#FFFFFFFF">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Welcome"
+                                android:textSize="22sp"
+                                android:textColor="#FF1C1B1F" />
+
+                            <Button
+                                android:id="@+id/hello"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:text="Say hello" />
+
+                        </LinearLayout>
+                    """,
+                    check = ExerciseCheck(
+                        layout = LayoutCheck(
+                            listOf(
+                                ViewRule(
+                                    "Button", "a Button with id hello inside the LinearLayout",
+                                    id = "hello", parent = "LinearLayout",
+                                ),
+                                ViewRule("Button", "the button's text is \"Say hello\"", attrs = mapOf("android:text" to "Say hello")),
+                            ),
+                        ),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "and-build-signin", "A sign-in form",
+                    listOf(
+                        text("Now the real thing. Build a sign-in form inside a **vertical** `LinearLayout`:"),
+                        text("• a `TextView` title\n• two `EditText` fields, for email and password\n• a `Button` with the id `signIn`"),
+                        note("Use `android:hint` to label a field, and `android:inputType=\"textPassword\"` to hide what is typed into the password field."),
+                    ),
+                    starterCode = """
+                        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="20dp"
+                            android:background="#FFFFFFFF">
+
+                            <!-- Build the form here -->
+
+                        </LinearLayout>
+                    """,
+                    language = "xml-layout",
+                    hints = listOf(
+                        "The LinearLayout needs android:orientation=\"vertical\" so the views stack.",
+                        "An EditText needs a width and height like any view; match_parent makes it fill the row.",
+                        "The button's id is written android:id=\"@+id/signIn\".",
+                    ),
+                    solution = """
+                        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="20dp"
+                            android:background="#FFFFFFFF">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Sign in"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#FF1C1B1F" />
+
+                            <EditText
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:hint="Email"
+                                android:textColor="#FF1C1B1F" />
+
+                            <EditText
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:hint="Password"
+                                android:inputType="textPassword"
+                                android:textColor="#FF1C1B1F" />
+
+                            <Button
+                                android:id="@+id/signIn"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:text="Sign in" />
+
+                        </LinearLayout>
+                    """,
+                    check = ExerciseCheck(
+                        layout = LayoutCheck(
+                            listOf(
+                                ViewRule("LinearLayout", "a vertical LinearLayout", attrs = mapOf("android:orientation" to "vertical")),
+                                ViewRule("TextView", "a TextView title", parent = "LinearLayout"),
+                                ViewRule("EditText", "two EditText fields", parent = "LinearLayout", count = 2),
+                                ViewRule("Button", "a Button with id signIn", id = "signIn", parent = "LinearLayout"),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
     ),
 )
 
@@ -3106,6 +3630,7 @@ private fun gettingStarted() = LearnTrackDef(
     accentColor = ACCENT_START,
     language = "none",
     category = "Get started",
+    level = "Beginner",
     lessons = listOf(
         LearnLessonDef(
             id = "gs-welcome", title = "Welcome to CodeAssist", summary = "What you can build here.",

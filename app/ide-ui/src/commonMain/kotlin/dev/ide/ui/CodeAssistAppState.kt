@@ -238,6 +238,12 @@ class CodeAssistAppState(
      *  step. Bumping [learnEpoch] on return re-reads progress so the Learn tab and track reflect finished work. */
     var currentTrackId: String? by mutableStateOf(null)
         private set
+
+    /** The learning path being viewed, and whether the open track was reached from it (so Back returns
+     *  to the path rather than the Learn tab). */
+    var currentPathId: String? by mutableStateOf(null)
+        private set
+    private var trackOpenedFromPath = false
     var currentLessonId: String? by mutableStateOf(null)
         private set
     var lessonInitialStep: Int by mutableStateOf(0)
@@ -845,7 +851,25 @@ class CodeAssistAppState(
 
     fun openTrack(trackId: String) {
         currentTrackId = trackId
+        trackOpenedFromPath = false
         screen = Screen.LessonTrack
+    }
+
+    fun openPath(pathId: String) {
+        currentPathId = pathId
+        screen = Screen.LearnPath
+    }
+
+    /** A track tapped on a path screen: Back from it comes back to the path. */
+    fun openTrackFromPath(trackId: String) {
+        currentTrackId = trackId
+        trackOpenedFromPath = true
+        screen = Screen.LessonTrack
+    }
+
+    fun exitLearnPath() {
+        learnEpoch++
+        screen = Screen.Projects
     }
 
     /** Opens the solve screen for [date] (empty for today). */
@@ -897,7 +921,8 @@ class CodeAssistAppState(
 
     fun exitLessonTrack() {
         learnEpoch++
-        screen = Screen.Projects
+        screen = if (trackOpenedFromPath && currentPathId != null) Screen.LearnPath else Screen.Projects
+        trackOpenedFromPath = false
     }
 
     // ---- the back stack ----
@@ -1162,6 +1187,7 @@ class CodeAssistAppState(
             // The lesson player steps back to its track; the track steps back to the Learn tab (picker).
             screen == Screen.LessonPlayer -> exitLessonPlayer()
             screen == Screen.LessonTrack -> exitLessonTrack()
+            screen == Screen.LearnPath -> exitLearnPath()
             // Nothing left on the stack, and contributed screens took their own exit above: what is left is
             // a store screen the user entered the run on, so Back leaves for the Explore tab (still the
             // selected home tab).

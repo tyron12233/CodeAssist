@@ -305,11 +305,30 @@ data class UiStoreInstallResult(val success: Boolean, val message: String, val r
 // ---- Learn DTOs ----
 
 /**
- * The Learn landing payload: the ordered lesson [tracks] (e.g. "Kotlin Basics", "Java Basics"). Neutral to
- * where the content came from (bundled today, a remote catalog later). The heavy per-lesson step content is
+ * The Learn landing payload: the ordered lesson [tracks] (e.g. "Kotlin Basics", "Java Basics") and the
+ * [paths] that string tracks together into a longer goal. Neutral to where the content came from (the
+ * bundled catalog, or a newer one downloaded from the server). [version] identifies that content, so the
+ * screen can tell a refreshed catalog from the one it already shows. The heavy per-lesson step content is
  * loaded lazily through [LearnService.lesson]; a track here only carries its lesson summaries.
  */
-data class UiLearnCatalog(val tracks: List<UiLearnTrack> = emptyList())
+data class UiLearnCatalog(
+    val tracks: List<UiLearnTrack> = emptyList(),
+    val paths: List<UiLearnPath> = emptyList(),
+    val version: Long = 0L,
+)
+
+/**
+ * A learning path: an ordered sequence of tracks toward one goal ("Android developer"). [trackIds] name
+ * tracks in the same catalog; an id the catalog does not carry is skipped when shown.
+ */
+data class UiLearnPath(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val iconId: String = "school",
+    val accentColor: Long? = null,
+    val trackIds: List<String> = emptyList(),
+)
 
 /**
  * A learning track: a themed sequence of lessons. [language] is `"kotlin"` | `"java"` | `"none"` (a
@@ -325,6 +344,10 @@ data class UiLearnTrack(
     val language: String = "none",
     val category: String = "General",
     val lessons: List<UiLessonSummary> = emptyList(),
+    /** `"Beginner"` | `"Intermediate"` | `"Advanced"`, or blank when the track does not say. */
+    val level: String = "",
+    /** Track ids recommended before this one. Advisory only: nothing is locked behind them. */
+    val prerequisites: List<String> = emptyList(),
 )
 
 /** One lesson as shown in a track list — light metadata; the steps load on open. */
@@ -335,7 +358,17 @@ data class UiLessonSummary(
     val iconId: String = "docText",
     val estMinutes: Int = 5,
     val stepCount: Int = 1,
+    /** `"lesson"`, `"checkpoint"` (a scored review quiz at the end of a track) or `"capstone"` (a larger
+     *  graded project that pulls the track together). */
+    val kind: String = UiLessonKind.LESSON,
 )
+
+/** The values of [UiLessonSummary.kind] and [UiLesson.kind]. */
+object UiLessonKind {
+    const val LESSON = "lesson"
+    const val CHECKPOINT = "checkpoint"
+    const val CAPSTONE = "capstone"
+}
 
 /** A fully-loaded lesson: its ordered [steps]. [language] mirrors the track's for the interactive editor. */
 data class UiLesson(
@@ -345,6 +378,8 @@ data class UiLesson(
     val summary: String,
     val language: String = "none",
     val steps: List<UiLessonStep> = emptyList(),
+    /** See [UiLessonSummary.kind]. A checkpoint's player scores the quizzes answered right first time. */
+    val kind: String = UiLessonKind.LESSON,
 )
 
 /**
@@ -368,7 +403,8 @@ sealed interface UiLessonStep {
         val blocks: List<UiContentBlock> = emptyList(),
         /** The pre-filled buffer the learner edits (a complete, compilable file). */
         val starterCode: String,
-        /** `"kotlin"` | `"java"` — drives the embedded editor's highlighting. */
+        /** `"kotlin"` | `"kotlin-coroutines"` | `"java"` (compiled and run), or `"xml-layout"` (an Android
+         *  layout, checked against its structure and shown in a live preview instead of run). */
         val language: String,
         /** Progressive hints, revealed one at a time. */
         val hints: List<String> = emptyList(),

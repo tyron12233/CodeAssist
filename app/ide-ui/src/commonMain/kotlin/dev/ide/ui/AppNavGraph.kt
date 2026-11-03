@@ -73,6 +73,7 @@ import dev.ide.ui.screens.KeystoreManagerScreen
 import dev.ide.ui.screens.LearnScreen
 import dev.ide.ui.screens.LessonPlayerScreen
 import dev.ide.ui.screens.LessonTrackScreen
+import dev.ide.ui.screens.LearnPathScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.PluginsScreen
@@ -311,6 +312,14 @@ private fun AppRoute(
                 )
             }
         }
+
+        Screen.LearnPath -> LearnPathScreen(
+            backend = backend,
+            pathId = app.currentPathId,
+            epoch = app.learnEpoch,
+            onOpenTrack = app::openTrackFromPath,
+            onBack = app::exitLearnPath,
+        )
 
         Screen.LessonTrack -> LessonTrackScreen(
             backend = backend,
@@ -1041,6 +1050,7 @@ private fun LearnRoute(app: CodeAssistAppState, fileActions: FileActions) {
         epoch = app.learnEpoch,
         onOpenTrack = app::openTrack,
         onResume = app::resumeLesson,
+        onOpenPath = app::openPath,
         onOpenDocs = if (fileActions.canOpenUrl) {
             { fileActions.openUrl(BetaInfo.REPO_URL) }
         } else null,

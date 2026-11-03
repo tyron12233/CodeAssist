@@ -1515,6 +1515,13 @@ interface LearnService {
     suspend fun lesson(id: String): UiLesson? = null
 
     /**
+     * Ask the server for a newer lesson catalog than the one being served. True when one arrived, so the
+     * caller should read [catalog] again; false when already current, offline, or not configured. Cheap to
+     * call: the request names the version already held and the answer is empty when nothing changed.
+     */
+    suspend fun refreshCatalog(): Boolean = false
+
+    /**
      * Code completion for an interactive exercise's editor: completes [code] at [offset] against the hidden
      * scratch project for [language] (`"kotlin"` | `"java"`), so a lesson buffer gets real member/keyword/
      * stdlib suggestions. Empty when no scratch engine is available.

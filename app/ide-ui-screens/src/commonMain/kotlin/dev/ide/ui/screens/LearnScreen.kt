@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLearnCatalog
+import dev.ide.ui.backend.UiLearnPath
 import dev.ide.ui.backend.UiLearnProgress
 import dev.ide.ui.backend.UiLearnTrack
 import dev.ide.ui.backend.UiResumePoint
@@ -68,6 +70,14 @@ import dev.ide.ui.generated.resources.learn_lessons_done
 import dev.ide.ui.generated.resources.learn_module_meta
 import dev.ide.ui.generated.resources.learn_resume_lesson
 import dev.ide.ui.generated.resources.learn_title
+import dev.ide.ui.generated.resources.learn_level_advanced
+import dev.ide.ui.generated.resources.learn_level_beginner
+import dev.ide.ui.generated.resources.learn_level_intermediate
+import dev.ide.ui.generated.resources.learn_path_complete
+import dev.ide.ui.generated.resources.learn_path_meta
+import dev.ide.ui.generated.resources.learn_path_next
+import dev.ide.ui.generated.resources.learn_paths
+import dev.ide.ui.generated.resources.learn_recommended_after
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.CaShapes
@@ -97,8 +107,14 @@ fun LearnScreen(
     epoch: Int = 0,
     onOpenDocs: (() -> Unit)? = null,
     onJoinDiscord: (() -> Unit)? = null,
+    onOpenPath: (pathId: String) -> Unit = {},
 ) {
-    val catalog by produceState(UiLearnCatalog(), backend, epoch) {
+    // A newer published catalog is fetched once per session; when one lands, re-read so new lessons show.
+    var refreshed by remember { mutableStateOf(0) }
+    LaunchedEffect(backend) {
+        if (runCatching { backend.learn.refreshCatalog() }.getOrDefault(false)) refreshed++
+    }
+    val catalog by produceState(UiLearnCatalog(), backend, epoch, refreshed) {
         value = runCatching { backend.learn.catalog() }.getOrDefault(UiLearnCatalog())
     }
     val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
@@ -123,6 +139,10 @@ fun LearnScreen(
                     ContinueCard(resume, catalog) { onResume(resume.trackId, resume.lessonId, resume.stepIndex) }
                 }
             }
+            val paths = catalog.paths.filter { p -> p.trackIds.any { id -> catalog.tracks.any { it.id == id } } }
+            if (paths.isNotEmpty()) {
+                item("paths") { PathsRow(paths, catalog, progress, onOpenPath) }
+            }
             if (categories.size > 1) {
                 item("tracks") { TrackFilterRow(categories, activeCat) { selectedCat = it } }
             }
@@ -131,6 +151,7 @@ fun LearnScreen(
                     track = track,
                     done = completedIn(track, progress),
                     index = i,
+                    recommendedAfter = unfinishedPrerequisite(track, catalog, progress),
                     onOpen = { onOpenTrack(track.id) },
                 )
                 // Interleave a native ad every few cards, never as the last item (the trailing slot follows).
@@ -324,7 +345,7 @@ private fun TrackFilterRow(categories: List<String>, active: String?, onPick: (S
  * before the progress bar is read.
  */
 @Composable
-private fun ModuleCard(track: UiLearnTrack, done: Int, index: Int, onOpen: () -> Unit) {
+private fun ModuleCard(track: UiLearnTrack, done: Int, index: Int, recommendedAfter: String?, onOpen: () -> Unit) {
     val c = MaterialTheme.colorScheme
     val total = track.lessons.size.coerceAtLeast(1)
     val fraction = done.toFloat() / total
@@ -369,6 +390,14 @@ private fun ModuleCard(track: UiLearnTrack, done: Int, index: Int, onOpen: () ->
                         style = MaterialTheme.typography.bodySmall,
                         color = c.onSurfaceVariant,
                     )
+                    levelLabel(track.level)?.let { level ->
+                        Text(
+                            level,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = c.primary,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
                 Box(
                     Modifier.size(32.dp).clip(CircleShape).background(badge.second),
@@ -398,6 +427,15 @@ private fun ModuleCard(track: UiLearnTrack, done: Int, index: Int, onOpen: () ->
                     softWrap = false,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End,
                     modifier = Modifier.width(40.dp),
+                )
+            }
+            // Only before the learner has started: once they are in, the advice has done its job.
+            if (recommendedAfter != null && done == 0) {
+                Text(
+                    stringResource(Res.string.learn_recommended_after, recommendedAfter),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
             if (track.lessons.isNotEmpty()) {
@@ -438,18 +476,126 @@ private fun LearnLinks(onOpenDocs: (() -> Unit)?, onJoinDiscord: (() -> Unit)?) 
 
 private const val MAX_INTERLEAVED_ADS = 2
 
+/**
+ * The learning paths as a horizontal shelf. Each card shows how far along the path the learner is and which
+ * track comes next, so the shelf answers "what should I do now" before any track is opened.
+ */
+@Composable
+private fun PathsRow(
+    paths: List<UiLearnPath>,
+    catalog: UiLearnCatalog,
+    progress: UiLearnProgress?,
+    onOpenPath: (String) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 22.dp)) {
+        Eyebrow(stringResource(Res.string.learn_paths), modifier = Modifier.padding(horizontal = 20.dp))
+        LazyRow(
+            Modifier.fillMaxWidth().padding(top = 10.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            itemsKeyed(paths, key = { it.id }) { path -> PathCard(path, catalog, progress) { onOpenPath(path.id) } }
+        }
+    }
+}
+
+@Composable
+private fun PathCard(path: UiLearnPath, catalog: UiLearnCatalog, progress: UiLearnProgress?, onOpen: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val tracks = pathTracks(path, catalog)
+    val finished = tracks.count { isTrackComplete(it, progress) }
+    val next = tracks.firstOrNull { !isTrackComplete(it, progress) }
+    val accent = path.accentColor?.let { Color(it) } ?: c.primary
+    val interaction = remember { MutableInteractionSource() }
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainer,
+        contentColor = c.onSurface,
+        interactionSource = interaction,
+        modifier = Modifier.width(264.dp).pressScale(interaction),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Symbol(symbolForLearnIcon(path.iconId), contentDescription = null, size = 22.dp, tint = accent)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(path.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        stringResource(Res.string.learn_path_meta, finished, tracks.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(
+                path.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = c.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 10.dp).height(34.dp),
+            )
+            LinearProgressIndicator(
+                progress = { if (tracks.isEmpty()) 0f else finished.toFloat() / tracks.size },
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(6.dp).clip(CircleShape),
+                color = accent,
+                trackColor = c.surfaceContainerHighest,
+                gapSize = 0.dp,
+                drawStopIndicator = {},
+            )
+            Text(
+                if (next != null) stringResource(Res.string.learn_path_next, next.title)
+                else stringResource(Res.string.learn_path_complete),
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = c.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+    }
+}
+
+/** A path's tracks in path order, skipping ids the catalog does not carry. */
+internal fun pathTracks(path: UiLearnPath, catalog: UiLearnCatalog): List<UiLearnTrack> =
+    path.trackIds.mapNotNull { id -> catalog.tracks.firstOrNull { it.id == id } }
+
+internal fun isTrackComplete(track: UiLearnTrack, progress: UiLearnProgress?): Boolean =
+    track.lessons.isNotEmpty() && completedIn(track, progress) >= track.lessons.size
+
+/** The title of the first prerequisite the learner has not finished, or null when there is none. */
+internal fun unfinishedPrerequisite(track: UiLearnTrack, catalog: UiLearnCatalog, progress: UiLearnProgress?): String? =
+    track.prerequisites.asSequence()
+        .mapNotNull { id -> catalog.tracks.firstOrNull { it.id == id } }
+        .firstOrNull { !isTrackComplete(it, progress) }
+        ?.title
+
+/** The localized label for a track level, or null when the track does not declare one. */
+@Composable
+internal fun levelLabel(level: String): String? = when (level.lowercase()) {
+    "beginner" -> stringResource(Res.string.learn_level_beginner)
+    "intermediate" -> stringResource(Res.string.learn_level_intermediate)
+    "advanced" -> stringResource(Res.string.learn_level_advanced)
+    else -> null
+}
+
 /** Category order: the order the catalog declares them in, deduplicated. */
 private fun orderedCategories(tracks: List<UiLearnTrack>): List<String> =
     tracks.map { it.category }.distinct()
 
-private fun completedIn(track: UiLearnTrack, progress: UiLearnProgress?): Int =
+internal fun completedIn(track: UiLearnTrack, progress: UiLearnProgress?): Int =
     track.lessons.count { (progress?.completedByLesson?.get(it.id)?.size ?: 0) >= it.stepCount }
 
 private fun countCompleted(catalog: UiLearnCatalog, progress: UiLearnProgress?): Int =
     catalog.tracks.sumOf { completedIn(it, progress) }
 
 /** A track's icon id, resolved through the shared vocabulary map. */
-private fun symbolForLearnIcon(iconId: String): Char = CaSymbols.forIconId(iconId, fallback = CaSymbols.school)
+internal fun symbolForLearnIcon(iconId: String): Char = CaSymbols.forIconId(iconId, fallback = CaSymbols.school)
 
 /**
  * A slim rounded progress bar whose fill animates to [fraction] (clamped to 0..1).

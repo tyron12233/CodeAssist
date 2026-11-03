@@ -14,6 +14,7 @@ import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiInlayKind
 import dev.ide.ui.backend.UiInlayPart
 import dev.ide.ui.backend.UiLearnCatalog
+import dev.ide.ui.backend.UiLearnPath
 import dev.ide.ui.backend.UiLearnProgress
 import dev.ide.ui.backend.UiLearnTrack
 import dev.ide.ui.backend.UiLesson
@@ -37,9 +38,22 @@ import java.nio.file.Path
  * never leave the backend; only the pass/fail result + captured output are returned. The interface is exactly
  * what a remote, submission-backed lesson catalog will later implement, so the UI does not change.
  */
-internal class LearnBackend(private val ctx: BackendContext) : LearnService {
+internal class LearnBackend(
+    private val ctx: BackendContext,
+    remote: dev.ide.store.LearnRemoteService = dev.ide.store.LearnRemoteService.Unsupported,
+) : LearnService {
 
     private val log = dev.ide.platform.log.Log.logger("learn.compose")
+
+    /** Bundled vs downloaded catalog; serves the newer. The cache sits beside the other app-wide data. */
+    private val catalogStore = LearnCatalogStore(
+        bundled = { LearnContent.catalog },
+        remote = remote,
+        cacheFile = { ctx.manager?.sharedRoot?.resolve("learn")?.resolve("catalog.json") },
+        log = { msg, t -> if (t != null) log.warn(msg, t) else log.info(msg) },
+    )
+
+    private val tracks: List<LearnTrackDef> get() = catalogStore.catalog().tracks
 
     /** Scratch keys whose extra dependencies (e.g. coroutines) have been resolved this session. */
     private val depsEnsured = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -48,14 +62,28 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
      *  concurrent resolutions of the same coordinates before the first sets [depsEnsured]. */
     private val composeDepsMutex = kotlinx.coroutines.sync.Mutex()
 
-    override fun learnAvailable(): Boolean = LearnContent.tracks.isNotEmpty()
+    override fun learnAvailable(): Boolean = tracks.isNotEmpty()
 
-    override suspend fun catalog(): UiLearnCatalog =
-        UiLearnCatalog(LearnContent.tracks.map { it.toUiTrack() })
+    override suspend fun catalog(): UiLearnCatalog {
+        val c = catalogStore.catalog()
+        return UiLearnCatalog(
+            tracks = c.tracks.map { it.toUiTrack() },
+            paths = c.paths.map { p ->
+                UiLearnPath(p.id, p.title, p.subtitle, p.iconId, p.accentColor, p.trackIds)
+            },
+            version = c.version,
+        )
+    }
+
+    override suspend fun refreshCatalog(): Boolean =
+        withContext(Dispatchers.IO) { runCatching { catalogStore.refresh() }.getOrDefault(false) }
 
     override suspend fun lesson(id: String): UiLesson? {
         val (track, lesson) = findLesson(id) ?: return null
-        return UiLesson(lesson.id, track.id, lesson.title, lesson.summary, track.language, lesson.steps.map { it.toUiStep() })
+        return UiLesson(
+            lesson.id, track.id, lesson.title, lesson.summary, track.language,
+            lesson.steps.map { it.toUiStep() }, lesson.kind,
+        )
     }
 
     override suspend fun complete(language: String, code: String, offset: Int): UiCompletionResult {
@@ -180,6 +208,11 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
     override suspend fun check(lessonId: String, stepId: String, code: String): UiExerciseResult {
         val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive
             ?: return UiExerciseResult(passed = false, compiled = false, message = "This step has no exercise to check.")
+        // A layout exercise is checked against its structure and a render; nothing compiles or runs, so it
+        // needs no scratch project (and works with no project manager at all).
+        step.check.layout?.let { layout ->
+            return withContext(Dispatchers.Default) { checkLayout(code, layout, ::renderProblems) }
+        }
         if (ctx.manager == null) {
             return UiExerciseResult(passed = false, compiled = false, message = "Running exercises isn't available in this build.")
         }
@@ -192,6 +225,7 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
             runCatching { writeMain(services, step.language, code) }.exceptionOrNull()?.let {
                 return@withContext failure("Couldn't save your code: ${reason(it)}")
             }
+            if (step.check.cases.isNotEmpty()) return@withContext runCases(services, step.check, code)
             val cap = try {
                 services.runAndCapture("app")
             } catch (e: Throwable) {
@@ -200,6 +234,62 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
             interpret(cap, step.check, code)
         }
     }
+
+    /**
+     * Run a multi-case exercise: the same program once per [ExerciseCheck.cases], each fed its own stdin.
+     * Stops at the first case that fails and shows its input, so the learner sees exactly what broke.
+     */
+    private suspend fun runCases(services: IdeServices, check: ExerciseCheck, code: String): UiExerciseResult {
+        var firstOutput = ""
+        val total = check.cases.size
+        for ((i, case) in check.cases.withIndex()) {
+            val cap = try {
+                services.runAndCapture("app", stdin = case.stdin)
+            } catch (e: Throwable) {
+                return failure("The exercise runner failed: ${reason(e)}")
+            }
+            if (!cap.compiled) return interpret(cap, check, code)
+            if (i == 0) firstOutput = cap.stdout
+            val verdict = caseVerdict(cap.stdout, case, check.caseSensitive)
+            if (verdict != null) {
+                val input = case.stdin.trimEnd().ifBlank { "(no input)" }
+                return UiExerciseResult(
+                    passed = false,
+                    compiled = true,
+                    output = cap.stdout,
+                    message = "Test ${i + 1} of $total failed.\nInput:\n$input\n$verdict",
+                    diagnostics = cap.diagnostics,
+                )
+            }
+        }
+        val missing = missingConstructs(code, check.requireSource)
+        if (missing.isNotEmpty()) {
+            return UiExerciseResult(
+                passed = false, compiled = true, output = firstOutput,
+                message = "All $total tests pass, but the exercise wants you to actually use " +
+                    missing.joinToString(", ") { "`$it`" } + ".",
+            )
+        }
+        return UiExerciseResult(passed = true, compiled = true, output = firstOutput, message = "All $total tests passed. Nicely done!")
+    }
+
+    /** Null when [stdout] satisfies [case], else what was expected. */
+    private fun caseVerdict(stdout: String, case: ExerciseCase, caseSensitive: Boolean): String? {
+        val actual = normalize(stdout, caseSensitive)
+        return when {
+            case.expectedOutput != null ->
+                if (actual == normalize(case.expectedOutput, caseSensitive)) null
+                else "Expected output:\n${case.expectedOutput.trimEnd()}"
+            case.mustContain.isNotEmpty() ->
+                if (case.mustContain.all { actual.contains(normalize(it, caseSensitive)) }) null
+                else "Your output should include: ${case.mustContain.joinToString(", ")}"
+            else -> null
+        }
+    }
+
+    /** The owned engine's problems for [xml], or null when it could not render at all. */
+    private fun renderProblems(xml: String): List<String>? =
+        dev.ide.core.renderStandaloneLayout(xml, LAYOUT_CHECK_REQUEST)?.problems?.map { "${it.tag}: ${it.message}" }
 
     // ---- scratch project selection (per language, coroutine-aware) ----
 
@@ -314,7 +404,7 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
 
     override fun progress(): UiLearnProgress {
         val map = HashMap<String, Set<String>>()
-        for (track in LearnContent.tracks) for (lesson in track.lessons) {
+        for (track in tracks) for (lesson in track.lessons) {
             completedSteps(lesson.id).takeIf { it.isNotEmpty() }?.let { map[lesson.id] = it }
         }
         return UiLearnProgress(map)
@@ -422,11 +512,13 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
 
     // ---- content mapping (drops the server-side ExerciseCheck) ----
 
-    private fun LearnTrackDef.toUiTrack() =
-        UiLearnTrack(id, title, subtitle, iconId, accentColor, language, category, lessons.map { it.toUiSummary() })
+    private fun LearnTrackDef.toUiTrack() = UiLearnTrack(
+        id, title, subtitle, iconId, accentColor, language, category, lessons.map { it.toUiSummary() },
+        level = level, prerequisites = prerequisites,
+    )
 
     private fun LearnLessonDef.toUiSummary() =
-        UiLessonSummary(id, title, summary, iconId, estMinutes, steps.size)
+        UiLessonSummary(id, title, summary, iconId, estMinutes, steps.size, kind)
 
     private fun LearnStepDef.toUiStep(): UiLessonStep = when (this) {
         is LearnStepDef.Concept -> UiLessonStep.Concept(id, title, blocks)
@@ -436,7 +528,7 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
     }
 
     private fun findLesson(lessonId: String): Pair<LearnTrackDef, LearnLessonDef>? {
-        for (track in LearnContent.tracks) for (lesson in track.lessons) if (lesson.id == lessonId) return track to lesson
+        for (track in tracks) for (lesson in track.lessons) if (lesson.id == lessonId) return track to lesson
         return null
     }
 
@@ -463,6 +555,9 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
         /** Cap [prepare] for the Compose scratch: the first-time `androidx.compose.*` download is much larger
          *  than coroutines, so allow more time before the gate opens anyway. */
         const val COMPOSE_PREPARE_WAIT_MS = 180_000L
+
+        /** A phone-sized owned render for checking a layout exercise (the size does not change the verdict). */
+        val LAYOUT_CHECK_REQUEST = dev.ide.preview.PreviewRequest(1080, 1920, 2.75f, showChrome = false)
 
         /** The coroutines runtime for interactive coroutine lessons (matches the app's catalog version). */
         const val COROUTINES_COORD = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0"

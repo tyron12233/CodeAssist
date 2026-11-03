@@ -1976,6 +1976,27 @@ We never collect your code, file or project names, what you type, or anything th
     <!-- Editor fallbacks -->
     <string name="rename_failed">Rename failed</string>
     <string name="learn_check_failed">Check failed</string>
+    <string name="learn_paths">Paths</string>
+    <string name="learn_path_meta">%1$d of %2$d tracks</string>
+    <string name="learn_path_next">Next: %1$s</string>
+    <string name="learn_path_complete">Path complete</string>
+    <string name="learn_path_you_are_here">You are here</string>
+    <string name="learn_level_beginner">Beginner</string>
+    <string name="learn_level_intermediate">Intermediate</string>
+    <string name="learn_level_advanced">Advanced</string>
+    <string name="learn_recommended_after">Recommended after %1$s</string>
+    <string name="learn_prereq_notice">This track builds on %1$s. You can start it anyway.</string>
+    <string name="learn_kind_checkpoint">Checkpoint</string>
+    <string name="learn_kind_capstone">Capstone</string>
+    <string name="learn_check_layout">Check layout</string>
+    <string name="learn_checking">Checking…</string>
+    <string name="learn_layout_preview">Preview</string>
+    <string name="learn_checkpoint_title">Checkpoint complete</string>
+    <string name="learn_checkpoint_score">%1$d of %2$d right first time</string>
+    <string name="learn_checkpoint_perfect">A perfect score. You are ready for what comes next.</string>
+    <string name="learn_checkpoint_good">Solid. Revisit the lessons behind the ones you missed whenever you like.</string>
+    <string name="learn_checkpoint_retry">Worth another look. Go back over the track, then take the checkpoint again.</string>
+    <string name="learn_done">Done</string>
     <!-- Command palette result-section headers ("Go to"; the rest reuse the filter-tab labels) -->
     <string name="palette_section_goto">Go to</string>
     <!-- Quick-doc section headers -->

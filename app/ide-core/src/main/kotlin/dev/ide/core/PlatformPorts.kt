@@ -68,6 +68,10 @@ val STORE_MODERATION_SERVICE = ServiceKey<dev.ide.store.StoreModerationService>(
  *  reports challenges unavailable, and the tab explains itself rather than failing. */
 val DAILY_CHALLENGE_SERVICE = ServiceKey<dev.ide.store.DailyChallengeService>("platform.dailyChallenges")
 
+/** Learn's online half: the published lesson catalog (later account progress and lesson discussions).
+ *  Registered by the launcher. Absent (tests, unconfigured builds) leaves Learn on its bundled catalog. */
+val LEARN_REMOTE_SERVICE = ServiceKey<dev.ide.store.LearnRemoteService>("platform.learnRemote")
+
 /** CodeAssist Free AI: the points wallet and the proxy's address. Registered by the launcher next to the store
  *  account service, whose session it borrows. Absent resolves to a service that reports the tier unavailable,
  *  and the agent offers bring-your-own-key providers only. */

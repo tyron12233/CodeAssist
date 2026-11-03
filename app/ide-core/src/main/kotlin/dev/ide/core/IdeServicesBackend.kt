@@ -501,7 +501,10 @@ class IdeServicesBackend(
         dev.ide.core.backend.ChallengeBackend(this, dailyChallengeService)
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
-    private val learnBackend = LearnBackend(this)
+    private val learnBackend = LearnBackend(
+        this,
+        manager?.applicationContainer?.getServiceOrNull(LEARN_REMOTE_SERVICE) ?: dev.ide.store.LearnRemoteService.Unsupported,
+    )
     override val learn: LearnService = learnBackend
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
@@ -905,7 +908,7 @@ class IdeServicesBackend(
  * handle the tags; unresolved project resources fall back (lesson XML is authored to be self-contained). Never
  * the real-view path (that needs the SDK + a built project). Returns null on any inflation failure.
  */
-private fun renderStandaloneLayout(
+internal fun renderStandaloneLayout(
     xml: String, request: dev.ide.preview.PreviewRequest
 ): dev.ide.preview.LayoutPreviewResult? = runCatching {
     dev.ide.preview.impl.LayoutPreviewService().preview(

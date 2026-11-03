@@ -942,6 +942,30 @@ class CodeAssistAppStateTest {
     }
 
     @Test
+    fun aTrackOpenedFromAPathStepsBackToThePath() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openPath("path-android")
+        assertEquals(Screen.LearnPath, app.screen)
+        app.openTrackFromPath("kotlin-basics")
+        assertEquals(Screen.LessonTrack, app.screen)
+        app.openLesson("kt-hello")
+        app.navigateBack()
+        assertEquals(Screen.LessonTrack, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.LearnPath, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+
+        // A track opened from the Learn tab still goes straight back to the tab.
+        app.openTrack("kotlin-basics")
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    @Test
     fun resumingALessonJumpsStraightToItsStep() = runTest {
         val backend = settled()
         val app = appState(backend)
