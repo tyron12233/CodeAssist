@@ -1572,6 +1572,19 @@ interface LearnService {
     /** Where "Resume" on the Learn banner should go, or null if nothing has been started. */
     fun resume(): UiResumePoint? = null
 
+    /**
+     * Sync progress with the signed-in account: upload what this device did, merge in what was done
+     * elsewhere. True when the device's progress changed, so the caller should re-read [progress].
+     * A no-op returning false when signed out or offline.
+     */
+    suspend fun syncProgress(): Boolean = false
+
+    /** The learner's account side (streak, badges), or null when this build has no accounts at all. */
+    fun account(): UiLearnAccount? = null
+
+    /** The Learn side of the public profile at [handle], or null when there is nothing to show. */
+    suspend fun publicProfile(handle: String): UiLearnPublicProfile? = null
+
     companion object {
         /** A Learn service with no content — the default for backends that wire none. */
         val Unsupported: LearnService = object : LearnService {}

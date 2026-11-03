@@ -8,12 +8,16 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.ide.ui.StubBackend
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.fakeAdController
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.LearnService
+import dev.ide.ui.backend.UiLearnAccount
+import dev.ide.ui.backend.UiLearnBadge
 import dev.ide.ui.backend.UiLearnCatalog
 import dev.ide.ui.backend.UiLearnPath
 import dev.ide.ui.backend.UiLessonKind
@@ -36,8 +40,9 @@ import kotlin.test.Test
  */
 class LearnScreenSnapshot {
 
-    private class FakeLearn : LearnService {
+    private class FakeLearn(private val account: UiLearnAccount? = null) : LearnService {
         override fun learnAvailable() = true
+        override fun account() = account
 
         override suspend fun catalog() = UiLearnCatalog(
             tracks = listOf(
@@ -92,8 +97,8 @@ class LearnScreenSnapshot {
             )
     }
 
-    private class FakeBackend : StubBackend() {
-        override val learn: LearnService = FakeLearn()
+    private class FakeBackend(account: UiLearnAccount? = null) : StubBackend() {
+        override val learn: LearnService = FakeLearn(account)
     }
 
     @Test
@@ -113,6 +118,37 @@ class LearnScreenSnapshot {
     @Test
     fun renderWithAdInFrame() {
         snapshot("learn-ads.png", FakeBackend(), dark = true, height = 2800)
+    }
+
+    /** Signed in with a streak: the header chip shows the streak instead of the lesson count. */
+    @Test
+    fun renderStreak() {
+        snapshot("learn-streak.png", FakeBackend(UiLearnAccount(signedIn = true, streak = 6, bestStreak = 9)), dark = true, height = 700)
+    }
+
+    /** Signed out with progress: the prompt to keep it on the account. */
+    @Test
+    fun renderSyncPrompt() {
+        snapshot("learn-sync-prompt.png", FakeBackend(UiLearnAccount(signedIn = false, available = true)), dark = false, height = 900) { b ->
+            LearnScreen(backend = b, onOpenTrack = {}, onResume = { _, _, _ -> }, onSignIn = {})
+        }
+    }
+
+    /** The profile Learning card, with badges and with none. */
+    @Test
+    fun renderProfileCard() {
+        val badges = listOf(
+            UiLearnBadge("kt1", "Kotlin Basics", "kotlin", 0xFF7F52FFL),
+            UiLearnBadge("jv1", "Java: Beyond Basics", "java", 0xFFF89820L),
+            UiLearnBadge("an1", "Android Basics", "android", 0xFF3DDC84L),
+        )
+        snapshot("learn-profile-card.png", FakeBackend(), dark = true, height = 900) {
+            androidx.compose.foundation.layout.Column {
+                LearnProfileCard(streak = 6, bestStreak = 12, lessons = 23, badges = badges)
+                androidx.compose.foundation.layout.Spacer(Modifier.padding(8.dp))
+                LearnProfileCard(streak = 0, bestStreak = 0, lessons = 2, badges = emptyList())
+            }
+        }
     }
 
     /** The path map: one finished track, the current one tagged "You are here", the rest upcoming. */

@@ -499,7 +499,7 @@ private fun kotlinBasics() = LearnTrackDef(
             ),
         ),
         LearnLessonDef(
-            id = "kt-basics-checkpoint", title = "Checkpoint: Kotlin Basics", kind = "checkpoint",
+            id = "kt-basics-checkpoint", title = "Kotlin Basics review", kind = "checkpoint",
             summary = "Five questions across the whole track. Aim to get them right first time.",
             iconId = "check", estMinutes = 4,
             steps = listOf(
@@ -541,7 +541,7 @@ private fun kotlinBasics() = LearnTrackDef(
             ),
         ),
         LearnLessonDef(
-            id = "kt-basics-capstone", title = "Capstone: Score report", kind = "capstone",
+            id = "kt-basics-capstone", title = "Score report", kind = "capstone",
             summary = "Read real input, loop over it, and report on it.",
             iconId = "kotlin", estMinutes = 12,
             steps = listOf(
@@ -895,7 +895,7 @@ private fun javaBasics() = LearnTrackDef(
             ),
         ),
         LearnLessonDef(
-            id = "java-basics-checkpoint", title = "Checkpoint: Java Basics", kind = "checkpoint",
+            id = "java-basics-checkpoint", title = "Java Basics review", kind = "checkpoint",
             summary = "Five questions across the whole track. Aim to get them right first time.",
             iconId = "check", estMinutes = 4,
             steps = listOf(
@@ -937,7 +937,7 @@ private fun javaBasics() = LearnTrackDef(
             ),
         ),
         LearnLessonDef(
-            id = "java-basics-capstone", title = "Capstone: Sum and evens", kind = "capstone",
+            id = "java-basics-capstone", title = "Sum and evens", kind = "capstone",
             summary = "Read numbers with a Scanner and summarise them.",
             iconId = "java", estMinutes = 12,
             steps = listOf(
@@ -3469,7 +3469,7 @@ private fun androidBasics() = LearnTrackDef(
             ),
         ),
         LearnLessonDef(
-            id = "and-build-screen", title = "Capstone: Build a sign-in screen", kind = "capstone",
+            id = "and-build-screen", title = "Build a sign-in screen", kind = "capstone",
             summary = "Write a real layout from scratch and watch it render.",
             iconId = "module.android", estMinutes = 10,
             steps = listOf(

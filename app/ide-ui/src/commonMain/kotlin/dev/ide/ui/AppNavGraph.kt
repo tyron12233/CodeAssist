@@ -1045,12 +1045,27 @@ private fun ChallengeRoute(app: CodeAssistAppState, fileActions: FileActions) {
 
 @Composable
 private fun LearnRoute(app: CodeAssistAppState, fileActions: FileActions) {
+    var signInVisible by remember { mutableStateOf(false) }
+    if (signInVisible) {
+        StoreSignInSheet(
+            backend = app.backend,
+            onDismiss = {
+                signInVisible = false
+                // The screen re-syncs when the auth state flips; this covers a sheet closed without signing in.
+                app.refreshLearn()
+            },
+            onSubmitProject = null,
+            onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+        )
+    }
     LearnScreen(
         backend = app.backend,
         epoch = app.learnEpoch,
         onOpenTrack = app::openTrack,
         onResume = app::resumeLesson,
         onOpenPath = app::openPath,
+        // Shown only when Learn has an account backend (UiLearnAccount.available), so always offered here.
+        onSignIn = { signInVisible = true },
         onOpenDocs = if (fileActions.canOpenUrl) {
             { fileActions.openUrl(BetaInfo.REPO_URL) }
         } else null,

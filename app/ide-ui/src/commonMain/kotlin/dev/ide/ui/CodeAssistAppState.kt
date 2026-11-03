@@ -867,6 +867,11 @@ class CodeAssistAppState(
         screen = Screen.LessonTrack
     }
 
+    /** Re-reads the Learn tab (progress, account), after a sign-in attempt. */
+    fun refreshLearn() {
+        learnEpoch++
+    }
+
     fun exitLearnPath() {
         learnEpoch++
         screen = Screen.Projects

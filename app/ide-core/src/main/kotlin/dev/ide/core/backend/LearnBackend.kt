@@ -13,7 +13,10 @@ import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiInlayKind
 import dev.ide.ui.backend.UiInlayPart
+import dev.ide.ui.backend.UiLearnAccount
+import dev.ide.ui.backend.UiLearnBadge
 import dev.ide.ui.backend.UiLearnCatalog
+import dev.ide.ui.backend.UiLearnPublicProfile
 import dev.ide.ui.backend.UiLearnPath
 import dev.ide.ui.backend.UiLearnProgress
 import dev.ide.ui.backend.UiLearnTrack
@@ -40,7 +43,7 @@ import java.nio.file.Path
  */
 internal class LearnBackend(
     private val ctx: BackendContext,
-    remote: dev.ide.store.LearnRemoteService = dev.ide.store.LearnRemoteService.Unsupported,
+    private val remote: dev.ide.store.LearnRemoteService = dev.ide.store.LearnRemoteService.Unsupported,
 ) : LearnService {
 
     private val log = dev.ide.platform.log.Log.logger("learn.compose")
@@ -54,6 +57,14 @@ internal class LearnBackend(
     )
 
     private val tracks: List<LearnTrackDef> get() = catalogStore.catalog().tracks
+
+    /** Device progress plus its sync with the signed-in account. */
+    private val progressSync = LearnProgressSync(
+        remote = remote,
+        pref = ::pref,
+        setPref = ::setPref,
+        catalog = { catalogStore.catalog() },
+    )
 
     /** Scratch keys whose extra dependencies (e.g. coroutines) have been resolved this session. */
     private val depsEnsured = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -411,8 +422,7 @@ internal class LearnBackend(
     }
 
     override fun markStepComplete(lessonId: String, stepId: String) {
-        val current = completedSteps(lessonId).toMutableSet()
-        if (current.add(stepId)) setPref(keyCompleted(lessonId), current.joinToString(","))
+        progressSync.stepCompleted(lessonId, stepId)
         val idx = findLesson(lessonId)?.second?.steps?.indexOfFirst { it.id == stepId } ?: -1
         if (idx >= 0) recordVisit(lessonId, idx)
     }
@@ -535,14 +545,50 @@ internal class LearnBackend(
     private fun findStep(lessonId: String, stepId: String): LearnStepDef? =
         findLesson(lessonId)?.second?.steps?.firstOrNull { it.id == stepId }
 
+    // ---- account ----
+
+    override suspend fun syncProgress(): Boolean = runCatching { progressSync.sync() }.getOrDefault(false)
+
+    override fun account(): UiLearnAccount {
+        val signedIn = remote.learnRemoteAvailable() && remote.accountId() != null
+        if (!signedIn) return UiLearnAccount(signedIn = false, available = remote.learnRemoteAvailable())
+        val state = progressSync.account
+        val streak = state?.streak ?: progressSync.cachedStreak() ?: dev.ide.store.LearnStreak()
+        return UiLearnAccount(
+            signedIn = true,
+            available = true,
+            streak = streak.current,
+            bestStreak = streak.best,
+            activeToday = streak.activeToday,
+            // Before the first sync of a session, the device's own finished tracks stand in for the badges.
+            badges = (state?.badges?.map { it.trackId to it.earnedAt } ?: progressSync.completedTracks().map { it to "" })
+                .mapNotNull { (id, at) -> badgeFor(id, at) },
+        )
+    }
+
+    override suspend fun publicProfile(handle: String): UiLearnPublicProfile? = withContext(Dispatchers.IO) {
+        val r = runCatching { remote.publicProfile(handle) }.getOrNull()
+        val p = (r as? dev.ide.store.StoreResult.Ok)?.value ?: return@withContext null
+        UiLearnPublicProfile(
+            badges = p.badges.mapNotNull { badgeFor(it.trackId, it.earnedAt) },
+            streak = p.streak.current,
+            bestStreak = p.streak.best,
+            lessonsStarted = p.lessonsStarted,
+        )
+    }
+
+    /** A badge for a track this catalog knows; a track id from a newer catalog is left out. */
+    private fun badgeFor(trackId: String, earnedAt: String): UiLearnBadge? {
+        val t = tracks.firstOrNull { it.id == trackId } ?: return null
+        return UiLearnBadge(t.id, t.title, t.iconId, t.accentColor, earnedAt)
+    }
+
     // ---- progress persistence (app-global preferences) ----
 
-    private fun completedSteps(lessonId: String): Set<String> =
-        pref(keyCompleted(lessonId))?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    private fun completedSteps(lessonId: String): Set<String> = progressSync.completedSteps(lessonId)
 
     private fun pref(key: String): String? = ctx.manager?.preference(key)
     private fun setPref(key: String, value: String) { ctx.manager?.setPreference(key, value) }
-    private fun keyCompleted(lessonId: String) = "learn.completed.$lessonId"
 
     private companion object {
         const val KEY_RESUME_LESSON = "learn.resume.lesson"

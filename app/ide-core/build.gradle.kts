@@ -95,6 +95,8 @@ tasks.named<Test>("test") {
     // Opt-in: LearnSolutionsTest compiles and runs every exercise's solution (slow, and coroutine lessons
     // download a dependency). The catalog publish flow turns it on: -Plearn.validateSolutions=true.
     providers.gradleProperty("learn.validateSolutions").orNull?.let { systemProperty("learn.validateSolutions", it) }
+    // Opt-in live test against a backend with the Learn migrations (LearnCatalogLiveTest).
+    listOf("LEARN_LIVE_URL", "LEARN_LIVE_KEY").forEach { name -> System.getenv(name)?.let { environment(name, it) } }
 }
 
 // Writes the bundled lesson catalog as the JSON the server serves (see supabase/scripts/publish-learn-catalog.mjs).

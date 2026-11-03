@@ -481,6 +481,38 @@ data class UiExerciseResult(
 /** Local learning progress: for each lesson id, the set of completed step ids. */
 data class UiLearnProgress(val completedByLesson: Map<String, Set<String>> = emptyMap())
 
+/**
+ * The signed-in learner's account side. [available] is whether this build has accounts at all (false hides
+ * every account surface); [signedIn] false with [available] true is the cue to offer sign-in. [streak] counts
+ * consecutive days with a completed step, in the learner's own time zone; [activeToday] says today already
+ * counts. [badges] are finished tracks.
+ */
+data class UiLearnAccount(
+    val signedIn: Boolean,
+    val available: Boolean = true,
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
+    val activeToday: Boolean = false,
+    val badges: List<UiLearnBadge> = emptyList(),
+)
+
+/** A finished track, shown as a badge. [earnedAt] is ISO-8601, or blank when not yet confirmed by the server. */
+data class UiLearnBadge(
+    val trackId: String,
+    val title: String,
+    val iconId: String,
+    val accentColor: Long? = null,
+    val earnedAt: String = "",
+)
+
+/** What a public profile shows about someone's learning. */
+data class UiLearnPublicProfile(
+    val badges: List<UiLearnBadge> = emptyList(),
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
+    val lessonsStarted: Int = 0,
+)
+
 /** Where to send "Resume" on the Learn banner: the last-visited lesson + step, with display labels + fraction. */
 data class UiResumePoint(
     val trackId: String,

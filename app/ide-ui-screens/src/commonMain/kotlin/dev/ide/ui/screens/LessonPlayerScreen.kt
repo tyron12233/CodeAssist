@@ -299,7 +299,9 @@ private fun InteractiveStep(
     // Live diagnostics + inlay hints: (re)analyze on each settled edit and when indexing finishes; feed the
     // editor's squiggles and the inferred-type/parameter-name hints. Both run against the same buffer snapshot
     // and re-fire when a new edit bumps textRevision (which cancels this pass), so offsets stay consistent.
-    LaunchedEffect(step.id, ready, session.textRevision, indexing, inlayHintsEnabled) {
+    // Keyed on the session itself as well as its revision: "Copy to editor" swaps in a new session whose
+    // revision counter starts where the old one did, which alone would leave the analysis stale.
+    LaunchedEffect(step.id, ready, session, session.textRevision, indexing, inlayHintsEnabled) {
         if (!ready || isLayout) return@LaunchedEffect
         delay(250)
         val code = session.doc.text
@@ -351,7 +353,7 @@ private fun InteractiveStep(
         if (isLayout) {
             // Re-render once typing settles rather than on every keystroke.
             var previewXml by remember(step.id) { mutableStateOf(step.starterCode) }
-            LaunchedEffect(step.id, session.textRevision) {
+            LaunchedEffect(step.id, session, session.textRevision) {
                 delay(LAYOUT_PREVIEW_DEBOUNCE_MS)
                 previewXml = session.doc.text
             }

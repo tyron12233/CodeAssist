@@ -59,6 +59,7 @@ import dev.ide.ui.backend.UiSubmissionStatus
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.learn_section_title
 import dev.ide.ui.generated.resources.you_delete_account_deleting
 import dev.ide.ui.generated.resources.you_delete_account_body
 import dev.ide.ui.generated.resources.you_delete_account_title
@@ -132,6 +133,15 @@ fun YouScreen(
     // Why a delete did not happen, from the backend. "That one is still in review" and "that one is
     // published" both name the next step, so they are shown as they were written.
     var deleteError by remember { mutableStateOf<String?>(null) }
+    // The Learning section: synced first, so a phone that just signed in shows the account's figures.
+    var learning by remember { mutableStateOf<dev.ide.ui.backend.UiLearnAccount?>(null) }
+    var lessonsStarted by remember { mutableStateOf(0) }
+    LaunchedEffect(epoch, signedIn) {
+        if (!signedIn) { learning = null; return@LaunchedEffect }
+        runCatching { backend.learn.syncProgress() }
+        learning = runCatching { backend.learn.account() }.getOrNull()?.takeIf { it.signedIn }
+        lessonsStarted = runCatching { backend.learn.progress().completedByLesson.size }.getOrDefault(0)
+    }
 
     LaunchedEffect(epoch, signedIn) {
         if (!signedIn) {
@@ -186,6 +196,8 @@ fun YouScreen(
                     onDelete = { deleteError = null; pendingDelete = it },
                     onOpenItem = onOpenItem,
                     onPublish = onPublish,
+                    learning = learning,
+                    lessonsStarted = lessonsStarted,
                     onOpenPublicProfile = { onOpenPublicProfile(current.handle) },
                     onSignOut = {
                         backend.store.signOut()
@@ -298,6 +310,8 @@ private fun YouPage(
     onOpenPublicProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: (() -> Unit)?,
+    learning: dev.ide.ui.backend.UiLearnAccount? = null,
+    lessonsStarted: Int = 0,
 ) {
     val open = submissions.filter { it.status != UiSubmissionStatus.PUBLISHED }
     val iconBySlug = published.associate { it.slug to it.iconPath }
@@ -412,6 +426,15 @@ private fun YouPage(
                 // Alone on the page (nothing published yet) the Publish tile takes the whole row: half a
                 // row of empty slot beside nothing reads as a layout that failed to load.
                 if (rows[r].size == 1 && published.isNotEmpty()) Spacer(Modifier.weight(1f))
+            }
+        }
+        if (learning != null) {
+            item("learning") {
+                Spacer(Modifier.height(16.dp))
+                ProfileSectionHeader(stringResource(Res.string.learn_section_title))
+                Spacer(Modifier.height(12.dp))
+                LearnProfileCard(learning.streak, learning.bestStreak, lessonsStarted, learning.badges)
+                Spacer(Modifier.height(12.dp))
             }
         }
         item("account") {

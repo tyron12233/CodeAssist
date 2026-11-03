@@ -56,6 +56,7 @@ import dev.ide.ui.components.FollowButton
 import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.formatStars
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.learn_section_title
 import dev.ide.ui.generated.resources.profile_installs
 import dev.ide.ui.generated.resources.profile_followers
 import dev.ide.ui.generated.resources.profile_likes
@@ -102,6 +103,10 @@ fun PublisherProfileScreen(
         value = runCatching { backend.store.publisherProfile(handle) }.getOrNull()
     }
     val current = profile
+    // What this person has learned. Null (nothing to show) leaves the section out entirely.
+    val learning by produceState<dev.ide.ui.backend.UiLearnPublicProfile?>(null, handle, backend) {
+        value = runCatching { backend.learn.publicProfile(handle) }.getOrNull()
+    }
     var sort by remember(handle) { mutableStateOf(ProfileSort.Popular) }
     val sorts = remember(current?.items) { usefulSorts(current?.items.orEmpty()) }
     val now = remember(current) { dev.ide.ui.platform.nowMillis() }
@@ -163,6 +168,14 @@ fun PublisherProfileScreen(
                             ProfileSectionHeader(stringResource(Res.string.profile_highlights))
                             Spacer(Modifier.height(12.dp))
                             HighlightsRow(backend, highlights, now, onOpenItem)
+                        }
+                    }
+                    learning?.let { l ->
+                        item("learning") {
+                            Spacer(Modifier.height(28.dp))
+                            ProfileSectionHeader(stringResource(Res.string.learn_section_title))
+                            Spacer(Modifier.height(12.dp))
+                            LearnProfileCard(l.streak, l.bestStreak, l.lessonsStarted, l.badges, showEmptyBadges = false)
                         }
                     }
                     item("shelf") {

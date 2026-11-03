@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -78,6 +79,10 @@ import dev.ide.ui.generated.resources.learn_path_meta
 import dev.ide.ui.generated.resources.learn_path_next
 import dev.ide.ui.generated.resources.learn_paths
 import dev.ide.ui.generated.resources.learn_recommended_after
+import dev.ide.ui.generated.resources.learn_sign_in
+import dev.ide.ui.generated.resources.learn_streak_chip
+import dev.ide.ui.generated.resources.learn_sync_body
+import dev.ide.ui.generated.resources.learn_sync_title
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.CaShapes
@@ -108,17 +113,28 @@ fun LearnScreen(
     onOpenDocs: (() -> Unit)? = null,
     onJoinDiscord: (() -> Unit)? = null,
     onOpenPath: (pathId: String) -> Unit = {},
+    /** Opens the account sign-in sheet. Null hides the "keep your progress" prompt. */
+    onSignIn: (() -> Unit)? = null,
 ) {
     // A newer published catalog is fetched once per session; when one lands, re-read so new lessons show.
     var refreshed by remember { mutableStateOf(0) }
     LaunchedEffect(backend) {
         if (runCatching { backend.learn.refreshCatalog() }.getOrDefault(false)) refreshed++
     }
+    // Sync with the account on open, on return from a lesson, and right after signing in; progress made on
+    // another device lands here.
+    val signedIn = backend.store.authState().collectAsState().value.signedIn
+    var synced by remember { mutableStateOf(0) }
+    LaunchedEffect(backend, epoch, signedIn) {
+        runCatching { backend.learn.syncProgress() }
+        synced++
+    }
     val catalog by produceState(UiLearnCatalog(), backend, epoch, refreshed) {
         value = runCatching { backend.learn.catalog() }.getOrDefault(UiLearnCatalog())
     }
-    val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
-    val resume = remember(backend, epoch) { runCatching { backend.learn.resume() }.getOrNull() }
+    val progress = remember(backend, epoch, synced) { runCatching { backend.learn.progress() }.getOrNull() }
+    val resume = remember(backend, epoch, synced) { runCatching { backend.learn.resume() }.getOrNull() }
+    val account = remember(backend, epoch, synced, signedIn) { runCatching { backend.learn.account() }.getOrNull() }
     var selectedCat by remember { mutableStateOf<String?>(null) }
 
     val categories = remember(catalog) { orderedCategories(catalog.tracks) }
@@ -133,7 +149,10 @@ fun LearnScreen(
             Modifier.widthIn(max = 640.dp).fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {
-            item("header") { LearnHeader(lessonsDone) }
+            item("header") { LearnHeader(lessonsDone, streak = account?.takeIf { it.signedIn }?.streak ?: 0) }
+            if (onSignIn != null && account?.available == true && !account.signedIn && lessonsDone > 0) {
+                item("sync") { SyncPrompt(onSignIn) }
+            }
             if (resume != null) {
                 item("continue") {
                     ContinueCard(resume, catalog) { onResume(resume.trackId, resume.lessonId, resume.stepIndex) }
@@ -169,9 +188,12 @@ fun LearnScreen(
     }
 }
 
-/** Title plus the completion chip. The chip is hidden at zero: "0 lessons done" is discouraging, not informative. */
+/**
+ * Title plus one chip: the day streak when there is one (it is the figure worth protecting), else the
+ * lesson count. Hidden at zero: "0 lessons done" is discouraging, not informative.
+ */
 @Composable
-private fun LearnHeader(lessonsDone: Int) {
+private fun LearnHeader(lessonsDone: Int, streak: Int = 0) {
     val c = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 8.dp),
@@ -184,7 +206,7 @@ private fun LearnHeader(lessonsDone: Int) {
             color = c.onSurface,
             modifier = Modifier.weight(1f),
         )
-        if (lessonsDone > 0) {
+        if (lessonsDone > 0 || streak > 0) {
             Surface(shape = CircleShape, color = c.primaryContainer, contentColor = c.onPrimaryContainer) {
                 Row(
                     Modifier.height(34.dp).padding(horizontal = 14.dp),
@@ -193,7 +215,8 @@ private fun LearnHeader(lessonsDone: Int) {
                 ) {
                     Symbol(CaSymbols.localFireDepartment, contentDescription = null, size = 17.dp)
                     Text(
-                        stringResource(Res.string.learn_lessons_done, lessonsDone),
+                        if (streak > 0) stringResource(Res.string.learn_streak_chip, streak)
+                        else stringResource(Res.string.learn_lessons_done, lessonsDone),
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }
@@ -475,6 +498,37 @@ private fun LearnLinks(onOpenDocs: (() -> Unit)?, onJoinDiscord: (() -> Unit)?) 
 }
 
 private const val MAX_INTERLEAVED_ADS = 2
+
+/** For a signed-out learner who has started: their progress lives on this device only until they sign in. */
+@Composable
+private fun SyncPrompt(onSignIn: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp),
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Symbol(CaSymbols.sync, contentDescription = null, size = 24.dp, tint = c.primary)
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.learn_sync_title), style = MaterialTheme.typography.titleSmall, color = c.onSurface)
+                Text(
+                    stringResource(Res.string.learn_sync_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            androidx.compose.material3.FilledTonalButton(onClick = onSignIn) {
+                Text(stringResource(Res.string.learn_sign_in))
+            }
+        }
+    }
+}
 
 /**
  * The learning paths as a horizontal shelf. Each card shows how far along the path the learner is and which
