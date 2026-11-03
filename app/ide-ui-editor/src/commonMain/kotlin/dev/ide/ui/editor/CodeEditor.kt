@@ -1222,7 +1222,12 @@ private fun CodeEditorContent(
                 .graphicsLayer {
                     // A candle does not blink; its flame flickering is the at-rest motion.
                     val lit = blinkOn || caretStyle == CaretStyle.Candle
-                    alpha = if (isFocused && lit && editorSession.selection.collapsed) 1f else 0f
+                    alpha = when {
+                        // Under a floating cursor the caret marks where the text will take it: steady and faint.
+                        editorSession.floatingCaret != null -> 0.45f
+                        isFocused && lit && editorSession.selection.collapsed -> 1f
+                        else -> 0f
+                    }
                 }
                 .drawBehind {
                     if (!editorSession.selection.collapsed) return@drawBehind
@@ -1244,6 +1249,32 @@ private fun CodeEditorContent(
                                 draw(flameTime.floatValue, geometry.vOffset.floatValue, geometry.hOffset.floatValue, metrics.lineHeight)
                             }
                         }
+                    }
+                },
+        )
+
+        // The symbol bar trackpad's floating cursor: wherever the finger has it, between lines or past a line's
+        // end, with the faint caret above showing where in the text that lands.
+        Spacer(
+            Modifier
+                .matchParentSize()
+                .drawBehind {
+                    val floating = editorSession.floatingCaret ?: return@drawBehind
+                    val doc = editorSession.doc
+                    val line = kotlin.math.floor(floating.line).toInt().coerceIn(0, doc.lineCount - 1)
+                    val onText = floating.column.toInt().coerceAtMost(doc.lineLength(line))
+                    val (_, textX, top) = geometry.caretGeometry(doc.lineStart(line) + onText)
+                    val x = textX + (floating.column - onText) * metrics.charWidth
+                    val y = top + (floating.line - line) * metrics.lineHeight
+                    val w = 3.dp.toPx()
+                    val h = metrics.lineHeight * 1.15f
+                    clipRect(left = gutterWidthPx, top = caretClip.codeTop) {
+                        drawRoundRect(
+                            drawColors.caret,
+                            topLeft = Offset(x - w / 2f, y - (h - metrics.lineHeight) / 2f),
+                            size = androidx.compose.ui.geometry.Size(w, h),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w / 2f),
+                        )
                     }
                 },
         )

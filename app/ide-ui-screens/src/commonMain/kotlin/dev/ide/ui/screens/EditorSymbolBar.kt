@@ -96,8 +96,8 @@ import kotlin.math.roundToInt
  * which opens a row of them above the bar. The keys:
  * - **tap** types the symbol, through smart insert, so `{`/`(`/`"` auto-close as typed;
  * - **flick up** types its alternate ([SYMBOL_ALTERNATES], shown small in the cap's corner): `(` gives `)`;
- * - **hold, then drag** turns the bar into a trackpad that slides the caret ([onMoveCaret]): sideways by
- *   character, up and down by line.
+ * - **hold, then drag** turns the bar into a trackpad driving a free, floating cursor ([trackpad]) that the
+ *   caret snaps to.
  *
  * No key uses `clickable`, which would take focus from the editor and close the keyboard with it.
  */
@@ -117,8 +117,8 @@ internal fun EditorSymbolBar(
      * does it (Android): there the key would be a redundant slot on a bar where every slot is scarce.
      */
     onHideKeyboard: (() -> Unit)? = null,
-    /** Slides the caret [chars] along the text and [lines] down, for the hold-and-drag trackpad. Null disables it. */
-    onMoveCaret: ((chars: Int, lines: Int) -> Unit)? = null,
+    /** What the hold-and-drag trackpad drives (the editor's floating cursor). Null disables it. */
+    trackpad: SymbolBarTrackpad? = null,
     /** Opens with the ⋯ row showing, for a preview or snapshot. */
     initiallyExpanded: Boolean = false,
 ) {
@@ -129,13 +129,13 @@ internal fun EditorSymbolBar(
     var moreOpen by remember { mutableStateOf(initiallyExpanded) }
     // When the ⋯ row last closed by an outside tap: that same tap landing on ⋯ must not reopen it at once.
     var dismissedAt by remember { mutableStateOf<TimeSource.Monotonic.ValueTimeMark?>(null) }
-    var trackpad by remember { mutableStateOf(false) }
+    var trackpadOn by remember { mutableStateOf(false) }
     val hasMore = folded.isNotEmpty() || showDiagnosticJump || onCustomize != null
     val haptics = LocalHapticFeedback.current
     val gestures = KeyGestures(
-        onMoveCaret = onMoveCaret,
+        trackpad = trackpad,
         onTrackpad = { on ->
-            trackpad = on
+            trackpadOn = on
             if (on) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         },
     )
@@ -191,7 +191,7 @@ internal fun EditorSymbolBar(
         }
         // While the trackpad drives the caret the keys are not keys: say what the drag does instead.
         AnimatedVisibility(
-            visible = trackpad,
+            visible = trackpadOn,
             modifier = Modifier.matchParentSize(),
             enter = fadeIn(tween(120)),
             exit = fadeOut(tween(180)),
@@ -339,8 +339,18 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.wai
     }
 }
 
-/** The bar-wide gesture wiring every key shares: the trackpad's caret callback and its on/off signal. */
-private class KeyGestures(val onMoveCaret: ((Int, Int) -> Unit)?, val onTrackpad: (Boolean) -> Unit)
+/**
+ * What the bar's trackpad drives: a floating cursor that [begin]s at the caret, [move]s by fractional columns and
+ * lines as the finger drags, and [end]s on release.
+ */
+internal interface SymbolBarTrackpad {
+    fun begin()
+    fun move(columns: Float, lines: Float)
+    fun end()
+}
+
+/** The bar-wide gesture wiring every key shares: the trackpad and its on/off signal. */
+private class KeyGestures(val trackpad: SymbolBarTrackpad?, val onTrackpad: (Boolean) -> Unit)
 
 /** What a held key is doing, for its look: nothing, pressed, or flicked up to its alternate. */
 private enum class KeyPress { NONE, DOWN, ALTERNATE }
@@ -396,10 +406,10 @@ private fun KeyCap(
             .clip(KeyShape)
             .background(face, KeyShape)
             .semantics { contentDescription = label }
-            .pointerInput(alternate, gestures.onMoveCaret) {
+            .pointerInput(alternate, gestures.trackpad) {
                 keyGestures(
                     hasAlternate = alternate != null,
-                    trackpad = gestures.onMoveCaret,
+                    trackpad = gestures.trackpad,
                     onTrackpad = gestures.onTrackpad,
                     onPress = { press = it },
                     onTap = { tap() },
@@ -442,7 +452,7 @@ private fun KeyCap(
  */
 private suspend fun PointerInputScope.keyGestures(
     hasAlternate: Boolean,
-    trackpad: ((Int, Int) -> Unit)?,
+    trackpad: SymbolBarTrackpad?,
     onTrackpad: (Boolean) -> Unit,
     onPress: (KeyPress) -> Unit,
     onTap: () -> Unit,
@@ -488,26 +498,23 @@ private suspend fun PointerInputScope.keyGestures(
                 if (trackpad == null) {
                     if (waitForUpOrCancel()) onTap()
                 } else {
+                    // The finger drives a free cursor continuously; the caret snaps to the text under it.
                     onTrackpad(true)
-                    val stepX = TrackpadStepX.toPx()
-                    val stepY = TrackpadStepY.toPx()
-                    var carriedX = 0f
-                    var carriedY = 0f
-                    var last = start
-                    while (true) {
-                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                        change.consume()
-                        carriedX += change.position.x - last.x
-                        carriedY += change.position.y - last.y
-                        last = change.position
-                        val chars = (carriedX / stepX).toInt()
-                        val lines = (carriedY / stepY).toInt()
-                        if (chars != 0 || lines != 0) {
-                            trackpad(chars, lines)
-                            carriedX -= chars * stepX
-                            carriedY -= lines * stepY
+                    trackpad.begin()
+                    try {
+                        val perColumn = TrackpadStepX.toPx()
+                        val perLine = TrackpadStepY.toPx()
+                        var last = start
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            change.consume()
+                            val d = change.position - last
+                            last = change.position
+                            if (d.x != 0f || d.y != 0f) trackpad.move(d.x / perColumn, d.y / perLine)
+                            if (!change.pressed) break
                         }
-                        if (!change.pressed) break
+                    } finally {
+                        trackpad.end()
                     }
                 }
             }
@@ -536,7 +543,7 @@ private const val MoreMillis = 180
 /** How far up a key must be flicked to type its alternate. */
 private val FlickUp = 14.dp
 
-/** Trackpad travel per character sideways, and per line up or down. */
+/** Finger travel per column sideways, and per line up or down, for the floating cursor. */
 private val TrackpadStepX = 9.dp
 private val TrackpadStepY = 22.dp
 

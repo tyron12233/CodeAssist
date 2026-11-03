@@ -1057,6 +1057,47 @@ class EditorSession(
         updateSelectionAndComposing(TextRange(offset.coerceIn(0, doc.length)), null)
     }
 
+    // ---- the floating cursor (the symbol bar's hold-and-drag trackpad) ----
+
+    /**
+     * Where the trackpad's free cursor is, in fractional document [line]s and [column]s, while one is being
+     * dragged; null otherwise. It goes wherever the finger takes it, past a line's end or between lines, and the
+     * real caret snaps to the text position nearest it, as iOS's floating cursor does: so dragging right past
+     * the end of a line holds the caret at that end instead of wrapping it onto the next line, and dragging down
+     * keeps the column the cursor is at rather than the one a short line clamped the caret to.
+     */
+    var floatingCaret by mutableStateOf<FloatingCaret?>(null)
+        private set
+
+    /** Start a floating cursor at the caret. */
+    fun beginFloatingCaret() {
+        val at = selection.end.coerceIn(0, doc.length)
+        val line = doc.lineForOffset(at)
+        floatingCaret = FloatingCaret(line.toFloat(), (at - doc.lineStart(line)).toFloat())
+    }
+
+    /** Move the floating cursor by [dColumns] and [dLines], and snap the caret to the text under it. */
+    fun moveFloatingCaret(dColumns: Float, dLines: Float) {
+        val from = floatingCaret ?: return
+        val line = (from.line + dLines).coerceIn(0f, (doc.lineCount - 1).toFloat())
+        val snappedLine = kotlin.math.round(line).toInt()
+        // It may float past the end of the line it is on, but not off into nowhere: no further than the longest
+        // line around it, so dragging back reaches text again without a long dead zone.
+        var widest = 0
+        for (l in (snappedLine - FLOAT_NEIGHBOURHOOD).coerceAtLeast(0)..(snappedLine + FLOAT_NEIGHBOURHOOD).coerceAtMost(doc.lineCount - 1)) {
+            widest = maxOf(widest, doc.lineLength(l))
+        }
+        val column = (from.column + dColumns).coerceIn(0f, (widest + 1).toFloat())
+        floatingCaret = FloatingCaret(line, column)
+        val snappedColumn = kotlin.math.round(column).toInt().coerceIn(0, doc.lineLength(snappedLine))
+        setCaret(doc.lineStart(snappedLine) + snappedColumn)
+    }
+
+    /** Let go of the floating cursor; the caret stays where it snapped. */
+    fun endFloatingCaret() {
+        floatingCaret = null
+    }
+
     /** Drag-selection: keep the current anchor ([TextRange.start]), move the live end. */
     fun extendSelectionTo(offset: Int) {
         updateSelectionAndComposing(TextRange(selection.start, offset.coerceIn(0, doc.length)), null)
@@ -1589,3 +1630,9 @@ private fun prevCharBoundary(text: CharSequence, i: Int): Int = when {
     text[i - 1].isLowSurrogate() && i >= 2 && text[i - 2].isHighSurrogate() -> i - 2
     else -> i - 1
 }
+
+/** The trackpad's free cursor: a fractional document [line] and [column] (see [EditorSession.floatingCaret]). */
+data class FloatingCaret(val line: Float, val column: Float)
+
+/** How many lines either side bound how far past a line's end the floating cursor may go. */
+private const val FLOAT_NEIGHBOURHOOD = 12

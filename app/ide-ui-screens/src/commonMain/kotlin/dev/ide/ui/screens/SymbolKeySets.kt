@@ -2,7 +2,6 @@ package dev.ide.ui.screens
 
 import dev.ide.ui.backend.CustomizationActions
 import dev.ide.ui.backend.UiSymbolKey
-import dev.ide.ui.editor.core.EditorDocument
 
 /**
  * What a symbol key types when flicked up: its partner, so one key covers two symbols and the bar needs half as
@@ -44,18 +43,3 @@ internal fun languageSymbolKeys(path: String): List<UiSymbolKey> = when (path.su
  */
 internal fun effectiveSymbolKeys(userKeys: List<UiSymbolKey>, path: String?): List<UiSymbolKey> =
     if (userKeys.isEmpty() || userKeys == DEFAULT_SYMBOL_KEYS) languageSymbolKeys(path.orEmpty()) else userKeys
-
-/**
- * Where the bar's trackpad puts the caret: [chars] along the text from [caret] (crossing line breaks as the arrow
- * keys do), then [lines] down (negative: up) keeping the column, clamped to the line it lands on.
- */
-internal fun trackpadTarget(doc: EditorDocument, caret: Int, chars: Int, lines: Int): Int {
-    var at = (caret + chars).coerceIn(0, doc.length)
-    if (lines != 0) {
-        val line = doc.lineForOffset(at)
-        val column = at - doc.lineStart(line)
-        val target = (line + lines).coerceIn(0, doc.lineCount - 1)
-        at = doc.lineStart(target) + column.coerceAtMost(doc.lineLength(target))
-    }
-    return at
-}

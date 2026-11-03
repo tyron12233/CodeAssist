@@ -14,7 +14,6 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.unit.Density
 import dev.ide.ui.backend.CustomizationActions
 import dev.ide.ui.backend.UiSymbolKey
-import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.Ide
 import org.jetbrains.skia.EncodedImageFormat
@@ -53,29 +52,26 @@ class SymbolBarTest {
         }
     }
 
-    @Test
-    fun theTrackpadCrossesLineBreaksAndKeepsTheColumnGoingUpAndDown() {
-        val doc = EditorDocument.of("fun a() {\n    x\n}\n")
-        assertEquals(9, trackpadTarget(doc, 8, 1, 0))
-        assertEquals(10, trackpadTarget(doc, 9, 1, 0), "past the line end onto the next line")
-        assertEquals(14, trackpadTarget(doc, 4, 0, 1), "column 4 one line down")
-        assertEquals(17, trackpadTarget(doc, 4, 0, 2), "the short last line clamps the column")
-        assertEquals(0, trackpadTarget(doc, 2, -10, 0))
-    }
-
     // ---- gestures through real pointer events ----
 
     private class Rig(keys: List<UiSymbolKey>) {
         val typed = ArrayList<String>()
         val actions = ArrayList<String>()
-        val moves = ArrayList<Pair<Int, Int>>()
+        val moves = ArrayList<Pair<Float, Float>>()
+        var began = 0
+        var ended = 0
         var t = 0L
         val scene = ImageComposeScene(width = 822, height = 300, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 Box(Modifier.fillMaxSize().background(Ide.colors.editorBg), contentAlignment = Alignment.BottomCenter) {
                     EditorSymbolBar(
                         onSymbol = { typed += it }, onAction = { actions += it }, symbols = keys,
-                        onMoveCaret = { c, l -> moves += c to l }, modifier = Modifier.fillMaxWidth(),
+                        trackpad = object : SymbolBarTrackpad {
+                            override fun begin() { began++ }
+                            override fun move(columns: Float, lines: Float) { moves += columns to lines }
+                            override fun end() { ended++ }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -125,7 +121,9 @@ class SymbolBarTest {
             rig.move(firstSymbol + Offset(80f, 0f))
             rig.release(firstSymbol + Offset(80f, 0f))
             assertEquals(listOf("{", "}"), rig.typed, "the hold typed nothing")
-            assertTrue(rig.moves.sumOf { it.first } in 3..6, "80px at 18px a character; got ${rig.moves}")
+            assertEquals(1 to 1, rig.began to rig.ended, "one floating cursor, let go on release")
+            val columns = rig.moves.sumOf { it.first.toDouble() }
+            assertTrue(columns in 4.0..5.0, "80px at 18px a column moves it continuously by ~4.4; got $columns")
         } finally {
             rig.scene.close()
         }

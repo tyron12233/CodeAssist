@@ -781,9 +781,13 @@ internal fun CompactLayout(
                             // The dismiss key only where the platform offers no way out of the keyboard
                             // itself; Android's back already does it. See [hasSystemBack].
                             onHideKeyboard = if (hasSystemBack) null else ({ state.active?.session?.ime?.hide() }),
-                            onMoveCaret = { chars, lines ->
-                                state.active?.session?.let { s ->
-                                    s.setCaret(trackpadTarget(s.doc, s.selection.start, chars, lines))
+                            trackpad = remember(state) {
+                                object : SymbolBarTrackpad {
+                                    override fun begin() { state.active?.session?.beginFloatingCaret() }
+                                    override fun move(columns: Float, lines: Float) {
+                                        state.active?.session?.moveFloatingCaret(columns, lines)
+                                    }
+                                    override fun end() { state.active?.session?.endFloatingCaret() }
                                 }
                             },
                         )
