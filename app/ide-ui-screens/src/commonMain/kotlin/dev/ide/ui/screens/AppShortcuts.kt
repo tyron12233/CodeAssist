@@ -145,7 +145,7 @@ internal fun BoxScope.AppShortcutsHost(
         if (item == null) return
         val open = state.openFiles.indexOfFirst { it.path == item.path }
         when {
-            open >= 0 -> { state.activeIndex = open; focusEditor() }
+            open >= 0 -> { state.selectTab(open); focusEditor() }
             item.path.startsWith(LIBRARY_PREFIX) -> state.openLibrary(item.path)
             // Focus once the tab exists: its editor only answers a focus request made after it appears.
             else -> scope.launch { state.openSuspend(item.path, item.name); focusEditor() }
@@ -233,10 +233,12 @@ internal fun BoxScope.AppShortcutsHost(
                     val n = id.removePrefix(AppCommands.GO_TO_TAB_PREFIX).toIntOrNull() ?: return@Runner false
                     val index = if (n == 9) state.openFiles.lastIndex else n - 1
                     if (index !in state.openFiles.indices) return@Runner false
-                    state.activeIndex = index
+                    state.selectTab(index)
                     focusEditor()
                 }
 
+                id == AppCommands.NAVIGATE_BACK -> return@Runner state.navigateBack()
+                id == AppCommands.NAVIGATE_FORWARD -> return@Runner state.navigateForward()
                 id == AppCommands.SEARCH_EVERYWHERE -> openPalette(null)
                 id == AppCommands.GO_TO_FILE -> openPalette("Files")
                 id == AppCommands.GO_TO_CLASS -> openPalette("Symbols")

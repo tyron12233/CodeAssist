@@ -44,6 +44,8 @@ import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.breadcrumb_blocks
 import dev.ide.ui.generated.resources.breadcrumb_code
+import dev.ide.ui.generated.resources.breadcrumb_nav_back
+import dev.ide.ui.generated.resources.breadcrumb_nav_forward
 import dev.ide.ui.generated.resources.breadcrumb_preview
 import dev.ide.ui.generated.resources.breadcrumb_split
 import dev.ide.ui.icons.CaIcons
@@ -90,6 +92,15 @@ internal fun BreadcrumbBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // Back / Forward lead the location line once there is a jump to return from: on a phone with no keyboard
+        // they are the only way back after Go to Declaration.
+        val history = state.navHistory
+        if (history.canGoBack || history.canGoForward) {
+            Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
+                NavArrow(CaIcons.chevronLeft, stringResource(Res.string.breadcrumb_nav_back), history.canGoBack) { state.navigateBack() }
+                NavArrow(CaIcons.chevronRight, stringResource(Res.string.breadcrumb_nav_forward), history.canGoForward) { state.navigateForward() }
+            }
+        }
         // Tapping the location line opens the Structure panel in the left sidebar (IntelliJ-style outline).
         Box(Modifier.weight(1f).clickable { state.selectLeftPanel(LeftPanelId.STRUCTURE) }) { Breadcrumb(crumbs) }
         ViewModeToggle(
@@ -173,6 +184,24 @@ private fun ViewModeToggle(
                 ) { onSelect(contributedMode) }
             }
         }
+    }
+}
+
+/** One of the Back / Forward arrows: muted and inert when there is nowhere to go that way. */
+@Composable
+private fun NavArrow(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(EditorToolbarHeight)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.xs))
+            .clickable(enabled = enabled, onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(
+            icon,
+            label,
+            Modifier.size(17.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.35f),
+        )
     }
 }
 

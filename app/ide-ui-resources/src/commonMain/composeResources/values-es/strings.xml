@@ -326,6 +326,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="breadcrumb_blocks">Bloques</string>
     <string name="breadcrumb_preview">Vista previa</string>
     <string name="breadcrumb_split">Dividido</string>
+    <string name="breadcrumb_nav_back">Atrás</string>
+    <string name="breadcrumb_nav_forward">Adelante</string>
 
     <!-- Editor chrome -->
     <string name="edchrome_files">Archivos</string>

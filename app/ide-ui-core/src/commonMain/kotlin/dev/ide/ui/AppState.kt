@@ -680,7 +680,7 @@ class IdeUiState(
     fun cycleTab(delta: Int) {
         if (openFiles.isEmpty()) return
         val n = openFiles.size
-        activeIndex = ((activeIndex.coerceAtLeast(0) + delta) % n + n) % n
+        selectTab(((activeIndex.coerceAtLeast(0) + delta) % n + n) % n)
     }
 
     /** Reopen the most recently closed tab that is not open again already. False when there is none. */
@@ -973,7 +973,50 @@ class IdeUiState(
 
     /** Fire-and-forget open for UI callbacks — the file is read off the main thread ([openSuspend]). */
     fun open(path: String, name: String) {
+        recordPlace()
         scope.launch { openSuspend(path, name) }
+    }
+
+    // ---- Navigate Back / Forward ----
+
+    /** Where the user was before each jump; see [NavigationHistory]. */
+    val navHistory = NavigationHistory()
+
+    /** The place the caret is at in the active tab, or null with no tab open. */
+    private fun currentPlace(): NavPlace? = active?.let { tab ->
+        val offset = tab.session.selection.start
+        NavPlace(tab.path, offset, tab.session.doc.lineForOffset(offset.coerceIn(0, tab.session.doc.length)))
+    }
+
+    /** A jump is about to leave the current place: remember it for Navigate Back. */
+    private fun recordPlace() = navHistory.record(currentPlace())
+
+    /** Activate tab [index] as the user's choice (a tab click, the switcher, Go to tab N), which Back returns from. */
+    fun selectTab(index: Int) {
+        if (index !in openFiles.indices || index == activeIndex) return
+        recordPlace()
+        activeIndex = index
+    }
+
+    /** Return to where the user was before the last jump. False when there is nowhere to go back to. */
+    fun navigateBack(): Boolean = goTo(navHistory.back(currentPlace()))
+
+    /** Undo a [navigateBack]. False when there is nowhere to go forward to. */
+    fun navigateForward(): Boolean = goTo(navHistory.forward(currentPlace()))
+
+    /** Show [place] without recording it: the history itself is moving. A closed file is opened again. */
+    private fun goTo(place: NavPlace?): Boolean {
+        if (place == null) return false
+        if (place.path.startsWith(LIBRARY_SCHEME) && openFiles.none { it.path == place.path }) {
+            openLibrary(place.path)
+            return true
+        }
+        val name = place.path.substringAfterLast('/').substringAfterLast('\\')
+        scope.launch {
+            openSuspend(place.path, name)
+            active?.takeIf { it.path == place.path }?.session?.setCaret(place.offset) // setCaret coerces into the buffer
+        }
+        return true
     }
 
     /**
@@ -1009,6 +1052,7 @@ class IdeUiState(
      *  [openLibrary] (fetch decompiled/attached-source content, open read-only) instead of a disk read. */
     fun openAt(path: String, offset: Int) {
         if (path.startsWith(LIBRARY_SCHEME)) { openLibrary(path); return }
+        recordPlace()
         val name = path.substringAfterLast('/').substringAfterLast('\\')
         scope.launch {
             openSuspend(path, name)
@@ -1028,6 +1072,7 @@ class IdeUiState(
         val fqn = raw.substringBefore('#')
         val member = raw.substringAfter('#', "").ifEmpty { null }
         val contextPath = active?.path?.takeUnless { it.startsWith(LIBRARY_SCHEME) }
+        recordPlace()
         scope.launch {
             val content = withContext(ioDispatcher) {
                 runCatching { backend.editor.libraryContent(contextPath ?: fqn, fqn, forceJava) }.getOrNull()
@@ -1088,6 +1133,7 @@ class IdeUiState(
     }
 
     fun openAtLine(path: String, line: Int, column: Int) {
+        recordPlace()
         val name = path.substringAfterLast('/').substringAfterLast('\\')
         scope.launch {
             openSuspend(path, name)
@@ -1545,10 +1591,18 @@ class IdeUiState(
     /** Close every open tab at [path] or under it (after a delete). The file is gone, so nothing to save. */
     private fun closeTabsUnder(path: String) {
         openFiles.filter { underPath(it.path, path) }.forEach(::closeNow)
+        navHistory.forget { underPath(it, path) }
     }
 
     /** Re-point open tabs at [oldPath] (or under it, for a directory) to [newPath], re-reading from disk. */
     private suspend fun rebaseTabs(oldPath: String, newPath: String) {
+        navHistory.repath { p ->
+            when {
+                p == oldPath -> newPath
+                underPath(p, oldPath) -> newPath + p.substring(oldPath.length)
+                else -> null
+            }
+        }
         for (f in openFiles.toList()) {
             val p = f.path
             val rebased = when {

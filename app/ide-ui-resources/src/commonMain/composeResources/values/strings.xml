@@ -479,6 +479,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="breadcrumb_blocks">Blocks</string>
     <string name="breadcrumb_preview">Preview</string>
     <string name="breadcrumb_split">Split</string>
+    <string name="breadcrumb_nav_back">Back</string>
+    <string name="breadcrumb_nav_forward">Forward</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>

@@ -302,6 +302,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="breadcrumb_blocks">Blocos</string>
     <string name="breadcrumb_preview">Visualização</string>
     <string name="breadcrumb_split">Dividido</string>
+    <string name="breadcrumb_nav_back">Voltar</string>
+    <string name="breadcrumb_nav_forward">Avançar</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Arquivos</string>

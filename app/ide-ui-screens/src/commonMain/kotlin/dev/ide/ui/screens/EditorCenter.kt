@@ -357,7 +357,7 @@ internal fun EditorCenter(
                     TabsStrip(
                         openFiles = state.openFiles,
                         activeIndex = state.activeIndex,
-                        onSelect = { state.activeIndex = it },
+                        onSelect = { state.selectTab(it) },
                         onClose = { state.close(it) },
                         onCloseOthers = { state.closeOthers(it) },
                         onCloseToRight = { state.closeToRight(it) },

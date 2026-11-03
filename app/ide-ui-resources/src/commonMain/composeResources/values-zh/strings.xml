@@ -470,6 +470,8 @@
     <string name="breadcrumb_blocks">积木</string>
     <string name="breadcrumb_preview">预览</string>
     <string name="breadcrumb_split">拆分</string>
+    <string name="breadcrumb_nav_back">后退</string>
+    <string name="breadcrumb_nav_forward">前进</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">文件</string>

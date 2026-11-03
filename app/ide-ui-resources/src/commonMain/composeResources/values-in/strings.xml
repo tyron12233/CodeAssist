@@ -295,6 +295,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="breadcrumb_blocks">Blok</string>
     <string name="breadcrumb_preview">Pratinjau</string>
     <string name="breadcrumb_split">Terpisah</string>
+    <string name="breadcrumb_nav_back">Kembali</string>
+    <string name="breadcrumb_nav_forward">Maju</string>
     <string name="edchrome_files">File</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>

@@ -519,6 +519,8 @@
     <string name="breadcrumb_blocks">الكتل</string>
     <string name="breadcrumb_preview">المعاينة</string>
     <string name="breadcrumb_split">مقسّم</string>
+    <string name="breadcrumb_nav_back">رجوع</string>
+    <string name="breadcrumb_nav_forward">للأمام</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>
