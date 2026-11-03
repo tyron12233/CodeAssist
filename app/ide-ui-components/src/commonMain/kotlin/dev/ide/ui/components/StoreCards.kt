@@ -1,17 +1,12 @@
 package dev.ide.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,6 +17,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -29,10 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,16 +36,18 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_installs
+import dev.ide.ui.generated.resources.store_trending
+import dev.ide.ui.generated.resources.store_trending_search
 import dev.ide.ui.generated.resources.store_projects
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.CaShapes
@@ -59,6 +55,7 @@ import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Explore tab's card vocabulary.
@@ -545,58 +542,53 @@ fun StoreListRow(
 }
 
 /**
- * The trending marquee: a row of tonal chips that scrolls forever.
+ * What people are looking for, as a row of search shortcuts under the search field.
  *
- * Renders the list **twice** and translates by exactly half the total width, so the moment the first copy
- * scrolls out the second is already in position and the loop has no visible seam. Purely decorative, so
- * the whole strip is cleared from the semantics tree — a screen reader should not narrate a moving band of
- * marketing chips.
+ * Replaced a marquee of tonal chips that scrolled forever and did nothing when tapped: it moved while
+ * the reader was trying to read the page under it, it was hidden from screen readers because a moving
+ * band cannot be narrated, and each chip carried the same trending arrow, so the arrow said nothing.
+ * Now it holds still, scrolls under the finger, says "Trending" once, and each term opens the search
+ * with that term already typed.
  */
 @Composable
-fun TrendingTicker(
-    labels: List<String>,
-    pairAt: @Composable (Int) -> TonalPair,
+fun TrendingSearches(
+    terms: List<String>,
+    onTerm: (String) -> Unit,
     modifier: Modifier = Modifier,
-    durationMillis: Int = 26_000,
 ) {
-    if (labels.isEmpty()) return
-    var totalWidth by remember { mutableStateOf(0) }
-    val transition = rememberInfiniteTransition(label = "ticker")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "tickerOffset",
-    )
-    Box(modifier.fillMaxWidth().clipToBounds().clearAndSetSemantics {}) {
-        Row(
-            Modifier
-                .onSizeChanged { totalWidth = it.width }
-                .offset { IntOffset(-(totalWidth / 2f * progress).roundToInt(), 0) },
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Twice through, so the second copy covers the gap the first leaves as it exits.
-            repeat(2) { copy ->
-                labels.forEachIndexed { i, label ->
-                    val pair = pairAt(i)
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = pair.container,
-                        contentColor = pair.onContainer,
-                        modifier = Modifier.height(30.dp),
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Symbol(CaSymbols.trendingUp, contentDescription = null, size = 14.dp)
-                            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
-                    }
+    if (terms.isEmpty()) return
+    val c = MaterialTheme.colorScheme
+    LazyRow(
+        modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        item("label") {
+            Row(
+                Modifier.padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Symbol(CaSymbols.trendingUp, contentDescription = null, size = 18.dp, tint = c.primary)
+                Text(
+                    stringResource(Res.string.store_trending),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = c.primary,
+                )
+            }
+        }
+        items(terms, key = { it }) { term ->
+            val description = stringResource(Res.string.store_trending_search, term)
+            Surface(
+                onClick = { onTerm(term) },
+                shape = CircleShape,
+                color = c.surfaceContainerHigh,
+                contentColor = c.onSurface,
+                modifier = Modifier.height(36.dp).semantics { contentDescription = description },
+            ) {
+                Box(Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                    Text(term, style = MaterialTheme.typography.labelLarge, maxLines = 1)
                 }
             }
         }

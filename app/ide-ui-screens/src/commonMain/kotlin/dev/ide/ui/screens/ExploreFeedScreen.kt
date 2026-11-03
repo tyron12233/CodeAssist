@@ -81,7 +81,7 @@ import dev.ide.ui.components.PosterCard
 import dev.ide.ui.components.PublishPitchBand
 import dev.ide.ui.components.SpotlightCard
 import dev.ide.ui.components.StoreCountBadge
-import dev.ide.ui.components.TrendingTicker
+import dev.ide.ui.components.TrendingSearches
 import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
 import dev.ide.ui.components.storeBlurb
@@ -114,6 +114,8 @@ fun ExploreFeed(
     onOpenItem: (UiStoreItem) -> Unit,
     onInstallItem: (UiStoreItem) -> Unit,
     onOpenSearch: (String?) -> Unit,
+    /** Opens the search with a term already typed, from a trending chip. Null leaves the chips inert. */
+    onSearchTerm: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     onOpenCollection: (UiStoreCollection) -> Unit = {},
     onOpenPublisher: (UiStorePublisher) -> Unit = {},
@@ -195,9 +197,9 @@ fun ExploreFeed(
             feed.sections.forEachIndexed { index, section ->
                 when (section) {
                     is UiFeedSection.Ticker -> item(section.id) {
-                        TrendingTicker(
-                            labels = section.terms,
-                            pairAt = { tonalPair(it) },
+                        TrendingSearches(
+                            terms = section.terms,
+                            onTerm = { term -> onSearchTerm?.invoke(term) ?: onOpenSearch(null) },
                             modifier = Modifier.padding(bottom = 6.dp),
                         )
                     }

@@ -645,6 +645,12 @@
     <string name="store_search_hint">搜索模板和示例</string>
     <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">模板、示例应用、插件</string>
+    <string name="store_trending">热门</string>
+    <string name="store_trending_search">搜索 %1$s</string>
+    <string name="store_translate">翻译</string>
+    <string name="store_translating">正在翻译…</string>
+    <string name="store_translated">自动翻译</string>
+    <string name="store_show_original">查看原文</string>
     <string name="store_browse_by_kind">按类型浏览</string>
     <string name="store_see_all">查看全部</string>
     <string name="store_install">安装</string>
@@ -727,6 +733,19 @@
     <string name="submit_send">提交审核</string>
     <string name="submit_sending">正在提交…</string>
     <string name="submit_review_note">每份提交都会经过审核员审核后才会展示。未经批准，任何内容都不会公开。</string>
+    <string name="submit_checks_title">审核员会检查什么</string>
+    <string name="submit_checks_english">标题、简介和描述使用英文。</string>
+    <string name="submit_checks_screenshots">截图展示的是运行中的应用，而不是编辑器。</string>
+    <string name="submit_checks_summary">简介用一句话说明项目的用途。</string>
+    <string name="submit_checks_icon">应用有自己的图标，而不是默认图标。</string>
+    <string name="submit_checks_own">这是你自己的作品，不含密钥或 AI 聊天记录。</string>
+    <string name="submit_warn_english">商店页面必须使用英文，而这段文字看起来是其他语言。请用英文撰写；可以在下方保留译文。</string>
+    <string name="submit_warn_summary">用一句话说明项目的用途。只重复名称的简介是页面被退回的最常见原因。</string>
+    <string name="submit_warn_spam">“download free”或“mod apk”之类的措辞会被视为垃圾内容，含有这类措辞的页面会被退回。</string>
+    <string name="submit_confirm_title">发送之前</string>
+    <string name="submit_confirm_body">审核员很可能会退回：</string>
+    <string name="submit_confirm_fix">去修改</string>
+    <string name="submit_confirm_send">仍然发送</string>
     <string name="submit_required">请填写标题、简介、描述和分类。</string>
     <string name="submit_target">发布为</string>
     <string name="submit_target_new">新上架项目</string>

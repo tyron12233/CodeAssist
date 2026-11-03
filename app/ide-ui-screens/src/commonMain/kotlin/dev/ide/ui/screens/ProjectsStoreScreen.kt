@@ -49,7 +49,7 @@ import dev.ide.ui.components.FeaturedHeroCard
 import dev.ide.ui.components.StoreListRow
 import dev.ide.ui.components.formatRating
 import dev.ide.ui.components.formatSizeShort
-import dev.ide.ui.components.TrendingTicker
+import dev.ide.ui.components.TrendingSearches
 import dev.ide.ui.components.motifFor
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_browse_by_kind
@@ -101,6 +101,7 @@ fun ProjectsStoreScreen(
     val state = rememberProjectsStoreState(backend)
     var searching by rememberSaveable { mutableStateOf(false) }
     var searchCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Box(Modifier.widthIn(max = 820.dp).fillMaxSize()) {
@@ -111,6 +112,7 @@ fun ProjectsStoreScreen(
                     onOpenItem = onOpenItem,
                     onClose = { searching = false },
                     initialCategory = searchCategory,
+                    initialQuery = searchQuery,
                 )
             } else {
                 StoreBrowse(
@@ -118,6 +120,12 @@ fun ProjectsStoreScreen(
                     onOpenItem = onOpenItem,
                     onOpenSearch = { category ->
                         searchCategory = category
+                        searchQuery = null
+                        searching = true
+                    },
+                    onSearchTerm = { term ->
+                        searchCategory = null
+                        searchQuery = term
                         searching = true
                     },
                 )
@@ -131,6 +139,7 @@ private fun StoreBrowse(
     state: ProjectsStoreState,
     onOpenItem: (UiStoreItem) -> Unit,
     onOpenSearch: (String?) -> Unit,
+    onSearchTerm: (String) -> Unit,
 ) {
     val catalog = state.catalog
     val allItems = remember(catalog) { catalog.sections.flatMap { it.items } }
@@ -153,9 +162,9 @@ private fun StoreBrowse(
 
         if (ticker.isNotEmpty()) {
             item("ticker") {
-                TrendingTicker(
-                    labels = ticker,
-                    pairAt = { tonalPair(it) },
+                TrendingSearches(
+                    terms = ticker,
+                    onTerm = onSearchTerm,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
             }

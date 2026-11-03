@@ -126,8 +126,42 @@ class ProjectSharingSnapshot {
         }
     }
 
+    /**
+     * The publish form with the review warnings up: an update to a listing whose words are the real
+     * Dead Line submission's (Portuguese, and a summary that says nothing), which is the listing these
+     * warnings were written for. A moderator sent it back for exactly these two reasons.
+     */
+    @Test
+    fun renderSubmitWithReviewWarnings() {
+        snapshot("submit-project-warnings.png", height = 3000) {
+            SubmitProjectScreen(
+                backend = SubmitBackend(
+                    published = listOf(
+                        dev.ide.ui.backend.UiPublishedItem(
+                            slug = "dead-line-fc498c",
+                            title = "Dead Line",
+                            status = "pending",
+                            summary = "Game Arcade",
+                            description = "DeadLine é um jogo arcade com temática cyberpunk, vc consegue clicar em " +
+                                "todos os alvos sem perder? Veremos, nesse jogo vc terá alguns alvos até chegar no seu modo sobrecarga.",
+                            category = "kotlin",
+                            screenshots = listOf("dead-line/1.0.0/shot-0.png"),
+                        ),
+                    ),
+                ),
+                initialProject = ProjectInfo("Dead Line", "/ws/deadline", 2, isAndroid = true),
+                initialItemSlug = "dead-line-fc498c",
+                fileActions = AllActions,
+                onBack = {},
+                onSubmitted = {},
+            )
+        }
+    }
+
     /** [SharingBackend] plus the store side the publish form reads: a packaged project and the categories. */
-    private inner class SubmitBackend : SharingBackend() {
+    private inner class SubmitBackend(
+        private val published: List<dev.ide.ui.backend.UiPublishedItem> = emptyList(),
+    ) : SharingBackend() {
         override fun projects(): List<ProjectInfo> =
             listOf(ProjectInfo("Jetsnack", "/ws/jetsnack", 4, isAndroid = true))
 
@@ -141,6 +175,8 @@ class ProjectSharingSnapshot {
 
             override suspend fun submitCategories(): List<Pair<String, String>> =
                 listOf("android" to "Android", "kotlin" to "Kotlin", "tools" to "Tools")
+
+            override suspend fun myPublishedItems(): List<dev.ide.ui.backend.UiPublishedItem> = published
         }
     }
 

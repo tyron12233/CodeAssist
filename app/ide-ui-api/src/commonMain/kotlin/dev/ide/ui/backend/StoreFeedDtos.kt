@@ -573,6 +573,15 @@ data class UiStoreReview(
 )
 
 /**
+ * The result of a Translate tap: the translated fields by name, or why there are none. A failure is a value
+ * rather than an exception because the button has to say something either way.
+ */
+data class UiTranslation(
+    val fields: Map<String, String> = emptyMap(),
+    val error: String? = null,
+)
+
+/**
  * Everything the reviews panel draws.
  *
  * [average] and [count] come from the reviews themselves, so the headline agrees with the list beneath it;

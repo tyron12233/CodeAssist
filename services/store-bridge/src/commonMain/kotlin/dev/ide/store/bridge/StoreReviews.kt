@@ -4,10 +4,12 @@ import dev.ide.store.RemoteReview
 import dev.ide.store.ReviewSort
 import dev.ide.store.StoreResult
 import dev.ide.store.StoreReviewService
+import dev.ide.store.TranslationKind
 import dev.ide.ui.backend.UiReviewPage
 import dev.ide.ui.backend.UiReportReason
 import dev.ide.ui.backend.UiReviewSort
 import dev.ide.ui.backend.UiStoreReview
+import dev.ide.ui.backend.UiTranslation
 
 /**
  * Ratings and reviews, engine-side.
@@ -57,6 +59,20 @@ class StoreReviews(private val reviews: StoreReviewService) {
         }
 
     fun deleteMine(itemId: String): Boolean = reviews.deleteMyReview(itemId) is StoreResult.Ok
+
+    fun translationAvailable(): Boolean = reviews.reviewsAvailable()
+
+    fun translateListing(itemId: String, target: String): UiTranslation =
+        reviews.translate(TranslationKind.LISTING, itemId, null, target).toTranslation()
+
+    fun translateReview(itemId: String, authorId: String, target: String): UiTranslation =
+        reviews.translate(TranslationKind.REVIEW, itemId, authorId, target).toTranslation()
+
+    private fun StoreResult<Map<String, String>>.toTranslation(): UiTranslation = when (this) {
+        is StoreResult.Ok -> UiTranslation(fields = value)
+        is StoreResult.Unavailable -> UiTranslation(error = reason)
+        is StoreResult.Failed -> UiTranslation(error = message)
+    }
 
     fun vote(itemId: String, authorId: String, helpful: Boolean): String? =
         when (val result = reviews.vote(itemId, authorId, helpful)) {

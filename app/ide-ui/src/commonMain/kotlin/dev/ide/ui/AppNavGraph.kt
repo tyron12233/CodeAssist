@@ -877,6 +877,7 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
     // Saveable, so a search a listing was opened from is still open on the way back (see AppNavGraph's homeState).
     var searching by rememberSaveable { mutableStateOf(false) }
     var searchCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var notifyLaunch by remember(app.backend) { mutableStateOf(app.backend.store.launchNotificationEnabled()) }
     var notifyMessage by remember { mutableStateOf<String?>(null) }
     val storeScope = rememberCoroutineScope()
@@ -932,6 +933,12 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
             onInstallItem = { item -> app.installStoreItem(item) },
             onOpenSearch = { category ->
                 searchCategory = category
+                searchQuery = null
+                searching = true
+            },
+            onSearchTerm = { term ->
+                searchCategory = null
+                searchQuery = term
                 searching = true
             },
             bundled = bundledItems,
@@ -972,6 +979,7 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
                 onOpenItem = app::openStoreItem,
                 onClose = { searching = false },
                 initialCategory = searchCategory,
+                initialQuery = searchQuery,
             )
         }
     }

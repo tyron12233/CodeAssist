@@ -86,13 +86,16 @@ fun StoreSearchScreen(
     modifier: Modifier = Modifier,
     /** The category to open filtered to, from a "browse by kind" tile. Null opens unfiltered. */
     initialCategory: String? = null,
+    /** A term to open already searched for, from a trending chip. Null opens on an empty field. */
+    initialQuery: String? = null,
 ) {
     // The query and category outlive the screen (the Explore tab keeps an open search while a listing it opened
     // is shown), and the results are rebuilt from them. So is "already focused": coming back to a search should
     // not pop the keyboard up over the results the reader was going through.
-    var savedQuery by rememberSaveable { mutableStateOf("") }
+    var savedQuery by rememberSaveable { mutableStateOf(initialQuery.orEmpty()) }
     var savedCategory by rememberSaveable { mutableStateOf(initialCategory) }
-    var focusedOnce by rememberSaveable { mutableStateOf(false) }
+    // Opened on a term, the reader came for its results, and a keyboard would cover half of them.
+    var focusedOnce by rememberSaveable { mutableStateOf(initialQuery != null) }
     val state = rememberStoreSearchState(backend, savedCategory, savedQuery)
     LaunchedEffect(state) {
         snapshotFlow { state.query to state.category }.collect { (q, cat) -> savedQuery = q; savedCategory = cat }

@@ -701,6 +701,12 @@
     <string name="store_search_hint">ابحث في القوالب والنماذج</string>
     <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">قوالب وتطبيقات نموذجية وإضافات</string>
+    <string name="store_trending">رائج</string>
+    <string name="store_trending_search">ابحث عن %1$s</string>
+    <string name="store_translate">ترجمة</string>
+    <string name="store_translating">جارٍ الترجمة…</string>
+    <string name="store_translated">مترجم تلقائيًا</string>
+    <string name="store_show_original">عرض الأصل</string>
     <string name="store_browse_by_kind">التصفح حسب النوع</string>
     <string name="store_see_all">عرض الكل</string>
     <string name="store_install">تثبيت</string>
@@ -782,6 +788,19 @@
     <string name="submit_send">إرسال للمراجعة</string>
     <string name="submit_sending">جاري الإرسال…</string>
     <string name="submit_review_note">يراجع مشرف كل إرسال قبل ظهوره. لا شيء يصبح علنيًا قبل الموافقة عليه.</string>
+    <string name="submit_checks_title">ما يتحقق منه المراجعون</string>
+    <string name="submit_checks_english">العنوان والملخص والوصف مكتوبة بالإنجليزية.</string>
+    <string name="submit_checks_screenshots">تعرض لقطات الشاشة التطبيق وهو يعمل، لا المحرر.</string>
+    <string name="submit_checks_summary">يوضح الملخص في سطر واحد ما يفعله المشروع.</string>
+    <string name="submit_checks_icon">للتطبيق أيقونته الخاصة، لا الأيقونة الافتراضية.</string>
+    <string name="submit_checks_own">إنه عملك أنت، ولا يحتوي على مفاتيح سرية أو سجل محادثات مع الذكاء الاصطناعي.</string>
+    <string name="submit_warn_english">يجب أن تكون صفحات المتجر بالإنجليزية، ويبدو أن هذا النص بلغة أخرى. اكتبه بالإنجليزية؛ ويمكنك إبقاء ترجمة أسفله.</string>
+    <string name="submit_warn_summary">اذكر في سطر واحد ما يفعله المشروع. الملخص الذي يكرر الاسم فقط هو أكثر سبب شائع لإعادة الصفحة.</string>
+    <string name="submit_warn_spam">عبارات مثل “download free” أو “mod apk” تبدو رسائل مزعجة، وتُعاد الصفحات التي تحتوي عليها.</string>
+    <string name="submit_confirm_title">قبل الإرسال</string>
+    <string name="submit_confirm_body">من المرجح أن يعيد المراجع هذا:</string>
+    <string name="submit_confirm_fix">إصلاح</string>
+    <string name="submit_confirm_send">إرسال على أي حال</string>
     <string name="submit_required">املأ العنوان والملخص والوصف والفئة.</string>
     <string name="submit_target">النشر بصفة</string>
     <string name="submit_target_new">بطاقة متجر جديدة</string>

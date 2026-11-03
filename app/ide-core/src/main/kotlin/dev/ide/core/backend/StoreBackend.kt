@@ -331,6 +331,17 @@ internal class StoreBackend(
 
     override fun reviewsAvailable(): Boolean = reviewState.available()
 
+    override fun translationAvailable(): Boolean = reviewState.translationAvailable()
+
+    override suspend fun translateListing(itemId: String, target: String): dev.ide.ui.backend.UiTranslation =
+        withContext(storeIo) { reviewState.translateListing(itemId, target) }
+
+    override suspend fun translateReview(
+        itemId: String,
+        authorId: String,
+        target: String,
+    ): dev.ide.ui.backend.UiTranslation = withContext(storeIo) { reviewState.translateReview(itemId, authorId, target) }
+
     override suspend fun reviews(
         itemId: String,
         sort: dev.ide.ui.backend.UiReviewSort,

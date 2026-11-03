@@ -14,38 +14,46 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiStoreReview
 import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.reviews_helpful
-import dev.ide.ui.generated.resources.reviews_helpful_count
-import dev.ide.ui.generated.resources.reviews_on_version
-import dev.ide.ui.generated.resources.reviews_reader
-import dev.ide.ui.generated.resources.reviews_reply
-import dev.ide.ui.generated.resources.reviews_yours
-import dev.ide.ui.icons.CaSymbols
-import dev.ide.ui.theme.Symbol
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import dev.ide.ui.generated.resources.review_actions
 import dev.ide.ui.generated.resources.review_hide
 import dev.ide.ui.generated.resources.review_reply
 import dev.ide.ui.generated.resources.review_reply_delete
 import dev.ide.ui.generated.resources.review_reply_edit
 import dev.ide.ui.generated.resources.review_report
+import dev.ide.ui.generated.resources.reviews_helpful
+import dev.ide.ui.generated.resources.reviews_helpful_count
+import dev.ide.ui.generated.resources.reviews_on_version
+import dev.ide.ui.generated.resources.reviews_reader
+import dev.ide.ui.generated.resources.reviews_reply
+import dev.ide.ui.generated.resources.reviews_yours
+import dev.ide.ui.generated.resources.store_show_original
+import dev.ide.ui.generated.resources.store_translate
+import dev.ide.ui.generated.resources.store_translated
+import dev.ide.ui.generated.resources.store_translating
+import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.markdown.linkify
+import dev.ide.ui.theme.Symbol
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -146,6 +154,12 @@ fun ReviewCard(
     onDeleteReply: (() -> Unit)? = null,
     /** Hide or restore it. Null unless the backend said this reader moderates. */
     onSetHidden: ((Boolean) -> Unit)? = null,
+    /** The review's text as shown: the original, or its translation when the reader asked for one. */
+    reviewText: String? = review.review,
+    /** The publisher's reply as shown, translated together with the review. */
+    replyText: String? = review.reply,
+    /** The Translate control, drawn under the text. Null when there is nothing to offer. */
+    translate: (@Composable () -> Unit)? = null,
 ) {
     var menuOpen by remember(review.authorId) { mutableStateOf(false) }
     val hasMenu = onReport != null || onReply != null || onSetHidden != null || onDeleteReply != null
@@ -260,19 +274,33 @@ fun ReviewCard(
                     }
                 }
             }
-            review.review?.takeIf { it.isNotBlank() }?.let {
+            // Links open: a review is plain text, not Markdown, but "it is here: https://..." should be tappable.
+            val linkStyle = SpanStyle(color = c.primary, textDecoration = TextDecoration.Underline)
+            reviewText?.takeIf { it.isNotBlank() }?.let {
                 Spacer(Modifier.height(10.dp))
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = c.onSurface)
+                Text(
+                    linkify(it, SpanStyle(), linkStyle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onSurface,
+                )
             }
-            review.reply?.takeIf { it.isNotBlank() }?.let { reply ->
+            replyText?.takeIf { it.isNotBlank() }?.let { reply ->
                 Spacer(Modifier.height(12.dp))
                 Surface(shape = RoundedCornerShape(14.dp), color = c.surfaceContainerHighest) {
                     Column(Modifier.padding(12.dp)) {
                         Eyebrow(stringResource(Res.string.reviews_reply))
                         Spacer(Modifier.height(4.dp))
-                        Text(reply, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+                        Text(
+                            linkify(reply, SpanStyle(), linkStyle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.onSurfaceVariant,
+                        )
                     }
                 }
+            }
+            translate?.let {
+                Spacer(Modifier.height(4.dp))
+                it()
             }
             if (onVote != null && !review.mine) {
                 Spacer(Modifier.height(12.dp))
@@ -332,3 +360,51 @@ fun formatStars(value: Float): String {
     val rounded = kotlin.math.round(value * 10).toInt()
     return "${rounded / 10}.${rounded % 10}"
 }
+
+/**
+ * "Translate", and once translated, "Translated automatically · Show original".
+ *
+ * Stateless: the screen owns what was fetched, so flipping back to the original and forward again does not
+ * ask the server twice. Text rather than a button, the way an app store puts it under a review: it is an
+ * aside to the words above it, and a filled button would outweigh them.
+ */
+@Composable
+fun TranslateToggle(
+    showingTranslation: Boolean,
+    busy: Boolean,
+    error: String?,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = MaterialTheme.colorScheme
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (showingTranslation) {
+                Text(
+                    stringResource(Res.string.store_translated),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.outline,
+                )
+                Text(" · ", style = MaterialTheme.typography.labelMedium, color = c.outline)
+            }
+            Text(
+                stringResource(
+                    when {
+                        showingTranslation -> Res.string.store_show_original
+                        busy -> Res.string.store_translating
+                        else -> Res.string.store_translate
+                    },
+                ),
+                style = MaterialTheme.typography.labelLarge,
+                color = if (busy) c.outline else c.primary,
+                modifier = Modifier
+                    .clickable(enabled = !busy, role = Role.Button, onClick = onToggle)
+                    .padding(vertical = 10.dp),
+            )
+        }
+        error?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = c.error)
+        }
+    }
+}
+

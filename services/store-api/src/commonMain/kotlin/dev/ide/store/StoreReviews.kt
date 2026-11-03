@@ -205,7 +205,27 @@ interface StoreReviewService {
     fun setFollowing(handle: String, following: Boolean): StoreResult<Unit> =
         StoreResult.Unavailable("No store endpoint")
 
+    /**
+     * Someone else's words in the reader's language: a listing's summary and description, or one review and
+     * the publisher's reply to it.
+     *
+     * Named by WHAT to translate, never by the text: the server reads the text from the store itself, so
+     * this cannot be used as a general-purpose translator, and its spend is bounded by what the store
+     * holds. [target] is a language tag the server offers ("es", "pt-BR", "zh"); [authorId] identifies the
+     * review and is ignored for a listing. The result maps each translated field ("summary",
+     * "description", "review", "reply") to its text; a field the item does not have is absent.
+     */
+    fun translate(
+        kind: TranslationKind,
+        itemSlug: String,
+        authorId: String?,
+        target: String,
+    ): StoreResult<Map<String, String>> = StoreResult.Unavailable("No store endpoint")
+
     companion object {
         val Unsupported: StoreReviewService = object : StoreReviewService {}
     }
 }
+
+/** What a translation request names. [wire] is the `kind` the translate function takes. */
+enum class TranslationKind(val wire: String) { LISTING("listing"), REVIEW("review") }

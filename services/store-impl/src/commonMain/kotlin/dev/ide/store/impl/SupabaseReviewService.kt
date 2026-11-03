@@ -6,6 +6,7 @@ import dev.ide.store.RemoteReviewPage
 import dev.ide.store.ReviewSort
 import dev.ide.store.StoreResult
 import dev.ide.store.StoreReviewService
+import dev.ide.store.TranslationKind
 import dev.ide.store.impl.platform.StoreHttp
 
 /**
@@ -28,6 +29,9 @@ class SupabaseReviewService(
 ) : StoreReviewService {
 
     private val http = StoreHttp(connectTimeoutMs, readTimeoutMs)
+    // Translating an 8,000-character description is a model call, not a row read: it can take well past the
+    // 20 s a review page is given, and cutting it off would pay for the work and show none of it.
+    private val translateHttp = StoreHttp(connectTimeoutMs, 60_000)
     private val base = url.trimEnd('/')
     private val configured = url.isNotBlank() && apiKey.isNotBlank()
 
@@ -179,6 +183,46 @@ class SupabaseReviewService(
         is StoreResult.Ok -> StoreResult.Ok(Unit)
         is StoreResult.Unavailable -> StoreResult.Unavailable(result.reason)
         is StoreResult.Failed -> StoreResult.Failed(result.message, result.status)
+    }
+
+    override fun translate(
+        kind: TranslationKind,
+        itemSlug: String,
+        authorId: String?,
+        target: String,
+    ): StoreResult<Map<String, String>> {
+        if (!configured) return StoreResult.Unavailable("No store endpoint configured")
+        val body = buildString {
+            append('{')
+            append(""""kind":""").append(jsonStr(kind.wire)).append(',')
+            append(""""item":""").append(jsonStr(itemSlug)).append(',')
+            if (authorId != null) append(""""author":""").append(jsonStr(authorId)).append(',')
+            append(""""target":""").append(jsonStr(target))
+            append('}')
+        }
+        // The publishable key alone: reading the store needs no account, so reading it translated does not.
+        val r = translateHttp.request(
+            method = "POST",
+            url = "$base/functions/v1/translate",
+            headers = mapOf(
+                "Content-Type" to "application/json",
+                "apikey" to apiKey,
+                "Authorization" to "Bearer $apiKey",
+            ),
+            body = body,
+        )
+        val message = JsonReader.parseOrNull(r.body)?.let { JsonReader.str(it, "error") }?.takeIf { it.isNotBlank() }
+        return when {
+            r.error != null -> StoreResult.Unavailable(r.error)
+            r.status in 200..299 -> {
+                val fields = JsonReader.obj(JsonReader.obj(JsonReader.parseOrNull(r.body))?.get("fields"))
+                    ?: return StoreResult.Failed("The translation response was not valid JSON")
+                StoreResult.Ok(fields.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap())
+            }
+            // 503 is the function's own "busy, try again"; its message says so in words.
+            r.status == 429 || r.status >= 500 -> StoreResult.Unavailable(message ?: "Translation unavailable (HTTP ${r.status})")
+            else -> StoreResult.Failed(message ?: "This could not be translated", r.status)
+        }
     }
 
     private fun rpc(name: String, body: String): StoreResult<String> {

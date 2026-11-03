@@ -10,7 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiStoreItem
+import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.components.CodeMotifColors
+import dev.ide.ui.components.GeneratedIcon
+import dev.ide.ui.components.isPluginListing
 
 /**
  * The project's own app icon, drawn into whatever tile the caller hands it, or null when it has none.
@@ -18,6 +21,9 @@ import dev.ide.ui.components.CodeMotifColors
  * A published listing's icon is an IMAGE in the store's media bucket; `UiStoreItem.iconId` is a glyph key
  * in the app's own registry, which is all a bundled template has. So a card asks for this first and draws
  * its glyph tile when the answer is null, rather than a blank plate.
+ *
+ * A published project that shipped no icon (every plugin: a plugin is not an app and has no launcher
+ * icon) gets a [GeneratedIcon] instead of null, so a shelf of plugins is not a row of identical glyphs.
  *
  * Fetched through the same media cache the screenshots use: it is the same bucket and the same
  * version-scoped key, so an icon is downloaded once per device and never goes stale.
@@ -27,8 +33,9 @@ internal fun rememberItemIcon(
     backend: IdeBackend?,
     item: UiStoreItem,
 ): (@Composable (Modifier) -> Unit)? {
-    val remote = item.iconPath
-    if (remote == null || backend == null) return null
+    val generated = remember(item.id, item.title, item.kind, item.category, item.tags) { generatedIconFor(item) }
+    val remote = item.iconPath ?: return generated
+    if (backend == null) return generated
     val path by produceState<String?>(null, remote, backend) {
         value = runCatching { backend.store.screenshotFile(remote) }.getOrNull()
     }
@@ -70,9 +77,19 @@ internal fun rememberItemShots(
 internal fun rememberItemIconSlot(
     backend: IdeBackend?,
     item: UiStoreItem,
-): (@Composable (Modifier) -> Unit)? = remember(backend, item.iconPath) {
+): (@Composable (Modifier) -> Unit)? = remember(backend, item.iconPath, item.id, item.title, item.kind, item.category) {
     val path = item.iconPath
-    if (path == null || backend == null) null else { m -> RemoteShot(backend, path, ContentScale.Crop, m) }
+    if (path == null || backend == null) generatedIconFor(item) else { m -> RemoteShot(backend, path, ContentScale.Crop, m) }
+}
+
+/**
+ * The generated icon for a published item with no icon of its own, or null for a bundled one: a bundled
+ * template's branded glyph (the Android robot, the Kotlin "K") already says more than a monogram would.
+ */
+internal fun generatedIconFor(item: UiStoreItem): (@Composable (Modifier) -> Unit)? {
+    if (item.kind != UiStoreItemKind.Community) return null
+    val plugin = isPluginListing(item.category, item.tags)
+    return { m -> GeneratedIcon(seed = item.id, title = item.title, plugin = plugin, modifier = m) }
 }
 
 /** One store media object: resolved to a cached file, then drawn. The chrome stands in until both land. */

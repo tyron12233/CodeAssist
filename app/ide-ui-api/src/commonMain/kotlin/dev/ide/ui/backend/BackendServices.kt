@@ -1273,6 +1273,20 @@ interface StoreService {
 
     suspend fun deleteMyReview(itemId: String): Boolean = false
 
+    /** Whether the Translate buttons can do anything in this build. False hides them. */
+    fun translationAvailable(): Boolean = false
+
+    /**
+     * A listing's summary and description in [target] (a language tag such as "es" or "pt-BR"). Keyed
+     * "summary" and "description"; a field the listing does not have is absent.
+     */
+    suspend fun translateListing(itemId: String, target: String): UiTranslation =
+        UiTranslation(error = "Translation is not available in this build")
+
+    /** One review and the publisher's reply to it in [target], keyed "review" and "reply". */
+    suspend fun translateReview(itemId: String, authorId: String, target: String): UiTranslation =
+        UiTranslation(error = "Translation is not available in this build")
+
     /** Mark a review useful, or take it back. Returns null on success or a message to show. */
     suspend fun voteReview(itemId: String, authorId: String, helpful: Boolean): String? =
         "Reviews are not available in this build"

@@ -651,6 +651,12 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="store_search_hint">Search templates and samples</string>
     <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">Templates, sample apps, plugins</string>
+    <string name="store_trending">Trending</string>
+    <string name="store_trending_search">Search for %1$s</string>
+    <string name="store_translate">Translate</string>
+    <string name="store_translating">Translating…</string>
+    <string name="store_translated">Translated automatically</string>
+    <string name="store_show_original">Show original</string>
     <string name="store_browse_by_kind">Browse by kind</string>
     <string name="store_see_all">See all</string>
     <string name="store_install">Install</string>
@@ -733,6 +739,19 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="submit_send">Submit for review</string>
     <string name="submit_sending">Submitting…</string>
     <string name="submit_review_note">A moderator reviews every submission before it appears. Nothing is public until it is approved.</string>
+    <string name="submit_checks_title">What reviewers check</string>
+    <string name="submit_checks_english">The title, summary and description are in English.</string>
+    <string name="submit_checks_screenshots">Screenshots show the app running, not the editor.</string>
+    <string name="submit_checks_summary">The summary says in one line what the project does.</string>
+    <string name="submit_checks_icon">The app has its own icon, not the default one.</string>
+    <string name="submit_checks_own">It is your own work, with no secret keys or AI chat history in it.</string>
+    <string name="submit_warn_english">Store listings must be in English, and this reads like another language. Write it in English; you can keep a translation below it.</string>
+    <string name="submit_warn_summary">Say in one line what the project does. A summary that only repeats the name is the most common reason a listing is sent back.</string>
+    <string name="submit_warn_spam">Wording like “download free” or “mod apk” reads as spam, and listings with it are sent back.</string>
+    <string name="submit_confirm_title">Before you send it</string>
+    <string name="submit_confirm_body">A moderator is likely to send this back:</string>
+    <string name="submit_confirm_fix">Fix it</string>
+    <string name="submit_confirm_send">Send anyway</string>
     <string name="submit_required">Fill in the title, summary, description and category.</string>
     <string name="submit_target">Publishing as</string>
     <string name="submit_target_new">A new listing</string>
