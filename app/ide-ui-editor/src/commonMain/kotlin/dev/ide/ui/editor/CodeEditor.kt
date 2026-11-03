@@ -1301,6 +1301,16 @@ private fun CodeEditorContent(
             modifier = Modifier.matchParentSize(),
         )
 
+        // The outline scrubber; on a file too large for an outline it is still a fast-scroll thumb, just without ticks.
+        FastScrollLayer(
+            session = editorSession,
+            geometry = geometry,
+            thumbColor = colors.textSecondary,
+            trackColor = colors.separator,
+            classTickColor = colors.accent,
+            memberTickColor = colors.textTertiary,
+        )
+
         if (horizontalScrollbar) {
             HorizontalScrollbarLayer(
                 geometry = geometry,
