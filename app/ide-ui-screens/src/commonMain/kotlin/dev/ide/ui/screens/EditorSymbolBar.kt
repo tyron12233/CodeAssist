@@ -1,5 +1,28 @@
 package dev.ide.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.PopupPositionProvider
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -8,6 +31,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,7 +58,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -104,6 +127,8 @@ internal fun EditorSymbolBar(
     val textKeys = symbols.filter { it.action == null }.sortedByDescending { it.pinned } // pinned ones first
     val folded = symbols.filter { it.action != null && it.action != CustomizationActions.TAB }
     var moreOpen by remember { mutableStateOf(initiallyExpanded) }
+    // When the ⋯ row last closed by an outside tap: that same tap landing on ⋯ must not reopen it at once.
+    var dismissedAt by remember { mutableStateOf<TimeSource.Monotonic.ValueTimeMark?>(null) }
     var trackpad by remember { mutableStateOf(false) }
     val hasMore = folded.isNotEmpty() || showDiagnosticJump || onCustomize != null
     val haptics = LocalHapticFeedback.current
@@ -147,9 +172,14 @@ internal fun EditorSymbolBar(
                 }
             }
             if (hasMore) {
+                val turn by animateFloatAsState(if (moreOpen) 90f else 0f, tween(MoreMillis), label = "moreTurn")
                 KeyCap(
                     label = stringResource(Res.string.symbolbar_more), gestures = gestures,
-                    onTap = { moreOpen = !moreOpen }, icon = CaIcons.ellipsis, active = moreOpen,
+                    onTap = {
+                        val justDismissed = dismissedAt?.let { it.elapsedNow() < 300.milliseconds } == true
+                        if (!justDismissed) moreOpen = !moreOpen
+                    },
+                    icon = CaIcons.ellipsis, active = moreOpen, iconRotation = { turn },
                 )
             }
             if (onHideKeyboard != null) {
@@ -160,9 +190,14 @@ internal fun EditorSymbolBar(
             }
         }
         // While the trackpad drives the caret the keys are not keys: say what the drag does instead.
-        if (trackpad) {
+        AnimatedVisibility(
+            visible = trackpad,
+            modifier = Modifier.matchParentSize(),
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(180)),
+        ) {
             Box(
-                Modifier.matchParentSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -172,13 +207,20 @@ internal fun EditorSymbolBar(
                 )
             }
         }
-        if (moreOpen && hasMore) {
+        // The popup outlives `moreOpen` by its exit animation, so it closes the way it opened.
+        val moreState = remember { MutableTransitionState(initiallyExpanded) }
+        moreState.targetState = moreOpen && hasMore
+        if (moreState.currentState || moreState.targetState) {
             MoreKeysRow(
+                visibleState = moreState,
                 folded = folded,
                 showDiagnosticJump = showDiagnosticJump,
                 onCustomize = onCustomize,
                 onAction = onAction,
-                onDismiss = { moreOpen = false },
+                onDismiss = {
+                    if (moreOpen) dismissedAt = TimeSource.Monotonic.markNow()
+                    moreOpen = false
+                },
             )
         }
     }
@@ -187,21 +229,29 @@ internal fun EditorSymbolBar(
 /** The actions behind ⋯, as a row of labelled keys floating just above the bar's right end. */
 @Composable
 private fun MoreKeysRow(
+    visibleState: MutableTransitionState<Boolean>,
     folded: List<UiSymbolKey>,
     showDiagnosticJump: Boolean,
     onCustomize: (() -> Unit)?,
     onAction: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val gap = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.roundToPx() }
+    val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
+    val position = remember(gap) { AboveAnchorEnd(gap) }
     Popup(
-        alignment = Alignment.TopEnd,
-        offset = IntOffset(-gap, -gap),
+        popupPositionProvider = position,
         onDismissRequest = onDismiss,
         // Not focusable: the editor keeps focus and the keyboard stays up under it.
         properties = PopupProperties(focusable = false),
     ) {
-        Box(Modifier.offsetAbove()) {
+        // Grows out of the ⋯ key (the row's bottom-right corner) and sinks back into it.
+        val origin = TransformOrigin(1f, 1f)
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter = fadeIn(tween(MoreMillis)) + scaleIn(tween(MoreMillis, easing = FastOutSlowInEasing), initialScale = 0.8f, transformOrigin = origin) +
+                slideInVertically(tween(MoreMillis, easing = FastOutSlowInEasing)) { it / 3 },
+            exit = fadeOut(tween(MoreMillis * 2 / 3)) + scaleOut(tween(MoreMillis * 2 / 3), targetScale = 0.85f, transformOrigin = origin),
+        ) {
             Row(
                 Modifier
                     .clip(RoundedCornerShape(12.dp))
@@ -226,10 +276,18 @@ private fun MoreKeysRow(
     }
 }
 
-/** Lifts the popup's content by its own height, so a TopEnd-anchored row sits above the bar, not over it. */
-private fun Modifier.offsetAbove(): Modifier = layout { measurable, constraints ->
-    val p = measurable.measure(constraints)
-    layout(p.width, p.height) { p.place(0, -p.height) }
+/**
+ * Places a popup just above its anchor (the bar), right edges aligned, [gap] px clear of both. Positioned by the
+ * popup window itself: drawing the content above an anchored window instead gets cut by that window on Android.
+ */
+private class AboveAnchorEnd(private val gap: Int) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize,
+    ): IntOffset {
+        val x = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.right - popupContentSize.width - gap else anchorBounds.left + gap
+        val y = anchorBounds.top - popupContentSize.height - gap
+        return IntOffset(x.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)), y.coerceAtLeast(0))
+    }
 }
 
 @Composable
@@ -301,21 +359,40 @@ private fun KeyCap(
     onAlternate: () -> Unit = {},
     accent: Boolean = false,
     active: Boolean = false,
+    /** Degrees to turn the icon by, read at draw time (the ⋯ key turns as its row opens). */
+    iconRotation: () -> Float = { 0f },
 ) {
     var press by remember { mutableStateOf(KeyPress.NONE) }
     val tap by rememberUpdatedState(onTap)
     val alt by rememberUpdatedState(onAlternate)
     val colors = MaterialTheme.colorScheme
-    val face = when {
-        press == KeyPress.ALTERNATE -> colors.primaryContainer
-        press == KeyPress.DOWN || active -> colors.secondaryContainer
-        else -> colors.surfaceContainerHighest
-    }
+    val face by animateColorAsState(
+        when {
+            press == KeyPress.ALTERNATE -> colors.primaryContainer
+            press == KeyPress.DOWN || active -> colors.secondaryContainer
+            else -> colors.surfaceContainerHighest
+        },
+        tween(90),
+        label = "keyFace",
+    )
+    // Pressed caps sink a little, with a spring so a quick tap still shows it and bounces back.
+    val squish by animateFloatAsState(
+        if (press == KeyPress.NONE) 1f else 0.9f,
+        spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow + 200f),
+        label = "keySquish",
+    )
+    // 0 at rest, 1 flicked: the corner glyph flies to the middle and grows while the key's own drops away.
+    val flick by animateFloatAsState(
+        if (press == KeyPress.ALTERNATE) 1f else 0f,
+        spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+        label = "keyFlick",
+    )
     val ink = if (accent) colors.primary else colors.onSurface
     Box(
         Modifier
             .height(KeyHeight)
             .widthIn(min = KeyMinWidth)
+            .graphicsLayer { scaleX = squish; scaleY = squish }
             .clip(KeyShape)
             .background(face, KeyShape)
             .semantics { contentDescription = label }
@@ -333,18 +410,27 @@ private fun KeyCap(
         contentAlignment = Alignment.Center,
     ) {
         when {
-            press == KeyPress.ALTERNATE && alternate != null ->
-                Text(alternate, style = Ide.type.code, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.onPrimaryContainer)
-            icon != null -> Icon(icon, label, Modifier.size(19.dp), tint = ink)
-            else -> Text(label, style = Ide.type.code, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = ink, maxLines = 1)
+            icon != null -> Icon(icon, label, Modifier.size(19.dp).graphicsLayer { rotationZ = iconRotation() }, tint = ink)
+            else -> Text(
+                label,
+                Modifier.graphicsLayer { alpha = 1f - flick; translationY = flick * 10.dp.toPx(); scaleX = 1f - 0.3f * flick; scaleY = 1f - 0.3f * flick },
+                style = Ide.type.code, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = ink, maxLines = 1,
+            )
         }
-        // The flick-up partner, small in the top corner, as a phone keyboard shows its long-press letters.
-        if (alternate != null && press != KeyPress.ALTERNATE) {
+        // The flick-up partner: small in the top corner at rest, as a phone keyboard shows its long-press letters;
+        // flicked, it flies to the middle at full size. Drawn at full size and scaled, so nothing re-lays out.
+        if (alternate != null) {
+            val restScale = 9f / 17f
             Text(
                 alternate,
-                Modifier.align(Alignment.TopEnd).padding(top = 2.dp),
-                style = Ide.type.code, fontSize = 9.sp, lineHeight = 9.sp,
-                color = colors.onSurfaceVariant.copy(alpha = 0.7f), maxLines = 1,
+                Modifier.graphicsLayer {
+                    val s = restScale + (1f - restScale) * flick
+                    scaleX = s; scaleY = s
+                    translationX = (1f - flick) * CornerDx.toPx()
+                    translationY = (1f - flick) * CornerDy.toPx()
+                },
+                style = Ide.type.code, fontSize = 17.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                color = lerp(colors.onSurfaceVariant.copy(alpha = 0.7f), colors.onPrimaryContainer, flick),
             )
         }
     }
@@ -439,6 +525,13 @@ private val KeyHeight = 36.dp
 private val KeyMinWidth = 38.dp
 private val KeyGap = 4.dp
 private val KeyShape = RoundedCornerShape(8.dp)
+
+/** Where the alternate glyph rests, from the cap's centre: its top-right corner. */
+private val CornerDx = 11.dp
+private val CornerDy = (-11).dp
+
+/** How long the ⋯ row takes to open (it closes in two thirds of that). */
+private const val MoreMillis = 180
 
 /** How far up a key must be flicked to type its alternate. */
 private val FlickUp = 14.dp

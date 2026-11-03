@@ -113,6 +113,7 @@ class SymbolBarTest {
             rig.press(firstSymbol)
             rig.move(firstSymbol + Offset(0f, -20f))
             rig.move(firstSymbol + Offset(0f, -50f))
+            rig.frames(250) // let the glyph's fly-in settle
             rig.shot("symbolbar-flick.png")
             rig.release(firstSymbol + Offset(0f, -50f))
             assertEquals(listOf("{", "}"), rig.typed, "a flick up types the alternate")
