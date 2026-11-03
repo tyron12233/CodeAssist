@@ -112,6 +112,8 @@ class SidebarPanel(
     /** The panel draws its own header (title, controls, hide button), so the pane draws none: the build
      *  console, the Run terminal and the logs, which have headers of their own wherever they show. */
     val ownHeader: Boolean = false,
+    /** Its work is running (see [dev.ide.ui.ext.ToolWindowContribution.busy]): the stripe animates its icon. */
+    val busy: Boolean = false,
     val content: @Composable () -> Unit,
 )
 
@@ -191,7 +193,9 @@ fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: 
             override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
         }
     }
-    return tools.map { tw -> SidebarPanel(tw.id, tw.title, actionIcon(tw.iconId), tw.order) { tw.content(ctx) } }
+    return tools.map { tw ->
+        SidebarPanel(tw.id, tw.title, actionIcon(tw.iconId), tw.order, busy = tw.busy?.invoke(backend) == true) { tw.content(ctx) }
+    }
 }
 
 /**
@@ -253,7 +257,7 @@ fun ActivityRail(
                             panels.forEach { panel ->
                                 StripeButton(
                                     panel.icon, withShortcut(panel.title, panel.id), active = panel.id == selectedId,
-                                    drag = DraggedToolWindow(panel.id, panel.title, panel.icon),
+                                    drag = DraggedToolWindow(panel.id, panel.title, panel.icon), busy = panel.busy,
                                 ) { onSelect(panel.id) }
                             }
                         }
@@ -314,6 +318,7 @@ private fun StripeButton(
     label: String,
     active: Boolean,
     drag: DraggedToolWindow? = null,
+    busy: Boolean = false,
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -330,6 +335,7 @@ private fun StripeButton(
     ) {
         Box(
             Modifier.size(StripeButtonSize)
+                .busyRing(busy)
                 .pressScale(interaction)
                 .background(
                     when {

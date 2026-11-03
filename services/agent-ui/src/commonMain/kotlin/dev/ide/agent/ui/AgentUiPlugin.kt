@@ -1,5 +1,6 @@
 package dev.ide.agent.ui
 
+import androidx.compose.runtime.collectAsState
 import dev.ide.ui.ext.HomeTabContribution
 import dev.ide.ui.ext.OverlayContribution
 import dev.ide.ui.icons.CaIcons
@@ -26,6 +27,8 @@ object AgentUiPlugin : UiPlugin {
                 iconId = "sparkle",
                 anchor = ToolWindowAnchor.RIGHT,
                 content = { ctx -> ChatDrawer(ctx.backend, fileActions = ctx.fileActions, activeFilePath = ctx.activeFilePath, onOpenFile = { ctx.openFile(it) }) },
+                // A reply still running: the AI icon animates in the editor's stripe and bottom bar.
+                busy = { backend -> backend.agent.chatState.collectAsState().value.busy },
             ),
         )
         // The AI home tab: create an app by chatting, or chat about a project, without opening the editor.

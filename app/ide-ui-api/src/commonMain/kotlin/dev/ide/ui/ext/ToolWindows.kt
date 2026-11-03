@@ -59,6 +59,12 @@ class ToolWindowContribution(
     val iconId: String,
     val anchor: ToolWindowAnchor,
     val order: Int = 1000,
+    /**
+     * Whether the tool window has work running right now (the AI agent mid-reply). Its icon then animates wherever
+     * it shows (the stripe, the phone's bottom bar), so the user can tell from the editor that it is still going.
+     * Before [content], so a body passed as a trailing lambda still binds to [content].
+     */
+    val busy: (@Composable (IdeBackend) -> Boolean)? = null,
     val content: @Composable (ToolWindowContext) -> Unit,
 )
 

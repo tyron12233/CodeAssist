@@ -809,10 +809,14 @@ internal fun CompactLayout(
                             onSelect = { state.onBottomNav(it) },
                             showSource = leftPanels.any { it.id == LeftPanelId.SOURCE },
                             rightTool = rightPrimary?.let { tw ->
-                                RightToolNavItem(actionIcon(tw.iconId), tw.title, open = state.selectedRightPanel != null) {
-                                    if (state.selectedRightPanel != null) state.selectedRightPanel = null
-                                    else state.selectRightPanel(tw.id)
-                                }
+                                RightToolNavItem(
+                                    actionIcon(tw.iconId), tw.title, open = state.selectedRightPanel != null,
+                                    onClick = {
+                                        if (state.selectedRightPanel != null) state.selectedRightPanel = null
+                                        else state.selectRightPanel(tw.id)
+                                    },
+                                    busy = tw.busy?.invoke(state.backend) == true,
+                                )
                             },
                         )
                     },

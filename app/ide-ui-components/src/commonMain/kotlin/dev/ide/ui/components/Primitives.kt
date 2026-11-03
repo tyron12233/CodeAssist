@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -244,5 +246,37 @@ fun Chip(
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = textColor, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+/**
+ * While [busy], a gradient arc circles the element (a tool window's icon whose work is still running, like the AI
+ * agent mid-reply), so it reads as "still working" from anywhere in the app, even with its panel closed. Drawn
+ * behind the content, inset to the element's bounds; nothing is drawn or animated when idle.
+ */
+@Composable
+fun Modifier.busyRing(busy: Boolean): Modifier {
+    if (!busy) return this
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "busyRing")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(1200, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "busyRingAngle",
+    )
+    val scheme = MaterialTheme.colorScheme
+    val colors = listOf(Color.Transparent, scheme.tertiary, scheme.primary, Color.Transparent)
+    return this.drawBehind {
+        val stroke = 2.dp.toPx()
+        val radius = size.minDimension / 2f - stroke / 2f
+        rotate(angle) {
+            drawCircle(
+                brush = androidx.compose.ui.graphics.Brush.sweepGradient(colors, center),
+                radius = radius,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+            )
+        }
     }
 }

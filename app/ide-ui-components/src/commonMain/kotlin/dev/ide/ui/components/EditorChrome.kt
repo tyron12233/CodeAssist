@@ -210,6 +210,8 @@ fun EditorTopBar(
     onToggleRightTool: () -> Unit = {},
     /** Wide layout only: show the right tool window toggle in the bar, because the user hid the right stripe. */
     rightToolInBar: Boolean = false,
+    /** The right tool window's work is running (the agent mid-reply): its bar button animates. */
+    rightToolBusy: Boolean = false,
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -327,7 +329,7 @@ fun EditorTopBar(
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
                 RunCluster(activeVariant, variants, onPickVariant, runTasks, onPickTask, selectedRunTask)
                 if (rightToolInBar && rightToolIconId != null) {
-                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, active = rightToolOpen)
+                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, Modifier.busyRing(rightToolBusy), active = rightToolOpen)
                 }
                 if (hasActiveFile) {
                     EditorOverflowMenu(

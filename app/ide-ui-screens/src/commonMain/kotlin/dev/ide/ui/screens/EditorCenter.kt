@@ -228,6 +228,7 @@ internal fun EditorCenter(
                 consoleOpen = state.consoleOpen,
                 rightToolIconId = rightPrimary?.iconId,
                 rightToolTitle = rightPrimary?.title ?: "",
+                rightToolBusy = rightPrimary?.busy?.invoke(state.backend) == true,
                 rightToolOpen = state.selectedRightPanel != null,
                 onToggleRightTool = { rightPrimary?.let { state.toggleRightPanel(it.id) } },
                 rightToolInBar = !state.rightStripeVisible,

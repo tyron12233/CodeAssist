@@ -21,6 +21,7 @@ import dev.ide.ui.RailDestination
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.components.busyRing
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.edbottomnav_source
 import dev.ide.ui.generated.resources.more
@@ -53,7 +54,7 @@ internal fun BottomNav(
             BottomNavItem(CaIcons.gitBranch, stringResource(Res.string.edbottomnav_source), selected == RailDestination.Source) { onSelect(RailDestination.Source) }
         }
         if (rightTool != null) {
-            BottomNavItem(rightTool.icon, rightTool.label, rightTool.open, onClick = rightTool.onClick)
+            BottomNavItem(rightTool.icon, rightTool.label, rightTool.open, busy = rightTool.busy, onClick = rightTool.onClick)
         }
         BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More) { onSelect(RailDestination.More) }
     }
@@ -65,6 +66,8 @@ internal class RightToolNavItem(
     val label: String,
     val open: Boolean,
     val onClick: () -> Unit,
+    /** Its work is running (the agent mid-reply): the icon animates. */
+    val busy: Boolean = false,
 )
 
 @Composable
@@ -73,11 +76,12 @@ private fun BottomNavItem(
     label: String,
     active: Boolean,
     badge: Int = 0,
+    busy: Boolean = false,
     onClick: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Box {
-            IconButtonCa(icon, label, onClick, active = active, iconSize = 22, boxSize = 40)
+            IconButtonCa(icon, label, onClick, Modifier.busyRing(busy), active = active, iconSize = 22, boxSize = 40)
             if (badge > 0) {
                 Box(
                     Modifier.align(Alignment.TopEnd)
