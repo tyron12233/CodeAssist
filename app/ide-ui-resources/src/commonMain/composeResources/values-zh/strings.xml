@@ -472,6 +472,8 @@
     <string name="breadcrumb_split">拆分</string>
     <string name="breadcrumb_nav_back">后退</string>
     <string name="breadcrumb_nav_forward">前进</string>
+    <string name="symbolbar_more">更多按键</string>
+    <string name="symbolbar_trackpad">拖动以移动光标</string>
     <string name="conflict_current">当前</string>
     <string name="conflict_incoming">传入</string>
     <string name="conflict_both">两者</string>

@@ -2283,6 +2283,8 @@
     <string name="block_lambda_page">لامدا</string>
     <string name="color_opacity">العتامة</string>
     <string name="symbolbar_hide_keyboard">إخفاء لوحة المفاتيح</string>
+    <string name="symbolbar_more">مفاتيح أخرى</string>
+    <string name="symbolbar_trackpad">اسحب لتحريك المؤشر</string>
     <string name="store_search_all">لم يُنشر أي شيء في المتجر بعد.</string>
     <string name="reviews_show_more">عرض المزيد من المراجعات</string>
     <string name="reviews_loading_more">جاري التحميل…</string>

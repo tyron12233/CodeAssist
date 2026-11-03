@@ -424,6 +424,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="symbolbar_next_problem">Next problem</string>
     <string name="symbolbar_customize">Customize symbols</string>
     <string name="symbolbar_hide_keyboard">Hide keyboard</string>
+    <string name="symbolbar_more">More keys</string>
+    <string name="symbolbar_trackpad">Drag to move the cursor</string>
     <string name="symbolbar_comment">Line comment</string>
     <string name="symed_pin">Pin to the fixed row</string>
     <string name="symed_unpin">Unpin</string>

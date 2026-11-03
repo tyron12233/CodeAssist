@@ -166,6 +166,8 @@ object CaIcons {
     val undo = mirroring("undo", s("M4 12h8.5a5.5 5.5 0 0 1 5.5 5.5"), s("M8 8l-4 4 4 4"))
     val redo = mirroring("redo", s("M20 12h-8.5a5.5 5.5 0 0 0-5.5 5.5"), s("M16 8l4 4-4 4"))
     val arrowRight = mirroring("arrow-right", s("M5 12h13M13 6l6 6-6 6"))
+    /** An arrow up against a bar — the Tab key. */
+    val tab = mirroring("tab", s("M3 12h13M11 7l5 5-5 5"), s("M20 5v14"))
     val arrowLeft = mirroring("arrow-left", s("M19 12H6M11 6l-6 6 6 6"))
     /** Arrow into a tray — import files from outside the app. */
     val download = build("download", s("M12 4v10M8 10.5l4 4 4-4"), s("M5 18.5h14"))

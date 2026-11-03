@@ -773,7 +773,7 @@ internal fun CompactLayout(
                             derivedStateOf { activeSession?.diagnostics?.isNotEmpty() == true }
                         }
                         EditorSymbolBar(
-                            symbols = state.symbolKeys.ifEmpty { DEFAULT_SYMBOL_KEYS },
+                            symbols = effectiveSymbolKeys(state.symbolKeys, state.active?.path),
                             onSymbol = { sym -> state.active?.session?.commitText(sym) },
                             onAction = { id -> dispatchSymbolAction(state, id) },
                             showDiagnosticJump = hasDiagnostics,
@@ -781,6 +781,11 @@ internal fun CompactLayout(
                             // The dismiss key only where the platform offers no way out of the keyboard
                             // itself; Android's back already does it. See [hasSystemBack].
                             onHideKeyboard = if (hasSystemBack) null else ({ state.active?.session?.ime?.hide() }),
+                            onMoveCaret = { chars, lines ->
+                                state.active?.session?.let { s ->
+                                    s.setCaret(trackpadTarget(s.doc, s.selection.start, chars, lines))
+                                }
+                            },
                         )
                     }
                     // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it. Zen mode hides

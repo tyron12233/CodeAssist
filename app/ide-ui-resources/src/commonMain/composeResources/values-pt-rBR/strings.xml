@@ -304,6 +304,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="breadcrumb_split">Dividido</string>
     <string name="breadcrumb_nav_back">Voltar</string>
     <string name="breadcrumb_nav_forward">Avançar</string>
+    <string name="symbolbar_more">Mais teclas</string>
+    <string name="symbolbar_trackpad">Arraste para mover o cursor</string>
     <string name="conflict_current">Atual</string>
     <string name="conflict_incoming">Recebida</string>
     <string name="conflict_both">Ambas</string>

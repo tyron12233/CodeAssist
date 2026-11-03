@@ -273,6 +273,8 @@
     <string name="breadcrumb_split">Разделение</string>
     <string name="breadcrumb_nav_back">Назад</string>
     <string name="breadcrumb_nav_forward">Вперёд</string>
+    <string name="symbolbar_more">Ещё клавиши</string>
+    <string name="symbolbar_trackpad">Перетащите, чтобы двигать курсор</string>
     <string name="conflict_current">Текущее</string>
     <string name="conflict_incoming">Входящее</string>
     <string name="conflict_both">Оба</string>
