@@ -106,6 +106,20 @@ private fun myers(a: List<String>, b: List<String>, maxEdits: Int): ByteArray? {
 }
 
 /**
+ * The base (committed) line that buffer [line] is, given the buffer's [changes] against the base: shifted by
+ * the stretches above it. Null for a line inside a changed stretch, which the base does not have.
+ */
+fun baseLineFor(changes: List<LineChange>, line: Int): Int? {
+    var delta = 0
+    for (c in changes) {
+        if (line < c.newStart) break
+        if (line < c.newEnd) return null
+        delta += (c.oldEnd - c.oldStart) - (c.newEnd - c.newStart)
+    }
+    return line + delta
+}
+
+/**
  * The edit that undoes [change] in [doc]: replaces its buffer lines with the [base] lines it stands for. Returns
  * the `[start, end)` range of [doc] and its replacement.
  */

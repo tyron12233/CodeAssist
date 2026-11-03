@@ -59,6 +59,8 @@ data class IdeSettings(
     val pinchZoom: Boolean = true,
     /** While typing in the editor on a phone, volume up / down move the caret left / right instead of the volume. */
     val volumeKeysMoveCaret: Boolean = false,
+    /** Show who last changed the caret's line (author, when, commit summary) faded after its end. */
+    val inlineBlame: Boolean = true,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space. **On by default** — a normal
      *  keyboard. Turning it OFF marks the field as raw code (a `visible-password` input type) so a typed `.`
      *  doesn't get an auto-inserted space and identifiers aren't "corrected", at the cost of the suggestion

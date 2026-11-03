@@ -1122,6 +1122,11 @@
     <string name="set_editor_two_axis_desc">Перетаскивайте в любом направлении, чтобы прокручивать сразу по обеим осям (касание)</string>
     <string name="set_editor_pinch">Масштабирование щипком</string>
     <string name="set_editor_pinch_desc">Сведите или разведите два пальца, чтобы изменить размер шрифта кода</string>
+    <string name="set_editor_volume_keys">Клавиши громкости двигают курсор</string>
+    <string name="set_editor_volume_keys_desc">При наборе на телефоне клавиша громкости вверх сдвигает курсор влево, вниз — вправо, вместо изменения громкости</string>
+    <string name="set_editor_inline_blame">Кто изменил эту строку</string>
+    <string name="set_editor_inline_blame_desc">В Git-проекте показывать, кто последним изменил строку с курсором, когда и зачем, бледным текстом после её конца</string>
+    <string name="blame_uncommitted">Ещё не закоммичено</string>
     <string name="set_editor_kbd_suggest">Подсказки клавиатуры</string>
     <string name="set_editor_kbd_suggest_desc">Разрешить экранной клавиатуре автоисправление, подсказки и автопробелы (обычная клавиатура). Выключите для ввода чистого кода, чтобы после набранной «.» не вставлялся автоматический пробел, ценой полосы подсказок.</string>
     <string name="set_editor_close_unsaved">Закрытие вкладки с несохранёнными изменениями</string>

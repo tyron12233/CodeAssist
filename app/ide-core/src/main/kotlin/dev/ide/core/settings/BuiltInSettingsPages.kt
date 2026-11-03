@@ -260,6 +260,7 @@ object BuiltInSettingsPages {
             SettingControl.Toggle("wordWrap", "Word wrap", "Soft-wrap long lines at the viewport edge instead of scrolling horizontally", default = d.wordWrap),
             SettingControl.Toggle("wrapIndent", "Indent wrapped lines", "Align a wrapped line's continuation rows to its indentation (when word wrap is on)", default = d.wrapIndent),
             SettingControl.Toggle("horizontalScrollbar", "Horizontal scrollbar", "Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)", default = d.horizontalScrollbar),
+            SettingControl.Toggle("inlineBlame", "Who changed this line", "In a Git project, show who last changed the caret's line, when, and why, faded after its end", default = d.inlineBlame),
             SettingControl.Choice(
                 CLOSE_UNSAVED, "Closing a tab with unsaved changes", "Ask first, or always save or discard the changes without asking",
                 default = CLOSE_UNSAVED_ASK,

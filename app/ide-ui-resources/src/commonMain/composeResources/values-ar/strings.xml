@@ -1904,6 +1904,11 @@
     <string name="set_editor_two_axis_desc">اسحب في أي اتجاه للتمرير على المحورين معًا (باللمس)</string>
     <string name="set_editor_pinch">القرص للتكبير</string>
     <string name="set_editor_pinch_desc">اقرص بإصبعين لتغيير حجم خط الكود</string>
+    <string name="set_editor_volume_keys">مفاتيح الصوت تحرّك المؤشر</string>
+    <string name="set_editor_volume_keys_desc">أثناء الكتابة على الهاتف، يحرّك رفع الصوت المؤشر يسارًا وخفضه يمينًا بدل تغيير مستوى الصوت</string>
+    <string name="set_editor_inline_blame">من غيّر هذا السطر</string>
+    <string name="set_editor_inline_blame_desc">في مشروع Git، اعرض من غيّر سطر المؤشر آخر مرة ومتى ولماذا، بلون خافت بعد نهايته</string>
+    <string name="blame_uncommitted">لم يُودَع بعد</string>
     <string name="set_editor_kbd_suggest">اقتراحات لوحة المفاتيح</string>
     <string name="set_editor_kbd_suggest_desc">اسمح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفه لإدخال الكود الخام، بحيث لا تحصل النقطة "." المكتوبة على مسافة مُدرَجة تلقائيًا، مقابل فقدان شريط الاقتراحات.</string>
     <string name="set_editor_close_unsaved">إغلاق علامة تبويب بها تغييرات غير محفوظة</string>

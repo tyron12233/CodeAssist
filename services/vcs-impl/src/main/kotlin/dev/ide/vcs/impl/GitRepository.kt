@@ -1,6 +1,7 @@
 package dev.ide.vcs.impl
 
 import dev.ide.vcs.VcsAuthor
+import dev.ide.vcs.VcsBlameLine
 import dev.ide.vcs.VcsBranch
 import dev.ide.vcs.VcsChange
 import dev.ide.vcs.VcsChangeArea
@@ -188,6 +189,28 @@ internal class GitRepository(
     override fun show(path: String, ref: String): String? = guard(msg(VcsMessage.SHOW_FAILED, path, ref)) {
         val id = repo.resolve("$ref:$path") ?: return@guard null
         runCatching { repo.open(id).bytes.toString(Charsets.UTF_8) }.getOrNull()
+    }
+
+    override fun blame(path: String): List<VcsBlameLine?> = guard(msg(VcsMessage.BLAME_FAILED, path)) {
+        val head = repo.resolve("HEAD") ?: return@guard emptyList()
+        // From HEAD, not the working tree: the editor maps its own (possibly unsaved) lines onto HEAD's.
+        val result = git.blame().setFilePath(path).setStartCommit(head).setFollowFileRenames(true).call()
+            ?: return@guard emptyList()
+        val lines = result.resultContents.size()
+        val memo = HashMap<String, VcsBlameLine>()
+        List(lines) { i ->
+            val commit = result.getSourceCommit(i) ?: return@List null
+            memo.getOrPut(commit.name) {
+                val who = commit.authorIdent
+                VcsBlameLine(
+                    commitId = commit.name,
+                    shortId = commit.name.take(7),
+                    author = VcsAuthor(who.name, who.emailAddress),
+                    timeMs = who.`when`.time,
+                    summary = commit.shortMessage,
+                )
+            }
+        }
     }
 
     override fun stashes(): List<VcsStash> = guard(msg(VcsMessage.LIST_STASHES_FAILED)) {

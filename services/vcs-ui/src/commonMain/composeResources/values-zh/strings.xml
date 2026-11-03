@@ -250,6 +250,7 @@
     <string name="vcs_msg_unknown_commit">未知的提交 %1$s</string>
     <string name="vcs_msg_diff_failed">无法比较 %1$s</string>
     <string name="vcs_msg_show_failed">无法读取 %2$s 处的 %1$s</string>
+    <string name="vcs_msg_blame_failed">无法确定是谁修改了 %1$s</string>
     <string name="vcs_msg_list_stashes_failed">无法列出贮藏</string>
     <string name="vcs_msg_stage_failed">无法暂存所选文件</string>
     <string name="vcs_msg_unstage_failed">无法取消暂存所选文件</string>

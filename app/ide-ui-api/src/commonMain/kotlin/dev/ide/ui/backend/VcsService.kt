@@ -92,6 +92,10 @@ interface VcsService {
      */
     suspend fun baseText(path: String): String? = null
 
+    /** Who last changed each line of the file at absolute [path] as of HEAD (one entry per line of [baseText]),
+     *  null entries for lines blame cannot place. Empty when the file is not committed or outside a repository. */
+    suspend fun blame(path: String): List<UiBlameLine?> = emptyList()
+
     // ---- stash ---------------------------------------------------------------------------------
 
     suspend fun stashes(): List<UiVcsStash> = emptyList()
@@ -360,6 +364,9 @@ data class UiVcsDiff(
 )
 
 data class UiVcsRemote(val name: String, val url: String)
+
+/** Who last changed a line: the author's name, when ([age], e.g. "3 days ago"), and the commit's summary. */
+data class UiBlameLine(val author: String, val age: String, val summary: String, val shortId: String)
 
 data class UiVcsStash(val index: Int, val message: String, val timeMs: Long = 0L, val timeLabel: String = "")
 

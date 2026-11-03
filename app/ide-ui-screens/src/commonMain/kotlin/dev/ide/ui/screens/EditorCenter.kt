@@ -402,6 +402,7 @@ internal fun EditorCenter(
                                 wordWrap = state.wordWrapEnabled,
                                 wrapIndent = state.wrapIndentEnabled,
                                 horizontalScrollbar = state.horizontalScrollbarEnabled,
+                                inlineBlame = state.inlineBlameEnabled,
                                 fontLigatures = state.fontLigaturesEnabled,
                                 caretStyle = CaretStyle.fromId(state.caretStyle),
                                 // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that

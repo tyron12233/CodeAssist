@@ -97,6 +97,9 @@ data class VcsAuthor(val name: String, val email: String) {
     override fun toString(): String = if (email.isBlank()) name else "$name <$email>"
 }
 
+/** Who last changed one line, as blame reports it: the commit, its author and author time, and its summary. */
+data class VcsBlameLine(val commitId: String, val shortId: String, val author: VcsAuthor, val timeMs: Long, val summary: String)
+
 /** One commit as history lists it. [id] is the full object id; [shortId] is the abbreviated form. */
 data class VcsCommit(
     val id: String,

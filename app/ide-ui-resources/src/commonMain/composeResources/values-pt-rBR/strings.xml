@@ -1213,6 +1213,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="set_editor_two_axis_desc">Arraste em qualquer direção para rolar nos dois eixos ao mesmo tempo (toque)</string>
     <string name="set_editor_pinch">Pinçar para ampliar</string>
     <string name="set_editor_pinch_desc">Pince com dois dedos para alterar o tamanho da fonte do código</string>
+    <string name="set_editor_volume_keys">Teclas de volume movem o cursor</string>
+    <string name="set_editor_volume_keys_desc">Ao digitar no celular, aumentar o volume move o cursor para a esquerda e diminuir para a direita, em vez de mudar o volume</string>
+    <string name="set_editor_inline_blame">Quem alterou esta linha</string>
+    <string name="set_editor_inline_blame_desc">Em um projeto Git, mostra quem alterou por último a linha do cursor, quando e por quê, esmaecido após o fim dela</string>
+    <string name="blame_uncommitted">Ainda sem commit</string>
     <string name="set_editor_kbd_suggest">Sugestões do teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permita que o teclado virtual faça autocorreção, sugestões e espaçamento automático (um teclado normal). Desative para entrada de código bruto, para que um '.' digitado não receba um espaço inserido automaticamente, ao custo da barra de sugestões.</string>
     <string name="set_editor_close_unsaved">Fechar uma aba com alterações não salvas</string>

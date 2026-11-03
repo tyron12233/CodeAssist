@@ -176,6 +176,8 @@ fun CodeEditor(
     wrapIndent: Boolean = true,
     /** Show a draggable bar along the bottom edge while a line runs past the view (Settings → Editor). */
     horizontalScrollbar: Boolean = true,
+    /** Show who last changed the caret's line after its end, in a Git project (Settings → Editor; on). */
+    inlineBlame: Boolean = true,
     /** Render programming ligatures (`->`, `!=`, …) when the code font provides them (Settings → Editor; on). */
     fontLigatures: Boolean = true,
     /** How the caret is drawn (Settings → Editor → Caret style). */
@@ -214,6 +216,7 @@ fun CodeEditor(
             wordWrap,
             wrapIndent,
             horizontalScrollbar,
+            inlineBlame,
             fontLigatures,
             caretStyle,
             obscured,
@@ -247,6 +250,7 @@ private fun CodeEditorContent(
     wordWrap: Boolean = false,
     wrapIndent: Boolean = true,
     horizontalScrollbar: Boolean = true,
+    inlineBlame: Boolean = true,
     fontLigatures: Boolean = true,
     caretStyle: CaretStyle = CaretStyle.Line,
     obscured: Boolean = false,
@@ -1379,6 +1383,19 @@ private fun CodeEditorContent(
             onInvoke = acts::invokeGutterAction,
             backend = backend,
         )
+
+        if (inlineBlame) {
+            InlineBlameLayer(
+                path = path,
+                session = editorSession,
+                backend = backend,
+                markers = changeMarkers,
+                caretOffset = caretOffset,
+                caretGeometry = { geometry.caretGeometry(it) },
+                metrics = metrics,
+                largeFile = largeFile,
+            )
+        }
 
         ChangeMarkersLayer(
             session = editorSession,

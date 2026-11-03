@@ -1833,6 +1833,11 @@
     <string name="set_editor_two_axis_desc">朝任意方向拖动即可同时在两个轴上滚动（触摸）</string>
     <string name="set_editor_pinch">双指缩放</string>
     <string name="set_editor_pinch_desc">用两指捏合以更改代码字号</string>
+    <string name="set_editor_volume_keys">音量键移动光标</string>
+    <string name="set_editor_volume_keys_desc">在手机上输入时，音量加键将光标左移，音量减键右移，而不是调节音量</string>
+    <string name="set_editor_inline_blame">谁修改了这一行</string>
+    <string name="set_editor_inline_blame_desc">在 Git 项目中，在光标所在行末尾以淡色显示最后修改者、时间和原因</string>
+    <string name="blame_uncommitted">尚未提交</string>
     <string name="set_editor_kbd_suggest">键盘建议</string>
     <string name="set_editor_kbd_suggest_desc">允许软键盘自动纠错、联想和自动加空格（普通键盘）。关闭以进行原始代码输入，这样键入的“.”不会被自动插入空格，但会失去联想候选栏。</string>
     <string name="set_editor_close_unsaved">关闭有未保存更改的标签页</string>

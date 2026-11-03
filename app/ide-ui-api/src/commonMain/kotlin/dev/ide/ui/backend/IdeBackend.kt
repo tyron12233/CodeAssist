@@ -2150,6 +2150,8 @@ data class UiSettings(
     val pinchZoom: Boolean = true,
     /** While typing on a phone, volume up / down move the caret left / right. */
     val volumeKeysMoveCaret: Boolean = false,
+    /** Show who last changed the caret's line after its end. */
+    val inlineBlame: Boolean = true,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     val softKeyboardSuggestions: Boolean = true,
     /** Reformat the active file when it is saved (the editor's save handler reads this). */

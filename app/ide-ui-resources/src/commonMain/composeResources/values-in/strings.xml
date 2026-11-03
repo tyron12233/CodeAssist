@@ -1161,6 +1161,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="set_editor_two_axis_desc">Seret ke arah mana pun untuk menggulir kedua sumbu sekaligus (sentuh)</string>
     <string name="set_editor_pinch">Cubit untuk zoom</string>
     <string name="set_editor_pinch_desc">Cubit dengan dua jari untuk mengubah ukuran font kode</string>
+    <string name="set_editor_volume_keys">Tombol volume menggerakkan kursor</string>
+    <string name="set_editor_volume_keys_desc">Saat mengetik di ponsel, volume naik menggeser kursor ke kiri dan volume turun ke kanan, bukan mengubah volume</string>
+    <string name="set_editor_inline_blame">Siapa yang mengubah baris ini</string>
+    <string name="set_editor_inline_blame_desc">Di proyek Git, tampilkan siapa yang terakhir mengubah baris kursor, kapan, dan mengapa, samar di ujung baris</string>
+    <string name="blame_uncommitted">Belum di-commit</string>
     <string name="set_editor_kbd_suggest">Saran keyboard</string>
     <string name="set_editor_kbd_suggest_desc">Biarkan keyboard lunak melakukan koreksi otomatis, memberi saran, dan spasi otomatis (keyboard normal). Matikan untuk input kode mentah, agar '.' yang diketik tidak mendapat spasi yang disisipkan otomatis, dengan konsekuensi kehilangan strip saran.</string>
     <string name="set_editor_close_unsaved">Menutup tab dengan perubahan yang belum disimpan</string>

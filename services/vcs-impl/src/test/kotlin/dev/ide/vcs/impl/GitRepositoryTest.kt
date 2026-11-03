@@ -199,6 +199,25 @@ class GitRepositoryTest {
     }
 
     @Test
+    fun `blame names the commit that last changed each HEAD line`() {
+        withTempDir("vcs") { dir ->
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "a.txt", "one\ntwo\nthree\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("first")
+                write(repository.root, "a.txt", "one\nTWO\nthree\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("second")
+                write(repository.root, "a.txt", "uncommitted edit\n") // the working tree does not count
+
+                assertEquals(listOf("first", "second", "first"), repository.blame("a.txt").map { it?.summary })
+                assertEquals("Test User", repository.blame("a.txt").first()?.author?.name)
+                assertEquals(emptyList(), repository.blame("missing.txt"))
+            }
+        }
+    }
+
+    @Test
     fun `show reads a path at a revision`() {
         withTempDir("vcs") { dir ->
             repo(dir, dir.resolve("config")).use { repository ->

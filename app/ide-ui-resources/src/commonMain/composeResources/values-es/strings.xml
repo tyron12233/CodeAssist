@@ -1259,6 +1259,11 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="set_editor_two_axis_desc">Arrastra en cualquier dirección para desplazarte en ambos ejes a la vez (táctil)</string>
     <string name="set_editor_pinch">Pellizcar para hacer zoom</string>
     <string name="set_editor_pinch_desc">Pellizca con dos dedos para cambiar el tamaño de la fuente del código</string>
+    <string name="set_editor_volume_keys">Las teclas de volumen mueven el cursor</string>
+    <string name="set_editor_volume_keys_desc">Al escribir en el teléfono, subir el volumen mueve el cursor a la izquierda y bajarlo a la derecha, en lugar de cambiar el volumen</string>
+    <string name="set_editor_inline_blame">Quién cambió esta línea</string>
+    <string name="set_editor_inline_blame_desc">En un proyecto Git, muestra quién cambió por última vez la línea del cursor, cuándo y por qué, atenuado tras su final</string>
+    <string name="blame_uncommitted">Aún sin commit</string>
     <string name="set_editor_kbd_suggest">Sugerencias del teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un '.' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
     <string name="set_editor_close_unsaved">Cerrar una pestaña con cambios sin guardar</string>

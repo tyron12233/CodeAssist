@@ -66,6 +66,7 @@ enum class VcsMessage(val english: String) {
     UNKNOWN_COMMIT("Unknown commit %1\$s"),
     DIFF_FAILED("Could not diff %1\$s"),
     SHOW_FAILED("Could not read %1\$s at %2\$s"),
+    BLAME_FAILED("Could not tell who changed %1\$s"),
     LIST_STASHES_FAILED("Could not list stashes"),
     STAGE_FAILED("Could not stage the selected files"),
     UNSTAGE_FAILED("Could not unstage the selected files"),

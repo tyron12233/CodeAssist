@@ -250,6 +250,7 @@
     <string name="vcs_msg_unknown_commit">إيداع غير معروف %1$s</string>
     <string name="vcs_msg_diff_failed">تعذّرت مقارنة %1$s</string>
     <string name="vcs_msg_show_failed">تعذّرت قراءة %1$s عند %2$s</string>
+    <string name="vcs_msg_blame_failed">تعذّر معرفة من غيّر %1$s</string>
     <string name="vcs_msg_list_stashes_failed">تعذّر سرد عمليات الحفظ المؤقت</string>
     <string name="vcs_msg_stage_failed">تعذّر تجهيز الملفات المحددة</string>
     <string name="vcs_msg_unstage_failed">تعذّر إلغاء تجهيز الملفات المحددة</string>

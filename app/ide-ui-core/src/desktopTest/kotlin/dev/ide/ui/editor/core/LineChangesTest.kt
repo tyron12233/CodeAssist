@@ -47,6 +47,12 @@ class LineChangesTest {
     }
 
     @Test
+    fun bufferLinesMapToTheirCommittedLines() {
+        val changes = lineChanges(base, "a\nB\nc\nnew1\nnew2\nd\n")
+        assertEquals(listOf(0, null, 2, null, null, 3, 5), (0..6).map { baseLineFor(changes, it) })
+    }
+
+    @Test
     fun identicalTextHasNoChangesAndAWholesaleRewriteIsOneStretch() {
         assertEquals(emptyList(), lineChanges(base, base))
         val big = (1..300).joinToString("\n") { "line $it" }

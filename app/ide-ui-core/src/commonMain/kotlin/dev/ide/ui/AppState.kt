@@ -846,6 +846,7 @@ class IdeUiState(
     var pinchZoomEnabled by mutableStateOf(true)
     /** Volume up / down move the caret while typing on a phone (see [dev.ide.ui.platform.VolumeKeyCaret]). */
     var volumeKeysMoveCaret by mutableStateOf(false)
+    var inlineBlameEnabled by mutableStateOf(true)
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     var softKeyboardSuggestions by mutableStateOf(true)
 
@@ -929,6 +930,7 @@ class IdeUiState(
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom
         volumeKeysMoveCaret = s.volumeKeysMoveCaret
+        inlineBlameEnabled = s.inlineBlame
         softKeyboardSuggestions = s.softKeyboardSuggestions
     }
 

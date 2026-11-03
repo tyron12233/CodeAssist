@@ -1855,6 +1855,11 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="set_editor_two_axis_desc">Drag in any direction to scroll both axes at once (touch)</string>
     <string name="set_editor_pinch">Pinch to zoom</string>
     <string name="set_editor_pinch_desc">Pinch with two fingers to change the code font size</string>
+    <string name="set_editor_volume_keys">Volume keys move the cursor</string>
+    <string name="set_editor_volume_keys_desc">While typing on a phone, volume up moves the cursor left and volume down moves it right, instead of changing the volume</string>
+    <string name="set_editor_inline_blame">Who changed this line</string>
+    <string name="set_editor_inline_blame_desc">In a Git project, show who last changed the caret's line, when, and why, faded after its end</string>
+    <string name="blame_uncommitted">Not committed yet</string>
     <string name="set_editor_kbd_suggest">Keyboard suggestions</string>
     <string name="set_editor_kbd_suggest_desc">Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.</string>
     <string name="set_editor_close_unsaved">Closing a tab with unsaved changes</string>
