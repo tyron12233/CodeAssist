@@ -86,6 +86,12 @@ interface VcsService {
      */
     suspend fun diff(path: String, staged: Boolean = false, commitId: String? = null): UiVcsDiff? = null
 
+    /**
+     * The text of the file at absolute [path] as of the last commit (HEAD), for the editor's change markers.
+     * Null when the file is outside the working copy, not committed yet, or binary.
+     */
+    suspend fun baseText(path: String): String? = null
+
     // ---- stash ---------------------------------------------------------------------------------
 
     suspend fun stashes(): List<UiVcsStash> = emptyList()

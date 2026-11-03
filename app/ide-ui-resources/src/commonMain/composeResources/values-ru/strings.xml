@@ -284,6 +284,9 @@
     <string name="gesture_nothing_to_undo">Нечего отменять</string>
     <string name="gesture_nothing_to_redo">Нечего возвращать</string>
     <string name="paste_history_title">Вставить из истории</string>
+    <string name="change_revert">Откатить</string>
+    <string name="change_before">В последнем коммите</string>
+    <string name="change_added">Добавлено после последнего коммита</string>
     <string name="paste_history_clear">Очистить</string>
     <string name="paste_history_empty">Здесь появится текст, который вы копируете или вырезаете в редакторе.</string>
     <string name="symbolbar_clipboard">Буфер обмена</string>

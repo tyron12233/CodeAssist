@@ -308,6 +308,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="gesture_nothing_to_undo">Tidak ada yang bisa diurungkan</string>
     <string name="gesture_nothing_to_redo">Tidak ada yang bisa diulangi</string>
     <string name="paste_history_title">Tempel dari riwayat</string>
+    <string name="change_revert">Kembalikan</string>
+    <string name="change_before">Di commit terakhir</string>
+    <string name="change_added">Ditambahkan sejak commit terakhir</string>
     <string name="paste_history_clear">Hapus</string>
     <string name="paste_history_empty">Teks yang Anda salin atau potong di editor muncul di sini.</string>
     <string name="symbolbar_clipboard">Papan klip</string>

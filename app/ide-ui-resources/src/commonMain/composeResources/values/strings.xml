@@ -492,6 +492,9 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="gesture_nothing_to_undo">Nothing to undo</string>
     <string name="gesture_nothing_to_redo">Nothing to redo</string>
     <string name="paste_history_title">Paste from history</string>
+    <string name="change_revert">Revert</string>
+    <string name="change_before">In the last commit</string>
+    <string name="change_added">Added since the last commit</string>
     <string name="paste_history_clear">Clear</string>
     <string name="paste_history_empty">Text you copy or cut in the editor shows up here.</string>
     <string name="symbolbar_clipboard">Clipboard</string>

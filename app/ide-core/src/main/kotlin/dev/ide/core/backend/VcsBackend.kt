@@ -263,6 +263,15 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         )
     }
 
+    override suspend fun baseText(path: String): String? = read { repo ->
+        val abs = runCatching { java.nio.file.Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return@read null
+        val root = repo.root.toAbsolutePath().normalize()
+        if (!abs.startsWith(root)) return@read null
+        // Git paths are always `/`-separated, whatever the host's separator.
+        val rel = root.relativize(abs).joinToString("/")
+        repo.show(rel, "HEAD")?.takeUnless { '\u0000' in it } // a NUL byte: binary, nothing to mark
+    }
+
     override suspend fun diff(path: String, staged: Boolean, commitId: String?): UiVcsDiff? = read { repo ->
         val diff = repo.diff(path, staged, commitId)
         UiVcsDiff(diff.path, diff.text, diff.binary, diff.insertions, diff.deletions)

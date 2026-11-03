@@ -530,6 +530,9 @@
     <string name="gesture_nothing_to_undo">لا شيء للتراجع عنه</string>
     <string name="gesture_nothing_to_redo">لا شيء لإعادته</string>
     <string name="paste_history_title">لصق من السجل</string>
+    <string name="change_revert">تراجع</string>
+    <string name="change_before">في آخر إيداع</string>
+    <string name="change_added">أُضيف منذ آخر إيداع</string>
     <string name="paste_history_clear">مسح</string>
     <string name="paste_history_empty">يظهر هنا النص الذي تنسخه أو تقصّه في المحرر.</string>
     <string name="symbolbar_clipboard">الحافظة</string>

@@ -339,6 +339,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="gesture_nothing_to_undo">Nada que deshacer</string>
     <string name="gesture_nothing_to_redo">Nada que rehacer</string>
     <string name="paste_history_title">Pegar del historial</string>
+    <string name="change_revert">Revertir</string>
+    <string name="change_before">En el último commit</string>
+    <string name="change_added">Añadido desde el último commit</string>
     <string name="paste_history_clear">Borrar</string>
     <string name="paste_history_empty">Aquí aparece el texto que copias o cortas en el editor.</string>
     <string name="symbolbar_clipboard">Portapapeles</string>

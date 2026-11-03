@@ -315,6 +315,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="gesture_nothing_to_undo">Nada para desfazer</string>
     <string name="gesture_nothing_to_redo">Nada para refazer</string>
     <string name="paste_history_title">Colar do histórico</string>
+    <string name="change_revert">Reverter</string>
+    <string name="change_before">No último commit</string>
+    <string name="change_added">Adicionado desde o último commit</string>
     <string name="paste_history_clear">Limpar</string>
     <string name="paste_history_empty">O texto que você copia ou recorta no editor aparece aqui.</string>
     <string name="symbolbar_clipboard">Área de transferência</string>

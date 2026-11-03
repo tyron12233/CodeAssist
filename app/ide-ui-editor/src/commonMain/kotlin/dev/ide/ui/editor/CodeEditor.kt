@@ -516,6 +516,8 @@ private fun CodeEditorContent(
     // Merge-conflict blocks (from a Git merge or a store update that kept the user's edits): tinted, with a
     // resolve row on each. The parser's errors inside a block are about the markers, not the code, so they hide.
     val conflicts = rememberMergeConflicts(editorSession, doc)
+    // The buffer's changes since the last commit, for the gutter's change stripes.
+    val changeMarkers = rememberChangeMarkers(path, editorSession, doc, backend, editorSession.doc.isLarge())
     // The session owns and auto-shifts these; rendered here.
     val diagnostics = remember(editorSession.diagnostics, conflicts) {
         withoutConflictDiagnostics(editorSession.diagnostics, conflicts)
@@ -1376,6 +1378,16 @@ private fun CodeEditorContent(
             colors = colors,
             onInvoke = acts::invokeGutterAction,
             backend = backend,
+        )
+
+        ChangeMarkersLayer(
+            session = editorSession,
+            markers = changeMarkers,
+            metrics = metrics,
+            vlayout = geometry.vlayout,
+            vOffset = geometry.vOffset,
+            gutterWidthPx = gutterWidthPx,
+            foldStripPx = renderState.foldStripPx,
         )
 
         MergeConflictLayer(
