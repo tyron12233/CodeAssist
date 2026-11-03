@@ -333,6 +333,10 @@
     <string name="kotlin_configure">Настроить Kotlin</string>
     <string name="kotlin_configuring">Настройка…</string>
     <string name="kotlin_configure_failed">Не удалось настроить Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">Этот файл использует библиотеки, которые ещё не добавлены: %1$s</string>
+    <string name="missing_libraries_add_all">Добавить все</string>
+    <string name="missing_libraries_adding">Добавление…</string>
+    <string name="missing_library_failed">Не удалось добавить библиотеку: %1$s</string>
     <string name="sources_download">Скачать</string>
     <string name="sources_downloading">Скачивание…</string>
     <string name="sources_download_failed">Не удалось скачать: %1$s</string>

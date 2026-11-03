@@ -563,6 +563,10 @@
     <string name="kotlin_configure">配置 Kotlin</string>
     <string name="kotlin_configuring">正在配置…</string>
     <string name="kotlin_configure_failed">无法配置 Kotlin：%1$s</string>
+    <string name="missing_libraries_notice">此文件使用了尚未添加的库：%1$s</string>
+    <string name="missing_libraries_add_all">全部添加</string>
+    <string name="missing_libraries_adding">正在添加…</string>
+    <string name="missing_library_failed">无法添加库：%1$s</string>
     <string name="sources_download">下载</string>
     <string name="sources_downloading">正在下载…</string>
     <string name="sources_download_failed">下载失败：%1$s</string>

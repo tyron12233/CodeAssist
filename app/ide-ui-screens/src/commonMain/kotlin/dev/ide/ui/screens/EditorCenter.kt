@@ -312,6 +312,7 @@ internal fun EditorCenter(
                         active?.let { file ->
                             staleOnDiskNotice(state, file)?.let(::add)
                             kotlinNotConfiguredNotice(state, file)?.let(::add)
+                            missingLibrariesNotice(state, file)?.let(::add)
                             readOnlyNotice(state, file)?.let(::add)
                             largeFileNotice(file)?.let(::add)
                         }

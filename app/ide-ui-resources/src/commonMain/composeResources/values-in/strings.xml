@@ -360,6 +360,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="kotlin_configure">Konfigurasi Kotlin</string>
     <string name="kotlin_configuring">Mengonfigurasi…</string>
     <string name="kotlin_configure_failed">Tidak dapat mengonfigurasi Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">File ini memakai pustaka yang belum ditambahkan: %1$s</string>
+    <string name="missing_libraries_add_all">Tambahkan semua</string>
+    <string name="missing_libraries_adding">Menambahkan…</string>
+    <string name="missing_library_failed">Tidak dapat menambahkan pustaka: %1$s</string>
     <string name="sources_download">Unduh</string>
     <string name="sources_downloading">Mengunduh…</string>
     <string name="sources_download_failed">Unduhan gagal: %1$s</string>

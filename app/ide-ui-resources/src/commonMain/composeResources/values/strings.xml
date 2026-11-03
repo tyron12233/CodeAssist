@@ -569,6 +569,10 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="kotlin_configure">Configure Kotlin</string>
     <string name="kotlin_configuring">Configuring…</string>
     <string name="kotlin_configure_failed">Couldn't configure Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">This file uses libraries that aren't added yet: %1$s</string>
+    <string name="missing_libraries_add_all">Add all</string>
+    <string name="missing_libraries_adding">Adding…</string>
+    <string name="missing_library_failed">Couldn't add the library: %1$s</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
     <string name="sources_download_failed">Download failed: %1$s</string>

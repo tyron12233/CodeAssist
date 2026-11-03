@@ -1538,6 +1538,39 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             .getOrDefault(emptyList())
     }
 
+    /** Published versions of `group:name`, newest first; empty offline. For [MissingLibraries]. */
+    internal suspend fun publishedVersions(group: String, name: String): List<String> =
+        runCatching { depsResolver.availableVersions(group, name, currentRepositories()) }.getOrDefault(emptyList())
+
+    /** The Maven Central artifacts containing class [fqn]; null when no search host answered. */
+    internal suspend fun artifactsWithClass(fqn: String): List<Coordinate>? =
+        depsResolver.searchByClass(fqn)?.map { it.coordinate }
+
+    /** [coordinate]'s `.aar`, downloaded into the shared cache (or found there); null for a jar library or offline. */
+    internal suspend fun fetchAar(coordinate: Coordinate): Path? =
+        depsResolver.fetchAar(coordinate, currentRepositories())?.let { Paths.get(it) }
+
+    internal fun moduleNamed(name: String): Module? = ctx.modules().firstOrNull { it.name == name }
+
+    /** Whether [module] builds against Android (takes `.aar`s). */
+    internal fun isAndroidModule(module: Module): Boolean = acceptsAar(module)
+
+    /** The editor's "add the missing library" fixes and banner. */
+    internal val missingLibraries: MissingLibraries by lazy {
+        val service = this
+        MissingLibraries(object : MissingLibraries.Host {
+            override suspend fun publishedVersions(group: String, name: String) = service.publishedVersions(group, name)
+            override suspend fun artifactsWithClass(fqn: String) = service.artifactsWithClass(fqn)
+            override suspend fun fetchAar(coordinate: Coordinate) = service.fetchAar(coordinate)
+            override fun moduleNamed(name: String) = service.moduleNamed(name)
+            override fun isAndroidModule(module: Module) = service.isAndroidModule(module)
+            override fun declaredUnresolved(module: Module) = service.declaredUnresolved(module)
+            override suspend fun addDependency(moduleName: String, coordinate: String, scope: String) =
+                service.addDependency(moduleName, coordinate, scope)
+            override suspend fun retryDependencyResolution() = service.retryDependencyResolution()
+        }, depsScope)
+    }
+
     /**
      * Versions of the library `group:name` currently downloaded to the shared cache, each with the disk space
      * it occupies (newest-first) — for the Dependencies screen's downloaded-versions cleanup list. Disk-only

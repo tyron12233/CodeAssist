@@ -230,6 +230,7 @@ object BuiltInPlugins {
         BuiltInPlugin(KotlinAnalysisPlugin()),
         BuiltInPlugin(PackageMismatchPlugin()),
         BuiltInPlugin(ManifestPermissionPlugin(env)),
+        BuiltInPlugin(MissingLibraryPlugin(env)),
         BuiltInPlugin(XmlAnalysisPlugin(env)),
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
@@ -784,6 +785,28 @@ private class ManifestPermissionPlugin(private val env: ApplicationEnvironment) 
         reg.register(
             QUICK_FIX_PROVIDER_EP,
             dev.ide.core.analysis.ManifestPermissionFixProvider { module -> env.activeEngine?.manifestFileOf(module) },
+        )
+    }
+}
+
+/**
+ * "Add library …" on an unresolved import, unknown class name or XML view tag (Java, Kotlin, XML): adds the
+ * library that provides it to the module. See [dev.ide.core.analysis.MissingLibraryFixProvider].
+ */
+private class MissingLibraryPlugin(private val env: ApplicationEnvironment) : Plugin {
+    override val manifest = PluginManifest(
+        id = "missing-library-fix",
+        name = "Missing Library Fix",
+        description = "Offers to add the library an unresolved import, class or layout tag comes from.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(
+            QUICK_FIX_PROVIDER_EP,
+            dev.ide.core.analysis.MissingLibraryFixProvider(
+                missing = { env.activeEngine?.dependencies?.missingLibraries },
+                diagnosticsOf = { file -> env.activeEngine?.publishedDiagnostics(file).orEmpty() },
+            ),
         )
     }
 }

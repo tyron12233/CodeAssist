@@ -8,6 +8,9 @@ import dev.ide.ui.backend.UiArtifactHit
 import dev.ide.ui.backend.UiCachedVersion
 import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiModuleDeps
+import dev.ide.ui.backend.UiMissingLibrary
+import dev.ide.core.analysis.MissingLibraryScan
+import java.nio.file.Paths
 import dev.ide.ui.backend.UiRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +71,32 @@ internal class DependencyBackend(private val ctx: BackendContext) : DependencySe
 
     override suspend fun availableVersions(moduleName: String, coordinate: String): List<String> =
         withContext(Dispatchers.IO) { ctx.services.dependencies.availableVersions(moduleName, coordinate) }
+
+    override suspend fun missingLibraries(path: String, text: String): List<UiMissingLibrary> =
+        withContext(Dispatchers.IO) {
+            ctx.services.missingLibrariesIn(Paths.get(path), text)?.second.orEmpty()
+                .map { UiMissingLibrary(it.library.coordinate, it.library.label) }
+                .distinctBy { it.coordinate }
+        }
+
+    override suspend fun addMissingLibraries(path: String, text: String): UiAddResult = withContext(Dispatchers.IO) {
+        val (module, needs) = ctx.services.missingLibrariesIn(Paths.get(path), text)
+            ?: return@withContext UiAddResult(false, "This file is not part of a module.")
+        if (needs.isEmpty()) return@withContext UiAddResult(true, "Nothing to add.")
+        ctx.services.dependencies.missingLibraries.add(
+            module.name, needs.map { it.library }, MissingLibraryScan.isTestSource(path),
+        )
+    }
+
+    override val missingLibraryOutcome: StateFlow<UiAddResult?> =
+        ctx.engineFlow(null) { it.dependencies.missingLibraries.lastOutcome }
+
+    override fun clearMissingLibraryOutcome() {
+        runCatching { ctx.services.dependencies.missingLibraries.clearOutcome() }
+    }
+
+    override val missingLibraryLookups: StateFlow<Int> =
+        ctx.engineFlow(0) { it.dependencies.missingLibraries.onlineFound }
 
     override suspend fun cachedVersions(group: String, name: String): List<UiCachedVersion> =
         withContext(Dispatchers.IO) {

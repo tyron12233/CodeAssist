@@ -400,6 +400,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="kotlin_configure">Configurar Kotlin</string>
     <string name="kotlin_configuring">Configurando…</string>
     <string name="kotlin_configure_failed">No se pudo configurar Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">Este archivo usa bibliotecas que aún no se han añadido: %1$s</string>
+    <string name="missing_libraries_add_all">Añadir todas</string>
+    <string name="missing_libraries_adding">Añadiendo…</string>
+    <string name="missing_library_failed">No se pudo añadir la biblioteca: %1$s</string>
     <string name="sources_download">Descargar</string>
     <string name="sources_downloading">Descargando…</string>
     <string name="sources_download_failed">Error de descarga: %1$s</string>

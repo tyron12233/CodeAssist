@@ -616,6 +616,27 @@ class MavenDependencyResolver(
     }
 
     /**
+     * The artifacts on Maven Central that contain the class [fqn] (Solr's `fc:` full-class-name field), for an
+     * editor fix that offers the library behind an unresolved import. Null when no search host answered, so
+     * the caller can tell "nothing contains it" from "could not ask". Central only: Google Maven has no class
+     * index, which is why the editor keeps a bundled table for AndroidX.
+     */
+    suspend fun searchByClass(fqn: String, limit: Int = 20): List<ArtifactCandidate>? {
+        if (fqn.isBlank()) return emptyList()
+        val (hits, answered) = searchCentral("fc:\"$fqn\"", limit)
+        return if (answered) hits.map { it.candidate } else null
+    }
+
+    /**
+     * Download [coord]'s `.aar` into the shared cache (or find it there) and return its path, so a caller can
+     * read the archive's manifest and `aar-metadata.properties` BEFORE adding it, to pick a version the module
+     * can build with. Null when no repository has an `.aar` for it (a plain jar library) or it is unreachable.
+     * The file stays cached, so adding that version afterwards does not download it again.
+     */
+    suspend fun fetchAar(coord: Coordinate, repos: List<Repository>): String? =
+        withContext(ioDispatcher) { runCatching { fetchArtifact(coord, "aar", repos)?.path }.getOrNull() }
+
+    /**
      * Maven Central's Solr search (full-text over group/artifact), from the first host that answers.
      *
      * Returns the hits and whether any host was actually READ: a host that answers with zero documents is a

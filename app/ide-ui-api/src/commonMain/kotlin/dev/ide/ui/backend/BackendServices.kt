@@ -443,6 +443,14 @@ interface BuildService {
 // Dependencies (Maven + local libraries + repositories)
 // ---------------------------------------------------------------------------
 
+/** A library a file uses that its module has not added ([DependencyService.missingLibraries]). */
+data class UiMissingLibrary(
+    /** `group:name`. */
+    val coordinate: String,
+    /** A display name, e.g. "Gson". */
+    val label: String,
+)
+
 /** Dependency management: declared/resolved graph, add/remove, local libraries, repositories. */
 interface DependencyService {
     /** Live resolution progress (a spinner/message while downloading + walking transitives). */
@@ -499,6 +507,28 @@ interface DependencyService {
 
     /** Published versions of the declared library [coordinate]'s artifact, newest-first (the version picker). */
     suspend fun availableVersions(moduleName: String, coordinate: String): List<String> = emptyList()
+
+    /**
+     * The libraries the open file [path] (live buffer [text]) uses but its module has not added: imports that do
+     * not resolve, classes typed by name, layout tags naming a library view. Read off the file's current
+     * diagnostics, so ask again when they change. Empty when nothing is missing.
+     */
+    suspend fun missingLibraries(path: String, text: String): List<UiMissingLibrary> = emptyList()
+
+    /** Add every library [missingLibraries] lists for [path], each at the newest version its module can build with. */
+    suspend fun addMissingLibraries(path: String, text: String): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
+    /**
+     * How the last library add started from an editor fix ended, so the editor can say when it failed; null
+     * when there is nothing to report. [clearMissingLibraryOutcome] once shown.
+     */
+    val missingLibraryOutcome: StateFlow<UiAddResult?> get() = MutableStateFlow(null)
+
+    fun clearMissingLibraryOutcome() {}
+
+    /** Ticks when an online lookup learns which library an import comes from: a reason to ask [missingLibraries] again. */
+    val missingLibraryLookups: StateFlow<Int> get() = MutableStateFlow(0)
 
     /** Versions of the library [group]:[name] currently downloaded to the shared cache, each with its size
      *  on disk (newest-first) — the Dependencies editor's downloaded-versions cleanup list. */

@@ -4052,6 +4052,23 @@ class IdeServices private constructor(
         }
     }
 
+    /** The diagnostics last published for [file] (every language's), for a fix that looks across the file. */
+    internal fun publishedDiagnostics(file: VirtualFile): List<dev.ide.analysis.Diagnostic> =
+        runCatching { analysisEngine.diagnostics(file) }.getOrDefault(emptyList())
+
+    /**
+     * The libraries [file]'s code uses (imports, class names, layout tags) that its module does not have, read off
+     * the file's published diagnostics, with the module. Null for a file outside every module.
+     */
+    internal fun missingLibrariesIn(file: Path, text: String): Pair<Module, List<dev.ide.core.services.MissingLibraries.Need>>? {
+        val module = moduleForEditableFile(file) ?: return null
+        val diagnostics = publishedDiagnostics(store.vfs.fileFor(file))
+        if (diagnostics.isEmpty()) return module to emptyList()
+        return module to dev.ide.core.analysis.MissingLibraryScan.needs(
+            dependencies.missingLibraries, diagnostics, text, module, indexService,
+        )
+    }
+
     /** [module]'s `AndroidManifest.xml` as the facet names it, or null for a non-Android module. */
     internal fun manifestFileOf(module: Module): VirtualFile? {
         val facet = module.facets.get(AndroidFacet.KEY) ?: return null
