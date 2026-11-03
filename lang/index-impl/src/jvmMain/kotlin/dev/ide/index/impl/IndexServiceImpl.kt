@@ -405,9 +405,15 @@ class IndexServiceImpl(
                 scope.libraryResourceRoots.forEach { if (Files.isDirectory(it)) add(Artifact.ResourceDir(it)) }
             }.map { a -> a.contentHash().let { h -> Keyed(a, h, sanitize(h.value)) } }
             // Library SOURCE archives feed only the source-doc indexes (parameter names, javadoc). When deferred,
-            // they build in the background after this pass, never holding up readiness or the next pass.
-            val docs = if (deferSourceArchives) all.filter { it.art is Artifact.SourceArchive } else emptyList()
-            val keyed = if (docs.isEmpty()) all else all.filter { it.art !is Artifact.SourceArchive }
+            // they build in the background after this pass, never holding up readiness or the next pass. One
+            // already built on a previous run only needs reopening, which is cheap, so it joins this pass: deferred
+            // too, it was still reopening when the editor's first pass ran on a cold start, every lookup missed, and
+            // each fell back to parsing the class's source out of its jar (the bulk of a cold first resolution).
+            // An artifact's build writes a segment for every extension, so one stat tells whether it was built.
+            val probeExt = states.values.firstOrNull()?.ext
+            fun builtBefore(k: Keyed) = probeExt != null && Files.exists(segmentFile(probeExt, k.hash))
+            val docs = if (deferSourceArchives) all.filter { it.art is Artifact.SourceArchive && !builtBefore(it) } else emptyList()
+            val keyed = if (docs.isEmpty()) all else all.filter { it !in docs }
 
             // Segments stay open across passes, so a pass touches only what changed. Three corrections first:
             //  - a kept artifact whose files vanished (a cleared cache) must reopen or rebuild, not be trusted;

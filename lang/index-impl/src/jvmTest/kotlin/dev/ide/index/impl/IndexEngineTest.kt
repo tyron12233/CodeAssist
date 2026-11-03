@@ -726,6 +726,36 @@ class IndexEngineTest {
         }
     }
 
+    /**
+     * A source archive built on an earlier run is reopened within the pass, not deferred: its docs answer as soon
+     * as the index is ready. Deferred, it was still reopening when the editor's first pass ran after a cold start,
+     * and every parameter-name lookup fell back to parsing the class's source out of its jar.
+     */
+    @Test
+    fun aSourceArchiveBuiltOnAnEarlierRunIsOpenWhenThePassEnds() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxDocsRelaunch")
+        try {
+            val jar = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            val sources = dir.resolve("a-sources.jar").also { storedJar(it, "com/x/Alpha.java", "class Alpha {}".toByteArray()) }
+            val scope = IndexScope(libraryJars = listOf(jar), sourceArchives = listOf(sources))
+            val exts = listOf(CountingClassIndex(AtomicInteger(0)), TestDocIndex)
+            runBlocking {
+                val first = IndexServiceImpl(exts, cache, deferSourceArchives = true)
+                first.ensureUpToDate(scope)
+                first.awaitDeferredWork()
+            }
+
+            val relaunched = IndexServiceImpl(exts, cache, deferSourceArchives = true)
+            runBlocking { relaunched.ensureUpToDate(scope) } // no awaitDeferredWork: nothing should be left to wait for
+            assertTrue(relaunched.status.ready)
+            assertEquals(0, relaunched.status.stats!!.artifactsBuilt, "nothing is rebuilt on a relaunch")
+            assertEquals(2, relaunched.status.stats!!.artifacts, "the built source archive is opened by the pass itself")
+            assertTrue(relaunched.prefix<ClassNameValue>(TestDocIndex.id, "Alpha", 10).any(), "the docs answer at once")
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
     /** Segment files under [cache] by size class. */
     private fun segSizes(cache: Path): List<Long> =
         Files.walk(cache).use { s -> s.filter { it.toString().endsWith(".seg") }.map { Files.size(it) }.toList() }
