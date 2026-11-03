@@ -2143,13 +2143,15 @@ data class UiSdkManagerState(
 )
 
 /** One queued/in-flight/finished download. [id] is the package path or `jdk-<feature>`;
- *  [status] ∈ {DOWNLOADING, EXTRACTING, INSTALLING, DONE, FAILED}; [fraction] < 0 ⇒ indeterminate. */
+ *  [status] ∈ {DOWNLOADING, EXTRACTING, INSTALLING, DONE, FAILED}; [fraction] < 0 ⇒ indeterminate. A FAILED
+ *  entry carries the raw error text in [detail] and its classification in [failure]. */
 data class UiSdkDownload(
     val id: String,
     val label: String,
     val status: String,
     val fraction: Double = -1.0,
     val detail: String = "",
+    val failure: UiSdkFailure? = null,
 )
 
 /** An installable Android SDK package. [category] is SOURCES or PLATFORMS. [incomplete] ⇒ a previous install

@@ -557,6 +557,8 @@ private fun AppRoute(
         Screen.SdkManager -> SdkManagerScreen(
             backend = state.backend,
             onBack = { app.navigateTo(Screen.Hub) },
+            // A download that failed for want of space links straight to the screen that frees it.
+            onOpenStorage = { app.navigateTo(Screen.Storage) },
         )
 
         // A plugin-contributed screen (ScreenRegistry). The route is generic: the contribution renders its

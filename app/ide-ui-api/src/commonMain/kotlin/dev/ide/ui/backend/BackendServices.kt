@@ -1674,6 +1674,10 @@ interface SdkService {
     /** The installable Android SDK source packages. */
     suspend fun sdkPackages(): List<UiSdkPackage> = emptyList()
 
+    /** The compileSdk levels of the open project's Android modules (empty with no project open), so the SDK
+     *  Manager can put the platforms the project needs first. */
+    suspend fun sdkProjectPlatformLevels(): Set<Int> = emptySet()
+
     /** Start downloading one Android package by id; returns immediately. */
     suspend fun installSdkPackage(path: String): String = "Not supported."
 

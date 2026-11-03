@@ -4,8 +4,10 @@ import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.AndroidSdkInstaller
 import dev.ide.android.support.tools.HttpSdkNetFetcher
 import dev.ide.android.support.tools.SdkNetFetcher
+import dev.ide.android.support.tools.describeFailure
 import dev.ide.core.AndroidSourcesInfo
 import dev.ide.platform.Disposable
+import dev.ide.ui.backend.SdkFailures
 import dev.ide.ui.backend.UiJdkInfo
 import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkManagerState
@@ -301,14 +303,14 @@ class SdkManagerService(
     /** Run [work] (returns null on success, else an error message) as a background download tracked under [id]. */
     private fun launchDownload(id: String, label: String, work: suspend () -> String?) {
         cancelled.remove(id)
-        update(id) { it.copy(label = label, status = "DOWNLOADING", fraction = -1.0, detail = "Starting…") }
+        update(id) { it.copy(label = label, status = "DOWNLOADING", fraction = -1.0, detail = "Starting…", failure = null) }
         val job = scope.launch {
             val err = try {
                 work()
             } catch (c: CancellationException) {
                 null // handled below via the cancelled flag
             } catch (e: Exception) {
-                "Download failed: ${e.message}"
+                "Download failed: ${describeFailure(e)}"
             }
             when {
                 id in cancelled -> finish(id, "FAILED", "Cancelled")
@@ -329,7 +331,12 @@ class SdkManagerService(
         st.copy(downloads = list).withAggregate()
     }
 
-    private fun finish(id: String, status: String, detail: String) = update(id) { it.copy(status = status, fraction = if (status == "DONE") 1.0 else -1.0, detail = detail) }
+    /** Settle [id] as DONE or FAILED. A failure keeps its raw [detail] for the Details view and is classified
+     *  ([SdkFailures]) so the screen can say what went wrong in plain terms and offer the matching fix. */
+    private fun finish(id: String, status: String, detail: String) = update(id) {
+        val failure = if (status == "FAILED") SdkFailures.classify(detail) else null
+        it.copy(status = status, fraction = if (status == "DONE") 1.0 else -1.0, detail = detail, failure = failure)
+    }
 
     private fun frac(read: Long, total: Long): Double = if (total > 0) read.toDouble() / total else -1.0
     private fun bytes(read: Long, total: Long): String = mb(read) + if (total > 0) " / ${mb(total)}" else ""
