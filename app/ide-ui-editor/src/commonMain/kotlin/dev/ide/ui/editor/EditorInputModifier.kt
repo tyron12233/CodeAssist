@@ -419,6 +419,9 @@ internal fun Modifier.editorInput(
             interaction.lastInputWasTouch = true
             interaction.longPressed = false
             val handleRadius = 14.dp.toPx()
+            // The grab area is wider than the drawn 6dp dot: about Android's 48dp touch target, since a finger
+            // covers the dot it is aiming at (14dp was easy to miss, and the miss scrolled the code instead).
+            val grabRadius = 22.dp.toPx()
             // A handle grab must land ON the handle glyph, which is drawn BELOW its anchor line — so require the
             // touch to be at/below that line's bottom. Without this the grab circle reaches a few dp up into the
             // text, and a horizontal scroll swipe over the text would drag the caret/selection instead of
@@ -427,7 +430,7 @@ internal fun Modifier.editorInput(
                 val (_, x, top) = geometry.caretGeometry(offset)
                 val lineBottom = top + metrics.lineHeight
                 val center = Offset(x, lineBottom + handleRadius * 0.6f)
-                return down.position.y >= lineBottom && (down.position - center).getDistance() < handleRadius
+                return down.position.y >= lineBottom && (down.position - center).getDistance() < grabRadius
             }
 
             val sel = session.selection

@@ -144,6 +144,21 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
 
+    /**
+     * What the symbol service is given: [sourceDocProvider] as it is at each call. The service captures its
+     * provider once, when it is first built, and the host assigns [sourceDocProvider] after construction; when
+     * anything touched the service in between, the service kept NONE for good, and every Kotlin file lost its
+     * library docs and real parameter names (seen on a device: `ScrollView` completed with no doc).
+     */
+    private val currentSourceDocs = object : SourceDocProvider {
+        override fun method(declaringFqn: String, methodName: String, arity: Int) =
+            sourceDocProvider.method(declaringFqn, methodName, arity)
+        override fun classDoc(fqn: String) = sourceDocProvider.classDoc(fqn)
+        override fun methodRaw(declaringFqn: String, methodName: String, arity: Int) =
+            sourceDocProvider.methodRaw(declaringFqn, methodName, arity)
+        override fun classDocRaw(fqn: String) = sourceDocProvider.classDocRaw(fqn)
+    }
+
     /** Injected by the host: whether this module targets Android (has an `AndroidFacet`, or an `android-*`
      *  module type). When `true` it forces `android.*`/`androidx.*` type names to stay VISIBLE in completion;
      *  otherwise the decision falls to the module's own classpath (see [androidNamespacesVisible]). A `false`
@@ -226,7 +241,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             indexService,
             extensionCacheDir?.toString(),
             { syntheticClassProvider() },
-            sourceDocProvider,
+            currentSourceDocs,
             // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
             // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
             // Hide the Android namespaces ONLY from a module that genuinely can't use them (see

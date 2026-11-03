@@ -60,5 +60,8 @@ class AndroidPlatformDocsTest {
         assertEquals(listOf("index", "element"), docs.method("java.util.List", "add", 2)?.names)
         assertTrue(docs.method("android.content.Context", "getSystemService", 1)!!.doc!!.startsWith("Return the handle to a system-level service"))
         assertTrue(docs.classDocRaw("android.app.Activity")!!.startsWith("/**"))
+        // A widget class too, cleaned: the completion popup shows it beside `ScrollView`.
+        val scroll = docs.classDoc("android.widget.ScrollView")
+        assertTrue(!scroll.isNullOrBlank() && "scroll" in scroll.lowercase(), "ScrollView class doc; got '${scroll?.take(200)}'")
     }
 }

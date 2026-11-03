@@ -318,6 +318,15 @@ class KotlinCompletion(
         // the `()`.
         val valuePosition = pos.nameReference && nameRef != null && !isStatement(nameRef)
 
+        // Types get their docs from the attached sources / platform docs pack here; members already have theirs
+        // (see KotlinSymbolService.enrich). Every candidate the page can hold is covered, not a guessed top few:
+        // the engine re-ranks after this, so a guess left the first row (`ScrollView`) without its doc. A miss is
+        // a directory lookup, and a hit decodes its package once into the provider's cache.
+        val typeDocs = HashMap<KotlinSymbol, String>()
+        candidates.asSequence()
+            .filter { it.symbol.documentation().isNullOrBlank() && !it.symbol.origin.fromSource }
+            .take(MAX_ITEMS)
+            .forEach { c -> service.typeDocForCompletion(c.symbol)?.let { typeDocs[c.symbol] = it } }
         val symbolItems = candidates.flatMap { c ->
             val (typeParamCount, ctorRequiredArgs) =
                 typeInsertFacts(c.symbol, superTypeEntry, valuePosition, typePosition, followingChar)
@@ -332,6 +341,8 @@ class KotlinCompletion(
                 typeParamCount = typeParamCount,
                 ctorRequiredArgs = ctorRequiredArgs,
             ).let { item ->
+                typeDocs[c.symbol]?.let { item.copy(documentation = it) } ?: item
+            }.let { item ->
                 // A platform API's doc opens with the level that added it ("Added in API 26", "Since Java 11").
                 service.apiLevelOf(c.symbol)?.let { item.copy(documentation = service.withApiLevel(c.symbol, item.documentation)) } ?: item
             }.let { item ->

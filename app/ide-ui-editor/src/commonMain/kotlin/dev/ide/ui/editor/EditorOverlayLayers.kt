@@ -282,6 +282,8 @@ internal fun SelectionToolbarLayer(
     onMenu: () -> Unit,
 ) {
     if (!(interaction.handlesVisible && interaction.lastInputWasTouch)) return
+    // Out of the way while a handle is dragged: the loupe floats where the toolbar sits. It returns on release.
+    if (interaction.loupeSource != null) return
     val density = LocalDensity.current
     @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
     // Anchor at the ACTIVE end of the selection (`end` is always the moving handle — see the handle-drag in

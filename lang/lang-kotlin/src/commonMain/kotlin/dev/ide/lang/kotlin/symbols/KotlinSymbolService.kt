@@ -2539,6 +2539,25 @@ class KotlinSymbolService(
         }?.takeIf { it.text.isNotBlank() }
     }
 
+    /**
+     * A BINARY type's doc for the completion popup, cleaned of javadoc markup as a member's is in [enrich]
+     * (which reaches members only, so a class like `ScrollView` completed with no docs at all). Null for project
+     * code, non-types, and a type the attached sources or the bundled platform docs do not cover.
+     */
+    fun typeDocForCompletion(s: KotlinSymbol): String? {
+        if (sourceDoc === SourceDocProvider.NONE || s.origin.fromSource) return null
+        if (s.kind != SymbolKind.CLASS && s.kind != SymbolKind.INTERFACE && s.kind != SymbolKind.ENUM &&
+            s.kind != SymbolKind.ANNOTATION_TYPE && s.kind != SymbolKind.RECORD
+        ) return null
+        // A class read back from the classpath index may carry neither a type nor a declaring class, only its
+        // package: `android.widget` + `ScrollView`, which is how an unimported type reaches completion.
+        val fqn = (s.type as? KotlinType)?.qualifiedName
+            ?: s.declaringClassFqn?.let { "$it.${s.name}" }
+            ?: s.packageName?.let { if (it.isEmpty()) s.name else "$it.${s.name}" }
+            ?: return null
+        return sourceDoc.classDoc(fqn)?.takeIf { it.isNotBlank() }
+    }
+
     /** A doc comment recovered from sources; [raw] when it still carries its javadoc markup. */
     class SourceDocText(val text: String, val raw: Boolean)
 
