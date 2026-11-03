@@ -228,12 +228,18 @@ internal class LearnBackend(
             return UiExerciseResult(passed = false, compiled = false, message = "Running exercises isn't available in this build.")
         }
         return withContext(Dispatchers.Default) {
-            val services = try {
+            // In the editor the learner's own workspace is the active project: run there, so what Check runs
+            // is exactly what they see (and no second engine is started). Elsewhere, the hidden scratch.
+            val workspace = activeWorkspaceFor(step.language)
+            val services = workspace ?: try {
                 scratchFor(step.language) ?: return@withContext failure("The exercise runner isn't available.")
             } catch (e: Throwable) {
                 return@withContext failure("Couldn't prepare the exercise runner: ${reason(e)}")
             }
-            runCatching { writeMain(services, step.language, code) }.exceptionOrNull()?.let {
+            runCatching {
+                if (workspace != null) workspace.save(workspaceFile(workspace, step.language), code)
+                else writeMain(services, step.language, code)
+            }.exceptionOrNull()?.let {
                 return@withContext failure("Couldn't save your code: ${reason(it)}")
             }
             if (step.check.cases.isNotEmpty()) return@withContext runCases(services, step.check, code)
@@ -301,6 +307,92 @@ internal class LearnBackend(
     /** The owned engine's problems for [xml], or null when it could not render at all. */
     private fun renderProblems(xml: String): List<String>? =
         dev.ide.core.renderStandaloneLayout(xml, LAYOUT_CHECK_REQUEST)?.problems?.map { "${it.tag}: ${it.message}" }
+
+    // ---- editor workspaces ----
+
+    /** Where a language's lessons happen in the full editor: a real project and the one file a step edits. */
+    private data class WorkspaceSpec(
+        val key: String,
+        val templateId: String,
+        val args: Map<String, String>,
+        val srcDir: String,
+        val fileName: String,
+    )
+
+    private fun workspaceSpec(language: String): WorkspaceSpec = when (language) {
+        "xml-layout" -> WorkspaceSpec(
+            "android", "android-app",
+            mapOf("packageName" to "dev.ide.learn.app", "language" to "kotlin", "minSdk" to "26"),
+            "app/src/main/res/layout", "lesson.xml",
+        )
+        "java" -> WorkspaceSpec("java", "java-console", emptyMap(), "app/src/main/java", "Main.java")
+        "kotlin-coroutines" -> WorkspaceSpec("coroutines", "kotlin-console", emptyMap(), "app/src/main/kotlin", "Main.kt")
+        else -> WorkspaceSpec("kotlin", "kotlin-console", emptyMap(), "app/src/main/kotlin", "Main.kt")
+    }
+
+    private fun Path.norm(): Path = toAbsolutePath().normalize()
+
+    /** The active engine when it is the workspace for [language], else null. */
+    private fun activeWorkspaceFor(language: String): IdeServices? {
+        val mgr = ctx.manager ?: return null
+        val active = ctx.servicesOrNull ?: return null
+        return active.takeIf { it.workspaceRoot.norm() == mgr.learnWorkspaceDir(workspaceSpec(language).key).norm() }
+    }
+
+    private fun workspaceFile(services: IdeServices, language: String): Path {
+        val spec = workspaceSpec(language)
+        return services.workspaceRoot.resolve(spec.srcDir).resolve(spec.fileName)
+    }
+
+    /** The language a lesson's exercises are written in, or null when it has none (it stays in the player). */
+    private fun exerciseLanguage(lesson: LearnLessonDef): String? =
+        lesson.steps.filterIsInstance<LearnStepDef.Interactive>().firstOrNull()?.language
+
+    override suspend fun openWorkspace(lessonId: String): Boolean = withContext(Dispatchers.IO) {
+        val mgr = ctx.manager ?: return@withContext false
+        val lesson = findLesson(lessonId)?.second ?: return@withContext false
+        val language = exerciseLanguage(lesson) ?: return@withContext false
+        val spec = workspaceSpec(language)
+        runCatching {
+            val services = activeWorkspaceFor(language) ?: mgr.learnWorkspace(spec.key, spec.templateId, spec.args) { created ->
+                // A console template ships a sample `Main` in a package. Lessons write a default-package Main,
+                // and two mains would make the run pick one at random, so the sample goes.
+                if (spec.fileName != "lesson.xml") clearSources(created.workspaceRoot.resolve(spec.srcDir))
+            }.also { ctx.swapEngine(it) }
+            if (language == "kotlin-coroutines" && "ws-coroutines" !in depsEnsured) {
+                val ok = runCatching { services.dependencies.addDependency("app", COROUTINES_COORD, "implementation") }
+                    .map { it.success || "already a dependency" in it.message }.getOrDefault(false)
+                if (ok) depsEnsured.add("ws-coroutines")
+            }
+            true
+        }.getOrElse { log.warn("Couldn't open the lesson workspace for $lessonId", it); false }
+    }
+
+    override suspend fun prepareStep(lessonId: String, stepId: String, content: String?): String? =
+        withContext(Dispatchers.IO) {
+            val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive ?: return@withContext null
+            val services = activeWorkspaceFor(step.language) ?: return@withContext null
+            val path = workspaceFile(services, step.language)
+            // Re-entering the same step (Back then Next, or reopening the lesson) keeps what the learner wrote;
+            // a new step, or an explicit [content] (Copy solution), replaces it.
+            val markerKey = KEY_WORKSPACE_STEP + workspaceSpec(step.language).key
+            val marker = "$lessonId/$stepId"
+            val replace = content != null || pref(markerKey) != marker || !Files.exists(path)
+            if (replace) {
+                val text = (content ?: step.starterCode.trimIndent()).trimEnd() + "\n"
+                runCatching { services.save(path, text) }.onFailure { return@withContext null }
+                setPref(markerKey, marker)
+            }
+            path.toString()
+        }
+
+    private fun clearSources(dir: Path) {
+        if (!Files.isDirectory(dir)) return
+        Files.walk(dir).use { s ->
+            s.filter { Files.isRegularFile(it) && (it.toString().endsWith(".kt") || it.toString().endsWith(".java")) }
+                .forEach { runCatching { Files.delete(it) } }
+        }
+    }
 
     // ---- scratch project selection (per language, coroutine-aware) ----
 
@@ -593,6 +685,9 @@ internal class LearnBackend(
     private companion object {
         const val KEY_RESUME_LESSON = "learn.resume.lesson"
         const val KEY_RESUME_STEP = "learn.resume.step"
+
+        /** Per workspace: the lesson/step whose starter its file holds, so re-entering a step keeps the work. */
+        const val KEY_WORKSPACE_STEP = "learn.workspace.step."
 
         /** Cap [prepare]: creating the scratch + (first time) downloading coroutines + the first index build.
          *  A slow start shouldn't block the lesson forever — the gate opens and the editor catches up. */

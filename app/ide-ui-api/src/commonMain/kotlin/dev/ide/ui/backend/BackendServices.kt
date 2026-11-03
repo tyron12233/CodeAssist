@@ -1522,6 +1522,21 @@ interface LearnService {
     suspend fun refreshCatalog(): Boolean = false
 
     /**
+     * Open the real project lesson [lessonId]'s exercises are done in, as the active project, creating it
+     * the first time. One workspace per exercise language, hidden from the project list. False when the
+     * lesson has no exercises or the workspace could not be opened (the caller stays in the lesson player).
+     */
+    suspend fun openWorkspace(lessonId: String): Boolean = false
+
+    /**
+     * Put step [stepId]'s file in place in the open workspace and return its path for the editor to open.
+     * The step's starter code is written when the step is new to the workspace; re-entering it keeps the
+     * learner's edits. [content] replaces the file regardless (Copy solution). Null when the workspace for
+     * that step is not the active project.
+     */
+    suspend fun prepareStep(lessonId: String, stepId: String, content: String? = null): String? = null
+
+    /**
      * Code completion for an interactive exercise's editor: completes [code] at [offset] against the hidden
      * scratch project for [language] (`"kotlin"` | `"java"`), so a lesson buffer gets real member/keyword/
      * stdlib suggestions. Empty when no scratch engine is available.

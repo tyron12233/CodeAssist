@@ -127,11 +127,25 @@ fun LessonPlayerScreen(
     inlayHintsEnabled: Boolean = true,
     /** The platform Compose renderer for [dev.ide.ui.backend.UiContentBlock.ComposePreview] lesson blocks. */
     host: dev.ide.ui.ComposePreviewHost? = null,
+    /**
+     * Moves a lesson with exercises into the full editor (its workspace project with the task banner). Called
+     * once when such a lesson loads; null keeps every lesson here, which is also the fallback when the
+     * workspace could not be opened.
+     */
+    onOpenInEditor: ((lessonId: String, stepIndex: Int) -> Unit)? = null,
 ) {
     val state = rememberLessonPlayerState(backend, lessonId, initialStep)
     val lesson = state.lesson
     val steps = state.steps
     val step = state.step
+    val toEditor = onOpenInEditor != null && steps.any { it is UiLessonStep.Interactive }
+    if (toEditor) {
+        LaunchedEffect(lesson?.id) { lesson?.let { onOpenInEditor?.invoke(it.id, state.stepIndex) } }
+        Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp), contentAlignment = Alignment.Center) {
+            PreparingCard()
+        }
+        return
+    }
 
     // Ad gating (null on desktop / when hosted without ads). Drives the completion interstitial below.
     val ads = rememberAds()
@@ -236,7 +250,7 @@ fun LessonPlayerScreen(
 // ---- concept step ----
 
 @Composable
-private fun ConceptStep(step: UiLessonStep.Concept, backend: IdeBackend, host: dev.ide.ui.ComposePreviewHost?) {
+internal fun ConceptStep(step: UiLessonStep.Concept, backend: IdeBackend, host: dev.ide.ui.ComposePreviewHost?) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -428,7 +442,7 @@ private fun InteractiveStep(
 }
 
 @Composable
-private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier) {
+internal fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier) {
     val (icon, tint) = when {
         result.passed -> CaIcons.check to Ide.colors.success
         !result.compiled -> CaIcons.error to MaterialTheme.colorScheme.error
@@ -459,7 +473,7 @@ private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
+internal fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(Ca.radius.md)
     Row(
         modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.primaryContainer).border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), shape).padding(12.dp),
@@ -477,7 +491,7 @@ private fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
 // ---- quiz step ----
 
 @Composable
-private fun QuizStep(step: UiLessonStep.Quiz, onAnswered: (correct: Boolean) -> Unit) {
+internal fun QuizStep(step: UiLessonStep.Quiz, onAnswered: (correct: Boolean) -> Unit) {
     var selected by remember(step.id) { mutableStateOf(-1) }
     var submitted by remember(step.id) { mutableStateOf(false) }
     val correct = selected == step.correctIndex
@@ -570,12 +584,14 @@ private fun OptionRow(
 // ---- shared buttons ----
 
 @Composable
-private fun PlayerButton(
+internal fun PlayerButton(
     text: String,
     primary: Boolean,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    /** The slimmer size for a one-row header (the lesson banner) rather than a bottom action bar. */
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -589,10 +605,12 @@ private fun PlayerButton(
         },
         tween(Motion.BASE), label = "btn-bg",
     )
+    // The primary fill is the theme's primary (a light lime in the dark theme), so the label is its onPrimary,
+    // not white: white on lime read as washed out and failed contrast.
     val fg by animateColorAsState(
         when {
             !primary -> MaterialTheme.colorScheme.onSurface
-            enabled -> Color.White
+            enabled -> MaterialTheme.colorScheme.onPrimary
             else -> MaterialTheme.colorScheme.outline
         },
         tween(Motion.BASE), label = "btn-fg",
@@ -600,17 +618,23 @@ private fun PlayerButton(
     val shape = RoundedCornerShape(Ca.radius.control)
     Row(
         modifier
-            .height(44.dp)
+            .height(if (compact) 36.dp else 44.dp)
             .pressScale(interaction)
             .clip(shape)
             .background(bg)
             .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = if (compact) 14.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp),
     ) {
-        icon?.let { Icon(it, null, Modifier.size(16.dp), tint = fg) }
-        Text(text, color = fg, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        icon?.let { Icon(it, null, Modifier.size(if (compact) 14.dp else 16.dp), tint = fg) }
+        Text(
+            text,
+            color = fg,
+            style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -643,7 +667,7 @@ private const val LAYOUT_PREVIEW_DEBOUNCE_MS = 300L
  * score. Shown in place of the steps; the bottom bar's Done leaves the lesson.
  */
 @Composable
-private fun CheckpointSummary(right: Int, total: Int, modifier: Modifier = Modifier) {
+internal fun CheckpointSummary(right: Int, total: Int, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
     val fraction = if (total == 0) 1f else right.toFloat() / total
     Column(
@@ -687,7 +711,7 @@ private fun CheckpointSummary(right: Int, total: Int, modifier: Modifier = Modif
 
 /** Shown while the scratch project's index is building, before the exercise editor is usable. */
 @Composable
-private fun PreparingCard() {
+internal fun PreparingCard() {
     val shape = RoundedCornerShape(Ca.radius.lg)
     Column(
         Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
@@ -720,7 +744,7 @@ private fun IndexingChip() {
 }
 
 @Composable
-private fun TextAction(text: String, icon: ImageVector, onClick: () -> Unit) {
+internal fun TextAction(text: String, icon: ImageVector, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier.clip(RoundedCornerShape(Ca.radius.control)).clickable(interaction, indication = null, onClick = onClick)

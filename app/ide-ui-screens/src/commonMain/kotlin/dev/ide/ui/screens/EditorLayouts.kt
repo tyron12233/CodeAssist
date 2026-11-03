@@ -811,7 +811,10 @@ internal fun CompactLayout(
                     }
                     // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it. Zen mode hides
                     // the bar, unless the console is pulled up.
-                    if (!keyboardOpen && !state.zenMode) androidx.compose.foundation.layout.Spacer(Modifier.height(DockBarHeight))
+                    // Room for the dock's bar, which a lesson hides (see the BuildDock below).
+                    if (!keyboardOpen && !state.zenMode && LocalLessonBanner.current == null) {
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(DockBarHeight))
+                    }
                 }
                 // The bottom nav is the collapsed face of the build dock: swipe it up (or tap its build
                 // chip / the top-bar console toggle) and it expands into the build console.
@@ -819,7 +822,9 @@ internal fun CompactLayout(
                     open = state.consoleOpen,
                     onOpenChange = { state.consoleOpen = it },
                     buildState = buildState,
-                    hidden = (keyboardOpen || state.zenMode) && !state.consoleOpen,
+                    // Hidden during a lesson too: Search / Source / AI are distractions there (and the AI would
+                    // do the exercise). The console still opens for a run; Files and Run stay in the top bar.
+                    hidden = (keyboardOpen || state.zenMode || LocalLessonBanner.current != null) && !state.consoleOpen,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     hint = dockHint,
                     onHintShown = {

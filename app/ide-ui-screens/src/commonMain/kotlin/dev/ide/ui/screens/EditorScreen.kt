@@ -84,6 +84,8 @@ fun EditorScreen(
     /** Told whether the wide layout is on screen, so a run docks in its bottom pane instead of opening full screen. */
     onRunDockedChange: (Boolean) -> Unit = {},
     fileActions: FileActions = FileActions.None,
+    /** Shown above the whole editor while a lesson runs in this project (the Learn task banner). */
+    topBanner: (@Composable () -> Unit)? = null,
 ) {
     // Everything in the editor that leaves the project (the top bar's arrow, the palette) asks first.
     val requestCloseProject = { onCloseProjectConfirmChange(true) }
@@ -162,6 +164,9 @@ fun EditorScreen(
         // keyboard is up, and on a phone near the breakpoint in landscape the lost width flipped the layout as the
         // keyboard opened; the editor was rebuilt, which closed the keyboard and hid the bar again.
         val hiddenBars = hiddenSystemBarsWidth()
+        // The lesson banner is drawn inside the editor column, under the top bar and above the file tabs
+        // (where AIDE puts its trainer header), so both layouts pick it up without threading it through.
+        androidx.compose.runtime.CompositionLocalProvider(LocalLessonBanner provides topBanner) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth - hiddenBars >= COMPACT_BREAKPOINT
             LaunchedEffect(wide, state.runFullScreen) {
@@ -205,6 +210,7 @@ fun EditorScreen(
                 fileActions,
                 onOpenRun,
             )
+        }
         }
         NewEntryDialog(
             request = newEntry,

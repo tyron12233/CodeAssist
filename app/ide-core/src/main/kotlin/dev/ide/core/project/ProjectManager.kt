@@ -386,6 +386,31 @@ class ProjectManager private constructor(
      * its `Main` source per exercise and runs it through [IdeServices.runAndCapture]; the lesson editor also
      * completes against it, so it opens as a FULL engine (not build-only) to have the editor/language stack.
      */
+    /**
+     * The Learn workspace for [key]: a real project the learner edits in the full editor during a lesson, kept
+     * under `<home>/learn-workspaces/` so it never appears in [list] or the picker's recent order. Opened fresh
+     * each call (the caller makes it the active engine, which owns and closes it); created from [templateId]
+     * the first time, with [onCreated] run on the new engine (e.g. to clear the template's sample sources).
+     */
+    fun learnWorkspace(
+        key: String,
+        templateId: String,
+        args: Map<String, String> = emptyMap(),
+        onCreated: (IdeServices) -> Unit = {},
+    ): IdeServices {
+        val dir = learnWorkspaceDir(key)
+        if (ModelPersistence.exists(dir.toString())) return open(dir.toString())
+        val services = IdeServices.createProjectAt(
+            dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel,
+            sharedCachesRoot = homeDir, env = env,
+        )
+        runCatching { onCreated(services) }
+        return services
+    }
+
+    /** Where [learnWorkspace] keeps the workspace for [key]. */
+    fun learnWorkspaceDir(key: String): Path = homeDir.resolve("learn-workspaces").resolve(key)
+
     fun scratch(key: String, templateId: String = key, args: Map<String, String> = emptyMap()): IdeServices {
         scratchEngines[key]?.let { return it }
         val dir = homeDir.resolve(".scratch").resolve(key)

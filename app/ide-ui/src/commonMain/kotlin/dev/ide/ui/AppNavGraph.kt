@@ -74,6 +74,7 @@ import dev.ide.ui.screens.LearnScreen
 import dev.ide.ui.screens.LessonPlayerScreen
 import dev.ide.ui.screens.LessonTrackScreen
 import dev.ide.ui.screens.LearnPathScreen
+import dev.ide.ui.screens.LessonBanner
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.PluginsScreen
@@ -336,6 +337,7 @@ private fun AppRoute(
             inlayHintsEnabled = state.inlayHintsEnabled,
             host = state.composePreviewHost,
             onExit = app::exitLessonPlayer,
+            onOpenInEditor = if (app.lessonEditorUnavailable) null else app::openLessonInEditor,
         )
 
         Screen.ChallengePlayer -> ChallengePlayerScreen(
@@ -450,12 +452,27 @@ private fun AppRoute(
             onNewImageAsset = { resDir -> app.openIconManager(Screen.Editor, resDir) },
             onOpenDependencies = { module -> app.openModuleConfig(module, ModulesTab.Dependencies) },
             onOpenModuleConfig = { module -> app.openModuleConfig(module, ModulesTab.Settings) },
-            onCloseProject = { app.navigateTo(Screen.Projects) },
+            onCloseProject = { if (app.lessonInEditor) app.exitLessonEditor() else app.navigateTo(Screen.Projects) },
             closeProjectConfirm = app.confirmCloseProject,
-            onCloseProjectConfirmChange = { app.confirmCloseProject = it },
+            // Leaving a lesson's workspace needs no confirmation: its work is saved and it reopens with the lesson.
+            onCloseProjectConfirmChange = { ask ->
+                if (ask && app.lessonInEditor) app.exitLessonEditor() else app.confirmCloseProject = ask
+            },
             onOpenRun = { app.navigateTo(Screen.Run) },
             onRunDockedChange = { app.runDocked = it },
             fileActions = fileActions,
+            topBanner = app.currentLessonId?.takeIf { app.lessonInEditor }?.let { lessonId ->
+                {
+                    LessonBanner(
+                        backend = state.backend,
+                        ui = state,
+                        lessonId = lessonId,
+                        initialStep = app.lessonInitialStep,
+                        host = state.composePreviewHost,
+                        onExit = app::exitLessonEditor,
+                    )
+                }
+            },
         )
 
         Screen.Run -> RunScreen(

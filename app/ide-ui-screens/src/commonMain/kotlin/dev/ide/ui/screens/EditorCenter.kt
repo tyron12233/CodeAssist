@@ -95,6 +95,9 @@ import kotlinx.coroutines.withContext
  * layouts. The wide layout frames everything below the bar with its stripes and panes (see [frame]). When no file is open it shows a placeholder; otherwise it runs the per-file analysis + breadcrumb
  * effects and renders the active [EditorViewMode] (code / blocks / preview / split).
  */
+/** The Learn task banner while a lesson runs in this project, provided by [EditorScreen]; null otherwise. */
+internal val LocalLessonBanner = androidx.compose.runtime.staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
+
 @Composable
 internal fun EditorCenter(
     state: IdeUiState,
@@ -267,6 +270,8 @@ internal fun EditorCenter(
             // stripes and panes (via [frame]) so the bar spans the whole window above them, IntelliJ-style.
             val editorBody: @Composable () -> Unit = {
                 Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+                    // A running lesson's task banner: under the top bar, above the notices and the file tabs.
+                    LocalLessonBanner.current?.invoke()
                     DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
                     // Hoisted so the notice strip can report the count and the banner can render the cards from the
                     // same state; two holders would disagree about which warnings had been dismissed.

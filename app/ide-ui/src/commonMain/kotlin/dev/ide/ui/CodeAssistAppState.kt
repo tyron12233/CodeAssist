@@ -46,6 +46,10 @@ internal const val EXPORT_AUTHOR_PREF = "export.author"
  *  kill (or a normal relaunch) resumes back into it instead of the picker. Blank = the picker was showing. */
 private const val LAST_PROJECT_PREF = "session.lastProject"
 
+/** Whether [rootPath] is one of Learn's lesson workspaces (`<home>/learn-workspaces/<language>`). */
+internal fun isLearnWorkspace(rootPath: String): Boolean =
+    rootPath.replace('\\', '/').trimEnd('/').substringBeforeLast('/').endsWith("/learn-workspaces")
+
 /** App preference gating the resume-last-project behavior: the "Reopen last project on launch" toggle on the
  *  Appearance settings page (`settings.<pageId>.<key>`). Unset/anything-but-"false" = on (the default). */
 private const val REOPEN_LAST_PROJECT_PREF = "settings.appearance.reopenLastProject"
@@ -243,6 +247,14 @@ class CodeAssistAppState(
      *  to the path rather than the Learn tab). */
     var currentPathId: String? by mutableStateOf(null)
         private set
+
+    /** A lesson is running in the editor (its workspace is the open project, under the task banner). */
+    var lessonInEditor: Boolean by mutableStateOf(false)
+        private set
+
+    /** The workspace could not be opened this session: lessons fall back to the stand-alone player. */
+    var lessonEditorUnavailable: Boolean by mutableStateOf(false)
+        private set
     private var trackOpenedFromPath = false
     var currentLessonId: String? by mutableStateOf(null)
         private set
@@ -391,6 +403,9 @@ class CodeAssistAppState(
         scope.launch {
             backend.projects.projectEpoch.collect {
                 epoch = it
+                // Any other project opened while a lesson was up ends the lesson: the banner belongs to the
+                // lesson's workspace only.
+                if (lessonInEditor && !isLearnWorkspace(backend.project.rootPath)) lessonInEditor = false
                 // The AI tab opens and creates projects in the background and keeps the user in the chat; the
                 // tab's own buttons take them into the editor.
                 if (it > 0 && !(screen == Screen.Projects && homeTab == HomeTab.Ai)) screen = Screen.Editor
@@ -425,6 +440,9 @@ class CodeAssistAppState(
         scope.launch {
             snapshotFlow { screen to epoch }.distinctUntilChanged().collect { (current, projectEpoch) ->
                 val target = when {
+                    // A lesson's workspace is not a project to come back to: a relaunch would land in it with
+                    // no lesson around it.
+                    lessonInEditor -> return@collect
                     current == Screen.Projects -> ""
                     (current == Screen.Editor || current == Screen.Run) && projectEpoch > 0 -> backend.project.rootPath
                     else -> return@collect
@@ -867,6 +885,33 @@ class CodeAssistAppState(
         screen = Screen.LessonTrack
     }
 
+    /**
+     * Move the lesson the player just loaded into the editor: open its workspace project, then show the editor
+     * with the task banner at [stepIndex]. The flag goes up first, because opening a project lands on the
+     * editor by itself and the banner must be there on its first frame. On failure the player carries on.
+     */
+    fun openLessonInEditor(lessonId: String, stepIndex: Int) {
+        currentLessonId = lessonId
+        lessonInitialStep = stepIndex
+        lessonInEditor = true
+        scope.launch {
+            val ok = runCatching { backend.learn.openWorkspace(lessonId) }.getOrDefault(false)
+            if (ok) {
+                screen = Screen.Editor
+            } else {
+                lessonInEditor = false
+                lessonEditorUnavailable = true
+            }
+        }
+    }
+
+    /** Leave a lesson that ran in the editor: back to its track (or Learn), re-reading progress. */
+    fun exitLessonEditor() {
+        lessonInEditor = false
+        learnEpoch++
+        screen = if (currentTrackId != null) Screen.LessonTrack else Screen.Projects
+    }
+
     /** Re-reads the Learn tab (progress, account), after a sign-in attempt. */
     fun refreshLearn() {
         learnEpoch++
@@ -1204,6 +1249,8 @@ class CodeAssistAppState(
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()
             screen == Screen.ExportProject -> finishExport()
+            // During a lesson Back leaves the lesson; the workspace is not a project the user opened.
+            screen == Screen.Editor && lessonInEditor -> exitLessonEditor()
             screen == Screen.Editor -> confirmCloseProject = true
             // On the home screen, a Store/Learn tab steps back to the project picker before exiting.
             screen == Screen.Projects && homeTab != HomeTab.Projects -> homeTab = HomeTab.Projects

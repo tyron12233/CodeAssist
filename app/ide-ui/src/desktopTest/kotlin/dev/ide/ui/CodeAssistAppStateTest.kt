@@ -34,6 +34,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -53,7 +54,21 @@ class CodeAssistAppStateTest {
         val folderKind: UiProjectFolderKind = UiProjectFolderKind.GRADLE,
         /** The Projects Store this backend serves. Unsupported unless a test exercises the store. */
         private val storeService: StoreService = StoreService.Unsupported,
+        /** Learn: when set, opening a lesson workspace succeeds and becomes the open project. */
+        val workspaceOpens: Boolean? = null,
     ) : StubBackend() {
+        var projectRoot = "/stub"
+        override val project: ProjectInfo get() = ProjectInfo("p", projectRoot, 0)
+        val workspaceRequests = ArrayList<String>()
+        override val learn: dev.ide.ui.backend.LearnService = object : dev.ide.ui.backend.LearnService {
+            override suspend fun openWorkspace(lessonId: String): Boolean {
+                workspaceRequests += lessonId
+                if (workspaceOpens != true) return false
+                projectRoot = "/home/learn-workspaces/kotlin"
+                epochFlow.value++
+                return true
+            }
+        }
         /** What a picked `.zip` unpacks to; null = not a zip. */
         var archive: UiProjectArchive? = null
         var discarded = 0
@@ -76,6 +91,7 @@ class CodeAssistAppStateTest {
         override suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = folderKind
         override suspend fun openProject(rootPath: String): Boolean {
             opened += rootPath
+            projectRoot = rootPath
             epochFlow.value++
             return true
         }
@@ -963,6 +979,67 @@ class CodeAssistAppStateTest {
         app.openTrack("kotlin-basics")
         app.navigateBack()
         assertEquals(Screen.Projects, app.screen)
+    }
+
+    @Test
+    fun aLessonWithExercisesMovesIntoTheEditorAndBackOut() = runTest {
+        val backend = AppBackend(settledPrefs(), workspaceOpens = true).apply { analyticsConsent = false }
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openTrack("kotlin-basics")
+        app.openLesson("kt-basics-capstone")
+        assertEquals(Screen.LessonPlayer, app.screen)
+        // The player hands a lesson with exercises over to the editor.
+        app.openLessonInEditor("kt-basics-capstone", 1)
+        advanceUntilIdle()
+        assertEquals(listOf("kt-basics-capstone"), backend.workspaceRequests)
+        assertEquals(Screen.Editor, app.screen)
+        assertTrue(app.lessonInEditor)
+        assertEquals(1, app.lessonInitialStep)
+        // The workspace is never remembered as the project to reopen on the next launch.
+        assertNotEquals("/home/learn-workspaces/kotlin", backend.prefs["session.lastProject"])
+
+        // Back leaves the lesson for its track, without the close-project prompt.
+        app.navigateBack()
+        assertEquals(Screen.LessonTrack, app.screen)
+        assertFalse(app.lessonInEditor)
+        assertFalse(app.confirmCloseProject)
+    }
+
+    @Test
+    fun openingAnotherProjectEndsTheLesson() = runTest {
+        val backend = AppBackend(settledPrefs(), workspaceOpens = true).apply { analyticsConsent = false }
+        val app = appState(backend)
+        advanceUntilIdle()
+        app.openLessonInEditor("kt-basics-capstone", 0)
+        advanceUntilIdle()
+        assertTrue(app.lessonInEditor)
+        app.openProject(ProjectInfo("app", "/ws/app", 1))
+        advanceUntilIdle()
+        assertFalse(app.lessonInEditor, "the banner belongs to the lesson's workspace only")
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    @Test
+    fun aWorkspaceThatWillNotOpenLeavesTheLessonInThePlayer() = runTest {
+        val backend = AppBackend(settledPrefs(), workspaceOpens = false).apply { analyticsConsent = false }
+        val app = appState(backend)
+        advanceUntilIdle()
+        app.openLesson("kt-basics-capstone")
+        app.openLessonInEditor("kt-basics-capstone", 0)
+        advanceUntilIdle()
+        assertFalse(app.lessonInEditor)
+        assertTrue(app.lessonEditorUnavailable)
+        assertEquals(Screen.LessonPlayer, app.screen)
+    }
+
+    @Test
+    fun learnWorkspacePathsAreRecognised() {
+        assertTrue(isLearnWorkspace("/data/user/0/app/files/learn-workspaces/kotlin"))
+        assertTrue(isLearnWorkspace("C:\\Users\\me\\.codeassist\\learn-workspaces\\java\\"))
+        assertFalse(isLearnWorkspace("/sdcard/CodeAssist/projects/learn-workspaces-demo"))
+        assertFalse(isLearnWorkspace("/ws/app"))
     }
 
     @Test
