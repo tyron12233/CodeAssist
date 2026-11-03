@@ -1035,6 +1035,61 @@ class CodeAssistAppStateTest {
     }
 
     @Test
+    fun aDiscussionOpenedFromALessonReturnsToIt() = runTest {
+        val backend = AppBackend(settledPrefs(), workspaceOpens = true).apply { analyticsConsent = false }
+        val app = appState(backend)
+        advanceUntilIdle()
+        app.openLessonInEditor("kt-basics-capstone", 1)
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+
+        app.openDiscussion("kt-basics-capstone", "kt-cap-i")
+        assertEquals(Screen.LearnDiscussion, app.screen)
+        app.openThread("t1")
+        assertEquals(Screen.LearnThread, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.LearnDiscussion, app.screen)
+        assertEquals("kt-cap-i", app.communityStepId)
+        app.navigateBack()
+        assertEquals(Screen.Editor, app.screen, "back to the lesson, not the home screen")
+        assertTrue(app.lessonInEditor, "the lesson is still running")
+    }
+
+    @Test
+    fun askingReplacesTheFormWithTheNewQuestion() = runTest {
+        val backend = AppBackend(settledPrefs(), workspaceOpens = true).apply { analyticsConsent = false }
+        val app = appState(backend)
+        advanceUntilIdle()
+        app.openLessonInEditor("kt-basics-capstone", 1)
+        advanceUntilIdle()
+        app.openAsk("kt-basics-capstone", "kt-cap-i", code = "fun main() {}", errorText = "Test 1 of 4 failed")
+        assertEquals(Screen.LearnAsk, app.screen)
+        assertEquals("fun main() {}", app.askPrefill?.code)
+        app.questionPosted("t9")
+        assertEquals(Screen.LearnThread, app.screen)
+        assertEquals("t9", app.communityThreadId)
+        app.navigateBack()
+        assertEquals(Screen.Editor, app.screen, "Back skips the posted form")
+    }
+
+    @Test
+    fun anAnsweredQuestionPushOpensItsThread() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        app.openNotificationTarget(
+            dev.ide.ui.backend.UiNotification(
+                id = "n1", kind = dev.ide.ui.backend.UiNotificationKind.LEARN, title = "New answer to your question",
+                target = dev.ide.ui.backend.UiNotificationTarget.Screen("learnThread:abc-123"),
+            ),
+        )
+        assertEquals(Screen.LearnThread, app.screen)
+        assertEquals("abc-123", app.communityThreadId)
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    @Test
     fun learnWorkspacePathsAreRecognised() {
         assertTrue(isLearnWorkspace("/data/user/0/app/files/learn-workspaces/kotlin"))
         assertTrue(isLearnWorkspace("C:\\Users\\me\\.codeassist\\learn-workspaces\\java\\"))

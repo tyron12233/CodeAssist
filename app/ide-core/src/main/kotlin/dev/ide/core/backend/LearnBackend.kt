@@ -27,6 +27,7 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiResumePoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -57,6 +58,16 @@ internal class LearnBackend(
     )
 
     private val tracks: List<LearnTrackDef> get() = catalogStore.catalog().tracks
+
+    /** Discussions and shared solutions; the same Supabase client as the catalog when it offers them. */
+    private val community = LearnCommunityOps(
+        community = remote as? dev.ide.store.LearnCommunityService ?: dev.ide.store.LearnCommunityService.Unsupported,
+        lessonTitle = { id -> findLesson(id)?.second?.title },
+        stepTitle = { lessonId, stepId -> stepId?.let { findStep(lessonId, it)?.title } },
+    )
+
+    /** Background work that must not hold up the caller (sharing a solution after a pass). */
+    private val backgroundScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
     /** Device progress plus its sync with the signed-in account. */
     private val progressSync = LearnProgressSync(
@@ -217,6 +228,19 @@ internal class LearnBackend(
     }
 
     override suspend fun check(lessonId: String, stepId: String, code: String): UiExerciseResult {
+        val result = checkExercise(lessonId, stepId, code)
+        if (result.passed) shareSolutionLater(lessonId, stepId, code)
+        return result
+    }
+
+    /** A pass is shared with other learners in the background, when signed in and not opted out. */
+    private fun shareSolutionLater(lessonId: String, stepId: String, code: String) {
+        val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive ?: return
+        if (!community.available() || remote.accountId() == null || !shareSolutions()) return
+        backgroundScope.launch { community.submitSolution(lessonId, stepId, code, step.language) }
+    }
+
+    private suspend fun checkExercise(lessonId: String, stepId: String, code: String): UiExerciseResult {
         val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive
             ?: return UiExerciseResult(passed = false, compiled = false, message = "This step has no exercise to check.")
         // A layout exercise is checked against its structure and a render; nothing compiles or runs, so it
@@ -669,6 +693,39 @@ internal class LearnBackend(
         )
     }
 
+    // ---- community ----
+
+    override fun communityAvailable(): Boolean = community.available()
+    override suspend fun threads(lessonId: String, stepId: String?) = community.threads(lessonId, stepId)
+    override suspend fun threadCount(lessonId: String) = community.threadCount(lessonId)
+    override suspend fun thread(threadId: String) = community.thread(threadId)
+    override suspend fun askQuestion(
+        lessonId: String, stepId: String?, title: String, body: String, code: String?, errorText: String?,
+    ) = community.ask(
+        lessonId, stepId, title, body, code,
+        language = stepId?.let { (findStep(lessonId, it) as? LearnStepDef.Interactive)?.language },
+        errorText = errorText,
+    )
+    override suspend fun answer(threadId: String, body: String, code: String?) = community.answer(threadId, body, code)
+    override suspend fun vote(answerId: String, up: Boolean) = community.vote(answerId, up)
+    override suspend fun accept(threadId: String, answerId: String?) = community.accept(threadId, answerId)
+    override suspend fun deleteMine(kind: String, id: String) = community.deleteMine(kind, id)
+    override suspend fun report(kind: String, id: String, reason: String, detail: String?) = community.report(kind, id, reason, detail)
+    override suspend fun solutions(lessonId: String, stepId: String, sort: String) = community.solutions(lessonId, stepId, sort)
+    override suspend fun likeSolution(solutionId: String, like: Boolean) = community.likeSolution(solutionId, like)
+    override fun shareSolutions(): Boolean =
+        progressSync.account?.shareSolutions ?: (pref(KEY_SHARE_SOLUTIONS) != "false")
+    override suspend fun setShareSolutions(share: Boolean): String? {
+        val error = community.setShareSolutions(share)
+        if (error == null) {
+            setPref(KEY_SHARE_SOLUTIONS, share.toString())
+            progressSync.account?.let { progressSync.overrideShareSolutions(share) }
+        }
+        return error
+    }
+    override suspend fun reportQueue() = community.reportQueue()
+    override suspend fun resolveReport(reportId: String, hide: Boolean) = community.resolveReport(reportId, hide)
+
     /** A badge for a track this catalog knows; a track id from a newer catalog is left out. */
     private fun badgeFor(trackId: String, earnedAt: String): UiLearnBadge? {
         val t = tracks.firstOrNull { it.id == trackId } ?: return null
@@ -685,6 +742,9 @@ internal class LearnBackend(
     private companion object {
         const val KEY_RESUME_LESSON = "learn.resume.lesson"
         const val KEY_RESUME_STEP = "learn.resume.step"
+
+        /** The last known "share my solutions" choice, for before the first sync of a session. */
+        const val KEY_SHARE_SOLUTIONS = "learn.shareSolutions"
 
         /** Per workspace: the lesson/step whose starter its file holds, so re-entering a step keeps the work. */
         const val KEY_WORKSPACE_STEP = "learn.workspace.step."

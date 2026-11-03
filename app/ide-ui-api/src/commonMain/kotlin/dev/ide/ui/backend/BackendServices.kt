@@ -1600,6 +1600,62 @@ interface LearnService {
     /** The Learn side of the public profile at [handle], or null when there is nothing to show. */
     suspend fun publicProfile(handle: String): UiLearnPublicProfile? = null
 
+    // ---- community: lesson discussions and shared solutions ----
+
+    /** Whether discussions and shared solutions are available in this build. */
+    fun communityAvailable(): Boolean = false
+
+    /** Questions asked about lesson [lessonId] (optionally one exercise [stepId]), newest activity first.
+     *  Null when they could not be loaded (offline, not configured). */
+    suspend fun threads(lessonId: String, stepId: String? = null): List<UiLearnThreadSummary>? = null
+
+    /** How many questions lesson [lessonId] has, for the "Discussion (n)" entry. 0 when unknown. */
+    suspend fun threadCount(lessonId: String): Int = 0
+
+    /** One question with its answers, or null when it is gone, hidden or unreachable. */
+    suspend fun thread(threadId: String): UiLearnThread? = null
+
+    /** Ask a question. [code] and [errorText] are the learner's attempt and what went wrong, when attached. */
+    suspend fun askQuestion(
+        lessonId: String,
+        stepId: String?,
+        title: String,
+        body: String,
+        code: String?,
+        errorText: String?,
+    ): UiLearnWrite = UiLearnWrite(error = "Discussions are not available in this build")
+
+    suspend fun answer(threadId: String, body: String, code: String?): UiLearnWrite =
+        UiLearnWrite(error = "Discussions are not available in this build")
+
+    /** Upvote (or take back an upvote on) an answer. Null on success, else why not. */
+    suspend fun vote(answerId: String, up: Boolean): String? = "Not available"
+
+    /** Mark [answerId] as the answer that solved the asker's question (null clears it). Asker only. */
+    suspend fun accept(threadId: String, answerId: String?): String? = "Not available"
+
+    /** Delete the caller's own question, answer or solution ([kind] `thread` | `post` | `solution`). */
+    suspend fun deleteMine(kind: String, id: String): String? = "Not available"
+
+    /** Report a question, answer or solution for a moderator to look at. */
+    suspend fun report(kind: String, id: String, reason: String, detail: String?): String? = "Not available"
+
+    /** Passing solutions to one exercise. Null when they could not be loaded. */
+    suspend fun solutions(lessonId: String, stepId: String, sort: String = "top"): UiLearnSolutionPage? = null
+
+    suspend fun likeSolution(solutionId: String, like: Boolean): String? = "Not available"
+
+    /** Whether this learner's passing solutions are shared with others (on unless they turned it off). */
+    fun shareSolutions(): Boolean = true
+
+    suspend fun setShareSolutions(share: Boolean): String? = "Not available"
+
+    /** Moderators: reported Learn content, oldest first. Null when not a moderator or unreachable. */
+    suspend fun reportQueue(): List<UiLearnReport>? = null
+
+    /** Moderators: hide the reported content, or dismiss the reports and leave it up. */
+    suspend fun resolveReport(reportId: String, hide: Boolean): String? = "Not available"
+
     companion object {
         /** A Learn service with no content — the default for backends that wire none. */
         val Unsupported: LearnService = object : LearnService {}

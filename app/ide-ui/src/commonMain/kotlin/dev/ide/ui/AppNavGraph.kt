@@ -75,6 +75,10 @@ import dev.ide.ui.screens.LessonPlayerScreen
 import dev.ide.ui.screens.LessonTrackScreen
 import dev.ide.ui.screens.LearnPathScreen
 import dev.ide.ui.screens.LessonBanner
+import dev.ide.ui.screens.LearnAskScreen
+import dev.ide.ui.screens.LearnDiscussionScreen
+import dev.ide.ui.screens.LearnSolutionsScreen
+import dev.ide.ui.screens.LearnThreadScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.PluginsScreen
@@ -322,6 +326,50 @@ private fun AppRoute(
             onBack = app::exitLearnPath,
         )
 
+        Screen.LearnDiscussion -> LearnCommunityRoute(app, fileActions) { needSignIn ->
+            LearnDiscussionScreen(
+                backend = backend,
+                lessonId = app.communityLessonId.orEmpty(),
+                stepId = app.communityStepId,
+                onBack = app::exitCommunity,
+                onOpenThread = app::openThread,
+                onAsk = { stepId -> app.openAsk(app.communityLessonId.orEmpty(), stepId) },
+                onNeedSignIn = needSignIn,
+            )
+        }
+
+        Screen.LearnThread -> LearnCommunityRoute(app, fileActions) { needSignIn ->
+            LearnThreadScreen(
+                backend = backend,
+                threadId = app.communityThreadId.orEmpty(),
+                onBack = app::exitCommunity,
+                onNeedSignIn = needSignIn,
+            )
+        }
+
+        Screen.LearnAsk -> LearnCommunityRoute(app, fileActions) { needSignIn ->
+            LearnAskScreen(
+                backend = backend,
+                lessonId = app.communityLessonId.orEmpty(),
+                stepId = app.communityStepId,
+                prefillCode = app.askPrefill?.code,
+                prefillError = app.askPrefill?.errorText,
+                onBack = app::exitCommunity,
+                onPosted = app::questionPosted,
+                onNeedSignIn = needSignIn,
+            )
+        }
+
+        Screen.LearnSolutions -> LearnCommunityRoute(app, fileActions) { needSignIn ->
+            LearnSolutionsScreen(
+                backend = backend,
+                lessonId = app.communityLessonId.orEmpty(),
+                stepId = app.communityStepId.orEmpty(),
+                onBack = app::exitCommunity,
+                onNeedSignIn = needSignIn,
+            )
+        }
+
         Screen.LessonTrack -> LessonTrackScreen(
             backend = backend,
             trackId = app.currentTrackId,
@@ -338,6 +386,7 @@ private fun AppRoute(
             host = state.composePreviewHost,
             onExit = app::exitLessonPlayer,
             onOpenInEditor = if (app.lessonEditorUnavailable) null else app::openLessonInEditor,
+            onOpenDiscussion = if (backend.learn.communityAvailable()) ({ lessonId, stepId -> app.openDiscussion(lessonId, stepId) }) else null,
         )
 
         Screen.ChallengePlayer -> ChallengePlayerScreen(
@@ -470,6 +519,10 @@ private fun AppRoute(
                         initialStep = app.lessonInitialStep,
                         host = state.composePreviewHost,
                         onExit = app::exitLessonEditor,
+                        onStepChanged = app::setLessonStep,
+                        onOpenDiscussion = { stepId -> app.openDiscussion(lessonId, stepId) },
+                        onAskForHelp = { stepId, code, error -> app.openAsk(lessonId, stepId, code, error) },
+                        onOpenSolutions = { stepId -> app.openSolutions(lessonId, stepId) },
                     )
                 }
             },
@@ -1054,6 +1107,25 @@ private fun ChallengeRoute(app: CodeAssistAppState, fileActions: FileActions) {
                 // A sign-in changes what the tab can show, and the sheet cannot know whether one happened.
                 app.refreshChallenges()
             },
+            onSubmitProject = null,
+            onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+        )
+    }
+}
+
+/** A Learn community screen with the store's sign-in sheet behind its "sign in to post" prompts. */
+@Composable
+private fun LearnCommunityRoute(
+    app: CodeAssistAppState,
+    fileActions: FileActions,
+    content: @Composable (needSignIn: () -> Unit) -> Unit,
+) {
+    var signInVisible by remember { mutableStateOf(false) }
+    content { signInVisible = true }
+    if (signInVisible) {
+        StoreSignInSheet(
+            backend = app.backend,
+            onDismiss = { signInVisible = false },
             onSubmitProject = null,
             onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
         )

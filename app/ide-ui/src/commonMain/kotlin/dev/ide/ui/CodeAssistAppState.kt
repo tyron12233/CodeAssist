@@ -46,6 +46,12 @@ internal const val EXPORT_AUTHOR_PREF = "export.author"
  *  kill (or a normal relaunch) resumes back into it instead of the picker. Blank = the picker was showing. */
 private const val LAST_PROJECT_PREF = "session.lastProject"
 
+/** A Learn push's route prefix (see learn_post_create): `learnThread:<thread id>`. */
+private const val LEARN_THREAD_ROUTE = "learnThread:"
+
+/** What "Ask for help" pre-fills the question form with. */
+data class AskPrefill(val code: String?, val errorText: String?)
+
 /** Whether [rootPath] is one of Learn's lesson workspaces (`<home>/learn-workspaces/<language>`). */
 internal fun isLearnWorkspace(rootPath: String): Boolean =
     rootPath.replace('\\', '/').trimEnd('/').substringBeforeLast('/').endsWith("/learn-workspaces")
@@ -251,6 +257,20 @@ class CodeAssistAppState(
     /** A lesson is running in the editor (its workspace is the open project, under the task banner). */
     var lessonInEditor: Boolean by mutableStateOf(false)
         private set
+
+    // ---- Learn community: what the discussion / thread / ask / solutions screens are showing ----
+    var communityLessonId: String? by mutableStateOf(null)
+        private set
+    /** The exercise a discussion or the solutions are scoped to; null for the whole lesson. */
+    var communityStepId: String? by mutableStateOf(null)
+        private set
+    var communityThreadId: String? by mutableStateOf(null)
+        private set
+    /** "Ask for help" carries the learner's code and what went wrong into the question form. */
+    var askPrefill: AskPrefill? by mutableStateOf(null)
+        private set
+    /** Where Back from the first community screen returns: the lesson, the player, the track, home. */
+    private var communityReturn: Screen = Screen.Projects
 
     /** The workspace could not be opened this session: lessons fall back to the stand-alone player. */
     var lessonEditorUnavailable: Boolean by mutableStateOf(false)
@@ -905,6 +925,63 @@ class CodeAssistAppState(
         }
     }
 
+    /** The banner moved to step [index]: remembered, so coming back from a discussion resumes there. */
+    fun setLessonStep(index: Int) {
+        lessonInitialStep = index
+    }
+
+    private fun isCommunity(s: Screen) =
+        s == Screen.LearnDiscussion || s == Screen.LearnThread || s == Screen.LearnAsk || s == Screen.LearnSolutions
+
+    /** Arrive at a community screen: stacked when coming from another one, else remember where to return. */
+    private fun enterCommunity(target: Screen) {
+        if (isCommunity(screen)) pushEntry() else communityReturn = screen
+        screen = target
+    }
+
+    /** A lesson's (or one exercise's) discussion. */
+    fun openDiscussion(lessonId: String, stepId: String? = null) {
+        val entering = !isCommunity(screen)
+        if (!entering) pushEntry() else communityReturn = screen
+        communityLessonId = lessonId
+        communityStepId = stepId
+        screen = Screen.LearnDiscussion
+    }
+
+    fun openThread(threadId: String) {
+        enterCommunity(Screen.LearnThread)
+        communityThreadId = threadId
+    }
+
+    /** The question form, optionally carrying the learner's [code] and [errorText] ("Ask for help"). */
+    fun openAsk(lessonId: String, stepId: String?, code: String? = null, errorText: String? = null) {
+        enterCommunity(Screen.LearnAsk)
+        communityLessonId = lessonId
+        communityStepId = stepId
+        askPrefill = AskPrefill(code, errorText)
+    }
+
+    /** A question was posted: replace the form with the new thread, so Back does not return to the form. */
+    fun questionPosted(threadId: String) {
+        askPrefill = null
+        communityThreadId = threadId
+        screen = Screen.LearnThread
+    }
+
+    fun openSolutions(lessonId: String, stepId: String) {
+        enterCommunity(Screen.LearnSolutions)
+        communityLessonId = lessonId
+        communityStepId = stepId
+    }
+
+    /** Back from a community screen: the screen below on the stack, else where the community was entered. */
+    fun exitCommunity() {
+        if (backStack.isNotEmpty()) popBack() else {
+            navigatingBack = true
+            screen = communityReturn
+        }
+    }
+
     /** Leave a lesson that ran in the editor: back to its track (or Learn), re-reading progress. */
     fun exitLessonEditor() {
         lessonInEditor = false
@@ -988,7 +1065,8 @@ class CodeAssistAppState(
     private fun navigatesAsStack(s: Screen): Boolean = when (s) {
         Screen.StoreItem, Screen.PublisherProfile, Screen.You,
         Screen.SubmitProject, Screen.PublishingGuide, Screen.Moderation,
-        Screen.PluginScreen -> true
+        Screen.PluginScreen,
+        Screen.LearnDiscussion, Screen.LearnThread, Screen.LearnAsk, Screen.LearnSolutions -> true
 
         else -> false
     }
@@ -1008,6 +1086,10 @@ class CodeAssistAppState(
         val slug = submitItemSlug
         val plugin = pluginScreenId
         val pluginArgument = pluginScreenArgument
+        val lesson = communityLessonId
+        val step = communityStepId
+        val thread = communityThreadId
+        val prefill = askPrefill
         backStack += NavEntry(screen) {
             storeItem = item
             publisherHandle = handle
@@ -1015,6 +1097,10 @@ class CodeAssistAppState(
             submitItemSlug = slug
             pluginScreenId = plugin
             pluginScreenArgument = pluginArgument
+            communityLessonId = lesson
+            communityStepId = step
+            communityThreadId = thread
+            askPrefill = prefill
         }
         while (backStack.size > MAX_BACK_STACK) backStack.removeAt(0)
     }
@@ -1157,8 +1243,10 @@ class CodeAssistAppState(
             }
             // The submissions live on the You screen, which is what a review decision is about.
             dev.ide.ui.backend.UiNotificationTarget.Submissions -> openYou()
-            is dev.ide.ui.backend.UiNotificationTarget.Screen -> {
-                Screen.entries.firstOrNull { it.name == target.route }?.let { navigateTo(it) }
+            is dev.ide.ui.backend.UiNotificationTarget.Screen -> when {
+                // "Someone answered your question": the route carries the thread.
+                target.route.startsWith(LEARN_THREAD_ROUTE) -> openThread(target.route.removePrefix(LEARN_THREAD_ROUTE))
+                else -> Screen.entries.firstOrNull { it.name == target.route }?.let { navigateTo(it) }
             }
         }
     }
@@ -1209,6 +1297,8 @@ class CodeAssistAppState(
             // was showing. Empty below the entry point, which falls through to the per-screen exits in the
             // rest of this chain.
             backStack.isNotEmpty() -> popBack()
+            // The first Learn community screen returns to where it was entered from (a lesson, the player).
+            isCommunity(screen) -> exitCommunity()
 
             // The keystore Create/Import sub-screens step back to their manager, not all the way out.
             screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager

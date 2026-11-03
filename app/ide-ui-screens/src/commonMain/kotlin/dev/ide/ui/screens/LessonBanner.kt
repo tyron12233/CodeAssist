@@ -14,11 +14,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -69,6 +68,20 @@ import dev.ide.ui.generated.resources.learn_step_progress
 import dev.ide.ui.generated.resources.learn_step_short
 import dev.ide.ui.generated.resources.learn_task_less
 import dev.ide.ui.generated.resources.learn_task_more
+import dev.ide.ui.generated.resources.learn_menu_stuck
+import dev.ide.ui.generated.resources.learn_menu_community
+import dev.ide.ui.generated.resources.learn_hint_progress
+import dev.ide.ui.generated.resources.learn_solution_sub
+import dev.ide.ui.generated.resources.learn_ask_sub
+import dev.ide.ui.generated.resources.learn_discussion_sub
+import dev.ide.ui.generated.resources.learn_solutions_sub
+import dev.ide.ui.generated.resources.learn_check_again
+import dev.ide.ui.generated.resources.learn_previous_step
+import dev.ide.ui.generated.resources.learn_collapse_sub
+import dev.ide.ui.generated.resources.learn_ask_for_help
+import dev.ide.ui.generated.resources.learn_discussion
+import dev.ide.ui.generated.resources.learn_discussion_count
+import dev.ide.ui.generated.resources.learn_see_solutions
 import dev.ide.ui.icons.CaIcons
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -101,8 +114,21 @@ fun LessonBanner(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     host: dev.ide.ui.ComposePreviewHost? = null,
+    /** The banner moved to another step; the host remembers it for coming back from a discussion. */
+    onStepChanged: (Int) -> Unit = {},
+    /** The lesson's discussion, scoped to [stepId] when on an exercise. Null hides it. */
+    onOpenDiscussion: ((stepId: String?) -> Unit)? = null,
+    /** "Ask for help": the question form with the learner's code and what went wrong attached. */
+    onAskForHelp: ((stepId: String, code: String?, errorText: String?) -> Unit)? = null,
+    /** Other learners' solutions to an exercise the learner has passed. */
+    onOpenSolutions: ((stepId: String) -> Unit)? = null,
 ) {
     val state = rememberLessonPlayerState(backend, lessonId, initialStep)
+    LaunchedEffect(state.stepIndex) { onStepChanged(state.stepIndex) }
+    val community = onOpenDiscussion != null && backend.learn.communityAvailable()
+    val threadCount by androidx.compose.runtime.produceState(0, lessonId, community) {
+        value = if (community) runCatching { backend.learn.threadCount(lessonId) }.getOrDefault(0) else 0
+    }
     val lesson = state.lesson
     val step = state.step
     val ads = rememberAds()
@@ -203,6 +229,7 @@ fun LessonBanner(
                         onExpand = { collapsed = false },
                     )
                 } else {
+                    val code = { ui.openFiles.firstOrNull { it.path == filePath }?.session?.doc?.text }
                     ExerciseHeader(
                         exercise = exercise,
                         backend = backend,
@@ -227,6 +254,12 @@ fun LessonBanner(
                         onShowSolution = { showSolution = true; taskExpanded = true },
                         onCopySolution = { copySolution(exercise) },
                         onBack = state::back,
+                        threadCount = threadCount,
+                        onOpenDiscussion = if (community) ({ onOpenDiscussion?.invoke(exercise.id) }) else null,
+                        onAskForHelp = if (community && onAskForHelp != null) ({
+                            onAskForHelp(exercise.id, code(), result?.takeIf { !it.passed }?.let(::describeFailure))
+                        }) else null,
+                        onOpenSolutions = if (community && onOpenSolutions != null && state.canAdvance) ({ onOpenSolutions(exercise.id) }) else null,
                     )
                 }
                 return@Surface
@@ -250,6 +283,7 @@ fun LessonBanner(
                             color = c.outline,
                         )
                     }
+                    if (community) DiscussionButton(threadCount) { onOpenDiscussion?.invoke(null) }
                 }
                 ProgressBar(
                     state.progress,
@@ -327,6 +361,10 @@ private fun ExerciseHeader(
     onShowSolution: () -> Unit,
     onCopySolution: () -> Unit,
     onBack: () -> Unit,
+    threadCount: Int = 0,
+    onOpenDiscussion: (() -> Unit)? = null,
+    onAskForHelp: (() -> Unit)? = null,
+    onOpenSolutions: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     val isLayout = exercise.language == "xml-layout"
@@ -351,24 +389,22 @@ private fun ExerciseHeader(
             PlayerButton(primaryLabel, primary = true, enabled = primaryEnabled, icon = primaryIcon, compact = true, onClick = onPrimary)
             Box {
                 MoreButton(stringResource(Res.string.learn_more_actions)) { menuOpen = true }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    if (exercise.hints.isNotEmpty() && hintsShown < exercise.hints.size) {
-                        DropdownMenuItem(text = { Text(stringResource(Res.string.learn_need_hint)) }, onClick = { menuOpen = false; onHint() })
-                    }
-                    if (exercise.solution.isNotBlank() && !showSolution) {
-                        DropdownMenuItem(text = { Text(stringResource(Res.string.learn_show_solution)) }, onClick = { menuOpen = false; onShowSolution() })
-                    }
-                    if (canRecheck) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(if (isLayout) Res.string.learn_check_layout else Res.string.learn_check)) },
-                            onClick = { menuOpen = false; onRecheck() },
-                        )
-                    }
-                    if (canGoBack) {
-                        DropdownMenuItem(text = { Text(stringResource(Res.string.back)) }, onClick = { menuOpen = false; onBack() })
-                    }
-                    DropdownMenuItem(text = { Text(stringResource(Res.string.learn_collapse_task)) }, onClick = { menuOpen = false; onCollapse() })
-                }
+                LessonMenu(
+                    expanded = menuOpen,
+                    onDismiss = { menuOpen = false },
+                    hint = (hintsShown + 1).takeIf { exercise.hints.isNotEmpty() && hintsShown < exercise.hints.size }
+                        ?.let { it to exercise.hints.size },
+                    onHint = onHint,
+                    onShowSolution = onShowSolution.takeIf { exercise.solution.isNotBlank() && !showSolution },
+                    onAskForHelp = onAskForHelp,
+                    threadCount = threadCount,
+                    onOpenDiscussion = onOpenDiscussion,
+                    onOpenSolutions = onOpenSolutions,
+                    onRecheck = onRecheck.takeIf { canRecheck },
+                    recheckLabel = stringResource(if (isLayout) Res.string.learn_check_layout else Res.string.learn_check_again),
+                    onBack = onBack.takeIf { canGoBack },
+                    onCollapse = onCollapse,
+                )
             }
         }
         ProgressBar(progress, track = c.surfaceContainerHighest, fill = c.primary, modifier = Modifier.padding(start = 12.dp, end = 4.dp, bottom = 6.dp))
@@ -378,6 +414,13 @@ private fun ExerciseHeader(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             result?.let { r -> key(r) { ResultPanel(r, Modifier.entrancePop()) } }
+            // The next move after a result: help when it failed, other approaches when it passed.
+            if (result != null && !result.passed && onAskForHelp != null) {
+                TextAction(stringResource(Res.string.learn_ask_for_help), CaIcons.lightbulb, onAskForHelp)
+            }
+            if (result?.passed == true && onOpenSolutions != null) {
+                TextAction(stringResource(Res.string.learn_see_solutions), CaIcons.eye, onOpenSolutions)
+            }
             if (taskExpanded) {
                 if (exercise.blocks.isNotEmpty()) LessonBlocks(exercise.blocks, backend = backend, host = host)
             } else {
@@ -448,4 +491,143 @@ private fun MoreButton(description: String, onClick: () -> Unit) {
     androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
         dev.ide.ui.theme.Symbol(dev.ide.ui.icons.CaSymbols.moreVert, contentDescription = description, size = 20.dp)
     }
+}
+
+/** A check failure as a helper reads it: the verdict, then the compiler's errors or the program's output. */
+private fun describeFailure(r: UiExerciseResult): String = buildString {
+    append(r.message.trim())
+    if (r.diagnostics.isNotEmpty()) append("\n\n").append(r.diagnostics.joinToString("\n"))
+    else if (r.output.isNotBlank()) append("\n\nOutput:\n").append(r.output.trimEnd())
+}.take(4000)
+
+/** The reading/quiz header's way into the lesson's discussion, with its question count. */
+@Composable
+private fun DiscussionButton(count: Int, onClick: () -> Unit) {
+    androidx.compose.material3.TextButton(onClick = onClick) {
+        dev.ide.ui.theme.Symbol(dev.ide.ui.icons.CaSymbols.forum, contentDescription = null, size = 18.dp)
+        Spacer(Modifier.size(6.dp))
+        Text(if (count > 0) count.toString() else stringResource(Res.string.learn_discussion))
+    }
+}
+
+/**
+ * The exercise menu, on the app's own menu surface ([dev.ide.ui.components.CaDropdownMenu]) and grouped by
+ * what the learner is after: getting unstuck, then learning from others, then moving around the lesson.
+ * Each row says what it does on a second line, and the discussion carries its question count as a badge.
+ */
+@Composable
+private fun LessonMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    hint: Pair<Int, Int>?,
+    onHint: () -> Unit,
+    onShowSolution: (() -> Unit)?,
+    onAskForHelp: (() -> Unit)?,
+    threadCount: Int,
+    onOpenDiscussion: (() -> Unit)?,
+    onOpenSolutions: (() -> Unit)?,
+    onRecheck: (() -> Unit)?,
+    recheckLabel: String,
+    onBack: (() -> Unit)?,
+    onCollapse: () -> Unit,
+) {
+    val c = MaterialTheme.colorScheme
+    fun pick(action: () -> Unit): () -> Unit = { onDismiss(); action() }
+    dev.ide.ui.components.CaDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        iconLed = true,
+        modifier = Modifier.widthIn(min = 248.dp),
+    ) {
+        val stuck = hint != null || onShowSolution != null || onAskForHelp != null
+        if (stuck) MenuSection(stringResource(Res.string.learn_menu_stuck))
+        hint?.let { (n, total) ->
+            dev.ide.ui.components.CaMenuItem(
+                label = stringResource(Res.string.learn_need_hint),
+                supporting = stringResource(Res.string.learn_hint_progress, n, total),
+                icon = CaIcons.lightbulb,
+                onClick = pick(onHint),
+            )
+        }
+        onShowSolution?.let {
+            dev.ide.ui.components.CaMenuItem(
+                label = stringResource(Res.string.learn_show_solution),
+                supporting = stringResource(Res.string.learn_solution_sub),
+                icon = CaIcons.eye,
+                onClick = pick(it),
+            )
+        }
+        onAskForHelp?.let {
+            dev.ide.ui.components.CaMenuItem(
+                label = stringResource(Res.string.learn_ask_for_help),
+                supporting = stringResource(Res.string.learn_ask_sub),
+                leading = { MenuSymbol(dev.ide.ui.icons.CaSymbols.forum) },
+                onClick = pick(it),
+            )
+        }
+        if (onOpenDiscussion != null || onOpenSolutions != null) {
+            if (stuck) MenuDivider()
+            MenuSection(stringResource(Res.string.learn_menu_community))
+        }
+        onOpenDiscussion?.let {
+            dev.ide.ui.components.CaMenuItem(
+                label = stringResource(Res.string.learn_discussion),
+                supporting = stringResource(Res.string.learn_discussion_sub),
+                leading = { MenuSymbol(dev.ide.ui.icons.CaSymbols.reviews) },
+                trailing = if (threadCount > 0) ({ CountBadge(threadCount) }) else null,
+                onClick = pick(it),
+            )
+        }
+        onOpenSolutions?.let {
+            dev.ide.ui.components.CaMenuItem(
+                label = stringResource(Res.string.learn_see_solutions),
+                supporting = stringResource(Res.string.learn_solutions_sub),
+                leading = { MenuSymbol(dev.ide.ui.icons.CaSymbols.star) },
+                onClick = pick(it),
+            )
+        }
+        MenuDivider()
+        onRecheck?.let { dev.ide.ui.components.CaMenuItem(label = recheckLabel, icon = CaIcons.play, onClick = pick(it)) }
+        onBack?.let {
+            dev.ide.ui.components.CaMenuItem(label = stringResource(Res.string.learn_previous_step), icon = CaIcons.chevronLeft, onClick = pick(it))
+        }
+        dev.ide.ui.components.CaMenuItem(
+            label = stringResource(Res.string.learn_collapse_task),
+            supporting = stringResource(Res.string.learn_collapse_sub),
+            icon = CaIcons.chevronUp,
+            onClick = pick(onCollapse),
+        )
+    }
+}
+
+@Composable
+private fun MenuSection(title: String) {
+    Text(
+        title.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun MenuDivider() {
+    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
+@Composable
+private fun MenuSymbol(glyph: Char) {
+    dev.ide.ui.theme.Symbol(glyph, contentDescription = null, size = dev.ide.ui.components.CaMenuDefaults.IconSize)
+}
+
+@Composable
+private fun CountBadge(count: Int) {
+    Text(
+        count.toString(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }

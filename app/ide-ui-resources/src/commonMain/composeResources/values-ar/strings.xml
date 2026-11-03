@@ -1115,7 +1115,9 @@
     <string name="learn_continue">متابعة</string>
     <string name="learn_completed">مكتمل</string>
     <!-- Learn tab, Material 3 Expressive redesign -->
-    <string name="learn_lessons_done">‏%1$d درس مكتمل</string>
+    <plurals name="learn_lessons_done">
+        <item quantity="other">‏%1$d درس مكتمل</item>
+    </plurals>
     <string name="learn_module_meta">‏%1$d من %2$d درس · %3$d دقيقة</string>
     <string name="learn_continue_meta">‏الدرس %1$d من %2$d · %3$s</string>
     <string name="learn_resume_lesson">متابعة الدرس %1$d</string>

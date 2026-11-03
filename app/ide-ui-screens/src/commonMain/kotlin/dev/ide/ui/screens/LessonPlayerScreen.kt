@@ -99,6 +99,7 @@ import dev.ide.ui.generated.resources.learn_checkpoint_retry
 import dev.ide.ui.generated.resources.learn_checkpoint_score
 import dev.ide.ui.generated.resources.learn_checkpoint_title
 import dev.ide.ui.generated.resources.learn_done
+import dev.ide.ui.generated.resources.learn_discussion
 import dev.ide.ui.generated.resources.learn_layout_preview
 import dev.ide.ui.editor.preview.LessonLayoutPreview
 import dev.ide.ui.icons.CaIcons
@@ -133,6 +134,8 @@ fun LessonPlayerScreen(
      * workspace could not be opened.
      */
     onOpenInEditor: ((lessonId: String, stepIndex: Int) -> Unit)? = null,
+    /** The lesson's discussion (scoped to the current step). Null hides the top-bar button. */
+    onOpenDiscussion: ((lessonId: String, stepId: String?) -> Unit)? = null,
 ) {
     val state = rememberLessonPlayerState(backend, lessonId, initialStep)
     val lesson = state.lesson
@@ -166,6 +169,15 @@ fun LessonPlayerScreen(
                             stringResource(Res.string.learn_step_progress, state.stepIndex + 1, steps.size),
                             color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
                         )
+                    }
+                    if (onOpenDiscussion != null && lesson != null) {
+                        androidx.compose.material3.IconButton(onClick = { onOpenDiscussion(lesson.id, step?.id) }) {
+                            dev.ide.ui.theme.Symbol(
+                                dev.ide.ui.icons.CaSymbols.forum,
+                                contentDescription = stringResource(dev.ide.ui.generated.resources.Res.string.learn_discussion),
+                                size = 20.dp,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

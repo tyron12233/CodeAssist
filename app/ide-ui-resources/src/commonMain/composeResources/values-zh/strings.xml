@@ -1044,7 +1044,9 @@
     <string name="learn_continue">继续</string>
     <string name="learn_completed">已完成</string>
     <!-- Learn tab, Material 3 Expressive redesign -->
-    <string name="learn_lessons_done">已完成 %1$d 节课</string>
+    <plurals name="learn_lessons_done">
+        <item quantity="other">已完成 %1$d 节课</item>
+    </plurals>
     <string name="learn_module_meta">%2$d 节课中的第 %1$d 节 · %3$d 分钟</string>
     <string name="learn_continue_meta">第 %1$d 节，共 %2$d 节 · %3$s</string>
     <string name="learn_resume_lesson">继续第 %1$d 节课</string>

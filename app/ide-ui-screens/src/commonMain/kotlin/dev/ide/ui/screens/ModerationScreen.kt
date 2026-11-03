@@ -50,6 +50,11 @@ import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.learn_hidden_label
+import dev.ide.ui.generated.resources.learn_hide
+import dev.ide.ui.generated.resources.learn_keep
+import dev.ide.ui.generated.resources.learn_reports_n
+import dev.ide.ui.generated.resources.learn_reports_title
 import dev.ide.ui.generated.resources.*
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
@@ -91,6 +96,7 @@ fun ModerationScreen(
     var epoch by remember { mutableStateOf(0) }
     var queue by remember { mutableStateOf(UiModerationQueue(loading = true)) }
     var reports by remember { mutableStateOf<List<UiReportedContent>>(emptyList()) }
+    var learnReports by remember { mutableStateOf<List<dev.ide.ui.backend.UiLearnReport>>(emptyList()) }
     // What the last decision said. Kept as the backend wrote it: "was already approved" is what a second
     // moderator sees, and paraphrasing it would lose the only part that explains anything.
     var notice by remember { mutableStateOf<String?>(null) }
@@ -112,6 +118,7 @@ fun ModerationScreen(
         queue = runCatching { backend.store.reviewQueue() }
             .getOrElse { UiModerationQueue(error = it.message ?: "The review queue could not be read") }
         reports = runCatching { backend.store.openReports() }.getOrDefault(emptyList())
+        learnReports = runCatching { backend.learn.reportQueue() }.getOrNull().orEmpty()
     }
 
     /** Run a decision, show whatever it said, and reload either way: the queue moved regardless. */
@@ -137,7 +144,7 @@ fun ModerationScreen(
                 return@Column
             }
             Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
-                ModerationTabs(tab, queue.pendingCount, reports.size) { tab = it }
+                ModerationTabs(tab, queue.pendingCount, reports.size, learnReports.size) { tab = it }
                 if (queue.loading || working) LinearProgressIndicator(Modifier.fillMaxWidth())
                 notice?.let { Notice(it) { notice = null } }
 
@@ -173,6 +180,12 @@ fun ModerationScreen(
                         onResolve = { report, actioned ->
                             decide { backend.store.resolveReport(report.reportId, actioned) }
                         },
+                    )
+
+                    ModerationTab.Learn -> LearnReportList(
+                        reports = learnReports,
+                        enabled = !working,
+                        onResolve = { report, hide -> decide { backend.learn.resolveReport(report.id, hide) } },
                     )
                 }
             }
@@ -240,13 +253,14 @@ private fun NotAModerator() {
     }
 }
 
-private enum class ModerationTab { Queue, Reports }
+private enum class ModerationTab { Queue, Reports, Learn }
 
 @Composable
 private fun ModerationTabs(
     selected: ModerationTab,
     waiting: Int,
     reports: Int,
+    learnReports: Int,
     onSelect: (ModerationTab) -> Unit,
 ) {
     LazyRow(
@@ -257,10 +271,15 @@ private fun ModerationTabs(
         itemsKeyed(ModerationTab.entries, key = { it.name }) { t ->
             // The count is in the label rather than on a badge: a moderator opening this wants to know
             // whether there is anything to do before deciding which tab to be on.
-            val count = if (t == ModerationTab.Queue) waiting else reports
+            val count = when (t) {
+                ModerationTab.Queue -> waiting
+                ModerationTab.Reports -> reports
+                ModerationTab.Learn -> learnReports
+            }
             val label = when (t) {
                 ModerationTab.Queue -> stringResource(Res.string.moderation_tab_queue)
                 ModerationTab.Reports -> stringResource(Res.string.moderation_tab_reports)
+                ModerationTab.Learn -> stringResource(Res.string.learn_reports_title)
             }
             PillChip(
                 label = if (count > 0) "$label ($count)" else label,
@@ -778,4 +797,50 @@ private fun moderationSize(bytes: Long): String {
         return "${tenths / 10}.${tenths % 10} MB"
     }
     return "${(bytes / 1024).coerceAtLeast(1)} KB"
+}
+
+/**
+ * Reported Learn content: one card per reported question, answer or solution, with how many reports it has
+ * and why. Three open reports hide an item automatically, so "Keep" is also how an auto-hide is undone.
+ */
+@Composable
+private fun LearnReportList(
+    reports: List<dev.ide.ui.backend.UiLearnReport>,
+    enabled: Boolean,
+    onResolve: (dev.ide.ui.backend.UiLearnReport, hide: Boolean) -> Unit,
+) {
+    val c = MaterialTheme.colorScheme
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp)) {
+        if (reports.isEmpty()) {
+            item("clear") {
+                Text(stringResource(Res.string.moderation_reports_none), color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
+            }
+        }
+        items(reports.size, key = { reports[it].id }) { i ->
+            val r = reports[i]
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                color = c.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        listOfNotNull(r.kind, r.reason, stringResource(Res.string.learn_reports_n, r.reports),
+                            if (r.hidden) stringResource(Res.string.learn_hidden_label) else null).joinToString(" · "),
+                        style = MaterialTheme.typography.labelMedium, color = c.primary,
+                    )
+                    Text(r.excerpt, style = MaterialTheme.typography.bodyMedium, maxLines = 6)
+                    r.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant) }
+                    Text(
+                        listOfNotNull(r.lessonTitle, r.authorHandle?.let { "@$it" }).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall, color = c.outline,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onResolve(r, true) }, enabled = enabled) { Text(stringResource(Res.string.learn_hide)) }
+                        TextButton(onClick = { onResolve(r, false) }, enabled = enabled) { Text(stringResource(Res.string.learn_keep)) }
+                    }
+                }
+            }
+        }
+    }
 }

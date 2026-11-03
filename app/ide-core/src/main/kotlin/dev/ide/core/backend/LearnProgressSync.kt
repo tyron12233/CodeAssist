@@ -160,6 +160,11 @@ internal class LearnProgressSync(
         return changed
     }
 
+    /** Reflect a "share my solutions" change made through the community service without a full sync. */
+    fun overrideShareSolutions(share: Boolean) {
+        account = account?.copy(shareSolutions = share)
+    }
+
     /** The last known streak, for showing before the first sync of a session finishes. */
     fun cachedStreak(): LearnStreak? {
         val parts = pref(KEY_STREAK)?.split(",") ?: return null
