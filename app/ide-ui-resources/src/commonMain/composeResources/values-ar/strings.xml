@@ -534,6 +534,13 @@
     <string name="change_before">في آخر إيداع</string>
     <string name="change_added">أُضيف منذ آخر إيداع</string>
     <string name="history_title">السجل المحلي</string>
+    <string name="symbolbar_bookmark">إشارة مرجعية</string>
+    <string name="bookmarks_title">الإشارات المرجعية</string>
+    <string name="bookmarks_empty">لا توجد إشارات مرجعية بعد. ضع إشارة على سطر المؤشر بـ F11 أو بمفتاح الإشارة خلف ⋯ في شريط الرموز.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">تحديث</string>
+    <string name="todo_empty">لا توجد تعليقات TODO أو FIXME في المشروع.</string>
+    <string name="bookmarks_panel_title">الإشارات و TODO</string>
     <string name="history_back">رجوع</string>
     <string name="history_restore">استعادة</string>
     <string name="history_empty">لم يُحفظ شيء بعد. كل حفظ لهذا الملف يحتفظ بنسخة هنا.</string>

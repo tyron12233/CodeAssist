@@ -68,6 +68,7 @@ import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.close
+import dev.ide.ui.generated.resources.symbolbar_bookmark
 import dev.ide.ui.generated.resources.symbolbar_clipboard
 import dev.ide.ui.generated.resources.symbolbar_comment
 import dev.ide.ui.generated.resources.symbolbar_duplicate_line
@@ -870,6 +871,7 @@ private fun actionLabel(action: String): String = when (action) {
     CustomizationActions.MOVE_LINE_DOWN -> stringResource(Res.string.symbolbar_move_line_down)
     CustomizationActions.DUPLICATE_LINE -> stringResource(Res.string.symbolbar_duplicate_line)
     CustomizationActions.PASTE_HISTORY -> stringResource(Res.string.symbolbar_clipboard)
+    CustomizationActions.TOGGLE_BOOKMARK -> stringResource(Res.string.symbolbar_bookmark)
     CustomizationActions.NEXT_PROBLEM -> stringResource(Res.string.symbolbar_next_problem)
     else -> action
 }

@@ -1787,7 +1787,9 @@ object CustomizationActions {
     const val NEXT_PROBLEM = "nextProblem"
     /** Opens Paste from History. */
     const val PASTE_HISTORY = "pasteHistory"
-    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM, PASTE_HISTORY)
+    /** Bookmarks the caret's line, or removes its bookmark. */
+    const val TOGGLE_BOOKMARK = "toggleBookmark"
+    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM, PASTE_HISTORY, TOGGLE_BOOKMARK)
 }
 
 /**

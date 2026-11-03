@@ -71,6 +71,7 @@ import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.CustomizationActions
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.symbolbar_bookmark
 import dev.ide.ui.generated.resources.symbolbar_clipboard
 import dev.ide.ui.generated.resources.symbolbar_comment
 import dev.ide.ui.generated.resources.symbolbar_customize
@@ -302,6 +303,7 @@ private fun foldedLabel(action: String, fallback: String): String = when (action
     CustomizationActions.DUPLICATE_LINE -> stringResource(Res.string.symbolbar_duplicate_line)
     CustomizationActions.NEXT_PROBLEM -> stringResource(Res.string.symbolbar_next_problem)
     CustomizationActions.PASTE_HISTORY -> stringResource(Res.string.symbolbar_clipboard)
+    CustomizationActions.TOGGLE_BOOKMARK -> stringResource(Res.string.symbolbar_bookmark)
     else -> fallback
 }
 
@@ -311,6 +313,7 @@ private fun foldedIcon(action: String): ImageVector? = when (action) {
     CustomizationActions.DUPLICATE_LINE -> CaIcons.copy
     CustomizationActions.NEXT_PROBLEM -> CaIcons.warning
     CustomizationActions.PASTE_HISTORY -> CaIcons.clock
+    CustomizationActions.TOGGLE_BOOKMARK -> CaIcons.pin
     else -> null
 }
 

@@ -75,6 +75,8 @@ val EDITOR_KEY_DEFAULTS: List<EditorKeyDefault> = listOf(
     EditorKeyDefault("editor.duplicateLine", "D", primary = true),
     EditorKeyDefault("editor.deleteLine", "K", primary = true, shift = true),
     EditorKeyDefault("editor.joinLines", "J", primary = true, shift = true),
+    // IntelliJ's Toggle Bookmark.
+    EditorKeyDefault("editor.toggleBookmark", "F11"),
     EditorKeyDefault("editor.moveLineUp", "Up", alt = true, shift = true),
     EditorKeyDefault("editor.moveLineDown", "Down", alt = true, shift = true),
     EditorKeyDefault("editor.codeActions", "Enter", alt = true),

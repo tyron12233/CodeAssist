@@ -487,6 +487,13 @@
     <string name="change_before">上次提交中的内容</string>
     <string name="change_added">自上次提交后新增</string>
     <string name="history_title">本地历史</string>
+    <string name="symbolbar_bookmark">书签</string>
+    <string name="bookmarks_title">书签</string>
+    <string name="bookmarks_empty">还没有书签。用 F11 或符号栏 ⋯ 后面的书签键为光标所在行添加书签。</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">刷新</string>
+    <string name="todo_empty">项目中没有 TODO 或 FIXME 注释。</string>
+    <string name="bookmarks_panel_title">书签与 TODO</string>
     <string name="history_back">返回</string>
     <string name="history_restore">恢复</string>
     <string name="history_empty">尚未保存过。每次保存此文件都会在这里保留一个版本。</string>

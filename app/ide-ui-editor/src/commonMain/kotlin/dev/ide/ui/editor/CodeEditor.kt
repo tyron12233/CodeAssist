@@ -1067,6 +1067,7 @@ private fun CodeEditorContent(
             }
 
             EditorCommands.JOIN_LINES -> editorSession.joinLines()
+            EditorCommands.TOGGLE_BOOKMARK -> editorSession.toggleBookmark()
 
             EditorCommands.MOVE_LINE_UP -> editorSession.moveLines(-1)
             EditorCommands.MOVE_LINE_DOWN -> editorSession.moveLines(1)
@@ -1396,6 +1397,15 @@ private fun CodeEditorContent(
                 largeFile = largeFile,
             )
         }
+
+        BookmarksGutterLayer(
+            session = editorSession,
+            metrics = metrics,
+            vlayout = geometry.vlayout,
+            vOffset = geometry.vOffset,
+            gutterWidthPx = gutterWidthPx,
+            color = colors.accent,
+        )
 
         ChangeMarkersLayer(
             session = editorSession,

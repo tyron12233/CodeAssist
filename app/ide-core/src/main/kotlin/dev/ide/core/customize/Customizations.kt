@@ -46,9 +46,11 @@ object SymbolActions {
     const val MOVE_LINE_DOWN = "moveLineDown"
     const val DUPLICATE_LINE = "duplicateLine"
     const val NEXT_PROBLEM = "nextProblem"
+    const val PASTE_HISTORY = "pasteHistory"
+    const val TOGGLE_BOOKMARK = "toggleBookmark"
 
     /** Every action id, for the editor's "add an action key" picker. */
-    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM)
+    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM, PASTE_HISTORY, TOGGLE_BOOKMARK)
 }
 
 /**

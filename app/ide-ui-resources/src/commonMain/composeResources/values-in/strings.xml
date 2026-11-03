@@ -312,6 +312,13 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="change_before">Di commit terakhir</string>
     <string name="change_added">Ditambahkan sejak commit terakhir</string>
     <string name="history_title">Riwayat lokal</string>
+    <string name="symbolbar_bookmark">Penanda</string>
+    <string name="bookmarks_title">Penanda</string>
+    <string name="bookmarks_empty">Belum ada penanda. Tandai baris kursor dengan F11, atau tombol Penanda di balik ⋯ bilah simbol.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">Muat ulang</string>
+    <string name="todo_empty">Tidak ada komentar TODO atau FIXME di proyek.</string>
+    <string name="bookmarks_panel_title">Penanda &amp; TODO</string>
     <string name="history_back">Kembali</string>
     <string name="history_restore">Pulihkan</string>
     <string name="history_empty">Belum ada yang disimpan. Setiap kali file ini disimpan, satu versi disimpan di sini.</string>

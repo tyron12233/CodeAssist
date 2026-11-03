@@ -400,6 +400,16 @@ class EditorSession(
         if (textDecorations.isNotEmpty()) textDecorations = shiftTextDecorations(textDecorations, edit, doc.length)
         if (pluginInlays.isNotEmpty()) pluginInlays = shiftInlayHints(pluginInlays, edit, doc.length)
         if (gutterMarks.isNotEmpty()) gutterMarks = shiftGutterMarks(gutterMarks, edit, doc)
+        if (bookmarks.isNotEmpty() && inserted != removed) {
+            val delta = inserted - removed
+            bookmarks = bookmarks.mapTo(HashSet()) { l ->
+                when {
+                    l <= firstLine -> l
+                    l <= lastLine -> firstLine // its line was merged into the edit's first line
+                    else -> l + delta
+                }
+            }
+        }
         if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
@@ -1055,6 +1065,15 @@ class EditorSession(
 
     fun setCaret(offset: Int) {
         updateSelectionAndComposing(TextRange(offset.coerceIn(0, doc.length)), null)
+    }
+
+    /** Bookmarked lines (0-based). They move with edits like diagnostics do: a line added above shifts them down,
+     *  and a bookmarked line merged into the one above it by a delete lands on that line. */
+    var bookmarks by mutableStateOf<Set<Int>>(emptySet())
+
+    /** Bookmark [line], or remove its bookmark. */
+    fun toggleBookmark(line: Int = doc.lineForOffset(selection.start.coerceIn(0, doc.length))) {
+        bookmarks = if (line in bookmarks) bookmarks - line else bookmarks + line
     }
 
     /** Bumped to open Paste from History from outside the editor (the symbol bar's Clipboard key). */

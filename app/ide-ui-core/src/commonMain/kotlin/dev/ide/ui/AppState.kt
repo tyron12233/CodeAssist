@@ -80,6 +80,7 @@ object LeftPanelId {
     const val SEARCH = "search"
     const val STRUCTURE = "structure"
     const val SOURCE = "source"
+    const val BOOKMARKS = "bookmarks"
 }
 
 /**
@@ -317,6 +318,57 @@ class IdeUiState(
         launch { persistTreeExpansion() }
         launch { syncExternalWrites() }
         launch { reanalyzeWhenInspectionsReturn() }
+        launch { syncBookmarks() }
+    }
+
+    // ---- bookmarks ----
+
+    /** Bookmarked lines per file path, closed files included, newest state of each open tab's [EditorSession]. */
+    val bookmarks: SnapshotStateMap<String, Set<Int>> = mutableStateMapOf()
+
+    /** The app preference this project's bookmarks are kept under (one per project root). */
+    private fun bookmarksKey(): String? =
+        backend.project.rootPath.takeIf { it.isNotEmpty() }?.let { "bookmarks." + it.hashCode().toUInt().toString(16) }
+
+    /**
+     * Keep bookmarks and the open tabs in step: a tab that opens gets its file's stored bookmarks, and a change in a
+     * tab (a toggle, or an edit that moved one) is stored and persisted. A tab's bookmarks are read from it only
+     * once they have been given to it, so a just-opened tab's empty set never wipes the stored one.
+     */
+    private suspend fun syncBookmarks() {
+        val key = bookmarksKey() ?: return
+        backend.settings.preference(key)?.lineSequence()?.forEach { row ->
+            val path = row.substringBefore('\t')
+            val lines = row.substringAfter('\t', "").split(',').mapNotNull { it.trim().toIntOrNull() }.toSet()
+            if (path.isNotEmpty() && lines.isNotEmpty()) bookmarks[path] = lines
+        }
+        val attached = HashSet<EditorSession>()
+        snapshotFlow { openFiles.map { it.path to it.session }.map { (p, s) -> Triple(p, s, s.bookmarks) } }.collect { tabs ->
+            var changed = false
+            for ((path, session, lines) in tabs) {
+                if (attached.add(session)) {
+                    session.bookmarks = bookmarks[path].orEmpty()
+                } else if (lines != bookmarks[path].orEmpty()) {
+                    if (lines.isEmpty()) bookmarks.remove(path) else bookmarks[path] = lines
+                    changed = true
+                }
+            }
+            attached.retainAll(tabs.mapTo(HashSet()) { it.second })
+            if (changed) {
+                backend.settings.setPreference(key, bookmarks.entries.joinToString("\n") { (p, l) -> p + "\t" + l.sorted().joinToString(",") })
+            }
+        }
+    }
+
+    /** Remove [path]'s bookmark on [line], whether or not the file is open. */
+    fun removeBookmark(path: String, line: Int) {
+        val open = openFiles.firstOrNull { it.path == path }
+        if (open != null) { open.session.bookmarks = open.session.bookmarks - line; return }
+        val left = bookmarks[path].orEmpty() - line
+        if (left.isEmpty()) bookmarks.remove(path) else bookmarks[path] = left
+        bookmarksKey()?.let { key ->
+            backend.settings.setPreference(key, bookmarks.entries.joinToString("\n") { (p, l) -> p + "\t" + l.sorted().joinToString(",") })
+        }
     }
 
     /**

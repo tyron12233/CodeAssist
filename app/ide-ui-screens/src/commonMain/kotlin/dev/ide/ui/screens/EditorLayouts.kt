@@ -114,6 +114,7 @@ import dev.ide.ui.components.RightToolOverlay
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.bookmarks_panel_title
 import dev.ide.ui.generated.resources.buildc_build
 import dev.ide.ui.generated.resources.logs_title
 import dev.ide.ui.generated.resources.run
@@ -223,6 +224,9 @@ internal fun buildLeftPanels(
         SidebarPanel(LeftPanelId.STRUCTURE, structureTitle, CaIcons.code, order = 30) {
             StructureOutline(state, onNavigated = closeDrawer, modifier = Modifier.fillMaxSize())
         },
+        SidebarPanel(LeftPanelId.BOOKMARKS, stringResource(Res.string.bookmarks_panel_title), CaIcons.pin, order = 35) {
+            BookmarksTodoPanel(state, onNavigated = closeDrawer, modifier = Modifier.fillMaxSize())
+        },
     )
     // The source-control panel is contributed by the version-control plugin (it registers under
     // LeftPanelId.SOURCE, so it takes this rail slot and the phone bottom-nav slot that maps to it). With the
@@ -244,6 +248,7 @@ private fun dispatchSymbolAction(state: IdeUiState, action: String) {
         CustomizationActions.DUPLICATE_LINE -> s.duplicateSelection()
         CustomizationActions.NEXT_PROBLEM -> s.goToDiagnostic(forward = true)
         CustomizationActions.PASTE_HISTORY -> s.requestPasteHistory()
+        CustomizationActions.TOGGLE_BOOKMARK -> s.toggleBookmark()
     }
 }
 

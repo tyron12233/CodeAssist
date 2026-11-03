@@ -319,6 +319,13 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="change_before">No último commit</string>
     <string name="change_added">Adicionado desde o último commit</string>
     <string name="history_title">Histórico local</string>
+    <string name="symbolbar_bookmark">Favorito</string>
+    <string name="bookmarks_title">Favoritos</string>
+    <string name="bookmarks_empty">Nenhum favorito ainda. Marque a linha do cursor com F11 ou a tecla Favorito atrás do ⋯ da barra de símbolos.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">Atualizar</string>
+    <string name="todo_empty">Nenhum comentário TODO ou FIXME no projeto.</string>
+    <string name="bookmarks_panel_title">Favoritos e TODO</string>
     <string name="history_back">Voltar</string>
     <string name="history_restore">Restaurar</string>
     <string name="history_empty">Nada salvo ainda. Cada vez que você salva este arquivo, uma versão fica aqui.</string>

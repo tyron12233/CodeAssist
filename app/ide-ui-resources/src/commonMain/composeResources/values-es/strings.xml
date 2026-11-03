@@ -343,6 +343,13 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="change_before">En el último commit</string>
     <string name="change_added">Añadido desde el último commit</string>
     <string name="history_title">Historial local</string>
+    <string name="symbolbar_bookmark">Marcador</string>
+    <string name="bookmarks_title">Marcadores</string>
+    <string name="bookmarks_empty">Aún no hay marcadores. Marca la línea del cursor con F11 o con la tecla Marcador tras el ⋯ de la barra de símbolos.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">Actualizar</string>
+    <string name="todo_empty">No hay comentarios TODO ni FIXME en el proyecto.</string>
+    <string name="bookmarks_panel_title">Marcadores y TODO</string>
     <string name="history_back">Atrás</string>
     <string name="history_restore">Restaurar</string>
     <string name="history_empty">Aún no hay nada guardado. Cada vez que guardes este archivo se conservará una versión aquí.</string>
