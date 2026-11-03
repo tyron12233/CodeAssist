@@ -28,6 +28,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -54,6 +55,7 @@ import dev.ide.interp.SandboxFinding
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.android.preview.ComposePreviewRemoteClient
+import dev.ide.android.preview.PreviewOpenTimeline
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.preview.PreviewOutcome
@@ -112,6 +114,14 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val lastGood = remember(path, preview.variantId) { arrayOfNulls<LoweredComposePreview>(1) }
         // Stand down while the pane's buffer is already outdated (see LocalPreviewBufferStale).
         val stale = LocalPreviewBufferStale.current
+        // Where the time to this mount's first frame goes (logcat + analytics). The pane remounts this host per
+        // variant and per index settle, so each timeline covers one open or switch.
+        val timingContext = LocalContext.current
+        val timeline = remember(path, preview.variantId) {
+            PreviewOpenTimeline(path, preview.variantId, ComposePreviewRemoteClient.get(timingContext).isConnected()) { e, ms, d ->
+                backend.recordPerf(e, ms, d, null)
+            }
+        }
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -128,6 +138,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                     if (lowered != null) {
                         ensurePreviewPassCurrent()
                         lastGood[0] = lowered
+                        timeline.mark("lowered")
                         value = PreviewState.Ready(lowered)
                         break
                     }
@@ -144,6 +155,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                                 ?: emptyList()
                         }
                         ensurePreviewPassCurrent()
+                        if (outcome is PreviewOutcome.Unavailable) timeline.finish("notInterpretable")
                         value = when (outcome) {
                             is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
                             is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
@@ -151,6 +163,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                         break
                     }
                     value = PreviewState.Loading
+                    timeline.mark("waitingForIndex")
                     delay(PREVIEW_READY_POLL_MS)
                 }
             }
@@ -259,6 +272,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         }
         val remoteRes = remoteResLoad.first
         val remoteResReady = remoteResLoad.second
+        LaunchedEffect(remoteResReady) { if (remoteResReady) timeline.mark("resRoots") }
         val remoteEligible by produceState(false, path, preview.variantId) {
             value = runCatching { backend.composePreviewIsolated() }.getOrDefault(false) &&
                 !preview.hasParameter && preview.config.locale == null
@@ -299,7 +313,8 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                                 resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                                 widthPx = widthPx, heightPx = heightPx, density = density, night = night,
                                 wrapContent = wrapContent,
-                                onUnavailable = { useRemote = false },
+                                onUnavailable = { timeline.mark("fallback"); useRemote = false },
+                                timeline = timeline,
                                 onPartialError = { remotePartial = it },
                                 sandbox = sandboxIds,
                                 onSandboxFindings = { if (it != sandboxFindings) sandboxFindings = it },
@@ -310,6 +325,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                         // In-process render (isolation off, or a remote failure fell back here): this composable
                         // builds the VM executor + resource resolver on demand, so that heavy work never runs on
                         // the isolated path. Its render outcomes flow up to the hoisted state → the shared chip.
+                        LaunchedEffect(Unit) { withFrameNanos { }; withFrameNanos { }; timeline.finish("inprocess") }
                         InProcessComposePreview(
                             backend = backend, path = path, lowered = s.lowered, night = night, density = density,
                             sandbox = sandbox, partialKey = partialKey,
@@ -545,6 +561,7 @@ private fun RemoteComposePreview(
     night: Boolean,
     wrapContent: Boolean,
     onUnavailable: () -> Unit,
+    timeline: PreviewOpenTimeline? = null,
     onPartialError: (String?) -> Unit,
     sandbox: List<String>,
     onSandboxFindings: (List<SandboxFinding>) -> Unit,
@@ -576,7 +593,7 @@ private fun RemoteComposePreview(
     DisposableEffect(client, cpKey, resKey, namespace) {
         var disposed = false
         val sink = object : ComposePreviewRemoteClient.FrameSink {
-            override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
+            override fun onFrame(bitmap: Bitmap, seq: Long) { timeline?.finish("remote"); main.post { frame = bitmap } }
             override fun onError(message: String) {
                 // The fallback is deliberate — a fatal remote failure may be remote-only, and in-process may well
                 // render it fine, so this is a recovery path rather than something to report. But the message
@@ -589,11 +606,13 @@ private fun RemoteComposePreview(
             override fun onPartialError(message: String?) { main.post { partial(message) } }
             override fun onSandboxFindings(findings2: List<SandboxFinding>) { main.post { findings(findings2) } }
         }
+        timeline?.mark("openStart")
         Thread {
             val s = client.openSession(
                 openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace,
                 wrapContent = wrapContent, sandbox = sandbox.toTypedArray(),
             )
+            timeline?.mark("openDone")
             main.post {
                 if (disposed) { s?.close() }
                 else { sessionBox[0] = s; sessionEpoch++; if (s == null) fallback() }

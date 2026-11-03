@@ -90,6 +90,9 @@ class ComposePreviewRemoteClient(context: Context) {
     /** Eagerly start + bind `:preview` (forks the process) so the first open doesn't pay the bind latency. */
     fun warmUp() = ensureBound()
 
+    /** Whether `:preview` is already running and bound, i.e. an open now doesn't pay for starting the process. */
+    fun isConnected(): Boolean = synchronized(lock) { daemon != null }
+
     private fun awaitDaemon(timeoutMs: Long): IComposePreviewSession? {
         ensureBound()
         synchronized(lock) {

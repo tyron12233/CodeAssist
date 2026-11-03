@@ -135,6 +135,7 @@ fun ComposePreviewPane(
     LaunchedEffect(path, host) {
         if (host == null) { ready = true; return@LaunchedEffect }
         ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
+        if (ready) PreviewOpenClock.mark(path, "indexReady")
         var building = backend.search.indexStatus.value.building
         backend.search.indexStatus.collect { status ->
             if (status.building == building) return@collect
@@ -144,7 +145,7 @@ fun ComposePreviewPane(
             } else {
                 // A build just settled: re-check readiness and re-lower against the now-current classpath.
                 ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
-                if (ready) nonce++
+                if (ready) { PreviewOpenClock.mark(path, "indexReady"); nonce++ }
             }
         }
     }
@@ -177,6 +178,7 @@ fun ComposePreviewPane(
     // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
     var detected by remember(path) { mutableStateOf(false) }
+    remember(path) { PreviewOpenClock.paneOpened(path) }
     LaunchedEffect(path, renderText) {
         previews = runCatching {
             backend.preview.composePreviews(
@@ -184,6 +186,7 @@ fun ComposePreviewPane(
             )
         }.getOrDefault(emptyList())
         detected = true
+        PreviewOpenClock.mark(path, "detected")
     }
     // Variant selection: the editor gutter picks one (via [selected]); the in-pane selector can override it
     // (cleared whenever the gutter selection changes so a fresh gutter tap wins).

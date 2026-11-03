@@ -135,6 +135,11 @@ object Events {
     // A preview render, from asking for it to having it: props `kind` (`compose`/`layout`), `first` (the first
     // render of that file this session, which pays for lowering/linking, or a re-render after an edit), `ok`.
     const val PREVIEW_PERF = "preview_perf"
+    // Opening a Compose preview until its first picture, split by step: props `phase` (`total`, `lower`, `session`
+    // = starting the render in the preview process, `frame` = from there to the first frame), `kind` (`first` open of
+    // that file this session or `again`), `proc` (`cold` = the preview process wasn't running yet, or `warm`) and
+    // `renderer` (`remote` or `inprocess`).
+    const val PREVIEW_OPEN_PERF = "preview_open_perf"
 
     // usage: how often each feature is used, counted on the device and sent as one row per feature (`feature`,
     // `count`) when telemetry is flushed. Only once the user agreed to the wording that names it; ids per [Features].

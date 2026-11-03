@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.hardware.HardwareBuffer
 import android.os.IBinder
 import android.os.Process
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
@@ -96,20 +97,34 @@ class ComposePreviewSessionService : Service() {
             sandbox: Array<out String>?,
             cb: IComposePreviewCallback?,
         ): Int = runCatching {
+            val t0 = SystemClock.elapsedRealtime()
             val memo = ComposePreviewWireCodec.DecodeMemo()
-            val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes(), memo)
+            val bytes = File(blobFile!!).readBytes()
+            val lowered = ComposePreviewWireCodec.decode(bytes, memo)
+            val tDecoded = SystemClock.elapsedRealtime()
+            val executorWasCached = classpath.isNullOrEmpty() || synchronized(cacheLock) { executorCache.containsKey(fingerprint(classpath.filter { it.isNotBlank() }.map { Paths.get(it) })) }
+            val executor = cachedExecutor(classpath)
+            val tExecutor = SystemClock.elapsedRealtime()
             val id = nextId.getAndIncrement()
             val session = Session(
                 id, widthPx, heightPx, density, night, File(frameDir!!).apply { mkdirs() }, cb!!,
-                cachedExecutor(classpath),
+                executor,
                 resDirs = resRoots?.filter { it.isNotBlank() }.orEmpty(),
                 namespace = packageName?.takeIf { it.isNotBlank() },
                 wrapContent = wrapContent,
                 sandbox = sandbox?.toList().orEmpty(),
                 decodeMemo = memo,
             )
+            session.openedAt = t0
             session.start(lowered)
+            val tStarted = SystemClock.elapsedRealtime()
             sessions[id] = session
+            android.util.Log.i(
+                PREVIEW_TIMING_TAG,
+                ":preview open session=$id blob=${bytes.size}B decode=${tDecoded - t0} " +
+                    "executor=${tExecutor - tDecoded}(${if (executorWasCached) "hit" else "miss"}, jars=${classpath?.size ?: 0}) " +
+                    "start=${tStarted - tExecutor}(resources=${session.resourcesMs}) total=${tStarted - t0}",
+            )
             log.info(":preview(pid=${Process.myPid()}): opened compose session $id (${widthPx}x$heightPx)")
             id
         }.getOrElse {
@@ -292,6 +307,18 @@ class ComposePreviewSessionService : Service() {
 
         private fun newSurface() = OffscreenComposeSurface(applicationContext, width, height, (density * 160f).toInt().coerceAtLeast(1))
 
+        /** When [open] began (elapsed realtime), for the first-frame timing line; 0 when not opened through it. */
+        @Volatile var openedAt = 0L
+        /** How long [start] spent getting the resource resolver (a parse on a cache miss). */
+        @Volatile var resourcesMs = 0L
+
+        /** Log the first frame's time since [open] began, once. */
+        private fun timeFirstFrame(s: Long) {
+            if (s == 1L && openedAt != 0L) {
+                android.util.Log.i(PREVIEW_TIMING_TAG, ":preview first frame session=$id after=${SystemClock.elapsedRealtime() - openedAt}")
+            }
+        }
+
         fun start(lowered: LoweredComposePreview) {
             programState.value = lowered
             nightState.value = night
@@ -300,7 +327,9 @@ class ComposePreviewSessionService : Service() {
             lastContentW = -1; lastContentH = -1
             // Project resource resolver (night baked in), served from the process cache on a re-open; mirrors the
             // in-process host.
+            val tRes = SystemClock.elapsedRealtime()
             currentResources = cachedResources(resDirs, namespace, density, night)
+            resourcesMs = SystemClock.elapsedRealtime() - tRes
             // Zero-copy when the platform supports it (API 29+): stream the GPU HardwareBuffer; else the raw bytes.
             if (surface.hardwareAccelerated) {
                 surface.onHardwareFrame = { hb, w, h -> pushHardwareFrame(hb, w, h) }
@@ -424,6 +453,7 @@ class ComposePreviewSessionService : Service() {
 
         private fun pushFrame(frame: OffscreenComposeSurface.Frame) {
             val s = seq.incrementAndGet()
+            timeFirstFrame(s)
             val f = File(frameDir, "frame-$s.px")
             runCatching {
                 // The frame is already the raw RGBA bytes — write them straight out (no ByteBuffer/int conversion).
@@ -436,6 +466,7 @@ class ComposePreviewSessionService : Service() {
          *  dmabuf fd during the transaction), so no pixels are read back or written to disk. */
         private fun pushHardwareFrame(hb: HardwareBuffer, w: Int, h: Int) {
             val s = seq.incrementAndGet()
+            timeFirstFrame(s)
             runCatching { cb.onFrameBuffer(hb, w, h, s) }
                 .onFailure { log.warn("compose session $id hardware frame push failed", it) }
         }
