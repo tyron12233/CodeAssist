@@ -420,14 +420,29 @@ internal fun rememberEditorGeometry(
     }
 
     // ---- bring the caret into view after every edit/caret move ----
-    LaunchedEffect(session.editCount, state.viewport.value) {
+    // While the symbol bar's trackpad floats a cursor, that cursor is what the user is steering, and it can be
+    // past a line's end or between lines where the snapped caret is not: follow it instead.
+    LaunchedEffect(session.editCount, state.viewport.value, session.floatingCaret) {
         if (state.viewport.value == IntSize.Zero) return@LaunchedEffect
         val doc = session.doc
-        val line = doc.lineForOffset(session.selection.end)
+        val floating = session.floatingCaret
+        val line: Int
+        val offsetInLine: Int
+        var beyondText = 0f // a floating cursor's distance past the text it is beside, in px
+        var lineFraction = 0f
+        if (floating != null) {
+            line = kotlin.math.floor(floating.line).toInt().coerceIn(0, doc.lineCount - 1)
+            offsetInLine = floating.column.toInt().coerceAtMost(doc.lineLength(line))
+            beyondText = (floating.column - offsetInLine) * metrics.charWidth
+            lineFraction = floating.line - line
+        } else {
+            line = doc.lineForOffset(session.selection.end)
+            offsetInLine = session.selection.end - doc.lineStart(line)
+        }
         val layout = render.layoutFor(line)
-        val vcol = layout.clampColumn(render.renderCache.rawToVisual(line, session.selection.end - doc.lineStart(line)))
+        val vcol = layout.clampColumn(render.renderCache.rawToVisual(line, offsetInLine))
         val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
-        val top = metrics.padTop + state.vlayout.topRow(line) * metrics.lineHeight + subTop
+        val top = metrics.padTop + state.vlayout.topRow(line) * metrics.lineHeight + subTop + lineFraction * metrics.lineHeight
         val bottom = top + metrics.lineHeight
         val vh = state.viewport.value.height.toFloat()
         if (top < vOffset.floatValue) vOffset.floatValue = (top - metrics.lineHeight).coerceIn(0f, state.maxV())
@@ -435,7 +450,7 @@ internal fun rememberEditorGeometry(
             (bottom - vh + metrics.lineHeight).coerceIn(0f, state.maxV())
         // Horizontal follow only when not wrapping — a wrapped buffer never scrolls sideways.
         if (!wordWrap) {
-            val caretX = layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
+            val caretX = layout.getHorizontalPosition(vcol, usePrimaryDirection = true) + beyondText
             val textViewW = state.viewport.value.width - gutterWidthPx - metrics.padLeft
             val margin = metrics.charWidth * 3
             if (caretX < hOffset.floatValue + margin) hOffset.floatValue = (caretX - margin).coerceIn(0f, state.maxH())

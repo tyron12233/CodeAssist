@@ -46,4 +46,31 @@ class FloatingCaretSnapshot {
             scene.close()
         }
     }
+
+    /** Floated far past a short line's end, beside a long one: the view scrolls to the cursor, not the caret. */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun theViewFollowsTheFloatingCursorNotTheCaret() {
+        val text = "val a = 1\nval message = \"a line long enough to scroll sideways on a phone\" + suffix\nval b = 2\n"
+        val session = EditorSession(text, languageFor("Main.kt"), TextRange(text.indexOf("1")))
+        val scene = ImageComposeScene(width = 822, height = 240, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+                    CodeEditor("Main.kt", session, PreviewBackend, Modifier.fillMaxSize())
+                }
+            }
+        }
+        var t = 0L
+        try {
+            repeat(10) { Thread.sleep(16); t += 16_000_000L; scene.render(t) }
+            session.beginFloatingCaret()
+            session.moveFloatingCaret(70f, 0f)
+            repeat(30) { Thread.sleep(16); t += 16_000_000L; scene.render(t) }
+            val png = scene.render(t + 16_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots/floating-3-scrolls.png").apply { parentFile?.mkdirs() }.writeBytes(png)
+            kotlin.test.assertEquals(text.indexOf("1") + 1, session.selection.start, "the caret waits at the end of `val a = 1`")
+        } finally {
+            scene.close()
+        }
+    }
 }
