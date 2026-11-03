@@ -68,6 +68,9 @@ import kotlin.time.Duration.Companion.milliseconds
 /** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
 private const val PREVIEW_DEBOUNCE_MS = 400L
 
+/** How often the pane re-asks whether a preview can be lowered while nothing is indexing but it still can't. */
+private const val PREVIEW_READY_RECHECK_MS = 600L
+
 /**
  * The Compose `@Preview` pane. Shares the exact [PreviewSurface] chrome with the layout-XML preview —
  * device selection, rotation, the Light/Night toggle, free pan + pinch/zoom — so both Preview views look
@@ -134,19 +137,29 @@ fun ComposePreviewPane(
     var ready by remember(path) { mutableStateOf(true) }
     LaunchedEffect(path, host) {
         if (host == null) { ready = true; return@LaunchedEffect }
-        ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
-        if (ready) PreviewOpenClock.mark(path, "indexReady")
-        var building = backend.search.indexStatus.value.building
+        // Judge every state the flow delivers, the current one included. Asking for readiness first and reading
+        // the build state after left a gap: a build that settled in between was never seen (the "not ready" answer
+        // predated it and no later edge came), so the pane sat on Preparing until the file was reopened.
+        var building: Boolean? = null
         backend.search.indexStatus.collect { status ->
             if (status.building == building) return@collect
+            val settled = building == true
             building = status.building
-            if (building) {
+            if (status.building) {
                 ready = false // a (re)build started — hold the preview until it settles
-            } else {
-                // A build just settled: re-check readiness and re-lower against the now-current classpath.
-                ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
-                if (ready) { PreviewOpenClock.mark(path, "indexReady"); nonce++ }
+                return@collect
             }
+            // Not building: check readiness, and re-lower when a build just settled so it runs against the
+            // now-current classpath. Readiness can still trail the index (a scratch module's Compose runtime
+            // attaching), so keep asking while nothing is building rather than wait for an edge that may not come.
+            ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
+            if (ready && settled) nonce++
+            while (!ready && !backend.search.indexStatus.value.building) {
+                delay(PREVIEW_READY_RECHECK_MS.milliseconds)
+                ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
+                if (ready) nonce++
+            }
+            if (ready) PreviewOpenClock.mark(path, "indexReady")
         }
     }
     // The engine is "working" either while the host is actively lowering/interpreting the rendered buffer

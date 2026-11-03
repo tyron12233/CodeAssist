@@ -273,16 +273,20 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val remoteRes = remoteResLoad.first
         val remoteResReady = remoteResLoad.second
         LaunchedEffect(remoteResReady) { if (remoteResReady) timeline.mark("resRoots") }
-        val remoteEligible by produceState(false, path, preview.variantId) {
+        // Null until the isolation setting is read: rendering in-process meanwhile would start the whole in-process
+        // pipeline (every jar opened, every resource parsed) only to throw it away when the remote one takes over.
+        val remoteEligible by produceState<Boolean?>(null, path, preview.variantId) {
             value = runCatching { backend.composePreviewIsolated() }.getOrDefault(false) &&
                 !preview.hasParameter && preview.config.locale == null
         }
-        var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible) }
+        var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible == true) }
         CompositionLocalProvider(LocalConfiguration provides cfg) {
             Box(modifier, contentAlignment = Alignment.Center) {
                 when (val s = state) {
                     is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                    is PreviewState.Ready -> if (useRemote) {
+                    is PreviewState.Ready -> if (remoteEligible == null) {
+                        CircularProgressIndicator(Modifier.size(28.dp))
+                    } else if (useRemote) {
                         // Remote render: wait only for the remote res roots (`:preview` rebuilds its own resources)
                         // — NOT the in-process resource parse, which the isolated path doesn't use.
                         if (!remoteResReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
