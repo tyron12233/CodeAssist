@@ -115,8 +115,42 @@ class IdlePreloadTest {
         assertEquals(3, loads)
         advanceTimeBy(4 * 60_000); runCurrent()
         assertEquals(4, loads)
+        // Then every four minutes, for about half an hour of idling in all.
+        advanceTimeBy(4 * 60_000); runCurrent()
+        assertEquals(5, loads)
+        advanceTimeBy(6 * 4 * 60_000); runCurrent()
+        assertEquals(10, loads)
         advanceTimeBy(60 * 60_000); runCurrent()
-        assertEquals(4, loads)
+        assertEquals(10, loads)
+    }
+
+    @Test
+    fun aLoadInFlightAtTheThresholdIsWaitedFor() = runTest {
+        var state = "loading"
+        var result: Pair<String, Long>? = null
+        launch { result = awaitInFlightLoad { state } }
+        advanceTimeBy(3_000); runCurrent()
+        assertNull(result)
+        state = "ready"
+        advanceTimeBy(250); runCurrent()
+        assertEquals("ready", result?.first)
+        assertTrue(result!!.second in 3_000L..3_250L)
+    }
+
+    @Test
+    fun aReadyOrFailedLoadIsNotWaitedFor() = runTest {
+        assertEquals("ready" to 0L, awaitInFlightLoad { "ready" })
+        assertEquals("failed_0" to 0L, awaitInFlightLoad { "failed_0" })
+    }
+
+    @Test
+    fun aLoadThatNeverLandsGivesUpAfterTheWait() = runTest {
+        var result: Pair<String, Long>? = null
+        launch { result = awaitInFlightLoad { "loading" } }
+        advanceTimeBy(IN_FLIGHT_LOAD_WAIT_MS - 1); runCurrent()
+        assertNull(result)
+        advanceTimeBy(1); runCurrent()
+        assertEquals("loading" to IN_FLIGHT_LOAD_WAIT_MS, result)
     }
 
     @Test

@@ -56,10 +56,37 @@ internal const val FREE_LONG_BUILDS = 3
 private const val IDLE_PRELOAD_DELAY_MS = 15_000L
 
 /**
- * Further load attempts while the IDE stays idle, as gaps after the previous one. A repeat while an ad is loaded
- * or loading is a no-op in the host, so these only re-request after a failed (often no-fill) or expired load.
+ * Further load attempts while the IDE stays idle, as gaps after the previous one: a short backoff, then every
+ * four minutes for about half an hour. A repeat while an ad is loaded or loading is a no-op in the host, so these
+ * only re-request after a failed (often no-fill or internal-error) or expired load. Three retries over seven
+ * minutes left a session that went on editing longer than that holding the failure at its next long build.
  */
-private val IDLE_PRELOAD_RETRY_MS = listOf(60_000L, 2 * 60_000L, 4 * 60_000L)
+private val IDLE_PRELOAD_RETRY_MS = listOf(60_000L, 2 * 60_000L) + List(7) { 4 * 60_000L }
+
+/**
+ * Longest a long build waits, past [LONG_BUILD_THRESHOLD_MS], for an interstitial whose load is still in flight.
+ * Most long builds outlast it (the median one runs about 25 s), and a load that was "loading" at the threshold
+ * used to be a skipped ad even when it landed a second later.
+ */
+internal const val IN_FLIGHT_LOAD_WAIT_MS = 10_000L
+
+private const val IN_FLIGHT_LOAD_POLL_MS = 250L
+
+/**
+ * The host's interstitial state once a load in flight has finished, polling [state] while it reads "loading" for
+ * at most [maxWaitMs]. Returns the final state and how long it waited. The caller runs it under [collectLatest],
+ * so a build that finishes meanwhile cancels the wait and no ad shows.
+ */
+internal suspend fun awaitInFlightLoad(maxWaitMs: Long = IN_FLIGHT_LOAD_WAIT_MS, state: () -> String): Pair<String, Long> {
+    var waited = 0L
+    while (waited < maxWaitMs) {
+        val now = state()
+        if (now != "loading") return now to waited
+        delay(IN_FLIGHT_LOAD_POLL_MS)
+        waited += IN_FLIGHT_LOAD_POLL_MS
+    }
+    return state() to waited
+}
 
 /**
  * Loads the next interstitial while the IDE sits idle: after [firstDelayMs], then again after each of
@@ -159,8 +186,9 @@ class BuildAdPacing(
  * Drives the occasional full-screen interstitial shown over a LONG build (Android only; inert on desktop and
  * whenever ads or full-screen ads are turned off). The ad is loaded at launch and while the IDE sits idle between
  * builds (retrying a failed load while it stays idle), never while one runs. When a build is still running
- * [LONG_BUILD_THRESHOLD_MS] after it started and [BuildAdPacing] allows it, the ad shows; a build that finishes
- * first cancels the timer (via [collectLatest]), so quick compiles never see one.
+ * [LONG_BUILD_THRESHOLD_MS] after it started and [BuildAdPacing] allows it, the ad shows, waiting up to
+ * [IN_FLIGHT_LOAD_WAIT_MS] more for a load still in flight; a build that finishes first cancels the timer (via
+ * [collectLatest]), so quick compiles never see one.
  *
  * It also watches every interstitial close (lesson ones too) to record it, and when a build finished behind the
  * ad, briefly shows that build's result so it isn't missed.
@@ -211,10 +239,20 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
                     ads.interstitialSkipped(reason)
                     return@collectLatest
                 }
-                // Read before the show, which clears a ready ad: on a miss, it says whether one was loading,
-                // failed to fill, or was never asked for.
-                val state = ads.host.interstitialState
-                if (ads.showInterstitial("build")) pacing.shown() else ads.interstitialSkipped("not_ready", state)
+                // A load started while idle may still be in flight: give it a few seconds while the build runs on.
+                // The state is read before the show, which clears a ready ad: on a miss, it says whether one was
+                // still loading, failed to fill, or was never asked for.
+                val (state, waitedMs) = awaitInFlightLoad { ads.host.interstitialState }
+                if (waitedMs > 0) {
+                    // The wait can outlast the user's toggles, or reach the point where the program itself runs.
+                    if (!ads.interstitialsActive) return@collectLatest
+                    if (programIsRunning(backend.build.runConsole.value)) {
+                        ads.interstitialSkipped("program_running")
+                        return@collectLatest
+                    }
+                }
+                val shownProps = if (waitedMs > 0) mapOf("waited_ms" to waitedMs.toString()) else emptyMap()
+                if (ads.showInterstitial("build", shownProps)) pacing.shown() else ads.interstitialSkipped("not_ready", state)
             }
     }
 

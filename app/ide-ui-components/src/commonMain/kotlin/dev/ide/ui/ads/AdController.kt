@@ -151,11 +151,11 @@ class AdController(
      * Show the full-screen interstitial for [trigger] (`"build"`, `"lesson"`) if the host has one ready, and
      * record it. Returns whether it showed.
      */
-    fun showInterstitial(trigger: String): Boolean {
+    fun showInterstitial(trigger: String, props: Map<String, String> = emptyMap()): Boolean {
         if (!host.showInterstitial()) return false
         shownFor = trigger
         shownAtMs = clockStart.elapsedNow().inWholeMilliseconds
-        track(AD_SHOWN, mapOf("trigger" to trigger))
+        track(AD_SHOWN, mapOf("trigger" to trigger) + props)
         return true
     }
 
