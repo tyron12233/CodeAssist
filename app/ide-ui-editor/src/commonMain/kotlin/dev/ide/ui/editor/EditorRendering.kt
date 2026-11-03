@@ -52,6 +52,8 @@ internal class EditorDrawColors(
     val findMatch: Color,
     val findCurrent: Color,
     val occurrence: Color,
+    /** Occurrence tint for a name the symbol is assigned or declared at (IntelliJ's "under caret (write)"). */
+    val occurrenceWrite: Color,
     /** Background box for a live template (snippet) field while stepping through tab stops. */
     val templateField: Color,
 )
@@ -119,6 +121,9 @@ internal fun DrawScope.drawEditor(
     findMatches: List<Match>,
     currentMatch: Int,
     occurrences: List<Match>,
+    /** The occurrences that write the symbol (assignment targets, `++`/`--`, its declaration), tinted apart.
+     *  Sorted and non-overlapping like [occurrences], and disjoint from it. */
+    occurrenceWrites: List<Match>,
     /** Live template (snippet) field ranges to box while stepping through tab stops; empty when not in a template. */
     templateFields: List<IntRange>,
     /** A plugin's geometric decorations binned per document line, already resolved to theme colors. */
@@ -289,14 +294,16 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // occurrence highlights (lowest layer): every textual use of the identifier under the caret, tinted
-        // subtly. The selection / find layers paint over the current one.
-        // Both match lists are sorted and non-overlapping, so only the visible slice is walked, not the file's.
+        // occurrence highlights (lowest layer): every use of the symbol under the caret (resolved where the
+        // language can, else textual), tinted subtly, writes in their own tint. The selection / find layers
+        // paint over the current one.
+        // The match lists are sorted and non-overlapping, so only the visible slice is walked, not the file's.
         val visibleFrom = doc.lineStart(firstVisible)
         val visibleTo = doc.lineEnd(lastVisible)
-        if (occurrences.isNotEmpty()) {
-            for (idx in visibleMatchIndices(occurrences, visibleFrom, visibleTo)) {
-                val m = occurrences[idx]
+        for ((list, tint) in arrayOf(occurrences to colors.occurrence, occurrenceWrites to colors.occurrenceWrite)) {
+            if (list.isEmpty()) continue
+            for (idx in visibleMatchIndices(list, visibleFrom, visibleTo)) {
+                val m = list[idx]
                 val sLine = doc.lineForOffset(m.start)
                 val eLine = doc.lineForOffset(m.end)
                 if (eLine < firstVisible || sLine > lastVisible) continue
@@ -304,7 +311,7 @@ internal fun DrawScope.drawEditor(
                     if (foldModel.isHidden(line)) continue
                     val vStart = if (line == sLine) rawToVisual(line, m.start - doc.lineStart(line)) else 0
                     val vEnd = if (line == eLine) rawToVisual(line, m.end - doc.lineStart(line)) else -1
-                    fillRange(line, vStart, vEnd, colors.occurrence, trailingMarker = false)
+                    fillRange(line, vStart, vEnd, tint, trailingMarker = false)
                 }
             }
         }

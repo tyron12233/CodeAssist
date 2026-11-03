@@ -411,6 +411,7 @@ private fun CodeAssistColors.schemeDefaults(): SchemeDefaults = SchemeDefaults(
         put(ColorKeys.EDITOR_FIND_MATCH, AttributeStyle.bg(warning.copy(alpha = 0.28f)))
         put(ColorKeys.EDITOR_FIND_CURRENT, AttributeStyle.bg(accent.copy(alpha = 0.5f)))
         put(ColorKeys.EDITOR_OCCURRENCE, AttributeStyle.bg(textSecondary.copy(alpha = 0.18f)))
+        put(ColorKeys.EDITOR_OCCURRENCE_WRITE, AttributeStyle.bg(syntax.keyword.copy(alpha = if (isDark) 0.34f else 0.22f)))
         put(ColorKeys.EDITOR_TEMPLATE_FIELD, AttributeStyle.bg(accent.copy(alpha = 0.16f)))
         put(ColorKeys.EDITOR_COMPOSING, AttributeStyle.fg(textSecondary))
         put(ColorKeys.EDITOR_INLAY_HINT, AttributeStyle.fg(textTertiary))

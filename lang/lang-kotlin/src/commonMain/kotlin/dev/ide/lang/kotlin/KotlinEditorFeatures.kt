@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtImportDirective
@@ -20,11 +21,13 @@ import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedDeclaration
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtParameter
+import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
+import dev.ide.kotlin.syntax.psi.KtUnaryExpression
 import dev.ide.kotlin.syntax.psi.KtUserType
 import dev.ide.kotlin.syntax.psi.KtValueArgument
 import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
@@ -39,6 +42,8 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.highlight.SemanticHighlightService
+import dev.ide.lang.highlight.UsageAccess
+import dev.ide.lang.highlight.UsageHighlight
 import dev.ide.lang.imports.ImportOrganizerService
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -696,7 +701,14 @@ class KotlinEditorFeatures(
     ): KotlinUsageTarget? {
         val ktFile = KotlinParserHost.parse(file.name, text)
         if (ktFile.textLength == 0) return null
-        val parsed = KotlinParsedFile(ktFile, file, 0L)
+        return usageTargetIn(KotlinParsedFile(ktFile, file, 0L), file, offset, readSource, includeOverloads)
+    }
+
+    /** [usageTargetAt] over an already-parsed [parsed] of [file]. */
+    private fun usageTargetIn(
+        parsed: KotlinParsedFile, file: VirtualFile, offset: Int, readSource: (String) -> CharSequence?, includeOverloads: Boolean,
+    ): KotlinUsageTarget? {
+        val ktFile = parsed.ktFile
         refreshOverlay(); syncFocal(parsed) // once, for the file being edited; the sweep resolves without it
         declarationNamedAt(ktFile, offset)?.let { return targetFor(it, file.path, ktFile, includeOverloads) }
         val off = offset.coerceIn(0, ktFile.textLength - 1)
@@ -724,9 +736,53 @@ class KotlinEditorFeatures(
         if (scope != null && scope.first != file.path) return emptyList()
         if (!containsIdentifier(text, target.name)) return emptyList()
         val ktFile = KotlinParserHost.parse(file.name, text)
+        return usageRefsIn(KotlinParsedFile(ktFile, file, 0L), text, target).map { it.first }
+    }
+
+    /**
+     * The names in [file]'s [text] that refer to the symbol under [offset], each marked a read, a write or the
+     * declaration, for the editor's highlight-usages-at-caret. One parse serves both the target and the sweep.
+     * Null when the caret is not on a resolvable symbol.
+     */
+    fun usageHighlightsAt(
+        file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?,
+    ): List<UsageHighlight>? {
+        val ktFile = KotlinParserHost.parse(file.name, text)
+        if (ktFile.textLength == 0) return null
         val parsed = KotlinParsedFile(ktFile, file, 0L)
+        val target = usageTargetIn(parsed, file, offset, readSource, includeOverloads = false) ?: return null
+        val out = ArrayList<UsageHighlight>()
+        target.declarations.filter { it.first == file.path }.forEach { out += UsageHighlight(it.second, UsageAccess.DECLARATION) }
+        val scope = target.scope
+        if (scope == null || scope.first == file.path) {
+            for ((range, ref) in usageRefsIn(parsed, text, target)) {
+                out += UsageHighlight(range, if (ref != null && isWritten(ref)) UsageAccess.WRITE else UsageAccess.READ)
+            }
+        }
+        return out.distinctBy { it.range.start }.sortedBy { it.range.start }
+    }
+
+    /** Whether [ref] is assigned: the left side of `=`/`+=`/… (bare or as `a.ref`), or the operand of `++`/`--`.
+     *  Compared by range: the tree hands out a fresh wrapper per navigation, so identity says nothing. */
+    private fun isWritten(ref: KtNameReferenceExpression): Boolean {
+        var e: KtElement = ref
+        (e.parent as? KtQualifiedExpression)?.let { q -> if (q.selectorExpression?.textRange == e.textRange) e = q }
+        while (true) e = (e.parent as? KtParenthesizedExpression) ?: break
+        return when (val p = e.parent) {
+            is KtBinaryExpression -> p.operationToken in ASSIGN_OPS && p.left?.textRange == e.textRange
+            is KtUnaryExpression -> p.operationToken in INC_DEC
+            else -> false
+        }
+    }
+
+    /** [usagesIn]'s sweep over an already-parsed file: each range with its reference (null for an import's). */
+    private fun usageRefsIn(
+        parsed: KotlinParsedFile, text: CharSequence, target: KotlinUsageTarget,
+    ): List<Pair<TextRange, KtNameReferenceExpression?>> {
+        val scope = target.scope
+        val ktFile = parsed.ktFile
         val resolver = KotlinResolver(ktFile, parsed, service)
-        val out = ArrayList<TextRange>()
+        val out = ArrayList<Pair<TextRange, KtNameReferenceExpression?>>()
         for (ref in ktFile.collectDescendantsOfType<KtNameReferenceExpression>()) {
             if (ref.getReferencedName() != target.name) continue
             val r = ref.textRange
@@ -734,7 +790,7 @@ class KotlinEditorFeatures(
             if (ref.getParentOfType<KtImportDirective>(strict = true) != null) continue // matched by FQN below
             if (ref.getParentOfType<KtPackageDirective>(strict = true) != null) continue
             val (path, at) = identityAt(parsed, r.startOffset, resolver) ?: continue
-            if (usageIdentity(path, at) in target.identities) out += TextRange(r.startOffset, r.endOffset)
+            if (usageIdentity(path, at) in target.identities) out += TextRange(r.startOffset, r.endOffset) to ref
         }
         // An import names the symbol by FQN, which resolution does not visit: its last segment is the name.
         for (imp in ktFile.importDirectives) {
@@ -742,9 +798,9 @@ class KotlinEditorFeatures(
             if (fqn !in target.importFqns) continue
             val end = imp.importedReference?.textRange?.endOffset ?: continue
             val start = end - target.name.length
-            if (start >= 0 && text.subSequence(start, end).toString() == target.name) out += TextRange(start, end)
+            if (start >= 0 && text.subSequence(start, end).toString() == target.name) out += TextRange(start, end) to null
         }
-        return out.distinct().sortedBy { it.start }
+        return out.distinctBy { it.first }.sortedBy { it.first.start }
     }
 
     /** The declaration (file path, name offset) the reference at [offset] resolves to, through [resolver]. */
@@ -1340,3 +1396,11 @@ class KotlinEditorFeatures(
             ?: KotlinSymbol(name, SymbolKind.CLASS, type = service.typeByFqn(fqn))
     }
 }
+
+/** The assignment operators: a name on their left is written. */
+private val ASSIGN_OPS = setOf(
+    KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ,
+)
+
+/** `++` / `--`: their operand is written. */
+private val INC_DEC = setOf(KtTokens.PLUSPLUS, KtTokens.MINUSMINUS)

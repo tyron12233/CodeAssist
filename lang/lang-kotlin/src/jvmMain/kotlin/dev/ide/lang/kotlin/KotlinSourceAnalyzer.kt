@@ -472,6 +472,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun usagesIn(file: VirtualFile, text: CharSequence, target: KotlinUsageTarget): List<dev.ide.lang.dom.TextRange> =
         features.usagesIn(file, text, target)
 
+    /** Highlight-usages-at-caret for [file]'s [text]; see [KotlinEditorFeatures.usageHighlightsAt]. */
+    fun usageHighlightsAt(
+        file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?,
+    ): List<dev.ide.lang.highlight.UsageHighlight>? = features.usageHighlightsAt(file, text, offset, readSource)
+
     /** Whether [file]'s last parse contains syntax errors; a preview must not interpret such a file. See
      *  [KotlinPreviewLowering.hasSyntaxErrors] for why. */
     fun hasSyntaxErrors(file: VirtualFile): Boolean =

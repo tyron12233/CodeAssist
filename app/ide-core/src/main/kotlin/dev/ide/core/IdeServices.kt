@@ -3546,6 +3546,10 @@ class IdeServices private constructor(
     fun findReferences(file: Path, text: String, offset: Int): List<Pair<Path, dev.ide.lang.dom.TextRange>> =
         refactor.findReferences(file, text, offset)
 
+    /** Highlight-usages-at-caret in [file]'s own buffer; null where only the editor's textual scan applies. */
+    fun usageHighlights(file: Path, text: String, offset: Int): List<dev.ide.lang.highlight.UsageHighlight>? =
+        refactor.usageHighlights(file, text, offset)
+
     // ---- file & package operations (delete / rename / move / copy), for files AND directories/packages ----
 
     /** Absolute-normalized form, matching how [openDocuments] is keyed. */

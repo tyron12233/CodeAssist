@@ -137,6 +137,13 @@ interface EditorService {
     /** Type-aware semantic-highlight tokens. May throw [AnalysisPreempted]. */
     suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> = emptyList()
 
+    /**
+     * The names in [path]'s buffer that refer to the symbol under [offset], resolved (so a same-named symbol
+     * elsewhere in the file is left out), for the highlight-usages-at-caret tint. Null when the backend has no
+     * resolved answer here, and the editor falls back to its textual whole-word scan.
+     */
+    suspend fun usageHighlights(path: String, text: String, offset: Int): List<UiUsageHighlight>? = null
+
     /** Foldable regions for the live buffer. May throw [AnalysisPreempted]. */
     suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> = emptyList()
 

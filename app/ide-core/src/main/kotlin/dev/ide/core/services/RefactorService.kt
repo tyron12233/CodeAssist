@@ -134,6 +134,24 @@ internal class RefactorService(
         return refs.filterNot { (p, r) -> p == decl.first && r.start == decl.second }
     }
 
+    /**
+     * Highlight-usages-at-caret: the names in [file]'s own buffer that refer to the symbol under [offset], read,
+     * written or declared. Null when this file's language has no resolved answer (the JDT backend, XML, …) or
+     * the caret is on nothing that resolves; the editor then falls back to its textual whole-word scan.
+     */
+    fun usageHighlights(file: Path, text: String, offset: Int): List<dev.ide.lang.highlight.UsageHighlight>? {
+        if (ctx.analysisDisabled(file)) return null
+        if (isKotlin(file)) return kotlin.usageHighlights(file, text, offset)
+        if (!file.toString().endsWith(".java")) return null
+        val module = ctx.moduleForFile(file) ?: return null
+        val java = ctx.analyzerFor(module, LanguageId("java")) as? JavaSourceAnalyzer ?: return null
+        return try {
+            java.usageHighlightsAt(ctx.store.vfs.fileFor(file), text, offset)
+        } catch (e: LinkageError) {
+            ctx.markAnalysisUnavailable(ctx.languageFor(file)); null
+        }
+    }
+
     /** Where the identifier covering [offset] (or ending there) starts, or null at none. */
     private fun identifierStart(text: String, offset: Int): Int? {
         var i = offset.coerceIn(0, text.length)

@@ -228,6 +228,10 @@ class JavaSourceAnalyzer private constructor(
     ): List<dev.ide.lang.dom.TextRange> =
         IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target) }
 
+    /** Highlight-usages-at-caret over [file]'s live [text]; see [dev.ide.lang.java.rename.JavaRename.usageHighlightsAt]. */
+    fun usageHighlightsAt(file: VirtualFile, text: CharSequence, offset: Int): List<dev.ide.lang.highlight.UsageHighlight>? =
+        IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.usageHighlightsAt(psiOf(file, text), offset) }
+
     private val navigation by lazy {
         JavaNavigation(env.facade) { fqn -> subtypeIndexQuery(fqn).map { it.fqn } }
     }

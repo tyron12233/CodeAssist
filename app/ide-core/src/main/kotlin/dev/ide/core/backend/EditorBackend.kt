@@ -22,6 +22,7 @@ import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiResourceSwatch
+import dev.ide.ui.backend.UiUsageHighlight
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
@@ -165,6 +166,18 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     } catch (_: EngineCanceledException) {
         emptyList()
     } // re-runs on the next caret move
+
+    // Per caret move, so the background lane: it must never preempt analysis. Preempted or failed, it answers
+    // null and the editor keeps its textual highlight; the next caret move asks again.
+    override suspend fun usageHighlights(path: String, text: String, offset: Int): List<UiUsageHighlight>? = try {
+        ctx.background(op = op("usageHighlights", path)) {
+            ctx.services.usageHighlights(Paths.get(path), text, offset)
+        }?.map {
+            UiUsageHighlight(it.range.start, it.range.end, write = it.access != dev.ide.lang.highlight.UsageAccess.READ)
+        }
+    } catch (_: EngineCanceledException) {
+        null
+    }
 
     override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
         // XML elements reuse the class/field kinds for container/leaf; the outline badges them as elements.

@@ -1878,6 +1878,10 @@ data class UiSemanticToken(
     val modifiers: Set<UiHighlightModifier> = emptySet(),
 )
 
+/** One name that refers to the symbol under the caret: `[startOffset, endOffset)`, and whether it is assigned
+ *  there ([write]: an assignment target, `++`/`--`, or the symbol's declaration), which is tinted apart. */
+data class UiUsageHighlight(val startOffset: Int, val endOffset: Int, val write: Boolean)
+
 /** Orthogonal facts a [UiSemanticToken] can carry — the editor layers these over the base kind color. */
 enum class UiHighlightModifier {
     Declaration, Static, Abstract, Deprecated, Readonly, Mutable, Extension, Composable, Suspend,

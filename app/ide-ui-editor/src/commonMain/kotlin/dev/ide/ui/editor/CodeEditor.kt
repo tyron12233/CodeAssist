@@ -93,6 +93,7 @@ import dev.ide.ui.theme.Season
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -805,6 +806,7 @@ private fun CodeEditorContent(
             findMatch = editorColors.findMatch(colors.warning.copy(alpha = 0.28f)),
             findCurrent = editorColors.findCurrent(colors.accent.copy(alpha = 0.5f)),
             occurrence = editorColors.occurrence(colors.textSecondary.copy(alpha = 0.18f)),
+            occurrenceWrite = editorColors.occurrenceWrite(colors.syntax.keyword.copy(alpha = if (colors.isDark) 0.34f else 0.22f)),
             templateField = editorColors.templateField(colors.accent.copy(alpha = 0.16f)),
         )
     }
@@ -812,7 +814,7 @@ private fun CodeEditorContent(
         matchingBracket(doc.chars, editorSession.selection.start)
     }
 
-    // ---- highlight occurrences of the identifier under the caret (textual, whole-word) ----
+    // ---- highlight usages of the identifier under the caret (resolved where the language can, else textual) ----
     // Suppressed while the find bar is open (find owns matches).
     val occurrenceWord = run {
         val sel = editorSession.selection
@@ -822,11 +824,11 @@ private fun CodeEditorContent(
                 val w = doc.substring(r.first, r.last + 1)
                 // Identifiers only; and when there IS a selection it must be exactly the word.
                 val isIdent = w.isNotEmpty() && (w[0].isLetter() || w[0] == '_' || w[0] == '$')
-                if (isIdent && (sel.collapsed || (sel.min == r.first && sel.max == r.last + 1))) w else null
+                if (isIdent && (sel.collapsed || (sel.min == r.first && sel.max == r.last + 1))) CaretWord(w, r.first) else null
             }
         }
     }
-    val occurrences = rememberOccurrences(editorSession, doc, occurrenceWord, largeFile)
+    val occurrences = rememberOccurrences(editorSession, doc, occurrenceWord, largeFile, path, backend)
 
     // ---- keyboard handling ----
     fun handleKey(ev: KeyEvent): Boolean {
@@ -1446,7 +1448,7 @@ private fun EditorCanvasLayer(
     expandAnimToken: IntState,
     diagByLine: Map<Int, List<DiagSeg>>,
     bracketPair: Pair<Int, Int>?,
-    occurrences: List<Match>,
+    occurrences: OccurrenceTint,
     templateFields: () -> List<IntRange>,
     painters: EditorPainters,
     drawColors: EditorDrawColors,
@@ -1545,7 +1547,8 @@ private fun EditorCanvasLayer(
                     bracketPair = bracketPair,
                     findMatches = if (find.open) find.matches else emptyList(),
                     currentMatch = find.currentIndex,
-                    occurrences = occurrences,
+                    occurrences = occurrences.reads,
+                    occurrenceWrites = occurrences.writes,
                     templateFields = templateFields(),
                     decoByLine = renderState.decoByLine,
                     filePath = path,
@@ -2002,32 +2005,84 @@ private class CaretClip {
     var codeTop = 0f
 }
 
-private class OccurrenceResult(val doc: EditorDocument, val word: String, val matches: List<Match>)
+/** The identifier under the caret: its text and where it starts. */
+private data class CaretWord(val text: String, val start: Int)
+
+/** The usages tinted for the identifier under the caret: [reads], and [writes] (assignments, declarations) in
+ *  their own tint. Both sorted and non-overlapping. */
+internal class OccurrenceTint(val reads: List<Match>, val writes: List<Match>) {
+    companion object {
+        val EMPTY = OccurrenceTint(emptyList(), emptyList())
+    }
+}
+
+/**
+ * One settled answer. [resolved] marks a language backend's answer, which holds for any caret on one of its
+ * ranges (they are all the same symbol); a textual one holds for any caret on the same [word].
+ */
+private class OccurrenceResult(val doc: EditorDocument, val word: String, val resolved: Boolean, val tint: OccurrenceTint)
 
 /** How long the caret and the text must stay put before the identifier under the caret is highlighted. */
 private const val OCCURRENCE_SETTLE_MS = 300L
 
+/** The files whose backend can resolve the usages of a symbol in place; elsewhere only the textual scan runs. */
+private fun resolvesUsages(path: String): Boolean = path.endsWith(".kt") || path.endsWith(".kts") || path.endsWith(".java")
+
 /**
- * The textual occurrences of [word] (the identifier under the caret) in [doc], for the occurrence tint. The
- * whole-file scan runs once the caret and the text have settled for [OCCURRENCE_SETTLE_MS], off the
- * composition and off the main thread, so a keystroke inside an identifier never pays it. A result is shown
- * only for the exact document and word it was computed from, so while typing the old highlights drop at once
- * instead of drawing at stale offsets. Empty when there is no word, on a large file, or with fewer than two uses.
+ * The usages of the identifier under the caret ([word]) in [doc], for the occurrence tint, once the caret and
+ * the text have settled for [OCCURRENCE_SETTLE_MS], off the composition and off the main thread, so a keystroke
+ * inside an identifier never pays it.
+ *
+ * In a Kotlin or Java file the backend is asked first, and its answer is the resolved one: only the names that
+ * are this symbol (another function's local `x` stays unlit) with writes apart, as IntelliJ shows them. When it
+ * has nothing to say (an unresolved name, a backend without the query) the whole-word textual scan stands in.
+ * A result is shown only for the exact document it was computed from, so while typing the old highlights drop
+ * at once instead of drawing at stale offsets. Empty when there is no word, on a large file, or with fewer than
+ * two uses.
  */
 @Composable
-private fun rememberOccurrences(session: EditorSession, doc: EditorDocument, word: String?, largeFile: Boolean): List<Match> {
+private fun rememberOccurrences(
+    session: EditorSession, doc: EditorDocument, word: CaretWord?, largeFile: Boolean, path: String, backend: IdeBackend,
+): OccurrenceTint {
     var result by remember(session) { mutableStateOf<OccurrenceResult?>(null) }
     LaunchedEffect(doc, word, largeFile) {
         if (largeFile || word == null) return@LaunchedEffect // a whole-file scan is too costly on a large buffer
+        // A caret moving between two uses of the symbol already shown keeps that answer: nothing to ask.
+        result?.let { r -> if (r.doc === doc && r.resolved && r.covers(word.start)) return@LaunchedEffect }
         delay(OCCURRENCE_SETTLE_MS)
         val text = doc.awaitText() // shared with the analysis pass, which reads the same revision
-        val found = withContext(Dispatchers.Default) {
-            findMatches(text, word, FindOptions(caseSensitive = true, wholeWord = true))
-                .takeIf { it.size >= 2 } // only meaningful when it appears more than once
-                ?: emptyList()
+        val usages = if (!resolvesUsages(path)) null else try {
+            backend.editor.usageHighlights(path, text, word.start)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            null
         }
-        result = OccurrenceResult(doc, word, found)
+        // The backend's answer counts only when it is about the name under the caret.
+        val resolved = usages?.takeIf { u -> u.any { word.start >= it.startOffset && word.start < it.endOffset } }
+        result = if (resolved != null) {
+            val tint = if (resolved.size < 2) OccurrenceTint.EMPTY // a lone use: nothing to point out
+            else OccurrenceTint(
+                reads = resolved.filter { !it.write }.map { Match(it.startOffset, it.endOffset) },
+                writes = resolved.filter { it.write }.map { Match(it.startOffset, it.endOffset) },
+            )
+            OccurrenceResult(doc, word.text, resolved = true, tint)
+        } else {
+            val found = withContext(Dispatchers.Default) {
+                findMatches(text, word.text, FindOptions(caseSensitive = true, wholeWord = true))
+                    .takeIf { it.size >= 2 } // only meaningful when it appears more than once
+                    ?: emptyList()
+            }
+            OccurrenceResult(doc, word.text, resolved = false, OccurrenceTint(found, emptyList()))
+        }
     }
-    val r = result ?: return emptyList()
-    return if (!largeFile && r.doc === doc && r.word == word) r.matches else emptyList()
+    val r = result ?: return OccurrenceTint.EMPTY
+    if (largeFile || word == null || r.doc !== doc) return OccurrenceTint.EMPTY
+    val holds = if (r.resolved) r.covers(word.start) else r.word == word.text
+    return if (holds) r.tint else OccurrenceTint.EMPTY
 }
+
+/** Whether a resolved answer includes the name starting at [start] (so it is about the same symbol). An empty
+ *  answer (a lone use) holds only for the name it was asked about, which [word] no longer tells; drop it. */
+private fun OccurrenceResult.covers(start: Int): Boolean =
+    tint.reads.any { start >= it.start && start < it.end } || tint.writes.any { start >= it.start && start < it.end }

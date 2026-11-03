@@ -150,6 +150,7 @@ class ResolvedColorScheme(
     fun findMatch(fallback: Color): Color = fillOf(ColorKeys.EDITOR_FIND_MATCH, fallback)
     fun findCurrent(fallback: Color): Color = fillOf(ColorKeys.EDITOR_FIND_CURRENT, fallback)
     fun occurrence(fallback: Color): Color = fillOf(ColorKeys.EDITOR_OCCURRENCE, fallback)
+    fun occurrenceWrite(fallback: Color): Color = fillOf(ColorKeys.EDITOR_OCCURRENCE_WRITE, fallback)
     fun templateField(fallback: Color): Color = fillOf(ColorKeys.EDITOR_TEMPLATE_FIELD, fallback)
     fun composing(fallback: Color): Color = styleOf(ColorKeys.EDITOR_COMPOSING).foreground ?: fallback
     fun gutterText(fallback: Color): Color = styleOf(ColorKeys.GUTTER_TEXT).foreground ?: fallback

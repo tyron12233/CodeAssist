@@ -97,6 +97,13 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
         return out
     }
 
+    /** Highlight-usages-at-caret over [file]'s live buffer; null when not Kotlin or nothing resolves there. */
+    fun usageHighlights(file: Path, text: String, offset: Int): List<dev.ide.lang.highlight.UsageHighlight>? {
+        if (!isKotlin(file)) return null
+        val analyzer = kotlinAnalyzer(file) ?: return null
+        return analyzer.usageHighlightsAt(ctx.store.vfs.fileFor(file), text, offset, { p -> textOf(Paths.get(p)) })
+    }
+
     private fun anyKotlinAnalyzer(): KotlinSourceAnalyzer? =
         ctx.projectKotlinFiles().firstOrNull()?.let { kotlinAnalyzer(it.toAbsolutePath().normalize()) }
 

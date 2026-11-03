@@ -13,6 +13,7 @@ object ColorKeys {
     const val EDITOR_FIND_MATCH = "editor.findMatch"
     const val EDITOR_FIND_CURRENT = "editor.findCurrent"
     const val EDITOR_OCCURRENCE = "editor.occurrence"
+    const val EDITOR_OCCURRENCE_WRITE = "editor.occurrenceWrite"
     const val EDITOR_TEMPLATE_FIELD = "editor.templateField"
     const val EDITOR_COMPOSING = "editor.composing"
     const val EDITOR_INLAY_HINT = "editor.inlayHint"
@@ -294,6 +295,7 @@ object BuiltInColorAttributes {
         add(chrome(ColorKeys.EDITOR_FIND_MATCH, "Search result", ColorGroups.GENERAL, 50, bg = true))
         add(chrome(ColorKeys.EDITOR_FIND_CURRENT, "Current search result", ColorGroups.GENERAL, 60, bg = true))
         add(chrome(ColorKeys.EDITOR_OCCURRENCE, "Identifier under caret", ColorGroups.GENERAL, 70, bg = true))
+        add(chrome(ColorKeys.EDITOR_OCCURRENCE_WRITE, "Identifier under caret (write)", ColorGroups.GENERAL, 75, bg = true))
         add(chrome(ColorKeys.EDITOR_TEMPLATE_FIELD, "Template field", ColorGroups.GENERAL, 80, bg = true))
         add(chrome(ColorKeys.EDITOR_COMPOSING, "Composing text", ColorGroups.GENERAL, 90, fontStyled = true))
         add(
