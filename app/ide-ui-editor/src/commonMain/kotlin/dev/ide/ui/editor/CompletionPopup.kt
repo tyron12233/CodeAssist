@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -96,28 +97,32 @@ fun CompletionList(
     if (docsBeside) {
         // Wide: the list with a doc panel to its right (IntelliJ-style).
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-            CompletionListPanel(items, selectedIndex, prefix, width, maxListHeight, listState, onPick, onHover, onInfo = null)
+            CompletionListPanel(items, selectedIndex, prefix, width, maxListHeight, listState, onPick, onHover, infoFor = null)
             if (doc != null) DocPanel(selected, doc, maxListHeight, Modifier.width(320.dp))
         }
     } else {
-        // Narrow: a side panel would squish, so flip the SAME popup between the list and full-width docs. The
-        // selected row carries an ⓘ; tapping it shows the docs (a ‹ Back returns), and a new selection resets
-        // to the list.
-        var showingDocs by remember { mutableStateOf(false) }
-        LaunchedEffect(selectedIndex) { showingDocs = false }
-        if (showingDocs && doc != null) {
-            DocPanel(selected, doc, maxListHeight, Modifier.width(width), onBack = { showingDocs = false })
+        // Narrow: a side panel would squish, so flip the SAME popup between the list and full-width docs. Every
+        // row with docs carries an ⓘ, so any suggestion's docs are one tap away without picking it first; the tap
+        // also selects the row, so ‹ Back returns to the list on it. Typing (a new list) returns to the list.
+        var docsFor by remember { mutableStateOf<UiCompletionItem?>(null) }
+        LaunchedEffect(items) { docsFor = null }
+        val shown = docsFor
+        val shownDoc = shown?.documentation?.takeIf { it.isNotBlank() }
+        if (shown != null && shownDoc != null) {
+            DocPanel(shown, shownDoc, maxListHeight, Modifier.width(width), onBack = { docsFor = null })
         } else {
             CompletionListPanel(
                 items, selectedIndex, prefix, width, maxListHeight, listState, onPick, onHover,
-                onInfo = if (doc != null) ({ showingDocs = true }) else null,
+                infoFor = { index, item ->
+                    if (item.documentation.isNullOrBlank()) null else ({ onHover(index); docsFor = item })
+                },
             )
         }
     }
 }
 
-/** The list box (glass): rows in a [LazyColumn], or a placeholder when empty. When [onInfo] is non-null the
- *  SELECTED row shows an ⓘ that calls it (used on narrow screens to flip to the docs view). */
+/** The list box (glass): rows in a [LazyColumn], or a placeholder when empty. [infoFor] gives a row's ⓘ action
+ *  (null for a row without docs); a null [infoFor] shows no ⓘ at all (wide screens, where docs sit beside). */
 @Composable
 private fun CompletionListPanel(
     items: List<UiCompletionItem>,
@@ -128,7 +133,7 @@ private fun CompletionListPanel(
     listState: LazyListState,
     onPick: (UiCompletionItem) -> Unit,
     onHover: (Int) -> Unit,
-    onInfo: (() -> Unit)?,
+    infoFor: ((index: Int, item: UiCompletionItem) -> (() -> Unit)?)?,
 ) {
     val shape = RoundedCornerShape(Ca.radius.md)
     Column(
@@ -155,13 +160,16 @@ private fun CompletionListPanel(
             val labelStyle = remember(codeType) { codeType.copy(fontSize = 12.sp, lineHeight = 15.sp) }
             val detailStyle = remember(codeSmallType) { codeSmallType.copy(fontSize = 11.sp, lineHeight = 13.sp) }
             val keys = remember(items) { completionRowKeys(items) }
+            // When any row has an ⓘ, every row keeps its slot, so the types stay in one right-aligned column.
+            val infoSlot = infoFor != null && remember(items) { items.any { !it.documentation.isNullOrBlank() } }
             LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
                 itemsIndexed(items, key = { index, _ -> keys[index] }) { index, item ->
                     val sel = index == selectedIndex
                     CompletionRow(
                         item, prefix, sel, labelStyle, detailStyle,
                         onPick = { onPick(item) }, onHover = { onHover(index) },
-                        onInfo = if (sel) onInfo else null,
+                        onInfo = infoFor?.invoke(index, item),
+                        infoSlot = infoSlot,
                     )
                 }
             }
@@ -233,8 +241,10 @@ private fun CompletionRow(
     detailStyle: TextStyle,
     onPick: () -> Unit,
     onHover: () -> Unit,
-    // Non-null on the selected row when docs are reachable via flip (narrow screens): shows a tappable ⓘ.
+    // Non-null when this row's docs are reachable via flip (narrow screens): shows a tappable ⓘ.
     onInfo: (() -> Unit)? = null,
+    /** Keep the ⓘ's width even without one, so this row's type lines up with the rows that have it. */
+    infoSlot: Boolean = false,
 ) {
     Row(
         Modifier
@@ -292,8 +302,18 @@ private fun CompletionRow(
         // Docs affordance (narrow screens): its own click consumes the tap, so it opens the docs instead of
         // accepting the item.
         if (onInfo != null) {
-            Spacer(Modifier.width(4.dp))
-            Icon(CaIcons.info, stringResource(Res.string.completion_show_documentation), Modifier.size(18.dp).clickable(onClick = onInfo), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            // A 36dp target around the 18dp glyph: a finger, not a pointer, has to hit it beside a tappable row.
+            Box(
+                Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onInfo),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    CaIcons.info, stringResource(Res.string.completion_show_documentation), Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (selected) 1f else 0.7f),
+                )
+            }
+        } else if (infoSlot) {
+            Spacer(Modifier.width(36.dp))
         }
     }
 }

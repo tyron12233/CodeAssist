@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -41,12 +43,37 @@ class CompletionDocsSnapshot {
                 CompletionList(items, selectedIndex = 0, prefix = "app", width = 440.dp, onPick = {}, onHover = {}, docsBeside = true)
             }
         }
-        // Narrow: just the list at phone width; the selected row shows the ⓘ (tap → docs, can't snapshot the tap).
+        // Narrow: just the list at phone width; every row with docs shows an ⓘ (tap → its docs).
         snapshot("completion-narrow.png", 720, 420) {
             Box(Modifier.fillMaxSize().background(Ide.colors.editorBg).padding(8.dp)) {
                 CompletionList(items, selectedIndex = 0, prefix = "app", width = 300.dp, onPick = {}, onHover = {}, docsBeside = false)
             }
         }
+    }
+
+    /** Narrow: tapping the ⓘ on a row that is NOT selected opens that row's docs, and selects it. */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun anUnselectedRowsInfoOpensItsOwnDocs() {
+        var selected by androidx.compose.runtime.mutableIntStateOf(0)
+        val scene = ImageComposeScene(width = 720, height = 420, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(Ide.colors.editorBg).padding(8.dp)) {
+                    CompletionList(items, selectedIndex = selected, prefix = "app", width = 300.dp, onPick = {}, onHover = { selected = it }, docsBeside = false)
+                }
+            }
+        }
+        try {
+            scene.render()
+            // The second row's ⓘ: 36dp target at the row's right end (popup 300dp wide from x=8dp, rows ~44dp tall).
+            val info = androidx.compose.ui.geometry.Offset((8 + 300 - 12 - 18) * 2f, (8 + 44 + 22) * 2f)
+            scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press, info)
+            scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Release, info)
+            scene.render(16_000_000L)
+            val img = scene.render(32_000_000L)
+            File("$OUT_DIR/completion-narrow-docs.png").apply { parentFile?.mkdirs() }.writeBytes(img.encodeToData(EncodedImageFormat.PNG)!!.bytes)
+            kotlin.test.assertEquals(1, selected, "the tap selected `apply`, whose docs now show")
+        } finally { scene.close() }
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
