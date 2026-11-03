@@ -84,6 +84,14 @@ internal class LearnBackend(
      *  concurrent resolutions of the same coordinates before the first sets [depsEnsured]. */
     private val composeDepsMutex = kotlinx.coroutines.sync.Mutex()
 
+    /**
+     * Serializes lesson Compose lowering. Every lesson preview goes through ONE scratch file: finding the
+     * `@Preview` and lowering it are two calls that each pass the snippet as that file's overlay, so two
+     * previews on one screen lowering at once interleaved, and one of them lowered the other's code
+     * ("lowered with no diagnostics" and a blank card, alternating between the two on each visit).
+     */
+    private val composeLowerMutex = kotlinx.coroutines.sync.Mutex()
+
     override fun learnAvailable(): Boolean = tracks.isNotEmpty()
 
     override suspend fun catalog(): UiLearnCatalog {
@@ -564,12 +572,14 @@ internal class LearnBackend(
                 val services = scratchFor("kotlin-compose") ?: return@runCatching null
                 val path = mainPathOf(services, "kotlin-compose")
                 ensureMain(services, "kotlin-compose")
-                val preview = services.composePreviews(path, code).firstOrNull() ?: return@runCatching null
+                composeLowerMutex.withLock {
+                val preview = services.composePreviews(path, code).firstOrNull() ?: return@withLock null
                 // The lesson host renders with tolerateGaps = false, so a program whose reachable helper (e.g.
                 // `Counter`) didn't resolve compose yet would throw "has unsupported nodes" mid-render. The
                 // lowering gate refuses that for every caller, which keeps the host in its retry loop until the
                 // scratch's compose attaches.
                 services.lowerComposePreview(path, code, preview.functionName, preview.arity)
+                }
             }.getOrElse { log.warn("lowerCompose failed", it); null }
         }
     }
@@ -600,10 +610,12 @@ internal class LearnBackend(
                     ?: return@runCatching listOf("The Compose workspace isn't ready yet.")
                 val path = mainPathOf(services, "kotlin-compose")
                 ensureMain(services, "kotlin-compose")
-                val preview = services.composePreviews(path, code).firstOrNull()
-                    ?: return@runCatching listOf("No @Preview @Composable found in this snippet.")
-                services.composePreviewDiagnostics(path, code, preview.functionName, preview.arity)
-                    .ifEmpty { listOf("The preview lowered with no diagnostics; if it doesn't render the gap is in the render path.") }
+                composeLowerMutex.withLock {
+                    val preview = services.composePreviews(path, code).firstOrNull()
+                        ?: return@withLock listOf("No @Preview @Composable found in this snippet.")
+                    services.composePreviewDiagnostics(path, code, preview.functionName, preview.arity)
+                        .ifEmpty { listOf("The preview lowered with no diagnostics; if it doesn't render the gap is in the render path.") }
+                }
             }.getOrElse { listOf("Couldn't analyze this Compose snippet: ${reason(it)}") }
         }
     }
