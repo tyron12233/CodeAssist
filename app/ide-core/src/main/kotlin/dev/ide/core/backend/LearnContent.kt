@@ -19,21 +19,30 @@ internal object LearnContent {
      * outrank the copy it downloaded before, and a published catalog must outrank the release. Format:
      * `yyyyMMddNN`.
      */
-    const val VERSION: Long = 2026110402L
+    const val VERSION: Long = 2026110403L
 
     val tracks: List<LearnTrackDef> = listOf(
         caEditor(), caProjects(), caBuild(), caTools(),
-        kotlinBasics(), kotlinNextSteps(), kotlinOo(), kotlinCoroutines(), kotlinPractice(),
+        kotlinBasics(), kotlinNextSteps(), kotlinOo(), kotlinCoroutines(),
+        kotlinPractice().withLessons(kotlinPracticeExtra()),
         composeIntro(), composeAdvanced(),
-        javaBasics(), javaBeyond(), javaMore(),
-        androidBasics(),
+        javaBasics(), javaBeyond(), javaMore(), javaPractice(),
+        androidBasics(), androidArchitecture(),
         gettingStarted(),
-    )
+    ).map { it.withLessons(trackMilestones(it.id)) }
 
     val paths: List<LearnPathDef> = learnPaths()
 
     val catalog: LearnCatalogDef get() = LearnCatalogDef(VERSION, tracks, paths)
 }
+
+/** [this] track with [extra] lessons appended (practice problems, checkpoints, capstones kept in other files). */
+private fun LearnTrackDef.withLessons(extra: List<LearnLessonDef>) =
+    if (extra.isEmpty()) this
+    // A track ends on its milestones: lessons first, then the checkpoint, then the capstone (stable within each).
+    else copy(lessons = (lessons + extra).sortedBy { MILESTONE_ORDER.indexOf(it.kind).coerceAtLeast(0) })
+
+private val MILESTONE_ORDER = listOf("lesson", "checkpoint", "capstone")
 
 // ---- authoring model ----
 
@@ -179,35 +188,35 @@ internal data class ViewRule(
 
 // ---- tiny authoring DSL ----
 
-private fun text(md: String) = UiContentBlock.Text(md.trimIndent())
-private fun code(src: String, lang: String = "kotlin") = UiContentBlock.Code(src.trimIndent(), lang)
-private fun tip(t: String) = UiContentBlock.Callout("tip", t)
-private fun note(t: String) = UiContentBlock.Callout("note", t)
+internal fun text(md: String) = UiContentBlock.Text(md.trimIndent())
+internal fun code(src: String, lang: String = "kotlin") = UiContentBlock.Code(src.trimIndent(), lang)
+internal fun tip(t: String) = UiContentBlock.Callout("tip", t)
+internal fun note(t: String) = UiContentBlock.Callout("note", t)
 
 /** A live, owned-rendered layout preview embedded in a lesson (see [UiContentBlock.LayoutPreview]). [xml] is a
  *  self-contained layout fragment; [interactive] gives the learner an editable field that re-renders live. */
-private fun preview(xml: String, interactive: Boolean = false, caption: String = "") =
+internal fun preview(xml: String, interactive: Boolean = false, caption: String = "") =
     UiContentBlock.LayoutPreview(xml.trimIndent(), interactive, caption)
 
 /** A live, interpreter-rendered Jetpack Compose preview embedded in a lesson (see [UiContentBlock.ComposePreview]).
  *  [code] is a self-contained Kotlin snippet (its `androidx.compose.*` imports + a `@Preview @Composable` entry);
  *  [interactive] gives the learner an editable Kotlin field that re-renders live. */
-private fun composePreview(code: String, interactive: Boolean = false, caption: String = "") =
+internal fun composePreview(code: String, interactive: Boolean = false, caption: String = "") =
     UiContentBlock.ComposePreview(code.trimIndent(), interactive, caption)
 
-private val ACCENT_KOTLIN = 0xFF7F52FFL
-private val ACCENT_JAVA = 0xFFF89820L
-private val ACCENT_START = 0xFF3FBDD9L
-private val ACCENT_KOTLIN2 = 0xFF00A8A0L
-private val ACCENT_COROUTINES = 0xFFE0533DL
-private val ACCENT_JAVA2 = 0xFFB5651DL
-private val ACCENT_KOTLIN_OO = 0xFF6D8EFFL
-private val ACCENT_PRACTICE = 0xFFE0A020L
-private val ACCENT_JAVA3 = 0xFF5382A1L
-private val ACCENT_ANDROID = 0xFF3DDC84L
-private val ACCENT_COMPOSE = 0xFF10A5A8L
-private val ACCENT_COMPOSE2 = 0xFF4285F4L
-private val ACCENT_CODEASSIST = 0xFFC6EF4CL
+internal val ACCENT_KOTLIN = 0xFF7F52FFL
+internal val ACCENT_JAVA = 0xFFF89820L
+internal val ACCENT_START = 0xFF3FBDD9L
+internal val ACCENT_KOTLIN2 = 0xFF00A8A0L
+internal val ACCENT_COROUTINES = 0xFFE0533DL
+internal val ACCENT_JAVA2 = 0xFFB5651DL
+internal val ACCENT_KOTLIN_OO = 0xFF6D8EFFL
+internal val ACCENT_PRACTICE = 0xFFE0A020L
+internal val ACCENT_JAVA3 = 0xFF5382A1L
+internal val ACCENT_ANDROID = 0xFF3DDC84L
+internal val ACCENT_COMPOSE = 0xFF10A5A8L
+internal val ACCENT_COMPOSE2 = 0xFF4285F4L
+internal val ACCENT_CODEASSIST = 0xFFC6EF4CL
 
 /** Workspace paths the CodeAssist tours seed and check (relative to the practice project's root). */
 private const val TOUR_MAIN = "app/src/main/kotlin/Main.kt"
@@ -677,7 +686,7 @@ private fun learnPaths() = listOf(
         accentColor = ACCENT_ANDROID,
         trackIds = listOf(
             "getting-started", "kotlin-basics", "kotlin-next", "kotlin-oo",
-            "android-basics", "compose-intro", "compose-advanced",
+            "android-basics", "compose-intro", "compose-advanced", "android-architecture",
         ),
     ),
     LearnPathDef(
@@ -694,7 +703,7 @@ private fun learnPaths() = listOf(
         subtitle = "Classes, collections and generics in Java",
         iconId = "coffee",
         accentColor = ACCENT_JAVA,
-        trackIds = listOf("getting-started", "java-basics", "java-beyond", "java-more"),
+        trackIds = listOf("getting-started", "java-basics", "java-beyond", "java-more", "java-practice"),
     ),
 )
 
