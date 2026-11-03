@@ -74,7 +74,7 @@ class JdkManager(private val platformDir: Path, private val fetcher: SdkNetFetch
             val found = if (ext == "zip") extractSrcZipFromZip(archive, dest) else extractSrcZipFromTarGz(archive, dest)
             return if (found) null else "Downloaded JDK has no src.zip."
         } catch (e: Exception) {
-            return "JDK download failed: ${e.message}"
+            return "JDK download failed: ${dev.ide.android.support.tools.describeFailure(e)}"
         } finally {
             runCatching { Files.deleteIfExists(archive) }
         }

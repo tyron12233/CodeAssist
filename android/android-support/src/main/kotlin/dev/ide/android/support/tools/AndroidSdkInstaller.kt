@@ -186,7 +186,7 @@ object AndroidSdkInstaller {
             val result = try {
                 installSlim(pkg, url, sdkRoot, downloadsDir, fetcher, onProgress, onStage)
             } catch (e: Exception) {
-                "Install failed: ${e.message}"
+                "Install failed: ${describeFailure(e)}"
             }
             // FULL_DOWNLOAD: the server cannot serve ranges, so download the whole archive below.
             if (result != FULL_DOWNLOAD) return result
@@ -204,7 +204,7 @@ object AndroidSdkInstaller {
                     extractZip(archive, staging)
                 } catch (e: Exception) {
                     runCatching { Files.deleteIfExists(archive) } // corrupt/partial cache → drop so a retry re-downloads clean
-                    return "Downloaded archive was incomplete; retry to re-download. (${e.message})"
+                    return "Downloaded archive was incomplete; retry to re-download. (${describeFailure(e)})"
                 }
                 onStage("INSTALLING")
                 Files.createDirectories(installDir.parent)
@@ -218,7 +218,7 @@ object AndroidSdkInstaller {
             runCatching { Files.deleteIfExists(archive) } // installed → drop the cached archive
             return null
         } catch (e: Exception) {
-            return "Install failed: ${e.message}"
+            return "Install failed: ${describeFailure(e)}"
         }
     }
 
@@ -399,6 +399,22 @@ object AndroidSdkInstaller {
     }
 }
 
+/**
+ * A one-line account of [e] that keeps what identifies the cause: the exception type (an
+ * `UnknownHostException`'s message is only the host name) and the innermost cause's own text, so the SDK
+ * Manager can tell an offline device from a full disk or a server error.
+ */
+fun describeFailure(e: Throwable): String {
+    fun one(t: Throwable): String = t.message?.takeIf { it.isNotBlank() }?.let { "${t.javaClass.simpleName}: $it" }
+        ?: t.javaClass.simpleName
+    var root = e
+    while (root.cause != null && root.cause !== root) root = root.cause!!
+    return if (root === e) one(e) else "${one(e)} (caused by ${one(root)})"
+}
+
+/** An HTTP error status from the SDK repository: a 404 when a package is gone, a 5xx when the server fails. */
+class SdkHttpException(val code: Int, url: String) : IOException("HTTP $code from ${url.substringBefore('?')}")
+
 /** The network seam used by [AndroidSdkInstaller] (and JDK download), so the logic is testable offline. */
 interface SdkNetFetcher {
     fun fetchText(url: String): String?
@@ -433,7 +449,12 @@ object HttpSdkNetFetcher : SdkNetFetcher {
         }
     }
 
-    override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean = runCatching {
+    /**
+     * Download [url] into [dest], resuming a partial file. Returns true on success; a failure throws with its
+     * cause (no connection, an HTTP error status as [SdkHttpException], a full disk) instead of collapsing
+     * into `false`, so the caller can tell the user why.
+     */
+    override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean {
         // Resume a partial download: ask for the remaining bytes (HTTP Range) and append. If the server
         // ignores the range (200 OK) or the partial already covers the file (416), fall back cleanly.
         val existing = if (Files.isRegularFile(dest)) Files.size(dest) else 0L
@@ -442,7 +463,8 @@ object HttpSdkNetFetcher : SdkNetFetcher {
             if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
         val code = conn.responseCode
-        if (code == 416) return@runCatching true // requested range past EOF ⇒ already fully downloaded
+        if (code == 416) return true // requested range past EOF ⇒ already fully downloaded
+        if (code >= 400) { conn.disconnect(); throw SdkHttpException(code, url) }
         val resume = code == HttpURLConnection.HTTP_PARTIAL && existing > 0
         val total = if (resume) existing + conn.contentLengthLong else conn.contentLengthLong
         val opts = if (resume) arrayOf(StandardOpenOption.WRITE, StandardOpenOption.APPEND)
@@ -460,6 +482,6 @@ object HttpSdkNetFetcher : SdkNetFetcher {
                 }
             }
         }
-        true
-    }.getOrDefault(false)
+        return true
+    }
 }
