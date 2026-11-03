@@ -143,7 +143,9 @@ class ComposePreviewSessionService : Service() {
 
         override fun updateBytes(sessionId: Int, blob: ByteArray?) {
             val session = sessions[sessionId] ?: return
-            runCatching { session.update(session.decode(blob!!)) }
+            // Empty: the IDE parked this session for reuse by another preview; stop drawing until the next program.
+            if (blob == null || blob.isEmpty()) { session.clearProgram(); return }
+            runCatching { session.update(session.decode(blob)) }
                 .onFailure { log.warn("compose session $sessionId updateBytes failed", it) }
         }
 
@@ -406,6 +408,14 @@ class ComposePreviewSessionService : Service() {
                         }
                     }
                 }
+            }
+        }
+
+        /** Draw nothing (and stream nothing) until the next [update], which then times its first frame afresh. */
+        fun clearProgram() {
+            surface.postToMain {
+                hasProgram = false
+                programState.value = null
             }
         }
 
