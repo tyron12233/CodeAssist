@@ -627,15 +627,17 @@ internal fun PlayerButton(
         },
         tween(Motion.BASE), label = "btn-fg",
     )
-    val shape = RoundedCornerShape(Ca.radius.control)
+    // Compact is a pill: in a one-row header it sits beside icon buttons, and a squarer 36 dp block read as
+    // heavy and crowded the progress bar under it.
+    val shape = if (compact) RoundedCornerShape(50) else RoundedCornerShape(Ca.radius.control)
     Row(
         modifier
-            .height(if (compact) 36.dp else 44.dp)
+            .height(if (compact) 32.dp else 44.dp)
             .pressScale(interaction)
             .clip(shape)
             .background(bg)
             .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
-            .padding(horizontal = if (compact) 14.dp else 18.dp),
+            .padding(horizontal = if (compact) 12.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp),
     ) {

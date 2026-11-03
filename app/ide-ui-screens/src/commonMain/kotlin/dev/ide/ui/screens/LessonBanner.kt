@@ -407,7 +407,7 @@ private fun ExerciseHeader(
                 )
             }
         }
-        ProgressBar(progress, track = c.surfaceContainerHighest, fill = c.primary, modifier = Modifier.padding(start = 12.dp, end = 4.dp, bottom = 6.dp))
+        ProgressBar(progress, track = c.surfaceContainerHighest, fill = c.primary, modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 8.dp))
 
         Column(
             Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(scroll).padding(start = 12.dp, end = 4.dp),
