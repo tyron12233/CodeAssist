@@ -495,6 +495,12 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="change_revert">Revert</string>
     <string name="change_before">In the last commit</string>
     <string name="change_added">Added since the last commit</string>
+    <string name="history_title">Local history</string>
+    <string name="history_back">Back</string>
+    <string name="history_restore">Restore</string>
+    <string name="history_empty">Nothing saved yet. Each save of this file keeps a version here.</string>
+    <string name="history_same">Same as the file now</string>
+    <string name="edchrome_local_history">Local history</string>
     <string name="paste_history_clear">Clear</string>
     <string name="paste_history_empty">Text you copy or cut in the editor shows up here.</string>
     <string name="symbolbar_clipboard">Clipboard</string>

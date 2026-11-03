@@ -111,6 +111,12 @@ internal fun EditorCenter(
     frame: (@Composable (editorBody: @Composable () -> Unit) -> Unit)? = null,
 ) {
     val project = state.backend.project
+    // Local history for the active tab, opened from the top bar's ⋯ menu.
+    if (state.localHistoryOpen) {
+        val file = state.active
+        if (file == null) state.localHistoryOpen = false
+        else LocalHistorySheet(state, file, onDismiss = { state.localHistoryOpen = false })
+    }
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
     val pluginNavigator = LocalPluginNavigator.current
@@ -224,6 +230,7 @@ internal fun EditorCenter(
                 onFind = { if (active != null) findEpoch++ },
                 onReformat = { if (active != null) formatEpoch++ },
                 onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
+                onLocalHistory = if (active != null && !active.readOnly) ({ state.localHistoryOpen = true }) else null,
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
                 rightToolIconId = rightPrimary?.iconId,

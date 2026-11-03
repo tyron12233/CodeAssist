@@ -533,6 +533,12 @@
     <string name="change_revert">تراجع</string>
     <string name="change_before">في آخر إيداع</string>
     <string name="change_added">أُضيف منذ آخر إيداع</string>
+    <string name="history_title">السجل المحلي</string>
+    <string name="history_back">رجوع</string>
+    <string name="history_restore">استعادة</string>
+    <string name="history_empty">لم يُحفظ شيء بعد. كل حفظ لهذا الملف يحتفظ بنسخة هنا.</string>
+    <string name="history_same">مطابق للملف الآن</string>
+    <string name="edchrome_local_history">السجل المحلي</string>
     <string name="paste_history_clear">مسح</string>
     <string name="paste_history_empty">يظهر هنا النص الذي تنسخه أو تقصّه في المحرر.</string>
     <string name="symbolbar_clipboard">الحافظة</string>

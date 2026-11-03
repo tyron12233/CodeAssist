@@ -23,6 +23,7 @@ import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiResourceSwatch
 import dev.ide.ui.backend.UiUsageHighlight
+import dev.ide.ui.backend.UiHistoryVersion
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
@@ -328,6 +329,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
      * must NOT happen is the throw escaping a UI coroutine and taking the process down, which is how this
      * surfaced in the field — one install, an unwritable project, and a crash on every save attempt.
      */
+    override suspend fun localHistory(path: String): List<UiHistoryVersion> = withContext(Dispatchers.IO) {
+        runCatching { ctx.services.localHistory.snapshots(Paths.get(path)) }.getOrDefault(emptyList())
+            .map { UiHistoryVersion(it.id, it.id, it.sizeChars) }
+    }
+
+    override suspend fun localHistoryText(path: String, id: Long): String? = withContext(Dispatchers.IO) {
+        runCatching { ctx.services.localHistory.text(Paths.get(path), id) }.getOrNull()
+    }
+
     override fun saveFile(path: String, text: String) {
         try {
             ctx.services.save(Paths.get(path), text)

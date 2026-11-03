@@ -311,6 +311,12 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="change_revert">Kembalikan</string>
     <string name="change_before">Di commit terakhir</string>
     <string name="change_added">Ditambahkan sejak commit terakhir</string>
+    <string name="history_title">Riwayat lokal</string>
+    <string name="history_back">Kembali</string>
+    <string name="history_restore">Pulihkan</string>
+    <string name="history_empty">Belum ada yang disimpan. Setiap kali file ini disimpan, satu versi disimpan di sini.</string>
+    <string name="history_same">Sama dengan file saat ini</string>
+    <string name="edchrome_local_history">Riwayat lokal</string>
     <string name="paste_history_clear">Hapus</string>
     <string name="paste_history_empty">Teks yang Anda salin atau potong di editor muncul di sini.</string>
     <string name="symbolbar_clipboard">Papan klip</string>

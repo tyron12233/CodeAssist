@@ -271,6 +271,8 @@ object ProjectPackaging {
         if (rel == ".platform/.deps-reconciled" || rel == ".platform/.deps-unresolved") return true
         if (rel.startsWith(".platform/kotlin-stdlib-") && rel.endsWith(".jar")) return true
         if (rel.contains(".platform/caches/")) return true
+        // Every saved version of every file, deleted secrets included: never in a package, which may go public.
+        if (rel.contains(".platform/local-history/")) return true
         if (rel.split('/').any { it == ".gradle" }) return true
         // Output only outside a source tree: a package named `build` or `exports` is source.
         return ProjectFiles.isBuildOutput(rel, isDirectory = false, outputDirs = COPY_OUTPUT_DIRS, products = false)

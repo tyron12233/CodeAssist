@@ -291,7 +291,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         val name = dir.fileName?.toString() ?: return false
         if (name == ".gradle" || name == ".idea") return true
         // The platform caches can be large + transient; keep `.platform/workspace.json` etc. visible though.
-        return dir.parent?.fileName?.toString() == ".platform" && name == "caches"
+        return dir.parent?.fileName?.toString() == ".platform" && (name == "caches" || name == "local-history")
     }
 
     /** A surfaced content root. `SOURCE`/`GENERATED`/`AIDL` roots are package contexts (compactable,

@@ -1878,6 +1878,9 @@ data class UiSemanticToken(
     val modifiers: Set<UiHighlightModifier> = emptySet(),
 )
 
+/** One saved version of a file in local history: [id] is its time (epoch millis). */
+data class UiHistoryVersion(val id: Long, val timeMs: Long, val sizeChars: Long)
+
 /** One name that refers to the symbol under the caret: `[startOffset, endOffset)`, and whether it is assigned
  *  there ([write]: an assignment target, `++`/`--`, or the symbol's declaration), which is tinted apart. */
 data class UiUsageHighlight(val startOffset: Int, val endOffset: Int, val write: Boolean)

@@ -769,7 +769,7 @@ class ProjectManager private constructor(
         val name = file.fileName.toString()
         if (name == "android.jar" || name == "debug.keystore") return true
         val rel = root.relativize(file).toString().replace(File.separatorChar, '/')
-        if (rel.contains(".platform/caches/")) return true
+        if (rel.contains(".platform/caches/") || rel.contains(".platform/local-history/")) return true
         if (rel.split('/').any { it == ".gradle" || it == TRASH_DIR }) return true
         // `build/` and `exports/` are output only outside a source tree; a package named `build` is source.
         return ProjectFiles.isBuildOutput(rel, isDirectory = false, outputDirs = COPY_OUTPUT_DIRS, products = false)
@@ -980,7 +980,7 @@ class ProjectManager private constructor(
         Files.walk(src).use { stream ->
             stream.forEach { path ->
                 val rel = src.relativize(path).toString().replace(File.separatorChar, '/')
-                if (rel.contains(".platform/caches/") ||
+                if (rel.contains(".platform/caches/") || rel.contains(".platform/local-history/") ||
                     rel.split('/').any { it == ".gradle" } ||
                     ProjectFiles.isBuildOutput(rel, isDirectory = Files.isDirectory(path), outputDirs = setOf("build"), products = false)
                 ) return@forEach

@@ -1376,6 +1376,9 @@ class IdeServices private constructor(
      */
     private val diskBaselines = ConcurrentHashMap<Path, String>()
 
+    /** Saved versions of the project's files, kept beside it (see [LocalHistory]). */
+    val localHistory: LocalHistory by lazy { LocalHistory(store.rootPath.resolve(".platform/local-history"), store.rootPath) }
+
     /** [text] is both the overlay for [norm] and what its file holds. */
     private fun putInStep(norm: Path, text: String) {
         openDocuments[norm] = text
@@ -1498,7 +1501,9 @@ class IdeServices private constructor(
         overlayChanged(path)
         path.parent?.let { Files.createDirectories(it) }
         path.writeText(text)
-        diskBaselines[path] = text
+        // What the save replaced, as last read or written, kept with the new text in local history.
+        val before = diskBaselines.put(path, text)
+        runCatching { localHistory.recordSave(path, before, text) }
         events.fileChanged(path, text)
     }
 

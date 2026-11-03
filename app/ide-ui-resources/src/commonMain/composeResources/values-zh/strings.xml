@@ -486,6 +486,12 @@
     <string name="change_revert">还原</string>
     <string name="change_before">上次提交中的内容</string>
     <string name="change_added">自上次提交后新增</string>
+    <string name="history_title">本地历史</string>
+    <string name="history_back">返回</string>
+    <string name="history_restore">恢复</string>
+    <string name="history_empty">尚未保存过。每次保存此文件都会在这里保留一个版本。</string>
+    <string name="history_same">与当前文件相同</string>
+    <string name="edchrome_local_history">本地历史</string>
     <string name="paste_history_clear">清除</string>
     <string name="paste_history_empty">你在编辑器中复制或剪切的文本会显示在这里。</string>
     <string name="symbolbar_clipboard">剪贴板</string>

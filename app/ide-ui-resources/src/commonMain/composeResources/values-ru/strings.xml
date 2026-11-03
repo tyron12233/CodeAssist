@@ -287,6 +287,12 @@
     <string name="change_revert">Откатить</string>
     <string name="change_before">В последнем коммите</string>
     <string name="change_added">Добавлено после последнего коммита</string>
+    <string name="history_title">Локальная история</string>
+    <string name="history_back">Назад</string>
+    <string name="history_restore">Восстановить</string>
+    <string name="history_empty">Пока ничего не сохранено. Каждое сохранение файла оставляет здесь версию.</string>
+    <string name="history_same">Совпадает с текущим файлом</string>
+    <string name="edchrome_local_history">Локальная история</string>
     <string name="paste_history_clear">Очистить</string>
     <string name="paste_history_empty">Здесь появится текст, который вы копируете или вырезаете в редакторе.</string>
     <string name="symbolbar_clipboard">Буфер обмена</string>

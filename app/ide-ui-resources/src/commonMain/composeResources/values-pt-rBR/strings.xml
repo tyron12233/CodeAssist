@@ -318,6 +318,12 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="change_revert">Reverter</string>
     <string name="change_before">No último commit</string>
     <string name="change_added">Adicionado desde o último commit</string>
+    <string name="history_title">Histórico local</string>
+    <string name="history_back">Voltar</string>
+    <string name="history_restore">Restaurar</string>
+    <string name="history_empty">Nada salvo ainda. Cada vez que você salva este arquivo, uma versão fica aqui.</string>
+    <string name="history_same">Igual ao arquivo agora</string>
+    <string name="edchrome_local_history">Histórico local</string>
     <string name="paste_history_clear">Limpar</string>
     <string name="paste_history_empty">O texto que você copia ou recorta no editor aparece aqui.</string>
     <string name="symbolbar_clipboard">Área de transferência</string>

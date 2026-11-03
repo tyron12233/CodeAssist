@@ -847,6 +847,8 @@ class IdeUiState(
     /** Volume up / down move the caret while typing on a phone (see [dev.ide.ui.platform.VolumeKeyCaret]). */
     var volumeKeysMoveCaret by mutableStateOf(false)
     var inlineBlameEnabled by mutableStateOf(true)
+    /** The local-history sheet for the active file is showing. */
+    var localHistoryOpen by mutableStateOf(false)
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     var softKeyboardSuggestions by mutableStateOf(true)
 

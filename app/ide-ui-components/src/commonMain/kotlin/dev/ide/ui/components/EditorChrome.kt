@@ -126,6 +126,7 @@ import dev.ide.ui.generated.resources.edchrome_no_matching_tasks
 import dev.ide.ui.generated.resources.edchrome_no_variants
 import dev.ide.ui.generated.resources.edchrome_nothing_to_run
 import dev.ide.ui.generated.resources.edchrome_optimize_imports
+import dev.ide.ui.generated.resources.edchrome_local_history
 import dev.ide.ui.generated.resources.edchrome_reformat_code
 import dev.ide.ui.generated.resources.edchrome_resolving_dependencies
 import dev.ide.ui.generated.resources.edchrome_search_tasks
@@ -199,6 +200,8 @@ fun EditorTopBar(
     onFind: () -> Unit = {},
     onReformat: () -> Unit = {},
     onOptimizeImports: () -> Unit = {},
+    /** Opens the active file's local history; null leaves the item out. */
+    onLocalHistory: (() -> Unit)? = null,
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
     /** Compact (phone) top bar only: a single button opening the RIGHT tool-window drawer — the phone has no
@@ -302,6 +305,7 @@ fun EditorTopBar(
                     onFind = onFind,
                     onReformat = onReformat,
                     onOptimizeImports = onOptimizeImports,
+                    onLocalHistory = onLocalHistory,
                     inlayHintsOn = inlayHintsOn,
                     onToggleInlayHints = onToggleInlayHints,
                     consoleOpen = consoleOpen,
@@ -338,6 +342,7 @@ fun EditorTopBar(
                         onFind = onFind,
                         onReformat = onReformat,
                         onOptimizeImports = onOptimizeImports,
+                    onLocalHistory = onLocalHistory,
                         inlayHintsOn = inlayHintsOn,
                         onToggleInlayHints = onToggleInlayHints,
                         consoleOpen = consoleOpen,
@@ -459,6 +464,7 @@ private fun EditorOverflowMenu(
     onFind: () -> Unit,
     onReformat: () -> Unit,
     onOptimizeImports: () -> Unit,
+    onLocalHistory: (() -> Unit)?,
     inlayHintsOn: Boolean,
     onToggleInlayHints: () -> Unit,
     consoleOpen: Boolean,
@@ -491,6 +497,9 @@ private fun EditorOverflowMenu(
                 OverflowItem(CaIcons.search, stringResource(Res.string.edchrome_find_replace)) { open = false; onFind() }
                 OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
                 OverflowItem(CaIcons.layers, stringResource(Res.string.edchrome_optimize_imports)) { open = false; onOptimizeImports() }
+                if (onLocalHistory != null) {
+                    OverflowItem(CaIcons.clock, stringResource(Res.string.edchrome_local_history)) { open = false; onLocalHistory() }
+                }
             }
             if (!editOnly) OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
             // The AI assistant panel — a toggle, its on-state accented like the other tool windows.

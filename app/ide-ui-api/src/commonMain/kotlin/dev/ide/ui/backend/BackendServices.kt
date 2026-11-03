@@ -134,6 +134,12 @@ interface EditorService {
     /** Parameter-info / signature help for the call surrounding [offset], or null. */
     suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? = null
 
+    /** The saved versions of [path] kept in local history, newest first. */
+    suspend fun localHistory(path: String): List<UiHistoryVersion> = emptyList()
+
+    /** The text of [path]'s local-history version [id], or null when it is gone. */
+    suspend fun localHistoryText(path: String, id: Long): String? = null
+
     /** Type-aware semantic-highlight tokens. May throw [AnalysisPreempted]. */
     suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> = emptyList()
 
