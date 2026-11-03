@@ -1,6 +1,7 @@
 package dev.ide.ui.screens
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -115,6 +116,9 @@ fun HomeScreen(
     val select: (String) -> Unit = { id -> HomeTab.entries.firstOrNull { it.name == id }?.let(onSelectTab) }
     // Halloween dresses three of the tabs up; the labels, and so what a screen reader says, stay the same.
     val seasonal = if (LocalSeason.current == Season.Halloween) HalloweenTabs else emptyMap()
+    // Each tab's saved UI state (its scroll position above all), kept while another tab is shown, so going
+    // Explore -> Projects -> Explore returns to the same place in the feed instead of its top.
+    val tabStates = rememberSaveableStateHolder()
     val content: @Composable (Modifier) -> Unit = { modifier ->
         Crossfade(
             targetState = tab,
@@ -122,13 +126,15 @@ fun HomeScreen(
             label = "homeTab",
             modifier = modifier,
         ) { t ->
-            Box(Modifier.fillMaxSize()) {
-                when (t) {
-                    HomeTab.Projects -> projectsContent()
-                    HomeTab.Store -> storeContent()
-                    HomeTab.Ai -> ai?.content?.invoke()
-                    HomeTab.Learn -> learnContent()
-                    HomeTab.Challenges -> challengesContent()
+            tabStates.SaveableStateProvider(t.name) {
+                Box(Modifier.fillMaxSize()) {
+                    when (t) {
+                        HomeTab.Projects -> projectsContent()
+                        HomeTab.Store -> storeContent()
+                        HomeTab.Ai -> ai?.content?.invoke()
+                        HomeTab.Learn -> learnContent()
+                        HomeTab.Challenges -> challengesContent()
+                    }
                 }
             }
         }

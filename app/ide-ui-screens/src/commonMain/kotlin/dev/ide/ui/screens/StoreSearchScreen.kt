@@ -31,6 +31,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -86,10 +87,22 @@ fun StoreSearchScreen(
     /** The category to open filtered to, from a "browse by kind" tile. Null opens unfiltered. */
     initialCategory: String? = null,
 ) {
-    val state = rememberStoreSearchState(backend, initialCategory)
+    // The query and category outlive the screen (the Explore tab keeps an open search while a listing it opened
+    // is shown), and the results are rebuilt from them. So is "already focused": coming back to a search should
+    // not pop the keyboard up over the results the reader was going through.
+    var savedQuery by rememberSaveable { mutableStateOf("") }
+    var savedCategory by rememberSaveable { mutableStateOf(initialCategory) }
+    var focusedOnce by rememberSaveable { mutableStateOf(false) }
+    val state = rememberStoreSearchState(backend, savedCategory, savedQuery)
+    LaunchedEffect(state) {
+        snapshotFlow { state.query to state.category }.collect { (q, cat) -> savedQuery = q; savedCategory = cat }
+    }
     val c = MaterialTheme.colorScheme
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(Unit) {
+        if (!focusedOnce) runCatching { focus.requestFocus() }
+        focusedOnce = true
+    }
     // Ahead of the app's own handler, so Back leaves the search rather than the tab it was opened from.
     PlatformBackHandler(enabled = true, onBack = onClose)
 
@@ -240,8 +253,9 @@ internal class StoreSearchState(
     private val backend: IdeBackend,
     private val scope: CoroutineScope,
     initialCategory: String?,
+    initialQuery: String = "",
 ) {
-    var query: String by mutableStateOf("")
+    var query: String by mutableStateOf(initialQuery)
         private set
     var category: String? by mutableStateOf(initialCategory)
         private set
@@ -314,8 +328,9 @@ internal class StoreSearchState(
 internal fun rememberStoreSearchState(
     backend: IdeBackend,
     initialCategory: String? = null,
+    initialQuery: String = "",
     scope: CoroutineScope = rememberCoroutineScope(),
-): StoreSearchState = remember(backend, scope) { StoreSearchState(backend, scope, initialCategory) }
+): StoreSearchState = remember(backend, scope) { StoreSearchState(backend, scope, initialCategory, initialQuery) }
 
 /** How close to the end of the list the next page is asked for, in rows. */
 private const val PREFETCH_ROWS = 6

@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,8 +99,8 @@ fun ProjectsStoreScreen(
     }
 
     val state = rememberProjectsStoreState(backend)
-    var searching by remember { mutableStateOf(false) }
-    var searchCategory by remember { mutableStateOf<String?>(null) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var searchCategory by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Box(Modifier.widthIn(max = 820.dp).fillMaxSize()) {

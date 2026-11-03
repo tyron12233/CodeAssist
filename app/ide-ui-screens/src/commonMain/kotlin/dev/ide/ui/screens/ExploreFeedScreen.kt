@@ -26,6 +26,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -427,7 +428,7 @@ private fun ChartsSection(
     /** Where a published app icon is fetched from. Null (the snapshot tests) keeps the glyph tiles. */
     backend: dev.ide.ui.backend.IdeBackend? = null,
 ) {
-    var selected by remember(section.id) { mutableStateOf(section.tabs.firstOrNull()?.key.orEmpty()) }
+    var selected by rememberSaveable(section.id) { mutableStateOf(section.tabs.firstOrNull()?.key.orEmpty()) }
     val tab = section.tabs.firstOrNull { it.key == selected } ?: section.tabs.firstOrNull() ?: return
     Column {
         Row(

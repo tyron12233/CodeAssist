@@ -11,6 +11,8 @@ import dev.ide.ui.generated.resources.notif_title
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.screens.HomeSidebarItem
 import androidx.compose.animation.Crossfade
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -117,6 +119,10 @@ internal fun AppNavGraph(
     // The destination the wide Settings pane last showed. Kept through Settings' own exit animation, when the
     // app has already moved on and the current screen is no longer one of its destinations.
     val lastHubPane = remember { arrayOf<HubTarget?>(null) }
+    // The home screen's saved UI state (each tab's scroll position, the Explore shelves, an open store search),
+    // kept while another screen is shown. Opening a listing from Explore replaces the home screen, and without
+    // this, coming back rebuilt every list at the top. Home only: no other screen needs to outlive itself.
+    val homeState = rememberSaveableStateHolder()
     BoxWithConstraints(modifier) {
         val twoPane = maxWidth >= HubTwoPaneBreakpoint
         SideEffect { app.hubTwoPane = twoPane }
@@ -131,6 +137,8 @@ internal fun AppNavGraph(
                         is HubTarget.Tool -> AppRoute(screenOf(target.tool), app, state, fileActions, codeFont, dark, scope)
                     }
                 }
+            } else if (s == Screen.Projects) {
+                homeState.SaveableStateProvider(HOME_STATE_KEY) { AppRoute(s, app, state, fileActions, codeFont, dark, scope) }
             } else {
                 AppRoute(s, app, state, fileActions, codeFont, dark, scope)
             }
@@ -239,6 +247,9 @@ private fun SettingsRoute(
         pageId = pageId,
     )
 }
+
+/** The [rememberSaveableStateHolder] key the home screen's state is kept under. */
+private const val HOME_STATE_KEY = "home"
 
 /** One route's screen, with its arguments and callbacks wired to [app]. */
 @Composable
@@ -863,8 +874,9 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
     // The search is a mode of this tab rather than a route of its own, so returning from it keeps the
     // feed's scroll position. Its entry used to re-select the tab it was already on, which is to say the
     // store had a search box that did nothing.
-    var searching by remember { mutableStateOf(false) }
-    var searchCategory by remember { mutableStateOf<String?>(null) }
+    // Saveable, so a search a listing was opened from is still open on the way back (see AppNavGraph's homeState).
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var searchCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var notifyLaunch by remember(app.backend) { mutableStateOf(app.backend.store.launchNotificationEnabled()) }
     var notifyMessage by remember { mutableStateOf<String?>(null) }
     val storeScope = rememberCoroutineScope()
