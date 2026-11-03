@@ -73,6 +73,7 @@ import dev.ide.ui.components.SubmissionStatusCard
 import dev.ide.ui.components.defaultPublishSteps
 import dev.ide.ui.components.emptyGhostNote
 import dev.ide.ui.components.Eyebrow
+import dev.ide.ui.components.EditorialCard
 import dev.ide.ui.components.FeaturedHeroCard
 import dev.ide.ui.components.GhostShelfCard
 import dev.ide.ui.components.LiveDot
@@ -83,6 +84,7 @@ import dev.ide.ui.components.StoreCountBadge
 import dev.ide.ui.components.TrendingTicker
 import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
+import dev.ide.ui.components.storeBlurb
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.joinMeta
 import org.jetbrains.compose.resources.pluralStringResource
@@ -391,24 +393,31 @@ private fun FeaturedRow(
     onOpenItem: (UiStoreItem) -> Unit,
 ) {
     val state = rememberLazyListState()
-    LazyRow(
-        state = state,
-        flingBehavior = rememberSnapFlingBehavior(state),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        itemsIndexedKeyed(items, key = { _, it -> it.id }) { i, item ->
-            FeaturedHeroCard(
-                title = item.title,
-                badge = item.kind.name,
-                subtitle = listOfNotNull(item.author, item.language).joinMeta().ifBlank { item.category },
-                pair = tonalPair(i),
-                motif = remember(item.id) { motifFor(item.id) },
-                rating = item.rating,
-                installs = item.installs,
-                preview = rememberItemPreview(backend, item),
-                onClick = { onOpenItem(item) },
-            )
+    // The one run on this page that keeps the tonal colours. Everywhere else the cards are neutral so
+    // the content carries the colour; the featured row IS the colour, and a neutral hero in front of a
+    // neutral page is the "same grey card twice" the store looked like before.
+    CompositionLocalProvider(LocalTonalCardFills provides true) {
+        LazyRow(
+            state = state,
+            flingBehavior = rememberSnapFlingBehavior(state),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            itemsIndexedKeyed(items, key = { _, it -> it.id }) { i, item ->
+                FeaturedHeroCard(
+                    title = item.title,
+                    subtitle = listOfNotNull(item.author, item.language).joinMeta().ifBlank { item.category },
+                    pair = tonalPair(i),
+                    motif = remember(item.id) { motifFor(item.id) },
+                    verified = item.verified,
+                    rating = item.rating,
+                    installs = item.installs,
+                    iconId = item.iconId,
+                    icon = rememberItemIconSlot(backend, item),
+                    shots = rememberItemShots(backend, item),
+                    onClick = { onOpenItem(item) },
+                )
+            }
         }
     }
 }
@@ -571,17 +580,22 @@ private fun LazyListScope.shelfSection(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                // Not the featured hero again: a poster shelf shows what a project LOOKS like, so its
+                // card is the screenshot, with the name set over it.
                 itemsIndexedKeyed(section.items, key = { _, it -> it.id }) { i, item ->
-                    FeaturedHeroCard(
+                    EditorialCard(
                         title = item.title,
-                        badge = item.kind.name,
-                        subtitle = listOfNotNull(item.author, item.language)
-                            .joinMeta().ifBlank { item.category },
+                        author = item.author.orEmpty(),
+                        blurb = remember(item.id, item.blurb, item.summary) {
+                            storeBlurb(item.blurb ?: item.description, item.title, fallback = item.summary)
+                        },
                         pair = tonalPair(i),
-                        motif = remember(item.id) { motifFor(item.id) },
+                        verified = item.verified,
                         rating = item.rating,
                         installs = item.installs,
-                        preview = rememberItemPreview(backend, item),
+                        iconId = item.iconId,
+                        icon = rememberItemIconSlot(backend, item),
+                        shot = rememberItemShots(backend, item, max = 1).firstOrNull(),
                         onClick = { onOpenItem(item) },
                     )
                 }

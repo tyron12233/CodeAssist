@@ -180,9 +180,10 @@ private fun StoreBrowse(
                             motif = remember(item.id) { motifFor(item.id) },
                             rating = item.rating,
                             installs = item.installs,
-                            preview = if (hasSamplePreview(item.previewKey)) {
-                                { m -> SamplePreview(item.previewKey!!, m) }
-                            } else null,
+                            iconId = item.iconId,
+                            shots = if (hasSamplePreview(item.previewKey)) {
+                                listOf { m -> SamplePreview(item.previewKey!!, m) }
+                            } else emptyList(),
                             onClick = { onOpenItem(item) },
                         )
                     }
