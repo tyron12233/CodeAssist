@@ -33,7 +33,17 @@ class StoreInstaller(
         val title: String,
         /** The catalog's version string, so a review can say which release it is about. */
         val version: String? = null,
-    )
+        /** The catalog's monotonic version code, recorded with an install so an update can be recognised. */
+        val versionCode: Int = 0,
+    ) {
+        companion object {
+            /** The payload a catalog row describes, or null when it has nothing to download. */
+            fun of(item: dev.ide.store.RemoteStoreItem): Payload? {
+                val path = item.storagePath ?: return null
+                return Payload(item.id, path, item.sha256, item.sizeBytes, item.title, item.version, item.versionCode)
+            }
+        }
+    }
 
     /**
      * Run the install, reporting each phase through [onProgress].
@@ -50,6 +60,8 @@ class StoreInstaller(
          * directory is deleted here, so a failed install leaves the workspace exactly as it was.
          */
         adopt: (String) -> String?,
+        /** Where to keep the verified archive once installed: the base a later update merges against. */
+        keepArchiveAt: String? = null,
         onProgress: (UiInstallProgress) -> Unit,
     ): UiStoreInstallResult {
         val id = payload.itemId
@@ -92,6 +104,10 @@ class StoreInstaller(
                     }
                     // The path travels with the terminal state: the UI's next tap on this row is "Open",
                     // and this is the only place that knows where the project went.
+                    keepArchiveAt?.let { keep ->
+                        StoreFs.mkdirsForFile(keep)
+                        StoreFs.readBytes(archive)?.let { StoreFs.writeBytes(keep, it) }
+                    }
                     report(UiInstallState.INSTALLED, 1f, rootPath = dir)
                     UiStoreInstallResult(true, "Added to your projects", dir)
                 }

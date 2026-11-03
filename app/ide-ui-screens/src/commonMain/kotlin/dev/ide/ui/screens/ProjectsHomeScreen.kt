@@ -176,6 +176,9 @@ import dev.ide.ui.generated.resources.home_delete_confirm_body
 import dev.ide.ui.generated.resources.home_delete_confirm_title
 import dev.ide.ui.generated.resources.home_more_actions
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.backend.UiStoreUpdate
+import dev.ide.ui.generated.resources.store_update_versions
+import dev.ide.ui.generated.resources.home_update_review
 
 /** Which list the Home screen's segment chips are showing. */
 enum class HomeSegment { Projects, Updates, Saved }
@@ -255,6 +258,10 @@ fun ProjectsHomeScreen(
      * flash on launch.
      */
     projectsLoaded: Boolean = true,
+    /** Store projects installed here that have a newer version: the Updates segment. */
+    updates: List<UiStoreUpdate> = emptyList(),
+    /** Opens an update's listing, where the update is applied (or offered as a copy). */
+    onOpenUpdate: (UiStoreUpdate) -> Unit = {},
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
     // Deleting wipes the project from disk and nothing else in this flow asks first.
@@ -360,8 +367,8 @@ fun ProjectsHomeScreen(
                 SegmentRow(
                     segment = segment,
                     projectCount = ordered.size,
-                    // Both are 0 until the store backend lands; see the KDoc above.
-                    updateCount = 0,
+                    // Saved is still 0 until favorites reach Home; see the KDoc above.
+                    updateCount = updates.size,
                     savedCount = 0,
                     onSelect = { segment = it },
                 )
@@ -375,7 +382,11 @@ fun ProjectsHomeScreen(
                 item("legacy") { LegacyRecoveryNotice(onDismissLegacyRecovery) }
             }
 
-            if (segment == HomeSegment.Projects && ordered.isNotEmpty()) {
+            if (segment == HomeSegment.Updates && updates.isNotEmpty()) {
+                itemsIndexedKeyed(updates, key = { _, u -> "update_${u.item.id}" }) { _, u ->
+                    UpdateRow(u, onOpen = { onOpenUpdate(u) })
+                }
+            } else if (segment == HomeSegment.Projects && ordered.isNotEmpty()) {
                 itemsIndexedKeyed(ordered, key = { _, p -> p.rootPath }) { i, project ->
                     LocalProjectCard(
                         project = project,
@@ -906,6 +917,54 @@ private fun EmptyList(inset: Dp = PhoneListInset, top: Dp = 24.dp) {
             color = c.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+    }
+}
+
+/**
+ * One installed store project with a newer version: its name, the versions, and the way to it. The update
+ * itself happens on the listing, which is where the user can see what changed and where a project they have
+ * edited is offered as a copy instead.
+ */
+@Composable
+private fun UpdateRow(update: UiStoreUpdate, onOpen: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = PhoneListInset).padding(top = 12.dp),
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(c.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.update, contentDescription = null, size = 22.dp, tint = c.onPrimaryContainer)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    update.item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    stringResource(
+                        Res.string.store_update_versions,
+                        update.installedVersion ?: "?",
+                        update.availableVersion ?: "?",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                )
+            }
+            Text(stringResource(Res.string.home_update_review), style = MaterialTheme.typography.labelLarge, color = c.primary)
+        }
     }
 }
 

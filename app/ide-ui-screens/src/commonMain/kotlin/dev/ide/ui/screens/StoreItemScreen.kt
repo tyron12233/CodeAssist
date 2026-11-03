@@ -150,6 +150,27 @@ import dev.ide.ui.generated.resources.review_hidden_done
 import dev.ide.ui.generated.resources.review_reported
 import dev.ide.ui.generated.resources.profile_likes
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.backend.UiStoreUpdate
+import dev.ide.ui.backend.UiLocalChanges
+import androidx.compose.material3.AlertDialog
+import dev.ide.ui.generated.resources.store_update_to
+import dev.ide.ui.generated.resources.store_update_versions
+import dev.ide.ui.generated.resources.store_update_conflict_title
+import dev.ide.ui.generated.resources.store_update_conflict_body
+import dev.ide.ui.generated.resources.store_update_conflict_more
+import dev.ide.ui.generated.resources.store_update_conflict_unknown
+import dev.ide.ui.generated.resources.store_update_conflict_keep
+import dev.ide.ui.generated.resources.store_update_as_copy
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.backend.UiStoreMergeResult
+import androidx.compose.material3.FilledTonalButton
+import dev.ide.ui.generated.resources.store_update_merge
+import dev.ide.ui.generated.resources.store_update_changed_files
+import dev.ide.ui.generated.resources.store_update_merge_note
+import dev.ide.ui.generated.resources.store_merge_done_title
+import dev.ide.ui.generated.resources.store_merge_conflicts_body
+import dev.ide.ui.generated.resources.store_merge_open
+import dev.ide.ui.generated.resources.close
 
 /**
  * The full-screen detail page for a store item, in the Material 3 Expressive language.
@@ -202,6 +223,17 @@ fun StoreItemScreen(
     var reviewsRefresh by remember(item.id) { mutableStateOf(0) }
     var myReview by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
     var lightbox by remember(item.id) { mutableStateOf(-1) }
+    // A newer version of this project, when it is installed here and the publisher has moved on. Re-asked
+    // after an update attempt (the epoch) and whenever it becomes installed.
+    var updateEpoch by remember(item.id) { mutableStateOf(0) }
+    val installed = install is InstallState.Installed
+    val update by produceState<UiStoreUpdate?>(null, item.id, installed, updateEpoch) {
+        value = if (installed) runCatching { backend.store.updateFor(item.id) }.getOrNull() else null
+    }
+    // The user's changes, when they stand in the way of updating in place: shows the choice.
+    var conflict by remember(item.id) { mutableStateOf<UiLocalChanges?>(null) }
+    // A merge that left files with both sides in them: listed so the user knows where to look.
+    var merged by remember(item.id) { mutableStateOf<UiStoreMergeResult?>(null) }
     val shots = rememberResolvedScreenshots(backend, item)
 
     val tabs = remember(item) { availableTabs(item) }
@@ -238,10 +270,26 @@ fun StoreItemScreen(
                     InstallRow(
                         item = item,
                         state = install,
+                        update = update,
+                        onOpen = (install as? InstallState.Installed)?.rootPath?.let { path ->
+                            onOpenInstalled?.let { open -> { open(path) } }
+                        },
                         onRate = onRate,
                         onPrimary = {
                             when {
                                 item.templateId != null -> onCreateFromTemplate(item.templateId!!)
+                                // An update: in place when nothing the user did would be lost, otherwise the
+                                // choice. The check is the project on disk now, not what the page last saw.
+                                update != null && install is InstallState.Installed -> scope.launch {
+                                    message = null
+                                    val changes = runCatching { backend.store.localChanges(item.id) }.getOrNull()
+                                    if (changes != null && changes.blocksInPlace) {
+                                        conflict = changes
+                                    } else {
+                                        message = backend.store.update(item.id, asCopy = false).message
+                                        updateEpoch++
+                                    }
+                                }
                                 // Already on the device: open it. This branch used to be a literal no-op,
                                 // so the button that said "Open in editor" did nothing at all.
                                 install is InstallState.Installed ->
@@ -256,7 +304,13 @@ fun StoreItemScreen(
                         },
                     )
                 }
-                item("hint") { InstallHint(item, message ?: progress?.message) }
+                item("hint") {
+                    val versions = update?.let {
+                        stringResource(Res.string.store_update_versions, it.installedVersion ?: "?", it.availableVersion ?: "?")
+                    }
+                    val shown = message ?: progress?.message ?: versions
+                    InstallHint(item, shown, versionSaid = shown != null && shown == versions)
+                }
 
                 if (tabs.size > 1) {
                     item("tabs") { TabRowPills(tabs, tab) { tab = it } }
@@ -295,6 +349,35 @@ fun StoreItemScreen(
                 lightbox,
                 onClose = { lightbox = -1 },
                 onIndex = { lightbox = it },
+            )
+        }
+        conflict?.let { changes ->
+            UpdateConflictDialog(
+                changes = changes,
+                onMerge = {
+                    conflict = null
+                    scope.launch {
+                        val result = backend.store.mergeUpdate(item.id)
+                        message = result.message
+                        if (result.success && result.conflicts.isNotEmpty()) merged = result
+                        updateEpoch++
+                    }
+                },
+                onCopy = {
+                    conflict = null
+                    scope.launch {
+                        message = backend.store.update(item.id, asCopy = true).message
+                        updateEpoch++
+                    }
+                },
+                onDismiss = { conflict = null },
+            )
+        }
+        merged?.let { result ->
+            MergeConflictsDialog(
+                result = result,
+                onOpen = result.rootPath?.let { path -> onOpenInstalled?.let { open -> { merged = null; open(path) } } },
+                onDismiss = { merged = null },
             )
         }
         if (reviewSheet) {
@@ -570,6 +653,124 @@ private fun HeroStat(
     SupportingOnContainer(label, pair.onContainer, Modifier.padding(top = 1.dp))
 }
 
+/**
+ * The user has changed the installed project, so replacing its files would throw their work away.
+ *
+ * Three ways on, safest-for-their-work first. **Update and keep my changes** merges the new version into
+ * their copy (offered when the installed version's files were kept, which is every install from this
+ * version on). **Install as a new copy** leaves their copy exactly as it is. **Cancel** does nothing. The
+ * changed files are named, up to a handful, so "you changed this project" is something they can check.
+ */
+@Composable
+private fun UpdateConflictDialog(
+    changes: UiLocalChanges,
+    onMerge: () -> Unit,
+    onCopy: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val touched = changes.modified + changes.deleted
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Symbol(CaSymbols.update, contentDescription = null, size = 24.dp) },
+        title = { Text(stringResource(Res.string.store_update_conflict_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!changes.known) {
+                    Text(stringResource(Res.string.store_update_conflict_unknown))
+                } else {
+                    Text(
+                        stringResource(
+                            if (changes.canMerge) Res.string.store_update_changed_files else Res.string.store_update_conflict_body,
+                        ),
+                    )
+                    ChangedFileList(touched)
+                }
+                Text(
+                    stringResource(if (changes.canMerge) Res.string.store_update_merge_note else Res.string.store_update_conflict_keep),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        },
+        // Stacked, not side by side: three labels this long do not fit one row on a phone.
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                if (changes.canMerge) {
+                    FilledTonalButton(onClick = onMerge) { Text(stringResource(Res.string.store_update_merge)) }
+                }
+                TextButton(onClick = onCopy) { Text(stringResource(Res.string.store_update_as_copy)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
+            }
+        },
+    )
+}
+
+/** After a merge: the files where both sides changed the same lines, which now hold both versions. */
+@Composable
+private fun MergeConflictsDialog(result: UiStoreMergeResult, onOpen: (() -> Unit)?, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Symbol(CaSymbols.update, contentDescription = null, size = 24.dp) },
+        title = { Text(stringResource(Res.string.store_merge_done_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.store_merge_conflicts_body))
+                ChangedFileList(result.conflicts)
+            }
+        },
+        confirmButton = {
+            if (onOpen != null) {
+                TextButton(onClick = onOpen) { Text(stringResource(Res.string.store_merge_open)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) }
+            }
+        },
+        dismissButton = if (onOpen != null) {
+            { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } }
+        } else {
+            null
+        },
+    )
+}
+
+/** Up to a handful of project paths, in the code face, cut from the middle so the file name stays visible. */
+@Composable
+private fun ChangedFileList(paths: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        paths.take(CONFLICT_LIST_MAX).forEach { path ->
+            Text(
+                compactPath(path),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = dev.ide.ui.theme.Ca.type.codeFamily),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        if (paths.size > CONFLICT_LIST_MAX) {
+            Text(
+                stringResource(Res.string.store_update_conflict_more, paths.size - CONFLICT_LIST_MAX),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+/**
+ * A project path short enough for one line of a dialog, keeping the end: `…/utils/Helper.kt` rather than
+ * `plugin/src/main/kotlin/com/…`. Done here rather than with a middle ellipsis, which not every platform's
+ * text layout honours: desktop cut the end anyway, hiding the file name, the one part that says what changed.
+ */
+internal fun compactPath(path: String, max: Int = 34): String {
+    if (path.length <= max) return path
+    val parts = path.split('/')
+    for (keep in (parts.size - 1) downTo 1) {
+        val tail = parts.takeLast(keep).joinToString("/")
+        if (tail.length + 2 <= max || keep == 1) return "…/$tail"
+    }
+    return path
+}
+
+/** How many changed files the conflict dialog names before "and N more". */
+private const val CONFLICT_LIST_MAX = 6
+
 /** The install state machine, as the design draws it: the button's shape changes with the state. */
 private sealed interface InstallState {
     data object Idle : InstallState
@@ -584,6 +785,10 @@ private fun InstallRow(
     state: InstallState,
     onRate: (() -> Unit)?,
     onPrimary: () -> Unit,
+    /** A newer version, when there is one: the primary action becomes the update. */
+    update: UiStoreUpdate? = null,
+    /** Opens the installed project. Shown beside the button only while the button is the update. */
+    onOpen: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     val busy = state is InstallState.Downloading
@@ -591,12 +796,15 @@ private fun InstallRow(
         item.templateId != null -> stringResource(Res.string.store_create)
         !item.available -> stringResource(Res.string.store_coming_soon)
         busy -> stringResource(Res.string.store_installing)
+        state is InstallState.Installed && update != null ->
+            stringResource(Res.string.store_update_to, update.availableVersion ?: "")
         state is InstallState.Installed -> stringResource(Res.string.store_open_in_editor)
         else -> stringResource(Res.string.store_install_project)
     }
     val glyph = when {
         item.templateId != null -> CaSymbols.add
         busy -> CaSymbols.progressActivity
+        state is InstallState.Installed && update != null -> CaSymbols.update
         state is InstallState.Installed -> CaSymbols.playArrow
         else -> CaSymbols.download
     }
@@ -628,6 +836,19 @@ private fun InstallRow(
                 SpinningSymbol(glyph, spinning = busy)
                 Spacer(Modifier.width(9.dp))
                 Text(label, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        if (update != null && onOpen != null && !busy) {
+            Surface(
+                onClick = onOpen,
+                shape = RoundedCornerShape(percent = 50),
+                color = c.secondaryContainer,
+                contentColor = c.onSecondaryContainer,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Symbol(CaSymbols.playArrow, contentDescription = stringResource(Res.string.store_open_in_editor), size = 22.dp)
+                }
             }
         }
         if (onRate != null) {
@@ -667,10 +888,11 @@ private fun SpinningSymbol(glyph: Char, spinning: Boolean) {
 
 /** The one-line requirements note under the CTA — the only centred prose on the screen. */
 @Composable
-private fun InstallHint(item: UiStoreItem, message: String?) {
+private fun InstallHint(item: UiStoreItem, message: String?, versionSaid: Boolean = false) {
     val parts = listOfNotNull(
         message,
-        item.version?.let { "v$it" },
+        // Left out when the message already names the versions, as an update's does.
+        item.version?.takeIf { !versionSaid }?.let { "v$it" },
         item.language,
         item.downloadBytes.takeIf { it > 0 }?.let { formatSize(it) },
     )

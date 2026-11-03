@@ -1273,6 +1273,34 @@ interface StoreService {
 
     suspend fun deleteMyReview(itemId: String): Boolean = false
 
+    /**
+     * The newer version of [itemId], if this device has it installed and the store has moved past it. Null
+     * when it is not installed, is current, or the store cannot be reached.
+     */
+    suspend fun updateFor(itemId: String): UiStoreUpdate? = null
+
+    /** Every installed store project the store has a newer version of: Home's Updates segment. */
+    suspend fun availableUpdates(): List<UiStoreUpdate> = emptyList()
+
+    /** What the user changed in [itemId]'s installed project; null when it is not installed. */
+    suspend fun localChanges(itemId: String): UiLocalChanges? = null
+
+    /**
+     * Update [itemId] to the store's current version. [asCopy] installs it as a separate project beside the
+     * existing one, which is left exactly as it is; otherwise the existing project is updated in place, which
+     * is refused when [localChanges] says it would overwrite the user's work.
+     */
+    suspend fun update(itemId: String, asCopy: Boolean): UiStoreInstallResult =
+        UiStoreInstallResult(false, "Updates are not available in this build")
+
+    /**
+     * Update [itemId] in place while keeping what the user changed: their edits and the new version are
+     * merged file by file. Possible when [UiLocalChanges.canMerge]; overlapping changes come back as
+     * [UiStoreMergeResult.conflicts].
+     */
+    suspend fun mergeUpdate(itemId: String): UiStoreMergeResult =
+        UiStoreMergeResult(false, "Updates are not available in this build")
+
     /** Whether the Translate buttons can do anything in this build. False hides them. */
     fun translationAvailable(): Boolean = false
 

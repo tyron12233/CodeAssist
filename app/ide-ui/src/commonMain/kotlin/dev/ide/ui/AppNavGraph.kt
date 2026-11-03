@@ -792,7 +792,14 @@ private fun ProjectPickerRoute(
     var notificationsVisible by remember { mutableStateOf(false) }
     val halloween = remember(app) { HalloweenDressUp(app) }
     val halloweenMode = halloween.mode()
+    // Store projects installed here that the store has a newer version of. Asked again when the project
+    // list changes (an install, a delete), and memoised by the backend, so showing Home is not a network trip.
+    val updates by produceState(emptyList<dev.ide.ui.backend.UiStoreUpdate>(), projects) {
+        value = runCatching { backend.store.availableUpdates() }.getOrDefault(emptyList())
+    }
     ProjectsHomeScreen(
+        updates = updates,
+        onOpenUpdate = { app.openStoreItem(it.item) },
         seasonalCard = halloweenMode?.let { mode ->
             { cardModifier ->
                 HalloweenCard(
