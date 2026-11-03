@@ -219,6 +219,64 @@ class IncrementalSemanticAnalysis(
     }
 
     /**
+     * The diagnostics of only the top-level declarations of [parsed] reachable by name from the ones called
+     * [entry] (a `@Preview` function): the entry, then every top-level declaration a reached one names, and so on.
+     * A preview can only run what it reaches, so a problem elsewhere in the file is not its concern, and checking
+     * the rest is what made the gate slow: on a cold open of the Compose starter, the `MainActivity` class's
+     * inheritance checks alone took ~1.2 s, for diagnostics the gate then discarded.
+     *
+     * Answered from the editor's per-file cache when it holds this exact text; otherwise the reached declarations
+     * are checked fresh and the cache is left alone (it describes the whole file, which this pass does not).
+     * Null when no top-level declaration is called [entry], so the caller can fall back to [diagnostics].
+     */
+    fun reachableDiagnostics(parsed: KotlinParsedFile, entry: String): List<Diagnostic>? {
+        val ktFile = parsed.ktFile
+        val topDecls = ktFile.declarations
+        val byName = HashMap<String, MutableList<Int>>()
+        for ((i, d) in topDecls.withIndex()) {
+            val name = (d as? dev.ide.kotlin.syntax.psi.KtNamedDeclaration)?.name ?: continue
+            byName.getOrPut(name) { ArrayList() } += i
+        }
+        val roots = byName[entry] ?: return null
+        val isReached = BooleanArray(topDecls.size)
+        val work = ArrayDeque(roots)
+        while (work.isNotEmpty()) {
+            val i = work.removeFirst()
+            if (isReached[i]) continue
+            isReached[i] = true
+            val names = HashSet<String>().also { checks.referencedNamesIn(topDecls[i], it) }
+            for (n in names) byName[n]?.let { work.addAll(it) }
+        }
+        val reached = topDecls.indices.filter { isReached[it] }
+        val externalStamp = service.externalContentStamp(parsed.file.path) * 31 + (permissionContext()?.stamp ?: 0L)
+        val cached = analyzeCache[parsed.file.path]
+            ?.takeIf { it.externalStamp == externalStamp && it.fileText == ktFile.text && it.decls.size == topDecls.size }
+        if (cached != null) {
+            return reached.flatMap { i ->
+                val base = topDecls[i].textRange.startOffset
+                cached.decls[i].rel.map { it.copy(range = TextRange(it.range.start + base, it.range.end + base)) }
+            }
+        }
+        checks.resetPassCaches()
+        val caches = cachesFor?.invoke(parsed)
+        val resolver = if (caches != null) KotlinResolver(ktFile, parsed, service, caches) else KotlinResolver(ktFile, parsed, service)
+        val session = KotlinAnalysisSession(resolver, service, typeAliasNamesIn(ktFile), resolveReady())
+        val out = ArrayList<Diagnostic>()
+        KotlinPerf.span("walk") {
+            for (i in reached) {
+                val d = topDecls[i]
+                val fn = d as? KtNamedFunction
+                out += when {
+                    fn != null && fn.bodyBlockExpression != null -> analyzeFunctionBody(fn, null, session).first
+                    d is KtClassOrObject && d.declarations.isNotEmpty() -> analyzeClassBody(d, null, session).first
+                    else -> DiagnosticReporter().also { driver.run(d, session, it) }.drain()
+                }
+            }
+        }
+        return out
+    }
+
+    /**
      * The names referenced anywhere in [ktFile]: each declaration's from its [DeclDiags.names], plus whatever
      * sits between the declarations (a file annotation, an error element). Null when the declarations are not
      * all direct children of the file (a script), so the checks walk it themselves.

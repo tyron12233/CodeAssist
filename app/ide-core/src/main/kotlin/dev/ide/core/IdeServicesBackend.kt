@@ -614,18 +614,31 @@ class IdeServicesBackend(
             compatibility = runCatching { services.isCompatibilityMode() }.getOrDefault(false),
         )
 
-    // ---- Compose preview (LayoutPreviewBackend; aggregator-level, uses the preview lane) ----
+    // ---- Compose preview (LayoutPreviewBackend; aggregator-level) ----
+    // Lowering after an edit uses the preview lane. The small setup reads a first frame waits on (readiness,
+    // libraries, resource roots, sandbox, isolation) use the background lane: each is a few milliseconds, and on
+    // the preview lane every one of them queued behind the editor's whole run of passes on the opened file.
 
-    /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
-     *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
-    suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? {
+    /**
+     * The lowered preview to render. Returns an ide-core type; the preview hosts call this.
+     *
+     * A re-lower after an edit is lowest-priority engine work: preempted by analysis and completion, it retries
+     * until the engine is free, so it never competes with typing. An [urgent] one (the host has nothing on screen
+     * yet: a preview just opened, or the user switched to another) queues with the editor's own passes instead and
+     * is not preempted by them. On a cold open the lowering itself took ~60 ms but waited ~3 s behind the
+     * highlighting and diagnostics of the same file (and a cold first attempt was thrown away when they arrived).
+     */
+    suspend fun lowerComposePreview(
+        path: String, functionName: String, arity: Int, text: String, urgent: Boolean = false,
+    ): LoweredComposePreview? {
         // A live-literal edit patches the last lowering directly: no lane wait behind the editor's analysis. Off the
         // caller's thread all the same (the host asks from the UI thread): the patch diffs the whole buffer.
         withContext(Dispatchers.Default) {
             runCatching { services.liveLiteralPreview(Paths.get(path), text, functionName, arity) }.getOrNull()
         }?.let { return it }
-        return timedPass("lower", path, { it?.program?.size ?: 0 }) {
-            preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+        return timedPass(if (urgent) "lowerFirst" else "lower", path, { it?.program?.size ?: 0 }) {
+            if (urgent) background("lowerPreview") { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+            else preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
         }
     }
 
@@ -638,29 +651,29 @@ class IdeServicesBackend(
      *  The preview host polls this to show a transient "Preparing" state (and retry) instead of latching a
      *  first-run (index still building) failure into a permanent "unresolved call" error. */
     suspend fun composePreviewReady(path: String): Boolean =
-        preview { services.composePreviewReady(Paths.get(path)) }
+        background("previewSetup") { services.composePreviewReady(Paths.get(path)) }
 
     /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
-        preview { services.composePreviewLibs(Paths.get(path)) }
+        background("previewSetup") { services.composePreviewLibs(Paths.get(path)) }
 
     /** The preview-sandbox categories the open project restricts (`SandboxCategory.id` strings from the
      *  project-scoped Compose Preview settings); the preview host builds a `PreviewSandboxPolicy` from them.
      *  A pref read, but routed through the preview lane like its sibling calls so it never races a swap of
      *  the inner services on project switch. */
     suspend fun composePreviewSandbox(): Set<String> =
-        preview { services.composePreviewSandbox() }
+        background("previewSetup") { services.composePreviewSandbox() }
 
     /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF).
      *  The Android host reads this to choose the remote streaming path over the in-process renderer. */
     suspend fun composePreviewIsolated(): Boolean =
-        preview { services.composePreviewIsolated() }
+        background("previewSetup") { services.composePreviewIsolated() }
 
     /** The previewed module's res-dir paths + R namespace, so the `:preview` process can rebuild the resource
      *  repository (it can't receive the in-memory one). Null for a non-Android module / one with no res dirs. */
     suspend fun composePreviewResourceRoots(path: String): ComposePreviewResourceRoots? =
-        preview { services.composePreviewResourceRoots(Paths.get(path)) }
+        background("previewSetup") { services.composePreviewResourceRoots(Paths.get(path)) }
 
     /** The previewed module's resources + R package for interpreter-mediated resource resolution
      *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI

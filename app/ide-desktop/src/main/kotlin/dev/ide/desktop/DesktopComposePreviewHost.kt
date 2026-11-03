@@ -145,7 +145,10 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             whileBufferCurrent(stale) {
                 var attempts = 0
                 while (true) {
-                    val lowered = previewAttempt { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }
+                    // Nothing on screen yet (just opened, or switched here): queue with the editor's passes, not behind them.
+                    val lowered = previewAttempt {
+                        backend.lowerComposePreview(path, preview.functionName, preview.arity, text, urgent = lastGood[0] == null)
+                    }
                     if (lowered != null) {
                         ensurePreviewPassCurrent()
                         lastGood[0] = lowered

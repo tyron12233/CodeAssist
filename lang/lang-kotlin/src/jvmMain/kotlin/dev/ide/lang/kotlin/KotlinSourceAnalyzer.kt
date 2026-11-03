@@ -506,12 +506,18 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * runtime a value of the wrong shape. Runs the same semantic pass the editor runs per keystroke, over the
      * same snapshot and the same per-declaration cache, so on the preview's (debounced, later) pass it is
      * normally a cache hit; the analysis it does pay for is a fraction of the lowering it saves by refusing.
+     *
+     * With an [entry] (the `@Preview` function's name), only the declarations of this file the preview can reach
+     * are checked (see [IncrementalSemanticAnalysis.reachableDiagnostics]): an error the preview never runs does
+     * not block it, and the first preview of a file no longer waits for every class in it to be analysed.
      */
-    fun previewBlockingErrors(file: VirtualFile): List<String> {
+    fun previewBlockingErrors(file: VirtualFile, entry: String? = null): List<String> {
         val parsed = lastByFile[file.path] ?: return emptyList()
         refreshOverlay()
         syncFocal(parsed)
-        return (parsed.diagnostics + incrementalAnalysis.diagnostics(parsed))
+        val semantic = entry?.let { incrementalAnalysis.reachableDiagnostics(parsed, it) }
+            ?: incrementalAnalysis.diagnostics(parsed)
+        return (parsed.diagnostics + semantic)
             .filter { it.severity == Severity.ERROR && it.code in KotlinDiagnosticCodes.PREVIEW_BLOCKING }
             .map { it.message }
     }
