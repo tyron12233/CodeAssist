@@ -63,6 +63,7 @@ private const val REOPEN_LAST_PROJECT_PREF = "settings.appearance.reopenLastProj
 private const val MIGRATION_ACK_PREF = "migration.acknowledged"
 private const val LEGACY_RECOVERY_SEEN_PREF = "legacy.recovery.seen"
 private const val ONBOARDING_SEEN_PREF = "onboarding.seen"
+private const val LEARN_TOUR_OFFERED_PREF = "learn.tourOffered"
 
 /** Why the project-import flow stopped, rendered by the host as a localized notice. */
 sealed interface ImportError {
@@ -1261,6 +1262,27 @@ class CodeAssistAppState(
     fun dismissOnboarding() {
         showOnboarding = false
         backend.settings.setPreference(ONBOARDING_SEEN_PREF, "true")
+        // A first-time user, just through the welcome tour: offer the hands-on CodeAssist lessons once.
+        if (backend.learn.learnAvailable() && backend.settings.preference(LEARN_TOUR_OFFERED_PREF) != "true") {
+            showLearnTourOffer = true
+        }
+    }
+
+    /** The one-time "Learn CodeAssist" offer, raised after onboarding. */
+    var showLearnTourOffer: Boolean by mutableStateOf(false)
+        private set
+
+    /** Take the offer: the first CodeAssist lesson, which moves into the editor on its own. */
+    fun startLearnTour() {
+        dismissLearnTourOffer()
+        homeTab = HomeTab.Learn
+        currentTrackId = "codeassist-editor"
+        openLesson("ca-ed-lightbulb")
+    }
+
+    fun dismissLearnTourOffer() {
+        showLearnTourOffer = false
+        backend.settings.setPreference(LEARN_TOUR_OFFERED_PREF, "true")
     }
 
     fun dismissLegacyRecovery() {

@@ -658,6 +658,12 @@ class IdeUiState(
      * and on a phone the system bars and the bottom nav too. The tool windows open when it starts are hidden
      * and come back when it ends. Not remembered across launches.
      */
+    /**
+     * True while a coding lesson runs in this editor: its banner hides the bottom bar (Search, Source, AI) so
+     * the exercise has the screen. A lesson that teaches the IDE itself turns it off, since those panels are
+     * what it is about.
+     */
+    var learnFocus by mutableStateOf(true)
     var zenMode by mutableStateOf(false)
         private set
     private var beforeZen: Map<ToolWindowSide, String> = emptyMap()

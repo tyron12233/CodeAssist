@@ -220,6 +220,9 @@ fun CodeAssistApp(
                         importError = importErrorMessage,
                         onDismissImportError = app::dismissImportError,
                         importBusy = app.importBusy,
+                        showLearnTourOffer = app.showLearnTourOffer,
+                        onStartLearnTour = app::startLearnTour,
+                        onDismissLearnTour = app::dismissLearnTourOffer,
                     )
                     ImportSourceDialog(
                         visible = app.showImportSourceChoice,

@@ -2001,6 +2001,10 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="learn_checkpoint_retry">Worth another look. Go back over the track, then take the checkpoint again.</string>
     <string name="learn_done">Done</string>
     <string name="learn_check">Check</string>
+    <string name="learn_tour_title">Learn CodeAssist in a few minutes</string>
+    <string name="learn_tour_body">Short hands-on lessons right in the editor: quick fixes, adding libraries, running your code and Git. Each step checks that you did it.</string>
+    <string name="learn_tour_start">Start the tour</string>
+    <string name="learn_tour_later">Not now</string>
     <string name="learn_task_more">More</string>
     <string name="learn_task_less">Less</string>
     <string name="learn_more_actions">More actions</string>

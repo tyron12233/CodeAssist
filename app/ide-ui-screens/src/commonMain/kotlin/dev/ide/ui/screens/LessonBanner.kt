@@ -147,6 +147,8 @@ fun LessonBanner(
     LaunchedEffect(step?.id) {
         val exercise = step as? UiLessonStep.Interactive
         collapsed = false
+        // A lesson about the IDE keeps the bottom bar; a coding lesson hides it.
+        ui.learnFocus = exercise?.language?.startsWith("ide-") != true
         if (exercise == null) return@LaunchedEffect
         val path = runCatching { backend.learn.prepareStep(lessonId, exercise.id) }.getOrNull() ?: return@LaunchedEffect
         filePath = path
@@ -170,7 +172,10 @@ fun LessonBanner(
     val checkFailedMsg = stringResource(Res.string.learn_check_failed)
     fun check(exercise: UiLessonStep.Interactive) {
         if (running) return
-        val code = ui.openFiles.firstOrNull { it.path == filePath }?.session?.doc?.text ?: return
+        val tour = exercise.language.startsWith("ide-")
+        // A hands-on step is graded from the workspace's files, so unsaved edits are written first.
+        if (tour) ui.saveAllNow()
+        val code = ui.openFiles.firstOrNull { it.path == filePath }?.session?.doc?.text ?: if (tour) "" else return
         running = true
         scope.launch {
             val r = runCatching { backend.learn.check(lessonId, exercise.id, code) }
@@ -259,7 +264,8 @@ fun LessonBanner(
                         onAskForHelp = if (community && onAskForHelp != null) ({
                             onAskForHelp(exercise.id, code(), result?.takeIf { !it.passed }?.let(::describeFailure))
                         }) else null,
-                        onOpenSolutions = if (community && onOpenSolutions != null && state.canAdvance) ({ onOpenSolutions(exercise.id) }) else null,
+                        // A hands-on CodeAssist step has nothing to share: its "solution" is what the learner did in the IDE.
+                        onOpenSolutions = if (community && onOpenSolutions != null && state.canAdvance && !exercise.language.startsWith("ide-")) ({ onOpenSolutions(exercise.id) }) else null,
                     )
                 }
                 return@Surface

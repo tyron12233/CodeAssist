@@ -61,6 +61,7 @@ class CodeAssistAppStateTest {
         override val project: ProjectInfo get() = ProjectInfo("p", projectRoot, 0)
         val workspaceRequests = ArrayList<String>()
         override val learn: dev.ide.ui.backend.LearnService = object : dev.ide.ui.backend.LearnService {
+            override fun learnAvailable() = true
             override suspend fun openWorkspace(lessonId: String): Boolean {
                 workspaceRequests += lessonId
                 if (workspaceOpens != true) return false
@@ -1087,6 +1088,28 @@ class CodeAssistAppStateTest {
         assertEquals("abc-123", app.communityThreadId)
         app.navigateBack()
         assertEquals(Screen.Projects, app.screen)
+    }
+
+    @Test
+    fun aFirstTimeUserIsOfferedTheCodeAssistTourOnce() = runTest {
+        val backend = AppBackend(mapOf("migration.acknowledged" to "true", "legacy.recovery.seen" to "true"))
+            .apply { analyticsConsent = false }
+        val app = appState(backend)
+        advanceUntilIdle()
+        assertTrue(app.showOnboarding)
+        app.dismissOnboarding()
+        assertTrue(app.showLearnTourOffer)
+        app.startLearnTour()
+        assertFalse(app.showLearnTourOffer)
+        assertEquals(Screen.LessonPlayer, app.screen)
+        assertEquals("ca-ed-lightbulb", app.currentLessonId)
+        assertEquals("true", backend.prefs["learn.tourOffered"])
+
+        // Never again, even if onboarding is somehow dismissed a second time.
+        val again = appState(backend)
+        advanceUntilIdle()
+        again.dismissOnboarding()
+        assertFalse(again.showLearnTourOffer)
     }
 
     @Test

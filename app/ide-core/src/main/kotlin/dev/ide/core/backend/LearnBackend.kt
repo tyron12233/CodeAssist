@@ -236,6 +236,7 @@ internal class LearnBackend(
     /** A pass is shared with other learners in the background, when signed in and not opted out. */
     private fun shareSolutionLater(lessonId: String, stepId: String, code: String) {
         val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive ?: return
+        if (step.check.ide.isNotEmpty()) return // a tour step's "solution" is what the learner did, not code
         if (!community.available() || remote.accountId() == null || !shareSolutions()) return
         backgroundScope.launch { community.submitSolution(lessonId, stepId, code, step.language) }
     }
@@ -247,6 +248,11 @@ internal class LearnBackend(
         // needs no scratch project (and works with no project manager at all).
         step.check.layout?.let { layout ->
             return withContext(Dispatchers.Default) { checkLayout(code, layout, ::renderProblems) }
+        }
+        if (step.check.ide.isNotEmpty()) {
+            val services = activeWorkspaceFor(step.language)
+                ?: return failure("Open this lesson from Learn so its practice project is the one in the editor.")
+            return withContext(Dispatchers.IO) { checkIde(step.check.ide, probeFor(services, step.language)) }
         }
         if (ctx.manager == null) {
             return UiExerciseResult(passed = false, compiled = false, message = "Running exercises isn't available in this build.")
@@ -344,6 +350,14 @@ internal class LearnBackend(
     )
 
     private fun workspaceSpec(language: String): WorkspaceSpec = when (language) {
+        // Hands-on CodeAssist lessons: their own practice projects, separate from the coding lessons', so a
+        // tour's files (a Gson import, a renamed function) never leak into an exercise.
+        "ide-kotlin" -> WorkspaceSpec("tour-kotlin", "kotlin-console", emptyMap(), "app/src/main/kotlin", "Main.kt")
+        "ide-android" -> WorkspaceSpec(
+            "tour-android", "android-app",
+            mapOf("packageName" to "dev.ide.learn.tour", "language" to "kotlin", "minSdk" to "26"),
+            "app/src/main/res/layout", "tour.xml",
+        )
         "xml-layout" -> WorkspaceSpec(
             "android", "android-app",
             mapOf("packageName" to "dev.ide.learn.app", "language" to "kotlin", "minSdk" to "26"),
@@ -396,6 +410,7 @@ internal class LearnBackend(
         withContext(Dispatchers.IO) {
             val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive ?: return@withContext null
             val services = activeWorkspaceFor(step.language) ?: return@withContext null
+            if (step.language.startsWith("ide-")) return@withContext prepareTourStep(services, lessonId, step)
             val path = workspaceFile(services, step.language)
             // Re-entering the same step (Back then Next, or reopening the lesson) keeps what the learner wrote;
             // a new step, or an explicit [content] (Copy solution), replaces it.
@@ -409,6 +424,70 @@ internal class LearnBackend(
             }
             path.toString()
         }
+
+    /**
+     * A hands-on step: write its seed files the first time it is opened (re-entering keeps the learner's
+     * changes), note when it started and which run was current, and return the file the editor opens.
+     */
+    private fun prepareTourStep(services: IdeServices, lessonId: String, step: LearnStepDef.Interactive): String? {
+        val key = workspaceSpec(step.language).key
+        val root = services.workspaceRoot
+        val marker = "$lessonId/${step.id}"
+        if (pref(KEY_WORKSPACE_STEP + key) != marker) {
+            for ((rel, text) in step.files) {
+                runCatching { services.save(root.resolve(rel), text.trimIndent().trimEnd() + "\n") }
+                    .onFailure { log.warn("Couldn't seed $rel for ${step.id}", it) }
+            }
+            setPref(KEY_WORKSPACE_STEP + key, marker)
+            setPref(KEY_WORKSPACE_START + key, System.currentTimeMillis().toString())
+        }
+        // ConcurrentHashMap takes no nulls: -1 stands for "no run yet".
+        runBaseline[key] = services.build.runConsole.value?.id ?: NO_RUN
+        return step.openFile?.let { root.resolve(it).toString() }
+    }
+
+    /** Per tour workspace: the run console session that was current when the step was entered. */
+    private val runBaseline = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /** [WorkspaceProbe] over the active tour workspace. */
+    private fun probeFor(services: IdeServices, language: String): WorkspaceProbe {
+        val key = workspaceSpec(language).key
+        val root = services.workspaceRoot
+        return object : WorkspaceProbe {
+            override val stepStartedMillis: Long = pref(KEY_WORKSPACE_START + key)?.toLongOrNull() ?: 0L
+
+            override fun read(path: String): String? =
+                root.resolve(path).takeIf { Files.isRegularFile(it) }?.let { String(Files.readAllBytes(it), Charsets.UTF_8) }
+
+            override suspend fun compileErrors(): List<String>? {
+                val cap = runCatching { services.runAndCapture("app") }.getOrElse { return listOf(reason(it)) }
+                return if (cap.compiled) null else cap.diagnostics.ifEmpty { listOf("The project did not compile.") }
+            }
+
+            override fun runOutputSinceStep(): String? {
+                val rc = services.build.runConsole.value ?: return null
+                if (rc.id == runBaseline[key]) return null
+                return rc.transcript.joinToString("") { it.text }
+            }
+
+            override fun dependencies(): List<String> = services.modules().flatMap { m ->
+                m.dependencies.filterIsInstance<dev.ide.model.LibraryDependency>().map { it.library.name }
+            }
+
+            override fun keystoreCount(): Int = runCatching { services.keystoreRegistry.all().size }.getOrDefault(0)
+
+            override fun newestApkMillis(): Long = runCatching {
+                Files.walk(root).use { s ->
+                    s.filter { Files.isRegularFile(it) && it.toString().endsWith(".apk") && it.toString().contains("/build/") }
+                        .mapToLong { Files.getLastModifiedTime(it).toMillis() }
+                        .max().orElse(0L)
+                }
+            }.getOrDefault(0L)
+
+            override fun gitReflog(): String? =
+                root.resolve(".git/logs/HEAD").takeIf { Files.isRegularFile(it) }?.let { String(Files.readAllBytes(it), Charsets.UTF_8) }
+        }
+    }
 
     private fun clearSources(dir: Path) {
         if (!Files.isDirectory(dir)) return
@@ -748,6 +827,12 @@ internal class LearnBackend(
 
         /** Per workspace: the lesson/step whose starter its file holds, so re-entering a step keeps the work. */
         const val KEY_WORKSPACE_STEP = "learn.workspace.step."
+
+        /** Per workspace: when the current step was first opened, for "since the step started" checks. */
+        const val KEY_WORKSPACE_START = "learn.workspace.start."
+
+        /** [runBaseline]'s value when no run had happened when the step was entered. */
+        const val NO_RUN = -1
 
         /** Cap [prepare]: creating the scratch + (first time) downloading coroutines + the first index build.
          *  A slow start shouldn't block the lesson forever — the gate opens and the editor catches up. */

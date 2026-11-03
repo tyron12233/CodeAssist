@@ -42,7 +42,7 @@ internal object LearnCatalogCodec {
      * value for lessons that use the new feature, whenever a lesson gains something an older build would
      * mishandle rather than ignore (a new step type, a check whose absence would pass everything).
      */
-    const val FORMAT: Int = 1
+    const val FORMAT: Int = 2
 
     /** The envelope format. Readers refuse a file whose envelope is newer than this. */
     const val ENVELOPE_FORMAT: Int = 1
@@ -76,8 +76,12 @@ internal object LearnCatalogCodec {
         return LearnCatalogDef(version, tracks, paths)
     }
 
-    /** The format a lesson needs. Everything a build at [FORMAT] 1 understands is format 1. */
-    fun lessonFormat(@Suppress("UNUSED_PARAMETER") lesson: LearnLessonDef): Int = 1
+    /**
+     * The format a lesson needs. 2: a hands-on CodeAssist step (workspace seed files, IDE conditions). A
+     * format-1 build would show it as a code exercise whose check has nothing in it, so it must skip it.
+     */
+    fun lessonFormat(lesson: LearnLessonDef): Int =
+        if (lesson.steps.any { it is LearnStepDef.Interactive && (it.check.ide.isNotEmpty() || it.files.isNotEmpty()) }) 2 else 1
 
     // ---- encode ----
 
@@ -131,6 +135,8 @@ internal object LearnCatalogCodec {
             put("hints", strings(s.hints))
             put("solution", s.solution)
             put("check", check(s.check))
+            if (s.files.isNotEmpty()) put("files", JsonObject(s.files.mapValues { JsonPrimitive(it.value) }))
+            s.openFile?.let { put("openFile", it) }
         }
         is LearnStepDef.Quiz -> buildJsonObject {
             put("type", "quiz")
@@ -186,6 +192,7 @@ internal object LearnCatalogCodec {
                 }
             },
         )
+        if (c.ide.isNotEmpty()) put("ide", buildJsonArray { c.ide.forEach { add(ideCondition(it)) } })
         c.layout?.let { l ->
             put(
                 "layout",
@@ -214,6 +221,36 @@ internal object LearnCatalogCodec {
     }
 
     private fun strings(list: List<String>) = JsonArray(list.map { JsonPrimitive(it) })
+
+    private fun ideCondition(c: IdeCondition) = buildJsonObject {
+        put("label", c.label)
+        when (c) {
+            is IdeCondition.FileContains -> { put("type", "fileContains"); put("path", c.path); put("text", c.text) }
+            is IdeCondition.FileLacks -> { put("type", "fileLacks"); put("path", c.path); put("text", c.text) }
+            is IdeCondition.Compiles -> put("type", "compiles")
+            is IdeCondition.RunOutput -> { put("type", "runOutput"); put("text", c.text) }
+            is IdeCondition.Dependency -> { put("type", "dependency"); put("coordinate", c.coordinate) }
+            is IdeCondition.Keystore -> put("type", "keystore")
+            is IdeCondition.ApkBuilt -> put("type", "apkBuilt")
+            is IdeCondition.GitCommit -> put("type", "gitCommit")
+        }
+    }
+
+    private fun readIdeCondition(o: JsonObject): IdeCondition {
+        val label = o.req("label")
+        return when (val type = o.str("type")) {
+            "fileContains" -> IdeCondition.FileContains(o.req("path"), o.req("text"), label)
+            "fileLacks" -> IdeCondition.FileLacks(o.req("path"), o.req("text"), label)
+            "compiles" -> IdeCondition.Compiles(label)
+            "runOutput" -> IdeCondition.RunOutput(o.req("text"), label)
+            "dependency" -> IdeCondition.Dependency(o.req("coordinate"), label)
+            "keystore" -> IdeCondition.Keystore(label)
+            "apkBuilt" -> IdeCondition.ApkBuilt(label)
+            "gitCommit" -> IdeCondition.GitCommit(label)
+            // A condition this build cannot evaluate would pass or fail for the wrong reason: drop the lesson.
+            else -> throw IllegalArgumentException("unknown IDE condition $type")
+        }
+    }
 
     // ---- decode ----
 
@@ -272,6 +309,8 @@ internal object LearnCatalogCodec {
             hints = o.strings("hints"),
             solution = o.req("solution"),
             check = readCheck(o["check"] as? JsonObject ?: JsonObject(emptyMap())),
+            files = (o["files"] as? JsonObject)?.mapValues { (it.value as JsonPrimitive).content } ?: emptyMap(),
+            openFile = o.str("openFile"),
         )
         "quiz" -> LearnStepDef.Quiz(
             id = o.req("id"),
@@ -309,6 +348,7 @@ internal object LearnCatalogCodec {
             val k = el.jsonObject
             ExerciseCase(k.str("stdin").orEmpty(), k.str("expectedOutput"), k.strings("mustContain"))
         },
+        ide = o.array("ide").map { readIdeCondition(it.jsonObject) },
         layout = (o["layout"] as? JsonObject)?.let { l ->
             LayoutCheck(
                 views = l.array("views").map { el ->

@@ -1,6 +1,7 @@
 package dev.ide.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.remember
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
@@ -17,6 +18,10 @@ import dev.ide.ui.components.UnsavedCloseDialog
 import dev.ide.ui.ext.OverlayContext
 import dev.ide.ui.ext.OverlayRegistry
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.learn_tour_body
+import dev.ide.ui.generated.resources.learn_tour_later
+import dev.ide.ui.generated.resources.learn_tour_start
+import dev.ide.ui.generated.resources.learn_tour_title
 import dev.ide.ui.generated.resources.import_gradle_busy
 import dev.ide.ui.screens.ImportErrorDialog
 import org.jetbrains.compose.resources.stringResource
@@ -49,6 +54,9 @@ internal fun AppOverlays(
     onDismissImportError: () -> Unit,
     /** True while a picked Gradle folder is being copied + imported — shows the blocking busy overlay. */
     importBusy: Boolean = false,
+    showLearnTourOffer: Boolean = false,
+    onStartLearnTour: () -> Unit = {},
+    onDismissLearnTour: () -> Unit = {},
 ) {
     // Upgrade notice first (the build-system migration warning), then the feature tour — both over the picker
     // only, one at a time.
@@ -66,6 +74,10 @@ internal fun AppOverlays(
         onDecline = onDeclineAnalytics,
         onLearnMore = if (fileActions.canOpenUrl) ({ fileActions.openUrl(BetaInfo.PRIVACY_URL) }) else null,
     )
+    // After the first-launch sheets: the one-time offer of the hands-on CodeAssist lessons.
+    if (showLearnTourOffer && !showOnboarding && !showAnalytics && !showMigration && onPicker) {
+        LearnTourOffer(onStart = onStartLearnTour, onDismiss = onDismissLearnTour)
+    }
     // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
     PermissionDialog(backend)
     // Plugin-contributed app-wide overlays (e.g. the AI agent's write-permission prompt). Each decides its own
@@ -94,4 +106,30 @@ internal fun AppOverlays(
     ImportErrorDialog(importError, onDismissImportError)
     // Blocking spinner while a Gradle folder is being copied in + imported (no cancel point).
     BusyOverlay(visible = importBusy, label = stringResource(Res.string.import_gradle_busy))
+}
+
+/** "Learn CodeAssist in a few minutes": offered once, right after onboarding. */
+@Composable
+private fun LearnTourOffer(onStart: () -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            dev.ide.ui.theme.Symbol(
+                dev.ide.ui.icons.CaSymbols.school, contentDescription = null, size = 28.dp,
+                tint = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+            )
+        },
+        title = { androidx.compose.material3.Text(org.jetbrains.compose.resources.stringResource(Res.string.learn_tour_title)) },
+        text = { androidx.compose.material3.Text(org.jetbrains.compose.resources.stringResource(Res.string.learn_tour_body)) },
+        confirmButton = {
+            androidx.compose.material3.Button(onClick = onStart) {
+                androidx.compose.material3.Text(org.jetbrains.compose.resources.stringResource(Res.string.learn_tour_start))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text(org.jetbrains.compose.resources.stringResource(Res.string.learn_tour_later))
+            }
+        },
+    )
 }

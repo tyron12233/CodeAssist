@@ -17,7 +17,18 @@ class LearnContentTest {
     @Test
     fun everyInteractiveSolutionIsAcceptedByItsOwnCheck() {
         forEachStep { lesson, step ->
-            if (step is LearnStepDef.Interactive) {
+            if (step is LearnStepDef.Interactive && step.language.startsWith("ide-")) {
+                // A hands-on CodeAssist step: graded by what happened in the workspace, not by code.
+                assertTrue(step.language in setOf("ide-kotlin", "ide-android"), "${step.id}: unexpected language '${step.language}'")
+                assertTrue(step.check.ide.isNotEmpty(), "${lesson.id}/${step.id}: a hands-on step needs IDE conditions")
+                assertTrue(step.openFile != null, "${lesson.id}/${step.id}: a hands-on step must open a file")
+                assertTrue(step.check.layout == null && step.check.cases.isEmpty(), "${step.id}: mixes check kinds")
+                for (c in step.check.ide) {
+                    val path = (c as? IdeCondition.FileContains)?.path ?: (c as? IdeCondition.FileLacks)?.path ?: continue
+                    assertTrue(path in step.files, "${lesson.id}/${step.id}: checks $path, which the step does not seed")
+                }
+            } else if (step is LearnStepDef.Interactive) {
+                assertTrue(step.check.ide.isEmpty() && step.files.isEmpty(), "${step.id}: IDE checks need an ide-* language")
                 assertTrue(step.starterCode.isNotBlank(), "${step.id}: blank starter code")
                 assertTrue(step.solution.isNotBlank(), "${step.id}: blank solution")
                 assertTrue(

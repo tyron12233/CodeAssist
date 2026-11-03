@@ -19,9 +19,10 @@ internal object LearnContent {
      * outrank the copy it downloaded before, and a published catalog must outrank the release. Format:
      * `yyyyMMddNN`.
      */
-    const val VERSION: Long = 2026110401L
+    const val VERSION: Long = 2026110402L
 
     val tracks: List<LearnTrackDef> = listOf(
+        caEditor(), caProjects(), caBuild(), caTools(),
         kotlinBasics(), kotlinNextSteps(), kotlinOo(), kotlinCoroutines(), kotlinPractice(),
         composeIntro(), composeAdvanced(),
         javaBasics(), javaBeyond(), javaMore(),
@@ -99,6 +100,13 @@ internal sealed interface LearnStepDef {
         val hints: List<String> = emptyList(),
         val solution: String,
         val check: ExerciseCheck,
+        /**
+         * Hands-on CodeAssist lessons (`language` `ide-*`): files written into the workspace when the step is
+         * first opened (path relative to the workspace root → content). Replaces [starterCode] for them.
+         */
+        val files: Map<String, String> = emptyMap(),
+        /** Which of [files] (or any workspace path) the editor opens for the step; null opens none. */
+        val openFile: String? = null,
     ) : LearnStepDef
 
     data class Quiz(
@@ -133,6 +141,8 @@ internal data class ExerciseCheck(
     val cases: List<ExerciseCase> = emptyList(),
     /** For an `"xml-layout"` exercise: the structure the layout must have. Nothing is run. */
     val layout: LayoutCheck? = null,
+    /** For a hands-on CodeAssist step: what must have happened in the workspace (see [IdeCondition]). */
+    val ide: List<IdeCondition> = emptyList(),
 )
 
 /** One run of a multi-case exercise: the [stdin] it is fed and what its output must be. */
@@ -197,6 +207,453 @@ private val ACCENT_JAVA3 = 0xFF5382A1L
 private val ACCENT_ANDROID = 0xFF3DDC84L
 private val ACCENT_COMPOSE = 0xFF10A5A8L
 private val ACCENT_COMPOSE2 = 0xFF4285F4L
+private val ACCENT_CODEASSIST = 0xFFC6EF4CL
+
+/** Workspace paths the CodeAssist tours seed and check (relative to the practice project's root). */
+private const val TOUR_MAIN = "app/src/main/kotlin/Main.kt"
+private const val TOUR_GREETER = "app/src/main/kotlin/Greeter.kt"
+private const val TOUR_LAYOUT = "app/src/main/res/layout/tour.xml"
+
+// ===========================================================================
+// CodeAssist: hands-on tours of the IDE itself. Steps run in a practice project
+// under the lesson banner and are checked against what actually happened there.
+// ===========================================================================
+
+private fun caEditor() = LearnTrackDef(
+    id = "codeassist-editor",
+    title = "CodeAssist: The editor",
+    subtitle = "Quick fixes, renaming, formatting and finding your way",
+    iconId = "sparkle",
+    accentColor = ACCENT_CODEASSIST,
+    language = "ide-kotlin",
+    category = "CodeAssist",
+    level = "Beginner",
+    lessons = listOf(
+        LearnLessonDef(
+            id = "ca-ed-lightbulb", title = "Fix it with the lightbulb", summary = "Let the editor add the missing import.",
+            iconId = "sparkle", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "ca-ed-lightbulb-c", "The editor works with you",
+                    listOf(
+                        text("CodeAssist understands your code as you type. Two things do most of the work:"),
+                        text("• **Completion** pops up suggestions as you type. Pick one to insert it, imports and all.\n• The **lightbulb** appears beside a problem. Tap it to see fixes: add an import, add a library, create a missing function."),
+                        tip("Red underlines are errors, yellow are warnings. Long-press one to see what it says."),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "ca-ed-lightbulb-i", "Import LocalDate",
+                    listOf(
+                        text("`LocalDate` is underlined in red: the file doesn't import it. Put the cursor on `LocalDate`, tap the **lightbulb**, and choose **Import**."),
+                        text("Then press **Check**."),
+                    ),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf(
+                        "Tap anywhere inside the word LocalDate so the cursor is on it.",
+                        "The lightbulb shows at the left of the line. Pick \"Import java.time.LocalDate\".",
+                    ),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_MAIN to """
+                            fun main() {
+                                val today = LocalDate.now()
+                                println("Year: ${'$'}{today.year}")
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(
+                        ide = listOf(
+                            IdeCondition.FileContains(TOUR_MAIN, "import java.time.LocalDate", "LocalDate is imported"),
+                            IdeCondition.Compiles("The project compiles"),
+                        ),
+                    ),
+                ),
+                LearnStepDef.Quiz(
+                    "ca-ed-lightbulb-q", "Quick check",
+                    prompt = "Where do you find the fixes for a red-underlined problem?",
+                    options = listOf("In Settings", "Behind the lightbulb", "In the Run console", "Nowhere, you fix it by hand"),
+                    correctIndex = 1,
+                    explanation = "The lightbulb offers fixes for the problem under the cursor.",
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-ed-rename", title = "Rename everywhere at once", summary = "Change a name in every file safely.",
+            iconId = "sparkle", estMinutes = 5,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "ca-ed-rename-c", "Navigate and refactor",
+                    listOf(
+                        text("Long-press a name to reach the code actions:"),
+                        text("• **Go to Declaration** jumps to where it is defined.\n• **Find Usages** lists every place it is used.\n• **Rename** changes it everywhere, across files, without touching unrelated text."),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "ca-ed-rename-i", "Rename greet to welcome",
+                    listOf(
+                        text("`greet` is defined in **Greeter.kt** and used twice in **Main.kt**. Long-press `greet`, choose **Rename**, and call it `welcome`."),
+                        tip("Editing it by hand would mean finding every use yourself. Rename does all of them."),
+                    ),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf(
+                        "Long-press the word greet in Main.kt, then pick Rename from the menu.",
+                        "Type welcome and confirm. Both files change.",
+                    ),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_GREETER to """
+                            fun greet(name: String) = "Hello, ${'$'}name!"
+                        """,
+                        TOUR_MAIN to """
+                            fun main() {
+                                println(greet("Ana"))
+                                println(greet("Bo"))
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(
+                        ide = listOf(
+                            IdeCondition.FileContains(TOUR_GREETER, "fun welcome(", "Greeter.kt defines welcome"),
+                            IdeCondition.FileLacks(TOUR_MAIN, "greet(", "Main.kt no longer calls greet"),
+                            IdeCondition.FileLacks(TOUR_GREETER, "greet(", "Greeter.kt no longer defines greet"),
+                            IdeCondition.Compiles("The project compiles"),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-ed-format", title = "Tidy up with Format", summary = "One action fixes messy indentation.",
+            iconId = "sparkle", estMinutes = 3,
+            steps = listOf(
+                LearnStepDef.Interactive(
+                    "ca-ed-format-i", "Format the file",
+                    listOf(
+                        text("This code works, but its indentation is a mess. Open the editor's **⋯** menu and choose **Reformat code**."),
+                        note("Formatting follows your Code style settings, which you can change in Settings."),
+                    ),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf("The ⋯ in the editor's top bar has Reformat code."),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_MAIN to """
+                            fun main() {
+                            println("one")
+                                    println("two")
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(
+                        ide = listOf(
+                            IdeCondition.FileContains(TOUR_MAIN, "\n    println(\"one\")\n    println(\"two\")", "Both lines are indented by four spaces"),
+                        ),
+                    ),
+                ),
+                LearnStepDef.Concept(
+                    "ca-ed-format-more", "More tools worth knowing",
+                    listOf(
+                        text("• **Bookmarks** mark a line to come back to; a **TODO** comment shows up in the TODO list.\n• **Local history** keeps earlier saved versions of a file, so you can go back even without Git.\n• **Zen mode** hides everything but the code."),
+                    ),
+                ),
+                LearnStepDef.Quiz(
+                    "ca-ed-format-q", "Quick check",
+                    prompt = "You saved a file an hour ago and want the old version back, and the project has no Git. Where do you look?",
+                    options = listOf("Local history", "The Run console", "Find Usages", "It's gone"),
+                    correctIndex = 0,
+                    explanation = "Local history keeps the versions you saved.",
+                ),
+            ),
+        ),
+    ),
+)
+
+private fun caProjects() = LearnTrackDef(
+    id = "codeassist-projects",
+    title = "CodeAssist: Projects & libraries",
+    subtitle = "Templates, modules and adding libraries",
+    iconId = "module",
+    accentColor = ACCENT_CODEASSIST,
+    language = "ide-kotlin",
+    category = "CodeAssist",
+    level = "Beginner",
+    prerequisites = listOf("codeassist-editor"),
+    lessons = listOf(
+        LearnLessonDef(
+            id = "ca-pr-projects", title = "Projects and modules", summary = "How a CodeAssist project is put together.",
+            iconId = "module", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "ca-pr-projects-c", "Start from a template",
+                    listOf(
+                        text("**New project** offers templates: a console app, an Android app with Views or Compose, a library, Kotlin Multiplatform, and more. Each one builds and runs straight away."),
+                        text("A project holds one or more **modules**. An app module builds your app; library modules hold shared code. Open the project menu to add modules or change a module's settings."),
+                        tip("Already have a project from Android Studio? **Import** opens Gradle projects and zips."),
+                    ),
+                ),
+                LearnStepDef.Quiz(
+                    "ca-pr-projects-q", "Quick check",
+                    prompt = "You have a Gradle project from Android Studio. How do you open it in CodeAssist?",
+                    options = listOf("Retype it", "Import it", "Only through Git", "You can't"),
+                    correctIndex = 1,
+                    explanation = "Import reads the Gradle build and creates the CodeAssist project for you.",
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-pr-library", title = "Add a library", summary = "Use code other people wrote.",
+            iconId = "module", estMinutes = 6,
+            steps = listOf(
+                LearnStepDef.Interactive(
+                    "ca-pr-library-i", "Add Gson",
+                    listOf(
+                        text("This program turns an object into JSON with the **Gson** library, which the project doesn't have yet. Add it: tap the lightbulb on `Gson` and choose **Add library**, or open **Dependencies** from the project menu and search for gson."),
+                        text("When it resolves, press **Check**."),
+                    ),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf(
+                        "The lightbulb on the red Gson import offers to add the library for you.",
+                        "Or: project menu, Dependencies, search \"gson\", add com.google.code.gson:gson.",
+                    ),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_MAIN to """
+                            import com.google.gson.Gson
+
+                            data class Score(val name: String, val points: Int)
+
+                            fun main() {
+                                println(Gson().toJson(Score("Ana", 92)))
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(
+                        ide = listOf(
+                            IdeCondition.Dependency("com.google.code.gson:gson", "Gson is a dependency of the project"),
+                            IdeCondition.Compiles("The project compiles"),
+                        ),
+                    ),
+                ),
+                LearnStepDef.Quiz(
+                    "ca-pr-library-q", "Quick check",
+                    prompt = "Where do libraries come from when you add them?",
+                    options = listOf("They're bundled in the app", "Maven repositories, downloaded once and cached", "You copy jar files by hand", "The Store"),
+                    correctIndex = 1,
+                    explanation = "CodeAssist resolves them from Maven repositories and caches them, so they work offline afterwards.",
+                ),
+            ),
+        ),
+    ),
+)
+
+private fun caBuild() = LearnTrackDef(
+    id = "codeassist-build",
+    title = "CodeAssist: Build, run & ship",
+    subtitle = "Running, signing and building an APK",
+    iconId = "hammer",
+    accentColor = ACCENT_CODEASSIST,
+    language = "ide-kotlin",
+    category = "CodeAssist",
+    level = "Intermediate",
+    prerequisites = listOf("codeassist-projects"),
+    lessons = listOf(
+        LearnLessonDef(
+            id = "ca-bu-run", title = "Run and talk to your program", summary = "Type input into a running program.",
+            iconId = "hammer", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Interactive(
+                    "ca-bu-run-i", "Run it",
+                    listOf(
+                        text("This program asks for your name. Press **Run** (the ▶ in the top bar). When the console asks, type your name and press Enter."),
+                        tip("The console is a real terminal: anything the program reads with readln() comes from what you type."),
+                    ),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf("The Run button is the green ▶ at the top of the editor.", "Type into the box at the bottom of the console, then Enter."),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_MAIN to """
+                            fun main() {
+                                print("Your name? ")
+                                val name = readln()
+                                println("Hello, ${'$'}name!")
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(
+                        ide = listOf(IdeCondition.RunOutput("Hello, ", "You ran it and answered")),
+                    ),
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-bu-sign", title = "Make a signing key", summary = "Every released Android app is signed.",
+            iconId = "hammer", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "ca-bu-sign-c", "Why apps are signed",
+                    listOf(
+                        text("Android only installs apps that are **signed**. Debug builds use a debug key automatically. To release an app, and to update it later, you sign it with **your own key**, kept in a keystore."),
+                        note("Keep your keystore and its passwords safe. An app signed with one key can only be updated with the same key."),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "ca-bu-sign-i", "Create a keystore",
+                    listOf(text("Open **Settings & tools** from the project menu, then **Keystores**, and create a new key. Any name and password will do for practice.")),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf("Project menu, Settings & tools, Keystores, then Create."),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_MAIN to """
+                            fun main() {
+                                println("Hello, CodeAssist!")
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(ide = listOf(IdeCondition.Keystore("A keystore exists"))),
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-bu-apk", title = "Build an APK", summary = "Turn the project into an installable app.",
+            iconId = "hammer", estMinutes = 6,
+            steps = listOf(
+                LearnStepDef.Interactive(
+                    "ca-bu-apk-i", "Build it",
+                    listOf(
+                        text("This is a small Android app. Build an installable **APK** from the **Run** menu (the arrow next to ▶), with **Build APK**."),
+                        note("The first build takes a while: it prepares the Android libraries once. Later builds are much faster."),
+                    ),
+                    starterCode = "",
+                    language = "ide-android",
+                    hints = listOf("Tap the small arrow beside the Run button for the build options."),
+                    solution = "",
+                    files = emptyMap(),
+                    openFile = "app/src/main/AndroidManifest.xml",
+                    check = ExerciseCheck(ide = listOf(IdeCondition.ApkBuilt("An APK was built"))),
+                ),
+                LearnStepDef.Concept(
+                    "ca-bu-apk-share", "Ship it",
+                    listOf(
+                        text("From here you can install the APK, share it, or publish your project to the **Store**, where other CodeAssist users can open it and learn from it."),
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
+
+private fun caTools() = LearnTrackDef(
+    id = "codeassist-tools",
+    title = "CodeAssist: Previews, Git & AI",
+    subtitle = "See layouts live, save history with Git, get help from the AI",
+    iconId = "layers",
+    accentColor = ACCENT_CODEASSIST,
+    language = "ide-kotlin",
+    category = "CodeAssist",
+    level = "Intermediate",
+    prerequisites = listOf("codeassist-editor"),
+    lessons = listOf(
+        LearnLessonDef(
+            id = "ca-to-preview", title = "See your layout live", summary = "Edit XML and watch it render.",
+            iconId = "layers", estMinutes = 4,
+            steps = listOf(
+                LearnStepDef.Interactive(
+                    "ca-to-preview-i", "Change the greeting",
+                    listOf(
+                        text("Open the **split view** (the icon at the right of the editor's toolbar) to see this layout rendered beside the XML. Then change the TextView's text to `Hello, preview` and watch the preview update."),
+                        tip("Compose files get a live preview too: any function marked @Preview."),
+                    ),
+                    starterCode = "",
+                    language = "ide-android",
+                    hints = listOf("The split icon is next to the code icon above the editor.", "Edit android:text, keeping the quotes."),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_LAYOUT to """
+                            <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:orientation="vertical"
+                                android:padding="24dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Hello"
+                                    android:textSize="24sp" />
+
+                            </LinearLayout>
+                        """,
+                    ),
+                    openFile = TOUR_LAYOUT,
+                    check = ExerciseCheck(
+                        ide = listOf(IdeCondition.FileContains(TOUR_LAYOUT, "android:text=\"Hello, preview\"", "The text says Hello, preview")),
+                    ),
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-to-git", title = "Your first commit", summary = "Save a snapshot of your work with Git.",
+            iconId = "layers", estMinutes = 5,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "ca-to-git-c", "Why Git",
+                    listOf(
+                        text("**Git** records snapshots of your project called **commits**. You can see what changed, go back, and push to GitHub to back it up or share it."),
+                    ),
+                ),
+                LearnStepDef.Interactive(
+                    "ca-to-git-i", "Commit",
+                    listOf(text("Open **Source** from the bottom bar. If the project isn't a repository yet, create one. Then write a message like `First commit` and **Commit**.")),
+                    starterCode = "",
+                    language = "ide-kotlin",
+                    hints = listOf("Source is in the bottom bar.", "Initialize the repository first, then stage the files and commit."),
+                    solution = "",
+                    files = mapOf(
+                        TOUR_MAIN to """
+                            fun main() {
+                                println("Hello, CodeAssist!")
+                            }
+                        """,
+                    ),
+                    openFile = TOUR_MAIN,
+                    check = ExerciseCheck(ide = listOf(IdeCondition.GitCommit("You made a commit"))),
+                ),
+            ),
+        ),
+        LearnLessonDef(
+            id = "ca-to-ai", title = "Ask the AI", summary = "Get help explaining and changing code.",
+            iconId = "sparkle", estMinutes = 3,
+            steps = listOf(
+                LearnStepDef.Concept(
+                    "ca-to-ai-c", "The AI agent",
+                    listOf(
+                        text("The **AI** tab can explain code, fix errors, and make changes across your project. It shows you each change before it is applied."),
+                        text("Use the free tier, or connect your own provider in Settings."),
+                        tip("While learning, ask it to explain rather than to write the answer: you will remember it."),
+                    ),
+                ),
+                LearnStepDef.Quiz(
+                    "ca-to-ai-q", "Quick check",
+                    prompt = "What's the best way to use the AI while doing a lesson?",
+                    options = listOf("Ask it to write the answer", "Ask it to explain what you don't understand", "Don't use it at all", "Ask it to pass the check"),
+                    correctIndex = 1,
+                    explanation = "Explanations help you learn. The exercises only teach if you do them.",
+                ),
+            ),
+        ),
+    ),
+)
 
 // ===========================================================================
 // Paths
@@ -204,6 +661,14 @@ private val ACCENT_COMPOSE2 = 0xFF4285F4L
 
 /** Ordered goals across tracks. Each id must name a track in [LearnContent.tracks] (LearnContentTest). */
 private fun learnPaths() = listOf(
+    LearnPathDef(
+        id = "path-codeassist",
+        title = "Master CodeAssist",
+        subtitle = "The editor, libraries, builds, previews and Git, hands on",
+        iconId = "sparkle",
+        accentColor = ACCENT_CODEASSIST,
+        trackIds = listOf("codeassist-editor", "codeassist-projects", "codeassist-build", "codeassist-tools"),
+    ),
     LearnPathDef(
         id = "path-android",
         title = "Android developer",

@@ -31,7 +31,8 @@ class LearnSolutionsTest {
                     val failures = ArrayList<String>()
                     var ran = 0
                     for (track in LearnContent.tracks) for (lesson in track.lessons) for (step in lesson.steps) {
-                        if (step !is LearnStepDef.Interactive) continue
+                        // Hands-on CodeAssist steps are passed by doing things in the IDE; LearnIdeCheckTest covers them.
+                        if (step !is LearnStepDef.Interactive || step.language.startsWith("ide-")) continue
                         ran++
                         val r = learn.check(lesson.id, step.id, step.solution.trimIndent())
                         if (!r.passed) failures += "${lesson.id}/${step.id}: ${r.message} ${r.diagnostics}\n${r.output}"

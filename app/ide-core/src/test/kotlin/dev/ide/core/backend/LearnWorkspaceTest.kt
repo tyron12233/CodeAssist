@@ -64,6 +64,19 @@ class LearnWorkspaceTest {
                     assertTrue(learn.openWorkspace(lesson.id))
                     assertEquals(epoch, backend.projects.projectEpoch.value)
 
+                    // A hands-on CodeAssist step: seeds its files and opens one, before any run has happened (a
+                    // null "current run" once made this throw and the editor opened nothing).
+                    assertTrue(learn.openWorkspace("ca-ed-lightbulb"))
+                    val tour = assertNotNull(learn.prepareStep("ca-ed-lightbulb", "ca-ed-lightbulb-i"), "tour step opens a file")
+                    assertTrue(tour.endsWith("app/src/main/kotlin/Main.kt"), tour)
+                    assertTrue("LocalDate.now()" in String(Files.readAllBytes(Paths.get(tour))))
+                    val notYet = learn.check("ca-ed-lightbulb", "ca-ed-lightbulb-i", "")
+                    assertFalse(notYet.passed, notYet.output)
+                    Files.write(Paths.get(tour), ("import java.time.LocalDate\n\n" + String(Files.readAllBytes(Paths.get(tour)))).toByteArray())
+                    val done = learn.check("ca-ed-lightbulb", "ca-ed-lightbulb-i", "")
+                    assertTrue(done.passed, "${done.message}\n${done.output}\n${done.diagnostics}")
+                    assertTrue(learn.openWorkspace(lesson.id))
+
                     // A step from another language's lesson has no file while this workspace is active.
                     val javaLesson = LearnContent.tracks.flatMap { it.lessons }.first { it.id == "java-basics-capstone" }
                     val javaStep = javaLesson.steps.filterIsInstance<LearnStepDef.Interactive>().single()
