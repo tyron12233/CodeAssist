@@ -18,7 +18,7 @@ interface IBuildDaemon {
     // changed (e.g. minifyEnabled toggled) and the daemon reloads instead of reusing its stale model.
     // [requestId] is echoed back in onOpened so the UI can pair each reply with the request that caused it —
     // a reply to a superseded open (a retry raced it) must not trigger the newer request's queued build.
-    void open(String workspaceDir, int modelGeneration, int requestId);
+    oneway void open(String workspaceDir, int modelGeneration, int requestId);
 
     // Pre-start this process's Kotlin compiler (the forked compiler VM) so the first Run does not pay its cold
     // start. Sent once at project open, only for a Kotlin project and never on a low-memory device. Needs no
@@ -31,13 +31,13 @@ interface IBuildDaemon {
     // Launch a specific task / the default build / cancel. Build state streams back via the callback deltas.
     // Stop is oneway: the UI calls it from the main thread (the Stop button), and a synchronous call waited out
     // the daemon's cancel there long enough to ANR. Its outcome arrives as a Stopped/Failed delta anyway.
-    void runTask(String id);
-    void runBuild();
+    oneway void runTask(String id);
+    oneway void runBuild();
     oneway void stopBuild();
 
     // --- Phase 4: interactive run (the program runs in :build; these drive its stdin + the sandbox prompts).
-    void sendRunInput(String text);   // feed one line of stdin to the running program
-    void closeRunInput();             // EOF the program's stdin
+    oneway void sendRunInput(String text);   // feed one line of stdin to the running program
+    oneway void closeRunInput();             // EOF the program's stdin
     // Drive a WINDOWED program (a Swing app) whose frames the UI is showing. Actions are RunPointer/RunKey
     // constants; x/y are in the frame's pixel space. The surface size lets the program lay out at exactly the
     // size it is drawn at instead of being scaled to fit it.
@@ -45,8 +45,8 @@ interface IBuildDaemon {
     oneway void sendRunKey(int action, int keyCode, int keyChar);
     oneway void sendRunScroll(float x, float y, int notches);
     oneway void setRunSurfaceSize(int widthPx, int heightPx);
-    void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
-    void clearAppLog();               // clear the app-log (Logcat) buffer
+    oneway void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
+    oneway void clearAppLog();               // clear the app-log (Logcat) buffer
 
     // --- App-log relay (docs/app-log-forwarding.md). The exported AppLogSinkService the built debug app binds
     // to always runs in the UI process, but under build-process isolation the app-log CHANNEL lives here in
