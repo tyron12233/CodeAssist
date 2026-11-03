@@ -521,6 +521,12 @@
     <string name="breadcrumb_split">مقسّم</string>
     <string name="breadcrumb_nav_back">رجوع</string>
     <string name="breadcrumb_nav_forward">للأمام</string>
+    <string name="conflict_current">الحالي</string>
+    <string name="conflict_incoming">الوارد</string>
+    <string name="conflict_both">كلاهما</string>
+    <string name="conflict_current_desc">الإبقاء على الجانب الحالي</string>
+    <string name="conflict_incoming_desc">الإبقاء على الجانب الوارد</string>
+    <string name="conflict_both_desc">الإبقاء على الجانبين</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>

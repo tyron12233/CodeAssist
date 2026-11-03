@@ -119,6 +119,7 @@ class RenderFrameBenchmark {
                     currentMatch = -1,
                     occurrences = emptyList(),
                     occurrenceWrites = emptyList(),
+                    conflicts = emptyList(),
                     templateFields = emptyList(),
                     decoByLine = emptyMap(),
                     filePath = "Bench.kt",
@@ -451,7 +452,8 @@ class RenderFrameBenchmark {
             composing = colors.textSecondary, indentGuide = colors.hairline,
             findMatch = colors.warning.copy(alpha = 0.28f), findCurrent = colors.accent.copy(alpha = 0.5f),
             occurrence = colors.textSecondary.copy(alpha = 0.18f),
-            occurrenceWrite = colors.textSecondary.copy(alpha = 0.22f), templateField = colors.accent.copy(alpha = 0.16f),
+            occurrenceWrite = colors.textSecondary.copy(alpha = 0.22f),
+            conflictCurrent = colors.success, conflictIncoming = colors.info, templateField = colors.accent.copy(alpha = 0.16f),
         )
         val inlayStyle = SpanStyle(color = colors.textTertiary)
         val perLineInlays = buildMap<Int, MutableList<InlayPiece>> {

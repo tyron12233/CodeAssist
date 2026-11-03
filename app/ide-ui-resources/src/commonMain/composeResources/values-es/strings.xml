@@ -328,6 +328,12 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="breadcrumb_split">Dividido</string>
     <string name="breadcrumb_nav_back">Atrás</string>
     <string name="breadcrumb_nav_forward">Adelante</string>
+    <string name="conflict_current">Actual</string>
+    <string name="conflict_incoming">Entrante</string>
+    <string name="conflict_both">Ambos</string>
+    <string name="conflict_current_desc">Conservar el lado actual</string>
+    <string name="conflict_incoming_desc">Conservar el lado entrante</string>
+    <string name="conflict_both_desc">Conservar ambos lados</string>
 
     <!-- Editor chrome -->
     <string name="edchrome_files">Archivos</string>

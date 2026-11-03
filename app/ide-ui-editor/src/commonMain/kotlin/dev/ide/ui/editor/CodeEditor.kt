@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.editor.core.MergeConflict
 import dev.ide.ui.backend.UiFeatures
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.geometry.Offset
@@ -501,7 +502,13 @@ private fun CodeEditorContent(
     // Read the document + selection straight off the session (snapshot reads → this body recomposes on edit),
     // deriving everything from the rope's O(log N) access; the body never forces the full-text materialization.
     val doc = editorSession.doc
-    val diagnostics = editorSession.diagnostics // the session owns and auto-shifts these; rendered here
+    // Merge-conflict blocks (from a Git merge or a store update that kept the user's edits): tinted, with a
+    // resolve row on each. The parser's errors inside a block are about the markers, not the code, so they hide.
+    val conflicts = rememberMergeConflicts(editorSession, doc)
+    // The session owns and auto-shifts these; rendered here.
+    val diagnostics = remember(editorSession.diagnostics, conflicts) {
+        withoutConflictDiagnostics(editorSession.diagnostics, conflicts)
+    }
     val docLength = doc.length
     val caretOffset = editorSession.selection.start.coerceIn(0, docLength)
     // Language-specific word chars (XML namespace `:` and resource-ref `@?+/.-`) so the popup survives them.
@@ -808,6 +815,8 @@ private fun CodeEditorContent(
             occurrence = editorColors.occurrence(colors.textSecondary.copy(alpha = 0.18f)),
             occurrenceWrite = editorColors.occurrenceWrite(colors.syntax.keyword.copy(alpha = if (colors.isDark) 0.34f else 0.22f)),
             templateField = editorColors.templateField(colors.accent.copy(alpha = 0.16f)),
+            conflictCurrent = colors.success,
+            conflictIncoming = colors.info,
         )
     }
     val bracketPair = remember(doc, editorSession.selection) {
@@ -1187,6 +1196,7 @@ private fun CodeEditorContent(
             diagByLine = diagByLine,
             bracketPair = bracketPair,
             occurrences = occurrences,
+            conflicts = conflicts,
             templateFields = { snippet?.fieldRanges().orEmpty() },
             painters = painters,
             drawColors = drawColors,
@@ -1308,6 +1318,18 @@ private fun CodeEditorContent(
             colors = colors,
             onInvoke = acts::invokeGutterAction,
             backend = backend,
+        )
+
+        MergeConflictLayer(
+            session = editorSession,
+            conflicts = conflicts,
+            metrics = metrics,
+            vlayout = geometry.vlayout,
+            vOffset = geometry.vOffset,
+            hOffset = geometry.hOffset,
+            gutterWidthPx = gutterWidthPx,
+            currentColor = colors.success,
+            incomingColor = colors.info,
         )
 
         ResourceSwatchGutterLayer(
@@ -1449,6 +1471,7 @@ private fun EditorCanvasLayer(
     diagByLine: Map<Int, List<DiagSeg>>,
     bracketPair: Pair<Int, Int>?,
     occurrences: OccurrenceTint,
+    conflicts: List<MergeConflict>,
     templateFields: () -> List<IntRange>,
     painters: EditorPainters,
     drawColors: EditorDrawColors,
@@ -1549,6 +1572,7 @@ private fun EditorCanvasLayer(
                     currentMatch = find.currentIndex,
                     occurrences = occurrences.reads,
                     occurrenceWrites = occurrences.writes,
+                    conflicts = conflicts,
                     templateFields = templateFields(),
                     decoByLine = renderState.decoByLine,
                     filePath = path,

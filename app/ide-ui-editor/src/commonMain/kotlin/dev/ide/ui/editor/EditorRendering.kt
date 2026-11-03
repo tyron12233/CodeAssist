@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.editor.core.MergeConflict
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -54,6 +55,10 @@ internal class EditorDrawColors(
     val occurrence: Color,
     /** Occurrence tint for a name the symbol is assigned or declared at (IntelliJ's "under caret (write)"). */
     val occurrenceWrite: Color,
+    /** Merge-conflict sides: the current one (`<<<<<<<` to `=======`) and the incoming one, as opaque roles the
+     *  renderer tints down (bands lightly, the marker lines more). */
+    val conflictCurrent: Color,
+    val conflictIncoming: Color,
     /** Background box for a live template (snippet) field while stepping through tab stops. */
     val templateField: Color,
 )
@@ -124,6 +129,8 @@ internal fun DrawScope.drawEditor(
     /** The occurrences that write the symbol (assignment targets, `++`/`--`, its declaration), tinted apart.
      *  Sorted and non-overlapping like [occurrences], and disjoint from it. */
     occurrenceWrites: List<Match>,
+    /** Merge-conflict blocks, banded by side under everything else in the text area. */
+    conflicts: List<MergeConflict>,
     /** Live template (snippet) field ranges to box while stepping through tab stops; empty when not in a template. */
     templateFields: List<IntRange>,
     /** A plugin's geometric decorations binned per document line, already resolved to theme colors. */
@@ -245,6 +252,26 @@ internal fun DrawScope.drawEditor(
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+        // Merge-conflict bands, lowest of all: each side of a block tinted by its own color across the text area,
+        // the marker lines stronger so the block's edges read at a glance, a diff3 base section left plain.
+        for (c in conflicts) {
+            if (c.endLine < firstVisible || c.startLine > lastVisible) continue
+            for (line in max(c.startLine, firstVisible)..min(c.endLine, lastVisible)) {
+                if (foldModel.isHidden(line)) continue
+                val base = c.baseLine
+                val inBase = base != null && line > base && line < c.separatorLine
+                val color = when {
+                    line == c.startLine || line == base -> colors.conflictCurrent.copy(alpha = 0.30f)
+                    line == c.separatorLine -> colors.muted.copy(alpha = 0.22f)
+                    line == c.endLine -> colors.conflictIncoming.copy(alpha = 0.30f)
+                    inBase -> continue
+                    line < c.separatorLine -> colors.conflictCurrent.copy(alpha = 0.12f)
+                    else -> colors.conflictIncoming.copy(alpha = 0.12f)
+                }
+                val rows = if (wrap) vlayout.rowsOf(line).coerceAtLeast(1) else 1
+                drawRect(color, Offset(gutterWidth, lineTop(line)), Size(size.width - gutterWidth, rows * lineH))
+            }
+        }
         // Plugin background decorations, BELOW every other fill: a coverage tint or a diff band is a property
         // of the text, so the selection, the find highlights and a template field all have to read as being
         // on top of it. Tinted down to the alpha the editor's other whole-range fills use, because the theme

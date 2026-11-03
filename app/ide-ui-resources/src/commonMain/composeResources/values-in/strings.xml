@@ -297,6 +297,12 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="breadcrumb_split">Terpisah</string>
     <string name="breadcrumb_nav_back">Kembali</string>
     <string name="breadcrumb_nav_forward">Maju</string>
+    <string name="conflict_current">Saat ini</string>
+    <string name="conflict_incoming">Masuk</string>
+    <string name="conflict_both">Keduanya</string>
+    <string name="conflict_current_desc">Pertahankan sisi saat ini</string>
+    <string name="conflict_incoming_desc">Pertahankan sisi masuk</string>
+    <string name="conflict_both_desc">Pertahankan kedua sisi</string>
     <string name="edchrome_files">File</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>
