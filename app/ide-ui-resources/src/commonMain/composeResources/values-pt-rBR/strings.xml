@@ -312,6 +312,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="conflict_current_desc">Manter o lado atual</string>
     <string name="conflict_incoming_desc">Manter o lado recebido</string>
     <string name="conflict_both_desc">Manter os dois lados</string>
+    <string name="gesture_nothing_to_undo">Nada para desfazer</string>
+    <string name="gesture_nothing_to_redo">Nada para refazer</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Arquivos</string>

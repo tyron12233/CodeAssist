@@ -52,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -765,6 +766,16 @@ internal fun CompactLayout(
                     )
                     // While the keyboard is up: a coding-symbol accessory bar sits directly above it. Off-keyboard,
                     // the dock's collapsed bar takes the slot instead.
+                    // Volume keys move the caret while typing, when the user turned that on.
+                    val takeVolumeKeys = keyboardOpen && state.active != null && state.volumeKeysMoveCaret
+                    DisposableEffect(takeVolumeKeys) {
+                        if (takeVolumeKeys) {
+                            dev.ide.ui.platform.VolumeKeyCaret.handler = { dir ->
+                                state.active?.session?.moveHorizontal(dir, select = false)
+                            }
+                        }
+                        onDispose { dev.ide.ui.platform.VolumeKeyCaret.handler = null }
+                    }
                     if (keyboardOpen && state.active != null) {
                         // Derived: the diagnostics list is replaced on every edit, and this scope should
                         // recompose only when the jump key appears or goes away.

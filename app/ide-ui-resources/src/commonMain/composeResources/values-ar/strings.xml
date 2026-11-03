@@ -527,6 +527,8 @@
     <string name="conflict_current_desc">الإبقاء على الجانب الحالي</string>
     <string name="conflict_incoming_desc">الإبقاء على الجانب الوارد</string>
     <string name="conflict_both_desc">الإبقاء على الجانبين</string>
+    <string name="gesture_nothing_to_undo">لا شيء للتراجع عنه</string>
+    <string name="gesture_nothing_to_redo">لا شيء لإعادته</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>

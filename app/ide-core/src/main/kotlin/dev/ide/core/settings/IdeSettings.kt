@@ -57,6 +57,8 @@ data class IdeSettings(
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     val pinchZoom: Boolean = true,
+    /** While typing in the editor on a phone, volume up / down move the caret left / right instead of the volume. */
+    val volumeKeysMoveCaret: Boolean = false,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space. **On by default** — a normal
      *  keyboard. Turning it OFF marks the field as raw code (a `visible-password` input type) so a typed `.`
      *  doesn't get an auto-inserted space and identifiers aren't "corrected", at the cost of the suggestion

@@ -336,6 +336,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="conflict_current_desc">Conservar el lado actual</string>
     <string name="conflict_incoming_desc">Conservar el lado entrante</string>
     <string name="conflict_both_desc">Conservar ambos lados</string>
+    <string name="gesture_nothing_to_undo">Nada que deshacer</string>
+    <string name="gesture_nothing_to_redo">Nada que rehacer</string>
 
     <!-- Editor chrome -->
     <string name="edchrome_files">Archivos</string>

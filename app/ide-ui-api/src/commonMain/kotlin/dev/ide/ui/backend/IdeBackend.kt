@@ -2148,6 +2148,8 @@ data class UiSettings(
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font. */
     val pinchZoom: Boolean = true,
+    /** While typing on a phone, volume up / down move the caret left / right. */
+    val volumeKeysMoveCaret: Boolean = false,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     val softKeyboardSuggestions: Boolean = true,
     /** Reformat the active file when it is saved (the editor's save handler reads this). */

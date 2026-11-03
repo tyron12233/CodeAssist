@@ -281,6 +281,8 @@
     <string name="conflict_current_desc">Оставить текущую сторону</string>
     <string name="conflict_incoming_desc">Оставить входящую сторону</string>
     <string name="conflict_both_desc">Оставить обе стороны</string>
+    <string name="gesture_nothing_to_undo">Нечего отменять</string>
+    <string name="gesture_nothing_to_redo">Нечего возвращать</string>
     <string name="edchrome_files">Файлы</string>
     <string name="edchrome_more">Ещё</string>
     <string name="sidebar_hide_tool_window_bar">Скрыть панель инструментов</string>

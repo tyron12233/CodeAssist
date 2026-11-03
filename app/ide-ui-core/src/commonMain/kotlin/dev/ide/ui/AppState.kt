@@ -844,6 +844,8 @@ class IdeUiState(
     var twoAxisScrollEnabled by mutableStateOf(true)
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     var pinchZoomEnabled by mutableStateOf(true)
+    /** Volume up / down move the caret while typing on a phone (see [dev.ide.ui.platform.VolumeKeyCaret]). */
+    var volumeKeysMoveCaret by mutableStateOf(false)
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     var softKeyboardSuggestions by mutableStateOf(true)
 
@@ -926,6 +928,7 @@ class IdeUiState(
         caretStyle = s.caretStyle
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom
+        volumeKeysMoveCaret = s.volumeKeysMoveCaret
         softKeyboardSuggestions = s.softKeyboardSuggestions
     }
 

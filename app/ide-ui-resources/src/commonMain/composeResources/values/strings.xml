@@ -489,6 +489,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="conflict_current_desc">Keep the current side</string>
     <string name="conflict_incoming_desc">Keep the incoming side</string>
     <string name="conflict_both_desc">Keep both sides</string>
+    <string name="gesture_nothing_to_undo">Nothing to undo</string>
+    <string name="gesture_nothing_to_redo">Nothing to redo</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>

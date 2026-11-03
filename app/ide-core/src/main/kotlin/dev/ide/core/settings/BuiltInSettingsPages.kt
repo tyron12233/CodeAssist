@@ -272,6 +272,7 @@ object BuiltInSettingsPages {
             ),
             SettingControl.Toggle("twoAxisScroll", "Two-axis scrolling", "Drag in any direction to scroll both axes at once (touch)", default = d.twoAxisScroll, group = "Gestures"),
             SettingControl.Toggle("pinchZoom", "Pinch to zoom", "Pinch with two fingers to change the code font size", default = d.pinchZoom, group = "Gestures"),
+            SettingControl.Toggle("volumeKeysMoveCaret", "Volume keys move the cursor", "While typing on a phone, volume up moves the cursor left and volume down moves it right, instead of changing the volume", default = d.volumeKeysMoveCaret, group = "Gestures"),
             SettingControl.Toggle("softKeyboardSuggestions", "Keyboard suggestions", "Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.", default = d.softKeyboardSuggestions, group = "Keyboard"),
         )
     }

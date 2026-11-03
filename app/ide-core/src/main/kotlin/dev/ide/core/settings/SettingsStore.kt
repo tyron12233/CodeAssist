@@ -46,6 +46,7 @@ class SettingsStore(
             caretStyle = oneOf("editor.caretStyle", d.caretStyle, IdeSettings.CARET_LINE, IdeSettings.CARET_BLOCK, IdeSettings.CARET_UNDERLINE, IdeSettings.CARET_CANDLE),
             twoAxisScroll = bool("editor.twoAxisScroll", d.twoAxisScroll),
             pinchZoom = bool("editor.pinchZoom", d.pinchZoom),
+            volumeKeysMoveCaret = bool("editor.volumeKeysMoveCaret", d.volumeKeysMoveCaret),
             softKeyboardSuggestions = bool("editor.softKeyboardSuggestions", d.softKeyboardSuggestions),
             completionAutoPopup = bool("completion.autoPopup", d.completionAutoPopup),
             completionDelayMs = int("completion.delayMs", d.completionDelayMs).coerceIn(MIN_COMPLETION_DELAY_MS, MAX_COMPLETION_DELAY_MS),
@@ -161,6 +162,7 @@ class SettingsStore(
         put("editor.caretStyle", s.caretStyle)
         put("editor.twoAxisScroll", s.twoAxisScroll.toString())
         put("editor.pinchZoom", s.pinchZoom.toString())
+        put("editor.volumeKeysMoveCaret", s.volumeKeysMoveCaret.toString())
         put("editor.softKeyboardSuggestions", s.softKeyboardSuggestions.toString())
         put("completion.autoPopup", s.completionAutoPopup.toString())
         put("completion.delayMs", s.completionDelayMs.toString())

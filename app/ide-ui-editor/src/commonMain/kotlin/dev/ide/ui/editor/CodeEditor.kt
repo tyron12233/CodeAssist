@@ -331,6 +331,8 @@ private fun CodeEditorContent(
     // A read-only buffer (a decompiled / library-source view) never mutates, so completion has nothing to
     // commit into — suppress the auto-popup so it doesn't hover over inert text.
     val readOnly = !editorSession.editable
+    // The three-finger undo/redo gesture's confirmation label.
+    val undoFeedback = remember(editorSession) { UndoGestureFeedback() }
     // Past the large-file threshold the memory-heavy features are suppressed (the daemon passes are gated in
     // EditorDaemonEffect; completion, the whole-file occurrence scan, and the structure fetch are gated below)
     // so a big file doesn't exhaust the heap on a low-RAM device. Syntax highlighting and editing stay on.
@@ -1170,7 +1172,9 @@ private fun CodeEditorContent(
             .background(colors.editorBg)
             // Before the clip, so the loupe may rise above the editor's top edge (over the breadcrumbs) to show a top line.
             .editorLoupe(interaction, metrics.lineHeight, background = drawColors.background, outline = colors.separator)
-            .clipToBounds(),
+            .clipToBounds()
+            // Outermost input: three-finger undo/redo sees the touches before the editor's own gestures do.
+            .then(if (readOnly) Modifier else Modifier.undoSwipe(editorSession, undoFeedback)),
     ) {
         EditorCanvasLayer(
             editorSession = editorSession,
@@ -1406,6 +1410,7 @@ private fun CodeEditorContent(
                 interaction.selectionToolbarHeightPx + with(LocalDensity.current) { 8.dp.roundToPx() }
             } else 0,
         )
+        UndoGestureLabel(undoFeedback)
         SelectionToolbarLayer(
             session = editorSession,
             geometry = geometry,

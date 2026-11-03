@@ -305,6 +305,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="conflict_current_desc">Pertahankan sisi saat ini</string>
     <string name="conflict_incoming_desc">Pertahankan sisi masuk</string>
     <string name="conflict_both_desc">Pertahankan kedua sisi</string>
+    <string name="gesture_nothing_to_undo">Tidak ada yang bisa diurungkan</string>
+    <string name="gesture_nothing_to_redo">Tidak ada yang bisa diulangi</string>
     <string name="edchrome_files">File</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>

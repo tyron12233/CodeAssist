@@ -480,6 +480,8 @@
     <string name="conflict_current_desc">保留当前一方</string>
     <string name="conflict_incoming_desc">保留传入一方</string>
     <string name="conflict_both_desc">保留两者</string>
+    <string name="gesture_nothing_to_undo">没有可撤销的操作</string>
+    <string name="gesture_nothing_to_redo">没有可重做的操作</string>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">文件</string>

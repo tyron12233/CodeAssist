@@ -370,8 +370,21 @@ class MainActivity : ComponentActivity() {
      * An app shortcut pressed while nothing in the Compose content has focus. With a focused node the root
      * listener in [CodeAssistApp] already had it; this only sees a key the content left unconsumed.
      */
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
-        super.dispatchKeyEvent(event) || AppKeys.onKey(androidx.compose.ui.input.key.KeyEvent(event))
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        // Volume keys as cursor keys, when the editor has taken them (opt-in setting, keyboard up). Both the press
+        // (and its auto-repeat) and the release are swallowed, so the volume panel never shows.
+        val caret = dev.ide.ui.platform.VolumeKeyCaret.handler
+        val dir = when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_VOLUME_UP -> -1
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> 1
+            else -> 0
+        }
+        if (caret != null && dir != 0) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) caret(dir)
+            return true
+        }
+        return super.dispatchKeyEvent(event) || AppKeys.onKey(androidx.compose.ui.input.key.KeyEvent(event))
+    }
 
     /** The app's shortcuts in Android's Keyboard Shortcuts list (Meta+/). */
     override fun onProvideKeyboardShortcuts(
