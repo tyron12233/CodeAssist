@@ -1089,10 +1089,13 @@ class IdeServices private constructor(
             val start = System.nanoTime()
             val scope = runCatching { buildIndexScope() }.getOrElse { return }
             val scoped = System.nanoTime()
+            // Alongside the pass where memory allows, after it where it is tight (two peaks must not stack there).
+            if (!DeviceMemory.isLow) prewarmResourceRepositories()
             runCatching {
                 if (invalidate) indexService.invalidate()
                 indexService.ensureUpToDate(scope)
             }
+            if (DeviceMemory.isLow) prewarmResourceRepositories()
             val end = System.nanoTime()
             val pass = (indexService as? IndexServiceImpl)?.lastPass
             val kinds = pass?.built.orEmpty().map { it to builtKind(it, store.rootPath, sharedCachesRoot) }
@@ -4886,6 +4889,22 @@ class IdeServices private constructor(
      * re-parsed per use case. Rebuilt only when the module's res files change (the `.xml` fingerprint), and
      * stampede-guarded so concurrent first-callers don't each launch a full parse.
      */
+    /**
+     * Parse each Android module's resources in the background, so the editor's first pass doesn't. The first
+     * type name a Kotlin file resolves can reach the synthetic `R` class, which needs every resource XML of the
+     * module and its libraries parsed (~0.7 s on an emulator, on the engine thread, during the first preview or
+     * highlighting of a cold start). Started with each index pass: the res set follows the dependencies. The
+     * repository is keyed on the res files' fingerprint and built under [repoBuildLock], so a pass that asks while
+     * this runs waits for it instead of parsing a second time, and a stale one is never served.
+     */
+    private fun prewarmResourceRepositories() {
+        val android = runCatching { modules().filter { it.facets.get(AndroidFacet.KEY) != null } }.getOrDefault(emptyList())
+        if (android.isEmpty()) return
+        indexScope.launch(Dispatchers.IO) {
+            for (m in android) runCatching { resourceRepository(m) }
+        }
+    }
+
     private fun resourceRepository(module: Module): CachedRepo? {
         val key = module.id.value
         val resDirs = runCatching { AndroidResources.resourceDirs(module, store.workspace) }.getOrDefault(emptyList())
