@@ -482,6 +482,14 @@
     <string name="conflict_both_desc">保留两者</string>
     <string name="gesture_nothing_to_undo">没有可撤销的操作</string>
     <string name="gesture_nothing_to_redo">没有可重做的操作</string>
+    <string name="paste_history_title">从历史记录粘贴</string>
+    <string name="paste_history_clear">清除</string>
+    <string name="paste_history_empty">你在编辑器中复制或剪切的文本会显示在这里。</string>
+    <string name="symbolbar_clipboard">剪贴板</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d 行</item>
+        <item quantity="other">%1$d 行</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">文件</string>

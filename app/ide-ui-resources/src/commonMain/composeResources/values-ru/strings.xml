@@ -283,6 +283,14 @@
     <string name="conflict_both_desc">Оставить обе стороны</string>
     <string name="gesture_nothing_to_undo">Нечего отменять</string>
     <string name="gesture_nothing_to_redo">Нечего возвращать</string>
+    <string name="paste_history_title">Вставить из истории</string>
+    <string name="paste_history_clear">Очистить</string>
+    <string name="paste_history_empty">Здесь появится текст, который вы копируете или вырезаете в редакторе.</string>
+    <string name="symbolbar_clipboard">Буфер обмена</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d строка</item>
+        <item quantity="other">%1$d строк</item>
+    </plurals>
     <string name="edchrome_files">Файлы</string>
     <string name="edchrome_more">Ещё</string>
     <string name="sidebar_hide_tool_window_bar">Скрыть панель инструментов</string>

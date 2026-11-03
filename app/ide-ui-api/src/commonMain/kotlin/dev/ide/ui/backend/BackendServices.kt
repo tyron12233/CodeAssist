@@ -1779,7 +1779,9 @@ object CustomizationActions {
     const val MOVE_LINE_DOWN = "moveLineDown"
     const val DUPLICATE_LINE = "duplicateLine"
     const val NEXT_PROBLEM = "nextProblem"
-    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM)
+    /** Opens Paste from History. */
+    const val PASTE_HISTORY = "pasteHistory"
+    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM, PASTE_HISTORY)
 }
 
 /**

@@ -368,6 +368,15 @@ private fun CodeEditorContent(
     val popups = remember(path) { EditorPopupState() }
     var gotoLineOpen by popups::gotoLineOpen
     var quickDoc by popups::quickDoc
+    // Paste from History (Ctrl/⌘-Shift-V, the caret toolbar's clock, the symbol bar's Clipboard key).
+    var pasteHistoryOpen by remember(editorSession) { mutableStateOf(false) }
+    val seenPasteRequests = remember(editorSession) { intArrayOf(editorSession.pasteHistoryRequests) }
+    LaunchedEffect(editorSession.pasteHistoryRequests) {
+        if (editorSession.pasteHistoryRequests != seenPasteRequests[0]) {
+            seenPasteRequests[0] = editorSession.pasteHistoryRequests
+            pasteHistoryOpen = true
+        }
+    }
     var rename by popups::rename
     var renameBusy by popups::renameBusy
     var renameError by popups::renameError
@@ -920,15 +929,17 @@ private fun CodeEditorContent(
 
                 Key.C -> {
                     // Cap the payload so a multi-MB selection can't blow the clipboard's Binder transaction.
-                    editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }; return true
+                    editorSession.selectedText()?.let(clipboard::copyFromEditor); return true
                 }
 
                 Key.X -> {
-                    editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }; return true
+                    editorSession.cutSelection()?.let(clipboard::copyFromEditor); return true
                 }
 
                 Key.V -> {
-                    clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) }
+                    // Ctrl/⌘-Shift-V: Paste from History, as in IntelliJ.
+                    if (ev.isShiftPressed) pasteHistoryOpen = true
+                    else clipboard.textForPaste()?.let(editorSession::commitText)
                     return true
                 }
                 // Undo (⌘/Ctrl-Z), redo (⌘/Ctrl-Shift-Z or Ctrl-Y). Dismiss the popup/snippet first.
@@ -1428,6 +1439,21 @@ private fun CodeEditorContent(
             lineHeightPx = metrics.lineHeight,
             onDocs = { showQuickDoc() },
             onMenu = { interaction.handlesVisible = false; openNavMenu() },
+            onPasteHistory = { interaction.handlesVisible = false; pasteHistoryOpen = true },
+        )
+        PasteHistoryLayer(
+            open = pasteHistoryOpen,
+            caretOffset = caretOffset,
+            caretGeometry = { geometry.caretGeometry(it) },
+            metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+            onPick = { text ->
+                pasteHistoryOpen = false
+                // The picked entry becomes the clipboard's too, so a plain paste after it repeats it.
+                clipboard.copyFromEditor(text)
+                editorSession.commitText(text)
+            },
+            onDismiss = { pasteHistoryOpen = false },
         )
         LightbulbLayer(
             acts = acts,
@@ -1775,9 +1801,9 @@ private fun BoxScope.EditorDialogsLayer(
                 }
             },
             onCommand = { commands.onEditorCommand(it) },
-            onCut = { editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
-            onCopy = { editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
-            onPaste = { clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) } },
+            onCut = { editorSession.cutSelection()?.let(clipboard::copyFromEditor) },
+            onCopy = { editorSession.selectedText()?.let(clipboard::copyFromEditor) },
+            onPaste = { clipboard.textForPaste()?.let(editorSession::commitText) },
             onSelectAll = { editorSession.selectAll() },
             onPluginAction = { acts.invokeMenuAction(it.id) },
             onDismiss = {

@@ -280,6 +280,7 @@ internal fun SelectionToolbarLayer(
     lineHeightPx: Float,
     onDocs: () -> Unit,
     onMenu: () -> Unit,
+    onPasteHistory: () -> Unit,
 ) {
     if (!(interaction.handlesVisible && interaction.lastInputWasTouch)) return
     // Out of the way while a handle is dragged: the loupe floats where the toolbar sits. It returns on release.
@@ -310,20 +311,22 @@ internal fun SelectionToolbarLayer(
             onCopy = {
                 // Cap the payload: putting a multi-MB selection on the system clipboard marshals it across a
                 // Binder transaction and throws TransactionTooLargeException (crash observed in the field).
-                session.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
+                session.selectedText()?.let(clipboard::copyFromEditor)
                 interaction.handlesVisible = false
             },
             onCut = {
-                session.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
+                session.cutSelection()?.let(clipboard::copyFromEditor)
                 interaction.handlesVisible = false
             },
             onPaste = {
-                clipboard.getText()?.text?.let { if (it.isNotEmpty()) session.commitText(it) }
+                clipboard.textForPaste()?.let(session::commitText)
                 interaction.handlesVisible = false
             },
             onSelectAll = { session.selectAll() },
             onDocs = { interaction.handlesVisible = false; onDocs() },
             onMenu = onMenu,
+            // With nothing selected the toolbar is short, so the history fits; it needs something to show.
+            onPasteHistory = if (session.selection.collapsed && dev.ide.ui.editor.core.ClipboardHistory.entries.isNotEmpty()) onPasteHistory else null,
         )
     }
 }

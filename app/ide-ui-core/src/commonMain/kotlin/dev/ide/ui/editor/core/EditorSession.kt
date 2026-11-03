@@ -1057,6 +1057,14 @@ class EditorSession(
         updateSelectionAndComposing(TextRange(offset.coerceIn(0, doc.length)), null)
     }
 
+    /** Bumped to open Paste from History from outside the editor (the symbol bar's Clipboard key). */
+    var pasteHistoryRequests by mutableIntStateOf(0)
+        private set
+
+    fun requestPasteHistory() {
+        pasteHistoryRequests++
+    }
+
     // ---- the floating cursor (the symbol bar's hold-and-drag trackpad) ----
 
     /**

@@ -243,6 +243,7 @@ private fun dispatchSymbolAction(state: IdeUiState, action: String) {
         CustomizationActions.MOVE_LINE_DOWN -> s.moveLines(1)
         CustomizationActions.DUPLICATE_LINE -> s.duplicateSelection()
         CustomizationActions.NEXT_PROBLEM -> s.goToDiagnostic(forward = true)
+        CustomizationActions.PASTE_HISTORY -> s.requestPasteHistory()
     }
 }
 

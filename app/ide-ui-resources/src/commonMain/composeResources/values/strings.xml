@@ -491,6 +491,14 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="conflict_both_desc">Keep both sides</string>
     <string name="gesture_nothing_to_undo">Nothing to undo</string>
     <string name="gesture_nothing_to_redo">Nothing to redo</string>
+    <string name="paste_history_title">Paste from history</string>
+    <string name="paste_history_clear">Clear</string>
+    <string name="paste_history_empty">Text you copy or cut in the editor shows up here.</string>
+    <string name="symbolbar_clipboard">Clipboard</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>

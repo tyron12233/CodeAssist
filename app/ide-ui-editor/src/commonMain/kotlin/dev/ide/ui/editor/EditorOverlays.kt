@@ -89,6 +89,7 @@ import dev.ide.ui.generated.resources.edoverlay_go_to_line
 import dev.ide.ui.generated.resources.edoverlay_go_to_line_hint
 import dev.ide.ui.generated.resources.edoverlay_no_documentation
 import dev.ide.ui.generated.resources.edoverlay_paste
+import dev.ide.ui.generated.resources.paste_history_title
 import dev.ide.ui.generated.resources.ctxmenu_actions
 import dev.ide.ui.generated.resources.edoverlay_quick_documentation
 import dev.ide.ui.generated.resources.edoverlay_rename_hint
@@ -422,6 +423,7 @@ internal fun SelectionToolbar(
     onSelectAll: () -> Unit,
     onDocs: (() -> Unit)? = null,
     onMenu: (() -> Unit)? = null,
+    onPasteHistory: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(Ca.radius.pill)
     Row(
@@ -440,6 +442,9 @@ internal fun SelectionToolbar(
             ToolbarTextItem(stringResource(Res.string.edoverlay_cut), i++, onCut)
         }
         ToolbarTextItem(stringResource(Res.string.edoverlay_paste), i++, onPaste)
+        if (onPasteHistory != null) {
+            ToolbarIconItem(CaIcons.clock, stringResource(Res.string.paste_history_title), i++, MaterialTheme.colorScheme.onSurfaceVariant, onPasteHistory)
+        }
         ToolbarTextItem(stringResource(Res.string.edoverlay_select_all), i++, onSelectAll)
         if (onMenu != null || onDocs != null) ToolbarDivider()
         // Quick documentation for the symbol under the caret (the touch path for Ctrl-Q).

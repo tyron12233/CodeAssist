@@ -307,6 +307,14 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="conflict_both_desc">Pertahankan kedua sisi</string>
     <string name="gesture_nothing_to_undo">Tidak ada yang bisa diurungkan</string>
     <string name="gesture_nothing_to_redo">Tidak ada yang bisa diulangi</string>
+    <string name="paste_history_title">Tempel dari riwayat</string>
+    <string name="paste_history_clear">Hapus</string>
+    <string name="paste_history_empty">Teks yang Anda salin atau potong di editor muncul di sini.</string>
+    <string name="symbolbar_clipboard">Papan klip</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d baris</item>
+        <item quantity="other">%1$d baris</item>
+    </plurals>
     <string name="edchrome_files">File</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>

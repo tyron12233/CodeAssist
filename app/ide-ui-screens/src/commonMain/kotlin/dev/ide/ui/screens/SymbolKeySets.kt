@@ -21,6 +21,7 @@ private val ACTION_KEYS = listOf(
     UiSymbolKey("Move line up", "", action = CustomizationActions.MOVE_LINE_UP),
     UiSymbolKey("Move line down", "", action = CustomizationActions.MOVE_LINE_DOWN),
     UiSymbolKey("Duplicate line", "", action = CustomizationActions.DUPLICATE_LINE),
+    UiSymbolKey("Clipboard", "", action = CustomizationActions.PASTE_HISTORY),
 )
 
 private fun keys(vararg symbols: String) = ACTION_KEYS + symbols.map { UiSymbolKey(it, it) }

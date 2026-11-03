@@ -529,6 +529,14 @@
     <string name="conflict_both_desc">الإبقاء على الجانبين</string>
     <string name="gesture_nothing_to_undo">لا شيء للتراجع عنه</string>
     <string name="gesture_nothing_to_redo">لا شيء لإعادته</string>
+    <string name="paste_history_title">لصق من السجل</string>
+    <string name="paste_history_clear">مسح</string>
+    <string name="paste_history_empty">يظهر هنا النص الذي تنسخه أو تقصّه في المحرر.</string>
+    <string name="symbolbar_clipboard">الحافظة</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d سطر</item>
+        <item quantity="other">%1$d أسطر</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>
