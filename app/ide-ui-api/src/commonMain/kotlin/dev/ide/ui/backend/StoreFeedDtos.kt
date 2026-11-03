@@ -681,6 +681,8 @@ data class UiPublisherProfile(
     val verified: Boolean = false,
     val followers: Int = 0,
     val following: Boolean = false,
+    /** When the publisher's account was created, ISO 8601. Null hides the "Joined" chip. */
+    val joinedAt: String? = null,
     val projectCount: Int = 0,
     val totalInstalls: Int = 0,
     val totalLikes: Int = 0,

@@ -1323,11 +1323,7 @@ private fun formatRating(rating: Float): String {
     return "${tenths / 10}.${tenths % 10}"
 }
 
-internal fun compactCount(n: Int): String = when {
-    n >= 1_000_000 -> "${n / 1_000_000}M"
-    n >= 1_000 -> "${n / 1_000}K"
-    else -> n.toString()
-}
+internal fun compactCount(n: Int): String = dev.ide.ui.components.compactNumber(n)
 
 private fun formatSize(bytes: Long): String {
     val mb = bytes / 1_048_576.0

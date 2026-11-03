@@ -273,13 +273,20 @@ internal fun StoreItemRow(
     progress: dev.ide.ui.backend.UiInstallProgress? = null,
     /** Where a published app icon is fetched from. Null (the bundled catalogue) keeps the glyph tile. */
     backend: dev.ide.ui.backend.IdeBackend? = null,
+    /**
+     * Replaces the publisher line. A publisher's own page passes the project's blurb, since naming the
+     * publisher under every row of their own page says nothing.
+     */
+    subtitle: String? = null,
+    /** Replaces the stat line, for a page that ranks by different figures than the store's shelves. */
+    meta: String? = null,
 ) {
     val message = progress?.message
     StoreListRow(
         title = item.title,
         // A failure replaces the publisher line: the row is where the tap happened, so it is where the
         // reason belongs.
-        subtitle = message ?: item.author.orEmpty().ifBlank { item.category },
+        subtitle = message ?: subtitle ?: item.author.orEmpty().ifBlank { item.category },
         iconId = item.iconId,
         pair = tonalPair(index),
         tileShape = tileShape(index),
@@ -287,7 +294,7 @@ internal fun StoreItemRow(
         actionLabel = installActionLabel(item, progress),
         actionFilled = item.available,
         // Suppressed while a failure is showing: the row is already saying something more important.
-        meta = if (message != null) "" else storeItemMeta(item),
+        meta = if (message != null) "" else meta ?: storeItemMeta(item),
         onOpen = { onOpenItem(item) },
         onAction = { if (!progress.inFlight) (onAction ?: onOpenItem)(item) },
         icon = rememberItemIcon(backend, item),

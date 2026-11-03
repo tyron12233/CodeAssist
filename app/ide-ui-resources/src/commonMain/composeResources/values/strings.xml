@@ -867,6 +867,11 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="you_moderation">Moderation</string>
     <string name="you_moderation_waiting">%1$d waiting for review</string>
     <string name="you_moderation_clear">Nothing is waiting for review</string>
+    <string name="you_account">Account</string>
+    <plurals name="you_releases">
+        <item quantity="one">%1$d release</item>
+        <item quantity="other">%1$d releases</item>
+    </plurals>
     <string name="moderation_title">Moderation</string>
     <string name="moderation_not_allowed">This account does not moderate the store.</string>
     <string name="moderation_tab_queue">Queue</string>
@@ -1001,6 +1006,27 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="profile_missing">No publisher with that name</string>
     <string name="profile_unrated">Unrated</string>
     <string name="profile_signin_to_follow">Sign in to follow</string>
+    <string name="profile_highlights">Highlights</string>
+    <string name="profile_award_installs">Most installed</string>
+    <string name="profile_award_liked">Most liked</string>
+    <string name="profile_award_rated">Top rated</string>
+    <string name="profile_award_newest">Newest</string>
+    <string name="profile_sort_popular">Popular</string>
+    <string name="profile_group_projects">Apps and projects</string>
+    <string name="profile_group_plugins">Plugins</string>
+    <string name="profile_joined">Joined %1$s</string>
+    <plurals name="profile_ratings">
+        <item quantity="one">%1$d rating</item>
+        <item quantity="other">%1$d ratings</item>
+    </plurals>
+    <plurals name="profile_age_months">
+        <item quantity="one">%1$d month ago</item>
+        <item quantity="other">%1$d months ago</item>
+    </plurals>
+    <plurals name="profile_age_years">
+        <item quantity="one">%1$d year ago</item>
+        <item quantity="other">%1$d years ago</item>
+    </plurals>
     <string name="like_action">Like</string>
     <string name="like_liked">Liked</string>
     <string name="like_signin">Sign in to like</string>

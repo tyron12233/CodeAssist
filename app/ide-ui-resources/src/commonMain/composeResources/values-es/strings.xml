@@ -1479,4 +1479,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="you_delete_account_title">¿Eliminar tu cuenta?</string>
     <string name="you_delete_account_body">Esto elimina de forma permanente tu cuenta de CodeAssist y todo lo guardado con ella: tu perfil, proyectos publicados, reseñas, me gusta, seguidos, resultados de retos y puntos de IA. Los proyectos de este dispositivo no se ven afectados. No se puede deshacer.</string>
     <string name="you_delete_account_deleting">Eliminando…</string>
+    <string name="you_account">Cuenta</string>
+    <plurals name="you_releases">
+        <item quantity="one">%1$d versión</item>
+        <item quantity="other">%1$d versiones</item>
+    </plurals>
 </resources>

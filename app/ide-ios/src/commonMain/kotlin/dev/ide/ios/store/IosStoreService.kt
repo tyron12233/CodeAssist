@@ -358,6 +358,7 @@ class IosStoreService(
                     verified = p.verified,
                     followers = p.followers,
                     following = p.following,
+                    joinedAt = p.joinedAt,
                     projectCount = p.projectCount,
                     totalInstalls = p.totalInstalls,
                     totalLikes = p.totalLikes,

@@ -914,6 +914,15 @@
     <string name="you_moderation">الإشراف</string>
     <string name="you_moderation_waiting">‏%1$d في انتظار المراجعة</string>
     <string name="you_moderation_clear">لا شيء ينتظر المراجعة</string>
+    <string name="you_account">الحساب</string>
+    <plurals name="you_releases">
+        <item quantity="zero">لا إصدارات</item>
+        <item quantity="one">إصدار واحد</item>
+        <item quantity="two">إصداران</item>
+        <item quantity="few">%1$d إصدارات</item>
+        <item quantity="many">%1$d إصدارًا</item>
+        <item quantity="other">%1$d إصدار</item>
+    </plurals>
     <string name="moderation_title">الإشراف</string>
     <string name="moderation_not_allowed">هذا الحساب لا يشرف على المتجر.</string>
     <string name="moderation_tab_queue">قائمة الانتظار</string>
@@ -1046,6 +1055,39 @@
     <string name="profile_missing">لا يوجد ناشر بهذا الاسم</string>
     <string name="profile_unrated">بلا تقييم</string>
     <string name="profile_signin_to_follow">سجّل الدخول للمتابعة</string>
+    <string name="profile_highlights">أبرز المشاريع</string>
+    <string name="profile_award_installs">الأكثر تثبيتًا</string>
+    <string name="profile_award_liked">الأكثر إعجابًا</string>
+    <string name="profile_award_rated">الأعلى تقييمًا</string>
+    <string name="profile_award_newest">الأحدث</string>
+    <string name="profile_sort_popular">الأكثر شيوعًا</string>
+    <string name="profile_group_projects">التطبيقات والمشاريع</string>
+    <string name="profile_group_plugins">الإضافات</string>
+    <string name="profile_joined">انضم %1$s</string>
+    <plurals name="profile_ratings">
+        <item quantity="zero">لا تقييمات</item>
+        <item quantity="one">تقييم واحد</item>
+        <item quantity="two">تقييمان</item>
+        <item quantity="few">%1$d تقييمات</item>
+        <item quantity="many">%1$d تقييمًا</item>
+        <item quantity="other">%1$d تقييم</item>
+    </plurals>
+    <plurals name="profile_age_months">
+        <item quantity="zero">منذ أقل من شهر</item>
+        <item quantity="one">منذ شهر</item>
+        <item quantity="two">منذ شهرين</item>
+        <item quantity="few">منذ %1$d أشهر</item>
+        <item quantity="many">منذ %1$d شهرًا</item>
+        <item quantity="other">منذ %1$d شهر</item>
+    </plurals>
+    <plurals name="profile_age_years">
+        <item quantity="zero">منذ أقل من سنة</item>
+        <item quantity="one">منذ سنة</item>
+        <item quantity="two">منذ سنتين</item>
+        <item quantity="few">منذ %1$d سنوات</item>
+        <item quantity="many">منذ %1$d سنة</item>
+        <item quantity="other">منذ %1$d سنة</item>
+    </plurals>
     <string name="like_action">إعجاب</string>
     <string name="like_liked">أعجبك</string>
     <string name="like_signin">سجّل الدخول للإعجاب</string>

@@ -861,6 +861,10 @@
     <string name="you_moderation">审核</string>
     <string name="you_moderation_waiting">%1$d 个待审核</string>
     <string name="you_moderation_clear">没有待审核的内容</string>
+    <string name="you_account">账号</string>
+    <plurals name="you_releases">
+        <item quantity="other">%1$d 个版本</item>
+    </plurals>
     <string name="moderation_title">审核</string>
     <string name="moderation_not_allowed">此账号没有商店审核权限。</string>
     <string name="moderation_tab_queue">待审核</string>
@@ -995,6 +999,24 @@
     <string name="profile_missing">没有这个名称的发布者</string>
     <string name="profile_unrated">未评分</string>
     <string name="profile_signin_to_follow">登录后关注</string>
+    <string name="profile_highlights">亮点</string>
+    <string name="profile_award_installs">安装最多</string>
+    <string name="profile_award_liked">最受喜爱</string>
+    <string name="profile_award_rated">评分最高</string>
+    <string name="profile_award_newest">最新</string>
+    <string name="profile_sort_popular">热门</string>
+    <string name="profile_group_projects">应用和项目</string>
+    <string name="profile_group_plugins">插件</string>
+    <string name="profile_joined">%1$s加入</string>
+    <plurals name="profile_ratings">
+        <item quantity="other">%1$d 个评分</item>
+    </plurals>
+    <plurals name="profile_age_months">
+        <item quantity="other">%1$d 个月前</item>
+    </plurals>
+    <plurals name="profile_age_years">
+        <item quantity="other">%1$d 年前</item>
+    </plurals>
     <string name="like_action">点赞</string>
     <string name="like_liked">已点赞</string>
     <string name="like_signin">登录后点赞</string>

@@ -1291,4 +1291,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="you_delete_account_title">Hapus akun Anda?</string>
     <string name="you_delete_account_body">Ini menghapus akun CodeAssist Anda secara permanen beserta semua yang tersimpan: profil, proyek yang diterbitkan, ulasan, suka, mengikuti, hasil tantangan, dan poin AI. Proyek di perangkat ini tidak terpengaruh. Tindakan ini tidak bisa dibatalkan.</string>
     <string name="you_delete_account_deleting">Menghapus…</string>
+    <string name="you_account">Akun</string>
+    <plurals name="you_releases">
+        <item quantity="other">%1$d rilis</item>
+    </plurals>
 </resources>

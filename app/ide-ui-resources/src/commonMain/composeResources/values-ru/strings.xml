@@ -1347,4 +1347,11 @@
     <string name="you_delete_account_title">Удалить аккаунт?</string>
     <string name="you_delete_account_body">Ваш аккаунт CodeAssist будет удалён навсегда вместе со всем, что с ним связано: профилем, опубликованными проектами, отзывами, лайками, подписками, результатами задач и баллами ИИ. Проекты на этом устройстве не затрагиваются. Отменить это нельзя.</string>
     <string name="you_delete_account_deleting">Удаление…</string>
+    <string name="you_account">Аккаунт</string>
+    <plurals name="you_releases">
+        <item quantity="one">%1$d выпуск</item>
+        <item quantity="few">%1$d выпуска</item>
+        <item quantity="many">%1$d выпусков</item>
+        <item quantity="other">%1$d выпуска</item>
+    </plurals>
 </resources>
