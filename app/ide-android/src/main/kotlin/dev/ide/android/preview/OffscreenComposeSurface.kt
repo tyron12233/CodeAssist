@@ -117,6 +117,10 @@ class OffscreenComposeSurface(
 
     private val latestBytes = AtomicReference<ByteArray?>(null)
     @Volatile private var contentSeen = false
+    /** [System.nanoTime] of the composition's first draw into the window, 0 until then. A frame queued after it
+     *  carries what the composable drew, even when that is a few glyphs on transparent (which [hasContent]'s
+     *  sparse sampling misses: a wrap-content `Text` touches none of its 64 points). */
+    @Volatile private var firstDrawNanos = 0L
     private val frames = AtomicInteger(0)
     private val owner = OffscreenOwner()
     private val virtualDisplay = context.getSystemService(DisplayManager::class.java).createVirtualDisplay(
@@ -139,7 +143,9 @@ class OffscreenComposeSurface(
                 // composition draws — a fully-transparent frame (the "black flash" on open). Once content has been
                 // seen, stop sampling (latch) so the zero-copy path never touches the pixels again.
                 if (!contentSeen) {
-                    if (!hasContent(img)) return@use
+                    val drawn = firstDrawNanos
+                    val afterDraw = drawn != 0L && (img.timestamp == 0L || img.timestamp >= drawn)
+                    if (!afterDraw && !hasContent(img)) return@use
                     contentSeen = true
                 }
                 val hwCb = onHardwareFrame
@@ -176,6 +182,17 @@ class OffscreenComposeSurface(
                 setViewTreeOnBackPressedDispatcherOwner(owner)
                 setContent(content)
             }
+            // Mark the composition's first draw: frames rendered from then on are content, whatever they hold.
+            // Removed on the next loop turn, since a draw listener may not remove itself while it is dispatched.
+            val firstDraw = object : android.view.ViewTreeObserver.OnDrawListener {
+                override fun onDraw() {
+                    if (firstDrawNanos == 0L) {
+                        firstDrawNanos = System.nanoTime()
+                        mainHandler.post { runCatching { view.viewTreeObserver.removeOnDrawListener(this) } }
+                    }
+                }
+            }
+            view.viewTreeObserver.addOnDrawListener(firstDraw)
             p.setContentView(view)
             // A Presentation is a Dialog: its window defaults to WRAP_CONTENT + centre gravity, so the ComposeView
             // can end up inset/centred within the VirtualDisplay rather than filling it from (0,0). That put a gap
