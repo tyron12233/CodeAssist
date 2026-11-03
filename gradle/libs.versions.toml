@@ -177,6 +177,12 @@ android-r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 android-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 android-aapt2 = { module = "com.android.tools.build:aapt2", version.ref = "aapt2" }
 android-bundletool = { module = "com.android.tools.build:bundletool", version.ref = "bundletool" }
+# bundletool's runtime dependencies other than protobuf, as its 1.18.3 POM declares them. :ide-android dexes a
+# protobuf-relocated bundletool from :art-compat instead of the stock module (and so loses its transitive
+# edges), so it declares these itself. Re-check against bundletool's POM when bumping it.
+bundletool-dagger = { module = "com.google.dagger:dagger", version = "2.28.3" }
+bundletool-jose4j = { module = "org.bitbucket.b_c:jose4j", version = "0.9.5" }
+bundletool-gson = { module = "com.google.code.gson:gson", version = "2.8.9" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_configuration", version.ref = "desugarJdkLibs" }

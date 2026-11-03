@@ -378,6 +378,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="missing_libraries_add_all">Adicionar todas</string>
     <string name="missing_libraries_adding">Adicionando…</string>
     <string name="missing_library_failed">Não foi possível adicionar a biblioteca: %1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">Veja quais redes de anúncios carregam e por que alguma falha. Só em builds de desenvolvimento em dispositivos de teste.</string>
+    <string name="ad_inspector_open">Abrir</string>
     <string name="sources_download">Baixar</string>
     <string name="sources_downloading">Baixando…</string>
     <string name="sources_download_failed">Falha no download: %1$s</string>

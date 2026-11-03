@@ -404,6 +404,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="missing_libraries_add_all">Añadir todas</string>
     <string name="missing_libraries_adding">Añadiendo…</string>
     <string name="missing_library_failed">No se pudo añadir la biblioteca: %1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">Comprueba qué redes de anuncios cargan y por qué falla alguna. Solo en compilaciones de desarrollo en dispositivos de prueba.</string>
+    <string name="ad_inspector_open">Abrir</string>
     <string name="sources_download">Descargar</string>
     <string name="sources_downloading">Descargando…</string>
     <string name="sources_download_failed">Error de descarga: %1$s</string>

@@ -97,6 +97,9 @@ import org.jetbrains.compose.resources.pluralStringResource
 import dev.ide.ui.generated.resources.support_ad_privacy
 import dev.ide.ui.generated.resources.support_ad_privacy_desc
 import dev.ide.ui.generated.resources.support_ad_privacy_button
+import dev.ide.ui.generated.resources.ad_inspector
+import dev.ide.ui.generated.resources.ad_inspector_desc
+import dev.ide.ui.generated.resources.ad_inspector_open
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.rememberNotificationPermissionController
@@ -123,6 +126,8 @@ internal const val SHOW_INTERSTITIALS_KEY = "showFullScreenAds"
 /** The "Manage ad consent" action injected onto the Privacy page when the host's UMP flow requires a privacy-
  *  options entry point (EEA/UK). Routed to [dev.ide.ui.ads.AdController.showPrivacyOptions], not the store. */
 private const val AD_PRIVACY_KEY = "adPrivacyOptions"
+/** "Ad Inspector", injected on the Privacy page of developer builds ([dev.ide.ui.ads.AdController.adInspectorAvailable]). */
+private const val AD_INSPECTOR_KEY = "adInspector"
 
 /**
  * The Settings screen. Pages come from [IdeBackend.settingsPages] — built-in categories plus any a plugin
@@ -166,6 +171,9 @@ fun SettingsScreen(
     val adPrivacyTitle = stringResource(Res.string.support_ad_privacy)
     val adPrivacyDesc = stringResource(Res.string.support_ad_privacy_desc)
     val adPrivacyButton = stringResource(Res.string.support_ad_privacy_button)
+    val adInspectorTitle = stringResource(Res.string.ad_inspector)
+    val adInspectorDesc = stringResource(Res.string.ad_inspector_desc)
+    val adInspectorButton = stringResource(Res.string.ad_inspector_open)
     // `ads?.privacyOptionsRequired` reads the host's observable consent state, so once UMP resolves and a
     // privacy-options entry becomes required, this recomputes and the "Manage ad consent" action appears.
     val privacyOptionsRequired = ads?.privacyOptionsRequired == true
@@ -188,6 +196,9 @@ fun SettingsScreen(
                     if (privacyOptionsRequired) {
                         add(UiSettingControl.Action(AD_PRIVACY_KEY, adPrivacyTitle, adPrivacyDesc, buttonLabel = adPrivacyButton))
                     }
+                    if (ads.adInspectorAvailable) {
+                        add(UiSettingControl.Action(AD_INSPECTOR_KEY, adInspectorTitle, adInspectorDesc, buttonLabel = adInspectorButton))
+                    }
                 }
                 page.copy(controls = injected + page.controls)
             }
@@ -207,6 +218,7 @@ fun SettingsScreen(
         when (action.key) {
             // The injected "Manage ad consent" action: reopen the host's UMP privacy-options form.
             AD_PRIVACY_KEY -> ads?.showPrivacyOptions()
+            AD_INSPECTOR_KEY -> ads?.openAdInspector()
             ACTION_VIEW_LOGS -> onOpenLogs()
             ACTION_BACKUP -> state.backupProjects(fileActions::share)
             // Re-request the notification permission; if the OS won't re-prompt (permanently denied), route to

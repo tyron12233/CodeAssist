@@ -106,6 +106,21 @@ class AndroidAdHost(
 
     override fun showPrivacyOptions() = onShowPrivacyOptions()
 
+    // Debug builds only. Built with -PREAL_ADS=true they request the REAL units, so the inspector shows the real
+    // mediation groups (Unity, Meta, Pangle, Mintegral); otherwise it shows Google's test units, which have none.
+    override val adInspectorAvailable: Boolean get() = BuildConfig.DEBUG
+
+    override fun openAdInspector() {
+        val activity = activityProvider() ?: return
+        com.google.android.gms.ads.MobileAds.openAdInspector(activity) { error ->
+            // Null on a normal close. Otherwise usually "not a test device" or "SDK not initialized yet".
+            if (error != null) {
+                adLog.warn("ad inspector: code=${error.code} ${error.message}")
+                android.widget.Toast.makeText(activity, "Ad Inspector: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // Full-screen interstitial, shared across trigger points (long build, finished lesson). Preloaded while the
     // IDE is idle and shown if the caller's gate allows. Single-use: cleared once shown; the callers preload the
     // next one when the IDE is idle again, never right after a show (that would load it next to the build the

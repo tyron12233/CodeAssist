@@ -589,17 +589,23 @@ android {
         // TEST rewarded unit never calls the `ai-reward` server, so with it a watched ad credits nothing. This swaps
         // in the real app id + real rewarded unit (the other units stay Google's test ones). Use it ONLY on an
         // emulator or a device registered as an AdMob test device, which get test ads from the real unit.
-        val realRewardedForTesting = (findProperty("REAL_REWARDED_ADS") as String?) == "true"
+        // -PREAL_ADS=true: debug only, EVERY unit real (app id included), for checking mediation with the Ad
+        // Inspector (Settings > Privacy & Data in a debug build). Google's test units have no mediation group, so
+        // without this the inspector shows nothing of Unity/Meta/Pangle/Mintegral. Same rule: emulator or a
+        // registered AdMob test device only.
+        val realAdsForTesting = (findProperty("REAL_ADS") as String?) == "true"
+        val realRewardedForTesting = realAdsForTesting || (findProperty("REAL_REWARDED_ADS") as String?) == "true"
         manifestPlaceholders["admobAppId"] = if (realRewardedForTesting) realAdmobAppId else testAdmobAppId
-        buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
-        buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+        fun unit(test: String, real: String) = "\"${if (realAdsForTesting) real else test}\""
+        buildConfigField("String", "AD_NATIVE_UNIT_ID", unit(testAdmobNativeUnitId, realAdmobNativeUnitId))
+        buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", unit(testAdmobInterstitialUnitId, realAdmobInterstitialUnitId))
         buildConfigField(
             "String", "AD_REWARDED_UNIT_ID",
             "\"${if (realRewardedForTesting) realAdmobRewardedUnitId else testAdmobRewardedUnitId}\"",
         )
-        buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
-        buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
-        buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
+        buildConfigField("String", "AD_NATIVE_UNIT_IDS", unit("", realAdmobNativeUnitsByPlacement))
+        buildConfigField("String", "AD_BANNER_UNIT_ID", unit(testAdmobBannerUnitId, realAdmobBannerUnitId))
+        buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", unit(testAdmobBannerUnitId, realAdmobBuildBannerUnitId))
     }
 
     buildFeatures {
@@ -980,6 +986,13 @@ configurations.configureEach {
         // fork's classes are API-compatible for the platform's (rarely hit) JNA touchpoints.
         exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna")
         exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna-platform")
+        // bundletool and the full protobuf it runs on are dexed from :art-compat, relocated off
+        // com.google.protobuf, which belongs to protobuf LITE here (the ad SDKs are built against it). See
+        // :art-compat's "bundletool's protobuf" section.
+        exclude(group = "com.android.tools.build", module = "bundletool")
+        exclude(group = "com.android.tools.build", module = "aapt2-proto")
+        exclude(group = "com.google.protobuf", module = "protobuf-java")
+        exclude(group = "com.google.protobuf", module = "protobuf-java-util")
     }
     // Force guava's JRE flavor over its Android flavor. The `implementation(libs.guava)` edge below requests
     // `org.gradle.jvm.environment = standard-jvm`, which makes guava's `jreRuntimeElements` a candidate
@@ -1098,11 +1111,12 @@ dependencies {
     implementation(libs.android.apksig)
     // Bouncy Castle: in-process keystore creation on device (keypair + self-signed cert → PKCS12; no keytool).
     implementation(libs.bouncycastle.pkix)
-    // bundletool builds the .aab in-process on device (BundletoolInProcess). Pure Java, so it dexes into the
-    // app like d8/apksig; its closure (guava/protobuf/dagger) comes transitively. android-support keeps it
-    // compileOnly+test. NOTE: dexing bundletool's closure into the app is new ground — if assembleDebug hits
-    // a duplicate-class / mergeJavaResource clash, add the offending entry to the packaging{} block above.
-    implementation(libs.android.bundletool)
+    // bundletool builds the .aab in-process on device (BundletoolInProcess). It is dexed from :art-compat with
+    // its full protobuf relocated (the stock jars are excluded from the runtime classpaths above), so its other
+    // runtime dependencies are declared here; guava and slf4j already arrive from elsewhere.
+    implementation(libs.bundletool.dagger)
+    implementation(libs.bundletool.jose4j)
+    implementation(libs.bundletool.gson)
 
     // Force the JRE flavor of guava (not the Android flavor). In an Android application the runtime
     // classpath requests `org.gradle.jvm.environment = android`, so guava's Gradle module metadata
@@ -1132,19 +1146,15 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.ui)
     implementation(libs.androidx.activity.compose)
-    // AdMob native ads (Android launcher only), rendered through the AdHost seam. Excludes protobuf-lite: this
-    // app already dexes full protobuf (via :android-support's bundletool), and the two share the com.google.
-    // protobuf.* package, so keeping both is a D8 duplicate-class failure. The ads SDK's protobuf touchpoints
-    // are API-compatible with the full runtime already present.
+    // AdMob native ads (Android launcher only), rendered through the AdHost seam. The ads SDK and the mediation
+    // network SDKs run on protobuf LITE, which they get: bundletool's full protobuf is relocated (:art-compat).
     // FCM, for push notifications. Present unconditionally so the messaging code compiles in every
     // checkout; without google-services.json the SDK has no project to talk to and stays dormant, which
     // is exactly what a contributor's build should do.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
 
-    implementation(libs.play.services.ads) {
-        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
-    }
+    implementation(libs.play.services.ads)
     // Play services (ads, base, basement) still declare androidx.fragment 1.0/1.1, which Play Console flags as
     // an outdated SDK. Nothing here uses fragments; this only lifts the resolved version.
     implementation(libs.androidx.fragment)
@@ -1153,26 +1163,16 @@ dependencies {
     implementation(libs.user.messaging.platform)
     // AdMob mediation adapters — Meta / Pangle / Mintegral bid against AdMob to fill the same NATIVE slots
     // (higher eCPM via competition; no new placements). Only native-capable networks are wired. Each pulls its
-    // network SDK transitively; the same protobuf-lite dup-class rule as the ads SDK applies, and their SDKs may
-    // add further transitive collisions that only surface at dex time — so a full assemble must be re-verified
+    // network SDK transitively; their SDKs may add transitive collisions that only surface at dex time — so a full assemble must be re-verified
     // when bumping these. Console-side mediation groups + per-network onboarding are configured in AdMob.
-    implementation(libs.admob.mediation.meta) {
-        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
-    }
-    implementation(libs.admob.mediation.pangle) {
-        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
-    }
-    implementation(libs.admob.mediation.mintegral) {
-        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
-    }
-    // Unity Ads: banner + interstitial demand only (it has no native format). The Unity SDK pulls
-    // protobuf-kotlin-lite -> protobuf-javalite, excluded for the same dup-class reason as above.
-    implementation(libs.admob.mediation.unity) {
-        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
-    }
-    implementation(libs.unity.ads) {
-        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
-    }
+    implementation(libs.admob.mediation.meta)
+    implementation(libs.admob.mediation.pangle)
+    implementation(libs.admob.mediation.mintegral)
+    // Unity Ads: banner + interstitial demand only (it has no native format). Its SDK needs protobuf lite
+    // (protobuf-kotlin-lite -> protobuf-javalite): against full protobuf its classes fail ART verification and
+    // it never bids.
+    implementation(libs.admob.mediation.unity)
+    implementation(libs.unity.ads)
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our
     // app-private project files for Share / "Open with", and grants read access on inbound intents.
     implementation(libs.androidx.core)
@@ -1236,33 +1236,6 @@ dependencies {
     androidTestCompileOnly(libs.ksp.common.deps)
 }
 
-// ============================================================================
-// R8 input fix for the experimental `minified` variant. The global
-// packaging.resources.excludes above drops bundletool's dead archive-dex stubs
-// from every build's PACKAGED OUTPUT, but whole-program R8 reads the dependency
-// jar directly (not the packaged resources), so it still sees the `.class`+`.dex`
-// mix and refuses it. Feed R8 a dex-stripped copy of the jar for `minified`
-// only. Scoped here (not global) because (a) the shipping R8-off builds don't
-// need it, and (b) doing it globally without dropping bundletool's protobuf/
-// dagger transitives (which resolve only through the bundletool module) needs a
-// transitive-preserving jar swap AGP doesn't cleanly allow — worth solving only
-// if/when R8 is enabled on a shipping variant. CONSEQUENCE for `minified`: the
-// module-exclude drops that protobuf/dagger closure, so the minified APK is a
-// slight under-estimate of a correct minified build (a few MB would return).
-val bundletoolNoDexSource: Configuration by configurations.creating {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
-dependencies { bundletoolNoDexSource(libs.android.bundletool) { isTransitive = false } }
-
-val stripBundletoolDex = tasks.register<Jar>("stripBundletoolDex") {
-    description = "Repackage bundletool without its embedded .dex stubs so whole-program R8 can ingest it."
-    archiveFileName.set("bundletool-nodex.jar")
-    destinationDirectory.set(layout.buildDirectory.dir("stripped-libs"))
-    from(provider { zipTree(bundletoolNoDexSource.singleFile) }) { exclude("**/*.dex") }
-}
-
-configurations.matching { it.name.startsWith("minified") }.configureEach {
-    exclude(group = "com.android.tools.build", module = "bundletool")
-}
-dependencies { "minifiedImplementation"(files(stripBundletoolDex)) }
+// (The `minified` variant used to swap in a dex-stripped copy of the stock bundletool jar here, because
+// whole-program R8 refuses a jar mixing .class and .dex. bundletool now comes from :art-compat, relocated and
+// with those archive-dex stubs already left out, so every variant dexes the same jar.)

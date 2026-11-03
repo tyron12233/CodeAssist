@@ -623,6 +623,9 @@
     <string name="missing_libraries_add_all">إضافة الكل</string>
     <string name="missing_libraries_adding">جارٍ الإضافة…</string>
     <string name="missing_library_failed">تعذّرت إضافة المكتبة: %1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">تحقّق من شبكات الإعلانات التي يتم تحميلها وسبب فشل أيٍّ منها. لإصدارات المطوّرين على أجهزة الاختبار فقط.</string>
+    <string name="ad_inspector_open">فتح</string>
     <string name="sources_download">تنزيل</string>
     <string name="sources_downloading">جاري التنزيل…</string>
     <string name="sources_download_failed">فشل التنزيل: %1$s</string>

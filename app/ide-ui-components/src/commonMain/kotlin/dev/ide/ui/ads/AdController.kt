@@ -86,6 +86,11 @@ class AdController(
     /** Open the host's ad consent / privacy-options form. Call only when [privacyOptionsRequired]. */
     fun showPrivacyOptions() = host.showPrivacyOptions()
 
+    /** Whether the host can open the ad debugging panel (developer builds). */
+    val adInspectorAvailable: Boolean get() = host.adInspectorAvailable
+
+    fun openAdInspector() = host.openAdInspector()
+
     /**
      * Milliseconds until ads may be turned off again, or 0 when they may be now. An install or update turns ads
      * back on and holds them on for [ADS_OFF_LOCK_MS] from the first launch of that build, so each update gets a

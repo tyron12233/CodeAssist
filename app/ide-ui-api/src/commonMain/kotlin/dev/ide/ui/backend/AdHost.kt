@@ -71,6 +71,16 @@ interface AdHost {
     fun showPrivacyOptions() {}
 
     /**
+     * Whether this build can open the ad SDK's debugging panel (AdMob's Ad Inspector: each ad unit's mediation
+     * group, which networks initialized, and how each request went). Developer builds only; the SDK itself
+     * opens it only on a registered test device (an emulator always is one).
+     */
+    val adInspectorAvailable: Boolean get() = false
+
+    /** Open the ad debugging panel ([adInspectorAvailable]). No-op where unsupported. */
+    fun openAdInspector() {}
+
+    /**
      * An opaque identity for the installed build: the same string for every launch of one installation, and a
      * different one after a fresh install or an update (on Android, the package's `lastUpdateTime`).
      * [dev.ide.ui.ads.AdController] uses it to turn ads back on once per install/update. Null where the host

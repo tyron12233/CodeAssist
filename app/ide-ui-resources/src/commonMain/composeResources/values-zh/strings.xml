@@ -567,6 +567,9 @@
     <string name="missing_libraries_add_all">全部添加</string>
     <string name="missing_libraries_adding">正在添加…</string>
     <string name="missing_library_failed">无法添加库：%1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">查看哪些广告网络已加载，以及失败的原因。仅限测试设备上的开发版本。</string>
+    <string name="ad_inspector_open">打开</string>
     <string name="sources_download">下载</string>
     <string name="sources_downloading">正在下载…</string>
     <string name="sources_download_failed">下载失败：%1$s</string>

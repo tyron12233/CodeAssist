@@ -167,6 +167,9 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="support_ad_privacy">Manage ad consent</string>
     <string name="support_ad_privacy_desc">Review or change your ad privacy choices.</string>
     <string name="support_ad_privacy_button">Manage</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">Check which ad networks load and why one fails. Developer builds on test devices only.</string>
+    <string name="ad_inspector_open">Open</string>
     <string name="ad_label">Ad</string>
     <string name="no_project_yet">No projects yet. Create one to get started.</string>
     <string name="your_projects">Your projects</string>
