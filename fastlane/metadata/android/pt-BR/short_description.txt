@@ -1,0 +1,1 @@
+IDE Android: programe em Kotlin e Java, veja o Compose e gere APKs sem PC.

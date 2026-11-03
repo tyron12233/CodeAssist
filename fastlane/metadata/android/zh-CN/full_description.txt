@@ -1,0 +1,49 @@
+CodeAssist 是一款运行在手机和平板上的安卓 IDE（Android IDE）。用 Kotlin 和 Java 写代码，边打字边看 Jetpack Compose 预览实时更新，并直接在设备上构建、签名和安装真正的 Android 应用。不需要电脑，不需要云端构建服务器，也不需要 Gradle 守护进程。
+
+它是完整的 Android 开发环境，而不只是代码练习工具：打开多模块 Android 项目，从 Maven 添加依赖库，生成可以安装或发布的 APK 或 App Bundle。
+
+<b>在手机上开发 Android 应用</b>
+• 整套工具链都在手机上运行：aapt2、Kotlin 编译器、Java 编译器、D8 dex 转换、打包和 APK 签名
+• 增量构建，只重新处理改动的部分
+• 一键安装并启动应用，在 Logcat 中查看输出
+• 支持 R8 的发布构建、Android App Bundle (AAB) 和你自己的签名密钥
+• 多模块项目、构建变体、ViewBinding、AIDL、KSP（Room、Hilt），以及用于 Firebase 的 google-services.json
+• 来自 Maven Central 和 Google Maven 仓库的依赖，也支持本地 JAR 和 AAR 文件
+• 导入现有的 Gradle 项目，或把你的项目导出为 Gradle 项目，在电脑上打开
+
+<b>Kotlin 和 Java 代码编辑器</b>
+• 代码补全在代码写到一半时依然可用，并自动添加导入
+• 边写边提示错误和警告，一键快速修复
+• 跳转到定义、实现和类型，符号搜索，以及可读的库源码
+• 格式化代码、优化导入、代码折叠和自动换行
+• Android XML 补全，支持布局、清单、values 和 drawable
+• 编程符号栏、双指缩放和编辑器配色方案
+
+<b>Jetpack Compose 和布局预览</b>
+• 带 @Preview 的 Composable 在代码旁实时渲染，编辑时即时更新
+• 预览 XML 布局（包括你的自定义 View），无需构建
+
+<b>AI 编程助手</b>
+• 用自然语言描述想要的改动。智能体会读取项目、修改代码、运行构建，并展示可撤销的 diff
+• 使用你自己的 Anthropic Claude、Google Gemini、OpenAI 或 OpenRouter 密钥，或兼容的网关。免费的 Gemini 密钥即可使用
+• 附加截图，用 @ 提及文件，随时继续已保存的会话
+
+<b>Git 与 GitHub</b>
+• 克隆、提交、分支、合并、stash 和推送
+• 登录 GitHub，克隆私有仓库并发起 Pull Request
+
+<b>学习与练习</b>
+• 交互式 Java 和 Kotlin 课程，练习可直接在设备上编译运行
+• 每日编程挑战和公开排行榜
+• 从项目商店的模板和示例应用开始，或发布你自己的作品
+
+<b>其他功能</b>
+• 积木编辑器：把 Java 文件切换成 Scratch 风格的积木再切回来，一个字符都不会丢
+• 运行 Java 和 Kotlin 控制台程序，带交互式控制台
+• 运行沙箱：程序访问网络、文件或其他进程前会先询问你
+• 可扩展 IDE 的插件，包括用于 C 和 C++ 的 NDK 插件
+• 浅色和深色主题，支持 Material You 动态配色
+
+<b>免费且开源</b>
+CodeAssist 是一款免费、开源的 Android IDE，采用 GNU General Public License v3.0 许可。应用内会显示少量小广告，你可以在应用内免费关闭。源代码、问题反馈和版本发布都在 GitHub：
+https://github.com/tyron12233/CodeAssist
