@@ -412,16 +412,17 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-declaration memoization
      *  (and disk persistence when the host provided [previewLoweringCacheDir]). The disk salt is this module's
-     *  classpath jar fingerprint: a dependency change alters overload resolution, so stale entries must miss —
+     *  classpath jar fingerprint (paths and sizes): a dependency change alters overload resolution, so stale entries must miss —
      *  the same signal that makes the host dispose this whole analyzer on classpath change. */
     private val previewLowering by lazy {
         val disk = previewLoweringCacheDir?.let { dir ->
             runCatching {
+                // Path and size, not the modification time: a dependency change moves a jar's path (its version
+                // is in it) or its size, while an mtime moves on its own. The IDE re-copies its bundled jars, and
+                // emulated external storage reports an unreliable mtime for a freshly written file, so with the
+                // mtime in it this salt changed on every launch and the cache never served a cold start.
                 val fp = classpathJars.asSequence()
-                    .map { p ->
-                        val a = runCatching { Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes::class.java) }.getOrNull()
-                        "$p:${a?.size() ?: -1}:${a?.lastModifiedTime()?.toMillis() ?: -1}"
-                    }
+                    .map { p -> "$p:${runCatching { Files.size(p) }.getOrDefault(-1L)}" }
                     .sorted().joinToString("|").hashCode().toString(16)
                 PreviewLoweringDiskCache(dir, "cp=$fp")
             }.getOrNull()
