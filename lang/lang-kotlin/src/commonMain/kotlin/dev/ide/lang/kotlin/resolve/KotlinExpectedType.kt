@@ -140,7 +140,11 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
         return p?.type
     }
     val call = argList.parent as? KtCallExpression ?: return null
-    val targets = callTargets(call)
+    // Overloads that can take this many arguments come first. Without that the first overload wins, whatever
+    // its arity: `stream.collect(Collectors.toList())` read its argument against the three-argument
+    // `collect(Supplier<R>, …)`, so `toList()` got no `T` from the parameter it really fills and typed as
+    // `Collector<Object, …>`, and the whole chain off `collect` became `List<Object>`.
+    val targets = callTargets(call).sortedBy { if (acceptsArgCount(it, call.valueArguments.size)) 0 else 1 }
     if (targets.isEmpty()) return null
     val argName = arg.getArgumentName()?.asName?.identifier
     if (argName != null) {
@@ -157,4 +161,14 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
         (s.paramTypes.getOrNull(paramIndex) as? KotlinType)?.let { return it }
     }
     return null
+}
+
+/** Whether [sym] can be called with [count] arguments: every parameter filled, or the missing ones have
+ *  defaults, or the extras go to its vararg. */
+private fun acceptsArgCount(sym: dev.ide.lang.kotlin.symbols.KotlinSymbol, count: Int): Boolean {
+    val n = sym.paramTypes.size
+    if (count == n) return true
+    if (sym.varargParamIndex >= 0) return count >= n - 1
+    if (count > n) return false
+    return (count until n).all { sym.paramHasDefault.getOrNull(it) == true }
 }
