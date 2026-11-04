@@ -74,10 +74,24 @@ How an app runs, which is `flutter run` without the `flutter` tool:
 - A saved file is recompiled as a delta and loaded with `reloadSources` + `ext.flutter.reassemble`: hot reload,
   state kept. `reset` + `recompile` gives the full kernel a hot restart needs.
 
-Previews: "Preview widgets" in the Run menu scans `lib/` for Flutter's `@Preview` widgets
-(`package:flutter/widget_previews.dart`) and runs a generated gallery of them in the same player, rewritten and
-hot-reloaded on every save. A preview is sized and themed as Flutter's previewer does it (`size`, `theme`,
-`brightness`, `textScaleFactor`, `wrapper`; not yet `localizations`), on a list rather than in the editor.
+Previews: a `.dart` file with Flutter `@Preview` widgets (`package:flutter/widget_previews.dart`) gets the
+editor's Preview and Split modes, like a Compose file. The pane shows that file's previews in a generated gallery
+that is hot-reloaded on every save, state kept. A preview is sized and themed as Flutter's previewer does it
+(`size`, `theme`, `brightness`, `textScaleFactor`, `wrapper`; not yet `localizations`), and follows the IDE's
+light or dark scheme. How it gets into the pane (Android 11 and later):
+
+- `FlutterPreviewService`, a bound service in the plugin's own `:preview` process, runs a `FlutterEngine` and a
+  `FlutterView` in a `SurfaceControlViewHost` and hands the pane a `SurfacePackage`, which the pane's
+  `SurfaceView` attaches. It serves CodeAssist alone, checked per message by `Message.sendingUid`.
+- The pane's surface is below the IDE's window, so the IDE receives the touches. The pane forwards them to the
+  service, which dispatches them to the view. This keeps the IDE's problem chip and notices drawable over the
+  preview.
+- The gallery's compiler and engine belong to a session per package that outlives the pane. Switching between
+  Split and Preview hands the same running engine a new surface (a fresh package from the same view host)
+  instead of restarting it, and a session no pane takes back within a minute is closed.
+
+"Preview widgets" in the Run menu shows every preview in `lib/` in the player instead, which is also what Android
+10 and earlier get.
 
 Not possible here: release (AOT) builds, which need a `gen_snapshot` that runs on Android; Flutter plugins with
 Android code of their own (the player has none); widget tests (`flutter test` needs Flutter's host test engine).

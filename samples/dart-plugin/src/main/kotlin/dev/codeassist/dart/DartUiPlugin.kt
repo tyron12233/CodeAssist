@@ -1,6 +1,7 @@
 package dev.codeassist.dart
 
 import dev.ide.plugin.ui.EditorLanguage
+import dev.ide.plugin.ui.EditorPreview
 import dev.ide.plugin.ui.FileIcon
 import dev.ide.plugin.ui.SyntaxStyle
 import dev.ide.plugin.ui.UiPlugin
@@ -9,7 +10,7 @@ import dev.ide.plugin.ui.UiRegistration
 /**
  * The UI facet: how a Dart file looks while it is being typed (keywords, strings, comments, brackets), drawn
  * on every keystroke before the analysis server's semantic colours arrive and wherever it is unavailable,
- * and the icon a `.dart` file gets.
+ * the icon a `.dart` file gets, and the preview pane for a Flutter file's `@Preview` widgets.
  */
 class DartUiPlugin : UiPlugin {
 
@@ -29,6 +30,14 @@ class DartUiPlugin : UiPlugin {
         )
         // Dart's own blue.
         ui.fileIcon(FileIcon(DartFileIcons.DART, DartFileIcons.SUFFIXES, badge = "D", color = 0xFF40C4FF))
+        // A Flutter file's @Preview widgets, live and hot-reloading, in the editor's preview pane.
+        ui.editorPreview(
+            EditorPreview(
+                id = "dev.codeassist.dart.flutterPreview",
+                title = "Flutter",
+                appliesTo = FlutterPreviewFiles::appliesTo,
+            ) { ctx -> FlutterPreviewPane(ctx) },
+        )
     }
 
     private companion object {

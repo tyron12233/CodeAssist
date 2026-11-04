@@ -28,6 +28,7 @@ class DartPlugin : Plugin {
         val sdk = DartSdk(reg, log, reg.appServices.getServiceOrNull(USER_MESSAGES))
         val flutter = FlutterSdk(reg, sdk, reg.logger("Flutter"))
         val pub = Pub(sdk, flutter)
+        tools = Tools(sdk, flutter, pub, reg.logger("FlutterPreview"))
 
         reg.register(FILE_TYPE_EP, FileTypeMapping(DartFileIcons.SUFFIXES, LanguageId(LANGUAGE)))
         reg.register(LANGUAGE_SERVER_EP, DartLanguageServer(sdk, pub, reg.logger("DartServer")))
@@ -43,7 +44,18 @@ class DartPlugin : Plugin {
         log.info("registered; the Dart SDK is prepared on first use")
     }
 
+    /** What the UI facet's preview pane compiles with: the same SDKs the engine facet prepared. */
+    class Tools(val sdk: DartSdk, val flutter: FlutterSdk, val pub: Pub, val log: dev.ide.platform.log.Logger)
+
     companion object {
+        /**
+         * Set by [register], read by the UI facet ([FlutterPreviewPane]). The two facets are loaded by one
+         * classloader, so they share this.
+         */
+        @Volatile
+        var tools: Tools? = null
+            private set
+
         /** The language id, shared by the file-type mapping, the editor profile and the language server. */
         const val LANGUAGE = "dart"
     }

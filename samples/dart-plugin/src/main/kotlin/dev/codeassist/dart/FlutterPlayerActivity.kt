@@ -11,7 +11,7 @@ import io.flutter.embedding.engine.FlutterJNI
  *
  * Runs in this plugin's own process, started only by [FlutterPlayerLauncher] (it is not exported), which
  * passes on the IDE's [ResultReceiver] in [EXTRA_RECEIVER]; the player answers it with its VM service URI
- * (auth token included) once the engine has one.
+ * (auth token included) and its isolate once the engine has them.
  */
 class FlutterPlayerActivity : FlutterActivity() {
 
@@ -38,17 +38,24 @@ class FlutterPlayerActivity : FlutterActivity() {
         intent.removeExtra(EXTRA_RECEIVER)
         Thread({
             var uri: String? = null
+            var isolate: String? = null
             val deadline = System.currentTimeMillis() + 20_000
-            while (uri == null && System.currentTimeMillis() < deadline) {
-                uri = runCatching { FlutterJNI.getVMServiceUri() }.getOrNull()?.takeIf { it.isNotBlank() }
-                if (uri == null) Thread.sleep(50)
+            while ((uri == null || isolate == null) && System.currentTimeMillis() < deadline) {
+                uri = uri ?: runCatching { FlutterJNI.getVMServiceUri() }.getOrNull()?.takeIf { it.isNotBlank() }
+                isolate = isolate ?: runCatching { flutterEngine?.dartExecutor?.isolateServiceId }.getOrNull()
+                if (uri == null || isolate == null) Thread.sleep(50)
             }
-            receiver.send(if (uri != null) 0 else 1, Bundle().apply { putString(EXTRA_URI, uri) })
+            receiver.send(if (uri != null) 0 else 1, Bundle().apply {
+                putString(EXTRA_URI, uri)
+                putString(EXTRA_ISOLATE, isolate)
+            })
         }, "flutter-player-vm-service").apply { isDaemon = true }.start()
     }
 
     companion object {
         const val EXTRA_RECEIVER = "dev.codeassist.dart.VM_SERVICE_RECEIVER"
         const val EXTRA_URI = "uri"
+        /** The isolate the player's engine started, which picks its view out of the VM's. */
+        const val EXTRA_ISOLATE = "isolate"
     }
 }

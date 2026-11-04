@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.ResultReceiver
+import dev.codeassist.dart.FlutterSession.Companion.string
 import dev.ide.build.AlwaysRun
 import dev.ide.build.ProgramIo
 import dev.ide.build.RunConsole
@@ -20,38 +21,33 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
 import java.io.IOException
-import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import java.util.stream.Collectors
 
 /**
  * Starts the Flutter player (FlutterPlayerActivity, in this plugin's own app) and answers its Dart VM service
- * URI, which the player sends back once its engine has one.
+ * URI and the isolate its engine started, which the player sends back once its engine has them.
  */
 object FlutterPlayer {
     const val PACKAGE = "dev.codeassist.dart"
     /** The player's gate, which checks that CodeAssist is the caller (see FlutterPlayerLauncher). */
     private const val ACTIVITY = "dev.codeassist.dart.FlutterPlayerLauncher"
 
-    fun launch(timeoutMs: Long = 20_000): String {
+    class Started(val uri: String, val isolate: String?)
+
+    fun launch(timeoutMs: Long = 20_000): Started {
         val context = appContext() ?: throw IOException("No Android context to start the Flutter player from.")
-        val answer = CompletableFuture<String>()
+        val answer = CompletableFuture<Started>()
         val receiver = object : ResultReceiver(null) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
                 val uri = resultData?.getString(FlutterPlayerActivity.EXTRA_URI)
-                if (resultCode == 0 && uri != null) answer.complete(uri)
+                if (resultCode == 0 && uri != null) answer.complete(Started(uri, resultData.getString(FlutterPlayerActivity.EXTRA_ISOLATE)))
                 else answer.completeExceptionally(IOException("The Flutter player started without a VM service."))
             }
         }
@@ -77,7 +73,7 @@ object FlutterPlayer {
      * The IDE's application context. A plugin is handed none (its engine facet has no Android API), but this
      * code runs inside the IDE's process, the IDE's or its `:build` one, and the process has an application.
      */
-    private fun appContext(): Context? = runCatching {
+    internal fun appContext(): Context? = runCatching {
         Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null) as Context?
     }.getOrNull()
 }
@@ -137,157 +133,66 @@ internal class FlutterRunTask(
         }
         if (DartPackages.needsPubGet(pkg) && !pubGet()) return fail("pub get failed")
 
-        val work = pkg.resolve(".dart_tool/codeassist/flutter")
-        val frontend = FrontendServer(sdk, flutter, pkg, work.resolve("app.dill"))
-        var vm: VmService? = null
+        val app = FlutterSession(
+            pkg, sdk, flutter, entry, pkg.resolve(".dart_tool/codeassist/flutter"), out,
+            alsoChanged = { if (preview && writeGallery()) listOf(galleryFile) else emptyList() },
+        )
         try {
-            frontend.start()
             out("Compiling $entry ...")
             val started = System.nanoTime()
-            val first = frontend.compile(entry)
+            val first = app.compile()
             first.messages.forEach(out)
             if (!first.ok) return fail("The app did not compile (${first.errors} error(s)).")
-            frontend.accept()
             out("Compiled in ${ms(started)} ms.")
 
             out("Starting the Flutter player ...")
-            val uri = FlutterPlayer.launch()
-            vm = connect(uri)
-            val app = AppSession(vm, frontend, entry)
+            val player = FlutterPlayer.launch()
+            val vm = FlutterSession.connect(player.uri)
             vm.onEvent = { stream, event -> if (stream == "Stdout" || stream == "Stderr") printed(event) }
             for (stream in listOf("Stdout", "Stderr")) runCatching { vm.call("streamListen", mapOf("streamId" to stream)) }
             val uploaded = System.nanoTime()
-            app.uploadAssets()
-            app.upload(first.dill!!, "app.dill")
-            app.runInView("app.dill")
+            app.runIn(vm, player.isolate, first.dill!!)
             out("Running in ${ms(uploaded)} ms. Saving a file hot-reloads it; type r (reload), R (restart) or q (quit).")
 
             val commands = LinkedBlockingQueue<String>()
             io?.stdin?.let { readCommands(it, commands) }
-            var seen = snapshot()
-            while (currentCoroutineContext().isActive && !vm.isClosed) {
+            var seen = FlutterSession.snapshot(pkg)
+            while (currentCoroutineContext().isActive && !app.engineGone) {
                 delay(POLL_MS)
                 when (commands.poll()?.trim()) {
-                    "r" -> app.reload(changedSince(seen).also { seen = snapshot() })
-                    "R" -> app.restart(changedSince(seen).also { seen = snapshot() })
-                    "q" -> { quit(vm); break }
+                    "r" -> app.reload(changedSince(seen).also { seen = FlutterSession.snapshot(pkg) })
+                    "R" -> app.restart(changedSince(seen).also { seen = FlutterSession.snapshot(pkg) })
+                    "q" -> { app.exitApp(); break }
                     else -> {
-                        val now = snapshot()
+                        val now = FlutterSession.snapshot(pkg)
                         if (now == seen) continue
-                        val changed = now.keys.filter { now[it] != seen[it] }
+                        val changed = FlutterSession.changed(seen, now)
                         seen = now
                         if (changed.any { it.fileName.toString() == DartPackages.PUBSPEC }) {
                             out("pubspec.yaml changed: pub get and a hot restart.")
                             if (pubGet()) { app.uploadAssets(); app.restart(emptyList()) }
                         } else {
-                            app.reload(changed.filter { it.toString().endsWith(".dart") })
+                            app.reload(changed.filter { it.toString().endsWith(".dart") && Files.isRegularFile(it) })
                         }
                     }
                 }
             }
-            if (vm.isClosed) out("The app was closed.")
+            if (app.engineGone) out("The app was closed.")
             return TaskResult.Success
         } finally {
-            if (vm != null && !vm.isClosed) quit(vm)
-            vm?.close()
-            frontend.close()
-        }
-    }
-
-    /** What one app run needs between reloads: the VM service, the compiler, the DevFS. */
-    private inner class AppSession(private val vm: VmService, private val frontend: FrontendServer, private val entry: String) {
-        private val fs = "codeassist"
-        private val fsUri: String
-
-        init {
-            runCatching { vm.call("_deleteDevFS", mapOf("fsName" to fs)) }
-            fsUri = vm.call("_createDevFS", mapOf("fsName" to fs)).string("uri") ?: throw IOException("the app made no DevFS")
-        }
-
-        fun upload(file: Path, path: String) = vm.upload(fs, path, file)
-
-        fun uploadAssets() {
-            val bundle = FlutterAssets.build(pkg, flutter.baseAssets)
-            for ((path, file) in bundle.files) upload(file, "flutter_assets/$path")
-            val staged = pkg.resolve(".dart_tool/codeassist/flutter/generated")
-            Files.createDirectories(staged)
-            for ((path, bytes) in bundle.generated) {
-                val file = staged.resolve(path)
-                Files.write(file, bytes)
-                upload(file, "flutter_assets/$path")
-            }
-        }
-
-        fun runInView(dill: String) {
-            vm.call("_flutter.runInView", mapOf(
-                "viewId" to view().string("id"),
-                "mainScript" to fsUri + dill,
-                "assetDirectory" to Paths.get(URI(fsUri + "flutter_assets")).toString(),
-            ))
-        }
-
-        fun reload(edited: List<Path>) {
-            val changed = edited + galleryChanges()
-            if (changed.isEmpty()) { out("Nothing changed."); return }
-            val started = System.nanoTime()
-            val delta = frontend.recompile(entry, changed.map { it.toUri().toString() })
-            delta.messages.forEach(out)
-            if (!delta.ok) {
-                frontend.reject()
-                out("Not reloaded: ${delta.errors} compile error(s).")
-                return
-            }
-            upload(delta.dill!!, "app.dill.incremental.dill")
-            val isolate = (view()["isolate"] as? JsonObject)?.string("id") ?: throw IOException("the app has no isolate")
-            val report = vm.call("reloadSources", mapOf("isolateId" to isolate, "rootLibUri" to fsUri + "app.dill.incremental.dill"))
-            if ((report["success"] as? JsonPrimitive)?.booleanOrNull != true) {
-                frontend.reject()
-                val notices = (report["notices"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.string("message") }
-                out("Hot reload was rejected: ${notices.joinToString("; ").ifEmpty { "the VM refused the change" }}. Type R to restart.")
-                return
-            }
-            frontend.accept()
-            vm.call("ext.flutter.reassemble", mapOf("isolateId" to isolate))
-            val details = report["details"] as? JsonObject
-            out("Reloaded ${details?.string("loadedLibraryCount") ?: "?"} of ${details?.string("finalLibraryCount") ?: "?"} libraries in ${ms(started)} ms.")
-        }
-
-        fun restart(edited: List<Path>) {
-            val changed = edited + galleryChanges()
-            val started = System.nanoTime()
-            val full = frontend.recompileFull(entry, changed.map { it.toUri().toString() })
-            full.messages.forEach(out)
-            if (!full.ok) {
-                frontend.reject()
-                out("Not restarted: ${full.errors} compile error(s).")
-                return
-            }
-            frontend.accept()
-            upload(full.dill!!, "app.dill")
-            runInView("app.dill")
-            out("Restarted in ${ms(started)} ms.")
-        }
-
-        private fun view(): JsonObject {
-            val views = vm.call("_flutter.listViews")["views"] as? JsonArray
-            return views?.firstOrNull() as? JsonObject ?: throw IOException("the app has no Flutter view")
+            // A run that stopped should not leave its player behind.
+            app.exitApp()
+            app.close()
         }
     }
 
     /** Rewrite the preview gallery from the app's previews as they are now. Answers whether its text changed. */
     private fun writeGallery(): Boolean {
         val previews = DartPreviews.find(pkg, packageName)
-        val source = DartPreviews.gallery(previews)
-        Files.createDirectories(galleryFile.parent)
-        val before = runCatching { String(Files.readAllBytes(galleryFile)) }.getOrNull()
-        if (before == source) return false
-        Files.write(galleryFile, source.toByteArray())
-        out("${previews.size} preview(s): ${previews.joinToString(", ") { it.label }.ifEmpty { "none yet" }}")
-        return true
+        val changed = DartPreviews.write(galleryFile, DartPreviews.gallery(previews))
+        if (changed) out("${previews.size} preview(s): ${previews.joinToString(", ") { it.label }.ifEmpty { "none yet" }}")
+        return changed
     }
-
-    /** The gallery, when it changed: what a reload has to recompile besides the files the user edited. */
-    private fun galleryChanges(): List<Path> = if (preview && writeGallery()) listOf(galleryFile) else emptyList()
 
     private fun pubGet(): Boolean {
         out("> dart pub get")
@@ -297,29 +202,6 @@ internal class FlutterRunTask(
     private fun fail(message: String): TaskResult {
         out(message)
         return TaskResult.Failed(message)
-    }
-
-    /** The VM service answers a moment after the engine reports it; try a few times. */
-    private suspend fun connect(uri: String): VmService {
-        var last: IOException? = null
-        repeat(20) {
-            try {
-                return VmService.connect(uri)
-            } catch (e: IOException) {
-                last = e
-                delay(250)
-            }
-        }
-        throw IOException("Could not reach the Flutter player's VM service at $uri: ${last?.message}")
-    }
-
-    /** Ask the app to exit, which ends the player too; a run that stopped should not leave it behind. */
-    private fun quit(vm: VmService) {
-        runCatching {
-            val views = vm.call("_flutter.listViews", timeoutMs = 2_000)["views"] as? JsonArray
-            val isolate = ((views?.firstOrNull() as? JsonObject)?.get("isolate") as? JsonObject)?.string("id") ?: return
-            vm.call("ext.flutter.exit", mapOf("isolateId" to isolate), timeoutMs = 2_000)
-        }
     }
 
     /** What the app printed (a `print`, an uncaught error), from the VM's Stdout and Stderr streams. */
@@ -335,26 +217,10 @@ internal class FlutterRunTask(
         }, "flutter-run-commands").apply { isDaemon = true }.start()
     }
 
-    /** The modification times of the package's Dart files and pubspec, outside `.dart_tool` and `build`. */
-    private fun snapshot(): Map<Path, Long> {
-        val files = Files.walk(pkg).use { walk ->
-            walk.filter { p ->
-                val rel = pkg.relativize(p).toString()
-                !rel.startsWith(".dart_tool") && !rel.startsWith("build") && !rel.startsWith(".") &&
-                    (rel.endsWith(".dart") || rel == DartPackages.PUBSPEC) && Files.isRegularFile(p)
-            }.collect(Collectors.toList())
-        }
-        return files.associateWith { runCatching { Files.getLastModifiedTime(it).toMillis() }.getOrDefault(0L) }
-    }
-
-    private fun changedSince(before: Map<Path, Long>): List<Path> {
-        val now = snapshot()
-        return now.keys.filter { now[it] != before[it] && it.toString().endsWith(".dart") }
-    }
+    private fun changedSince(before: Map<Path, Long>): List<Path> =
+        FlutterSession.changed(before, FlutterSession.snapshot(pkg)).filter { it.toString().endsWith(".dart") && Files.isRegularFile(it) }
 
     private fun ms(since: Long) = (System.nanoTime() - since) / 1_000_000
-
-    private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 
     private companion object {
         const val POLL_MS = 400L

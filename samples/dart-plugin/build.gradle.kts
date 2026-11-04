@@ -8,7 +8,8 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    // No Compose compiler plugin: the UI facet registers an editor language and file icons, no @Composable.
+    // The UI facet's Flutter preview pane is a @Composable.
+    alias(libs.plugins.kotlin.compose)
 }
 
 /** Where `fetch-dart-android.sh` put its output. Override with `-Pdart.sdk.dir=...`. */
@@ -150,7 +151,7 @@ dependencies {
     // The Flutter player (FlutterPlayerActivity), which runs in this plugin's own process, never the IDE's.
     implementation("io.flutter:flutter_embedding_debug:1.0.0-$flutterEngine")
 
-    // `UiRegistration` names these types in methods this facet does not call.
+    // The IDE's Compose, which the preview pane is composed by. Never bundled.
     compileOnly(libs.androidx.compose.runtime)
     compileOnly(libs.androidx.compose.foundation)
     compileOnly(libs.androidx.compose.ui)
@@ -165,4 +166,6 @@ dependencies {
     testImplementation(project(":lsp-api"))
     testImplementation(project(":project-model-api"))
     testImplementation(libs.kotlinx.coroutines.core)
+    // The Compose compiler insists on a runtime wherever it compiles, test sources included.
+    testImplementation(libs.androidx.compose.runtime)
 }

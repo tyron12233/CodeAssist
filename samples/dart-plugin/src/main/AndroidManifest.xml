@@ -52,6 +52,16 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize" />
+
+        <!--
+            The editor's Flutter preview: engines drawn into CodeAssist's preview pane (SurfaceControlViewHost).
+            Exported for CodeAssist to bind; it checks every message's sender uid and serves CodeAssist alone. Its
+            own process, so an engine exiting cannot end the Run's player, nor the player the pane.
+        -->
+        <service
+            android:name=".FlutterPreviewService"
+            android:exported="true"
+            android:process=":preview" />
     </application>
 
 </manifest>
