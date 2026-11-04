@@ -950,9 +950,11 @@ each capability the server advertises into the editor feature that matches it:
 Three things are still yours to register, because the protocol does not cover them: the file-type mapping, the
 editor's **lexical** colouring (`ui.editorLanguage`, which shows before the server has answered and wherever
 it is unavailable), and the project model if your language has one (a module type, an importer for
-`pubspec.yaml`, templates). The project model is not optional in one respect: the editor analyses a file only
-when it sits under one of a module's source roots, so a Dart plugin's module type (or importer) has to make
-`lib/`, `bin/` and `test/` source roots, or its files open as plain text whatever the server could say.
+`pubspec.yaml`, templates). A served file is analysed wherever it is in the project, but the model is what makes
+it look like your language's project: declare its directories as content roots under a `ContentRole` of your
+own and the Project view shows them (a plugin's roles are surfaced there like the built-in code roots), and
+a module type no build system builds offers its own Run rows rather than a Build row that cannot work. The
+Dart plugin (`samples/dart-plugin`) is a complete example.
 
 How it behaves, so you can plan around it:
 

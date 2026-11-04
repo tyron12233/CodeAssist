@@ -1,0 +1,138 @@
+// The Dart plugin: Dart on the device, shipped as its own Android app.
+//
+// It carries a Dart SDK that RUNS on Android arm64 (tools/dart-sdk). Those bytes are NOT in this repository:
+// `tools/dart-sdk/fetch-dart-android.sh` stages them, and this module packages whatever that left behind.
+// Building the plugin without them produces an APK that installs and reports "no Dart SDK for this device",
+// which is what a user on an unsupported ABI sees too.
+import java.util.Properties
+
+plugins {
+    alias(libs.plugins.android.application)
+    // No Compose compiler plugin: the UI facet registers an editor language and file icons, no @Composable.
+}
+
+/** Where `fetch-dart-android.sh` put its output. Override with `-Pdart.sdk.dir=...`. */
+val sdkOut: File =
+    (providers.gradleProperty("dart.sdk.dir").orNull?.let(::File) ?: rootProject.file("tools/dart-sdk/build/out"))
+
+val sdkLibs: File = File(sdkOut, "jniLibs")
+val sdkAssets: File = File(sdkOut, "assets/dart-sdk")
+val generatedAssetsDir: File = layout.buildDirectory.dir("generated/dart-sdk/assets").get().asFile
+
+/**
+ * Pack the SDK's libraries into ONE archive. The plugin reads it back through its classloader, over the
+ * installed APK, and a classloader can open a named entry but cannot list a directory, so ~500 loose files
+ * would be unreachable for want of a way to enumerate them.
+ */
+val packSdkAssets by tasks.registering(Zip::class) {
+    from(sdkAssets)
+    archiveFileName.set("dart-sdk.zip")
+    destinationDirectory.set(generatedAssetsDir)
+    // Stored: the APK compresses its own entries, and compressing twice costs build time for nothing.
+    entryCompression = ZipEntryCompression.STORED
+    onlyIf {
+        sdkAssets.isDirectory.also {
+            if (!it) logger.warn(
+                "No Dart SDK at $sdkAssets -- the plugin will build without one. Run tools/dart-sdk/fetch-dart-android.sh first."
+            )
+        }
+    }
+}
+
+android {
+    namespace = "dev.codeassist.dart"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "dev.codeassist.dart"
+        // The IDE's own floor: this code runs inside the IDE's process.
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = "0.1.0"
+    }
+
+    // Signed with the IDE's upload key when one is configured (a gitignored keystore.properties at the repo
+    // root), as the NDK plugin is; with none the release variant is left unsigned.
+    signingConfigs {
+        val keystoreProps = Properties().apply {
+            val f = rootProject.file("keystore.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }
+        fun signingValue(key: String, prop: String, env: String): String? =
+            keystoreProps.getProperty(key) ?: (findProperty(prop) as String?) ?: System.getenv(env)
+
+        val storeFileResolved = signingValue("storeFile", "RELEASE_STORE_FILE", "RELEASE_STORE_FILE")
+            ?.let { rootProject.file(it) }
+        if (storeFileResolved != null && storeFileResolved.exists()) {
+            create("release") {
+                storeFile = storeFileResolved
+                storePassword = signingValue("storePassword", "RELEASE_STORE_PASSWORD", "RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS", "RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "RELEASE_KEY_PASSWORD", "RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        // Never minify a plugin: the IDE loads the entry points by the names in the packaged manifest.
+        getByName("debug") { isMinifyEnabled = false }
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    sourceSets["main"].jniLibs.srcDir(sdkLibs)
+    // Produced by `packSdkAssets`. AGP refuses a Provider here, so the directory is a plain File and the
+    // ordering is an explicit task dependency below.
+    sourceSets["main"].assets.srcDir(generatedAssetsDir)
+
+    packaging {
+        jniLibs {
+            // The executables have to exist as FILES to be run: left in the APK they are mapped straight out
+            // of the archive, which serves System.loadLibrary and gives a child process nothing to exec.
+            useLegacyPackaging = true
+            // Three of these are AOT snapshots, ELF files the Dart VM loads itself. Stripping them as if they
+            // were ordinary shared libraries would break them.
+            keepDebugSymbols += "**/*.so"
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn(packSdkAssets) }
+
+// JUnit 5, like the rest of this build. AGP defaults a unit test task to JUnit 4.
+tasks.withType<Test>().configureEach { useJUnitPlatform() }
+
+dependencies {
+    // Compiled against, never bundled: the IDE's classloader is the parent of the plugin's.
+    compileOnly(project(":plugin-api"))
+    compileOnly(project(":plugin-ui-api"))
+    compileOnly(project(":build-api"))
+    compileOnly(project(":language-api"))
+    compileOnly(project(":lsp-api"))
+    compileOnly(project(":project-model-api"))
+    compileOnly(libs.kotlinx.coroutines.core)
+
+    // `UiRegistration` names these types in methods this facet does not call.
+    compileOnly(libs.androidx.compose.runtime)
+    compileOnly(libs.androidx.compose.foundation)
+    compileOnly(libs.androidx.compose.ui)
+    compileOnly(libs.androidx.compose.material3)
+
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(project(":plugin-api"))
+    testImplementation(project(":build-api"))
+    testImplementation(project(":language-api"))
+    testImplementation(project(":lsp-api"))
+    testImplementation(project(":project-model-api"))
+    testImplementation(libs.kotlinx.coroutines.core)
+}

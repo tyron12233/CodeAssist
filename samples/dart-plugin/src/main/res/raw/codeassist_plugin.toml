@@ -1,0 +1,19 @@
+[plugin]
+id = "dev.codeassist.dart"
+name = "Dart"
+version = "0.1.0"
+apiVersion = 4
+description = "Dart on the device, with a bundled Dart SDK for Android arm64. Dart's analysis server gives errors, completion, quick fixes, navigation, rename and formatting. Run compiles and runs bin/*.dart in the Run console, pub get fetches packages, and there is a Dart Console App template. Existing pub packages open as Dart projects."
+entryPoints = ["dev.codeassist.dart.DartPlugin"]
+uiEntryPoints = ["dev.codeassist.dart.DartUiPlugin"]
+capabilities = [
+    "lang.server",
+    "model.moduleType",
+    "build.runTask",
+    "ui.editorLanguage",
+    "fs.read",
+    "fs.write",
+    "net",
+]
+# Language servers arrived with SPI 3.3.0. No minHostVersion: the first IDE to carry it is not released yet, and
+# an older one fails this plugin's load with the missing class as the reason, which says the same thing.

@@ -205,6 +205,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":samples:hello-plugin",
         ":samples:ndk-plugin",
         ":samples:lsp-plugin",
+        ":samples:dart-plugin",
     )
 }
 
