@@ -1482,7 +1482,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         val wasRunning = _buildState.value.status == RunStatus.Running
         _buildState.update {
             if (it.status == RunStatus.Running) it.copy(
-                status = RunStatus.Failed, log = it.log + logLine("Stopped.", UiLogLevel.Warn)
+                status = RunStatus.Failed, stopped = true, log = it.log + logLine("Stopped.", UiLogLevel.Warn)
             ) else it
         }
         if (wasRunning) {

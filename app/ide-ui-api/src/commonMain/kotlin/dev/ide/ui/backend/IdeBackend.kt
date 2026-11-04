@@ -777,6 +777,11 @@ data class BuildState(
     val elapsedMs: Long = 0,
     /** An informational notice shown above the step graph (e.g. the first-build dex-cache warning). */
     val banner: String? = null,
+    /**
+     * The user stopped this build or run. Its [status] still ends as [RunStatus.Failed], which everything that
+     * waits for a build to finish relies on; this only changes how it reads ("Stopped", not "Failed").
+     */
+    val stopped: Boolean = false,
 )
 
 /**

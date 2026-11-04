@@ -307,10 +307,13 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // status will ever stream back; resolve the optimistic Running locally so Stop visibly stops and the
         // next Run isn't blocked by the run-conflict gate. A real in-flight build (steps present) terminates
         // through the daemon's own Stopped/Failed delta instead.
+        // Either way it reads as stopped: the daemon's terminal Failed arrives as a copy of this state, flag kept.
         _buildState.update {
-            if (it.status == RunStatus.Running && it.steps.isEmpty()) {
-                it.copy(status = RunStatus.Failed, log = it.log + line("Stopped."))
-            } else it
+            when {
+                it.status != RunStatus.Running -> it
+                it.steps.isEmpty() -> it.copy(status = RunStatus.Failed, stopped = true, log = it.log + line("Stopped."))
+                else -> it.copy(stopped = true)
+            }
         }
     }
 

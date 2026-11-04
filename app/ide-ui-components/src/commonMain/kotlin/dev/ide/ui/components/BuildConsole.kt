@@ -103,6 +103,7 @@ import dev.ide.ui.generated.resources.buildc_status_idle
 import dev.ide.ui.generated.resources.buildc_status_running
 import dev.ide.ui.generated.resources.buildc_status_succeeded
 import dev.ide.ui.generated.resources.buildc_status_failed
+import dev.ide.ui.generated.resources.run_stopped
 import dev.ide.ui.generated.resources.buildc_copied
 import dev.ide.ui.generated.resources.buildc_copy
 import dev.ide.ui.generated.resources.buildc_working
@@ -368,7 +369,7 @@ private fun Header(
                 softWrap = false
             )
         }
-        StatusPill(state.status)
+        StatusPill(state.status, state.stopped)
         // The window's actions fade when the console is idle and not hovered (see ToolWindowFrame); the
         // build's own status above stays.
         Row(
@@ -415,8 +416,9 @@ private fun MiniCount(icon: ImageVector, count: Int, color: Color) {
 }
 
 @Composable
-private fun StatusPill(status: RunStatus) {
+private fun StatusPill(status: RunStatus, stopped: Boolean = false) {
     val (text, color) = when (status) {
+        RunStatus.Failed if stopped -> stringResource(Res.string.run_stopped) to MaterialTheme.colorScheme.onSurfaceVariant
         RunStatus.Idle -> stringResource(Res.string.buildc_status_idle) to MaterialTheme.colorScheme.onSurfaceVariant
         RunStatus.Running -> stringResource(Res.string.buildc_status_running) to MaterialTheme.colorScheme.primary
         RunStatus.Succeeded -> stringResource(Res.string.buildc_status_succeeded) to Ide.colors.run
