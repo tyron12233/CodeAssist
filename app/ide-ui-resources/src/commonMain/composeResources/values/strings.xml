@@ -498,7 +498,7 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="history_title">Local history</string>
     <string name="symbolbar_bookmark">Bookmark</string>
     <string name="bookmarks_title">Bookmarks</string>
-    <string name="bookmarks_empty">No bookmarks yet. Bookmark the caret line with F11, or the Bookmark key behind the symbol bar\'s ⋯.</string>
+    <string name="bookmarks_empty">No bookmarks yet. Bookmark the caret line with F11, or the Bookmark key behind the symbol bar's ⋯.</string>
     <string name="todo_title">TODO</string>
     <string name="todo_refresh">Refresh</string>
     <string name="todo_empty">No TODO or FIXME comments in the project.</string>
