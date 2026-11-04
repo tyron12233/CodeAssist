@@ -13,6 +13,8 @@ import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
+import dev.ide.kotlin.syntax.psi.KtReturnExpression
+import dev.ide.kotlin.syntax.psi.KtValueArgument
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression
@@ -30,6 +32,7 @@ import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.TypeRef
 
@@ -77,7 +80,7 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
             is KtParenthesizedExpression -> inferType(expr.expression)
             is KtConstantExpression -> constType(expr)
             is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
-            is KtNameReferenceExpression -> typeOfName(
+            is KtNameReferenceExpression -> companionValueType(expr) ?: typeOfName(
                 expr.getReferencedName(),
                 expr.textRange.startOffset
             )
@@ -850,6 +853,27 @@ internal fun KotlinResolver.typeOfTypeName(expr: KtExpression): KotlinType? {
     return service.resolveTypeName(name, fileContext)?.let { service.typeByFqn(it) }
 }
 
+/**
+ * A class name used as a VALUE (`build(Widget)`, `val f: Factory<Widget> = Widget`, `return Widget`) denotes the
+ * class's companion object, so it has the companion's type. It typed as the class itself, and passing a
+ * companion that implements an interface read "inferred type is Widget but Factory<T> was expected". Only the
+ * plain value slots are recognized: a receiver (`Widget.create()`) keeps the type denotation that static,
+ * nested and enum lookups are built on. Null when [expr] names no class with a companion.
+ */
+private fun KotlinResolver.companionValueType(expr: KtNameReferenceExpression): KotlinType? {
+    if (expr.getReferencedName().firstOrNull()?.isUpperCase() != true) return null
+    val inValueSlot = when (val p = expr.parent) {
+        is KtValueArgument -> true
+        is KtProperty -> p.initializer === expr
+        is KtReturnExpression -> p.returnedExpression === expr
+        else -> false
+    }
+    if (!inValueSlot) return null
+    val fqn = typeDenotationFqn(expr) ?: return null
+    val companion = service.companionObjectFqn(fqn) ?: return null
+    return service.typeByFqn(companion)
+}
+
 /** `X::class` → `kotlin.reflect.KClass<X>`. The left-hand side is either a classifier name (`Main::class`,
  *  `Foo.Bar::class`, `String::class`) or a value expression (`instance::class`); either way its type is the
  *  literal's single type argument. So `Main::class.java` resolves the `KClass<T>.java` extension to
@@ -861,8 +885,15 @@ internal fun KotlinResolver.classLiteralType(e: KtClassLiteralExpression): Kotli
     return service.typeByFqn("kotlin.reflect.KClass", listOfNotNull(arg))
 }
 
-internal fun KotlinResolver.memberNamed(type: KotlinType, name: String): KotlinSymbol? =
-    service.membersNamed(type.qualifiedName, type.typeArguments, name).firstOrNull()
+internal fun KotlinResolver.memberNamed(type: KotlinType, name: String): KotlinSymbol? {
+    val all = service.membersNamed(type.qualifiedName, type.typeArguments, name)
+    // A property read wants a PROPERTY: `t.priority` is `Thread`'s `getPriority()` property, not its
+    // package-private `void priority(int)` method, which typed the read `Unit`. And a public one before a
+    // protected field: `Calendar`'s `protected long time` is out of reach where `c.time` is the `Date` that
+    // `getTime()`/`setTime(Date)` expose. Any member is still the fallback, as before.
+    val fields = all.filter { it.kind == SymbolKind.FIELD }
+    return fields.firstOrNull { Modifier.PROTECTED !in it.modifiers } ?: fields.firstOrNull() ?: all.firstOrNull()
+}
 
 /** The type of an anonymous object (`object : Foo { }`, `object { val a = 1 }`): the synthetic classifier its
  *  declaration was registered under in the source model ([SourceIndexBuilder.localTypeFqn]), computed from the

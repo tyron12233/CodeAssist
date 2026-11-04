@@ -2465,11 +2465,8 @@ internal class KotlinSemanticChecks(
         )
     }
 
-    /** Kotlin's accessor-name decapitalization (`Text` → `text`, `URL` → `URL`). Mirrors
-     *  [KotlinSymbolService.decapitalizeAccessor] (kept local — the analyzer doesn't reach the private one). */
     private fun decapitalizeAccessor(suffix: String): String =
-        if (suffix.length > 1 && suffix[1].isUpperCase()) suffix
-        else suffix.replaceFirstChar { it.lowercaseChar() }
+        dev.ide.lang.kotlin.symbols.decapitalizeJavaAccessor(suffix)
 
     /**
      * A bare `name(...)` call where `name` is not callable — it resolves to a VALUE (a local/parameter/property)

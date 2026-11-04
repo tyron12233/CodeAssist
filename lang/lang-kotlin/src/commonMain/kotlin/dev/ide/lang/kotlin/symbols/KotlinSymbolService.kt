@@ -2666,13 +2666,16 @@ class KotlinSymbolService(
      * The synthetic Kotlin properties a Java type exposes from its bean accessors (Kotlin's
      * `SyntheticJavaPropertyDescriptor`): a `getX()`/`isX()` getter (no parameters) becomes a readable property,
      * a `setX(v)` setter (one parameter) a writable one. The property name follows Kotlin's rule — `getText` →
-     * `text`, `isVisible` → `isVisible` (the `is` is kept), `getURL` → `URL` (no decap when the 2nd char is
-     * upper). A getter defines the type (the read side); a lone setter (no matching getter) defines a
-     * write-only property. Skips names that already exist as a real field and static accessors.
+     * `text`, `isVisible` → `isVisible` (the `is` is kept), `getURL` → `url`, `getID` → `id` (see
+     * [decapitalizeJavaAccessor]). A getter defines the type (the read side); a lone setter (no matching
+     * getter) defines a write-only property. Skips names that already exist as a PUBLIC field, and static
+     * accessors: a private or protected field is not what a caller outside the class reaches, so
+     * `Calendar`'s `protected long time` must not hide `getTime(): Date`.
      */
     private fun syntheticAccessorProperties(methods: List<KotlinSymbol>): List<KotlinSymbol> {
-        val existingFields =
-            methods.filterTo(HashSet()) { it.kind == SymbolKind.FIELD }.mapTo(HashSet()) { it.name }
+        val existingFields = methods
+            .filter { it.kind == SymbolKind.FIELD && Modifier.PRIVATE !in it.modifiers && Modifier.PROTECTED !in it.modifiers }
+            .mapTo(HashSet()) { it.name }
         val getters = LinkedHashMap<String, KotlinSymbol>() // propName -> the getter method
         val setterNames =
             HashSet<String>()                  // candidate property names from setX (decap form)
@@ -2728,11 +2731,7 @@ class KotlinSymbolService(
         return out
     }
 
-    /** Kotlin's accessor-name decapitalization: drop the `get`/`set` prefix already removed, then lowercase the
-     *  first char UNLESS the second is also uppercase (`URL` stays `URL`, `Text` → `text`). */
-    private fun decapitalizeAccessor(suffix: String): String =
-        if (suffix.length > 1 && suffix[1].isUpperCase()) suffix
-        else suffix.replaceFirstChar { it.lowercaseChar() }
+    private fun decapitalizeAccessor(suffix: String): String = decapitalizeJavaAccessor(suffix)
 
     /** Bind a type's parameters from the receiver's [typeArgs]; a parameter the receiver doesn't supply (a raw
      *  use) falls back to its erased bound when known (Java bytecode), so a member's generic return type still
@@ -4536,3 +4535,18 @@ class KotlinSymbolService(
 /** How long [KotlinSymbolService]'s walk of its source roots is reused before the tree is walked again. */
 private val SOURCE_WALK_TTL = 2.seconds
 private val SOURCE_WALK_MAX_AGE = 30.seconds
+
+/**
+ * Kotlin's name for a Java accessor's property, from the suffix after `get`/`set` (the compiler's
+ * `decapitalizeSmart`): a single leading capital is lowered (`Text` -> `text`), and a leading run of capitals is
+ * lowered up to the start of the next word (`ID` -> `id`, `URL` -> `url`, `URLConnection` -> `urlConnection`).
+ * Keeping such a run verbatim made `timeZone.id` and `connection.url` unresolved.
+ */
+internal fun decapitalizeJavaAccessor(suffix: String): String {
+    if (suffix.isEmpty() || !suffix[0].isUpperCase()) return suffix
+    if (suffix.length == 1 || !suffix[1].isUpperCase()) return suffix.replaceFirstChar { it.lowercaseChar() }
+    val firstLower = suffix.indexOfFirst { !it.isUpperCase() }
+    if (firstLower < 0) return suffix.lowercase()
+    val wordStart = firstLower - 1
+    return suffix.substring(0, wordStart).lowercase() + suffix.substring(wordStart)
+}

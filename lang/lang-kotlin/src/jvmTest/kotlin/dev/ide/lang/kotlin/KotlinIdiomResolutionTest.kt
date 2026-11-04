@@ -167,6 +167,38 @@ class KotlinIdiomResolutionTest {
         clean("fun len(s: String): Int = s.length\nfun g(ps: List<String>): Int = ps.sumOf(::len) + ps.sumOf(String::length)")
     }
 
+    /** A source function's `contract { returns(true) implies (x != null) }` smart-casts at its call sites. */
+    @Test
+    fun aUserContractNarrowsItsArgument() {
+        val isValid = "import kotlin.contracts.*\n@OptIn(ExperimentalContracts::class)\n" +
+            "fun isValid(s: String?): Boolean { contract { returns(true) implies (s != null) }; return s != null }\n"
+        clean(isValid + "fun f(s: String?): Int = if (isValid(s)) s.length else 0")
+        clean(isValid + "fun f(s: String?): Int { if (!isValid(s)) return 0; return s.length }")
+        clean(
+            "import kotlin.contracts.*\n@OptIn(ExperimentalContracts::class)\n" +
+                "fun String?.present(): Boolean { contract { returns(true) implies (this@present != null) }; return this != null }\n" +
+                "fun f(s: String?): Int = if (s.present()) s.length else 0"
+        )
+        assertCodes(isValid + "fun f(s: String?): Int = if (!isValid(s)) s.length else 0", KotlinDiagnosticCodes.UNSAFE_NULLABLE)
+    }
+
+    /** Java accessor properties: Kotlin's name rule (`getID` -> `id`), a protected field does not hide the
+     *  accessor pair, and a property read never binds a same-named method. */
+    @Test
+    fun javaAccessorPropertiesFollowKotlinsRules() {
+        cleanWithJdk("fun g(c: java.net.URLConnection): String = c.url.toString() + java.util.TimeZone.getDefault().id")
+        cleanWithJdk("import java.util.*\nfun f(): Long { val c = Calendar.getInstance(); c.time = Date(); return c.time.time }")
+        cleanWithJdk("fun g(t: Thread): Int { t.priority = 5; t.isDaemon = true; return t.priority }")
+    }
+
+    /** A class name passed as a value is its companion object. */
+    @Test
+    fun aClassNameAsAValueIsItsCompanion() {
+        val decl = "interface Factory<T> { fun create(): T }\nclass Widget { companion object : Factory<Widget> { override fun create() = Widget() } }\n" +
+            "fun <T> build(f: Factory<T>): T = f.create()\n"
+        clean(decl + "fun f(): Widget = build(Widget)\nval g: Factory<Widget> = Widget\nfun h(): Factory<Widget> { return Widget }")
+    }
+
     private fun clean(code: String) = assertClean(code, jdk = false)
     private fun cleanWithJdk(code: String) = assertClean(code, jdk = true)
 
