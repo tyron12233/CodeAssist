@@ -67,6 +67,7 @@ class FlutterAppTemplate : ProjectTemplate {
 
     private fun main(title: String) = """
         import 'package:flutter/material.dart';
+        import 'package:flutter/widget_previews.dart';
 
         void main() => runApp(const App());
 
@@ -116,6 +117,13 @@ class FlutterAppTemplate : ProjectTemplate {
             );
           }
         }
+
+        // Previews: pick "Preview widgets" in the Run menu to see these, updating as you save.
+        @Preview(name: 'Counter page')
+        Widget counterPagePreview() => const CounterPage(title: 'Preview');
+
+        @Preview(name: 'Counter page, small phone', size: Size(320, 480), textScaleFactor: 1.3)
+        Widget smallCounterPagePreview() => const CounterPage(title: 'Small');
     """.trimIndent() + "\n"
 
     private fun readme(pkg: String) = """
@@ -125,6 +133,8 @@ class FlutterAppTemplate : ProjectTemplate {
 
         - `lib/main.dart` is the app. Press Run: it starts in the player, and every file you save hot-reloads
           into it, keeping its state. In the Run console, type `r` to hot reload, `R` to restart, `q` to quit.
+        - Functions marked `@Preview` show in "Preview widgets" in the Run menu: every preview in `lib/` in one
+          gallery, hot-reloading as you save.
         - Add packages in `pubspec.yaml`; saving it runs `pub get` and restarts the app. Packages with their own
           Android code (plugins) do not work in the player.
         - This is debug mode only: release builds (AOT) are not something the device can make.

@@ -44,7 +44,10 @@ class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub, privat
         val pkg = Paths.get(module.dir.path)
         // A Flutter app runs in the player, hot-reloading; its bin/ (if any) is not what Run means.
         val runs = if (FlutterSdk.isFlutterPackage(pkg)) {
-            listOf(RunTaskSpec("$FLUTTER_PREFIX${module.name}", "Run Flutter app · ${module.name}", "run"))
+            listOf(
+                RunTaskSpec("$FLUTTER_PREFIX${module.name}", "Run Flutter app · ${module.name}", "run"),
+                RunTaskSpec("$PREVIEW_PREFIX${module.name}", "Preview widgets · ${module.name}", "run"),
+            )
         } else DartPackages.executables(pkg).map { file ->
             RunTaskSpec("$RUN_PREFIX${module.name}:${pkg.relativize(file)}", "Run ${file.fileName}", "run")
         }
@@ -60,6 +63,11 @@ class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub, privat
             val command = spec.id.substringAfterLast(':').takeIf { it == "get" || it == "upgrade" } ?: return null
             val task = PubTask(TaskName(":${module.name}:pub${command.replaceFirstChar(Char::uppercaseChar)}"), pkg, pub, command, onlyIfNeeded = false)
             return RunAction("> dart pub $command", LinearGraph(listOf(task)))
+        }
+        if (spec.id == "$PREVIEW_PREFIX${module.name}") {
+            val console = RunConsole("${module.name} previews")
+            val task = FlutterRunTask(TaskName(":${module.name}:flutterPreview"), pkg, sdk, flutter, pub, console, preview = true)
+            return RunAction("> Flutter previews ${module.name}", LinearGraph(listOf(task))).also { it.console = console }
         }
         if (spec.id == "$FLUTTER_PREFIX${module.name}") {
             val console = RunConsole("${module.name} (Flutter)")
@@ -86,6 +94,7 @@ class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub, privat
         const val RUN_PREFIX = "dartRun:"
         const val PUB_PREFIX = "dartPub:"
         const val FLUTTER_PREFIX = "flutterRun:"
+        const val PREVIEW_PREFIX = "flutterPreview:"
     }
 }
 

@@ -74,5 +74,10 @@ How an app runs, which is `flutter run` without the `flutter` tool:
 - A saved file is recompiled as a delta and loaded with `reloadSources` + `ext.flutter.reassemble`: hot reload,
   state kept. `reset` + `recompile` gives the full kernel a hot restart needs.
 
+Previews: "Preview widgets" in the Run menu scans `lib/` for Flutter's `@Preview` widgets
+(`package:flutter/widget_previews.dart`) and runs a generated gallery of them in the same player, rewritten and
+hot-reloaded on every save. A preview is sized and themed as Flutter's previewer does it (`size`, `theme`,
+`brightness`, `textScaleFactor`, `wrapper`; not yet `localizations`), on a list rather than in the editor.
+
 Not possible here: release (AOT) builds, which need a `gen_snapshot` that runs on Android; Flutter plugins with
 Android code of their own (the player has none); widget tests (`flutter test` needs Flutter's host test engine).

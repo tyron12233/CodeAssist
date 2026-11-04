@@ -88,6 +88,9 @@ object FlutterPlayer {
  * The run lasts as long as the app: every save of a `.dart` file in the package hot-reloads it (state kept),
  * a pubspec change gets `pub get` and a hot restart, and the console takes `r` (reload), `R` (restart) and `q`
  * (quit), as `flutter run` does. What the app prints shows in the console. Stop, `q` or closing the app ends it.
+ *
+ * With [preview], what runs is not the app but a gallery of its `@Preview` widgets ([DartPreviews]), rewritten
+ * before every reload so a preview added, removed or changed shows on the next save.
  */
 internal class FlutterRunTask(
     override val name: TaskName,
@@ -96,11 +99,14 @@ internal class FlutterRunTask(
     private val flutter: FlutterSdk,
     private val pub: Pub,
     private val console: RunConsole,
+    private val preview: Boolean = false,
 ) : Task, AlwaysRun {
     override val inputs: TaskInputs get() = TaskInputsImpl()
     override val outputs: TaskOutputs get() = TaskOutputsImpl()
 
     private lateinit var out: (String) -> Unit
+    private var packageName = ""
+    private val galleryFile: Path get() = pkg.resolve(".dart_tool/codeassist/preview/main.dart")
 
     override suspend fun execute(ctx: TaskContext): TaskResult = withContext(Dispatchers.IO) {
         val io: ProgramIo? = console.io
@@ -121,8 +127,14 @@ internal class FlutterRunTask(
         (flutter.prepare() as? FlutterSdk.Status.Unavailable)?.let { return TaskResult.Failed(it.reason).also { _ -> out(it.reason) } }
         val name = DartPackages.nameOf(String(Files.readAllBytes(pkg.resolve(DartPackages.PUBSPEC))))
             ?: return fail("pubspec.yaml has no name")
-        if (!Files.isRegularFile(pkg.resolve("lib/main.dart"))) return fail("A Flutter app needs lib/main.dart.")
-        val entry = "package:$name/main.dart"
+        packageName = name
+        val entry = if (preview) {
+            writeGallery()
+            galleryFile.toUri().toString()
+        } else {
+            if (!Files.isRegularFile(pkg.resolve("lib/main.dart"))) return fail("A Flutter app needs lib/main.dart.")
+            "package:$name/main.dart"
+        }
         if (DartPackages.needsPubGet(pkg) && !pubGet()) return fail("pub get failed")
 
         val work = pkg.resolve(".dart_tool/codeassist/flutter")
@@ -214,7 +226,8 @@ internal class FlutterRunTask(
             ))
         }
 
-        fun reload(changed: List<Path>) {
+        fun reload(edited: List<Path>) {
+            val changed = edited + galleryChanges()
             if (changed.isEmpty()) { out("Nothing changed."); return }
             val started = System.nanoTime()
             val delta = frontend.recompile(entry, changed.map { it.toUri().toString() })
@@ -239,7 +252,8 @@ internal class FlutterRunTask(
             out("Reloaded ${details?.string("loadedLibraryCount") ?: "?"} of ${details?.string("finalLibraryCount") ?: "?"} libraries in ${ms(started)} ms.")
         }
 
-        fun restart(changed: List<Path>) {
+        fun restart(edited: List<Path>) {
+            val changed = edited + galleryChanges()
             val started = System.nanoTime()
             val full = frontend.recompileFull(entry, changed.map { it.toUri().toString() })
             full.messages.forEach(out)
@@ -259,6 +273,21 @@ internal class FlutterRunTask(
             return views?.firstOrNull() as? JsonObject ?: throw IOException("the app has no Flutter view")
         }
     }
+
+    /** Rewrite the preview gallery from the app's previews as they are now. Answers whether its text changed. */
+    private fun writeGallery(): Boolean {
+        val previews = DartPreviews.find(pkg, packageName)
+        val source = DartPreviews.gallery(previews)
+        Files.createDirectories(galleryFile.parent)
+        val before = runCatching { String(Files.readAllBytes(galleryFile)) }.getOrNull()
+        if (before == source) return false
+        Files.write(galleryFile, source.toByteArray())
+        out("${previews.size} preview(s): ${previews.joinToString(", ") { it.label }.ifEmpty { "none yet" }}")
+        return true
+    }
+
+    /** The gallery, when it changed: what a reload has to recompile besides the files the user edited. */
+    private fun galleryChanges(): List<Path> = if (preview && writeGallery()) listOf(galleryFile) else emptyList()
 
     private fun pubGet(): Boolean {
         out("> dart pub get")
