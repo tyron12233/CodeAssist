@@ -148,7 +148,19 @@ class CodeAssistAppState(
      */
     var screen: Screen
         get() = currentScreen
-        private set(value) {
+        private set(next) {
+            // The editor needs an open project. Every real way in (open, create, import, a lesson, the AI tab)
+            // marks one open first, so what arrives here without one is a stale Back target or a link from
+            // Home into a project that was closed: it goes Home instead. Closing only leaves the editor (the
+            // engine stays loaded, so the screen behind it would show the closed project and the session
+            // resume would record it again), and before any project is loaded the editor's backend throws.
+            val value = if (next == Screen.Editor && !projectOpen) Screen.Projects else next
+            // Home is where closing a project lands.
+            if (value == Screen.Projects) projectOpen = false
+            // Home's "Get plugins" entry lasts only while the user is on the Plugins screen (or a plugin page
+            // opened from it); leaving any other way must not make the hub's Plugins tool open on the Get tab
+            // and return Home later.
+            if (value != Screen.Plugins && value != Screen.PluginScreen) resetPluginsEntry()
             if (value != currentScreen && !navigatesAsStack(value)) backStack.clear()
             // Leaving Settings altogether: the next visit starts at the top of its list.
             if (isHubPane(currentScreen) && !isHubPane(value)) hubListScroll = ScrollState(0)
@@ -191,6 +203,20 @@ class CodeAssistAppState(
     var homeTab: HomeTab by mutableStateOf(HomeTab.Projects)
         private set
 
+    /**
+     * Whether the user has a project open: set when one is opened, created or imported (or a lesson's workspace
+     * is), cleared when they leave it for Home or a lesson ends, or when the engine is unloaded. NOT `epoch > 0`:
+     * closing a project keeps its engine loaded behind the picker, so the epoch stays up after it is closed.
+     */
+    var projectOpen: Boolean by mutableStateOf(false)
+        private set
+
+    /** Where the Plugins screen's back goes, and the tab it opens on: the hub's Plugins tool, or Home's card. */
+    var pluginsReturn: Screen by mutableStateOf(Screen.Hub)
+        private set
+    var pluginsStartTab: dev.ide.ui.screens.PluginsTab? by mutableStateOf(null)
+        private set
+
     /** Where the Settings and Tools hub returns on Back: the picker (opened with no project) or the editor. */
     var hubReturn: Screen by mutableStateOf(Screen.Editor)
         private set
@@ -222,6 +248,10 @@ class CodeAssistAppState(
      *  a project is closed back to the picker, which is exactly when the row must not show. */
     var keystoreInProject: Boolean by mutableStateOf(false)
         private set
+
+    /** Whether Settings was opened over an open project (from the editor or one of its screens), not from Home:
+     *  the project-scoped pages, the live formatter preview and the keystore's signing row need one. */
+    val hubInProject: Boolean get() = projectOpen && hubReturn != Screen.Projects
 
     /** Where the Icon Manager returns on Back: the editor, or a module's config when opened from there. */
     var iconManagerReturn: Screen by mutableStateOf(Screen.Editor)
@@ -424,12 +454,15 @@ class CodeAssistAppState(
         scope.launch {
             backend.projects.projectEpoch.collect {
                 epoch = it
+                // A newly loaded project is an open one (even one the AI tab opened behind Home); no engine at
+                // all is no project.
+                projectOpen = it > 0
                 // Any other project opened while a lesson was up ends the lesson: the banner belongs to the
                 // lesson's workspace only.
                 if (lessonInEditor && !isLearnWorkspace(backend.project.rootPath)) lessonInEditor = false
                 // The AI tab opens and creates projects in the background and keeps the user in the chat; the
                 // tab's own buttons take them into the editor.
-                if (it > 0 && !(screen == Screen.Projects && homeTab == HomeTab.Ai)) screen = Screen.Editor
+                if (it > 0 && !(screen == Screen.Projects && homeTab == HomeTab.Ai)) enterEditor()
             }
         }
         // Starting a console run (a `run` task) opens a fresh interactive session: keyed on its id, jump to the
@@ -508,6 +541,16 @@ class CodeAssistAppState(
      *  the same as the top bar's back arrow; the editor draws it and clears it. */
     var confirmCloseProject by mutableStateOf(false)
 
+    /**
+     * Into the editor on the project that is loaded, as an intent: an open, create or import that just loaded
+     * it, or the AI tab's buttons for the one it opened. Marks it open, which a plain [navigateTo] does not (a
+     * Back target or a link from Home must not reopen a project the user closed). Inert with nothing loaded.
+     */
+    fun enterEditor() {
+        if (backend.projects.projectEpoch.value > 0) projectOpen = true
+        screen = Screen.Editor
+    }
+
     /** Go to [target] with no extra state to carry (the plain forward/back moves between screens). */
     fun navigateTo(target: Screen) {
         screen = target
@@ -542,13 +585,6 @@ class CodeAssistAppState(
         screen = Screen.PluginScreen
     }
 
-    /** Open Settings (the hub), remembering [from] as its Back destination. */
-    /** Where the Plugins screen's back goes, and the tab it opens on: the hub's Plugins tool, or Home's card. */
-    var pluginsReturn: Screen by mutableStateOf(Screen.Hub)
-        private set
-    var pluginsStartTab: dev.ide.ui.screens.PluginsTab? by mutableStateOf(null)
-        private set
-
     /** Home's "Get plugins" card: the Plugins screen on its download tab, back to Home. */
     fun openGetPlugins() {
         pluginsReturn = Screen.Projects
@@ -566,6 +602,7 @@ class CodeAssistAppState(
         pluginsStartTab = null
     }
 
+    /** Open Settings (the hub), remembering [from] as its Back destination. */
     fun openHub(from: Screen) {
         hubReturn = from
         screen = Screen.Hub
@@ -596,7 +633,7 @@ class CodeAssistAppState(
     }
 
     /** Open the hub's Keystore Manager entry: a project context only when the hub itself came from the editor. */
-    fun openKeystoreManagerFromHub() = openKeystoreManager(Screen.Hub, inProject = hubReturn == Screen.Editor)
+    fun openKeystoreManagerFromHub() = openKeystoreManager(Screen.Hub, inProject = hubInProject)
 
     /**
      * Open the Icon Manager, remembering where Back goes. [resDir] preselects an import target, which is how
@@ -638,7 +675,7 @@ class CodeAssistAppState(
     // ---- project intents ----
 
     fun openProject(project: ProjectInfo) {
-        scope.launch { if (backend.projects.openProject(project.rootPath)) screen = Screen.Editor }
+        scope.launch { if (backend.projects.openProject(project.rootPath)) enterEditor() }
     }
 
     fun deleteProject(project: ProjectInfo) {
@@ -701,7 +738,7 @@ class CodeAssistAppState(
      */
     fun openInstalledProject(rootPath: String) {
         scope.launch {
-            if (backend.projects.openProject(rootPath)) screen = Screen.Editor else refreshProjects()
+            if (backend.projects.openProject(rootPath)) enterEditor() else refreshProjects()
         }
     }
 
@@ -792,7 +829,7 @@ class CodeAssistAppState(
     private fun leaveImportPreview(next: Screen) {
         importPreview = null
         importArchivePath = null
-        screen = next
+        if (next == Screen.Editor) enterEditor() else screen = next
     }
 
     // ---- project import ----
@@ -893,7 +930,7 @@ class CodeAssistAppState(
         importBusy = false
         if (result.success) {
             if (convert) pendingGradleConvert = true
-            screen = Screen.Editor
+            enterEditor()
         } else {
             importError = ImportError.GradleFailed(result.message)
         }
@@ -941,7 +978,7 @@ class CodeAssistAppState(
         scope.launch {
             val ok = runCatching { backend.learn.openWorkspace(lessonId) }.getOrDefault(false)
             if (ok) {
-                screen = Screen.Editor
+                enterEditor()
             } else {
                 lessonInEditor = false
                 lessonEditorUnavailable = true
@@ -1009,6 +1046,8 @@ class CodeAssistAppState(
     /** Leave a lesson that ran in the editor: back to its track (or Learn), re-reading progress. */
     fun exitLessonEditor() {
         lessonInEditor = false
+        // The workspace is not a project the user opened: no Back target may lead into it once the lesson ends.
+        projectOpen = false
         learnEpoch++
         screen = if (currentTrackId != null) Screen.LessonTrack else Screen.Projects
     }

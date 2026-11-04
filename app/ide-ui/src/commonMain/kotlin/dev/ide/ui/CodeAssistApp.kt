@@ -160,10 +160,10 @@ fun CodeAssistApp(
             LocalPluginNavigator provides app::openPluginScreen,
             LocalSettingsPageOpener provides { id -> app.openSettingsPageFrom(app.screen, id) },
             // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
-            // user on the editor to see it. Guarded on a project being open (`epoch > 0`), since a tab over
-            // nothing is not a state the shell has.
+            // user on the editor to see it. Guarded on a project being open, since a tab over nothing is not a
+            // state the shell has (and `epoch > 0` would reopen a project the user closed behind Home).
             LocalPluginFileOpener provides { path, offset ->
-                if (app.epoch > 0) {
+                if (app.projectOpen) {
                     state.openAt(path, offset)
                     app.navigateTo(Screen.Editor)
                 }

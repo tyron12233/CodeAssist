@@ -160,7 +160,7 @@ internal fun AppNavGraph(
  */
 @Composable
 private fun rememberHubSections(app: CodeAssistAppState, state: IdeUiState): List<HubSection> {
-    val global = app.hubReturn != Screen.Editor
+    val global = !app.hubInProject
     val pages = remember(state.backend, global, app.screen) {
         state.backend.settings.settingsPages().filter { !global || it.scope == "app" }
     }
@@ -247,14 +247,14 @@ private fun SettingsRoute(
         backend = state.backend,
         onBack = { app.navigateTo(Screen.Hub) },
         onSettingsChanged = app::reloadSettings,
-        // The logs viewer is an editor overlay; only meaningful with a project open.
+        // The logs viewer is an editor overlay; only meaningful with a project open (not one closed behind Home).
         onOpenLogs = {
-            if (app.epoch > 0) {
+            if (app.projectOpen) {
                 state.logsOpen = true
                 app.navigateTo(Screen.Editor)
             }
         },
-        view = if (app.hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
+        view = if (app.hubInProject) SettingsView.All else SettingsView.Global,
         title = stringResource(Res.string.settings_title),
         codeFont = codeFont,
         fileActions = fileActions,
@@ -283,7 +283,7 @@ private fun AppRoute(
         Screen.CreateProject -> CreateProjectScreen(
             backend = backend,
             onCancel = { app.navigateTo(Screen.Projects) },
-            onCreated = { app.navigateTo(Screen.Editor) },
+            onCreated = { app.enterEditor() },
             initialTemplateId = app.createTemplateId,
         )
 
@@ -501,8 +501,9 @@ private fun AppRoute(
             )
         }
 
-        // The editor needs an open project; any route that lands here without one goes Home instead of composing
-        // a screen whose backend throws "No project is open" (a wrong Back target did, in 3.40.0).
+        // The editor needs a loaded project. The state already turns every stale way in back Home
+        // ([CodeAssistAppState.projectOpen]); this is the backstop for an engine unloaded under the editor, which
+        // must not compose a screen whose backend throws "No project is open" (a wrong Back target did, in 3.40.0).
         Screen.Editor -> if (app.epoch <= 0) {
             LaunchedEffect(Unit) { app.navigateTo(Screen.Projects) }
         } else EditorScreen(
@@ -618,8 +619,9 @@ private fun AppRoute(
             },
             onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
             startTab = app.pluginsStartTab,
-            // The Logs viewer is an editor overlay, so the row offers it only with a project open.
-            onOpenLogs = if (app.epoch > 0) {
+            // The Logs viewer is an editor overlay, so the row offers it only with a project open (a project closed
+            // behind Home is still loaded, which is why this is not `epoch > 0`).
+            onOpenLogs = if (app.projectOpen) {
                 { pluginId ->
                     state.logsSource = pluginId
                     state.logsOpen = true
@@ -645,7 +647,7 @@ private fun AppRoute(
             backend = state.backend,
             // The live formatter preview is engine-backed: available when the hub (hence Code Style) was
             // opened from the editor, not from the project picker.
-            hasProject = app.hubReturn == Screen.Editor,
+            hasProject = app.hubInProject,
             onBack = { app.navigateTo(Screen.Hub) },
         )
 
@@ -798,10 +800,10 @@ private fun rememberAiTab(app: CodeAssistAppState, state: IdeUiState, fileAction
         object : HomeTabContext {
             override val backend get() = app.backend
             override val fileActions get() = fileActions
-            override fun openEditor() = app.navigateTo(Screen.Editor)
+            override fun openEditor() = app.enterEditor()
             override fun openFile(path: String) {
                 state.openAt(path, 0)
-                app.navigateTo(Screen.Editor)
+                app.enterEditor()
             }
             // The same run the editor's Run button starts, with the console open to follow it.
             override val runProject: (() -> Unit)? = if (state.backend.build.supported()) {
@@ -811,7 +813,7 @@ private fun rememberAiTab(app: CodeAssistAppState, state: IdeUiState, fileAction
                         val selected = state.selectedRunTask
                         if (selected != null) state.backend.build.runTask(selected.id) else state.backend.build.runBuild()
                     }
-                    app.navigateTo(Screen.Editor)
+                    app.enterEditor()
                 }
             } else null
         }
