@@ -6,10 +6,13 @@ import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
 import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtEnumEntry
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
 import dev.ide.kotlin.syntax.psi.KtTokens
@@ -132,6 +135,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // implicit receiver, so `x?.let { it }` inside `Column { }` typed `it` as `ColumnScope`.
         service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension }
     } else {
+        // A nearer VALUE with an `invoke` (a function-typed property or local) shadows every top-level function
+        // of that name ([nearerValueInvokeTargets]), so no FUNCTION is the callee: the call is the value's
+        // invocation, which [typeOfCall] types through [invokeReturnType] and the highlighter colors as the
+        // value. Null from the helper means "not that case": go on.
+        if (nearerValueInvokeTargets(call, name) != null) return null
         // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
         // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
         // (`itemsIndexed(...)` inside `LazyColumn { }`, on the implicit `LazyListScope`) so its `itemContent`
@@ -532,6 +540,9 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         }
         return members + scopeExts + companionMethods
     }
+    // A nearer function-typed value: the call's targets are its `invoke`, not the top-level functions it
+    // shadows ([nearerValueInvokeTargets]).
+    if (q == null || q.selectorExpression !== call) nearerValueInvokeTargets(call, name)?.let { return it }
     val out = ArrayList<KotlinSymbol>()
     // The callee name is known, so push it down as the prefix (it filters to names starting with it, the
     // exact match included) — avoids scanning the whole top-level universe just to keep one name.
@@ -737,4 +748,64 @@ fun KotlinResolver.annotationParameters(entry: KtAnnotationEntry): List<ParamInf
         }
     }
     return out.values.toList()
+}
+
+/**
+ * The `invoke` a bare call `name(…)` binds to when [name] is a VALUE declared nearer than any top-level
+ * function: a local or parameter, or a property of an enclosing class (a constructor `val` included). Kotlin
+ * resolves a call scope by scope from the innermost, and at each scope a value with an `invoke` is a candidate
+ * like a function, so `class C(private val log: (String) -> Unit) { fun f() = log("x") }` calls the
+ * property's `invoke(String)`. The editor only collected FUNCTIONS for a bare call, so the property was never a
+ * candidate and the call bound to `kotlin.math.log(Double, Double)` instead, reporting "inferred type is
+ * String but Double was expected" on a valid call.
+ *
+ * Null when no such value is nearer, or a FUNCTION of that name is declared in the same scope (a function
+ * beats a property there), or the value has no `invoke` (the compiler then keeps looking further out), so the
+ * caller resolves as before. An empty list when the value's type is unknown: the value still shadows the outer
+ * functions, so binding to one of them would be a guess, and resolving to nothing is the conservative answer.
+ */
+internal fun KotlinResolver.nearerValueInvokeTargets(call: KtCallExpression, name: String): List<KotlinSymbol>? {
+    val offset = call.textRange.startOffset
+    val local = localsAt(offset).firstOrNull { it.name == name }
+    val isValue = when {
+        local != null -> local.kind != SymbolKind.METHOD // the nearest local decides: a local fun is a function
+        else -> innermostClassDeclaresValue(offset, name) ?: return null
+    }
+    if (!isValue) return null
+    val type = typeOfName(name, offset) ?: return emptyList()
+    if (type.isTypeParameter) return emptyList()
+    service.membersNamed(type.qualifiedName, type.typeArguments, "invoke")
+        .filter { it.kind == SymbolKind.METHOD }
+        .takeIf { it.isNotEmpty() }
+        ?.let { return it }
+    // A function type the member lookup can't enumerate: its shape is the `invoke` signature. An extension
+    // function type (`String.() -> Unit`) takes its receiver as the first argument of a plain call.
+    val shape = service.functionalShape(type) ?: return null
+    val params = (if (shape.isExtension) listOf(shape.receiverType) else emptyList()) + shape.parameterTypes
+    return listOf(
+        KotlinSymbol(
+            "invoke", SymbolKind.METHOD, type = shape.returnType,
+            paramTypes = params,
+            paramHasDefault = List(params.size) { false },
+        )
+    )
+}
+
+/** For the innermost enclosing class that declares a member named [name] (a function, a property, a
+ *  constructor `val`/`var`, or an enum entry): true when that member is a VALUE and no same-named FUNCTION
+ *  sits beside it, false when a function does. Null when no enclosing class declares the name. */
+private fun KotlinResolver.innermostClassDeclaresValue(offset: Int, name: String): Boolean? {
+    var node: KtElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtClassOrObject) {
+            val hasFunction = node.declarations.any { it is KtNamedFunction && it.name == name }
+            val hasValue = node.declarations.any {
+                (it is KtProperty && it.name == name) || (it is KtEnumEntry && it.name == name)
+            } || node.primaryConstructorParameters.any { it.hasValOrVar() && it.name == name }
+            if (hasFunction) return false
+            if (hasValue) return true
+        }
+        node = node.parent
+    }
+    return null
 }

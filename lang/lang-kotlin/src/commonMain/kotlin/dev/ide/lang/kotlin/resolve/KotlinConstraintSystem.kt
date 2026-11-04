@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.resolve
 import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.TypeRef
 
 /**
@@ -120,6 +121,17 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         }
         // B is a supertype of A by classifier (args unknown / raw) → satisfiable, no arg constraints.
         if (isClassifierSubtype(a.qualifiedName, b.qualifiedName)) return
+        // A function type (`kotlin.FunctionN`) is synthetic, never an indexed "known type", so the check below
+        // could never reject one: a `Char` argument stayed applicable to `trimEnd(predicate: (Char) -> Boolean)`,
+        // which then won the function-type tiebreak over `trimEnd(vararg chars: Char)`. A known classifier that
+        // is not itself a function type and doesn't extend this one (checked just above, so a
+        // `class F : (Int) -> Unit` still passes) cannot be one. `kotlin.reflect` is spared: a function
+        // reference's `KFunctionN` IS a function type, through a supertype the model may not carry.
+        if (TypeRendering.isFunctionType(b.qualifiedName) && !TypeRendering.isFunctionType(a.qualifiedName) &&
+            !a.qualifiedName.startsWith("kotlin.reflect.") && service.isKnownType(a.qualifiedName)
+        ) {
+            hasContradiction = true; return
+        }
         // Neither classifier-related nor projectable, and both are genuine known types → A is NOT a subtype of B.
         if (service.isKnownType(a.qualifiedName) && service.isKnownType(b.qualifiedName)) hasContradiction =
             true
