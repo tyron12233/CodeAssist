@@ -2269,7 +2269,7 @@ class IdeServices private constructor(
     /** Content roots to surface in the project tree — code, resources, and assets (so `res/` is editable). */
     fun treeRoots(module: Module): List<Path> {
         return module.sourceSets.flatMap { it.contentRoots }
-            .filter { cr -> cr.roles.any { it in TREE_ROOT_ROLES } }.map { Paths.get(it.dir.path) }
+            .filter { cr -> cr.roles.any(::surfacedInTree) }.map { Paths.get(it.dir.path) }
     }
 
     /**
@@ -2278,7 +2278,7 @@ class IdeServices private constructor(
      * package contexts (compactable + new-class targets).
      */
     fun treeRootsDetailed(module: Module): List<TreeRootInfo> = module.sourceSets.flatMap { ss ->
-        ss.contentRoots.filter { cr -> cr.roles.any { it in TREE_ROOT_ROLES } }
+        ss.contentRoots.filter { cr -> cr.roles.any(::surfacedInTree) }
             .map { TreeRootInfo(Paths.get(it.dir.path), ss.name, it.roles) }
     }
 
@@ -5987,7 +5987,15 @@ internal class ActiveEngineXmlResourceHost(private val env: ApplicationEnvironme
         host?.createResourceFile(file, rClass, name)
 }
 
-/** Content roles surfaced in the project tree (code + resources + assets + AIDL); see [IdeServices.treeRoots]. */
+/**
+ * Whether a content root with [role] shows in the project tree: the built-in code, resource, asset and AIDL
+ * roles, and every role a plugin defined. A plugin's role is the layout of a language the core knows nothing
+ * about (a Dart package, a Python package root), and hiding it left such a module looking empty in the
+ * Project view. The built-ins left out (`jni-libs`, `excluded`) stay out.
+ */
+private fun surfacedInTree(role: ContentRole): Boolean = role in TREE_ROOT_ROLES || role !in ContentRole.entries
+
+/** The built-in content roles surfaced in the project tree (code + resources + assets + AIDL); see [IdeServices.treeRoots]. */
 private val TREE_ROOT_ROLES = setOf(
     ContentRole.SOURCE,
     ContentRole.GENERATED,

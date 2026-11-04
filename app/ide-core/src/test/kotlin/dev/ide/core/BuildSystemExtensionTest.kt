@@ -184,6 +184,28 @@ class BuildSystemExtensionTest {
         }
     }
 
+    /**
+     * A plugin's module type that no build system builds (a Dart package) offers its rows through its own
+     * provider. The picker used to add a Build row for it too, which could only fail with "No build system
+     * supports module type".
+     */
+    @Test
+    fun aModuleNoBuildSystemBuildsGetsNoBuildRow() {
+        withTempDir("unbuildable-type") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                ide.store.workspace.projects.first().beginModification().apply {
+                    addModule("pkg", UnknownModuleType("custom-bar")).apply { dirRelPath = "pkg" }
+                    commit()
+                }
+                val rows = ide.build.runTasks().map { it.id }
+                assertTrue("build:pkg" !in rows && "run:pkg" !in rows, rows.toString())
+                // A Java module beside it keeps its Build row.
+                val java = ide.modules().first { it.name != "pkg" }.name
+                assertTrue("build:$java" in rows, rows.toString())
+            }
+        }
+    }
+
     /** A contributed row with no built-in id prefix is dispatched back to its provider and its graph runs. */
     @Test
     fun contributedRunActionIsExecuted() {

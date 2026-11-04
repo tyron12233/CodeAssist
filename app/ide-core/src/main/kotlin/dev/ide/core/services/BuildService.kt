@@ -705,6 +705,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // every such module offers — so a library module (no main) is still buildable from the Run picker.
         for (m in ctx.modules()) {
             if (!isConsoleRunModule(m)) continue
+            // A plugin's module type (a Dart package) that no build system builds offers its own rows through
+            // RUN_TASK_PROVIDER_EP; a Build row here would only fail with "no build system supports it".
+            if (buildSystemFor(m.type) == null && ctx.projectOf(m)?.let { buildSystemFor(it) } == null) continue
             if (runnableMainFor(m) != null) add(
                 RunTaskOption(
                     "run:${m.name}", "Run ${m.name}", "run"
