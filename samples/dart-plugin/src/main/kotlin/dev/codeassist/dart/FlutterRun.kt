@@ -42,7 +42,8 @@ import java.util.stream.Collectors
  */
 object FlutterPlayer {
     const val PACKAGE = "dev.codeassist.dart"
-    private const val ACTIVITY = "dev.codeassist.dart.FlutterPlayerActivity"
+    /** The player's gate, which checks that CodeAssist is the caller (see FlutterPlayerLauncher). */
+    private const val ACTIVITY = "dev.codeassist.dart.FlutterPlayerLauncher"
 
     fun launch(timeoutMs: Long = 20_000): String {
         val context = appContext() ?: throw IOException("No Android context to start the Flutter player from.")
@@ -58,7 +59,11 @@ object FlutterPlayer {
             .setClassName(PACKAGE, ACTIVITY)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(FlutterPlayerActivity.EXTRA_RECEIVER, receiver)
-        context.startActivity(intent)
+        // Android 14 and later tell the player who is starting it only when the caller agrees to say.
+        val options = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            android.app.ActivityOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
+        } else null
+        context.startActivity(intent, options)
         return try {
             answer.get(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (e: java.util.concurrent.TimeoutException) {

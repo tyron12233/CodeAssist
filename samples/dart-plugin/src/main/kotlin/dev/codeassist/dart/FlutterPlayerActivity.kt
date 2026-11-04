@@ -9,9 +9,9 @@ import io.flutter.embedding.engine.FlutterJNI
  * The Flutter player. It starts on a few-kilobyte `dart:ui` program ("Waiting for CodeAssist...") and is then
  * handed the real app through its Dart VM service, the way `flutter run` restarts and hot-reloads an app.
  *
- * Runs in this plugin's own process: the IDE starts it with a [ResultReceiver] in [EXTRA_RECEIVER], and it
- * answers with its VM service URI (auth token included) once the engine has one. The VM service port comes
- * from the intent as well (`vm-service-port`, read by [FlutterActivity] itself); 0 picks a free one.
+ * Runs in this plugin's own process, started only by [FlutterPlayerLauncher] (it is not exported), which
+ * passes on the IDE's [ResultReceiver] in [EXTRA_RECEIVER]; the player answers it with its VM service URI
+ * (auth token included) once the engine has one.
  */
 class FlutterPlayerActivity : FlutterActivity() {
 

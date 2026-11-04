@@ -33,11 +33,18 @@
 
         <!--
             The Flutter player: runs the Flutter app CodeAssist compiles, in this plugin's own process, and takes
-            its hot reloads through the Dart VM service. Exported so the IDE (another app) can start it.
+            its hot reloads through the Dart VM service. Not exported: its VM service runs whatever it is sent, so
+            the only way in is FlutterPlayerLauncher, which starts it for CodeAssist alone.
         -->
         <activity
-            android:name=".FlutterPlayerActivity"
+            android:name=".FlutterPlayerLauncher"
             android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+        <activity
+            android:name=".FlutterPlayerActivity"
+            android:exported="false"
             android:label="Flutter app"
             android:launchMode="singleTask"
             android:taskAffinity="dev.codeassist.dart.player"

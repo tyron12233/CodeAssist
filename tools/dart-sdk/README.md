@@ -67,7 +67,9 @@ How an app runs, which is `flutter run` without the `flutter` tool:
 
 - The IDE compiles the app with `frontend_server` (incremental, `--target=flutter`, against the patched platform).
 - The player (`FlutterPlayerActivity`, in the plugin's own APK and process) starts on its stub and sends the IDE
-  its Dart VM service URI. The IDE uploads the kernel and the asset bundle into a DevFS over the VM service and
+  its Dart VM service URI. It is not exported: its VM service runs whatever code it is sent, so the way in is
+  `FlutterPlayerLauncher`, which starts it only when the caller is CodeAssist (`getLaunchedFromPackage` on
+  Android 14 and later, the referrer before that, and adb for a debuggable build). The IDE uploads the kernel and the asset bundle into a DevFS over the VM service and
   calls `_flutter.runInView`: a hot restart into the app.
 - A saved file is recompiled as a delta and loaded with `reloadSources` + `ext.flutter.reassemble`: hot reload,
   state kept. `reset` + `recompile` gives the full kernel a hot restart needs.
