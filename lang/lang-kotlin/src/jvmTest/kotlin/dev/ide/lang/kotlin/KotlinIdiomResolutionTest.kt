@@ -199,6 +199,98 @@ class KotlinIdiomResolutionTest {
         clean(decl + "fun f(): Widget = build(Widget)\nval g: Factory<Widget> = Widget\nfun h(): Factory<Widget> { return Widget }")
     }
 
+    /** A member inherited from a generic SOURCE supertype is bound by the arguments the subclass gives it, so a
+     *  lambda filling its `S.() -> S` parameter has `S` as its receiver: the base-ViewModel `setState { copy() }`
+     *  idiom, through one or two levels and with or without an explicit receiver. */
+    @Test
+    fun anInheritedReceiverLambdaUsesTheSupertypesArguments() {
+        clean(
+            "abstract class Base<S : Any>(initial: S) {\n" +
+                "    private var s: S = initial\n" +
+                "    protected fun setState(reduce: S.() -> S) { s = s.reduce() }\n" +
+                "    protected val current get() = s\n}\n" +
+                "data class St(val n: Int = 0)\n" +
+                "class Impl : Base<St>(St()) {\n" +
+                "    fun inc() = setState { copy(n = n + 1) }\n" +
+                "    fun inc2() = this.setState { copy(n = n + current.n) }\n}"
+        )
+        clean(
+            "abstract class B0<S>(var s: S) { fun mod(f: S.() -> Unit) = s.f() }\n" +
+                "abstract class B1<X>(x: X) : B0<X>(x)\nclass Sb(var v: Int)\n" +
+                "class Impl2 : B1<Sb>(Sb(1)) { fun g() = mod { v += 1 } }\nfun h(i: Impl2) = i.mod { v = 2 }"
+        )
+    }
+
+    /** `s.f()` invokes a parameter, local or property of extension function type with `s` as its receiver,
+     *  for a concrete, supertype, or bounded type-parameter receiver; the result is the function's. */
+    @Test
+    fun aFunctionTypedValueIsInvokedOnAnExplicitReceiver() {
+        clean("fun g(s: String, f: String.() -> Int) = s.f()")
+        clean("fun g(s: String, f: CharSequence.() -> Int) = s.f()")
+        clean("fun <S : CharSequence> g(s: S, f: S.() -> Int) = s.f()")
+        clean("class W<S : CharSequence>(var s: S) { fun a(f: S.() -> S) { s = s.f() } }")
+        clean("class P(val f: String.(Int) -> Boolean) { fun g(): Boolean = \"a\".f(1) }")
+        clean("fun h(s: String, f: String.(Int) -> List<Int>): Int = s.f(2).size")
+    }
+
+    @Test
+    fun aFunctionTypedValueOnTheWrongReceiverIsStillReported() {
+        assertCodes("fun h(s: String, f: String.(Int) -> Int): String = s.f(1)", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        assertCodes("fun h(s: String, f: Int.() -> Int) = s.f()", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("fun k(s: String, g: (String) -> Int) = s.g()", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** A project typealias is seen only where Kotlin's scope rules put it: one package's
+     *  `typealias Stroke = List<Int>` must not turn another file's imported `Stroke` class into a `List`. */
+    @Test
+    fun aTypealiasIsSeenOnlyWhereItIsInScope() {
+        val files = mapOf(
+            "draw/Stroke.kt" to "package demo.draw\nclass Stroke(val width: Float)\n",
+            "carve/Carving.kt" to "package demo.carve\ntypealias Stroke = List<Int>\n",
+        )
+        cleanAcrossFiles(files, "package demo\nimport demo.draw.Stroke\nfun f(): Float = Stroke(1f).width\nfun g(s: Stroke): Float = s.width\n")
+        cleanAcrossFiles(files, "package demo.carve\nfun f(s: Stroke): Int = s.size\n")
+        cleanAcrossFiles(files, "package demo\nimport demo.carve.*\nfun f(s: Stroke): Int = s.size\n")
+    }
+
+    /** An extension declared on a typealias receiver extends the alias's target, from any file that sees it,
+     *  including one that imports a same-named class under another name. */
+    @Test
+    fun anExtensionOnATypealiasReceiverResolves() {
+        val files = mapOf(
+            "draw/Stroke.kt" to "package demo.draw\nclass Stroke(val width: Float)\n",
+            "carve/Carving.kt" to "package demo.carve\ntypealias Stroke = List<Int>\n" +
+                "fun Stroke.extendedWith(p: Int): Stroke = this + p\nfun Stroke.isClosed(): Boolean = size > 3\n",
+        )
+        cleanAcrossFiles(
+            files,
+            "package demo.carve\nimport demo.draw.Stroke as DrawStroke\n" +
+                "fun f(s: Stroke, d: DrawStroke): Boolean = s.extendedWith(1).isClosed() && d.width > 0f\n" +
+                "fun g(all: List<Stroke>): Int = all.count { it.isClosed() }\n",
+        )
+    }
+
+    /** A scope interface's member extension (`RowScope`'s `fun Modifier.weight()`) is a member: an
+     *  implementation overrides it, and leaving it out is the usual missing-implementation error. */
+    @Test
+    fun aMemberExtensionIsOverriddenLikeAnyMember() {
+        clean("interface Scope { fun String.shout(): String }\nclass Impl : Scope { override fun String.shout(): String = uppercase() }")
+        assertCodes("interface Scope { fun String.shout(): String }\nclass Impl : Scope", KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+        assertCodes("interface Scope { fun String.shout(): String }\nclass Impl : Scope { override fun String.whisper(): String = this }",
+            KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED, KotlinDiagnosticCodes.NOTHING_TO_OVERRIDE)
+    }
+
+    private fun cleanAcrossFiles(others: Map<String, String>, code: String) {
+        val errors = runBlocking {
+            val src = tempProject(others + ("Use.kt" to code))
+            val a = KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath())))
+            val doc = SnippetDoc(code, DiskFile(src.resolve("Use.kt")))
+            a.incrementalParser.parseFull(doc)
+            a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR }
+        }
+        assertTrue(errors.isEmpty(), "expected `$code` clean, got $errors")
+    }
+
     private fun clean(code: String) = assertClean(code, jdk = false)
     private fun cleanWithJdk(code: String) = assertClean(code, jdk = true)
 

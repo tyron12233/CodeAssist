@@ -577,7 +577,7 @@ internal fun KotlinResolver.typeOfCall(
         // `object Api { data class Level(…) }`), matching the bare-name path in `typeOfName`.
         // A project `typealias` constructed by its own name (`DiskFile(path)`) — resolved before the
         // classifier lookup's verbatim fallback, which would hand back the alias name as if it were a type.
-        service.typeAliasTargetFqn(name)?.let { return constructorResultType(it, call) }
+        service.typeAliasTargetFqn(name, fileContext)?.let { return constructorResultType(it, call) }
         service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { typeFqn ->
             // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
             // (`Box("s")` → `Box<String>`). Two cases are NOT, and both route to a same-named top-level FACTORY

@@ -1,6 +1,9 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
+import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
@@ -176,6 +179,11 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
     expectedTypeAt(call.textRange.startOffset)?.let { exp ->
         if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
     }
+    // Likewise the RESULT of a lambda whose expected return type is concrete: `transitionSpec = { spring() }`
+    // fills `Segment<S>.() -> FiniteAnimationSpec<Dp>`, which pins `spring`'s T to Dp.
+    lambdaResultSlotType(call)?.let { exp ->
+        if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
+    }
     val bound = inferTypeArguments(sym, call).keys
     val supplied = suppliedValueParameterIndices(sym, call)
     return sym.typeParameters.filter { tp ->
@@ -184,6 +192,16 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
         val mentioning = sym.paramTypes.indices.filter { mentionsTypeParam(sym.paramTypes[it], tp) }
         mentioning.isNotEmpty() && mentioning.none { it in supplied }
     }
+}
+
+/** The return type a lambda expects when [call] (or the qualified expression it ends) is that lambda's LAST
+ *  statement, i.e. its result. Null anywhere else, or when the lambda's expected shape is unknown. */
+private fun KotlinResolver.lambdaResultSlotType(call: KtCallExpression): KotlinType? {
+    val e: KtExpression = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call } ?: call
+    val block = e.parent as? KtBlockExpression ?: return null
+    if (block.statements.lastOrNull() !== e) return null
+    val lambda = (block.parent as? KtFunctionLiteral)?.parent as? KtLambdaExpression ?: return null
+    return expectedLambdaShape(lambda)?.returnType as? KotlinType
 }
 
 /** Whether the type reference [t] is, or nests, the type parameter named [name]. */

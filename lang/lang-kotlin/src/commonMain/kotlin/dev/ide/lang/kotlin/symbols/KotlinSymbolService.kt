@@ -1026,7 +1026,7 @@ class KotlinSymbolService(
         // to normal resolution (no unsound substitution). The target is resolved in the ALIAS's own file context
         // (its imports/package), and [aliasExpandDepth] bounds a cyclic/deep alias chain.
         if (argText.isBlank() && aliasExpandDepth.get().value < ALIAS_EXPAND_LIMIT) {
-            model().typeAliasBySimpleName[head]?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() }?.let { alias ->
+            visibleTypeAlias(head, ctx)?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() }?.let { alias ->
                 aliasExpandDepth.get().value++
                 try {
                     typeFromText(alias.targetText, alias.ctx)?.let { return if (nullable) it.withNullable(true) else it }
@@ -1420,6 +1420,10 @@ class KotlinSymbolService(
     ): List<Symbol> =
         ownAndInheritedCached(typeFqn, typeArgs) + extensionsFor(typeFqn, typeArgs)
 
+    /** The members [typeFqn] declares or inherits, its MEMBER extensions included, without the top-level
+     *  extensions [membersOf] adds for the receiver. What a subclass can override or must implement. */
+    fun ownAndInheritedMembers(typeFqn: String): List<KotlinSymbol> = ownAndInheritedCached(typeFqn, emptyList())
+
     /**
      * Members of [typeFqn] whose name starts with [namePrefix] — the completion path. Pushing the prefix down
      * matters with large classpaths (Compose): a type's extension set (esp. the `kotlin.Any` bucket, which
@@ -1687,8 +1691,18 @@ class KotlinSymbolService(
             // A compiler plugin's generated INSTANCE members (a future Parcelize provider's writeToParcel/…), for
             // the same reason: the parse-only model never runs the plugin. Cheap — gated on the class's annotations.
             val syntheticPlugin = syntheticInstanceMembers(rc)
-            val inherited = rc.superTypeTexts.mapNotNull { sourceSupertypeFqn(it, rc.ctx, rc.fqn) }
-                .flatMap { ownAndInherited(it, emptyList(), visited) }
+            // Each supertype is enumerated WITH the arguments this class gives it (`class Sub : Box<Sb>` binds
+            // Box's `S` to `Sb`, and `class B1<X> : B0<X>` passes the receiver's own binding of X through), so an
+            // inherited member's parameter types are concrete. Without them a lambda filling an inherited
+            // `S.() -> S` parameter had an unbound receiver and every member call in its body went unresolved.
+            val tps = rc.typeParameterNames.toHashSet()
+            val inherited = rc.superTypeTexts.mapNotNull { text ->
+                val superFqn = sourceSupertypeFqn(text, rc.ctx, rc.fqn) ?: return@mapNotNull null
+                val args = if ('<' !in text || "->" in text) emptyList()
+                else markTypeParameters(typeFromText(text, rc.ctx, fqn), tps)?.typeArguments.orEmpty()
+                    .map { if (classBindings.isEmpty()) it else substitute(it, classBindings) }
+                superFqn to args
+            }.flatMap { (superFqn, args) -> ownAndInherited(superFqn, args, visited) }
             // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
             // LAST, so an explicit supertype's override (or the class's own member) is found before the
             // inherited default — the enumeration is order-sensitive, first match wins.
@@ -2129,7 +2143,11 @@ class KotlinSymbolService(
      */
     private fun sourceReceiverFqn(rc: RawCallable, ownerFqn: String?): String? {
         val text = rc.receiverText ?: return null
-        val tp = sourceReceiverTypeParam(rc) ?: return resolveTypeName(text, rc.ctx, ownerFqn)
+        // An extension on a project TYPEALIAS (`typealias Stroke = List<Offset>`, `fun Stroke.extendedWith(…)`) is
+        // an extension on the alias's target, so it is keyed there; under the alias name no value ever finds it.
+        val tp = sourceReceiverTypeParam(rc)
+            ?: return typeAliasTargetFqn(text.substringBefore('<').removeSuffix("?").trim(), rc.ctx)
+                ?: resolveTypeName(text, rc.ctx, ownerFqn)
         val bound = rc.typeParameterBounds.getOrNull(rc.typeParameterNames.indexOf(tp))?.takeIf { it.isNotBlank() }
         return bound?.let { resolveTypeName(it, rc.ctx, ownerFqn) } ?: "kotlin.Any"
     }
@@ -4178,9 +4196,9 @@ class KotlinSymbolService(
      * KotlinNavigationTest.theseResolveButHaveNoNavigableDeclarationYet, which is waiting for the alias to get
      * a location of its own).
      */
-    fun typeAliasTargetFqn(simpleName: String): String? {
+    fun typeAliasTargetFqn(simpleName: String, ctx: FileContext? = null): String? {
         if (aliasExpandDepth.get().value >= ALIAS_EXPAND_LIMIT) return null
-        val alias = model().typeAliasBySimpleName[simpleName]
+        val alias = visibleTypeAlias(simpleName, ctx)
             ?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() } ?: return null
         aliasExpandDepth.get().value++
         return try {
@@ -4192,6 +4210,27 @@ class KotlinSymbolService(
     }
 
     fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
+
+    /**
+     * The project typealias that [simpleName] denotes in the file [ctx], by Kotlin's scope order: an explicit
+     * import binding the name decides outright (the alias it names, or nothing when it names a class, so
+     * `import …drawscope.Stroke` hides a `typealias Stroke` elsewhere); then an alias in the file's own package;
+     * then one in a star-imported package. Matching by simple name alone let one file's
+     * `typealias Stroke = List<Offset>` turn `Stroke(width = 4f)` in every other package into a `List`.
+     * Without a file context (a library's type text), the name's only alias, if it has exactly one.
+     */
+    private fun visibleTypeAlias(simpleName: String, ctx: FileContext?): TypeAliasDecl? {
+        val m = model()
+        val candidates = m.typeAliasesBySimpleName[simpleName]
+        if (ctx == null) return candidates?.singleOrNull()
+        ctx.imports.firstOrNull { !it.isStar && it.simpleName == simpleName }?.let { return m.typeAliasByFqn[it.fqn] }
+        if (candidates == null) return null
+        candidates.firstOrNull { it.fqn.substringBeforeLast('.', "") == ctx.packageName }?.let { return it }
+        return candidates.firstOrNull { a ->
+            val pkg = a.fqn.substringBeforeLast('.', "")
+            ctx.imports.any { it.isStar && it.fqn == pkg }
+        }
+    }
 
     /**
      * Whether [fqnRaw]'s supertype closure is completely known — so "X is NOT a subtype of Y" can be

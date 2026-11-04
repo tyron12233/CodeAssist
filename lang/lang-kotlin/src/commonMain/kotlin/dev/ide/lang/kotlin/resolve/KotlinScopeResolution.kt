@@ -896,7 +896,7 @@ fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
         ?.takeIf { service.isKnownType(it) }?.let { return it }
     // A project `typealias` constructed by its own name (`DiskFile(path)`). See [typeAliasTargetFqn].
-    return service.typeAliasTargetFqn(name)
+    return service.typeAliasTargetFqn(name, fileContext)
 }
 
 fun KotlinResolver.enclosingClassFqn(offset: Int): String? = elementAt(offset)?.let { enclosingClassFqnOf(it) }

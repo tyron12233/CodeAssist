@@ -135,7 +135,7 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         val javaStatics = q?.let { mappedJavaStatics(it.receiverExpression, receiverType, name) }.orEmpty()
             .filter { it.kind == SymbolKind.METHOD }
         if (javaStatics.isNotEmpty()) javaStatics + companionMethods
-        else members + scopeExts + companionMethods
+        else (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
     } else if (q != null && q.selectorExpression === call) {
         // An EXPLICIT receiver whose type is unknown (`unresolved?.let { }`). Only a package-qualified call
         // (`kotlinx.coroutines.delay(…)`) can still resolve, to a plain top-level function. The scope walk below
@@ -148,6 +148,8 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // invocation, which [typeOfCall] types through [invokeReturnType] and the highlighter colors as the
         // value. Null from the helper means "not that case": go on.
         if (nearerValueInvokeTargets(call, name) != null) return null
+        val typeInScope = name.firstOrNull()?.isUpperCase() == true &&
+            service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
         // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
         // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
         // (`itemsIndexed(...)` inside `LazyColumn { }`, on the implicit `LazyListScope`) so its `itemContent`
@@ -163,7 +165,15 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
             // experimental-API misuse -- instead of the default-imported `kotlin.synchronized`. This only
             // REORDERS: when nothing is in scope the whole list is kept, so the leniency a bare `Text` /
             // `Column` relies on is untouched, which is what filtering outright broke.
-            .let { cands -> cands.filter { topLevelInScope(it, fileContext) }.ifEmpty { cands } }
+            .let { cands ->
+                cands.filter { topLevelInScope(it, fileContext) }.ifEmpty {
+                    // None in scope, but the name IS a type in scope (`import android.widget.Button` and then
+                    // `Button(ctx)`): that class's constructor is the call. An unimported function of the same name
+                    // (Material3's `Button`) is invisible to Kotlin, and keeping it made a View constructor read as
+                    // a @Composable invocation.
+                    if (typeInScope) emptyList() else cands
+                }
+            }
             .let {
                 // A local function, and equally a MEMBER of the enclosing class, SHADOWS a same-named
                 // top-level one. This lookup runs BEFORE the scope walk that knows about members, so a
@@ -187,6 +197,12 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                     name,
                     exactName = true
                 ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+                    // The scope walk lists every top-level function too; with a type of this name in scope, an
+                    // out-of-scope one is still invisible (see above).
+                    .let { found ->
+                        if (!typeInScope) found
+                        else found.filter { f -> f.packageName == null || f.isExtension || topLevelInScope(f, fileContext) }
+                    }
             }
     }
     // Prefer exact arity; then functions with MORE params than supplied args (defaulted params the caller
@@ -600,7 +616,7 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
                     service.sourceClass(nested)?.constructors.orEmpty().map { sourceCtorSymbol(it, nested) }
             }
         }
-        return members + scopeExts + companionMethods
+        return (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
     }
     // A nearer function-typed value: the call's targets are its `invoke`, not the top-level functions it
     // shadows ([nearerValueInvokeTargets]).
@@ -631,7 +647,7 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
     // yields its constructors (`Level(21, "x")` inside `object Api { data class Level(…) }`).
     if (name.firstOrNull()?.isUpperCase() == true) {
         // A project `typealias` constructed by its own name (`DiskFile(path)`).
-        service.typeAliasTargetFqn(name)?.let { fqn ->
+        service.typeAliasTargetFqn(name, fileContext)?.let { fqn ->
             out += service.constructorsOf(fqn)
             service.sourceClass(fqn)?.constructors?.forEach { rc -> out += sourceCtorSymbol(rc, fqn) }
         }
@@ -854,6 +870,55 @@ internal fun KotlinResolver.nearerValueInvokeTargets(call: KtCallExpression, nam
     // f()`), so both shapes are candidates whenever some implicit receiver exists.
     val explicit = invoke(listOf(shape.receiverType) + shape.parameterTypes)
     return if (implicitReceiversAt(offset).isEmpty()) listOf(explicit) else listOf(explicit, invoke(shape.parameterTypes))
+}
+
+/**
+ * A receiver call's candidates: the receiver type's members and receiver-keyed extensions, then the member
+ * extensions an implicit receiver brings into scope ([scopeExts]: `RowScope`'s `Modifier.alignByBaseline()`
+ * inside `Row { }`). The classpath index ALSO keys a class's member extensions by receiver, so the same
+ * signature declared in `ContextualFlowRowOverflowScopeImpl`, an experimental class, came first and reported
+ * an opt-in error on a plain `Row`. An extension the scope redeclares with the identical signature is that
+ * duplicate, so the scope's own declaration replaces it. Anything else keeps its place (a scope's `T.let`
+ * bound to `ColumnScope` must not displace the receiver's own `let`).
+ */
+private fun kotlinCandidateOrder(members: List<KotlinSymbol>, scopeExts: List<KotlinSymbol>): List<KotlinSymbol> {
+    if (scopeExts.isEmpty()) return members
+    fun sig(s: KotlinSymbol) = s.receiverTypeFqn + "(" + s.paramTypes.joinToString(",") { it?.qualifiedName.orEmpty() } + ")"
+    val scoped = scopeExts.mapTo(HashSet()) { sig(it) }
+    return members.filterNot { it.isExtension && it.typeParameters.isEmpty() && sig(it) in scoped } + scopeExts
+}
+
+/**
+ * `s.f()` where `f` is a parameter, local or enclosing-class property of EXTENSION function type
+ * (`f: String.() -> Int`, a builder's `block: S.() -> S`): the value is invoked with `s` as its receiver, so the
+ * call's target is its `invoke` with the remaining parameters. Consulted only once the receiver has no member or
+ * extension of that name, which is the order Kotlin resolves them in. Empty when [name] is not such a value.
+ */
+internal fun KotlinResolver.receiverValueInvokeTargets(
+    call: KtCallExpression,
+    name: String,
+    receiverType: KotlinType?,
+): List<KotlinSymbol> {
+    val offset = call.textRange.startOffset
+    val local = localsAt(offset).firstOrNull { it.name == name }
+    val isValue = if (local != null) local.kind != SymbolKind.METHOD else innermostClassDeclaresValue(offset, name) == true
+    if (!isValue) return emptyList()
+    val type = typeOfName(name, offset) ?: return emptyList()
+    val shape = service.functionalShape(type)?.takeIf { it.isExtension } ?: return emptyList()
+    // The value's receiver must accept the explicit one (`s.f()` with `f: Int.() -> Unit` stays an error). A
+    // type-parameter receiver on either side (`f: S.() -> S` on an `s: S`) is left to the checker's own leniency.
+    val wanted = shape.receiverType as? KotlinType
+    if (wanted != null && receiverType != null && !wanted.isTypeParameter && !receiverType.isTypeParameter &&
+        !isTypeParameterInScope(wanted.qualifiedName, offset) &&
+        !wanted.isAssignableFrom(receiverType.withNullable(false))
+    ) return emptyList()
+    return listOf(
+        KotlinSymbol(
+            "invoke", SymbolKind.METHOD, type = shape.returnType,
+            paramTypes = shape.parameterTypes,
+            paramHasDefault = List(shape.parameterTypes.size) { false },
+        )
+    )
 }
 
 /** For the innermost enclosing class that declares a member named [name] (a function, a property, a

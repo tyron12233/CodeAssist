@@ -3670,6 +3670,9 @@ internal class KotlinSemanticChecks(
         // `this` here — so it must not be flagged unresolved (the import gate below applies only to top-level
         // extensions). Checked first since these never need an import.
         if (resolver.scopeMemberExtensions(expr.textRange.startOffset, recvType, name).any { it.name == name }) return null
+        // `s.f()` invoking a parameter/local/property of extension function type (`f: String.() -> Int`) with `s`
+        // as its receiver: `f` is a value in scope, not a member of `s`'s type.
+        if (parent is KtCallExpression && resolver.receiverValueInvokeTargets(parent, name, recvType).isNotEmpty()) return null
         // Does the receiver have a member named `name`? Push the NAME into the lookup so only same-named
         // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
         // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)
