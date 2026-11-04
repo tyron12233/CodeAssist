@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.zip.Deflater
 import java.util.zip.GZIPOutputStream
 
 /** A VM service call the VM refused or failed. */
@@ -77,6 +78,9 @@ class VmService private constructor(private val httpBase: String, private val so
                 future.get(timeoutMs, TimeUnit.MILLISECONDS)
             } catch (e: java.util.concurrent.ExecutionException) {
                 throw e.cause ?: e
+            } catch (e: java.util.concurrent.TimeoutException) {
+                // An IOException like every other way a call fails, so the run reports it rather than dying of it.
+                throw IOException("the app did not answer $method within ${timeoutMs / 1000} s")
             }
         } finally {
             pending.remove(id)
@@ -93,9 +97,19 @@ class VmService private constructor(private val httpBase: String, private val so
             connection.requestMethod = "PUT"
             connection.doOutput = true
             connection.setChunkedStreamingMode(64 * 1024)
+            // Without these a VM service that stops answering holds the run forever, past Stop.
+            connection.connectTimeout = 10_000
+            connection.readTimeout = UPLOAD_TIMEOUT_MS
+            // A fresh socket for every upload. Reusing a pooled one now and then sends the request down a
+            // connection the VM service has finished with, and it never answers: the run hung on a reload.
+            connection.setRequestProperty("Connection", "close")
             connection.setRequestProperty("dev_fs_name", fsName)
             connection.setRequestProperty("dev_fs_uri_b64", Base64.getEncoder().encodeToString(path.toByteArray()))
-            GZIPOutputStream(connection.outputStream, 64 * 1024).use { gz -> Files.copy(file, gz) }
+            // The fastest level: the kernel is tens of megabytes, compressed on the phone for a socket to localhost,
+            // where the default level costs seconds and saves nothing that matters.
+            object : GZIPOutputStream(connection.outputStream, 64 * 1024) {
+                init { def.setLevel(Deflater.BEST_SPEED) }
+            }.use { gz -> Files.copy(file, gz) }
             val code = connection.responseCode
             if (code != 200) throw IOException("uploading $path to the app failed: HTTP $code")
         } finally {
@@ -208,6 +222,7 @@ class VmService private constructor(private val httpBase: String, private val so
     }
 
     companion object {
+        private const val UPLOAD_TIMEOUT_MS = 120_000
         private const val WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         const val OP_CONTINUATION = 0
         const val OP_TEXT = 1

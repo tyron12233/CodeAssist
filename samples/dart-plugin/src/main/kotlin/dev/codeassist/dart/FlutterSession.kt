@@ -62,9 +62,13 @@ internal class FlutterSession(
         isolateHint = isolate
         runCatching { vm.call("_deleteDevFS", mapOf("fsName" to FS)) }
         fsUri = vm.call("_createDevFS", mapOf("fsName" to FS)).string("uri") ?: throw IOException("the app made no DevFS")
+        val started = System.nanoTime()
         uploadAssets()
+        val assets = System.nanoTime()
         vm.upload(FS, "app.dill", dill)
+        val kernel = System.nanoTime()
         runInView("app.dill")
+        out("Started: assets ${(assets - started) / 1_000_000} ms, kernel ${(kernel - assets) / 1_000_000} ms, run ${ms(kernel)} ms.")
     }
 
     /** A full kernel of the program as it is now, for an engine that has not run it yet. */
@@ -128,19 +132,12 @@ internal class FlutterSession(
             out("Not restarted: ${full.errors} compile error(s).")
             return Outcome(false, errors(full))
         }
+        val compiled = System.nanoTime()
         vm.upload(FS, "app.dill", full.dill!!)
+        val uploaded = System.nanoTime()
         runInView("app.dill")
-        out("Restarted in ${ms(started)} ms.")
+        out("Restarted in ${ms(started)} ms (compile ${(compiled - started) / 1_000_000}, upload ${(uploaded - compiled) / 1_000_000}, start ${ms(uploaded)}).")
         return Outcome(true)
-    }
-
-    /** Ask the app to exit. That ends the whole engine's process, so only the Run, which owns its player, asks. */
-    fun exitApp() {
-        val vm = vm?.takeIf { !it.isClosed } ?: return
-        runCatching {
-            val isolate = (view(timeoutMs = 2_000)["isolate"] as? JsonObject)?.string("id") ?: return
-            vm.call("ext.flutter.exit", mapOf("isolateId" to isolate), timeoutMs = 2_000)
-        }
     }
 
     override fun close() {

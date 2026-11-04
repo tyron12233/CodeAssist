@@ -39,7 +39,13 @@ object FlutterPlayer {
     /** The player's gate, which checks that CodeAssist is the caller (see FlutterPlayerLauncher). */
     private const val ACTIVITY = "dev.codeassist.dart.FlutterPlayerLauncher"
 
-    class Started(val uri: String, val isolate: String?)
+    class Started(val uri: String, val isolate: String?, private val control: android.os.IBinder?) {
+        /** End the player: its task closed, its process gone. Safe to call again, or once it is already gone. */
+        fun quit() {
+            val binder = control ?: return
+            runCatching { android.os.Messenger(binder).send(android.os.Message.obtain(null, FlutterPlayerActivity.QUIT)) }
+        }
+    }
 
     fun launch(timeoutMs: Long = 20_000): Started {
         val context = appContext() ?: throw IOException("No Android context to start the Flutter player from.")
@@ -47,7 +53,7 @@ object FlutterPlayer {
         val receiver = object : ResultReceiver(null) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
                 val uri = resultData?.getString(FlutterPlayerActivity.EXTRA_URI)
-                if (resultCode == 0 && uri != null) answer.complete(Started(uri, resultData.getString(FlutterPlayerActivity.EXTRA_ISOLATE)))
+                if (resultCode == 0 && uri != null) answer.complete(Started(uri, resultData.getString(FlutterPlayerActivity.EXTRA_ISOLATE), resultData.getBinder(FlutterPlayerActivity.EXTRA_CONTROL)))
                 else answer.completeExceptionally(IOException("The Flutter player started without a VM service."))
             }
         }
@@ -110,7 +116,10 @@ internal class FlutterRunTask(
         io?.started()
         val result = try {
             session(io)
-        } catch (e: IOException) {
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Anything else ends the run with its reason in the console, never silently.
             out(e.message ?: e.toString())
             TaskResult.Failed(e.message ?: "The Flutter run failed")
         }
@@ -137,6 +146,7 @@ internal class FlutterRunTask(
             pkg, sdk, flutter, entry, pkg.resolve(".dart_tool/codeassist/flutter"), out,
             alsoChanged = { if (preview && writeGallery()) listOf(galleryFile) else emptyList() },
         )
+        var player: FlutterPlayer.Started? = null
         try {
             out("Compiling $entry ...")
             val started = System.nanoTime()
@@ -146,10 +156,12 @@ internal class FlutterRunTask(
             out("Compiled in ${ms(started)} ms.")
 
             out("Starting the Flutter player ...")
-            val player = FlutterPlayer.launch()
+            val launched = System.nanoTime()
+            player = FlutterPlayer.launch()
             val vm = FlutterSession.connect(player.uri)
             vm.onEvent = { stream, event -> if (stream == "Stdout" || stream == "Stderr") printed(event) }
             for (stream in listOf("Stdout", "Stderr")) runCatching { vm.call("streamListen", mapOf("streamId" to stream)) }
+            out("The player answered in ${ms(launched)} ms.")
             val uploaded = System.nanoTime()
             app.runIn(vm, player.isolate, first.dill!!)
             out("Running in ${ms(uploaded)} ms. Saving a file hot-reloads it; type r (reload), R (restart) or q (quit).")
@@ -162,7 +174,7 @@ internal class FlutterRunTask(
                 when (commands.poll()?.trim()) {
                     "r" -> app.reload(changedSince(seen).also { seen = FlutterSession.snapshot(pkg) })
                     "R" -> app.restart(changedSince(seen).also { seen = FlutterSession.snapshot(pkg) })
-                    "q" -> { app.exitApp(); break }
+                    "q" -> break
                     else -> {
                         val now = FlutterSession.snapshot(pkg)
                         if (now == seen) continue
@@ -181,7 +193,7 @@ internal class FlutterRunTask(
             return TaskResult.Success
         } finally {
             // A run that stopped should not leave its player behind.
-            app.exitApp()
+            player?.quit()
             app.close()
         }
     }

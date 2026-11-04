@@ -130,8 +130,10 @@ class FlutterPreviewService : Service() {
             val deadline = System.currentTimeMillis() + 20_000
             var uri: String? = null
             var isolate: String? = null
-            while ((uri == null || isolate == null) && System.currentTimeMillis() < deadline) {
+            var isolateDeadline = Long.MAX_VALUE
+            while ((uri == null || isolate == null) && System.currentTimeMillis() < minOf(deadline, isolateDeadline)) {
                 uri = uri ?: runCatching { FlutterJNI.getVMServiceUri() }.getOrNull()?.takeIf { it.isNotBlank() }
+                    ?.also { isolateDeadline = System.currentTimeMillis() + FlutterPlayerActivity.ISOLATE_GRACE_MS }
                 isolate = isolate ?: embedded.isolate
                 if (uri == null || isolate == null) Thread.sleep(30)
             }
