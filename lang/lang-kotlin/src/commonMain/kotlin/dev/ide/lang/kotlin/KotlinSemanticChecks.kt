@@ -2822,7 +2822,9 @@ internal class KotlinSemanticChecks(
         if (!service.isKnownType(d.qualifiedName) || !service.isKnownType(a.qualifiedName)) return false
         // Base types compatible — but a generic TYPE ARGUMENT may still definitely clash (`List<String>` vs
         // `List<Int>`). No variance can bridge two unrelated final argument types, so that is a real mismatch.
-        if (d.isAssignableFrom(a)) return genericArgsMismatch(d, a)
+        // A Java collection (`java.util.List` from `Collectors.toList()`) is the platform type `(Mutable)List`,
+        // so it fills a declared `MutableList` as well as a `List`.
+        if (d.isAssignableFrom(a) || sameClassifier(d, a)) return genericArgsMismatch(d, a)
         return !(d.qualifiedName in NUMERIC && a.qualifiedName in NUMERIC)
     }
 
@@ -2838,20 +2840,42 @@ internal class KotlinSemanticChecks(
      *  into nested arguments. Only unrelated finals count, so covariance/contravariance/invariance is irrelevant
      *  (none can relate two disjoint final types) — no variance model needed and no false positive. */
     private fun genericArgsMismatch(d: KotlinType, a: KotlinType): Boolean {
-        if (d.qualifiedName != a.qualifiedName || d.typeArguments.size != a.typeArguments.size) return false
+        if (!sameClassifier(d, a) || d.typeArguments.size != a.typeArguments.size) return false
+        val variances by lazy { service.classTypeParameterVariance(d.qualifiedName) }
         return d.typeArguments.indices.any { i ->
-            val da = d.typeArguments[i] as? KotlinType ?: return@any false
-            val aa = a.typeArguments[i] as? KotlinType ?: return@any false
+            // A nested argument read from Java bytecode keeps its JVM name (`java.lang.String`), the same class
+            // as the Kotlin one it is compared with.
+            val da = (d.typeArguments[i] as? KotlinType)?.let(::canonicalTypeForCheck) ?: return@any false
+            val aa = (a.typeArguments[i] as? KotlinType)?.let(::canonicalTypeForCheck) ?: return@any false
             when {
+                da.projection == "*" || aa.projection == "*" -> false               // a star accepts any argument
                 da.isTypeParameter || aa.isTypeParameter -> false
+                aa.qualifiedName == "kotlin.Nothing" -> false
                 !service.isKnownType(da.qualifiedName) || !service.isKnownType(aa.qualifiedName) -> false
-                da.qualifiedName == aa.qualifiedName -> genericArgsMismatch(da, aa) // same base → check nested args
+                sameClassifier(da, aa) -> genericArgsMismatch(da, aa)                // same base → check nested args
                 da.isAssignableFrom(aa) || aa.isAssignableFrom(da) -> false          // a subtype relation → variance may allow it
                 da.qualifiedName in NUMERIC && aa.qualifiedName in NUMERIC -> false  // numeric adaptation
-                else -> comparisonFinal(da) && comparisonFinal(aa)                   // two disjoint finals → clash
+                comparisonFinal(da) && comparisonFinal(aa) -> true                   // two disjoint finals → clash
+                // A declared built-in value type in an `out` or invariant position: only that type itself (or
+                // Nothing) can fill it, and the two are unrelated, so `List<String>` against `List<Path>` is a
+                // clash however open `Path` is. The relation was decided on the built-in's own supertype chain,
+                // which the model knows in full. Not the reverse (a built-in INFERRED against an open declared
+                // type: `List<Serializable> = listOf("a")` is valid through a JVM supertype the model may lack),
+                // and not an `in` position, which needs the declared built-in to be a subtype of the inferred one.
+                da.qualifiedName in FINAL_VALUE_TYPES ->
+                    (da.projection.ifEmpty { variances.getOrNull(i).orEmpty() }) != "in"
+                else -> false
             }
         }
     }
+
+    /** Whether [d] and [a] name the same classifier, counting a Java collection as the Kotlin one it is seen
+     *  as: a `java.util.List` from Java code (`stream.collect(Collectors.toList())`) is the platform type
+     *  `(Mutable)List`, so it is compared argument by argument with a declared `List` or `MutableList`. */
+    private fun sameClassifier(d: KotlinType, a: KotlinType): Boolean =
+        d.qualifiedName == a.qualifiedName ||
+            Builtins.javaTypeFor(d.qualifiedName) == a.qualifiedName ||
+            Builtins.javaTypeFor(a.qualifiedName) == d.qualifiedName
 
     /**
      * The `null` literal assigned where a known NON-nullable type is expected — Kotlin's NULL_FOR_NONNULL_TYPE

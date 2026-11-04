@@ -81,6 +81,54 @@ class KotlinStreamCollectInferenceTest {
         assertTrue(errors.isNotEmpty(), "a List<Path> where String is declared must still be flagged")
     }
 
+    /** A built-in element type declared against an unrelated one, open or not, is a clash: only `String`
+     *  itself fills `List<String>`. Before, both arguments had to be final types, so an interface like `Path`
+     *  slipped through. */
+    @Test
+    fun aMismatchedElementTypeIsReported() {
+        val cases = listOf(
+            "fun f(s: Stream<Path>): List<String> = s.collect(Collectors.toList())",
+            "fun f(s: Stream<Path>) { val xs: List<String> = s.collect(Collectors.toList()) }",
+            "fun f(xs: List<Path>): List<Int> = xs",
+            "fun f(xs: MutableList<Runnable>): MutableList<String> = xs",
+        )
+        for (c in cases) {
+            val errors = errors(STREAM_IMPORTS + c)
+            assertEquals(
+                listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors.map { it.code },
+                "expected one type mismatch for `$c`, got $errors",
+            )
+        }
+    }
+
+    /** Valid assignments the stricter element check must keep accepting. */
+    @Test
+    fun compatibleElementTypesStayClean() {
+        val cases = listOf(
+            "fun f(): List<CharSequence> = listOf(\"a\")",
+            "fun f(): List<java.io.Serializable> = listOf(\"a\")",
+            "fun f(): List<Comparable<String>> = listOf(\"a\")",
+            "fun f(): List<Number> = listOf(1)",
+            "fun f(): List<Any> = listOf(\"a\")",
+            "fun f(): List<String> = emptyList()",
+            "fun f(): List<*> = listOf(Path.of(\"a\"))",
+            "fun f(c: Comparator<Any>): Comparator<String> = c",
+            "fun f(s: Stream<String>): List<String> = s.collect(Collectors.toList())",
+            "fun f(s: Stream<Path>): MutableList<Path> = s.collect(Collectors.toList())",
+            "fun f(s: Stream<Path>): List<Any> = s.collect(Collectors.toList())",
+            "fun f(s: Stream<String>): List<CharSequence> = s.collect(Collectors.toList())",
+            "fun f(s: Stream<Int>): List<Int> = s.collect(Collectors.toList())",
+            "fun f(): List<String> = java.util.Arrays.asList(\"a\")",
+            "fun f(): Map<String, Int> = java.util.HashMap<String, Int>()",
+            "fun f(xs: List<Nothing>): List<String> = xs",
+            "fun f(m: Map<String, Path>): Map<String, Any> = m",
+        )
+        for (c in cases) {
+            val errors = errors(STREAM_IMPORTS + c)
+            assertTrue(errors.isEmpty(), "`$c` must stay clean, got $errors")
+        }
+    }
+
     private fun hints(code: String): List<String> = runBlocking {
         val (a, doc, text) = open(code)
         a.inlayHints!!.hints(doc.file, TextRange(0, text.length)).map { h -> h.parts.joinToString("") { it.text } }
@@ -108,6 +156,8 @@ class KotlinStreamCollectInferenceTest {
     }
 
     companion object {
+        private const val STREAM_IMPORTS =
+            "import java.nio.file.Path\nimport java.util.stream.Stream\nimport java.util.stream.Collectors\n"
         private val jdkJar: java.nio.file.Path? =
             TestJars.jdkBaseJar(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "codeassist-jdk-jar"))
     }
