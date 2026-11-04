@@ -962,6 +962,10 @@ How it behaves, so you can plan around it:
   completion, longer for references and rename) and the engine's cancel token is polled while it waits, so a
   slow server degrades to "no answer" rather than freezing the editor. A file analysed while the server was
   still starting is analysed again once it is ready.
+- **The server's work never holds the engine thread.** The editor does each pass's round trip (diagnostics,
+  completion, semantic colours, folding, inlay hints, hover, signature help, the structure view) off the
+  IDE's single analysis thread first, and the engine's own call then finds the answer cached for that version
+  of the document. A slow server delays its own language's results, not Java's or Kotlin's.
 - **A server that exits is restarted** on the next request. Only a crash loop (more than three failures within
   three minutes) leaves it down until the project is reopened, which the user is told once. A server Android
   killed in the background (Android 12 and later stop an app's child processes there) comes back every time.

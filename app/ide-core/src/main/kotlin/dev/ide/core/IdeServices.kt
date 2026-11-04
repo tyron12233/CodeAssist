@@ -5887,6 +5887,14 @@ class IdeServices private constructor(
     /** Files whose diagnostics a language server changed on its own; the editor re-analyzes the open ones. */
     val externalDiagnosticsChanged: kotlinx.coroutines.flow.Flow<Set<Path>> get() = env.languageServers.diagnosticsChanged
 
+    /**
+     * The language server support serving [file]'s language, or null. The editor uses it to do a pass's server
+     * round trip off the engine thread first ([dev.ide.lsp.client.LspLanguageSupport.prefetch]), so the engine
+     * call that follows is a lookup rather than a wait on another process.
+     */
+    fun languageServerFor(file: Path): dev.ide.lsp.client.LspLanguageSupport? =
+        if (env.languageServers.hasServers) env.languageServers.supportFor(languageFor(file)) else null
+
     /** Edits a language server asked to make on its own; the editor applies them like a multi-file quick fix. */
     val languageServerEdits: kotlinx.coroutines.flow.Flow<Map<Path, List<DocumentEdit>>> get() = env.languageServers.externalEdits
 

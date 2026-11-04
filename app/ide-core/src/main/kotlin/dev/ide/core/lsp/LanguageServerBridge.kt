@@ -83,6 +83,10 @@ class LanguageServerBridge internal constructor(private val env: ApplicationEnvi
 
     private val supports = ArrayList<LspLanguageSupport>()
 
+    /** The registered support serving [language], or null when no language server does. */
+    fun supportFor(language: dev.ide.lang.LanguageId): LspLanguageSupport? =
+        synchronized(this) { supports.firstOrNull { language in it.definition.languages } }
+
     /** Whether any plugin registered a language server: the engine skips the bookkeeping otherwise. */
     val hasServers: Boolean get() = supports.isNotEmpty()
 

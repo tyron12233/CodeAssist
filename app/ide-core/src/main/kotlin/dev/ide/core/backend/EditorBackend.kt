@@ -170,7 +170,26 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         ctx.recordPerf(event, (end - t0) / 1_000_000, dims, queuedMs = ((started - t0) / 1_000_000).coerceAtLeast(0))
     }
 
+    /**
+     * For a file a language server serves: do [pass]'s round trip to the server now, off the engine thread, so
+     * the engine call that follows finds the answer ready. Without it the engine's single worker would sit
+     * waiting on another process while Java and Kotlin work queued behind it. A no-op for every other file.
+     */
+    private suspend fun prefetchFromLanguageServer(
+        pass: dev.ide.lsp.client.LspLanguageSupport.Pass, path: String, text: String, offset: Int = 0,
+        range: dev.ide.lang.dom.TextRange? = null,
+    ) {
+        val services = ctx.servicesOrNull ?: return
+        val file = Paths.get(path)
+        val support = runCatching { services.languageServerFor(file) }.getOrNull() ?: return
+        withContext(Dispatchers.IO) {
+            val job = coroutineContext[Job]
+            runCatching { support.prefetch(pass, file, text, offset, range) { job?.isActive != false } }
+        }
+    }
+
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.STRUCTURE, path, text)
         ctx.background(op = op("docBreadcrumb", path)) { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
     } catch (_: EngineCanceledException) {
         emptyList()
@@ -189,6 +208,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.STRUCTURE, path, text)
         // XML elements reuse the class/field kinds for container/leaf; the outline badges them as elements.
         val isXml = path.endsWith(".xml")
         ctx.background(op = op("fileStructure", path)) {
@@ -265,6 +285,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             ?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = try {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.HOVER, path, text, offset)
         ctx.background {
             ctx.services.quickDocAt(Paths.get(path), text, offset)?.let {
                 UiQuickDoc(
@@ -378,6 +399,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.COMPLETION, path, text, offset)
         val t0 = System.nanoTime()
         var started = 0L
         val result = try {
@@ -422,6 +444,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.DIAGNOSTICS, path, text)
         // Routes through the full analysis engine for EVERY language: per-language diagnostic providers
         // (the JDT compiler, the hand-rolled Kotlin checks, the XML lint) plus the analyzers, merged,
         // suppression-filtered, and profile-adjusted into one set. Runs in the preemptible lane so a
@@ -545,6 +568,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun hintsAt(
         path: String, text: String, startOffset: Int, endOffset: Int
     ): List<UiInlayHint> {
+        prefetchFromLanguageServer(
+            dev.ide.lsp.client.LspLanguageSupport.Pass.INLAY, path, text, range = dev.ide.lang.dom.TextRange(startOffset, endOffset),
+        )
         val hints = try {
             timedPass("inlay", path, { it.size }) {
                 measuredBackground(Events.PASS_PERF, "inlay", path, "inlay") {
@@ -577,6 +603,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.SIGNATURE, path, text, offset)
         // Background lane: completion (interactive) preempts it. A preemption just means "no panel this round";
         // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
         val help = try {
@@ -605,6 +632,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.SEMANTIC, path, text)
         val tokens = try {
             timedPass("semantic", path, { it.size }) {
                 measuredBackground(Events.PASS_PERF, "semantic", path, "semantic") {
@@ -637,6 +665,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.FOLDS, path, text)
         val folds = try {
             timedPass("folds", path, { it.size }) {
                 measuredBackground(Events.PASS_PERF, "folds", path, "folding") {

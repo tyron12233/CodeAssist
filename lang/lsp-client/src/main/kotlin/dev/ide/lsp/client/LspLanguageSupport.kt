@@ -134,6 +134,7 @@ class LspLanguageSupport(
      * is then the plugin's, and only the providers the engine asks separately are added.
      */
     fun register(registry: ExtensionRegistry, plugin: PluginId, withBackend: Boolean): List<Disposable> = buildList {
+        servesBackend = withBackend
         if (withBackend) add(registry.register(LANGUAGE_BACKEND_EP, backend, plugin))
         add(registry.register(DIAGNOSTIC_PROVIDER_EP, diagnostics, plugin))
         add(registry.register(COMPLETION_CONTRIBUTOR_EP, CompletionContribution(completion, languages = languages), plugin))
@@ -146,7 +147,69 @@ class LspLanguageSupport(
 
     // ---------------------------------------------------------------------------------------------- plumbing
 
-    private val cancel: () -> Unit = { EngineCancellation.checkCanceled() }
+    /**
+     * What a wait polls to give up early: the engine's cancel token on the engine thread, or the caller's own
+     * check while a [prefetch] runs on another thread.
+     */
+    private val cancelOverride = ThreadLocal<(() -> Unit)?>()
+    private val cancel: () -> Unit = { cancelOverride.get()?.invoke() ?: EngineCancellation.checkCanceled() }
+
+    /**
+     * Answers already computed for one version of a document, so the engine's call after a [prefetch] is a
+     * lookup. Keyed by session, document, version and what was asked (and where); a newer version or a
+     * restarted session never matches an old entry. Small, and least-recently-used out.
+     */
+    private val answers = object : LinkedHashMap<String, Any>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Any>?): Boolean = size > MAX_CACHED_ANSWERS
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T : Any> answer(session: LspSession, doc: LspSession.Document, what: String, compute: () -> T?): T? {
+        val key = "${System.identityHashCode(session)}|${doc.uri}|${doc.version}|$what"
+        synchronized(answers) { answers[key] }?.let { return it as T }
+        val value = compute() ?: return null
+        synchronized(answers) { answers[key] = value }
+        return value
+    }
+
+    /** The LSP passes [prefetch] can run ahead of the engine. */
+    enum class Pass { DIAGNOSTICS, SEMANTIC, FOLDS, INLAY, STRUCTURE, HOVER, SIGNATURE, COMPLETION }
+
+    /**
+     * Do [pass]'s server round trip for [path] at [text] now, on the calling thread, so the engine's own call for
+     * the same text finds the answer ready instead of holding the engine thread while the server works. Call it
+     * off the engine thread, just before queuing the engine call. [offset] is the caret for hover, signature help
+     * and completion; [range] the visible range for inlay hints. [isActive] going false gives up the wait.
+     */
+    fun prefetch(pass: Pass, path: Path, text: CharSequence, offset: Int = 0, range: TextRange? = null, isActive: () -> Boolean = { true }) {
+        cancelOverride.set { if (!isActive()) throw java.util.concurrent.CancellationException("prefetch abandoned") }
+        try {
+            val normalized = path.toAbsolutePath().normalize()
+            when (pass) {
+                Pass.DIAGNOSTICS -> {
+                    val session = readySession(normalized) ?: return
+                    session.diagnostics(normalized, text, Budgets.DIAGNOSTICS, cancel)?.let { lastDiagnostics[it.document.uri] = it }
+                }
+                Pass.SEMANTIC -> if (servesBackend) semanticTokensFor(normalized, text)
+                Pass.FOLDS -> if (servesBackend) foldsFor(normalized, text)
+                Pass.INLAY -> if (servesBackend) inlayHintsFor(normalized, text, range ?: TextRange(0, text.length))
+                Pass.STRUCTURE -> if (servesBackend) structureFor(normalized, text)
+                Pass.HOVER -> if (servesBackend) hoverFor(normalized, text, offset)
+                Pass.SIGNATURE -> if (servesBackend) signatureFor(normalized, text, offset, SignatureHelpTrigger.CursorUpdate)
+                Pass.COMPLETION -> {
+                    val (session, doc) = synced(normalized, text, "completionProvider") ?: return
+                    completionResponse(session, doc, offset, null)
+                }
+            }
+        } catch (_: java.util.concurrent.CancellationException) {
+            // The editor moved on; the engine's call (if it still comes) asks again.
+        } finally {
+            cancelOverride.remove()
+        }
+    }
+
+    /** Whether this support's backend is the one the engine uses for its languages (see [register]). */
+    @Volatile private var servesBackend = true
 
     private fun pathOf(file: VirtualFile): Path? = runCatching { Paths.get(file.path).toAbsolutePath().normalize() }.getOrNull()
 
@@ -240,14 +303,19 @@ class LspLanguageSupport(
     private fun semanticTokens(file: VirtualFile): List<SemanticToken> {
         val path = pathOf(file) ?: return emptyList()
         val text = buffers[file.path] ?: return emptyList()
+        return semanticTokensFor(path, text)
+    }
+
+    private fun semanticTokensFor(path: Path, text: CharSequence): List<SemanticToken> {
         val (session, doc) = synced(path, text, "semanticTokensProvider") ?: return emptyList()
         val provider = session.capabilities.obj("semanticTokensProvider") ?: return emptyList()
         if (!provider.capability("full")) return emptyList()
         val legend = provider.obj("legend") ?: return emptyList()
         val types = legend.arr("tokenTypes")?.mapNotNull(LspConvert::string).orEmpty()
         val modifiers = legend.arr("tokenModifiers")?.mapNotNull(LspConvert::string).orEmpty()
-        val data = tokenData(session, doc, provider) ?: return emptyList()
-        return LspConvert.semanticTokens(data, types, modifiers, doc.lines)
+        return answer(session, doc, "semantic") {
+            tokenData(session, doc, provider)?.let { LspConvert.semanticTokens(it, types, modifiers, doc.lines) }
+        }.orEmpty()
     }
 
     /**
@@ -282,11 +350,16 @@ class LspLanguageSupport(
     private fun folds(file: VirtualFile): List<FoldRegion> {
         val path = pathOf(file) ?: return emptyList()
         val text = buffers[file.path] ?: return emptyList()
+        return foldsFor(path, text)
+    }
+
+    private fun foldsFor(path: Path, text: CharSequence): List<FoldRegion> {
         val (session, doc) = synced(path, text, "foldingRangeProvider") ?: return emptyList()
-        val result = session.request(
-            "textDocument/foldingRange", buildJsonObject { put("textDocument", textDocument(doc.uri)) }, Budgets.FOLDING, cancel,
-        )
-        return LspConvert.folds(result, doc.lines)
+        return answer(session, doc, "folds") {
+            session.request(
+                "textDocument/foldingRange", buildJsonObject { put("textDocument", textDocument(doc.uri)) }, Budgets.FOLDING, cancel,
+            )?.let { LspConvert.folds(it, doc.lines) }
+        }.orEmpty()
     }
 
     private fun format(file: VirtualFile, text: CharSequence, range: TextRange?, style: FormatStyle): List<DocumentEdit> {
@@ -329,12 +402,25 @@ class LspLanguageSupport(
 
     private fun signatureHelp(request: SignatureHelpRequest): SignatureHelp? {
         val path = pathOf(request.document.file) ?: return null
-        val (session, doc) = synced(path, request.document.text, "signatureHelpProvider") ?: return null
+        return signatureFor(path, request.document.text, request.offset, request.trigger)
+    }
+
+    private fun signatureFor(path: Path, text: CharSequence, offset: Int, trigger: SignatureHelpTrigger): SignatureHelp? {
+        val (session, doc) = synced(path, text, "signatureHelpProvider") ?: return null
+        val what = "signature@$offset/" + when (trigger) {
+            is SignatureHelpTrigger.TypedChar -> "typed${trigger.char}"
+            SignatureHelpTrigger.CursorUpdate -> "cursor"
+            else -> "explicit"
+        }
+        return answer(session, doc, what) { signatureRequest(session, doc, offset, trigger) }
+    }
+
+    private fun signatureRequest(session: LspSession, doc: LspSession.Document, offset: Int, trigger: SignatureHelpTrigger): SignatureHelp? {
         val result = session.request("textDocument/signatureHelp", buildJsonObject {
             put("textDocument", textDocument(doc.uri))
-            put("position", doc.lines.position(request.offset))
+            put("position", doc.lines.position(offset))
             putJsonObject("context") {
-                when (val t = request.trigger) {
+                when (val t = trigger) {
                     is SignatureHelpTrigger.TypedChar -> { put("triggerKind", 2); put("triggerCharacter", t.char.toString()) }
                     SignatureHelpTrigger.CursorUpdate -> put("triggerKind", 3)
                     else -> put("triggerKind", 1)
@@ -372,12 +458,20 @@ class LspLanguageSupport(
     private fun inlayHints(file: VirtualFile, range: TextRange): List<InlayHint> {
         val path = pathOf(file) ?: return emptyList()
         val text = buffers[file.path] ?: return emptyList()
+        return inlayHintsFor(path, text, range)
+    }
+
+    private fun inlayHintsFor(path: Path, text: CharSequence, range: TextRange): List<InlayHint> {
         val (session, doc) = synced(path, text, "inlayHintProvider") ?: return emptyList()
         val clamped = TextRange(range.start.coerceIn(0, text.length), range.end.coerceIn(0, text.length))
+        return answer(session, doc, "inlay@${clamped.start}-${clamped.end}") { inlayRequest(session, doc, clamped) }.orEmpty()
+    }
+
+    private fun inlayRequest(session: LspSession, doc: LspSession.Document, clamped: TextRange): List<InlayHint>? {
         val result = session.request("textDocument/inlayHint", buildJsonObject {
             put("textDocument", textDocument(doc.uri))
             put("range", doc.lines.range(clamped))
-        }, Budgets.INLAY, cancel).arr() ?: return emptyList()
+        }, Budgets.INLAY, cancel).arr() ?: return null
         return result.mapNotNull { e ->
             val h = e.obj() ?: return@mapNotNull null
             val offset = doc.lines.toOffset(h["position"]) ?: return@mapNotNull null
@@ -404,19 +498,30 @@ class LspLanguageSupport(
 
     private fun structure(file: VirtualFile, text: CharSequence): List<StructureItem> {
         val path = pathOf(file) ?: return emptyList()
+        return structureFor(path, text)
+    }
+
+    private fun structureFor(path: Path, text: CharSequence): List<StructureItem> {
         val content = text.toString()
-        structureCache[file.path]?.let { (forText, items) -> if (forText == content) return items }
+        val key = path.toString()
+        structureCache[key]?.let { (forText, items) -> if (forText == content) return items }
         val (session, doc) = synced(path, content, "documentSymbolProvider") ?: return emptyList()
         val result = session.request(
             "textDocument/documentSymbol", buildJsonObject { put("textDocument", textDocument(doc.uri)) }, Budgets.STRUCTURE, cancel,
         ) ?: return emptyList()
-        return LspConvert.structure(result, doc.lines).also { structureCache[file.path] = content to it }
+        return LspConvert.structure(result, doc.lines).also { structureCache[key] = content to it }
     }
 
     private fun hover(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? {
         val path = pathOf(file) ?: return null
+        return hoverFor(path, text, offset)
+    }
+
+    private fun hoverFor(path: Path, text: CharSequence, offset: Int): QuickDocInfo? {
         val (session, doc) = synced(path, text, "hoverProvider") ?: return null
-        val result = session.request("textDocument/hover", position(doc, offset), Budgets.HOVER, cancel).obj() ?: return null
+        val result = answer(session, doc, "hover@$offset") {
+            session.request("textDocument/hover", position(doc, offset), Budgets.HOVER, cancel).obj()
+        } ?: return null
         val markdown = markupText(result["contents"])?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val (signature, body) = splitHover(markdown)
         val name = LspConvert.wordAt(text, offset)?.let { text.substring(it.start, it.end) } ?: signature.take(40)
@@ -480,17 +585,8 @@ class LspLanguageSupport(
             val path = pathOf(params.document.file) ?: return
             val text = params.document.text
             val (session, doc) = synced(path, text, "completionProvider") ?: return
-            val triggers = session.capabilities.obj("completionProvider")?.arr("triggerCharacters")
-                ?.mapNotNull(LspConvert::string).orEmpty()
-            val response = session.request("textDocument/completion", buildJsonObject {
-                put("textDocument", textDocument(doc.uri))
-                put("position", doc.lines.position(params.offset))
-                putJsonObject("context") {
-                    val typed = (params.trigger as? CompletionTrigger.TypedChar)?.char?.toString()
-                    if (typed != null && typed in triggers) { put("triggerKind", 2); put("triggerCharacter", typed) }
-                    else put("triggerKind", 1)
-                }
-            }, Budgets.COMPLETION, cancel) ?: return
+            val typed = (params.trigger as? CompletionTrigger.TypedChar)?.char
+            val response = completionResponse(session, doc, params.offset, typed) ?: return
             val (items, incomplete, defaults) = when (response) {
                 is JsonArray -> Triple(response.toList(), false, null)
                 is JsonObject -> Triple(response.arr("items")?.toList().orEmpty(), response.bool("isIncomplete") == true, response.obj("itemDefaults"))
@@ -513,6 +609,22 @@ class LspLanguageSupport(
                 added++
             }
             replacement?.let { result.setReplacementRange(it) }
+        }
+    }
+
+    /** The server's completion answer at [offset] (cached per document version), triggered by [typed] if a character. */
+    private fun completionResponse(session: LspSession, doc: LspSession.Document, offset: Int, typed: Char?): JsonElement? {
+        val triggers = session.capabilities.obj("completionProvider")?.arr("triggerCharacters")
+            ?.mapNotNull(LspConvert::string).orEmpty()
+        val trigger = typed?.toString()?.takeIf { it in triggers }
+        return answer(session, doc, "completion@$offset/${trigger ?: ""}") {
+            session.request("textDocument/completion", buildJsonObject {
+                put("textDocument", textDocument(doc.uri))
+                put("position", doc.lines.position(offset))
+                putJsonObject("context") {
+                    if (trigger != null) { put("triggerKind", 2); put("triggerCharacter", trigger) } else put("triggerKind", 1)
+                }
+            }, Budgets.COMPLETION, cancel)
         }
     }
 
@@ -797,5 +909,8 @@ class LspLanguageSupport(
 
     companion object {
         const val MAX_COMPLETION_ITEMS = 1_000
+
+        /** Answers kept for [prefetch]: a few files' worth of passes, the next one in a row reuses the slot. */
+        private const val MAX_CACHED_ANSWERS = 64
     }
 }
