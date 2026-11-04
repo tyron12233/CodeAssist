@@ -19,8 +19,10 @@ class ModuleTypeRegistry(private val extensions: ExtensionRegistry) {
     fun byId(id: String): ModuleType? =
         extensions.extensions(ModuleTypeExtensionPoint).firstOrNull { it.id == id }
 
-    /** Every module type contributed to the extension point, in registration order (for the New-Module picker). */
-    fun all(): List<ModuleType> = extensions.extensions(ModuleTypeExtensionPoint)
+    /** Every module type contributed to the extension point, in registration order (for the New-Module picker),
+     *  one per id: the first registered, the same one [byId] resolves, so two plugins claiming an id cannot put
+     *  it in a picker twice. */
+    fun all(): List<ModuleType> = extensions.extensions(ModuleTypeExtensionPoint).distinctBy { it.id }
 
     fun resolve(id: String): ModuleType = byId(id) ?: UnknownModuleType(id)
 }

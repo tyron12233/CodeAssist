@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import dev.ide.model.template.ProjectTemplateExtensionPoint
+import dev.ide.platform.PluginId
 import dev.ide.core.lsp.LanguageServerBridge
 import dev.ide.core.notify.UserMessageCenter
 import dev.ide.core.plugins.BuiltInPlugins
@@ -254,6 +256,13 @@ class ApplicationEnvironment(
             log.warn("installed plugin '$id' failed to load", error)
         }
 
+        // A project template or module type whose id an earlier plugin already holds is left out of every list
+        // (the registries keep the first). Said in the log of the plugin that lost it, which its page opens: a
+        // developer whose own template quietly never appears has nowhere else to find out why. Not as a load
+        // failure, which would mark a plugin that loaded and works "Didn't load".
+        reportShadowedIds(ProjectTemplateExtensionPoint, "project template") { it.id.value }
+        reportShadowedIds(dev.ide.model.ModuleTypeExtensionPoint, "module type") { it.id }
+
         // UI facets come after the ordered engine load, so a plugin whose engine facet was pruned or threw
         // contributes no UI: its panels would be reading services that never registered.
         val externalUi = external.keys.filter { it !in failures }.mapNotNull { id ->
@@ -272,6 +281,24 @@ class ApplicationEnvironment(
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
         // After every plugin: a definition's adapters must know which languages already have a backend.
         runCatching { languageServers.registerAll() }.onFailure { log.warn("could not register the language servers", it) }
+    }
+
+    /** Warn, in the plugin's own log, about each contribution to [ep] whose id an earlier registration holds. */
+    private fun <T : Any> reportShadowedIds(
+        ep: dev.ide.platform.ExtensionPoint<T>,
+        kind: String,
+        idOf: (T) -> String,
+    ) {
+        val owners = HashMap<String, PluginId>()
+        for (c in platform.extensions.contributions(ep)) {
+            val id = runCatching { idOf(c.impl) }.getOrNull() ?: continue
+            val owner = owners.putIfAbsent(id, c.plugin) ?: continue
+            if (owner == c.plugin) continue
+            Log.logger("CodeAssist", c.plugin.value).warn(
+                "The $kind '$id' is not shown: plugin '${owner.value}' already provides one with that id. " +
+                    "Give it an id of its own.",
+            )
+        }
     }
 
     /** One discovery pass: the plugins the host can go on to load, and the ones it cannot. */
