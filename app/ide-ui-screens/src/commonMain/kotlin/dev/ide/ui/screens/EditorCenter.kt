@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.platform.excludeSystemGestures
 import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.LocalPluginFileOpener
@@ -46,12 +47,7 @@ import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.zen_exit
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.touchInput
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemGestures
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
@@ -576,8 +572,8 @@ internal fun EditorCenter(
     }
 }
 
-/** Zen mode's way out, at the end of the tabs strip: clear of the screen edge's back-gesture zone, which would
- *  otherwise take the tap once the system bars are hidden. */
+/** Zen mode's way out, at the end of the tabs strip. It opts out of the screen edge's back-gesture zone, which
+ *  would otherwise take the tap once the system bars are hidden, instead of being inset clear of it (an empty strip). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ZenExitButton(onExit: () -> Unit) {
@@ -587,7 +583,7 @@ private fun ZenExitButton(onExit: () -> Unit) {
         tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
         state = rememberTooltipState(),
         enableUserInput = !touchInput,
-        modifier = Modifier.windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.End)).padding(end = 6.dp),
+        modifier = Modifier.excludeSystemGestures().padding(end = 6.dp),
     ) {
         IconButtonCa(CaIcons.collapse, label, onExit, boxSize = 30, iconSize = 16)
     }
