@@ -27,8 +27,9 @@ import java.util.concurrent.TimeUnit
  * before the server has answered and wherever it is unavailable.
  *
  * One server is started per (definition, project root). It is shut down when that project closes, and
- * restarted on the next request if it exits (a few times, then left down for the session, which the user is
- * told about once). Since SPI 3.3.0.
+ * restarted on the next request if it exits. Only a crash loop (several failures within a few minutes) leaves
+ * it down until the project is reopened, which the user is told about once; a server Android killed in the
+ * background comes back every time. Since SPI 3.3.0.
  */
 interface LanguageServerDefinition {
     /** Stable and unique among definitions, e.g. `"dart"`. Used in logs and as the key for a running server. */

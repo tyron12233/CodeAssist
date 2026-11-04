@@ -16,11 +16,16 @@ import java.util.concurrent.Executors
  *
  * A session is started on a background thread the first time anything asks for it, so the engine thread that
  * asked never waits on a process launch: it gets the session at once and each request waits only as long as
- * its own budget allows for the handshake. A server that exits is restarted on the next request, at most
- * [MAX_RESTARTS] times per session lifetime; one that is unavailable (no toolchain yet) is asked again after
- * [UNAVAILABLE_RETRY_MS].
+ * its own budget allows for the handshake. A server that exits is restarted on the next request; only one that
+ * fails [MAX_RESTARTS] times within [RESTART_WINDOW_MS] is left down (a crash loop). One killed after running
+ * fine, which Android 12+ does to an app's child processes in the background, comes back every time. One that
+ * is unavailable (no toolchain yet) is asked again after [UNAVAILABLE_RETRY_MS].
  */
-class LspSessionManager(private val host: Host) : AutoCloseable {
+class LspSessionManager(
+    private val host: Host,
+    /** Wall-clock milliseconds, for the restart window; a test moves it. */
+    private val clock: () -> Long = System::currentTimeMillis,
+) : AutoCloseable {
 
     /** What the manager needs from the IDE. */
     interface Host {
@@ -47,10 +52,12 @@ class LspSessionManager(private val host: Host) : AutoCloseable {
 
     private class Slot(
         @Volatile var session: LspSession,
-        @Volatile var restarts: Int = 0,
         @Volatile var unavailableSince: Long = 0,
         @Volatile var givenUp: Boolean = false,
-    )
+    ) {
+        /** When this slot's sessions failed, newest last; only those within [RESTART_WINDOW_MS] count. */
+        val failures = ArrayDeque<Long>()
+    }
 
     private val slots = ConcurrentHashMap<Key, Slot>()
     private val starter: ExecutorService = Executors.newCachedThreadPool { r ->
@@ -74,7 +81,7 @@ class LspSessionManager(private val host: Host) : AutoCloseable {
             when (s.state) {
                 LspSession.State.NEW -> launch(s)
                 LspSession.State.UNAVAILABLE -> {
-                    val now = System.currentTimeMillis()
+                    val now = clock()
                     if (slot.unavailableSince == 0L) slot.unavailableSince = now
                     if (now - slot.unavailableSince < UNAVAILABLE_RETRY_MS) return null
                     slot.unavailableSince = 0
@@ -82,16 +89,18 @@ class LspSessionManager(private val host: Host) : AutoCloseable {
                 }
                 LspSession.State.FAILED -> {
                     if (slot.givenUp) return null
-                    if (slot.restarts >= MAX_RESTARTS) {
+                    val now = clock()
+                    slot.failures.addLast(now)
+                    while (slot.failures.isNotEmpty() && now - slot.failures.first() > RESTART_WINDOW_MS) slot.failures.removeFirst()
+                    if (slot.failures.size > MAX_RESTARTS) {
                         slot.givenUp = true
                         host.message(
                             definition, 1,
-                            "${definition.displayName} stopped (${s.failureReason ?: "it exited"}) and will not be restarted until the project is reopened.",
+                            "${definition.displayName} stopped (${s.failureReason ?: "it exited"}) and keeps failing, so it will not be restarted until the project is reopened.",
                         )
                         return null
                     }
-                    slot.restarts++
-                    s.context.logger.info("restarting ${definition.id} (${slot.restarts}/$MAX_RESTARTS)")
+                    s.context.logger.info("restarting ${definition.id} (${s.failureReason ?: "it exited"}; ${slot.failures.size} failure(s) in the last ${RESTART_WINDOW_MS / 60_000} min)")
                     slot.session = newSession(definition, root, projectRoot).also(::launch)
                 }
                 LspSession.State.CLOSED -> slot.session = newSession(definition, root, projectRoot).also(::launch)
@@ -202,7 +211,9 @@ class LspSessionManager(private val host: Host) : AutoCloseable {
     ) : LanguageServerContext
 
     companion object {
+        /** Failures within [RESTART_WINDOW_MS] that mean a crash loop rather than a server that was killed. */
         const val MAX_RESTARTS = 3
+        const val RESTART_WINDOW_MS = 3 * 60_000L
         const val UNAVAILABLE_RETRY_MS = 30_000L
     }
 }

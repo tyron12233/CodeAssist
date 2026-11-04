@@ -61,8 +61,17 @@ class JsonRpcConnection(
         fun handle(method: String, params: JsonElement?)
     }
 
-    /** A request in flight: its [id], for `$/cancelRequest`, and the [future] its result completes. */
-    class Pending(val id: Long, val future: CompletableFuture<JsonElement?>)
+    /**
+     * A request in flight: its [id], for `$/cancelRequest`, and the [future] its result completes. Once it has,
+     * [responseChars] is the size of the server's answer in characters (bytes, for ASCII JSON) and [parseNanos] how long the client took to parse it,
+     * which is where a large answer (a 10 000-item completion list) costs on a phone.
+     */
+    class Pending(val id: Long, val future: CompletableFuture<JsonElement?>) {
+        @Volatile var responseChars: Int = 0
+            internal set
+        @Volatile var parseNanos: Long = 0
+            internal set
+    }
 
     @Volatile var requestHandler: RequestHandler = RequestHandler { method, _ ->
         throw ResponseErrorException(ResponseErrorException.METHOD_NOT_FOUND, "unhandled method $method")
@@ -74,7 +83,7 @@ class JsonRpcConnection(
 
     private val input = BufferedInputStream(input, 64 * 1024)
     private val nextId = AtomicLong(1)
-    private val pending = ConcurrentHashMap<Long, CompletableFuture<JsonElement?>>()
+    private val pending = ConcurrentHashMap<Long, Pending>()
     private val writeLock = Any()
     private val dispatcher: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "lsp-$name-dispatch").apply { isDaemon = true }
@@ -91,11 +100,12 @@ class JsonRpcConnection(
     fun request(method: String, params: JsonElement?): Pending {
         val id = nextId.getAndIncrement()
         val future = CompletableFuture<JsonElement?>()
+        val entry = Pending(id, future)
         if (isClosed) {
             future.completeExceptionally(ConnectionClosedException("$name is not running"))
-            return Pending(id, future)
+            return entry
         }
-        pending[id] = future
+        pending[id] = entry
         try {
             send(buildJsonObject {
                 put("jsonrpc", "2.0")
@@ -107,7 +117,7 @@ class JsonRpcConnection(
             pending.remove(id)
             future.completeExceptionally(e)
         }
-        return Pending(id, future)
+        return entry
     }
 
     fun notify(method: String, params: JsonElement?) {
@@ -125,8 +135,8 @@ class JsonRpcConnection(
 
     /** Give up on request [id]: its future is cancelled and the server is told it may stop working on it. */
     fun cancel(id: Long) {
-        val future = pending.remove(id) ?: return
-        future.cancel(false)
+        val entry = pending.remove(id) ?: return
+        entry.future.cancel(false)
         notify("$/cancelRequest", buildJsonObject { put("id", id) })
     }
 
@@ -177,13 +187,14 @@ class JsonRpcConnection(
         try {
             while (!isClosed) {
                 val body = readMessage() ?: break
+                val started = System.nanoTime()
                 val message = try {
                     Json.parseToJsonElement(body).jsonObject
                 } catch (e: Exception) {
                     log.warn("$name: unreadable message from the server", e)
                     continue
                 }
-                handle(message)
+                handle(message, body.length, System.nanoTime() - started)
             }
         } catch (e: IOException) {
             if (!isClosed) failure = e
@@ -240,13 +251,16 @@ class JsonRpcConnection(
         return buf.toString(Charsets.US_ASCII.name())
     }
 
-    private fun handle(message: JsonObject) {
+    private fun handle(message: JsonObject, bytes: Int, parseNanos: Long) {
         val method = (message["method"] as? JsonPrimitive)?.contentOrNull
         val id = message["id"]?.takeIf { it !is JsonNull }
         if (method == null) {
             // A response to one of ours.
             val key = (id as? JsonPrimitive)?.let { it.longOrNull ?: it.contentOrNull?.toLongOrNull() } ?: return
-            val future = pending.remove(key) ?: return
+            val entry = pending.remove(key) ?: return
+            entry.responseChars = bytes
+            entry.parseNanos = parseNanos
+            val future = entry.future
             val error = message["error"] as? JsonObject
             if (error != null) {
                 val code = (error["code"] as? JsonPrimitive)?.intOrNull ?: ResponseErrorException.INTERNAL_ERROR
@@ -284,6 +298,6 @@ class JsonRpcConnection(
     private fun failPending(cause: Throwable) {
         val all = pending.values.toList()
         pending.clear()
-        all.forEach { it.completeExceptionally(cause) }
+        all.forEach { it.future.completeExceptionally(cause) }
     }
 }

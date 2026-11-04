@@ -962,9 +962,14 @@ How it behaves, so you can plan around it:
   completion, longer for references and rename) and the engine's cancel token is polled while it waits, so a
   slow server degrades to "no answer" rather than freezing the editor. A file analysed while the server was
   still starting is analysed again once it is ready.
-- **A crash is restarted** on the next request, at most three times; after that the user is told once and
-  the server stays down until the project is reopened. `start` returning null (no toolchain yet) is asked again
-  after 30 seconds.
+- **A server that exits is restarted** on the next request. Only a crash loop (more than three failures within
+  three minutes) leaves it down until the project is reopened, which the user is told once. A server Android
+  killed in the background (Android 12 and later stop an app's child processes there) comes back every time.
+  `start` returning null (no toolchain yet) is asked again after 30 seconds.
+- **Every request is timed.** A request slower than 1.5 s or an answer over about 1 MB is always logged
+  (`lsp-perf ... (slow or large)`), with the time the client spent parsing it. With Settings > Analysis >
+  Advanced > "Log analysis timings" on, every request is, and a per-method summary is logged when the server
+  shuts down. Read them in Settings > Privacy > View logs.
 - **`initializationOptions` and `workspace/configuration`** are answered from `initializationOptions(context)`
   and `configuration(section, context)`, as JSON text.
 - **A backend of your own wins.** If the plugin also registers a `LanguageBackend` for the language, the server

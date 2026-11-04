@@ -182,6 +182,9 @@ class LspSession(
         connection?.close()
         server?.close()
         documents.clear()
+        if (methodStats.isNotEmpty() && dev.ide.platform.log.PerfTrace.enabled) {
+            log.info("lsp-perf server=$name session summary:\n" + methodStats.entries.sortedBy { it.key }.joinToString("\n") { (m, s) -> "  $m $s" })
+        }
     }
 
     private fun fail(newState: State, reason: String, cause: Throwable?) {
@@ -249,17 +252,20 @@ class LspSession(
         if (!awaitReady(timeoutMs, cancel)) throw ConnectionClosedException("$name is not running")
         val connection = rpc ?: throw ConnectionClosedException("$name is not running")
         val pending = connection.request(method, params)
-        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        val sent = System.nanoTime()
+        var outcome = Outcome.ERROR
+        val deadline = sent + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         try {
             while (true) {
                 cancel()
                 val left = deadline - System.nanoTime()
                 if (left <= 0) {
                     connection.cancel(pending.id)
+                    outcome = Outcome.TIMEOUT
                     throw TimeoutException("$method timed out")
                 }
                 try {
-                    return pending.future.get(minOf(left, POLL_NANOS), TimeUnit.NANOSECONDS)
+                    return pending.future.get(minOf(left, POLL_NANOS), TimeUnit.NANOSECONDS).also { outcome = Outcome.OK }
                 } catch (_: TimeoutException) {
                     // poll [cancel] again
                 } catch (e: ExecutionException) {
@@ -269,8 +275,64 @@ class LspSession(
                 }
             }
         } catch (e: Throwable) {
-            if (!pending.future.isDone) connection.cancel(pending.id)
+            if (!pending.future.isDone) {
+                connection.cancel(pending.id)
+                if (outcome == Outcome.ERROR) outcome = Outcome.CANCELLED
+            }
             throw e
+        } finally {
+            record(method, System.nanoTime() - sent, pending, outcome)
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------- timing
+
+    private enum class Outcome { OK, ERROR, TIMEOUT, CANCELLED }
+
+    /** How one kind of request has gone this session: what [stats] reports. */
+    class MethodStats internal constructor() {
+        @Volatile var count: Int = 0; internal set
+        @Volatile var totalMillis: Long = 0; internal set
+        @Volatile var maxMillis: Long = 0; internal set
+        @Volatile var totalChars: Long = 0; internal set
+        @Volatile var maxChars: Int = 0; internal set
+        /** Time the client spent parsing answers: the part a phone pays for a large one. */
+        @Volatile var parseMillis: Long = 0; internal set
+        @Volatile var timeouts: Int = 0; internal set
+        /** Requests the editor gave up on (a keystroke preempted them) before the server answered. */
+        @Volatile var cancelled: Int = 0; internal set
+
+        override fun toString(): String =
+            "n=$count avg=${if (count == 0) 0 else totalMillis / count}ms max=${maxMillis}ms " +
+                "avgSize=${if (count == 0) 0 else totalChars / count / 1024}KB maxSize=${maxChars / 1024}KB " +
+                "parse=${parseMillis}ms timeouts=$timeouts cancelled=$cancelled"
+    }
+
+    private val methodStats = ConcurrentHashMap<String, MethodStats>()
+
+    /** Per-method request timings for this session, for the log and for a performance report. */
+    fun stats(): Map<String, MethodStats> = methodStats.toMap()
+
+    private fun record(method: String, nanos: Long, pending: JsonRpcConnection.Pending, outcome: Outcome) {
+        val millis = TimeUnit.NANOSECONDS.toMillis(nanos)
+        val chars = pending.responseChars
+        val parse = TimeUnit.NANOSECONDS.toMillis(pending.parseNanos)
+        val s = methodStats.getOrPut(method) { MethodStats() }
+        synchronized(s) {
+            s.count++
+            s.totalMillis += millis
+            if (millis > s.maxMillis) s.maxMillis = millis
+            s.totalChars += chars
+            if (chars > s.maxChars) s.maxChars = chars
+            s.parseMillis += parse
+            if (outcome == Outcome.TIMEOUT) s.timeouts++
+            if (outcome == Outcome.CANCELLED) s.cancelled++
+        }
+        val line = "lsp-perf server=$name method=$method took=${millis}ms size=${chars / 1024}KB parse=${parse}ms ${outcome.name.lowercase()}"
+        when {
+            // Always worth knowing: these are what make the editor feel slow.
+            millis >= SLOW_REQUEST_MS || chars >= LARGE_RESPONSE_CHARS -> log.info("$line (slow or large)")
+            dev.ide.platform.log.PerfTrace.enabled -> log.info(line)
         }
     }
 
@@ -615,6 +677,9 @@ class LspSession(
 
     companion object {
         const val INITIALIZE_TIMEOUT_MS = 60_000L
+        /** A request this slow, or an answer this large, is logged even with timing logs off. */
+        const val SLOW_REQUEST_MS = 1_500L
+        const val LARGE_RESPONSE_CHARS = 1_000_000
         private const val SHUTDOWN_TIMEOUT_MS = 2_000L
         private val POLL_NANOS = TimeUnit.MILLISECONDS.toNanos(20)
         private const val SYNC_NONE = 0
