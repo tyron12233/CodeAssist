@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -82,6 +83,8 @@ internal fun Modifier.editorInput(
     onFocusedChange: (Boolean) -> Unit,
     onDismissQuickDoc: () -> Unit,
     onPreviewKey: (KeyEvent) -> Boolean,
+    /** Keys taken before the soft keyboard sees them (Escape/Back closing the completion list). */
+    onPreImeKey: (KeyEvent) -> Boolean,
     onKey: (KeyEvent) -> Boolean,
     /** Mouse rest/link tracking for hover popups and Ctrl/⌘-click (see [EditorHoverState]). */
     hover: EditorHoverState,
@@ -97,6 +100,7 @@ internal fun Modifier.editorInput(
     .focusRequester(focus)
     .onFocusChanged { onFocusedChange(it.isFocused) }
     .focusable()
+    .onInterceptKeyBeforeSoftKeyboard(onPreImeKey)
     .onPreviewKeyEvent(onPreviewKey)
     .onKeyEvent(onKey)
     // pinch-to-zoom: a 2-finger gesture scales the editor font. Watched on the Initial pass (outer→inner) so a

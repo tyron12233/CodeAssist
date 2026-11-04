@@ -538,6 +538,8 @@ private fun CodeEditorContent(
 
     // Keep the popup WINDOW mounted across the 1-frame gaps a keystroke opens up (see CompletionController).
     val onToken = liveCompletion != null
+    // The key whose press [onPreImeKey] took, so it takes the release too.
+    val preImeSwallow = remember { PreImeSwallow() }
     val hasItems = displayed.isNotEmpty()
     LaunchedEffect(completion.dismissed, onToken, hasItems) {
         completion.updatePopupVisibility(onToken, hasItems)
@@ -1082,6 +1084,25 @@ private fun CodeEditorContent(
         return true
     }
 
+    // Escape and Back close the completion list while it is on screen, and are taken BEFORE the soft keyboard
+    // sees them: with the keyboard up, Android hands an app's keys to the keyboard first, and the keyboard spends
+    // Back on hiding itself (and many spend Escape too), so the list's own Escape and Back handling never ran.
+    // The key's release is swallowed with its press, so neither the keyboard nor Back's own handler acts on half
+    // a key. Visibility as the popup computes it (keep-alive latch included), so a key is never eaten for a list
+    // that is not showing.
+    fun onPreImeKey(ev: KeyEvent): Boolean {
+        if (ev.key != Key.Escape && ev.key != Key.Back) return false
+        if (ev.type == KeyEventType.KeyUp && preImeSwallow.key == ev.key) {
+            preImeSwallow.key = null
+            return true
+        }
+        val onScreen = !completion.dismissed && onToken && (showPopup || completion.popupVisible)
+        if (ev.type != KeyEventType.KeyDown || !onScreen) return false
+        completion.dismiss()
+        preImeSwallow.key = ev.key
+        return true
+    }
+
     // Editor commands, handled on the Preview pass so they win over the default key path + completion keys.
     fun onPreviewKey(ev: KeyEvent): Boolean {
         if (ev.type != KeyEventType.KeyDown) return false
@@ -1229,6 +1250,7 @@ private fun CodeEditorContent(
             onFocusedChange = { isFocused = it },
             onDismissQuickDoc = { quickDoc = null },
             onPreviewKey = ::onPreviewKey,
+            onPreImeKey = ::onPreImeKey,
             onKey = ::handleKey,
             onContextMenu = ::openContextMenu,
             onLinkClick = { offset ->
@@ -1593,6 +1615,7 @@ private fun EditorCanvasLayer(
     onFocusedChange: (Boolean) -> Unit,
     onDismissQuickDoc: () -> Unit,
     onPreviewKey: (KeyEvent) -> Boolean,
+    onPreImeKey: (KeyEvent) -> Boolean,
     onKey: (KeyEvent) -> Boolean,
     onContextMenu: (Offset) -> Unit,
     onLinkClick: (Int) -> Unit,
@@ -1625,6 +1648,7 @@ private fun EditorCanvasLayer(
                 onFocusedChange = onFocusedChange,
                 onDismissQuickDoc = onDismissQuickDoc,
                 onPreviewKey = onPreviewKey,
+                onPreImeKey = onPreImeKey,
                 onKey = onKey,
                 hover = hover,
                 onContextMenu = onContextMenu,
@@ -2223,3 +2247,8 @@ private fun rememberOccurrences(
  *  answer (a lone use) holds only for the name it was asked about, which [word] no longer tells; drop it. */
 private fun OccurrenceResult.covers(start: Int): Boolean =
     tint.reads.any { start >= it.start && start < it.end } || tint.writes.any { start >= it.start && start < it.end }
+
+/** See CodeEditor's onPreImeKey: the key whose press it took, until its release arrives. */
+private class PreImeSwallow {
+    var key: Key? = null
+}
