@@ -1846,11 +1846,12 @@ interface SettingsService {
      *  that really restarts, this does not return. */
     fun restartApplication() {}
 
-    /** Whether this host can run language servers the user configures (Settings > Language Servers). */
+    /**
+     * Whether this host can run language servers the user configures (Settings > Language Servers): the
+     * desktop. Not Android, where an app may only execute what an installed package ships, so a server the
+     * user installed could never start; there a language server comes with a plugin.
+     */
     fun languageServersSupported(): Boolean = false
-
-    /** True where only executables inside an installed app may run (Android), which the screen explains. */
-    fun languageServerExecutablesRestricted(): Boolean = false
 
     /** The language servers the user configured, in the order they were added. */
     fun languageServers(): List<UiLanguageServer> = emptyList()

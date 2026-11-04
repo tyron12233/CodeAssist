@@ -1017,13 +1017,16 @@ sample (`samples/lsp-plugin`, `CalcTestProvider`) is a complete one.
 
 ### Language servers without a plugin
 
-Users can also add a language server themselves, in **Settings > Language Servers** (Code Intelligence):
+On the desktop, users can also add a language server themselves, in **Settings > Language Servers** (Code
+Intelligence):
 a name, the command, the file extensions and the protocol's language id, with presets for gopls,
 rust-analyzer, Pyright, typescript-language-server, clangd, Dart, Lua, zls and bash-language-server. They are
 stored in `language-servers.json` in the IDE's home folder and registered exactly like a plugin's definition,
-so everything above applies to them. On the desktop the command is looked up on PATH and in the folders
-toolchains install into (`~/go/bin`, `~/.cargo/bin`, `/opt/homebrew/bin`, ...), since an app started from the
-Dock or Start menu does not see the terminal's PATH.
+so everything above applies to them. The command is looked up on PATH and in the folders toolchains install
+into (`~/go/bin`, `~/.cargo/bin`, `/opt/homebrew/bin`, ...), since an app started from the Dock or Start menu
+does not see the terminal's PATH. The page is not offered on Android: an app there may only execute what an
+installed package ships, so a server the user installed could never start. On Android a language server comes
+with a plugin, as above.
 
 ### Put composables and pixels in the editor
 

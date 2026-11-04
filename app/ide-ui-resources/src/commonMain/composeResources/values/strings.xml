@@ -2622,7 +2622,6 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="settings_language_servers">Language Servers</string>
     <string name="settings_language_servers_subtitle">Errors, completion and navigation from servers you have installed</string>
     <string name="lsp_intro">Add a Language Server Protocol server you have installed. Files with its extensions get its errors, completion, navigation, rename and formatting. A new language applies to the next project you open.</string>
-    <string name="lsp_android_note">On Android a server must be an executable that an installed app ships, such as a plugin.</string>
     <string name="lsp_unsupported">Language servers are not available on this device.</string>
     <string name="lsp_empty">No language servers yet. Add one, or start from a common server below.</string>
     <string name="lsp_add">Add</string>

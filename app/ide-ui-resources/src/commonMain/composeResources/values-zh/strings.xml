@@ -2288,7 +2288,6 @@
     <string name="settings_language_servers">语言服务器</string>
     <string name="settings_language_servers_subtitle">来自你已安装服务器的错误提示、补全和导航</string>
     <string name="lsp_intro">添加你已安装的语言服务器协议（LSP）服务器。带有其扩展名的文件会获得它提供的错误提示、补全、导航、重命名和格式化。新语言会在你下次打开项目时生效。</string>
-    <string name="lsp_android_note">在 Android 上，服务器必须是已安装应用（例如插件）自带的可执行文件。</string>
     <string name="lsp_unsupported">此设备上无法使用语言服务器。</string>
     <string name="lsp_empty">还没有语言服务器。添加一个，或从下面的常用服务器开始。</string>
     <string name="lsp_add">添加</string>

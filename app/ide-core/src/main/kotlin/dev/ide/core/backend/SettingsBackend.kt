@@ -65,11 +65,10 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         }.getOrNull()
     }
 
-    override fun languageServersSupported(): Boolean = ctx.manager != null
-
-    // ART's VM vendor; an app there may only execute what an installed package ships (W^X).
-    override fun languageServerExecutablesRestricted(): Boolean =
-        System.getProperty("java.vm.vendor").orEmpty().contains("Android", ignoreCase = true)
+    // Not on ART: an app there may only execute what an installed package ships (W^X), so a server the user
+    // installed elsewhere could never start. Android gets its language servers from plugins.
+    override fun languageServersSupported(): Boolean =
+        ctx.manager != null && !System.getProperty("java.vm.vendor").orEmpty().contains("Android", ignoreCase = true)
 
     override fun languageServers(): List<dev.ide.ui.backend.UiLanguageServer> {
         val servers = ctx.manager?.userLanguageServers ?: return emptyList()

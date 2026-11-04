@@ -51,4 +51,11 @@ class SettingsHubPlacementTest {
             hubPlacement(emptyList()).map { it.first },
         )
     }
+
+    @Test
+    fun aToolTheHostCannotUseIsLeftOut() {
+        // Android: a language server the user installed could never start there.
+        val code = ids(hubPlacement(appPages, hiddenTools = setOf(HubTool.LanguageServers))).toMap().getValue(HubGroup.Code)
+        assertEquals(listOf("completion", "analysis"), code)
+    }
 }

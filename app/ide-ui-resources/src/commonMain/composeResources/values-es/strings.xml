@@ -1505,7 +1505,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="settings_language_servers">Servidores de lenguaje</string>
     <string name="settings_language_servers_subtitle">Errores, autocompletado y navegación de servidores que tienes instalados</string>
     <string name="lsp_intro">Añade un servidor de Language Server Protocol que tengas instalado. Los archivos con sus extensiones reciben sus errores, autocompletado, navegación, cambio de nombre y formato. Un lenguaje nuevo se aplica al siguiente proyecto que abras.</string>
-    <string name="lsp_android_note">En Android, el servidor debe ser un ejecutable incluido en una app instalada, como un complemento.</string>
     <string name="lsp_unsupported">Los servidores de lenguaje no están disponibles en este dispositivo.</string>
     <string name="lsp_empty">Aún no hay servidores de lenguaje. Añade uno o empieza con uno habitual de abajo.</string>
     <string name="lsp_add">Añadir</string>

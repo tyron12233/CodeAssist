@@ -39,7 +39,6 @@ import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.SettingsCard
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.lsp_add
-import dev.ide.ui.generated.resources.lsp_android_note
 import dev.ide.ui.generated.resources.lsp_cancel
 import dev.ide.ui.generated.resources.lsp_check
 import dev.ide.ui.generated.resources.lsp_delete
@@ -92,9 +91,6 @@ fun LanguageServersScreen(backend: IdeBackend, onBack: () -> Unit) {
                 return@Column
             }
             Text(stringResource(Res.string.lsp_intro), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            if (settings.languageServerExecutablesRestricted()) {
-                Text(stringResource(Res.string.lsp_android_note), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-            }
             if (servers.isEmpty()) {
                 Text(stringResource(Res.string.lsp_empty), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             }

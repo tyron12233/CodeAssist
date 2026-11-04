@@ -164,7 +164,12 @@ private fun rememberHubSections(app: CodeAssistAppState, state: IdeUiState): Lis
     val pages = remember(state.backend, global, app.screen) {
         state.backend.settings.settingsPages().filter { !global || it.scope == "app" }
     }
-    return hubSections(pages)
+    // A user-configured language server is a program the IDE starts, which Android does not allow an app to
+    // do for one it did not ship; there a language comes from a plugin instead.
+    val hidden = remember(state.backend) {
+        if (state.backend.settings.languageServersSupported()) emptySet() else setOf(HubTool.LanguageServers)
+    }
+    return hubSections(pages, hidden)
 }
 
 /**
