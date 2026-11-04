@@ -35,6 +35,8 @@ class FakeLanguageServer {
     @Volatile var pushDiagnostics = true
     @Volatile var connection: JsonRpcConnection? = null
     @Volatile var configurationAnswer: JsonElement? = null
+    /** How long the server works on a request, by method: a server still busy analysing. */
+    val delays = ConcurrentHashMap<String, Long>()
 
     val definition = object : LanguageServerDefinition {
         override val id = "toy"
@@ -50,7 +52,11 @@ class FakeLanguageServer {
         val serverToClient = PipedOutputStream()
         val clientIn = PipedInputStream(serverToClient, 1 shl 16)
         val server = JsonRpcConnection(serverIn, serverToClient, "fake-server", Log.logger("fake-server"))
-        server.requestHandler = JsonRpcConnection.RequestHandler { method, params -> received += method; answer(method, params.obj()) }
+        server.requestHandler = JsonRpcConnection.RequestHandler { method, params ->
+            received += method
+            delays[method]?.let { Thread.sleep(it) }
+            answer(method, params.obj())
+        }
         server.notificationHandler = JsonRpcConnection.NotificationHandler { method, params -> received += method; onNotification(method, params.obj()) }
         connection = server
         server.start()

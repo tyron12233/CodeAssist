@@ -5,6 +5,7 @@ import dev.ide.lsp.LanguageServerDefinition
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.Logger
 import kotlinx.serialization.json.JsonObject
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
@@ -75,6 +76,15 @@ class LspSessionManager(
         val projectRoot = host.projectRootFor(file) ?: run {
             if (dev.ide.platform.log.PerfTrace.enabled) {
                 host.loggerFor(definition).info("lsp-perf no session for $file: it is in no open project")
+            }
+            return null
+        }
+        // A tab left open on a file whose folder was deleted or moved: its relative imports resolve nowhere, and
+        // `rootFor` finds no package marker above it, so it would start a server of its own at the project root
+        // (a second Dart analysis server, ~100 MB) for a buffer nothing else can see.
+        if (file.parent?.let { Files.isDirectory(it) } == false) {
+            if (dev.ide.platform.log.PerfTrace.enabled) {
+                host.loggerFor(definition).info("lsp-perf no session for $file: its directory no longer exists")
             }
             return null
         }

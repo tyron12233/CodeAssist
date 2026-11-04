@@ -347,4 +347,48 @@ class LspLanguageSupportTest {
             assertTrue("shutdown" in server.received, server.received.toString())
         }
     }
+
+    @Test
+    fun twoCallersAskingTheSameThingShareOneRequest() {
+        val text = "fun greet() {}\nfun grow() {}\n"
+        val path = file("s.toy", text).let { java.nio.file.Paths.get(it.path) }
+        // Started and warm first, so both callers below reach the request at once.
+        support.prefetch(LspLanguageSupport.Pass.FOLDS, path, text)
+        server.delays["textDocument/documentSymbol"] = 300
+        val asked = { server.received.count { it == "textDocument/documentSymbol" } }
+        val before = asked()
+        val callers = List(2) { Thread { support.prefetch(LspLanguageSupport.Pass.STRUCTURE, path, text) } }
+        callers.forEach(Thread::start)
+        callers.forEach { it.join(5_000) }
+        assertEquals(1, asked() - before, server.received.toString())
+        // And the answer they shared is what a later lookup gets, without asking again.
+        server.delays.clear()
+        val items = support.backend.createAnalyzer(object : CompilationContext {
+            override val sourceRoots: List<VirtualFile> = emptyList()
+        }).fileStructure(LspFile(path), text)
+        assertEquals(listOf("greet", "grow"), items.map { it.name })
+        assertEquals(1, asked() - before)
+    }
+
+    @Test
+    fun serverTiesAreBrokenByHowWellTheyMatchWhatWasTyped() {
+        fun item(label: String, sort: String) = kotlinx.serialization.json.buildJsonObject {
+            put("label", kotlinx.serialization.json.JsonPrimitive(label))
+            put("sortText", kotlinx.serialization.json.JsonPrimitive(sort))
+        }
+        // Dart's answer for `Str`: one sortText for every type, in no useful order.
+        val dart = listOf(item("StringBuffer", "9477"), item("StringSink", "9477"), item("Stream", "9477"), item("String", "9477"), item("strip", "9477"))
+        // Shorter first among the case-sensitive matches, so String is no longer behind StringBuffer; the
+        // case-insensitive `strip` comes last.
+        assertEquals(
+            listOf("Stream", "String", "StringSink", "StringBuffer", "strip"),
+            LspLanguageSupport.completionOrder(dart, "Str").map { it.str("label") },
+        )
+        // An exact match beats everything the server ranked the same.
+        assertEquals("String", LspLanguageSupport.completionOrder(dart, "String").first().str("label"))
+        // The server's ranking still comes first, and with nothing typed its order is kept as it is.
+        val ranked = listOf(item("StringBuffer", "1"), item("String", "2"))
+        assertEquals(listOf("StringBuffer", "String"), LspLanguageSupport.completionOrder(ranked, "Str").map { it.str("label") })
+        assertEquals(dart.map { it.str("label") }, LspLanguageSupport.completionOrder(dart, "").map { it.str("label") })
+    }
 }

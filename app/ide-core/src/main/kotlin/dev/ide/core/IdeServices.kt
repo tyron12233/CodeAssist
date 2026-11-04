@@ -2324,10 +2324,14 @@ class IdeServices private constructor(
         .filter { ContentRole.AIDL in it.roles }
         .map { Paths.get(it.dir.path) }
 
-    /** The module that owns [file] (its source root is a prefix), or null if outside the project. */
+    /**
+     * The module that owns [file] (its source root is a prefix), or null if outside the project. A file a
+     * language server serves is also owned outside the source roots: see [moduleForLanguageServerFile].
+     */
     fun moduleForFile(file: Path): Module? {
         val target = file.toAbsolutePath().normalize()
         return modules().firstOrNull { module -> sourceRoots(module).any { target.startsWith(it) } }
+            ?: moduleForLanguageServerFile(target)
     }
 
     /** Transitive subtypes of [superFqn] from the workspace subtype index (binary + Java/Kotlin source), for
@@ -2669,6 +2673,24 @@ class IdeServices private constructor(
      */
     fun moduleForEditableFile(file: Path): Module? =
         moduleForFile(file) ?: moduleForResourceFile(file) ?: moduleForAidlFile(file) ?: moduleForManifestFile(file)
+
+    /**
+     * The module a file served by a language server is analysed under when no source root holds it: the
+     * deepest module whose directory contains it, else the project's first module. A Dart package or a Python
+     * script sits in no Java-shaped source root, and every editor pass is gated on a module, so without this
+     * the server was asked (the off-engine prefetch is not gated) while the editor showed nothing. The module
+     * only selects the analyzer; a language server's analyzer ignores it. Only for a language whose backend
+     * IS the server, so a Java or Kotlin file outside the source roots stays unanalysed as before.
+     */
+    private fun moduleForLanguageServerFile(file: Path): Module? {
+        if (languageServerFor(file)?.servesBackend != true) return null
+        val target = file.toAbsolutePath().normalize()
+        if (!target.startsWith(workspaceRoot.toAbsolutePath().normalize())) return null
+        val all = modules()
+        return all.filter { target.startsWith(Paths.get(it.dir.path).toAbsolutePath().normalize()) }
+            .maxByOrNull { it.dir.path.length }
+            ?: all.firstOrNull()
+    }
 
     /** The module whose [AndroidFacet] manifest path is [file], or null. */
     private fun moduleForManifestFile(file: Path): Module? {

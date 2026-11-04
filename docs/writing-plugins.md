@@ -974,6 +974,14 @@ How it behaves, so you can plan around it:
   (`lsp-perf ... (slow or large)`), with the time the client spent parsing it. With Settings > Analysis >
   Advanced > "Log analysis timings" on, every request is, and a per-method summary is logged when the server
   shuts down. Read them in Settings > Privacy > View logs.
+- **A served file needs no source root.** A file of your language anywhere in the project is analysed, even
+  outside every module's source roots (a Dart package beside the app, a script folder). Features keyed to a
+  module (a test provider's marks, say) see the deepest module whose directory holds the file, else the
+  project's first module; contribute source roots through a module type when your language has a real one.
+- **Identical requests are shared.** Two parts of the editor asking the same thing about the same version of a
+  document (the breadcrumb and the structure view both want the outline) send one request.
+- **Completion keeps the server's ranking**, by `sortText`. Among items the server ranked equal, an exact match
+  of what was typed comes first, then case-sensitive prefix matches, shorter labels before longer.
 - **`initializationOptions` and `workspace/configuration`** are answered from `initializationOptions(context)`
   and `configuration(section, context)`, as JSON text.
 - **A backend of your own wins.** If the plugin also registers a `LanguageBackend` for the language, the server

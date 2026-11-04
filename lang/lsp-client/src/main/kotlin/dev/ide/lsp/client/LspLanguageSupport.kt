@@ -163,13 +163,52 @@ class LspLanguageSupport(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Any>?): Boolean = size > MAX_CACHED_ANSWERS
     }
 
+    /**
+     * The questions being put to a server right now, by [answers] key. The breadcrumb and the structure view
+     * both prefetch the outline when a document changes, and without this each asked the server for it.
+     */
+    private val inFlight = ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<Any>>()
+
     @Suppress("UNCHECKED_CAST")
     private fun <T : Any> answer(session: LspSession, doc: LspSession.Document, what: String, compute: () -> T?): T? {
         val key = "${System.identityHashCode(session)}|${doc.uri}|${doc.version}|$what"
-        synchronized(answers) { answers[key] }?.let { return it as T }
-        val value = compute() ?: return null
-        synchronized(answers) { answers[key] = value }
-        return value
+        while (true) {
+            synchronized(answers) { answers[key] }?.let { return it as T }
+            val mine = java.util.concurrent.CompletableFuture<Any>()
+            val running = inFlight.putIfAbsent(key, mine)
+            if (running == null) {
+                val value = try {
+                    compute()
+                } catch (t: Throwable) {
+                    inFlight.remove(key, mine)
+                    mine.completeExceptionally(t) // a waiter asks for itself: this caller may only have been cancelled
+                    throw t
+                }
+                if (value != null) synchronized(answers) { answers[key] = value }
+                inFlight.remove(key, mine)
+                mine.complete(value ?: NO_ANSWER)
+                return value
+            }
+            // The same question is already out: wait for its answer instead of asking the server twice.
+            val shared = try {
+                awaitShared(running)
+            } catch (_: java.util.concurrent.ExecutionException) {
+                continue // that caller gave up or failed; ask again (or wait on whoever asks next)
+            }
+            return if (shared === NO_ANSWER) null else shared as T
+        }
+    }
+
+    /** [future]'s value, polling [cancel] meanwhile so a waiting engine call can still be preempted. */
+    private fun awaitShared(future: java.util.concurrent.CompletableFuture<Any>): Any {
+        while (true) {
+            cancel()
+            try {
+                return future.get(SHARED_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (_: java.util.concurrent.TimeoutException) {
+                // keep waiting
+            }
+        }
     }
 
     /** The LSP passes [prefetch] can run ahead of the engine. */
@@ -209,7 +248,8 @@ class LspLanguageSupport(
     }
 
     /** Whether this support's backend is the one the engine uses for its languages (see [register]). */
-    @Volatile private var servesBackend = true
+    @Volatile var servesBackend = true
+        private set
 
     private fun pathOf(file: VirtualFile): Path? = runCatching { Paths.get(file.path).toAbsolutePath().normalize() }.getOrNull()
 
@@ -506,10 +546,13 @@ class LspLanguageSupport(
         val key = path.toString()
         structureCache[key]?.let { (forText, items) -> if (forText == content) return items }
         val (session, doc) = synced(path, content, "documentSymbolProvider") ?: return emptyList()
-        val result = session.request(
-            "textDocument/documentSymbol", buildJsonObject { put("textDocument", textDocument(doc.uri)) }, Budgets.STRUCTURE, cancel,
-        ) ?: return emptyList()
-        return LspConvert.structure(result, doc.lines).also { structureCache[key] = content to it }
+        // Through [answer], so the breadcrumb and the structure view asking at once share one request.
+        val items = answer(session, doc, "structure") {
+            session.request(
+                "textDocument/documentSymbol", buildJsonObject { put("textDocument", textDocument(doc.uri)) }, Budgets.STRUCTURE, cancel,
+            )?.let { LspConvert.structure(it, doc.lines) }
+        } ?: return emptyList()
+        return items.also { structureCache[key] = content to it }
     }
 
     private fun hover(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? {
@@ -593,7 +636,7 @@ class LspLanguageSupport(
                 else -> return
             }
             if (incomplete) result.markIncomplete()
-            val sorted = items.mapNotNull { it.obj() }.sortedBy { it.str("sortText") ?: it.str("label") ?: "" }
+            val sorted = completionOrder(items.mapNotNull { it.obj() }, params.prefix)
             var replacement: TextRange? = null
             var added = 0
             for ((rank, item) in sorted.withIndex()) {
@@ -912,5 +955,36 @@ class LspLanguageSupport(
 
         /** Answers kept for [prefetch]: a few files' worth of passes, the next one in a row reuses the slot. */
         private const val MAX_CACHED_ANSWERS = 64
+
+        /** How often a caller waiting on another's identical request checks whether it was cancelled. */
+        private const val SHARED_POLL_MS = 20L
+
+        /** What a shared request completes with when the server's answer was "nothing". */
+        private val NO_ANSWER = Any()
+
+        /**
+         * Completion items in the order to offer them: by `sortText`, which is the server's ranking, and among
+         * items the server ranked equal, by how well they match the typed [prefix]. Dart gives every type
+         * matching `Str` the same sortText, and kept in the server's order `String` came after `StringBuffer`,
+         * `StringSink` and `Stream`. Ties go to an exact match, then a case-sensitive prefix match, then a
+         * case-insensitive one, then the shorter label, then the label alphabetically (as VS Code orders ties).
+         * With nothing typed yet the server's order stands.
+         */
+        internal fun completionOrder(items: List<JsonObject>, prefix: String): List<JsonObject> {
+            val byServer = compareBy<JsonObject> { it.str("sortText") ?: it.str("label") ?: "" }
+            if (prefix.isEmpty()) return items.sortedWith(byServer)
+            fun tier(item: JsonObject): Int {
+                val name = item.str("filterText") ?: item.str("label") ?: return 4
+                return when {
+                    name == prefix -> 0
+                    name.startsWith(prefix) -> 1
+                    name.startsWith(prefix, ignoreCase = true) -> 2
+                    else -> 3
+                }
+            }
+            return items.sortedWith(
+                byServer.thenBy(::tier).thenBy { it.str("label")?.length ?: Int.MAX_VALUE }.thenBy { it.str("label") ?: "" },
+            )
+        }
     }
 }

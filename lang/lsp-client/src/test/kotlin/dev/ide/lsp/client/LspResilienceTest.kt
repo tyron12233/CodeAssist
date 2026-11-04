@@ -119,4 +119,13 @@ class LspResilienceTest {
         assertEquals(0, hover.timeouts)
         assertTrue("n=3" in hover.toString(), hover.toString())
     }
+
+    @Test
+    fun aFileWhoseFolderIsGoneStartsNoServer() {
+        val m = manager()
+        // A tab still open on a file that was moved away with its folder.
+        assertNull(m.sessionFor(dying, root.resolve("moved/away/a.toy")))
+        assertEquals(0, starts.get())
+        assertTrue(m.sessions().isEmpty())
+    }
 }

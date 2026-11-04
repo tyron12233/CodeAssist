@@ -41,6 +41,7 @@ class LanguageServerOffEngineTest {
     private val root = createTempDirectory("lsp-off-engine")
     private var services: IdeServices? = null
     private val semanticRequests = AtomicInteger()
+    @Volatile private var serverDelayMs = SERVER_DELAY_MS
 
     @AfterTest
     fun tearDown() {
@@ -74,7 +75,7 @@ class LanguageServerOffEngineTest {
                     }
                     "textDocument/semanticTokens/full" -> {
                         semanticRequests.incrementAndGet()
-                        Thread.sleep(SERVER_DELAY_MS)
+                        Thread.sleep(serverDelayMs)
                         buildJsonObject { putJsonArray("data") { add(0); add(0); add(3); add(0); add(0) } }
                     }
                     else -> null
@@ -85,15 +86,39 @@ class LanguageServerOffEngineTest {
         }
     }
 
-    @Test
-    fun aSlowServerDoesNotHoldTheEngine() {
+    private fun boot(): Pair<IdeServices, IdeServicesBackend> {
         val env = ApplicationEnvironment()
         val plugin = PluginId("test-slow")
         env.platform.extensions.register(FILE_TYPE_EP, FileTypeMapping(listOf(".toy"), LanguageId("toy")), plugin)
         env.platform.extensions.register(LANGUAGE_SERVER_EP, slow, plugin)
         env.languageServers.registerAll()
         val s = IdeServices.bootstrapJavaDemo(root, env).also { services = it }
-        val backend = IdeServicesBackend(s)
+        return s to IdeServicesBackend(s)
+    }
+
+    /**
+     * A Dart package or a Python script sits in no source root. The editor's passes are gated on a module, and
+     * such a file used to get the server asked (by the ungated prefetch) and nothing shown.
+     */
+    @Test
+    fun aServedFileOutsideEverySourceRootIsStillAnalysed() {
+        serverDelayMs = 0
+        val (s, backend) = boot()
+        val toy = root.resolve("tools/scripts/outside.toy")
+        Files.createDirectories(toy.parent)
+        Files.writeString(toy, "fun x")
+        s.modules()
+        runBlocking {
+            assertEquals(1, backend.editor.semanticTokens(toy.toString(), "fun x").size)
+        }
+        // Only a language the server is the backend for: a plain-text file there is still in no module.
+        assertEquals(null, s.moduleForFile(root.resolve("tools/scripts/notes.txt")))
+        assertEquals(null, s.moduleForFile(root.resolve("tools/scripts/Stray.java")))
+    }
+
+    @Test
+    fun aSlowServerDoesNotHoldTheEngine() {
+        val (s, backend) = boot()
 
         val toy = root.resolve("app/src/main/java/com/example/app/slow.toy")
         Files.createDirectories(toy.parent)
