@@ -40,11 +40,15 @@ object DartPreviews {
         }.sorted()
         return files.flatMap { file ->
             val text = runCatching { String(Files.readAllBytes(file)) }.getOrDefault("")
-            if (!text.contains("@Preview") || Regex("""(?m)^\s*part\s+of\b""").containsMatchIn(text)) return@flatMap emptyList()
+            if (!isLibraryWithPreviews(text)) return@flatMap emptyList()
             val library = "package:$name/" + lib.relativize(file).joinToString("/") { it.toString() }
             scan(text).map { it.copy(library = library) }
         }
     }
+
+    /** Whether [text] can hold previews the gallery can import: it mentions one and is a library, not a `part`. */
+    fun isLibraryWithPreviews(text: String): Boolean =
+        text.contains("@Preview") && !Regex("""(?m)^\s*part\s+of\b""").containsMatchIn(text)
 
     /** The previews declared in one library's [text] (their [Found.library] is left blank). */
     fun scan(text: String): List<Found> {

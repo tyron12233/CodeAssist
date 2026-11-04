@@ -6,7 +6,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
@@ -38,6 +37,8 @@ internal class FlutterPreviewController(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val engines = Channel<Engine>(Channel.CONFLATED)
+    /** Wakes the session loop: a save (through its [PackageWatcher]), another file shown, a new engine. */
+    private val wake = Channel<Unit>(Channel.CONFLATED)
     private val work = pkg.resolve(".dart_tool/codeassist/pane/${ids.incrementAndGet()}")
     private val galleryFile = work.resolve("gallery.dart")
 
@@ -57,12 +58,14 @@ internal class FlutterPreviewController(
         file = p
         this.dark = dark
         dirty = true
+        wake.trySend(Unit)
         if (job == null) job = scope.launch { run() }
     }
 
     /** The service made an engine for the pane and it is listening at [uri]. */
     fun engineReady(uri: String, isolate: String?) {
         engines.trySend(Engine(uri, isolate))
+        wake.trySend(Unit)
     }
 
     /** The pane's engine could not be had. */
@@ -97,8 +100,11 @@ internal class FlutterPreviewController(
             if (!pubGet()) return fail("pub get failed: open pubspec.yaml or Run to see why.")
         }
 
+        PackageWatcher(pkg, tools.bus, wake).use { watcher -> session(watcher) }
+    }
+
+    private suspend fun session(watcher: PackageWatcher) {
         // The first compile, again after every save until there is one that compiles.
-        var seen = FlutterSession.snapshot(pkg)
         var compiled: Path? = null
         var app: FlutterSession? = null
         while (compiled == null) {
@@ -112,7 +118,8 @@ internal class FlutterPreviewController(
             } else {
                 app.close()
                 _state.value = State("The previews do not compile. Save a fix to try again.", errors(first))
-                seen = waitForChange(seen)
+                while (scope.isActive && watcher.changes().isEmpty() && !dirty) watcher.await()
+                dirty = false
             }
         }
         app!!
@@ -124,16 +131,15 @@ internal class FlutterPreviewController(
         dirty = false
 
         while (scope.isActive) {
-            delay(POLL_MS)
+            watcher.await()
             engines.tryReceive().getOrNull()?.let { next ->
                 // A new engine: the old one went with its process. Start the program in it from scratch.
                 engine = next
                 _state.value = State("Restarting the preview ...")
-                val full = app.fullKernel()
+                val full = app.fullKernel(watcher.changes())
                 if (!full.ok) { _state.value = State("The previews do not compile.", errors(full)); return@let }
                 app.runIn(FlutterSession.connect(engine.uri), engine.isolate, full.dill!!)
                 _state.value = State(null)
-                seen = FlutterSession.snapshot(pkg)
                 dirty = false
             }
             if (app.engineGone) {
@@ -142,10 +148,8 @@ internal class FlutterPreviewController(
                 _state.value = State("Starting the Flutter engine ...")
                 continue
             }
-            val now = FlutterSession.snapshot(pkg)
-            val changed = FlutterSession.changed(seen, now)
+            val changed = watcher.changes()
             if (changed.isEmpty() && !dirty) continue
-            seen = now
             dirty = false
             val outcome = if (changed.any { it.fileName.toString() == DartPackages.PUBSPEC }) {
                 _state.value = State("Getting packages ...")
@@ -163,9 +167,11 @@ internal class FlutterPreviewController(
     private fun writeGallery(): Boolean {
         val shown = file ?: return false
         val lib = pkg.resolve("lib")
+        // Only the shown file's previews, so only that file is read: not the whole of lib/ on every reload.
         val previews = if (shown.startsWith(lib)) {
             val library = "package:$packageName/" + lib.relativize(shown).joinToString("/") { it.toString() }
-            DartPreviews.find(pkg, packageName).filter { it.library == library }
+            val text = runCatching { String(Files.readAllBytes(shown)) }.getOrDefault("")
+            if (DartPreviews.isLibraryWithPreviews(text)) DartPreviews.scan(text).map { it.copy(library = library) } else emptyList()
         } else emptyList()
         val empty = if (shown.startsWith(lib)) "No @Preview widgets in ${shown.fileName} yet."
         else "Previews are shown for files in lib/."
@@ -173,15 +179,6 @@ internal class FlutterPreviewController(
     }
 
     private fun galleryChanges(): List<Path> = if (writeGallery()) listOf(galleryFile) else emptyList()
-
-    private suspend fun waitForChange(before: Map<Path, Long>): Map<Path, Long> {
-        while (scope.isActive) {
-            delay(POLL_MS)
-            val now = FlutterSession.snapshot(pkg)
-            if (now != before || dirty) return now.also { dirty = false }
-        }
-        return before
-    }
 
     private fun pubGet(): Boolean = tools.pub.run(pkg, "get", out = ::log) == 0
 
@@ -197,7 +194,6 @@ internal class FlutterPreviewController(
     private fun log(line: String) = tools.log.info("preview: $line")
 
     private companion object {
-        const val POLL_MS = 400L
         val ids = AtomicInteger()
     }
 }

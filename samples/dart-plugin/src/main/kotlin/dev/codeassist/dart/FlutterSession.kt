@@ -11,7 +11,6 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.stream.Collectors
 
 /**
  * One Flutter program kept running and hot-reloading: its incremental compiler and, once it has an engine to
@@ -105,9 +104,12 @@ internal class FlutterSession(
             out("Not reloaded: ${delta.errors} compile error(s).")
             return Outcome(false, errors(delta))
         }
+        val compiled = System.nanoTime()
         vm.upload(FS, "app.dill.incremental.dill", delta.dill!!)
+        val uploaded = System.nanoTime()
         val isolate = (view()["isolate"] as? JsonObject)?.string("id") ?: throw IOException("the app has no isolate")
         val report = vm.call("reloadSources", mapOf("isolateId" to isolate, "rootLibUri" to fsUri + "app.dill.incremental.dill"))
+        val reloaded = System.nanoTime()
         if ((report["success"] as? JsonPrimitive)?.booleanOrNull != true) {
             frontend.reject()
             val notices = (report["notices"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.string("message") }
@@ -118,7 +120,9 @@ internal class FlutterSession(
         frontend.accept()
         vm.call("ext.flutter.reassemble", mapOf("isolateId" to isolate))
         val details = report["details"] as? JsonObject
-        out("Reloaded ${details?.string("loadedLibraryCount") ?: "?"} of ${details?.string("finalLibraryCount") ?: "?"} libraries in ${ms(started)} ms.")
+        out("Reloaded ${details?.string("loadedLibraryCount") ?: "?"} of ${details?.string("finalLibraryCount") ?: "?"} libraries in ${ms(started)} ms " +
+            "(compile ${(compiled - started) / 1_000_000}, upload ${(uploaded - compiled) / 1_000_000}, " +
+            "reload ${(reloaded - uploaded) / 1_000_000}, rebuild ${ms(reloaded)}).")
         return Outcome(true)
     }
 
@@ -196,22 +200,6 @@ internal class FlutterSession(
             }
             throw IOException("Could not reach the Flutter engine's VM service at $uri: ${last?.message}")
         }
-
-        /** The modification times of a package's Dart files and pubspec, outside `.dart_tool`, `build` and dot dirs. */
-        fun snapshot(pkg: Path): Map<Path, Long> {
-            val files = Files.walk(pkg).use { walk ->
-                walk.filter { p ->
-                    val rel = pkg.relativize(p).toString()
-                    !rel.startsWith(".dart_tool") && !rel.startsWith("build") && !rel.startsWith(".") &&
-                        (rel.endsWith(".dart") || rel == DartPackages.PUBSPEC) && Files.isRegularFile(p)
-                }.collect(Collectors.toList())
-            }
-            return files.associateWith { runCatching { Files.getLastModifiedTime(it).toMillis() }.getOrDefault(0L) }
-        }
-
-        /** The files whose time differs between two snapshots, dropped or added ones included. */
-        fun changed(before: Map<Path, Long>, now: Map<Path, Long>): List<Path> =
-            (now.keys + before.keys).filter { now[it] != before[it] }
 
         internal fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
     }

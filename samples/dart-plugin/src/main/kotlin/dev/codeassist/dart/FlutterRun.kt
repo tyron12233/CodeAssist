@@ -18,7 +18,6 @@ import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -147,6 +146,7 @@ internal class FlutterRunTask(
             alsoChanged = { if (preview && writeGallery()) listOf(galleryFile) else emptyList() },
         )
         var player: FlutterPlayer.Started? = null
+        var watching: PackageWatcher? = null
         try {
             out("Compiling $entry ...")
             val started = System.nanoTime()
@@ -166,25 +166,25 @@ internal class FlutterRunTask(
             app.runIn(vm, player.isolate, first.dill!!)
             out("Running in ${ms(uploaded)} ms. Saving a file hot-reloads it; type r (reload), R (restart) or q (quit).")
 
+            val watcher = PackageWatcher(pkg, DartPlugin.tools?.bus).also { watching = it }
+            vm.onClosed = { watcher.wake.trySend(Unit) }
             val commands = LinkedBlockingQueue<String>()
-            io?.stdin?.let { readCommands(it, commands) }
-            var seen = FlutterSession.snapshot(pkg)
+            io?.stdin?.let { readCommands(it, commands) { watcher.wake.trySend(Unit) } }
             while (currentCoroutineContext().isActive && !app.engineGone) {
-                delay(POLL_MS)
+                // A save, a command or the app closing wakes this at once; otherwise the watcher's walk is due.
+                if (commands.isEmpty()) watcher.await()
                 when (commands.poll()?.trim()) {
-                    "r" -> app.reload(changedSince(seen).also { seen = FlutterSession.snapshot(pkg) })
-                    "R" -> app.restart(changedSince(seen).also { seen = FlutterSession.snapshot(pkg) })
+                    "r" -> app.reload(dartFiles(watcher.changes()))
+                    "R" -> app.restart(dartFiles(watcher.changes()))
                     "q" -> break
                     else -> {
-                        val now = FlutterSession.snapshot(pkg)
-                        if (now == seen) continue
-                        val changed = FlutterSession.changed(seen, now)
-                        seen = now
+                        val changed = watcher.changes()
+                        if (changed.isEmpty()) continue
                         if (changed.any { it.fileName.toString() == DartPackages.PUBSPEC }) {
                             out("pubspec.yaml changed: pub get and a hot restart.")
                             if (pubGet()) { app.uploadAssets(); app.restart(emptyList()) }
                         } else {
-                            app.reload(changed.filter { it.toString().endsWith(".dart") && Files.isRegularFile(it) })
+                            app.reload(dartFiles(changed))
                         }
                     }
                 }
@@ -194,6 +194,7 @@ internal class FlutterRunTask(
         } finally {
             // A run that stopped should not leave its player behind.
             player?.quit()
+            watching?.close()
             app.close()
         }
     }
@@ -223,18 +224,15 @@ internal class FlutterRunTask(
         text.trimEnd('\n').split('\n').forEach(out)
     }
 
-    private fun readCommands(stdin: java.io.InputStream, into: LinkedBlockingQueue<String>) {
+    private fun readCommands(stdin: java.io.InputStream, into: LinkedBlockingQueue<String>, arrived: () -> Unit) {
         Thread({
-            runCatching { stdin.bufferedReader().forEachLine { into.put(it) } }
+            runCatching { stdin.bufferedReader().forEachLine { into.put(it); arrived() } }
         }, "flutter-run-commands").apply { isDaemon = true }.start()
     }
 
-    private fun changedSince(before: Map<Path, Long>): List<Path> =
-        FlutterSession.changed(before, FlutterSession.snapshot(pkg)).filter { it.toString().endsWith(".dart") && Files.isRegularFile(it) }
+    /** The Dart files among [changed] that still exist: what a reload recompiles. */
+    private fun dartFiles(changed: List<Path>): List<Path> =
+        changed.filter { it.toString().endsWith(".dart") && Files.isRegularFile(it) }
 
     private fun ms(since: Long) = (System.nanoTime() - since) / 1_000_000
-
-    private companion object {
-        const val POLL_MS = 400L
-    }
 }
