@@ -1753,6 +1753,55 @@ data class UiPluginInfo(
      * than from anything the plugin declares. Null when it could not be read.
      */
     val signature: String? = null,
+    /** The oldest IDE this plugin loads in, from its manifest. */
+    val minHostVersion: String? = null,
+    /** The plugin API it was built for, from its manifest. */
+    val apiVersion: Int? = null,
+    /** What the package manager says about the installed plugin app, or null for a built-in (or no host support). */
+    val app: UiPluginApp? = null,
+)
+
+/** An installed plugin app's facts, read from the package manager rather than from anything it declares. */
+data class UiPluginApp(
+    val packageName: String,
+    val appVersion: String?,
+    val firstInstalledAt: Long,
+    val lastUpdatedAt: Long,
+    val sizeBytes: Long,
+    /** Signed with the same certificate as this IDE: published by CodeAssist itself. */
+    val signedLikeIde: Boolean,
+    /** Who installed it: a store's package, or null for a direct (browser or adb) install. */
+    val installer: String?,
+    /** The app has a screen of its own to open (its about page and licenses). */
+    val canOpen: Boolean = true,
+)
+
+/** The "Get plugins" page: [plugins], or why there are none ([unavailable]); [cached] when shown from the last fetch. */
+data class UiPluginDownloads(
+    val plugins: List<UiPluginDownload>,
+    val unavailable: String? = null,
+    val cached: Boolean = false,
+)
+
+/** One downloadable plugin, and where this device stands with it. */
+data class UiPluginDownload(
+    val id: String,
+    val name: String,
+    val tagline: String,
+    val description: String,
+    val publisher: String,
+    val version: String,
+    val sizeBytes: Long?,
+    val downloadUrl: String,
+    val pageUrl: String?,
+    val capabilities: List<String>,
+    val languages: String,
+    /** The version installed on this device, or null when it is not. */
+    val installedVersion: String? = null,
+    /** Installed, and older than [version]. */
+    val updateAvailable: Boolean = false,
+    /** The oldest CodeAssist it loads in, when this one is older; null when this IDE is new enough. */
+    val needsHost: String? = null,
 )
 
 /** What happened to a plugin that the IDE running now has not taken up. */
@@ -1838,6 +1887,18 @@ interface SettingsService {
      * exactly the plugins the device has, so nothing needs a restart.
      */
     fun pendingPluginChanges(): List<UiPluginChange> = emptyList()
+
+    /**
+     * The plugins on the "Get plugins" page, each with what this device already has of it. Network-bound (it is
+     * read from the store backend), so call it off the main thread; falls back to the last list fetched.
+     */
+    suspend fun pluginDownloads(): UiPluginDownloads = UiPluginDownloads(emptyList(), unavailable = "Not available in this build")
+
+    /** Open the system page of the installed plugin app [id] (where it is also uninstalled). */
+    fun openPluginAppInfo(id: String): Boolean = false
+
+    /** Launch installed plugin app [id]'s own screen: what it is, and the licenses of what it carries. */
+    fun openPluginApp(id: String): Boolean = false
 
     /** True when this host can restart itself, so the Plugins screen can offer it as a button. */
     fun canRestartApplication(): Boolean = false

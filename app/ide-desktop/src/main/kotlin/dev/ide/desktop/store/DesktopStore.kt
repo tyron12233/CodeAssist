@@ -56,6 +56,9 @@ internal fun registerDesktopStore(manager: ProjectManager, sessionFile: Path): L
     services.registerServiceIfAbsent(DAILY_CHALLENGE_SERVICE) {
         SupabaseDailyService(url = url, apiKey = key, judgeUrl = StoreConfig.JUDGE_URL, accounts = accounts)
     }
+    services.registerServiceIfAbsent(dev.ide.core.PLUGIN_DOWNLOAD_SERVICE) {
+        dev.ide.store.impl.SupabasePluginDownloads(url, key)
+    }
     services.registerServiceIfAbsent(dev.ide.core.LEARN_REMOTE_SERVICE) {
         dev.ide.store.impl.SupabaseLearnService(url, key, accounts)
     }

@@ -14,6 +14,9 @@ import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiPluginChange
 import dev.ide.ui.backend.UiPluginChangeKind
+import dev.ide.ui.backend.UiPluginApp
+import dev.ide.ui.backend.UiPluginDownload
+import dev.ide.ui.backend.UiPluginDownloads
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
@@ -21,8 +24,8 @@ import java.io.File
 import kotlin.test.Test
 
 /**
- * Renders [PluginsScreen] off-screen to a PNG so its layout (the Built-in / Installed tab strip with its
- * counts, essential "Required" pills vs switches, the dependency line, versions, an installed plugin's origin
+ * Renders [PluginsScreen] off-screen to a PNG so its layout (the Get plugins / Installed / Built-in tab strip
+ * with its counts, the download cards, a plugin's page, essential "Required" pills vs switches, the dependency line, versions, an installed plugin's origin
  * load failure, and a plugin whose manifest could not be read at all, which gets a reason and no switch) can
  * be eyeballed without launching the app; also guards that it renders without a runtime
  * layout error. The Installed tab is reached by a real click on the tab, so the switch is exercised the way a
@@ -41,8 +44,17 @@ class PluginsScreenSnapshot {
             UiPluginInfo("kotlin-analysis", "Kotlin Analysis", "1.0.0", "Kotlin diagnostics and code actions.", essential = false, enabled = true, dependsOn = listOf("kotlin-language")),
             UiPluginInfo("samples", "Sample Projects", "1.0.0", "Bundled sample projects in the Create gallery.", essential = false, enabled = false),
             UiPluginInfo(
-                "com.example.hello", "Hello", "1.2.0", "Adds a Hello tool window.",
-                essential = false, enabled = true, builtIn = false, origin = "com.example.hello",
+                "dev.codeassist.ndk", "NDK (C/C++)", "1.3.0",
+                "Compiles C and C++ on the device with a bundled clang and lld for Android arm64.",
+                essential = false, enabled = true, builtIn = false, origin = "dev.codeassist.ndk",
+                capabilities = listOf("ui.action", "ui.editorLanguage", "lang.backend", "build.task", "fs.read", "fs.write"),
+                signature = "b".repeat(64), minHostVersion = "3.21.0", apiVersion = 4,
+                app = UiPluginApp(
+                    packageName = "dev.codeassist.ndk", appVersion = "1.3.0",
+                    firstInstalledAt = System.currentTimeMillis() - 9 * 86_400_000L,
+                    lastUpdatedAt = System.currentTimeMillis() - 2 * 86_400_000L,
+                    sizeBytes = 47_354_399, signedLikeIde = true, installer = null,
+                ),
             ),
             UiPluginInfo(
                 "com.example.stale", "Stale Plugin", "0.9.0", "Built against an older plugin API.",
@@ -60,6 +72,29 @@ class PluginsScreenSnapshot {
                 essential = false, enabled = false, builtIn = false, origin = "com.example.broken",
                 error = "plugin id 'com.Example.Broken' must be lowercase letters, digits, '.', '-' or '_'",
                 togglable = false,
+            ),
+        )
+    }
+
+    /** The download tab: one plugin installed with an update waiting, one too new for this IDE, one not installed. */
+    private class DownloadsBackend : StubBackend() {
+        override fun pluginCatalog(): List<UiPluginInfo> = FakeBackend().pluginCatalog()
+        override suspend fun pluginDownloads(): UiPluginDownloads = UiPluginDownloads(
+            listOf(
+                UiPluginDownload(
+                    "dev.codeassist.ndk", "NDK (C/C++)", "C and C++ on your phone, with clang and lld built in.",
+                    "Compiles C and C++ on the device with a bundled clang and lld for Android arm64: fast completion and errors, semantic highlighting, Run for console programs, JNI checks and templates.",
+                    "CodeAssist", "1.4.0", 47_354_399, "https://example.com/ndk.apk", "https://example.com/release",
+                    listOf("ui.action", "ui.editorLanguage", "lang.backend", "build.task", "fs.read", "fs.write"), "C/C++",
+                    installedVersion = "1.3.0", updateAvailable = true,
+                ),
+                UiPluginDownload(
+                    "dev.codeassist.dart", "Dart & Flutter", "Dart and Flutter apps, with hot reload and live previews.",
+                    "Dart on the device, with a bundled Dart SDK and Flutter for Android arm64.",
+                    "CodeAssist", "0.1.0", 82_333_586, "https://example.com/dart.apk", "https://example.com/release",
+                    listOf("lang.server", "model.moduleType", "build.runTask", "ui.editorPreview", "fs.read", "net"), "Dart · Flutter",
+                    needsHost = "3.40.0",
+                ),
             ),
         )
     }
@@ -88,17 +123,29 @@ class PluginsScreenSnapshot {
 
     @Test
     fun renderBuiltInTab() {
-        snapshot("plugins.png", FakeBackend())
+        snapshot("plugins.png", FakeBackend(), startTab = PluginsTab.BuiltIn)
     }
 
     @Test
     fun renderInstalledTab() {
-        snapshot("plugins-installed.png", FakeBackend(), clickInstalledTab = true)
+        // Reached by a real click on the tab, from the download tab.
+        snapshot("plugins-installed.png", FakeBackend(), startTab = PluginsTab.Get, click = INSTALLED_TAB)
     }
 
     @Test
     fun renderInstalledTabWithNothingInstalled() {
-        snapshot("plugins-installed-empty.png", NoInstalledBackend(), clickInstalledTab = true)
+        snapshot("plugins-installed-empty.png", NoInstalledBackend(), startTab = PluginsTab.Installed)
+    }
+
+    @Test
+    fun renderDownloadTab() {
+        snapshot("plugins-get.png", DownloadsBackend(), startTab = PluginsTab.Get)
+    }
+
+    @Test
+    fun renderPluginPage() {
+        // A tap on the first installed plugin's card opens its page.
+        snapshot("plugins-detail.png", FakeBackend(), startTab = PluginsTab.Installed, click = FIRST_CARD, height = 2400)
     }
 
     @Test
@@ -110,22 +157,24 @@ class PluginsScreenSnapshot {
     private fun snapshot(
         name: String,
         backend: IdeBackend,
-        clickInstalledTab: Boolean = false,
+        startTab: PluginsTab? = null,
+        click: Offset? = null,
         onRestart: (() -> Unit)? = null,
+        height: Int = HEIGHT,
     ) {
-        val scene = ImageComposeScene(width = WIDTH, height = HEIGHT, density = Density(2f)) {
+        val scene = ImageComposeScene(width = WIDTH, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    PluginsScreen(backend, onBack = {}, onRestart = onRestart)
+                    PluginsScreen(backend, onBack = {}, onRestart = onRestart, onOpenUrl = {}, startTab = startTab)
                 }
             }
         }
         try {
             scene.render()
             scene.render(16_000_000L)
-            if (clickInstalledTab) {
-                scene.sendPointerEvent(PointerEventType.Press, INSTALLED_TAB)
-                scene.sendPointerEvent(PointerEventType.Release, INSTALLED_TAB)
+            if (click != null) {
+                scene.sendPointerEvent(PointerEventType.Press, click)
+                scene.sendPointerEvent(PointerEventType.Release, click)
                 // The tab indicator animates across; step the clock until it has settled.
                 for (frame in 2..40) scene.render(frame * 50_000_000L)
             }
@@ -142,8 +191,11 @@ class PluginsScreenSnapshot {
         const val WIDTH = 840
         const val HEIGHT = 1600
 
-        /** The Installed tab's centre, at the position the Built-in snapshot renders the tab strip. */
-        val INSTALLED_TAB = Offset(630f, 352f)
+        /** The Installed tab's centre (the middle of three), where the tab strip renders. */
+        val INSTALLED_TAB = Offset(420f, 352f)
+
+        /** On the first card of a list with no search field above it. */
+        val FIRST_CARD = Offset(380f, 520f)
 
         val OUT_DIR: String = File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots").absolutePath
     }

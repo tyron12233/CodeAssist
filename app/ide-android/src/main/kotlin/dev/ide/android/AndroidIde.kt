@@ -135,6 +135,15 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(DAILY_CHALLENGE_SERVICE) {
             buildDailyChallenges(supabaseAccounts)
         }
+        // The "Get plugins" page: a public, read-only list, so it needs only the project config.
+        if (BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_KEY.isNotBlank()) {
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_DOWNLOAD_SERVICE) {
+                dev.ide.store.impl.SupabasePluginDownloads(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY)
+            }
+        }
+        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_PACKAGES) {
+            dev.ide.android.plugins.AndroidPluginPackages(appContext)
+        }
         // Learn: the lesson catalog (and later progress + discussions). Reads work signed out, so this needs
         // only the project config; the session is used when there is one.
         if (BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_KEY.isNotBlank()) {

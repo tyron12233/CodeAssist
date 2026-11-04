@@ -113,6 +113,8 @@ import dev.ide.ui.generated.resources.home_share
 import dev.ide.ui.generated.resources.home_sponsor
 import dev.ide.ui.generated.resources.home_star_github
 import dev.ide.ui.generated.resources.join_the_community
+import dev.ide.ui.generated.resources.home_get_plugins_content
+import dev.ide.ui.generated.resources.home_get_plugins
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.project_opened_days
 import dev.ide.ui.generated.resources.project_opened_hours
@@ -216,6 +218,8 @@ fun ProjectsHomeScreen(
     onOpenHub: (() -> Unit)? = null,
     onSubmitSuggestions: (() -> Unit)? = null,
     onJoinDiscord: (() -> Unit)? = null,
+    /** Open the Plugins screen on its download tab. Null hides the card (a host that cannot open links). */
+    onGetPlugins: (() -> Unit)? = null,
     onSponsor: (() -> Unit)? = null,
     onStarOnGitHub: (() -> Unit)? = null,
     storagePath: String? = null,
@@ -310,6 +314,7 @@ fun ProjectsHomeScreen(
             bell = bell,
             onOpenAccount = { sheet = HomeSheet.Account },
             onJoinDiscord = onJoinDiscord,
+            onGetPlugins = onGetPlugins,
         )
     } else
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
@@ -361,6 +366,11 @@ fun ProjectsHomeScreen(
             if (onJoinDiscord != null) {
                 item("community") {
                     CommunityCard(onJoinDiscord, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
+                }
+            }
+            if (onGetPlugins != null) {
+                item("plugins") {
+                    GetPluginsCard(onGetPlugins, Modifier.padding(horizontal = 20.dp).padding(top = 12.dp))
                 }
             }
             item("segments") {
@@ -1196,6 +1206,42 @@ private fun CommunityCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/** Home's way to more languages and tools: the Plugins screen, on its download tab. */
+@Composable
+private fun GetPluginsCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainerLow,
+        contentColor = c.onSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, c.primary.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(44.dp).background(c.primary, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.extension, contentDescription = null, size = 24.dp, tint = c.onPrimary, filled = true)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.home_get_plugins), style = MaterialTheme.typography.titleMedium, color = c.onSurface)
+                Text(
+                    stringResource(Res.string.home_get_plugins_content),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onSurfaceVariant,
+                )
+            }
+            Symbol(CaSymbols.chevronRight, contentDescription = null, size = 22.dp, tint = c.onSurfaceVariant)
+        }
+    }
+}
+
 // ---- helpers ----
 
 @Composable
@@ -1314,6 +1360,7 @@ private fun WideProjectsHome(
     bell: (@Composable () -> Unit)?,
     onOpenAccount: () -> Unit,
     onJoinDiscord: (() -> Unit)?,
+    onGetPlugins: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
@@ -1360,7 +1407,8 @@ private fun WideProjectsHome(
                     )
                 }
             }
-            if (onJoinDiscord != null) CommunityCard(onJoinDiscord, Modifier.padding(bottom = 16.dp))
+            if (onJoinDiscord != null) CommunityCard(onJoinDiscord, Modifier.padding(bottom = 12.dp))
+            if (onGetPlugins != null) GetPluginsCard(onGetPlugins, Modifier.padding(bottom = 16.dp))
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

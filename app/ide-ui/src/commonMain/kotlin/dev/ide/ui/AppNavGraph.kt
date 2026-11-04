@@ -607,7 +607,13 @@ private fun AppRoute(
 
         Screen.Plugins -> PluginsScreen(
             backend = state.backend,
-            onBack = { app.navigateTo(Screen.Hub) },
+            onBack = {
+                val back = app.pluginsReturn
+                app.resetPluginsEntry()
+                app.navigateTo(back)
+            },
+            onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+            startTab = app.pluginsStartTab,
             // The Logs viewer is an editor overlay, so the row offers it only with a project open.
             onOpenLogs = if (app.epoch > 0) {
                 { pluginId ->
@@ -930,6 +936,8 @@ private fun ProjectPickerRoute(
         onJoinDiscord = if (fileActions.canOpenUrl) {
             { fileActions.openUrl(BetaInfo.DISCORD_URL) }
         } else null,
+        // Downloading is a browser's job, so the card is offered only where links open.
+        onGetPlugins = if (fileActions.canOpenUrl) app::openGetPlugins else null,
         onSponsor = if (fileActions.canOpenUrl) {
             { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
         } else null,

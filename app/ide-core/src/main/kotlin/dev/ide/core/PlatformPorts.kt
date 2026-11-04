@@ -68,6 +68,14 @@ val STORE_MODERATION_SERVICE = ServiceKey<dev.ide.store.StoreModerationService>(
  *  reports challenges unavailable, and the tab explains itself rather than failing. */
 val DAILY_CHALLENGE_SERVICE = ServiceKey<dev.ide.store.DailyChallengeService>("platform.dailyChallenges")
 
+/** The "Get plugins" page's list of downloadable plugins (the backend's `plugin_catalog`). Absent (tests,
+ *  unconfigured builds) leaves the page saying the list is unavailable. */
+val PLUGIN_DOWNLOAD_SERVICE = ServiceKey<dev.ide.store.PluginDownloadService>("platform.pluginDownloads")
+
+/** What the host can tell about, and do with, an installed plugin app: its install facts, its system page,
+ *  uninstalling it. Android only; absent elsewhere, where the detail page leaves those rows out. */
+val PLUGIN_PACKAGES = ServiceKey<dev.ide.core.plugins.PluginPackages>("platform.pluginPackages")
+
 /** Learn's online half: the published lesson catalog (later account progress and lesson discussions).
  *  Registered by the launcher. Absent (tests, unconfigured builds) leaves Learn on its bundled catalog. */
 val LEARN_REMOTE_SERVICE = ServiceKey<dev.ide.store.LearnRemoteService>("platform.learnRemote")

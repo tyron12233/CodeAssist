@@ -543,6 +543,25 @@ class CodeAssistAppState(
     }
 
     /** Open Settings (the hub), remembering [from] as its Back destination. */
+    /** Where the Plugins screen's back goes, and the tab it opens on: the hub's Plugins tool, or Home's card. */
+    var pluginsReturn: Screen by mutableStateOf(Screen.Hub)
+        private set
+    var pluginsStartTab: dev.ide.ui.screens.PluginsTab? by mutableStateOf(null)
+        private set
+
+    /** Home's "Get plugins" card: the Plugins screen on its download tab, back to Home. */
+    fun openGetPlugins() {
+        pluginsReturn = Screen.Projects
+        pluginsStartTab = dev.ide.ui.screens.PluginsTab.Get
+        screen = Screen.Plugins
+    }
+
+    /** Any other way into the Plugins screen (the hub): its usual tab, back to the hub. */
+    fun resetPluginsEntry() {
+        pluginsReturn = Screen.Hub
+        pluginsStartTab = null
+    }
+
     fun openHub(from: Screen) {
         hubReturn = from
         screen = Screen.Hub

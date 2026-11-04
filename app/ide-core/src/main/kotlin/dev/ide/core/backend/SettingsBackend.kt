@@ -129,6 +129,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
                 // The certificate of the package as installed, from the package manager, not a claim the
                 // plugin makes about itself.
                 signature = fromSource?.origin?.signature,
+                minHostVersion = m.minHostVersion,
+                apiVersion = m.apiVersion,
+                app = fromSource?.let { appFacts(it.origin.label) },
             )
         }
         // Plugins with no usable manifest are not in the catalog and have no id to persist a choice against,
@@ -145,6 +148,68 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         return (catalogued + unusable)
             .sortedWith(compareByDescending<UiPluginInfo> { it.essential }.thenBy { it.name.lowercase() })
     }
+
+    private val pluginPackages: dev.ide.core.plugins.PluginPackages?
+        get() = ctx.manager?.applicationContainer?.getServiceOrNull(dev.ide.core.PLUGIN_PACKAGES)
+
+    private fun appFacts(packageName: String): dev.ide.ui.backend.UiPluginApp? {
+        val facts = pluginPackages?.facts(packageName) ?: return null
+        return dev.ide.ui.backend.UiPluginApp(
+            packageName = packageName,
+            appVersion = facts.appVersion,
+            firstInstalledAt = facts.firstInstalledAt,
+            lastUpdatedAt = facts.lastUpdatedAt,
+            sizeBytes = facts.sizeBytes,
+            signedLikeIde = facts.signedLikeIde,
+            installer = facts.installer,
+        )
+    }
+
+    /** The installed plugin app [id] came from, by its manifest id. */
+    private fun packageOf(id: String): String? =
+        ctx.manager?.env?.installedPlugins?.firstOrNull { it.manifest.id == id }?.origin?.label
+
+    override fun openPluginAppInfo(id: String): Boolean =
+        packageOf(id)?.let { pluginPackages?.openAppInfo(it) } ?: false
+
+    override fun openPluginApp(id: String): Boolean =
+        packageOf(id)?.let { pluginPackages?.openApp(it) } ?: false
+
+    /**
+     * The downloadable plugins, each set against what this device has: installed (and at which version), an
+     * update, or too new for this IDE. The list as fetched is kept, so the page still shows it offline.
+     */
+    override suspend fun pluginDownloads(): dev.ide.ui.backend.UiPluginDownloads =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val manager = ctx.manager
+            val service = manager?.applicationContainer?.getServiceOrNull(dev.ide.core.PLUGIN_DOWNLOAD_SERVICE)
+                ?: return@withContext dev.ide.ui.backend.UiPluginDownloads(emptyList(), unavailable = "Plugin downloads are not available in this build.")
+            val fetched = service.fetch()
+            val cachedBody = manager.preference(PLUGIN_DOWNLOADS_CACHE)
+            val (body, cached, problem) = when (fetched) {
+                is dev.ide.store.StoreResult.Ok -> {
+                    runCatching { manager.setPreference(PLUGIN_DOWNLOADS_CACHE, fetched.value) }
+                    Triple(fetched.value, false, null)
+                }
+                else -> Triple(cachedBody, cachedBody != null, "Could not reach the plugin list. Check your connection.")
+            }
+            if (body == null) return@withContext dev.ide.ui.backend.UiPluginDownloads(emptyList(), unavailable = problem)
+            val host = manager.env.hostVersion
+            val installed = manager.env.pluginCatalog.all.associateBy { it.id }
+            val plugins = service.parse(body).map { d ->
+                val have = installed[d.id]?.version
+                dev.ide.ui.backend.UiPluginDownload(
+                    id = d.id, name = d.name, tagline = d.tagline, description = d.description,
+                    publisher = d.publisher, version = d.version, sizeBytes = d.sizeBytes,
+                    downloadUrl = d.downloadUrl, pageUrl = d.pageUrl, capabilities = d.capabilities,
+                    languages = d.languages,
+                    installedVersion = have,
+                    updateAvailable = have != null && dev.ide.plugin.PluginVersions.compare(have, d.version) < 0,
+                    needsHost = d.minHostVersion?.takeUnless { dev.ide.plugin.PluginVersions.satisfies(host, it) },
+                )
+            }
+            dev.ide.ui.backend.UiPluginDownloads(plugins, unavailable = if (plugins.isEmpty()) problem else null, cached = cached)
+        }
 
     override fun setPluginConsent(id: String, granted: Boolean) {
         val manager = ctx.manager ?: return
@@ -603,3 +668,6 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
 /** The shortest reparse debounce the editor uses on a [dev.ide.platform.MemoryTier.LOW] device. */
 private const val LOW_MEMORY_MIN_REPARSE_DELAY_MS = 500
+
+/** The last plugin list fetched, kept for the "Get plugins" page offline. */
+private const val PLUGIN_DOWNLOADS_CACHE = "plugins.downloads.cache"
