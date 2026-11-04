@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -483,14 +484,17 @@ private fun PluginCard(
 
 @Composable
 private fun VerifiedChip() {
+    // The same box as [Chip] (at least 22 dp, 3 dp vertical padding, sized by the same label text), with an icon
+    // no taller than that text, so it is exactly as tall as the chips beside it at any font size.
     Row(
         Modifier
+            .defaultMinSize(minHeight = 22.dp)
             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
-            .padding(start = 6.dp, end = 9.dp, top = 2.dp, bottom = 2.dp),
+            .padding(start = 6.dp, end = 9.dp, top = 3.dp, bottom = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Symbol(CaSymbols.verified, contentDescription = null, size = 14.dp, filled = true, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        Symbol(CaSymbols.verified, contentDescription = null, size = 12.dp, filled = true, tint = MaterialTheme.colorScheme.onPrimaryContainer)
         Text(stringResource(Res.string.plugins_by_codeassist), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }

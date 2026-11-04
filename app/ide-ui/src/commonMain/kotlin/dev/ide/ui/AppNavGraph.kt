@@ -501,7 +501,11 @@ private fun AppRoute(
             )
         }
 
-        Screen.Editor -> EditorScreen(
+        // The editor needs an open project; any route that lands here without one goes Home instead of composing
+        // a screen whose backend throws "No project is open" (a wrong Back target did, in 3.40.0).
+        Screen.Editor -> if (app.epoch <= 0) {
+            LaunchedEffect(Unit) { app.navigateTo(Screen.Projects) }
+        } else EditorScreen(
             state = state,
             onToggleTheme = { app.toggleTheme(dark) },
             onOpenHub = { app.openHub(Screen.Editor) },

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -155,6 +156,7 @@ private fun CapabilityLine(capability: String) {
 fun PluginStatusPill(text: String, color: Color, modifier: Modifier = Modifier) {
     Row(
         modifier
+            .defaultMinSize(minHeight = 22.dp)
             .background(color.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
             .padding(horizontal = 9.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,

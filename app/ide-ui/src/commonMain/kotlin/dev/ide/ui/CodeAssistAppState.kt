@@ -553,6 +553,10 @@ class CodeAssistAppState(
     fun openGetPlugins() {
         pluginsReturn = Screen.Projects
         pluginsStartTab = dev.ide.ui.screens.PluginsTab.Get
+        // The hub's own return too: the Plugins screen is one of its panes, and every Back path that goes
+        // through the hub (the wide layout's, the phone's Plugins -> Hub -> back) must land on Home, not on an
+        // editor with no project open (which threw "No project is open").
+        hubReturn = Screen.Projects
         screen = Screen.Plugins
     }
 
@@ -1343,6 +1347,12 @@ class CodeAssistAppState(
 
             // The keystore Create/Import sub-screens step back to their manager, not all the way out.
             screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
+            // Plugins opened from Home's card goes back there, not up into the hub it is also a pane of.
+            screen == Screen.Plugins && pluginsReturn != Screen.Hub -> {
+                val back = pluginsReturn
+                resetPluginsEntry()
+                screen = back
+            }
             // The wide hub is one surface with its destinations: Back leaves it from any of them.
             hubTwoPane && isHubPane(screen) -> screen = hubReturn
             // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
