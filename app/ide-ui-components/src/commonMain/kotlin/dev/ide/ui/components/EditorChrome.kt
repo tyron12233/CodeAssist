@@ -94,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.OpenFile
+import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.IndexUiStatus
@@ -863,14 +864,24 @@ private fun RunControl(
         // The task list is resolved lazily here (it scans sources), not on every recomposition. `keyboard.hide()`
         // drops any editor keyboard so the task list isn't covered; the search field stays unfocusable until
         // tapped (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open. A
-        // selected task the picker no longer lists (a gutter run of one `main`) stays on top, so it can be re-picked.
+        // selected task the picker does not list (a gutter run of one `main`) stays on top, so it can be re-picked;
+        // one remembered for a project that was at this path before is dropped (RunGutter.stillApplies).
         val openMenu = {
             keyboard?.hide(); query = ""
             val listed = tasks()
-            items = if (selected == null || listed.any { it.id == selected.id }) listed else listOf(selected) + listed
+            items = if (selected == null || listed.any { it.id == selected.id } || !RunGutter.stillApplies(selected, listed)) {
+                listed
+            } else {
+                listOf(selected) + listed
+            }
             open = true
         }
-        val runSelected = { if (selected != null) { keyboard?.hide(); onPickTask(selected) } else openMenu() }
+        // A remembered task that no longer applies would only fail ("No module 'app'"): pick from the list instead.
+        val runSelected = {
+            if (selected != null && RunGutter.stillApplies(selected, tasks())) {
+                keyboard?.hide(); onPickTask(selected)
+            } else openMenu()
+        }
         val runLabel = stringResource(Res.string.run)
         val chooseLabel = stringResource(Res.string.run_choose_task)
         if (compact) {
