@@ -82,6 +82,32 @@ class KotlinFunctionPropertyCallTest {
         for (c in cases) clean(c)
     }
 
+    /** A class that implements a function type IS one. Its supertype text (`(Int) -> Unit`, or a bare
+     *  `Function1<…>`) never resolved to `kotlin.FunctionN`, so passing an instance read as a mismatch. */
+    @Test
+    fun aClassImplementingAFunctionTypeIsOne() {
+        val cases = listOf(
+            "class F : (Int) -> Unit { override fun invoke(p: Int) {} }\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())",
+            "class F : Function1<Int, Unit> { override fun invoke(p: Int) {} }\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())",
+            "class F : String.() -> Int { override fun invoke(p: String) = 1 }\nfun take(f: String.() -> Int) {}\nfun t() = take(F())",
+            "open class Base : (Int) -> Unit { override fun invoke(p: Int) {} }\nclass F : Base()\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())",
+            "class F : (Int) -> Unit { override fun invoke(p: Int) {} }\nfun t() { val f: (Int) -> Unit = F() }",
+            "class F : (Int) -> Unit { override fun invoke(p: Int) {} }\nfun t() { F()(1) }",
+            "fun take(f: Function1<Int, Unit>) {}\nfun t() = take { }",
+        )
+        for (c in cases) clean(c)
+    }
+
+    @Test
+    fun aClassNotImplementingTheFunctionTypeIsStillRejected() {
+        val errors = errors("class F\nfun t() { val f: (Int) -> Unit = F() }")
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors.map { it.code }, "F is not a function; got $errors")
+        val arg = errors("class F\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())")
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), arg.map { it.code }, "F is not a function argument; got $arg")
+        val unknown = errors("class F : Function1x<Int, Unit>")
+        assertEquals(listOf(KotlinDiagnosticCodes.UNRESOLVED), unknown.map { it.code }, "a non-FunctionN name still resolves strictly; got $unknown")
+    }
+
     private fun clean(code: String) {
         val errors = errors(code)
         assertTrue(errors.isEmpty(), "expected `$code` clean, got $errors")

@@ -1682,7 +1682,7 @@ class KotlinSymbolService(
             // A compiler plugin's generated INSTANCE members (a future Parcelize provider's writeToParcel/…), for
             // the same reason: the parse-only model never runs the plugin. Cheap — gated on the class's annotations.
             val syntheticPlugin = syntheticInstanceMembers(rc)
-            val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx, rc.fqn) }
+            val inherited = rc.superTypeTexts.mapNotNull { sourceSupertypeFqn(it, rc.ctx, rc.fqn) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
             // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
             // LAST, so an explicit supertype's override (or the class's own member) is found before the
@@ -3004,7 +3004,7 @@ class KotlinSymbolService(
             // walking the owner chain. A TOP-LEVEL hierarchy hid this -- the same-package fallback found it --
             // so only a sealed family nested in an object or class lost its supertype, and with it every
             // `return Plan.Full` from a function declared to return `Plan`.
-            rc.superTypeTexts.forEach { t -> resolveTypeName(t, rc.ctx, rc.fqn)?.let { direct += it } }
+            rc.superTypeTexts.forEach { t -> sourceSupertypeFqn(t, rc.ctx, rc.fqn)?.let { direct += it } }
         }
         // Classpath supertypes (@Metadata Kotlin AND plain Java bytecode) via the type-shape index, or a live
         // decode when no index is wired — null in dumb mode, so the chain is empty until the index is ready.
@@ -3984,6 +3984,23 @@ class KotlinSymbolService(
     /** The resolved classifier FQN of a supertype-list entry's text (`State`, `State<T>`, `State()`,
      *  `pkg.State`); falls back to the raw head when it can't be resolved (so an already-qualified text still
      *  compares equal to a candidate FQN, and an unresolvable simple name just won't match → safe miss). */
+    /**
+     * The classifier a SOURCE supertype's declaration text names, for the supertype walk. A function type
+     * (`class F : (Int) -> Unit`, `String.() -> Unit`) is `kotlin.FunctionN`, but [resolveTypeName] reads a plain
+     * name and handed that text back unchanged, and a bare `Function1` came back as just `Function1`: the
+     * synthetic `kotlin.FunctionN` is never an indexed type, so the import-and-default-package lookup misses it.
+     * Either way the chain named no function type, so an `F()` passed where `(Int) -> Unit` is expected read as
+     * "inferred type is F but (Int) -> Unit was expected".
+     */
+    private fun sourceSupertypeFqn(text: String, ctx: FileContext?, ownerFqn: String): String? {
+        if ("->" in text) return typeFromText(text, ctx, ownerFqn)?.qualifiedName
+        val resolved = resolveTypeName(text, ctx, ownerFqn) ?: return null
+        if ('.' !in resolved && !isKnownType(resolved) && TypeRendering.isFunctionType("kotlin.$resolved")) {
+            return "kotlin.$resolved"
+        }
+        return resolved
+    }
+
     private fun superHeadFqn(superText: String, ctx: FileContext?, enclosingClassFqn: String? = null): String? {
         val head = superText.substringBefore('<').substringBefore('(').trim()
         return resolveTypeName(head, ctx, enclosingClassFqn) ?: head

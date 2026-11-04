@@ -100,6 +100,7 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.OptInLevel
 import dev.ide.lang.kotlin.symbols.OptInMarker
+import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
@@ -2354,7 +2355,13 @@ internal class KotlinSemanticChecks(
      *  false-positives; the caller already excluded a functional [t]. */
     private fun isConcreteNonFunction(t: KotlinType): Boolean =
         !t.isTypeParameter && t.qualifiedName != "kotlin.Nothing" &&
-            service.isKnownType(canonicalTypeForCheck(t).qualifiedName)
+            !TypeRendering.isFunctionType(t.qualifiedName) &&
+            // A callable reference's `KFunctionN` / `KPropertyN` IS a function type, through a supertype the
+            // model may not carry.
+            !t.qualifiedName.startsWith("kotlin.reflect.") &&
+            service.isKnownType(canonicalTypeForCheck(t).qualifiedName) &&
+            // A class that implements a function type (`class F : (Int) -> Unit`) is one.
+            service.supertypesOf(t.qualifiedName).none { TypeRendering.isFunctionType(it.qualifiedName) }
 
     /**
      * An assignment (`x = expr`) whose right-hand side type isn't assignable to the target's declared type
@@ -2819,6 +2826,12 @@ internal class KotlinSemanticChecks(
         // `isKnownType`), matching the mapping member/supertype lookup already applies (`Builtins.kotlinTypeFor`).
         val d = canonicalTypeForCheck(declared)
         val a = canonicalTypeForCheck(actual)
+        // A function type is synthetic, never a "known type", so the check below always backed off on one.
+        // Judge it the way an argument for a function-type parameter is judged: only a value that can never be
+        // a function (a known, non-function class that implements no function type) is a mismatch.
+        if (isFunctional(d) || TypeRendering.isFunctionType(d.qualifiedName)) {
+            return !isFunctional(a) && isConcreteNonFunction(a)
+        }
         if (!service.isKnownType(d.qualifiedName) || !service.isKnownType(a.qualifiedName)) return false
         // Base types compatible — but a generic TYPE ARGUMENT may still definitely clash (`List<String>` vs
         // `List<Int>`). No variance can bridge two unrelated final argument types, so that is a real mismatch.
@@ -3567,6 +3580,9 @@ internal class KotlinSemanticChecks(
         // `class Game { private class Plan }`) resolves by simple name instead of being falsely flagged.
         val resolved = service.resolveTypeName(name, ctx, resolver.enclosingClassFqn(off))
         if (resolved != null && service.isKnownType(resolved)) return null
+        // `Function1<Int, Unit>` is the default-imported `kotlin.Function1`, which is synthetic (the compiler
+        // makes the FunctionN family up) and so never a known type the lookup above can find.
+        if (TypeRendering.isFunctionType("kotlin.$name") && !name.startsWith("Suspend")) return null
         val r = ref.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
     }
