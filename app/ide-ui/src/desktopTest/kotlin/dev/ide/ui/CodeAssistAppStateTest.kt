@@ -486,6 +486,79 @@ class CodeAssistAppStateTest {
         assertFalse(app.keystoreInProject)
     }
 
+    // ---- links and notifications that arrive mid-edit ----
+
+    /**
+     * A store link (or a tapped notification) opening a store item over the editor: Back returns to the editor.
+     * It used to leave for Home, closing the project without the close confirmation.
+     */
+    @Test
+    fun aStoreItemOpenedOverTheEditorStepsBackToIt() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+
+        app.openStoreItem(communityItem("some.project"))
+        assertEquals(Screen.StoreItem, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.Editor, app.screen)
+        assertTrue(app.projectOpen)
+
+        // The run's base is spent with it: a store item opened from Home goes back Home.
+        app.navigateTo(Screen.Projects)
+        app.openStoreItem(communityItem("some.project"))
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    /** The daily challenge's push names `challenges`, a home tab: its tap used to match no screen and do nothing. */
+    @Test
+    fun theDailyChallengeNotificationOpensTheChallengesTab() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openNotificationTarget(dev.ide.ui.backend.UiNotificationTarget.Screen("challenges"))
+        assertEquals(Screen.Projects, app.screen)
+        assertEquals(HomeTab.Challenges, app.homeTab)
+    }
+
+    /** A `screen` route reaches only destinations that stand on their own, never one that needs a project. */
+    @Test
+    fun notificationRoutesReachOnlyStandAloneDestinations() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        for (route in listOf("ModuleConfig", "Run", "KeystoreImport", "IconManager", "PluginScreen", "Editor", "nope")) {
+            app.openNotificationTarget(dev.ide.ui.backend.UiNotificationTarget.Screen(route))
+            assertEquals(Screen.Projects, app.screen, route)
+        }
+        app.openNotificationTarget(dev.ide.ui.backend.UiNotificationTarget.Screen("You"))
+        assertEquals(Screen.You, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    /** A notification tapped at launch wins over reopening the last project behind it. */
+    @Test
+    fun aNotificationTappedAtLaunchWinsOverSessionResume() = runTest {
+        val backend = AppBackend(settledPrefs() + ("session.lastProject" to "/ws/app")).apply { analyticsConsent = false }
+        val app = appState(backend)
+        app.openNotificationTarget(dev.ide.ui.backend.UiNotificationTarget.Submissions)
+        // The resume reads the project list on a real IO thread: give it the time it would have taken.
+        repeat(30) {
+            advanceUntilIdle()
+            Thread.sleep(10)
+        }
+        advanceUntilIdle()
+        assertTrue(backend.opened.isEmpty(), "resume stood down")
+        assertEquals(Screen.You, app.screen)
+    }
+
     // ---- Home's "Get plugins" entry ----
 
     @Test
@@ -899,6 +972,36 @@ class CodeAssistAppStateTest {
         assertEquals(Screen.Projects, app.screen)
         assertNull(app.importPreview)
         assertNull(app.importArchivePath)
+    }
+
+    /** A package handed in mid-edit: Cancel goes back to the editor, not Home (which closed the project). */
+    @Test
+    fun cancellingAPackageHandedInMidEditReturnsToTheEditor() = runTest {
+        val preview = UiImportPreview(
+            name = "Sample", description = "", author = "", createdBy = "", isAndroid = false,
+            packageName = null, moduleCount = 1,
+            modules = listOf(UiPackagedModule("app", "android-app", fileCount = 3, sizeBytes = 128)), fileCount = 3,
+            uncompressedSizeBytes = 128, hasBundledDeps = false, icon = null, files = emptyList(),
+            compatible = true,
+        )
+        val backend = settled(importPreview = preview)
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+
+        app.openImportPackage("/tmp/sample.caproj")
+        assertEquals(Screen.ImportProject, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.Editor, app.screen)
+        assertTrue(app.projectOpen)
+
+        // The next one, from Home, cancels back Home.
+        app.navigateTo(Screen.Projects)
+        app.openImportPackage("/tmp/sample.caproj")
+        app.cancelImportPreview()
+        assertEquals(Screen.Projects, app.screen)
     }
 
     /** A host that always "picks" the same Gradle folder. */

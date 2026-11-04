@@ -99,7 +99,13 @@ import org.jetbrains.compose.resources.stringResource
  * action. Clearing caches is silent; the SDK clear, leftover-folder removal and project deletes go through a confirm.
  */
 @Composable
-fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
+fun StorageScreen(
+    backend: IdeBackend,
+    onBack: () -> Unit,
+    /** Whether the loaded project is open in the editor. Only then is its row marked Open and kept from deletion:
+     *  a project closed behind Home stays loaded, and deleting it unloads it first. */
+    projectOpen: Boolean = true,
+) {
     val state = rememberStorageScreenState(backend)
 
     ExpressiveScaffold(title = stringResource(Res.string.settings_storage), onBack = onBack) { innerPadding ->
@@ -119,6 +125,7 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
                     onClearAllCaches = state::clearAllCaches,
                     onRequestConfirmedClear = state::askClear,
                     onRequestDeleteProject = state::askDeleteProject,
+                    openProjectRootPath = r.openProjectRootPath.takeIf { projectOpen },
                 )
             }
             val freed = state.freedBytes
@@ -165,6 +172,7 @@ private fun StorageContent(
     onClearAllCaches: () -> Unit,
     onRequestConfirmedClear: (UiStorageCategory) -> Unit,
     onRequestDeleteProject: (UiStorageProject) -> Unit,
+    openProjectRootPath: String?,
 ) {
     val shown = report.categories.filter { it.bytes > 0 }
     val hasClearableCache = report.categories.any { it.clearable && !it.destructive && it.bytes > 0 }
@@ -201,7 +209,7 @@ private fun StorageContent(
                 )
             }
             itemsKeyed(report.projects, key = { it.rootPath }) { p ->
-                ProjectRow(p, isOpen = p.rootPath == report.openProjectRootPath, busy = busy) { onRequestDeleteProject(p) }
+                ProjectRow(p, isOpen = p.rootPath == openProjectRootPath, busy = busy) { onRequestDeleteProject(p) }
             }
         }
     }

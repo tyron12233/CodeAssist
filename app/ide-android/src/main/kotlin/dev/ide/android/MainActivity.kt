@@ -80,6 +80,14 @@ class MainActivity : ComponentActivity() {
      */
     private val storeLink = mutableStateOf<String?>(null)
 
+    /** What a tapped tray notification is about, pending the composition that can open it. Held here for the
+     *  same reason [storeLink] is. */
+    private val notificationTarget = mutableStateOf<dev.ide.ui.backend.UiNotificationTarget?>(null)
+
+    /** Whether the user has a project open in the editor, as the shared UI reports it. A source file handed in
+     *  by "Open with" goes into that project, and waits while there is none. */
+    private val projectOpen = mutableStateOf(false)
+
     /** Whether the UMP consent flow has settled (success or failure). Ads wait for it, see [ADS_STARTUP_DELAY_MS]. */
     private val adConsentResolved = mutableStateOf(false)
 
@@ -93,7 +101,9 @@ class MainActivity : ComponentActivity() {
         AppIcons.host = AndroidAppIcons(applicationContext)
         // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
         // taken for a file to import.
-        if (!takeAuthRedirect(intent) && !takeStoreLink(intent) && !takeAgentReturn(intent)) inbound.value = extractStream(intent)
+        if (!takeAuthRedirect(intent) && !takeStoreLink(intent) && !takeAgentReturn(intent) && !takeNotificationTap(intent)) {
+            inbound.value = extractStream(intent)
+        }
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement). Failure resolves
         // too, so a consent hiccup never blocks the IDE. The SDK itself starts later, once launch has settled
         // (see the LaunchedEffect below the ad host).
@@ -308,9 +318,12 @@ class MainActivity : ComponentActivity() {
 
             // A `.caproj` package or a `.zip` handed in via "Open with" goes to project import (a package's preview,
             // or the project inside the zip); any other inbound file is copied into the open project's first
-            // source root as before.
+            // source root. With no project open it waits for one (said once): a project closed behind Home is
+            // still loaded, and the file used to be copied into it without a word about where it went.
             var importPackagePath by remember { mutableStateOf<String?>(null) }
-            LaunchedEffect(backend, inbound.value) {
+            var waitingAnnounced by remember { mutableStateOf<Uri?>(null) }
+            val open = projectOpen.value
+            LaunchedEffect(backend, inbound.value, open) {
                 val b = backend
                 val uri = inbound.value
                 if (b != null && uri != null) {
@@ -324,16 +337,25 @@ class MainActivity : ComponentActivity() {
                         val path = withContext(Dispatchers.IO) { fileOps.copyInboundToCache(uri, name) }
                         if (path != null) importPackagePath = path
                         else Toast.makeText(this@MainActivity, "Couldn't open the project file", Toast.LENGTH_SHORT).show()
+                    } else if (!open) {
+                        if (waitingAnnounced != uri) {
+                            waitingAnnounced = uri
+                            val shown = name.ifBlank { "the file" }
+                            Toast.makeText(this@MainActivity, "Open a project to add $shown to it", Toast.LENGTH_LONG).show()
+                        }
+                        return@LaunchedEffect
                     } else {
+                        val projectName = b.project.name
                         val path = withContext(Dispatchers.IO) {
                             firstSourceRoot(b.files.fileTree())?.let { target -> fileOps.importUri(uri, target, b) }
                         }
                         Toast.makeText(
                             this@MainActivity,
-                            if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
+                            if (path != null) "Imported ${File(path).name} into $projectName" else "Couldn't import file",
                             Toast.LENGTH_SHORT,
                         ).show()
                     }
+                    waitingAnnounced = null
                     inbound.value = null
                 }
             }
@@ -358,6 +380,9 @@ class MainActivity : ComponentActivity() {
                     importPackagePath = importPackagePath,
                     openStoreItemId = storeLink.value,
                     onStoreItemIdHandled = { storeLink.value = null },
+                    openNotificationTarget = notificationTarget.value,
+                    onNotificationTargetHandled = { notificationTarget.value = null },
+                    onProjectOpenChange = { projectOpen.value = it },
                 )
 
                 error != null -> Splash("Failed to start: $error")
@@ -402,6 +427,7 @@ class MainActivity : ComponentActivity() {
         if (takeAuthRedirect(intent)) return
         if (takeStoreLink(intent)) return
         if (takeAgentReturn(intent)) return
+        if (takeNotificationTap(intent)) return
         extractStream(intent)?.let { inbound.value = it }
     }
 
@@ -421,6 +447,10 @@ class MainActivity : ComponentActivity() {
         intent.data = null
         return true
     }
+
+    /** Claim [intent] if a tray notification was tapped: its target is opened once the UI can act on it. */
+    private fun takeNotificationTap(intent: Intent?): Boolean =
+        NotificationTargets.take(intent) { target -> target?.let { notificationTarget.value = it } }
 
     /**
      * Claim [intent] if it is the "Back to CodeAssist" link from the OpenRouter sign-in page. Arriving here already
