@@ -20,6 +20,16 @@ val sdkAssets: File = File(sdkOut, "assets/dart-sdk")
 val generatedAssetsDir: File = layout.buildDirectory.dir("generated/dart-sdk/assets").get().asFile
 
 /**
+ * Flutter, from `fetch-flutter.sh`: the engine, the player's bundle, a FLUTTER_ROOT and the base assets. Without
+ * them the plugin still builds and runs Dart; a Flutter app's Run then says the plugin carries no Flutter.
+ */
+val flutterOut: File = File(sdkOut, "flutter")
+
+/** The engine the staged Flutter was built on, which the player's Java embedding has to match. */
+val flutterEngine: String = File(flutterOut, "ENGINE").takeIf { it.isFile }?.readText()?.trim()
+    ?: "89c39edfdfae2949f6806e4a315c0c08522238b7" // Flutter 3.47.9
+
+/**
  * Pack the SDK's libraries into ONE archive. The plugin reads it back through its classloader, over the
  * installed APK, and a classloader can open a named entry but cannot list a directory, so ~500 loose files
  * would be unreachable for want of a way to enumerate them.
@@ -38,6 +48,17 @@ val packSdkAssets by tasks.registering(Zip::class) {
         }
     }
 }
+
+/** Pack a staged Flutter directory into one stored asset archive (the classloader can only open named entries). */
+fun packFlutter(taskName: String, dir: String, archive: String) = tasks.register<Zip>(taskName) {
+    from(File(flutterOut, dir))
+    archiveFileName.set(archive)
+    destinationDirectory.set(generatedAssetsDir)
+    entryCompression = ZipEntryCompression.STORED
+    onlyIf { File(flutterOut, dir).isDirectory }
+}
+val packFlutterRoot = packFlutter("packFlutterRoot", "root", "flutter-root.zip")
+val packFlutterBaseAssets = packFlutter("packFlutterBaseAssets", "base-assets", "flutter-base-assets.zip")
 
 android {
     namespace = "dev.codeassist.dart"
@@ -89,6 +110,10 @@ android {
     }
 
     sourceSets["main"].jniLibs.srcDir(sdkLibs)
+    // The engine (libflutter.so), and the player's own bundle as the APK's `flutter_assets`, where the
+    // Flutter embedding looks for it.
+    sourceSets["main"].jniLibs.srcDir(File(flutterOut, "jniLibs"))
+    sourceSets["main"].assets.srcDir(File(flutterOut, "player"))
     // Produced by `packSdkAssets`. AGP refuses a Provider here, so the directory is a plain File and the
     // ordering is an explicit task dependency below.
     sourceSets["main"].assets.srcDir(generatedAssetsDir)
@@ -105,7 +130,7 @@ android {
     }
 }
 
-tasks.named("preBuild") { dependsOn(packSdkAssets) }
+tasks.named("preBuild") { dependsOn(packSdkAssets, packFlutterRoot, packFlutterBaseAssets) }
 
 // JUnit 5, like the rest of this build. AGP defaults a unit test task to JUnit 4.
 tasks.withType<Test>().configureEach { useJUnitPlatform() }
@@ -122,6 +147,8 @@ dependencies {
     // Reading the test runner's JSON events. Bundled, as the Calc sample bundles it, rather than borrowed
     // from the IDE.
     implementation(libs.kotlinx.serialization.json)
+    // The Flutter player (FlutterPlayerActivity), which runs in this plugin's own process, never the IDE's.
+    implementation("io.flutter:flutter_embedding_debug:1.0.0-$flutterEngine")
 
     // `UiRegistration` names these types in methods this facet does not call.
     compileOnly(libs.androidx.compose.runtime)

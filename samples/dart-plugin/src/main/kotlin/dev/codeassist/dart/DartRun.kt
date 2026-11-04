@@ -37,12 +37,15 @@ import java.nio.file.Paths
  * `dart run`, which cannot work from an installed app: it looks for its compilers beside the runtime's real
  * path, the read-only native library directory.
  */
-class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub) : RunTaskProvider {
+class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub, private val flutter: FlutterSdk) : RunTaskProvider {
 
     override fun tasksFor(module: Module): List<RunTaskSpec> {
         if (module.type.id != DartModuleType.ID) return emptyList()
         val pkg = Paths.get(module.dir.path)
-        val runs = DartPackages.executables(pkg).map { file ->
+        // A Flutter app runs in the player, hot-reloading; its bin/ (if any) is not what Run means.
+        val runs = if (FlutterSdk.isFlutterPackage(pkg)) {
+            listOf(RunTaskSpec("$FLUTTER_PREFIX${module.name}", "Run Flutter app · ${module.name}", "run"))
+        } else DartPackages.executables(pkg).map { file ->
             RunTaskSpec("$RUN_PREFIX${module.name}:${pkg.relativize(file)}", "Run ${file.fileName}", "run")
         }
         return runs + listOf(
@@ -57,6 +60,11 @@ class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub) : RunT
             val command = spec.id.substringAfterLast(':').takeIf { it == "get" || it == "upgrade" } ?: return null
             val task = PubTask(TaskName(":${module.name}:pub${command.replaceFirstChar(Char::uppercaseChar)}"), pkg, pub, command, onlyIfNeeded = false)
             return RunAction("> dart pub $command", LinearGraph(listOf(task)))
+        }
+        if (spec.id == "$FLUTTER_PREFIX${module.name}") {
+            val console = RunConsole("${module.name} (Flutter)")
+            val task = FlutterRunTask(TaskName(":${module.name}:flutterRun"), pkg, sdk, flutter, pub, console)
+            return RunAction("> Flutter ${module.name}", LinearGraph(listOf(task))).also { it.console = console }
         }
         val prefix = "$RUN_PREFIX${module.name}:"
         if (!spec.id.startsWith(prefix)) return null
@@ -77,6 +85,7 @@ class DartRunTaskProvider(private val sdk: DartSdk, private val pub: Pub) : RunT
     companion object {
         const val RUN_PREFIX = "dartRun:"
         const val PUB_PREFIX = "dartPub:"
+        const val FLUTTER_PREFIX = "flutterRun:"
     }
 }
 

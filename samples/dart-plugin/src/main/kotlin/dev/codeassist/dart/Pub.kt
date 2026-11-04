@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
  * `dart run` and `dart test` do not (they look for compilers beside the runtime's resolved path), which is
  * why Run compiles and runs a program itself ([DartRun]).
  */
-class Pub(private val sdk: DartSdk) {
+class Pub(private val sdk: DartSdk, private val flutter: FlutterSdk? = null) {
 
     /**
      * Run `dart pub <command> <args>` in [pkg], passing each line of its output to [out], and answer its exit
@@ -33,11 +33,19 @@ class Pub(private val sdk: DartSdk) {
             return -1
         }
         val dartdev = sdk.dartdev ?: return -1
+        // A Flutter package's `flutter: sdk: flutter` dependencies resolve from FLUTTER_ROOT.
+        val env = sdk.environment().toMutableMap()
+        if (FlutterSdk.isFlutterPackage(pkg)) {
+            when (val f = flutter?.prepare() ?: FlutterSdk.Status.Unavailable(FlutterSdk.NO_FLUTTER)) {
+                is FlutterSdk.Status.Ready -> env["FLUTTER_ROOT"] = f.root.toString()
+                is FlutterSdk.Status.Unavailable -> { out(f.reason); return -1 }
+            }
+        }
         val process = try {
             ProcessBuilder(listOf(sdk.launcher.toString(), dartdev.toString(), "--suppress-analytics", "pub", command) + args)
                 .directory(pkg.toFile())
                 .redirectErrorStream(true)
-                .apply { environment().putAll(sdk.environment()) }
+                .apply { environment().putAll(env) }
                 .start()
         } catch (e: IOException) {
             out("Could not start pub: ${e.message}")

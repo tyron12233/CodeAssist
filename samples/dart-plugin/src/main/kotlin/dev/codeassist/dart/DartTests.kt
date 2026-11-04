@@ -50,14 +50,16 @@ class DartTestProvider(private val sdk: DartSdk, private val pub: Pub) : TestPro
     override val displayName = "Dart tests"
     override val languages = setOf(LanguageId(DartPlugin.LANGUAGE))
 
+    // A Flutter package's tests are widget tests (flutter_test), which need Flutter's host test engine: not here.
     override fun appliesTo(module: Module): Boolean =
-        module.type.id == DartModuleType.ID && testFiles(Paths.get(module.dir.path)).isNotEmpty()
+        module.type.id == DartModuleType.ID && testFiles(Paths.get(module.dir.path)).isNotEmpty() &&
+            !FlutterSdk.isFlutterPackage(Paths.get(module.dir.path))
 
     override fun tests(module: Module, path: String, text: String): List<TestDeclaration> {
         if (!path.endsWith(TEST_SUFFIX)) return emptyList()
         val pkg = Paths.get(module.dir.path)
         val file = Paths.get(path)
-        if (!file.startsWith(pkg.resolve("test"))) return emptyList()
+        if (!file.startsWith(pkg.resolve("test")) || FlutterSdk.isFlutterPackage(pkg)) return emptyList()
         val calls = DartTestScanner.scan(text)
         if (calls.isEmpty()) return emptyList()
         val suite = suiteOf(pkg, file)

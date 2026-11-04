@@ -26,17 +26,19 @@ class DartPlugin : Plugin {
     override fun register(reg: PluginRegistration) {
         val log = reg.logger("DartPlugin")
         val sdk = DartSdk(reg, log, reg.appServices.getServiceOrNull(USER_MESSAGES))
-        val pub = Pub(sdk)
+        val flutter = FlutterSdk(reg, sdk, reg.logger("Flutter"))
+        val pub = Pub(sdk, flutter)
 
         reg.register(FILE_TYPE_EP, FileTypeMapping(DartFileIcons.SUFFIXES, LanguageId(LANGUAGE)))
         reg.register(LANGUAGE_SERVER_EP, DartLanguageServer(sdk, pub, reg.logger("DartServer")))
 
         reg.register(ModuleTypeExtensionPoint, DartModuleType)
         reg.register(ProjectTemplateExtensionPoint, DartConsoleTemplate())
+        reg.register(ProjectTemplateExtensionPoint, FlutterAppTemplate())
         reg.register(PROJECT_IMPORTER_EP, PubImporter)
         reg.register(FileIconExtensionPoint, DartFileIconProvider)
 
-        reg.register(RUN_TASK_PROVIDER_EP, DartRunTaskProvider(sdk, pub))
+        reg.register(RUN_TASK_PROVIDER_EP, DartRunTaskProvider(sdk, pub, flutter))
         reg.register(TEST_PROVIDER_EP, DartTestProvider(sdk, pub))
         log.info("registered; the Dart SDK is prepared on first use")
     }

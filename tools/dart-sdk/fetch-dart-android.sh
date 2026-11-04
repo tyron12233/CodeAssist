@@ -12,6 +12,7 @@
 #     libanalysis_server.so  the analysis server (the language server), an AOT snapshot
 #     libgen_kernel.so       the kernel compiler Run uses, an AOT snapshot
 #     libdartdev.so          the `dart` command-line tool, for `pub get`, an AOT snapshot
+#     libfrontend_server.so  the incremental compiler behind Flutter's hot reload, an AOT snapshot
 #   out/assets/dart-sdk/     what is only READ: the SDK's libraries, the platform dill, the version
 #
 # Since Android 10 an app may not exec() a file it wrote, and an AOT snapshot is an ELF the VM maps as
@@ -74,6 +75,7 @@ cp "$SDK/bin/dartvm" "$JNI/libdartvm.so"
 cp "$SDK/bin/snapshots/analysis_server_aot.dart.snapshot" "$JNI/libanalysis_server.so"
 cp "$SDK/bin/snapshots/gen_kernel_aot.dart.snapshot" "$JNI/libgen_kernel.so"
 cp "$SDK/bin/snapshots/dartdev_aot.dart.snapshot" "$JNI/libdartdev.so"
+cp "$SDK/bin/snapshots/frontend_server_aot.dart.snapshot" "$JNI/libfrontend_server.so"
 
 cp -R "$SDK/lib" "$ASSETS/lib"
 cp "$SDK/version" "$SDK/revision" "$SDK/sdk_packages.yaml" "$SDK/LICENSE" "$ASSETS/"

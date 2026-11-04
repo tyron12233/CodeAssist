@@ -53,6 +53,9 @@ class DartSdk(
     val genKernel: Path? get() = native("gen_kernel")
     val dartdev: Path? get() = native("dartdev")
 
+    /** The incremental compiler behind Flutter's hot reload. */
+    val frontendServer: Path? get() = native("frontend_server")
+
     /** `<sdk>/bin/dart`: the runtime, by a path two levels below the SDK root, which is how `dart` finds it. */
     val launcher: Path get() = sdkDir.resolve("bin").resolve("dart")
 

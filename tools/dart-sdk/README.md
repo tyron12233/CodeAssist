@@ -48,3 +48,29 @@ about 53 MB.
   test_core's `directRunTests` (the API it keeps for other runners) with the JSON reporter `dart test
   --reporter json` uses, and is compiled and run like a program. It imports `package:test_core/src/...`, so a
   test_core release that moves those files breaks it until the generator follows.
+
+## Flutter
+
+`fetch-flutter.sh` stages Flutter for the same plugin, from a Flutter SDK on the build machine
+(`FLUTTER_HOME=/path/to/flutter ./fetch-flutter.sh`). It has to be **Flutter 3.47.9**: the kernel the IDE compiles
+on the device must match the Dart VM inside the engine, and 3.47.9 is the release whose Dart is 3.13.7. The
+script checks both.
+
+| Staged as | What it is |
+| --- | --- |
+| `jniLibs/arm64-v8a/libflutter.so` | the Android arm64 debug engine, stripped with the NDK's `llvm-objcopy` (396 MB to 39 MB) |
+| `root/` | a minimal FLUTTER_ROOT: `packages/flutter` and `flutter_test` (sources only), `sky_engine` (`dart:ui`), the patched platform dill, the version files pub reads (44 MB) |
+| `player/flutter_assets/` | the player's own bundle: a 4 KB `dart:ui` stub (`flutter-player/main.dart`) and the VM snapshots |
+| `base-assets/` | what every app's bundle starts from: the Material icons font, the framework's compiled shaders, NOTICES |
+
+How an app runs, which is `flutter run` without the `flutter` tool:
+
+- The IDE compiles the app with `frontend_server` (incremental, `--target=flutter`, against the patched platform).
+- The player (`FlutterPlayerActivity`, in the plugin's own APK and process) starts on its stub and sends the IDE
+  its Dart VM service URI. The IDE uploads the kernel and the asset bundle into a DevFS over the VM service and
+  calls `_flutter.runInView`: a hot restart into the app.
+- A saved file is recompiled as a delta and loaded with `reloadSources` + `ext.flutter.reassemble`: hot reload,
+  state kept. `reset` + `recompile` gives the full kernel a hot restart needs.
+
+Not possible here: release (AOT) builds, which need a `gen_snapshot` that runs on Android; Flutter plugins with
+Android code of their own (the player has none); widget tests (`flutter test` needs Flutter's host test engine).

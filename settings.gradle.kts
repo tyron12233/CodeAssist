@@ -55,6 +55,11 @@ dependencyResolutionManagement {
         maven("https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea") {
             content { includeGroupByRegex("com\\.mbridge\\..*") }
         }
+        // The Flutter engine's Java embedding (:samples:dart-plugin's Flutter player only). Published by
+        // Google to its own bucket, not Maven Central or Google Maven; scoped by group.
+        maven("https://storage.googleapis.com/download.flutter.io") {
+            content { includeGroup("io.flutter") }
+        }
     }
 }
 
