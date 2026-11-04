@@ -126,7 +126,7 @@ first, and MRR the average of 1/rank. Latency is measured on the maintainer's ma
 rough figure.
 
 <!-- AUTOGEN:tests:START -->
-**2252** tests passing across **406** suites · 0 failing · 2 skipped (framework / `CI_CORE_ONLY`).
+**2277** tests passing across **411** suites · 0 failing · 3 skipped (framework / `CI_CORE_ONLY`).
 <!-- AUTOGEN:tests:END -->
 
 ## Contributing
