@@ -43,4 +43,8 @@ about 53 MB.
   above the path it was started by. The plugin unpacks the SDK in internal storage, because shared storage
   cannot hold a symlink.
 - **`dart run` and `dart test` do not**: they look for their compilers beside the runtime's *resolved* path,
-  which is the read-only native library directory. That is why Run is the plugin's own compile-and-run.
+  which is the read-only native library directory. That is why Run is the plugin's own compile-and-run, and
+  why tests run through a generated entry point instead: it imports the test files and hands each `main` to
+  test_core's `directRunTests` (the API it keeps for other runners) with the JSON reporter `dart test
+  --reporter json` uses, and is compiled and run like a program. It imports `package:test_core/src/...`, so a
+  test_core release that moves those files breaks it until the generator follows.

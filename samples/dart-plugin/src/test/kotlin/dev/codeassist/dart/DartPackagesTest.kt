@@ -73,8 +73,8 @@ class DartPackagesTest {
 
     @Test
     fun contentRootsAreTheConventionalDirectoriesThatExist() {
-        // `lib/` is the package's code even before it exists; the rest only when they are there.
-        assertEquals(mapOf("main" to listOf("lib")), DartPackages.contentRoots(dir))
+        // `lib/` and `test/` even before they exist; the rest only when they are there.
+        assertEquals(mapOf("main" to listOf("lib"), "test" to listOf("test")), DartPackages.contentRoots(dir))
         write("bin/app.dart")
         write("tool/build.dart")
         write("test/app_test.dart")

@@ -119,6 +119,9 @@ dependencies {
     compileOnly(project(":lsp-api"))
     compileOnly(project(":project-model-api"))
     compileOnly(libs.kotlinx.coroutines.core)
+    // Reading the test runner's JSON events. Bundled, as the Calc sample bundles it, rather than borrowed
+    // from the IDE.
+    implementation(libs.kotlinx.serialization.json)
 
     // `UiRegistration` names these types in methods this facet does not call.
     compileOnly(libs.androidx.compose.runtime)

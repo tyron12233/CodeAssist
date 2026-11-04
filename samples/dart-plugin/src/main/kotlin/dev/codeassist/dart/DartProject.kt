@@ -88,13 +88,13 @@ object DartPackages {
     }
 
     /**
-     * The content roots of the package at [pkg], by source set: `lib/` always (it is where a package's code
-     * is, even before it exists), the other conventional directories when they are there.
+     * The content roots of the package at [pkg], by source set: `lib/` and `test/` always (where a package's
+     * code and tests go, so the Project view shows them as soon as they exist; it skips a root that does not),
+     * the other conventional directories when they are there.
      */
     fun contentRoots(pkg: Path): Map<String, List<String>> {
         val main = listOf("lib") + listOf("bin", "example", "tool").filter { Files.isDirectory(pkg.resolve(it)) }
-        val test = listOf("test").filter { Files.isDirectory(pkg.resolve(it)) }
-        return linkedMapOf("main" to main, "test" to test).filterValues { it.isNotEmpty() }
+        return linkedMapOf("main" to main, "test" to listOf("test"))
     }
 
     /** The programs a package offers to run: the `.dart` files directly in `bin/`, as pub does, sorted. */

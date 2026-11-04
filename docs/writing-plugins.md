@@ -1032,7 +1032,8 @@ The run reports through the console: print `TestReport.run(id)` first (it is wha
 your provider), then `queued` / `started` / `passed` / `failed` / `skipped` per test and `finished()` at the
 end, to the console's `ProgramIo.stdout`. Everything else the run prints stays in the console as output. A
 re-run hands `run` the targets as `suite#test` (or a bare suite), in the names your records used. The Calc
-sample (`samples/lsp-plugin`, `CalcTestProvider`) is a complete one.
+sample (`samples/lsp-plugin`, `CalcTestProvider`) is a complete one; the Dart plugin's `DartTestProvider`
+(`samples/dart-plugin`) is one for a real test framework.
 
 ### Language servers without a plugin
 

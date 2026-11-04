@@ -39,6 +39,8 @@ class DartConsoleTemplate : ProjectTemplate {
                 dirRelPath = ""
                 languageLevel = scaffold.languageLevel
                 for (dir in listOf("lib", "bin")) addContentRoot("main", dir, setOf(DartModuleType.DART_SOURCE))
+                // No test yet (package:test would need the network for the first Run), but where they go.
+                addContentRoot("test", "test", setOf(DartModuleType.DART_SOURCE))
             }
             commit()
         }

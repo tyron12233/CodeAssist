@@ -1,6 +1,7 @@
 package dev.codeassist.dart
 
 import dev.ide.build.RUN_TASK_PROVIDER_EP
+import dev.ide.build.TEST_PROVIDER_EP
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.FileTypeMapping
 import dev.ide.lang.LanguageId
@@ -36,6 +37,7 @@ class DartPlugin : Plugin {
         reg.register(FileIconExtensionPoint, DartFileIconProvider)
 
         reg.register(RUN_TASK_PROVIDER_EP, DartRunTaskProvider(sdk, pub))
+        reg.register(TEST_PROVIDER_EP, DartTestProvider(sdk, pub))
         log.info("registered; the Dart SDK is prepared on first use")
     }
 

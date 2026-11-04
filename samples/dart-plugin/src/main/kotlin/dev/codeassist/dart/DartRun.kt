@@ -139,31 +139,44 @@ internal class CompileTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         val status = sdk.prepare()
         if (status is DartSdk.Status.Unavailable) return TaskResult.Failed(status.reason)
-        val runtime = sdk.runtime ?: return TaskResult.Failed(DartSdk.NO_SDK)
-        val compiler = sdk.genKernel ?: return TaskResult.Failed(DartSdk.NO_SDK)
-        Files.createDirectories(dill.parent)
-        Files.deleteIfExists(dill)
-        val config = pkg.resolve(DartPackages.PACKAGE_CONFIG)
-        val command = buildList {
-            add(runtime.toString()); add(compiler.toString())
-            add("--platform=${sdk.platformDill}")
-            if (Files.isRegularFile(config)) add("--packages=$config")
-            add("--no-link-platform")
-            add("-o"); add(dill.toString())
-            add(entry.toString())
-        }
         val log = alsoToConsole(ctx.logger(), console)
-        val code = killableTool { cancellation ->
-            val process = ProcessBuilder(command).directory(pkg.toFile()).redirectErrorStream(true)
-                .apply { environment().putAll(sdk.environment()) }.start()
-            cancellation.attach(process)
-            runCatching { process.outputStream.close() }
-            process.inputStream.bufferedReader().forEachLine(log)
-            process.waitFor()
-        }
+        val code = killableTool { cancellation -> compileKernel(sdk, pkg, entry, dill, cancellation, log) }
         if (code != 0 || !Files.isRegularFile(dill)) return TaskResult.Failed("${entry.fileName} did not compile")
         return TaskResult.Success
     }
+}
+
+/**
+ * Compile [entry] of the package at [pkg] to kernel at [dill], passing each line the compiler prints to [out].
+ * The exit code, or -1 when the SDK is missing. Blocking; [cancellation] kills the compiler.
+ */
+internal fun compileKernel(
+    sdk: DartSdk,
+    pkg: Path,
+    entry: Path,
+    dill: Path,
+    cancellation: ToolCancellation?,
+    out: (String) -> Unit,
+): Int {
+    val runtime = sdk.runtime ?: return -1
+    val compiler = sdk.genKernel ?: return -1
+    Files.createDirectories(dill.parent)
+    Files.deleteIfExists(dill)
+    val config = pkg.resolve(DartPackages.PACKAGE_CONFIG)
+    val command = buildList {
+        add(runtime.toString()); add(compiler.toString())
+        add("--platform=${sdk.platformDill}")
+        if (Files.isRegularFile(config)) add("--packages=$config")
+        add("--no-link-platform")
+        add("-o"); add(dill.toString())
+        add(entry.toString())
+    }
+    val process = ProcessBuilder(command).directory(pkg.toFile()).redirectErrorStream(true)
+        .apply { environment().putAll(sdk.environment()) }.start()
+    cancellation?.attach(process)
+    runCatching { process.outputStream.close() }
+    process.inputStream.bufferedReader().forEachLine(out)
+    return process.waitFor()
 }
 
 /** Run [dill] on the JIT VM in the Run console: its output there, what is typed there as its stdin. */
