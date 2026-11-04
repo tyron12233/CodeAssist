@@ -208,12 +208,18 @@ class KotlinType(
     override fun isAssignableFrom(other: TypeRef): Boolean {
         if (other.qualifiedName == qualifiedName) return true
         if (qualifiedName == "kotlin.Any" || qualifiedName == "java.lang.Object") return true
+        // A Kotlin typealias and its JVM target are one classifier under two names (`kotlin.Comparator` is
+        // `java.util.Comparator`), and either side may carry either spelling: a checker canonicalizes the
+        // expected type to the JVM name while a source class's supertype keeps the alias it was written with.
+        fun canon(q: String) = Builtins.TYPEALIAS_TO_JVM[q] ?: q
+        val target = canon(qualifiedName)
+        if (canon(other.qualifiedName) == target) return true
         val seen = HashSet<String>()
         val stack = ArrayDeque(other.supertypes())
         while (stack.isNotEmpty()) {
             val s = stack.removeLast()
             if (!seen.add(s.qualifiedName)) continue
-            if (s.qualifiedName == qualifiedName) return true
+            if (canon(s.qualifiedName) == target) return true
             stack.addAll(s.supertypes())
         }
         return false

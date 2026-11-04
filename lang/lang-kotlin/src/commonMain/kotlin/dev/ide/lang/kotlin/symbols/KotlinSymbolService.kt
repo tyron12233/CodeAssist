@@ -1307,6 +1307,11 @@ class KotlinSymbolService(
         //    that happens to share the simple name (e.g. `import icons.automirrored.filled.List` → the icon
         //    object must not displace `kotlin.collections.List` in type-annotation position). What does
         //    displace them is a nearer DECLARATION, which is why steps 1 and 2 run first.
+        //    An explicit import of a known TYPE is not a coincidence of names, though: Kotlin ranks explicit
+        //    imports above the default ones, so `import java.util.function.Function` makes `Function` the Java
+        //    interface, not `kotlin.Function`, whose missing `apply` then bound the scope function instead.
+        //    The icon case above is a PROPERTY import, which `isKnownType` rejects, so it still yields.
+        explicitImportFqn?.let { if (isKnownType(it)) return it }
         Builtins.DEFAULT_SIMPLE_TYPES[simple]?.let { return it }
         // 4. An explicit (non-star) import. It wins when it resolves to a KNOWN type. When the imported FQN is
         //    NOT known (a stale/typo'd import whose target doesn't exist — `import com.foo.Food` alongside a
@@ -2108,6 +2113,27 @@ class KotlinSymbolService(
         return "($params)" + (returnType?.let { ": $it" } ?: "")
     }
 
+    /** The name of the callable's own type parameter its extension receiver IS (`fun <T> T.twice()` -> `T`),
+     *  or null when the receiver is a concrete type. */
+    private fun sourceReceiverTypeParam(rc: RawCallable): String? {
+        val text = rc.receiverText ?: return null
+        val bare = text.substringBefore('<').removeSuffix("?").trim()
+        return bare.takeIf { it in rc.typeParameterNames }
+    }
+
+    /**
+     * The FQN a SOURCE extension's receiver is keyed under. A receiver that is the callable's own type parameter
+     * (`fun <T> T.twice()`, `fun <T : CharSequence> T.len()`) is keyed under its upper bound, or `kotlin.Any`
+     * when unbounded, the same convention @Metadata extensions follow. Resolving the bare `T` as a type name
+     * found nothing, so every such source extension read as an unresolved reference.
+     */
+    private fun sourceReceiverFqn(rc: RawCallable, ownerFqn: String?): String? {
+        val text = rc.receiverText ?: return null
+        val tp = sourceReceiverTypeParam(rc) ?: return resolveTypeName(text, rc.ctx, ownerFqn)
+        val bound = rc.typeParameterBounds.getOrNull(rc.typeParameterNames.indexOf(tp))?.takeIf { it.isNotBlank() }
+        return bound?.let { resolveTypeName(it, rc.ctx, ownerFqn) } ?: "kotlin.Any"
+    }
+
     fun extensionsFor(
         fqnRaw: String,
         typeArgs: List<TypeRef> = emptyList(),
@@ -2170,12 +2196,7 @@ class KotlinSymbolService(
             targets.flatMap { scan.extensionsByReceiver[it].orEmpty() }.filter { matches(it.name) }
         }
         val fromSource = model().extensions
-            .filter {
-                matches(it.name) && resolveTypeName(
-                    it.receiverText ?: return@filter false,
-                    it.ctx
-                ) in targets
-            }
+            .filter { matches(it.name) && sourceReceiverFqn(it, null) in targets }
             .map { toSymbol(it, null) }
         // Cross-file source extensions from the persistent `kotlin.callables.source` index — available as
         // soon as the file is index-synced, without waiting on the in-memory source model to warm. The
@@ -2232,7 +2253,7 @@ class KotlinSymbolService(
             // Name first: the receiver-text resolution below is the expensive half, and a keystroke's prefix
             // rules out nearly every candidate.
             if (namePrefix.isNotEmpty() && !m.matches(mem.name)) continue
-            val recvFqn = resolveTypeName(mem.receiverText ?: continue, mem.ctx, rc.fqn) ?: continue
+            val recvFqn = sourceReceiverFqn(mem, rc.fqn) ?: continue
             if (recvFqn !in receiverTargets) continue
             out += toSymbol(mem, rc.fqn, rc.typeParameterNames, declaringFqn = rc.fqn)
         }
@@ -4227,7 +4248,13 @@ class KotlinSymbolService(
                 ?: inferReturnFromBody(rc, ownerFqn),
             tps,
         )
-        val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx, ownerFqn) }
+        val receiverFqn = sourceReceiverFqn(rc, ownerFqn)
+        val receiverTypeParam = sourceReceiverTypeParam(rc)
+        // The receiver's own type arguments (`List<T>` in `fun <T> List<T>.second(): T`), so the actual
+        // receiver's arguments bind them ([bindExtensionReceiver]); without them `l.second()` typed as a bare `T`.
+        val receiverTypeArgs = if (receiverTypeParam == null && rc.receiverText?.contains('<') == true)
+            markTypeParameters(typeFromText(rc.receiverText, rc.ctx, ownerFqn), tps)?.typeArguments.orEmpty()
+        else emptyList()
         val sig = if (rc.isFunction) {
             "(" + rc.paramTexts.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" +
                     (rc.returnText?.let { ": $it" } ?: "")
@@ -4247,6 +4274,8 @@ class KotlinSymbolService(
             },
             origin = SOURCE,
             receiverTypeFqn = receiverFqn,
+            receiverTypeArgs = receiverTypeArgs,
+            receiverTypeParam = receiverTypeParam,
             signature = sig,
             typeParameters = rc.typeParameterNames,
             // Each type parameter's upper bound (unbounded → `Any`, matching the Java-bytecode convention), for the

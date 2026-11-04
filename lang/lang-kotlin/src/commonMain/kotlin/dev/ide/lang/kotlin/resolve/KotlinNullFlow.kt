@@ -389,11 +389,12 @@ private fun isNotNullAssertStatement(
 /** A stdlib precondition that makes the accessed value non-null past the call: `requireNotNull(v)` /
  *  `checkNotNull(v)` (throws on a null VALUE), or `require(cond)` / `check(cond)` whose boolean condition
  *  guarantees it (`require(v != null)`, `check(a != null && b != null)`) — the `returns() implies (…)`
- *  contract smart-casts after the call. */
+ *  contract smart-casts after the call. The value or condition is the FIRST argument: a lazy message may follow
+ *  it, in parentheses or as a trailing lambda (`checkNotNull(v) { "v" }`), and it narrows just the same. */
 private fun KotlinResolver.isNotNullPrecondition(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
     val call = stripParens(st) as? KtCallExpression ?: return false
     val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
-    val arg = call.valueArguments.singleOrNull()?.getArgumentExpression()
+    val arg = call.valueArguments.takeIf { it.size <= 2 }?.firstOrNull()?.getArgumentExpression()
     return when (callee) {
         "requireNotNull", "checkNotNull" -> matches(arg)
         "require", "check" -> arg != null && condGuarantees(arg, true, matches)

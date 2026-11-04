@@ -138,6 +138,14 @@ internal fun KotlinResolver.inferBinaryType(e: KtBinaryExpression): KotlinType? 
             val rightType = inferType(e.right)
             when {
                 token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String" -> leftType
+                // `Char` is not a number: `'a' + 1` and `c - 1` are `Char` (`Char.plus/minus(Int)`), `c - 'a'` is
+                // an `Int` (`Char.minus(Char)`). Promotion ranked it with Byte/Short and typed all three `Int`.
+                leftType.qualifiedName == "kotlin.Char" && rightType != null &&
+                    (token == KtTokens.PLUS || token == KtTokens.MINUS) -> when (rightType.qualifiedName) {
+                    "kotlin.Int" -> service.typeByFqn("kotlin.Char")
+                    "kotlin.Char" -> if (token == KtTokens.MINUS) service.typeByFqn("kotlin.Int") else null
+                    else -> null
+                }
                 // Two primitive numbers → Kotlin's WIDENING promotion directly (`1 * 1.0` = Double, `1 + 1L` =
                 // Long; Byte/Short/Char promote to Int). NOT [arithmeticOperatorReturn]: its by-argument overload
                 // pick, over the built-in `times`/`plus` set whose numeric parameters accept each other loosely,
@@ -726,6 +734,7 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
         }
         return service.typeByFqn(fqn, args)
     }
+    samConstructorResultType(fqn, tps, call)?.let { return it }
     val paramTypes = service.constructorParamTypes(fqn, call.valueArguments.size)
         ?: return service.typeByFqn(fqn)
     val bindings = HashMap<String, TypeRef>()
@@ -736,6 +745,31 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
         inferType(expr)?.let { unify(pt, it, bindings) }
     }
     if (bindings.isEmpty()) return service.typeByFqn(fqn)
+    return service.typeByFqn(fqn, tps.map { bindings[it] ?: service.typeByFqn("kotlin.Any") })
+}
+
+/**
+ * The type of a generic SAM-constructor call with no explicit type arguments: `Callable { 42 }` is a
+ * `Callable<Int>`, from the lambda's RESULT bound against the single abstract method's return; and
+ * `Comparator { a, b -> … }` where a `Comparator<String>` is expected takes the expected arguments. An
+ * interface has no constructor, so the ordinary argument path left every parameter unbound and the call
+ * erased to `Callable<Any>`, which typed `Callable { 42 }.call()` as `Object`. Null when [fqn] is not an
+ * interface or the call has no lambda.
+ */
+private fun KotlinResolver.samConstructorResultType(fqn: String, tps: List<String>, call: KtCallExpression): KotlinType? {
+    if (service.isInterfaceType(fqn) != true) return null
+    val lambda = call.lambdaArguments.firstOrNull()?.getLambdaExpression()
+        ?: call.valueArguments.singleOrNull()?.getArgumentExpression() as? KtLambdaExpression
+        ?: return null
+    expectedTypeAt(call.textRange.startOffset)
+        ?.takeIf { sameSimpleName(it.qualifiedName, fqn) && it.typeArguments.size == tps.size && concreteArgs(it) }
+        ?.let { return service.typeByFqn(fqn, it.typeArguments) }
+    val generic = service.typeByFqn(fqn, tps.map { KotlinType(it, isTypeParameter = true) })
+    val ret = service.functionalShape(generic)?.returnType as? KotlinType ?: return null
+    val body = inferLambdaResult(lambda) as? KotlinType ?: return null
+    val bindings = HashMap<String, TypeRef>()
+    unify(ret, body, bindings)
+    if (bindings.isEmpty()) return null
     return service.typeByFqn(fqn, tps.map { bindings[it] ?: service.typeByFqn("kotlin.Any") })
 }
 

@@ -170,7 +170,7 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
                 var c = e.firstChild
                 while (c != null) { s = flowNull(c, s); c = c.nextSibling }
                 val callee = (e.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
-                val arg = e.valueArguments.singleOrNull()?.getArgumentExpression()
+                val arg = e.valueArguments.takeIf { it.size <= 2 }?.firstOrNull()?.getArgumentExpression()
                 when (callee) {
                     "requireNotNull", "checkNotNull" -> boundVar(arg)?.let { s = s + (it to VarNul.NOT_NULL) }
                     "require", "check" -> if (arg != null) s = refine(s, arg, true)
@@ -292,7 +292,7 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
                 val callee = (c.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
                 if ((callee == "requireNotNull" || callee == "checkNotNull") && whenTrue) {
                     boundVar(
-                        c.valueArguments.singleOrNull()?.getArgumentExpression()
+                        c.valueArguments.takeIf { it.size <= 2 }?.firstOrNull()?.getArgumentExpression()
                     )?.let { return set(state, it, VarNul.NOT_NULL) }
                 }
                 state

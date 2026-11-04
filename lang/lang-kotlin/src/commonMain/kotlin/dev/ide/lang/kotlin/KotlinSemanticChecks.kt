@@ -272,7 +272,7 @@ internal class KotlinSemanticChecks(
                     // The same-file PSI arity check first (precise for a unique same-file function); then the
                     // overload-aware applicability check (wrong-typed / too-many args for an overloaded, library,
                     // or member call); then the missing-required check (which the applicability check defers to).
-                    report(argumentCountMismatch(psi) ?: callNotApplicable(psi, resolver) ?: missingRequiredArgument(psi, resolver))
+                    report(argumentCountMismatch(psi, resolver) ?: callNotApplicable(psi, resolver) ?: missingRequiredArgument(psi, resolver))
                 }
                 KotlinPerf.span("call.ambiguity") { if (resolveReady) report(overloadAmbiguity(psi, resolver)) }
                 KotlinPerf.span("call.typeArgBounds") { if (resolveReady) reportAll(callTypeArgumentBoundViolation(psi, resolver)) }
@@ -1464,7 +1464,7 @@ internal class KotlinSemanticChecks(
     /** Stdlib extensions whose declared receiver is NULLABLE, so calling them on a nullable value is legal.
      *  See [unsafeNullableAccess] for why this is a name list and what would replace it. */
     private val NULLABLE_RECEIVER_EXTENSIONS = setOf(
-        "isNullOrBlank", "isNullOrEmpty", "orEmpty", "toString", "toBoolean",
+        "isNullOrBlank", "isNullOrEmpty", "orEmpty", "toString", "toBoolean", "hashCode",
     )
 
     private val UNUSED_PARAM_EXEMPT_MODIFIERS = listOf(
@@ -1907,7 +1907,7 @@ internal class KotlinSemanticChecks(
         )
     }
 
-    private fun argumentCountMismatch(call: KtCallExpression): Diagnostic? {
+    private fun argumentCountMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
         if (call.parent is KtQualifiedExpression && (call.parent as KtQualifiedExpression).selectorExpression === call) return null // member call: receiver unknown
         if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null // named/spread: arity rules differ
@@ -1920,6 +1920,9 @@ internal class KotlinSemanticChecks(
         // resolved-symbol checks instead. Only reached once a same-named top-level function exists, so the
         // scope walk stays off the common path.
         if (localFunctionsInScope(call, call.textRange.startOffset, name).isNotEmpty()) return null
+        // So does a nearer function-typed VALUE (a parameter `f: (T) -> R`, a local, a class property): the call
+        // is its `invoke`, judged by the resolved-symbol checks.
+        if (runCatching { resolver.nearerValueInvokeTargets(call, name) }.getOrNull() != null) return null
         val params = fn.valueParameters
         if (params.any { it.isVarArg }) return null
         val required = params.count { !it.hasDefaultValue() && !it.isVarArg }
@@ -2549,8 +2552,19 @@ internal class KotlinSemanticChecks(
         // ALL (null → not a known source sealed type → back off, e.g. a library sealed class).
         val sealedSubs = service.sealedSubclassesOf(type.qualifiedName) ?: return null
         if (sealedSubs.isEmpty()) return null
-        val coveredTypes = coveredTypeNames(expr)
-        val missing = sealedSubs.filter { it.substringAfterLast('.') !in coveredTypes }
+        // An `object` subclass is matched by VALUE as often as by type (`R.Loading ->`, `Loading ->`), and that
+        // covers it just the same; only `is` patterns were counted, so `when (r) { R.Loading -> …; is R.Ok -> … }`
+        // read as missing `Loading`.
+        val coveredTypes = coveredTypeNames(expr) + covered
+        // A subclass that is itself sealed is covered by branches for all of ITS subclasses (`Ev.Ui.Click ->`,
+        // `is Ev.Ui.Scroll ->` cover `Ev.Ui`), as Kotlin's exhaustiveness checker expands it.
+        fun isCovered(fqn: String, depth: Int = 0): Boolean {
+            if (fqn.substringAfterLast('.') in coveredTypes) return true
+            if (depth > 8) return false
+            val subs = service.sealedSubclassesOf(fqn)?.takeIf { it.isNotEmpty() } ?: return false
+            return subs.all { isCovered(it, depth + 1) }
+        }
+        val missing = sealedSubs.filter { !isCovered(it) }
         if (missing.isEmpty()) return null
         return whenDiag(expr, "'when' expression must be exhaustive; add branches for ${missing.joinToString(", ") { it.substringAfterLast('.') }} or an 'else'")
     }
@@ -2636,6 +2650,9 @@ internal class KotlinSemanticChecks(
         // `requireNotNull`/`check` list in the null-flow pass. A user-declared `fun Foo?.bar()` is still
         // flagged -- a known gap, and the one the format change would close.
         if (selectorName(expr) in NULLABLE_RECEIVER_EXTENSIONS) return null
+        // `String?.equals(other: String?, ignoreCase)` is the one stdlib `equals` a nullable receiver may call.
+        if (selectorName(expr) == "equals" && recvType.qualifiedName == "kotlin.String") return null
+        if (callAcceptsNullableReceiver(expr, resolver)) return null
         if (receiver is KtNameReferenceExpression) {
             // Flow is now the authority: `smartCastNonNull` precisely models the direct guards (if/else, early
             // exit, `&&`/`||`, elvis, `!!`, `require`, `is`, and — for a `var` — reassignment). Only forms it does
@@ -2655,6 +2672,31 @@ internal class KotlinSemanticChecks(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "Only safe (?.) or non-null asserted (!!) calls are allowed on a nullable receiver", KotlinDiagnosticCodes.UNSAFE_NULLABLE,
         )
+    }
+
+    /**
+     * Whether the call in [expr]'s selector resolves to an extension DECLARED to accept a nullable receiver:
+     * a source `fun Foo?.bar()`, a receiver that is an unbounded (or nullable-bounded) type parameter
+     * (`fun <T> T?.orDefault(d: T)`, `fun <T> T.twice()`), or a classpath extension on an unbounded type
+     * parameter (`infix fun <A, B> A.to(that: B)`). A SOURCE declaration is read from its PSI, which carries
+     * the `?` the symbol model drops. A classpath `fun <T : Any> T.x()` keys its bound as plain `Any` and is
+     * spared too: under-reporting there is the conservative side.
+     */
+    private fun callAcceptsNullableReceiver(expr: KtDotQualifiedExpression, resolver: KotlinResolver): Boolean {
+        val call = expr.selectorExpression as? KtCallExpression ?: return false
+        val sym = runCatching { resolver.resolveCalleeFunction(call) }.getOrNull() ?: return false
+        if (!sym.isExtension) return false
+        val decl = (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtCallableDeclaration
+        if (decl != null && sym.origin.fromSource) {
+            val recv = decl.receiverTypeReference?.text?.trim() ?: return false
+            if (recv.endsWith("?")) return true
+            val tp = decl.typeParameters.firstOrNull { it.name == recv.substringBefore('<').trim() } ?: return false
+            val bound = tp.extendsBound?.text?.trim() ?: return true // an unbounded `T` admits null
+            return bound.endsWith("?")
+        }
+        val tp = sym.receiverTypeParam ?: return false
+        val bound = sym.typeParameterBounds.getOrNull(sym.typeParameters.indexOf(tp)) as? KotlinType
+        return bound == null || bound.nullable || bound.qualifiedName == "kotlin.Any"
     }
 
     /** Whether the enclosing function guards [name] with a construct the flow analysis does NOT model — a `when`
@@ -3639,8 +3681,7 @@ internal class KotlinSemanticChecks(
         // statics through the Java spelling only — the mapped Kotlin classifier's API omits them, so
         // `membersNamedForCheck` misses them. Mirror the completion gate (spelled as the FQN, a type receiver) so
         // a bare `String.valueOf` stays flagged (Kotlin reports it) while the explicit FQN resolves.
-        val typeStatics = if (resolver.isTypeReceiver(receiver) && receiver.text == recvType.qualifiedName)
-            service.mappedTypeStatics(recvType.qualifiedName).filter { it.name == name } else emptyList()
+        val typeStatics = resolver.mappedJavaStatics(receiver, recvType, name)
         val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
             (if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()) +
             typeStatics

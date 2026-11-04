@@ -144,7 +144,9 @@ internal fun KotlinResolver.inferTypeArguments(
             (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
                 ?: return@forEachIndexed
         if (expr is KtLambdaExpression) bindLambdaReturn(pt, expr, bindings)
-        else inferType(expr)?.let { unify(pt, it, bindings) }
+        // A spread `*arr` fills the vararg with the array's ELEMENTS: `listOf(*arr)` binds T to the element.
+        else inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
+            ?.let { unify(pt, it, bindings) }
     }
     return bindings
 }
@@ -254,13 +256,18 @@ internal fun KotlinResolver.bindingsFromValueArgs(
     sym: KotlinSymbol,
     call: KtCallExpression
 ): Map<String, TypeRef> =
-    bindingsFromArgExprs(sym, call.valueArguments.map { it.getArgumentExpression() })
+    bindingsFromArgExprs(
+        sym, call.valueArguments.map { it.getArgumentExpression() },
+        spread = call.valueArguments.indices.filterTo(HashSet()) { call.valueArguments[it].getSpreadElement() != null },
+    )
 
 /** [bindingsFromValueArgs] over bare argument EXPRESSIONS, for a call site that is not a [KtCallExpression] —
  *  an operator convention (`a[i]`, `a(i)`), whose operands fill the operator's value parameters just the same. */
 internal fun KotlinResolver.bindingsFromArgExprs(
     sym: KotlinSymbol,
-    args: List<KtExpression?>
+    args: List<KtExpression?>,
+    /** Indices of SPREAD arguments (`*arr`), which bind a vararg by their ELEMENT type. */
+    spread: Set<Int> = emptySet(),
 ): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
@@ -275,7 +282,7 @@ internal fun KotlinResolver.bindingsFromArgExprs(
         val paramIndex = if (sym.varargParamIndex in 0..<i) sym.varargParamIndex else i
         val pt = (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
-        inferType(expr)?.let { unify(pt, it, bindings) }
+        inferType(expr)?.let { if (i in spread) spreadElementType(it) else it }?.let { unify(pt, it, bindings) }
     }
     return bindings
 }

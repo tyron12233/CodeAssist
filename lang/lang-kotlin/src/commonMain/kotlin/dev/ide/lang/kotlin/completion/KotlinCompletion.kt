@@ -73,6 +73,7 @@ import dev.ide.lang.kotlin.parse.identifierPrefixBefore
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.SourceIndexBuilder
 import dev.ide.lang.resolve.Modifier
@@ -538,7 +539,10 @@ class KotlinCompletion(
                 // they never arrive through `members`. Offered ONLY when the receiver is SPELLED as the fully-
                 // qualified name — a bare `String.` must stay static-free, since Kotlin exposes these statics only
                 // through the `java.lang.String` spelling (both resolve to the same type here).
-                val mappedStatics = if (receiver.text == recvType.qualifiedName)
+                val written = receiver.text.trim()
+                val javaSpelling = written == recvType.qualifiedName ||
+                    Builtins.kotlinTypeFor(recvType.qualifiedName)?.substringAfterLast('.') != written.substringAfterLast('.')
+                val mappedStatics = if (javaSpelling)
                     service.mappedTypeStatics(recvType.qualifiedName)
                         .filter { matcher.matches(it.name) && memberVisibleOn(it, typeReceiver = true, enclosing) }
                 else emptyList()

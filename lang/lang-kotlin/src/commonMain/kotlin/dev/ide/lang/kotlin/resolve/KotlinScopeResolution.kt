@@ -77,7 +77,7 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             is KtLambdaExpression -> lambdaReceiverType(node)?.let(out::add)
 
             is KtNamedFunction -> node.receiverTypeReference?.text
-                ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
+                ?.let { boundedTypeParameterReceiver(node, it) ?: service.typeFromText(it, fileContext) }?.let(out::add)
             // An extension PROPERTY's receiver is the implicit `this` of its accessors
             // (`val ColorScheme.codeBlockBackground get() = onSurface.copy(alpha = .15f)`): the same rule as an
             // extension function. A local/plain property has no receiver type and adds nothing.
@@ -110,6 +110,16 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
         node = node.parent
     }
     return out
+}
+
+/** The implicit `this` of `fun <T : CharSequence> T.len() = length`: a receiver that is the function's own
+ *  type parameter with an explicit upper bound has that bound's members, so `length` resolves. Null for a
+ *  concrete receiver or an unbounded parameter (the caller keeps its plain text lookup). */
+private fun KotlinResolver.boundedTypeParameterReceiver(fn: KtNamedFunction, receiverText: String): KotlinType? {
+    val bare = receiverText.substringBefore('<').removeSuffix("?").trim()
+    val tp = fn.typeParameters.firstOrNull { it.name == bare } ?: return null
+    val bound = tp.extendsBound?.text ?: return null
+    return service.typeFromText(bound, fileContext)
 }
 
 /** The member named [name] on the nearest implicit receiver in scope at [offset] — the `this` of an
@@ -434,6 +444,8 @@ internal fun KotlinResolver.constructorScopeParams(offset: Int): List<KtParamete
                 return classCtorParams(node)
             // The superclass delegation call `: Base(arg)` — its arguments run in the primary constructor.
             is KtSuperTypeCallEntry -> return classCtorParams(node)
+            // Interface delegation `: Base by b` — its expression is evaluated by the primary constructor too.
+            is dev.ide.kotlin.syntax.psi.KtDelegatedSuperTypeEntry -> return classCtorParams(node)
             // Reached the class without passing through a constructor-scope context (a bare declaration slot).
             is KtClassOrObject -> return emptyList()
         }
