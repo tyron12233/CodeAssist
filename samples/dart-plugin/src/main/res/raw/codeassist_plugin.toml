@@ -16,5 +16,6 @@ capabilities = [
     "fs.write",
     "net",
 ]
-# Language servers arrived with SPI 3.3.0. No minHostVersion: the first IDE to carry it is not released yet, and
-# an older one fails this plugin's load with the missing class as the reason, which says the same thing.
+# Language servers arrived with SPI 3.3.0, first released in CodeAssist 3.40.0. An older IDE refuses the plugin
+# with "requires CodeAssist 3.40.0 or newer" instead of failing on a missing class.
+minHostVersion = "3.40.0"

@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
@@ -138,13 +139,21 @@ internal class FlutterPreviewController(
         while (compiled == null) {
             if (FlutterSession.runActive(pkg)) return
             writeGallery()
-            _state.value = State("Compiling the previews ...")
+            _state.value = State(COMPILING)
             app = FlutterSession(
                 pkg, tools.sdk, tools.flutter, galleryFile.toUri().toString(), work, ::log, ::galleryChanges,
                 siblings = listOf(FlutterSession.runWork(pkg).resolve("app.dill")),
             )
             session = app
-            val first = app.compile()
+            // The first compile after the IDE starts races the analysis server's own first pass over the framework
+            // and can take tens of seconds on a phone; past a few seconds, say why the pane is still waiting.
+            val slow = scope.launch {
+                delay(SLOW_COMPILE_MS)
+                if (_state.value.message == COMPILING) {
+                    _state.value = State("$COMPILING\nThe first compile after opening a project is slow while Dart analyses it.")
+                }
+            }
+            val first = try { app.compile() } finally { slow.cancel() }
             if (first.ok) {
                 compiled = first.dill
             } else {
@@ -242,4 +251,9 @@ internal class FlutterPreviewController(
     }
 
     private fun log(line: String) = tools.log.info("preview: $line")
+
+    private companion object {
+        const val COMPILING = "Compiling the previews ..."
+        const val SLOW_COMPILE_MS = 6_000L
+    }
 }
