@@ -52,6 +52,9 @@ object KotlinMetadata {
          *  reference to it (`CardDefaults.`) denotes the INSTANCE, so its members are accessed like an
          *  instance's — not statics off a type. */
         val isObject: Boolean = false,
+        /** True when this class is a `companion object`. With [isObject], the singletons whose member
+         *  extensions an `import` can reach (`import okhttp3.MediaType.Companion.toMediaType`). */
+        val isCompanion: Boolean = false,
         /** True when this class is a Kotlin `interface` — it cannot be instantiated directly. */
         val isInterface: Boolean = false,
         /** True when this class is an `abstract` (or `sealed`) class — it cannot be instantiated directly. */
@@ -74,6 +77,15 @@ object KotlinMetadata {
     ) {
         /** Just the supertype classifier FQNs — for the supertype walk that doesn't need type arguments. */
         val supertypeFqns: List<String> get() = supertypes.mapNotNull { (it as? KotlinType)?.qualifiedName }
+
+        /** The [extensions] callable WITHOUT a dispatch receiver, so the receiver-keyed indexes may list them: a
+         *  facade's top-level extensions, and a singleton's member extensions (reachable through an import). A
+         *  regular class's member extensions are not: `RowScope`'s `Modifier.weight()` only applies with a
+         *  `RowScope` in scope, which the type's own shape already answers. Listed by receiver, the same
+         *  signature on `ContextualFlowRowOverflowScopeImpl` (experimental) resolved in a plain `Row`, and
+         *  `Modifier.weight(1f)` outside any `Row` was never reported. */
+        val receiverIndexableExtensions: List<KotlinSymbol>
+            get() = if (classFqn == null || isObject || isCompanion) extensions else emptyList()
     }
 
     /**
@@ -279,6 +291,7 @@ object KotlinMetadata {
             ext,
             companionObjectName = info.companionObjectName,
             isObject = info.classKind?.name == "OBJECT",
+            isCompanion = info.classKind?.name == "COMPANION_OBJECT",
             isInterface = info.classKind?.name == "INTERFACE",
             // SEALED is abstract for instantiation purposes too (a sealed class can't be instantiated directly).
             isAbstractClass = info.modality == KotlinModality.ABSTRACT || info.modality == KotlinModality.SEALED,

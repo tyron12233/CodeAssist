@@ -546,9 +546,13 @@ class KotlinCompletion(
                     service.mappedTypeStatics(recvType.qualifiedName)
                         .filter { matcher.matches(it.name) && memberVisibleOn(it, typeReceiver = true, enclosing) }
                 else emptyList()
+                // The scope member extensions that apply to that companion instance: `Modifier.weight` inside a
+                // `Row { }`, where `Modifier.Companion : Modifier` and `RowScope` declares `fun Modifier.weight()`.
+                val companionScopeExts = service.companionObjectFqn(recvType.qualifiedName)
+                    ?.let { resolver.scopeMemberExtensions(offset, service.typeByFqn(it), prefix) }.orEmpty()
                 members + nestedTypes + enumConstants + listOfNotNull(companion) + mappedStatics + service.companionMembersFor(
                     recvType.qualifiedName, prefix
-                ).filter { memberVisibleOn(it, typeReceiver = false, enclosing) }
+                ).filter { memberVisibleOn(it, typeReceiver = false, enclosing) } + companionScopeExts
             } else {
                 // Member-extensions in scope on an instance receiver (`map.printMap()` where `printMap` is a
                 // `Map<…>` extension declared in the enclosing class, `Modifier.weight` inside a `Row { }`),

@@ -51,7 +51,8 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
     override val id = IndexId("kotlin.callables")
     // Base 9 (v9: + CallableShape.isInfix) + the shared-codec FORMAT (see CallableShapeExternalizer.FORMAT), so a
     // codec format change invalidates this index, kotlin.builtinCallables and kotlin.callables.source together.
-    override val version = 9 + CallableShapeExternalizer.FORMAT
+    // v10: a regular class's member extensions are no longer keyed by receiver (see Decoded.receiverIndexableExtensions).
+    override val version = 10 + CallableShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = CallableShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried by prefix on a tagged key; no fuzzy
@@ -88,7 +89,8 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
         // (no metadata) yields nothing here (its member shape is the `kotlin.typeShape` index's job). The decode
         // is SHARED with the other kotlin.* binary indexes for this class ([sharedMetadata]).
         val decoded = sharedMetadata(input) ?: return emptyMap()
-        if (decoded.topLevel.isEmpty() && decoded.extensions.isEmpty()) return emptyMap()
+        val extensions = decoded.receiverIndexableExtensions
+        if (decoded.topLevel.isEmpty() && extensions.isEmpty()) return emptyMap()
         val unit = input.unitName?.removeSuffix(".class")
         val pkg = unit?.substringBeforeLast('/', "")?.replace('/', '.')?.ifEmpty { null }
         // The .class entry IS the JVM facade these callables compile into (a multi-file part overrides it via
@@ -99,7 +101,7 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
             if (s.inaccessibleFromAnotherModule()) return@forEach
             out.getOrPut(topKey(s.name)) { ArrayList() }.add(CallableShape.from(s, pkg, facade))
         }
-        decoded.extensions.forEach { s ->
+        extensions.forEach { s ->
             if (s.inaccessibleFromAnotherModule()) return@forEach
             val recv = s.receiverTypeFqn ?: return@forEach
             val shape = CallableShape.from(s, pkg, facade)

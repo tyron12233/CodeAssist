@@ -51,6 +51,17 @@ class KotlinLibraryCallResolutionTest {
         assertTrue(errors.isEmpty(), "the RowScope-like member extension carries no opt-in marker; got $errors")
     }
 
+    /** `Modifier.weight(1f)` outside any `Row`: a scope's member extension needs that scope as an implicit
+     *  receiver. The index listed it by receiver, so it resolved anywhere and the mistake went unreported. */
+    @Test
+    fun aScopeMemberExtensionOutsideItsScopeIsReported() {
+        val errors = errors(
+            "Use.kt" to "package demo\nimport dev.ide.fakecompose.*\nimport androidx.compose.runtime.Composable\n" +
+                "@Composable fun C() { FakeBox(FakeModifier.fakeAlignByBaseline()) }\n",
+        )
+        assertEquals(listOf(KotlinDiagnosticCodes.UNRESOLVED), errors.map { it.code }, "$errors")
+    }
+
     /** `transitionSpec = { spring() }`: the lambda's expected result pins `spring`'s T. */
     @Test
     fun aLambdaResultPinsAGenericFactory() {

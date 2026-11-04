@@ -47,12 +47,18 @@ class KotlinExtensionAutoImportTest {
     fun memberExtensionAddsNoImport() {
         val srcDir = tempProject(emptyMap())
         // `scopedPad` is a member extension of FakeScope (`fun FakeModifier.scopedPad` inside the class): it
-        // needs its dispatch receiver in scope, so it is NOT importable by FQN — no import edit.
-        val items = complete(
-            srcDir, listOf(fakeExtJar(), stdlibJarPath()), "Use.kt",
-            "import dev.ide.fakecompose.FakeModifier\nfun f() { FakeModifier.scoped| }",
+        // needs its dispatch receiver in scope, so it is NOT importable by FQN. Offered where a FakeScope is an
+        // implicit receiver, with no import edit; not offered anywhere else, where Kotlin cannot call it
+        // (`Modifier.weight` is not a completion outside a `Row`).
+        val jars = listOf(fakeExtJar(), stdlibJarPath())
+        val inScope = complete(
+            srcDir, jars, "Use.kt",
+            "import dev.ide.fakecompose.FakeModifier\nimport dev.ide.fakecompose.FakeScope\nfun FakeScope.f() { FakeModifier.scoped| }",
         )
-        assertTrue(item(items, "scopedPad").additionalEdits.isEmpty(), "member extension must not auto-import")
+        assertTrue(item(inScope, "scopedPad").additionalEdits.isEmpty(), "member extension must not auto-import")
+        val outside = complete(srcDir, jars, "Use2.kt", "import dev.ide.fakecompose.FakeModifier\nfun f() { FakeModifier.| }")
+        assertTrue(outside.any { it.label.startsWith("fakePadding") }, "the receiver's own extensions are offered; got ${outside.map { it.label }}")
+        assertTrue(outside.none { it.label.startsWith("scopedPad") }, "a scope's member extension is not offered outside the scope")
     }
 
     @Test

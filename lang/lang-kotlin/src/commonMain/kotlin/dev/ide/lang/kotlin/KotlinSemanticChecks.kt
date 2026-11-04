@@ -2376,6 +2376,7 @@ internal class KotlinSemanticChecks(
     private fun assignmentTypeMismatch(expr: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
         if (expr.operationToken != KtTokens.EQ) return null
         val left = expr.left ?: return null
+        if (left is KtArrayAccessExpression) return indexedAssignmentMismatch(left, expr.right ?: return null, resolver)
         if (left !is KtNameReferenceExpression && left !is KtDotQualifiedExpression) return null
         val right = expr.right ?: return null
         val declared = assignmentTargetType(left, resolver) ?: return null
@@ -2384,6 +2385,36 @@ internal class KotlinSemanticChecks(
         if (!isMismatch(declared, actual)) return null
         val r = right.textRange
         return mismatchDiagnostic(r.startOffset, r.endOffset, actual, declared)
+    }
+
+    /**
+     * `a[i] = v` is `a.set(i, v)`: the value must fit the `set` operator's last parameter, with the operator's
+     * own type parameters bound from the indices (`prefs[COUNT] = "x"` where `set(key: Key<T>, value: T)` and
+     * `COUNT: Key<Int>`) and the receiver's from its type (`MutableMap<String, Int>`). Reported only when every
+     * `set` of that arity has a known value type and none accepts the value; an unknown receiver, an unbound
+     * type parameter or an untyped value backs off.
+     */
+    private fun indexedAssignmentMismatch(left: KtArrayAccessExpression, right: KtExpression, resolver: KotlinResolver): Diagnostic? {
+        val receiver = left.arrayExpression ?: return null
+        val recvType = resolver.inferType(receiver)?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) } ?: return null
+        if (recvType.isTypeParameter) return null
+        val indices = left.indexExpressions
+        val ctx = resolver.fileContext
+        val setters = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, "set")
+            .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size + 1 && (!it.isExtension || extensionInScope(it, ctx)) }
+        if (setters.isEmpty()) return null
+        val actual = resolver.inferType(right) ?: return null
+        var expected: KotlinType? = null
+        for (setter in setters) {
+            val bindings = resolver.bindingsFromArgExprs(setter, indices)
+            val valueType = service.substitute(setter.paramTypes.last() ?: return null, bindings) as? KotlinType ?: return null
+            if (valueType.isTypeParameter) return null
+            if (setter.typeParameters.any { resolver.mentionsTypeParam(valueType, it) }) return null
+            if (!isMismatch(valueType, actual)) return null
+            expected = expected ?: valueType
+        }
+        val r = right.textRange
+        return mismatchDiagnostic(r.startOffset, r.endOffset, actual, expected ?: return null)
     }
 
     /**

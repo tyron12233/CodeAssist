@@ -280,6 +280,25 @@ class KotlinIdiomResolutionTest {
             KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED, KotlinDiagnosticCodes.NOTHING_TO_OVERRIDE)
     }
 
+    /** `a[i] = v` is `a.set(i, v)`, so the value must fit the operator's value parameter, bound from the
+     *  receiver (`MutableMap<String, Int>`) and from the indices (DataStore's `prefs[intKey] = …`). */
+    @Test
+    fun anIndexedAssignmentOfTheWrongTypeIsReported() {
+        assertCodes("fun f() { val m = mutableMapOf<String, Int>(); m[\"a\"] = \"x\" }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        assertCodes("fun f() { val l = mutableListOf(1); l[0] = \"x\" }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        assertCodes("class Grid { operator fun set(i: Int, j: Int, v: String) {} }\nfun f(g: Grid) { g[1, 2] = 3 }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        val prefs = "class Key<T>(val n: String)\nclass Prefs { private val m = HashMap<String, Any?>()\n" +
+            "    operator fun <T> set(k: Key<T>, v: T) { m[k.n] = v }\n    @Suppress(\"UNCHECKED_CAST\") operator fun <T> get(k: Key<T>): T? = m[k.n] as T? }\n" +
+            "val COUNT = Key<Int>(\"c\")\n"
+        assertCodes(prefs + "fun f(p: Prefs) { p[COUNT] = \"x\" }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean(prefs + "fun f(p: Prefs): Int { p[COUNT] = (p[COUNT] ?: 0) + 1; return p[COUNT]!! }")
+        clean(
+            "fun f() { val m = mutableMapOf<String, Any?>(); m[\"a\"] = null; m[\"b\"] = 3; val l = mutableListOf(1L); l[0] = 2\n" +
+                "    val a = arrayOf(\"x\"); a[0] = \"y\"; val ia = IntArray(2); ia[1] = 3; val n = mutableListOf<Number>(1); n[0] = 2.5\n" +
+                "    val sb = StringBuilder(\"ab\"); sb[0] = 'c' }"
+        )
+    }
+
     private fun cleanAcrossFiles(others: Map<String, String>, code: String) {
         val errors = runBlocking {
             val src = tempProject(others + ("Use.kt" to code))
