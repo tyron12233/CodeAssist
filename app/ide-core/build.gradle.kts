@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":lang-jdt"))
     implementation(project(":lang-java")) // IntelliJ-PSI Java backend (native resolution/inference); JDT is still the .java default
     implementation(project(":lang-xml")) // XML language backend (Android layouts/values/manifest)
+    implementation(project(":lsp-client")) // plugins' Language Server Protocol servers, as the IDE's own language features
     implementation(project(":lang-kotlin")) // editor-only Kotlin language backend (PSI parse + own completion)
     implementation(project(":lang-ksp")) // KSP2 source generation: KspSourceGenerator + bundled thin runner/processors (Room)
     // The plugin-facing interpreter (docs/plugin-interpreter.md): `api` on interp-api because the published

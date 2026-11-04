@@ -29,6 +29,7 @@ import dev.ide.ui.generated.resources.plugin_consent_cap_fs_read
 import dev.ide.ui.generated.resources.plugin_consent_cap_fs_write
 import dev.ide.ui.generated.resources.plugin_consent_cap_interp_run
 import dev.ide.ui.generated.resources.plugin_consent_cap_lang_backend
+import dev.ide.ui.generated.resources.plugin_consent_cap_lang_server
 import dev.ide.ui.generated.resources.plugin_consent_cap_model_facet
 import dev.ide.ui.generated.resources.plugin_consent_cap_model_module_type
 import dev.ide.ui.generated.resources.plugin_consent_cap_net
@@ -205,6 +206,7 @@ internal fun capabilityDescription(capability: String): StringResource? = when (
     "ui.colorAttribute" -> Res.string.plugin_consent_cap_ui_color_attribute
     "ui.newFileTemplate" -> Res.string.plugin_consent_cap_ui_new_file_template
     "lang.backend" -> Res.string.plugin_consent_cap_lang_backend
+    "lang.server" -> Res.string.plugin_consent_cap_lang_server
     "model.moduleType" -> Res.string.plugin_consent_cap_model_module_type
     "model.facet" -> Res.string.plugin_consent_cap_model_facet
     // Phrased as what it does to the user's own code, since that is the part worth deciding about.

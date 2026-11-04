@@ -350,8 +350,23 @@ const val PLUGIN_API_VERSION: Int = 4
  * property rather than a constructor parameter, so `RunAction`'s published constructor is unchanged;
  * [PLUGIN_API_VERSION] stays at `4`, and on a `3.1.0` host the setter throws a `NoSuchMethodError` a plugin
  * can catch.
+ *
+ * `3.3.0` lets a plugin teach the IDE a language through a Language Server Protocol server, and opens the
+ * editor features that were Java- and Kotlin-only to every plugin language:
+ * - `lsp-api` (new coordinate): `dev.ide.lsp.LanguageServerDefinition` on `LANGUAGE_SERVER_EP`
+ *   (`platform.languageServer`), `LanguageServerConnection` (with a `process` factory) and
+ *   `LanguageServerContext`. The host's client turns a definition into diagnostics, completion, code actions,
+ *   navigation, usages, rename, semantic colours, folding, formatting, signature help, inlay hints, hover and
+ *   the structure view. Capability [PluginCapabilities.LANG_SERVER].
+ * - `analysis-api`: `NavigationProvider` on `NAVIGATION_PROVIDER_EP` (Go to Implementation / Type
+ *   Declaration), `ReferenceProvider` on `REFERENCE_PROVIDER_EP` (Find Usages, Highlight Usages) and
+ *   `RenameProvider` on `RENAME_PROVIDER_EP`, with `NavigationKind`, `SymbolReference`, `RenameTarget` and
+ *   `RenameResult`. Find Usages and Rename were hardwired to the Java and Kotlin backends.
+ * - `model-api`: `DocFormat.MARKDOWN`, for a hover's Markdown.
+ * The editor's folding pass now runs for every file, as the semantic pass already did. Additive, so
+ * [PLUGIN_API_VERSION] stays at `4`.
  */
-const val PLUGIN_SPI_VERSION: String = "3.2.0"
+const val PLUGIN_SPI_VERSION: String = "3.3.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

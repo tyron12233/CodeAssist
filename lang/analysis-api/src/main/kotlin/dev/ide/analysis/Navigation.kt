@@ -37,3 +37,31 @@ interface DeclarationProvider {
 
 /** Plugin-contributed go-to-declaration targets; see [DeclarationProvider]. Since SPI 3.1.0. */
 val DECLARATION_PROVIDER_EP = ExtensionPoint<DeclarationProvider>("platform.declarationProvider")
+
+/** The go-to kinds a [NavigationProvider] can answer beyond declaration. Since SPI 3.3.0. */
+enum class NavigationKind {
+    /** Go to Implementation: the bodies of an interface/abstract member, or the subtypes of a type. */
+    IMPLEMENTATION,
+
+    /** Go to Type Declaration: the declaration of the type of the expression under the caret. */
+    TYPE_DECLARATION,
+}
+
+/**
+ * Go to Implementation and Go to Type Declaration for a plugin's language: the counterpart of
+ * [DeclarationProvider] for the other two go-to kinds the editor offers. Asked for a file in one of
+ * [languages] (empty means every language) when the built-in navigation has nothing; return an empty list
+ * for a [kind] or a position that is not yours.
+ *
+ * Registered on [NAVIGATION_PROVIDER_EP]. Since SPI 3.3.0.
+ */
+interface NavigationProvider {
+    val id: String
+
+    val languages: Set<LanguageId> get() = emptySet()
+
+    suspend fun targets(target: AnalysisTarget, offset: Int, kind: NavigationKind): List<NavigationTarget>
+}
+
+/** Plugin-contributed implementation and type-declaration targets; see [NavigationProvider]. Since SPI 3.3.0. */
+val NAVIGATION_PROVIDER_EP = ExtensionPoint<NavigationProvider>("platform.navigationProvider")

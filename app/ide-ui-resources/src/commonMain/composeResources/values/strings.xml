@@ -2514,6 +2514,7 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="plugin_consent_cap_ui_color_attribute">Add entries to your editor color scheme, and change what the built-in ones look like</string>
     <string name="plugin_consent_cap_ui_new_file_template">Add kinds of file to the New menu</string>
     <string name="plugin_consent_cap_lang_backend">Teach the editor a language: parsing, completion and errors</string>
+    <string name="plugin_consent_cap_lang_server">Run a language server: a separate program that checks, completes and navigates a language</string>
     <string name="plugin_consent_cap_model_module_type">Add a kind of module, and templates that create one</string>
     <string name="plugin_consent_cap_model_facet">Keep configuration of its own in your modules</string>
     <string name="plugin_consent_cap_interp_run">Run your project's code inside the IDE, to preview or run it</string>

@@ -682,12 +682,10 @@ private fun EditorDaemonEffect(
             // and a plugin's language (the NDK plugin's C/C++), which this gate used to shut out by extension. A
             // backend with no highlighter answers empty at once, so the pass costs nothing for plain text.
             DaemonPass.SEMANTIC -> true
-            // Folding stays Java/Kotlin; @Preview markers are Kotlin-only; diagnostics + inlay apply to every
-            // backend (they no-op for languages that don't provide them).
-            DaemonPass.FOLDS ->
-                active.path.endsWith(".java") || active.path.endsWith(".kt") || active.path.endsWith(
-                    ".kts"
-                )
+            // Folding likewise: XML and a plugin's language (a language server's folding ranges) have folds of
+            // their own, and a backend without a folding service answers empty at once. @Preview markers are
+            // Kotlin-only; diagnostics + inlay apply to every backend (they no-op where not provided).
+            DaemonPass.FOLDS -> true
 
             DaemonPass.PREVIEWS -> active.path.endsWith(".kt") || active.path.endsWith(".kts")
             else -> true

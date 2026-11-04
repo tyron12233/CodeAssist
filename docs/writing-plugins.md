@@ -897,6 +897,98 @@ the built-in navigation found nothing, so a plugin cannot shadow a declaration a
 menu lists both. For a plugin that must also run on an older IDE, register it from a class of its own after
 checking the host has SPI 3.1.0, so the older host never loads a type it does not have.
 
+### Teach the IDE a language through a language server
+
+If a Language Server Protocol server exists for your language (the Dart analysis server, gopls,
+rust-analyzer, clangd, pyright), you do not have to write a backend. Since SPI 3.3.0 a plugin declares the
+server on `LANGUAGE_SERVER_EP` (in the `lsp-api` artifact) and the IDE's own LSP client does the rest:
+
+```kotlin
+class DartPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "dart-support", name = "Dart",
+        capabilities = listOf(PluginCapabilities.LANG_SERVER),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".dart"), LanguageId("dart")))
+        reg.register(LANGUAGE_SERVER_EP, object : LanguageServerDefinition {
+            override val id = "dart"
+            override val displayName = "Dart analysis server"
+            override val languages = setOf(LanguageId("dart"))
+
+            override fun start(context: LanguageServerContext): LanguageServerConnection? {
+                // On Android the executable must be in your APK's native library directory.
+                val dart = reg.nativeLibrary("libdart.so") ?: return null   // null: not available here
+                return LanguageServerConnection.process(listOf(dart.toString(), "language-server"), context.root)
+            }
+
+            // The workspace root, when it is not the project root: the nearest pubspec.yaml.
+            override fun rootFor(file: Path, context: LanguageServerContext): Path? =
+                generateSequence(file.parent) { it.parent }
+                    .takeWhile { it.startsWith(context.projectRoot) }
+                    .firstOrNull { Files.exists(it.resolve("pubspec.yaml")) }
+        })
+    }
+}
+```
+
+That is the whole language integration. The host starts the server the first time a `.dart` file of an open
+project is analysed (off the engine thread), keeps the server's copy of every open buffer in sync, and turns
+each capability the server advertises into the editor feature that matches it:
+
+| The server's answer | What the editor shows |
+| --- | --- |
+| `publishDiagnostics` or `textDocument/diagnostic` | Squiggles, gutter marks and inline error chips |
+| `codeAction` (with `codeAction/resolve` and `workspace/executeCommand`) | Quick fixes and refactorings at the caret; the `workspace/applyEdit` a command sends back becomes the action's edit, applied like any quick fix |
+| `completion` | Completion, with snippets (`$1`, `${1:name}`) and auto-import edits |
+| `signatureHelp`, `hover`, `inlayHint` | Parameter info, Quick Documentation (Markdown), inlay hints |
+| `definition`, `implementation`, `typeDefinition` | Go to Declaration, Implementation and Type Declaration |
+| `references`, `documentHighlight`, `prepareRename` + `rename` | Find Usages, highlight usages at the caret, Rename across the project |
+| `semanticTokens/full`, `foldingRange`, `documentSymbol`, `formatting` | Semantic colouring, folding, the structure view and breadcrumbs, Reformat Code (and Optimize Imports through `source.organizeImports`) |
+
+Three things are still yours to register, because the protocol does not cover them: the file-type mapping, the
+editor's **lexical** colouring (`ui.editorLanguage`, which shows before the server has answered and wherever
+it is unavailable), and the project model if your language has one (a module type, an importer for
+`pubspec.yaml`, templates). The project model is not optional in one respect: the editor analyses a file only
+when it sits under one of a module's source roots, so a Dart plugin's module type (or importer) has to make
+`lib/`, `bin/` and `test/` source roots, or its files open as plain text whatever the server could say.
+
+How it behaves, so you can plan around it:
+
+- **One server per (definition, workspace root).** `rootFor` decides the root; files that answer the same
+  root share a server. Servers shut down (`shutdown` + `exit`) when their project closes.
+- **Every request has a budget** (1.5 s for the first handshake wait, 2.5 s for diagnostics, 3 s for
+  completion, longer for references and rename) and the engine's cancel token is polled while it waits, so a
+  slow server degrades to "no answer" rather than freezing the editor. A file analysed while the server was
+  still starting is analysed again once it is ready.
+- **A crash is restarted** on the next request, at most three times; after that the user is told once and
+  the server stays down until the project is reopened. `start` returning null (no toolchain yet) is asked again
+  after 30 seconds.
+- **`initializationOptions` and `workspace/configuration`** are answered from `initializationOptions(context)`
+  and `configuration(section, context)`, as JSON text.
+- **A backend of your own wins.** If the plugin also registers a `LanguageBackend` for the language, the server
+  only serves what the engine asks separately (diagnostics, completion, code actions, navigation, usages,
+  rename), and your backend keeps the rest.
+
+On Android the usual rule for native programs applies: an app may only execute files inside an installed
+package's native library directory, so ship the server's executable in `jniLibs` with
+`packaging { jniLibs.useLegacyPackaging = true }` and find it with `PluginRegistration.nativeLibrary`.
+
+### Find Usages, Rename and Go to Implementation for your language
+
+The language-server client is built on three extension points any plugin can use directly, for a language
+whose intelligence is not a server (since SPI 3.3.0, in `analysis-api`):
+
+- `REFERENCE_PROVIDER_EP` (`ReferenceProvider`): Find Usages and Find References, plus highlight usages at
+  the caret (`highlights`; null keeps the editor's whole-word scan).
+- `RENAME_PROVIDER_EP` (`RenameProvider`): `prepare` names what is under the caret, `rename` returns a
+  `RenameResult` holding a `WorkspaceEdit` the host applies to disk and every open editor, or a message.
+- `NAVIGATION_PROVIDER_EP` (`NavigationProvider`): Go to Implementation and Go to Type Declaration.
+
+They are asked only for files of the languages they name, and never for `.java` or Kotlin files, which the
+built-in backends answer.
+
 ### Put composables and pixels in the editor
 
 The decoration tier above covers everything expressible as data. Two things are not, and each has a UI-facet
@@ -2867,6 +2959,11 @@ Every published extension point, its id, the type it carries, and what contribut
 | `dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP` | `platform.diagnosticProvider` | `DiagnosticProvider` | A diagnostic source |
 | `dev.ide.analysis.QUICK_FIX_PROVIDER_EP` | `platform.quickFixProvider` | `QuickFixProvider` | A fix for a diagnostic |
 | `dev.ide.analysis.ACTION_PROVIDER_EP` | `platform.actionProvider` | `ActionProvider` | A caret intention |
+| `dev.ide.analysis.DECLARATION_PROVIDER_EP` | `platform.declarationProvider` | `DeclarationProvider` | Go to Declaration targets the backends do not know |
+| `dev.ide.analysis.NAVIGATION_PROVIDER_EP` | `platform.navigationProvider` | `NavigationProvider` | Go to Implementation / Type Declaration for a language |
+| `dev.ide.analysis.REFERENCE_PROVIDER_EP` | `platform.referenceProvider` | `ReferenceProvider` | Find Usages and highlight usages for a language |
+| `dev.ide.analysis.RENAME_PROVIDER_EP` | `platform.renameProvider` | `RenameProvider` | Rename for a language |
+| `dev.ide.lsp.LANGUAGE_SERVER_EP` | `platform.languageServer` | `LanguageServerDefinition` | A whole language, served by a Language Server Protocol server |
 | `dev.ide.plugin.editor.EDITOR_DECORATION_EP` | `platform.editorDecoration` | `EditorDecorationProvider` | Tinted ranges, gutter glyphs and inlays on any file |
 | `dev.ide.plugin.keymap.KEY_BINDING_EP` | `platform.keyBinding` | `KeyBinding` | A keyboard shortcut for an action |
 | `dev.ide.block.BLOCK_MAPPING_EP` | `platform.blockMapping` | `BlockMapping` | Block-editor projection for a language |

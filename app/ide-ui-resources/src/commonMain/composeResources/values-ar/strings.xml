@@ -2516,6 +2516,7 @@
     <string name="plugin_consent_cap_ui_color_attribute">إضافة إدخالات إلى النظام اللوني للمحرر، وتغيير مظهر الإدخالات المدمجة</string>
     <string name="plugin_consent_cap_ui_new_file_template">إضافة أنواع ملفات إلى قائمة «جديد»</string>
     <string name="plugin_consent_cap_lang_backend">تعليم المحرر لغةً: التحليل والإكمال والأخطاء</string>
+    <string name="plugin_consent_cap_lang_server">تشغيل خادم لغة: برنامج منفصل يفحص لغةً ويكملها ويتنقل فيها</string>
     <string name="plugin_consent_cap_model_module_type">إضافة نوع من الوحدات، وقوالب لإنشائه</string>
     <string name="plugin_consent_cap_model_facet">حفظ إعدادات خاصة بها في وحداتك</string>
     <string name="plugin_consent_cap_interp_run">تشغيل كود مشروعك داخل بيئة التطوير لمعاينته أو تشغيله</string>

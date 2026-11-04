@@ -151,6 +151,7 @@ class PluginManifestCompletion(
                 PluginCapabilities.BUILD_SOURCE_GENERATOR -> "generates source at build time"
                 PluginCapabilities.BUILD_RUN_TASK -> "contributes a Run-picker row"
                 PluginCapabilities.LANG_BACKEND -> "teaches the editor a language"
+                PluginCapabilities.LANG_SERVER -> "runs a language server for a language"
                 PluginCapabilities.MODEL_MODULE_TYPE -> "contributes a kind of module"
                 PluginCapabilities.MODEL_FACET -> "attaches its own module configuration"
                 PluginCapabilities.FS_READ -> "reads project files"

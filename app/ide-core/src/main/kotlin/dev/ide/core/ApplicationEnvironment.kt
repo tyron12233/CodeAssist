@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.lsp.LanguageServerBridge
 import dev.ide.core.notify.UserMessageCenter
 import dev.ide.core.plugins.BuiltInPlugins
 import dev.ide.core.plugins.ExternalUiFacets
@@ -112,6 +113,13 @@ class ApplicationEnvironment(
      *  template registries). The android built-in plugin registers the AndroidFacet codec through it; every
      *  opened project reuses it to decode `module.toml`. */
     val codecs: FacetCodecRegistry = FacetCodecRegistry(platform.extensions)
+
+    /**
+     * The plugins' Language Server Protocol servers ([dev.ide.lsp.LANGUAGE_SERVER_EP]) as the IDE's own language
+     * features, and the sessions running them. Registered at the end of the plugin load below, so every
+     * definition and every competing language backend is known by then.
+     */
+    val languageServers: LanguageServerBridge = LanguageServerBridge(this)
 
     /** The currently-open project's engine, or null. Set by the backend on project swap; read by app-level
      *  extension callbacks (e.g. command actions) that fire outside any project's service scope. */
@@ -262,6 +270,8 @@ class ApplicationEnvironment(
         }
         enabledUiPlugins = enabledBuiltIns.mapNotNull { it.ui } + externalUi
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
+        // After every plugin: a definition's adapters must know which languages already have a backend.
+        runCatching { languageServers.registerAll() }.onFailure { log.warn("could not register the language servers", it) }
     }
 
     /** One discovery pass: the plugins the host can go on to load, and the ones it cannot. */
@@ -315,6 +325,7 @@ class ApplicationEnvironment(
     }
 
     override fun close() {
+        runCatching { languageServers.close() }
         runCatching { pluginManager.unloadAll() }
         runCatching { container.dispose() }
         runCatching { platform.dispose() }

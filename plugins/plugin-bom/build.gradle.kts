@@ -63,6 +63,7 @@ dependencies {
         api(project(":vcs-api"))
         api(project(":agent-api"))
         api(project(":block-api"))
+        api(project(":lsp-api"))
 
         // Coroutines, which `:agent-api` exposes and which a plugin's own suspend code binds against. Like
         // Compose, the version has to be the one the IDE bundles rather than whatever a plugin resolves on

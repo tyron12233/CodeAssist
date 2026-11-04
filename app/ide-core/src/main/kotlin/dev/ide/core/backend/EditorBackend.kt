@@ -75,6 +75,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -90,6 +95,9 @@ import dev.ide.ui.backend.UiActionEdits
  */
 /** Quiet period after a per-file pass before the project-wide sweep runs, and its preemption retry policy. */
 private const val PROJECT_ANALYSIS_DELAY_MS = 800L
+
+/** How often the language-server invalidation flow looks for the first engine, before a project is open. */
+private const val LANGUAGE_SERVER_POLL_MS = 500L
 private const val PROJECT_ANALYSIS_RETRY_MS = 150L
 private const val PROJECT_ANALYSIS_MAX_RETRIES = 8
 
@@ -461,7 +469,25 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     private val analyzedPaths = ConcurrentHashMap<String, String>()
 
     private val invalidated = MutableSharedFlow<Set<String>>(extraBufferCapacity = 8)
-    override val diagnosticsInvalidated: Flow<Set<String>> get() = invalidated
+    override val diagnosticsInvalidated: Flow<Set<String>> get() = merge(invalidated, languageServerInvalidations)
+
+    /**
+     * Files a language server re-published diagnostics for on its own (it finished its first analysis, a
+     * dependency changed, it restarted), as the editor paths they were analyzed under. The flow is the
+     * application's, the same for every engine, so the first engine seen supplies it for good.
+     */
+    private val languageServerInvalidations: Flow<Set<String>> = flow {
+        var services = ctx.servicesOrNull
+        while (services == null) {
+            delay(LANGUAGE_SERVER_POLL_MS)
+            services = ctx.servicesOrNull
+        }
+        emitAll(
+            services.externalDiagnosticsChanged
+                .map { paths -> paths.mapNotNullTo(HashSet()) { analyzedPaths[engineKey(it.toString())] } }
+                .filter { it.isNotEmpty() },
+        )
+    }
 
     /**
      * Queue the project-tier analyzers to run once the editor has been quiet for [PROJECT_ANALYSIS_DELAY_MS].

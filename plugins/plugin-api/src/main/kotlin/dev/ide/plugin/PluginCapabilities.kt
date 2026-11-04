@@ -60,6 +60,12 @@ object PluginCapabilities {
     const val LANG_BACKEND = "lang.backend"
 
     /**
+     * Runs a Language Server Protocol server (`platform.languageServer`): a separate program the IDE starts
+     * and talks to for a language's errors, completion, navigation and rename. Engine facet. Since SPI 3.3.0.
+     */
+    const val LANG_SERVER = "lang.server"
+
+    /**
      * Contributes a kind of module: a `ModuleType`, its default source-set layout, and the project templates
      * that scaffold one. This is what a plugin for a language whose projects are not laid out like a JVM
      * module declares. Engine facet.
@@ -148,7 +154,7 @@ object PluginCapabilities {
         UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY, UI_EDITOR_PREVIEW, UI_EDITOR_DECORATION,
         UI_EDITOR_LAYER, UI_EDITOR_PAINTER, UI_EDITOR_LANGUAGE, UI_COLOR_ATTRIBUTE, UI_NEW_FILE_TEMPLATE,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
-        LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
+        LANG_BACKEND, LANG_SERVER, MODEL_MODULE_TYPE, MODEL_FACET,
         INTERP_RUN,
         FS_READ, FS_WRITE, NET,
     )
@@ -169,7 +175,7 @@ object PluginCapabilities {
     val NEEDS_ENGINE_FACET: Set<String> = linkedSetOf(
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION, UI_EDITOR_DECORATION, UI_KEY_BINDING,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
-        LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
+        LANG_BACKEND, LANG_SERVER, MODEL_MODULE_TYPE, MODEL_FACET,
         // The interpreter is resolved through `PluginRegistration.appServices`, which only an engine facet
         // has. A UI facet reaches it the way it reaches everything else: through its own engine facet.
         INTERP_RUN,

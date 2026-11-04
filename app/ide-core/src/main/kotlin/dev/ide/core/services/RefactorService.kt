@@ -3,6 +3,7 @@ package dev.ide.core.services
 import dev.ide.core.EngineContext
 import dev.ide.core.RenameInfo
 import dev.ide.core.RenameOutcome
+import dev.ide.core.runSync
 import dev.ide.lang.LanguageId
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentEdit
@@ -126,6 +127,7 @@ internal class RefactorService(
      */
     fun usages(file: Path, text: String, offset: Int): List<Pair<Path, TextRange>> {
         if (ctx.analysisDisabled(file)) return emptyList()
+        pluginReferences(file, text, offset, includeDeclaration = false)?.let { return it }
         if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.let(::kotlinTargetUsages).orEmpty()
         val refs = findReferences(file, text, offset)
         if (refs.isEmpty()) return refs
@@ -141,6 +143,13 @@ internal class RefactorService(
      */
     fun usageHighlights(file: Path, text: String, offset: Int): List<dev.ide.lang.highlight.UsageHighlight>? {
         if (ctx.analysisDisabled(file)) return null
+        val highlighters = pluginProviders(file, dev.ide.analysis.REFERENCE_PROVIDER_EP) { it.languages }
+        if (highlighters.isNotEmpty()) {
+            val target = ctx.pluginTarget(file, text) ?: return null
+            return highlighters.firstNotNullOfOrNull { p ->
+                runCatching { runSync { p.highlights(target, offset) } }.getOrNull()
+            }
+        }
         if (isKotlin(file)) return kotlin.usageHighlights(file, text, offset)
         if (!file.toString().endsWith(".java")) return null
         val module = ctx.moduleForFile(file) ?: return null
@@ -212,6 +221,7 @@ internal class RefactorService(
      */
     fun findReferences(file: Path, text: String, offset: Int): List<Pair<Path, TextRange>> {
         if (ctx.analysisDisabled(file)) return emptyList()
+        pluginReferences(file, text, offset, includeDeclaration = true)?.let { return it }
         if (isKotlin(file)) return kotlin.usageTarget(file, text, offset)?.let(::kotlinTargetUsages).orEmpty()
         if (!file.toString().endsWith(".java")) return emptyList()
         val module = ctx.moduleForFile(file) ?: return emptyList()
@@ -226,6 +236,12 @@ internal class RefactorService(
     /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable. */
     fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
         if (ctx.analysisDisabled(file)) return null
+        val renamers = pluginProviders(file, dev.ide.analysis.RENAME_PROVIDER_EP) { it.languages }
+        if (renamers.isNotEmpty()) {
+            val target = ctx.pluginTarget(file, text) ?: return null
+            return renamers.firstNotNullOfOrNull { p -> runCatching { runSync { p.prepare(target, offset) } }.getOrNull() }
+                ?.let { RenameInfo(it.name, it.kind) }
+        }
         if (isKotlin(file)) return kotlin.usageTarget(file, text, offset, forRename = true)?.takeIf { it.renameable }?.let { RenameInfo(it.name, it.kind) }
         if (!file.toString().endsWith(".java")) return null
         val module = ctx.moduleForFile(file) ?: return null
@@ -245,6 +261,8 @@ internal class RefactorService(
     suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome {
         val name = newName.trim()
         if (ctx.analysisDisabled(file)) return RenameOutcome(false, "Code analysis is unavailable for this file.")
+        val renamers = pluginProviders(file, dev.ide.analysis.RENAME_PROVIDER_EP) { it.languages }
+        if (renamers.isNotEmpty()) return renameThroughPlugin(renamers, file, text, offset, name)
         return if (isKotlin(file)) renameKotlin(file, text, offset, name) else renameJava(file, text, offset, name, newName)
     }
 
@@ -349,6 +367,96 @@ internal class RefactorService(
         ctx.events.filesMutated(changed, newPath?.let { renameFile!! to it })
         val message = "Renamed '$oldName' to '$newName'" + (note?.let { ". $it" } ?: "")
         return RenameOutcome(true, message, occurrences, changed.size, newPath?.toString())
+    }
+
+    /**
+     * The plugin providers on [ep] for [file]'s language. Java and Kotlin are the built-in backends' own, so a
+     * provider never answers for them, even one that claims every language.
+     */
+    private fun <T : Any> pluginProviders(
+        file: Path, ep: dev.ide.platform.ExtensionPoint<T>, languages: (T) -> Set<LanguageId>,
+    ): List<T> {
+        val name = file.toString()
+        if (name.endsWith(".java") || isKotlin(file)) return emptyList()
+        val language = ctx.languageFor(file)
+        return ctx.platform.extensions.extensions(ep).filter { languages(it).isEmpty() || language in languages(it) }
+    }
+
+    /** Usages from the [dev.ide.analysis.REFERENCE_PROVIDER_EP] plugins, or null when none serves [file]. */
+    private fun pluginReferences(file: Path, text: String, offset: Int, includeDeclaration: Boolean): List<Pair<Path, TextRange>>? {
+        val providers = pluginProviders(file, dev.ide.analysis.REFERENCE_PROVIDER_EP) { it.languages }
+        if (providers.isEmpty()) return null
+        val target = ctx.pluginTarget(file, text) ?: return emptyList()
+        return providers.flatMap { p ->
+            runCatching { runSync { p.references(target, offset, includeDeclaration) } }.getOrDefault(emptyList())
+        }.filter { includeDeclaration || !it.isDeclaration }
+            .map { Paths.get(it.path).toAbsolutePath().normalize() to it.range }
+            .distinct()
+    }
+
+    private suspend fun renameThroughPlugin(
+        providers: List<dev.ide.analysis.RenameProvider>, file: Path, text: String, offset: Int, name: String,
+    ): RenameOutcome {
+        if (name.isEmpty()) return RenameOutcome(false, "Enter a new name.")
+        val target = ctx.pluginTarget(file, text) ?: return RenameOutcome(false, "This file is not in a source module.")
+        val oldName = identifierAround(text, offset)
+        if (name == oldName) return RenameOutcome(false, "The new name is the same as the current one.")
+        var rejection: String? = null
+        for (provider in providers) {
+            val result = runCatching { provider.rename(target, offset, name) }.getOrElse {
+                return RenameOutcome(false, "Rename failed: ${it.message ?: it}")
+            }
+            val edit = result.edit
+            if (edit == null || edit.isEmpty) { rejection = rejection ?: result.error; continue }
+            return applyWorkspaceEdit(edit, file.toAbsolutePath().normalize() to text, oldName, name)
+        }
+        return RenameOutcome(false, rejection ?: "Place the caret on a symbol to rename.")
+    }
+
+    /**
+     * Apply a plugin's [edit] to disk and the live overlay, file by file, as one batched mutation: what a
+     * rename computed by a language server becomes. [focal] is the file the rename started in and the
+     * editor's text of it, which is what its offsets index. A file the edit creates is written whole.
+     */
+    private fun applyWorkspaceEdit(
+        edit: dev.ide.analysis.WorkspaceEdit, focal: Pair<Path, String>, oldName: String?, newName: String,
+    ): RenameOutcome {
+        var occurrences = 0
+        val changed = ArrayList<Path>()
+        for ((file, edits) in edit.edits) {
+            if (edits.isEmpty()) continue
+            val path = runCatching { Paths.get(file.path).toAbsolutePath().normalize() }.getOrNull() ?: continue
+            val current = when {
+                path == focal.first -> focal.second
+                !file.exists && !Files.exists(path) -> ""
+                else -> textOf(path) ?: continue
+            }
+            val sb = StringBuilder(current)
+            for (e in edits.sortedByDescending { it.offset }) {
+                val start = e.offset.coerceIn(0, sb.length)
+                val end = (e.offset + e.oldLength).coerceIn(start, sb.length)
+                sb.replace(start, end, e.newText.toString())
+            }
+            val updated = sb.toString()
+            ctx.updateDocument(path, updated)
+            runCatching { path.parent?.let { Files.createDirectories(it) }; path.writeText(updated) }
+            occurrences += edits.size
+            changed.add(path)
+        }
+        if (changed.isEmpty()) return RenameOutcome(false, "Nothing to rename here.")
+        ctx.events.filesMutated(changed, null)
+        val what = oldName?.let { "'$it' to '$newName'" } ?: "to '$newName'"
+        return RenameOutcome(true, "Renamed $what", occurrences, changed.size)
+    }
+
+    /** The identifier around [offset] in [text], for a rename's message. */
+    private fun identifierAround(text: String, offset: Int): String? {
+        fun part(c: Char) = c.isLetterOrDigit() || c == '_' || c == '$'
+        var start = offset.coerceIn(0, text.length)
+        var end = start
+        while (start > 0 && part(text[start - 1])) start--
+        while (end < text.length && part(text[end])) end++
+        return if (end > start) text.substring(start, end) else null
     }
 
     private fun textOf(path: Path): String? = ctx.overlayText(path) ?: runCatching { path.readText() }.getOrNull()
