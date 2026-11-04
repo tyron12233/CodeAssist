@@ -363,6 +363,9 @@ const val PLUGIN_API_VERSION: Int = 4
  *   `RenameProvider` on `RENAME_PROVIDER_EP`, with `NavigationKind`, `SymbolReference`, `RenameTarget` and
  *   `RenameResult`. Find Usages and Rename were hardwired to the Java and Kotlin backends.
  * - `model-api`: `DocFormat.MARKDOWN`, for a hover's Markdown.
+ * - `build-api`: `TestProvider` on `TEST_PROVIDER_EP` (`platform.testProvider`), `TestDeclaration` and
+ *   `TestReport`: a plugin language's tests get gutter run marks, a Run-picker row and the Tests tab (with
+ *   re-run), which were the JVM's alone. `build-api` now depends on `language-api` for `LanguageId`.
  * The editor's folding pass now runs for every file, as the semantic pass already did. Additive, so
  * [PLUGIN_API_VERSION] stays at `4`.
  */

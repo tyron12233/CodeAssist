@@ -127,17 +127,40 @@ internal object LspConvert {
      * the server's name, so a plugin can give it a colour of its own. Strings, numbers, comments and operators
      * are left to the lexer, which already colours them before the server answers.
      */
-    fun semanticTokens(data: JsonArray, types: List<String>, modifiers: List<String>, lines: LineIndex): List<SemanticToken> {
+    fun semanticTokens(data: JsonArray, types: List<String>, modifiers: List<String>, lines: LineIndex): List<SemanticToken> =
+        semanticTokens(ints(data), types, modifiers, lines)
+
+    fun ints(array: JsonArray): IntArray = IntArray(array.size) { (array[it] as? JsonPrimitive)?.intOrNull ?: 0 }
+
+    /**
+     * A `SemanticTokensDelta`'s edits applied to [previous]: each replaces `deleteCount` integers at `start`
+     * with its `data`. Null when an edit falls outside the array, which means the delta was not computed against
+     * what this client holds.
+     */
+    fun applyTokenEdits(previous: IntArray, edits: JsonArray): IntArray? {
+        var out = previous.toMutableList()
+        val sorted = edits.mapNotNull { it.obj() }.sortedByDescending { it.int("start") ?: 0 }
+        for (e in sorted) {
+            val start = e.int("start") ?: return null
+            val delete = e.int("deleteCount") ?: 0
+            if (start < 0 || delete < 0 || start + delete > out.size) return null
+            val insert = e.arr("data")?.let(::ints)?.toList().orEmpty()
+            out = (out.subList(0, start) + insert + out.subList(start + delete, out.size)).toMutableList()
+        }
+        return out.toIntArray()
+    }
+
+    fun semanticTokens(data: IntArray, types: List<String>, modifiers: List<String>, lines: LineIndex): List<SemanticToken> {
         val out = ArrayList<SemanticToken>(data.size / 5)
         var line = 0
         var character = 0
         var i = 0
         while (i + 4 < data.size) {
-            val deltaLine = (data[i] as? JsonPrimitive)?.intOrNull ?: 0
-            val deltaStart = (data[i + 1] as? JsonPrimitive)?.intOrNull ?: 0
-            val length = (data[i + 2] as? JsonPrimitive)?.intOrNull ?: 0
-            val type = (data[i + 3] as? JsonPrimitive)?.intOrNull ?: -1
-            val bits = (data[i + 4] as? JsonPrimitive)?.intOrNull ?: 0
+            val deltaLine = data[i]
+            val deltaStart = data[i + 1]
+            val length = data[i + 2]
+            val type = data[i + 3]
+            val bits = data[i + 4]
             i += 5
             if (deltaLine > 0) { line += deltaLine; character = deltaStart } else character += deltaStart
             val kind = highlightKind(types.getOrNull(type) ?: continue) ?: continue

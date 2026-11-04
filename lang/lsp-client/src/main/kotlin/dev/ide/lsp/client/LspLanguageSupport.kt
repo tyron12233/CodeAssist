@@ -233,6 +233,10 @@ class LspLanguageSupport(
         override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? = hover(file, text, offset)
     }
 
+    /** The last full token array per document, with the session and result id a delta request builds on. */
+    private class TokenCache(val session: LspSession, val resultId: String, val data: IntArray)
+    private val tokenCache = ConcurrentHashMap<String, TokenCache>()
+
     private fun semanticTokens(file: VirtualFile): List<SemanticToken> {
         val path = pathOf(file) ?: return emptyList()
         val text = buffers[file.path] ?: return emptyList()
@@ -242,11 +246,37 @@ class LspLanguageSupport(
         val legend = provider.obj("legend") ?: return emptyList()
         val types = legend.arr("tokenTypes")?.mapNotNull(LspConvert::string).orEmpty()
         val modifiers = legend.arr("tokenModifiers")?.mapNotNull(LspConvert::string).orEmpty()
+        val data = tokenData(session, doc, provider) ?: return emptyList()
+        return LspConvert.semanticTokens(data, types, modifiers, doc.lines)
+    }
+
+    /**
+     * The document's token array: from `full/delta` against the previous answer when the server offers deltas
+     * and there is one from this session, else from `full`. A delta that cannot be applied falls back to `full`.
+     */
+    private fun tokenData(session: LspSession, doc: LspSession.Document, provider: JsonObject): IntArray? {
+        val previous = tokenCache[doc.uri]?.takeIf { it.session === session }
+        val deltas = provider.obj("full")?.bool("delta") == true
+        if (deltas && previous != null) {
+            val result = session.request("textDocument/semanticTokens/full/delta", buildJsonObject {
+                put("textDocument", textDocument(doc.uri))
+                put("previousResultId", previous.resultId)
+            }, Budgets.SEMANTIC, cancel).obj()
+            val applied = result?.let { r ->
+                r.arr("data")?.let(LspConvert::ints) ?: r.arr("edits")?.let { LspConvert.applyTokenEdits(previous.data, it) }
+            }
+            if (applied != null) {
+                result.str("resultId")?.let { tokenCache[doc.uri] = TokenCache(session, it, applied) } ?: tokenCache.remove(doc.uri)
+                return applied
+            }
+        }
         val result = session.request(
             "textDocument/semanticTokens/full", buildJsonObject { put("textDocument", textDocument(doc.uri)) },
             Budgets.SEMANTIC, cancel,
-        ).obj() ?: return emptyList()
-        return LspConvert.semanticTokens(result.arr("data") ?: return emptyList(), types, modifiers, doc.lines)
+        ).obj() ?: return null
+        val data = LspConvert.ints(result.arr("data") ?: return null)
+        result.str("resultId")?.let { tokenCache[doc.uri] = TokenCache(session, it, data) } ?: tokenCache.remove(doc.uri)
+        return data
     }
 
     private fun folds(file: VirtualFile): List<FoldRegion> {

@@ -128,6 +128,14 @@ interface EditorService {
     val diagnosticsInvalidated: kotlinx.coroutines.flow.Flow<Set<String>>
         get() = kotlinx.coroutines.flow.emptyFlow()
 
+    /**
+     * Edits something outside the editor asked to make, by absolute path: a language server's
+     * `workspace/applyEdit` sent on its own. The editor applies each batch like a multi-file quick fix (an open
+     * file through its tab, so the edit is undoable). Empty on a backend with no such source.
+     */
+    val externalEdits: kotlinx.coroutines.flow.Flow<Map<String, List<UiTextEdit>>>
+        get() = kotlinx.coroutines.flow.emptyFlow()
+
     /** Inlay hints for `[startOffset, endOffset)`. May throw [AnalysisPreempted]. */
     suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
 
@@ -1837,7 +1845,49 @@ interface SettingsService {
     /** Restart the app to apply [pendingPluginChanges]. The caller saves anything unsaved first: on a host
      *  that really restarts, this does not return. */
     fun restartApplication() {}
+
+    /** Whether this host can run language servers the user configures (Settings > Language Servers). */
+    fun languageServersSupported(): Boolean = false
+
+    /** True where only executables inside an installed app may run (Android), which the screen explains. */
+    fun languageServerExecutablesRestricted(): Boolean = false
+
+    /** The language servers the user configured, in the order they were added. */
+    fun languageServers(): List<UiLanguageServer> = emptyList()
+
+    /** Ready-made entries for servers people commonly have installed (blank [UiLanguageServer.id]). */
+    fun languageServerPresets(): List<UiLanguageServer> = emptyList()
+
+    /**
+     * Add [server] (blank id) or replace the one with its id. Returns why it was refused, or null once saved.
+     * A server whose command changed is restarted; a new language applies to a project opened afterwards.
+     */
+    fun saveLanguageServer(server: UiLanguageServer): String? = "Language servers are not supported here."
+
+    fun deleteLanguageServer(id: String) {}
+
+    /** Whether [command]'s executable can be found, and a sentence saying where (or why not). */
+    fun checkLanguageServerCommand(command: String): UiCommandCheck = UiCommandCheck(false, "Not supported here.")
 }
+
+/**
+ * A language server the user configured: the [command] that starts it, the file [extensions] it serves
+ * (`.go`), and the protocol's [languageId]. [status] is how it is doing in the open project ("Running",
+ * "Not started", "Stopped: ..."), read when the list is.
+ */
+data class UiLanguageServer(
+    val id: String,
+    val name: String,
+    val command: String,
+    val extensions: List<String>,
+    val languageId: String,
+    val enabled: Boolean = true,
+    val initializationOptions: String = "",
+    val status: String = "",
+)
+
+/** The answer to [SettingsService.checkLanguageServerCommand]. */
+data class UiCommandCheck(val found: Boolean, val message: String)
 
 // ---------------------------------------------------------------------------
 // Editor customizations: the keyboard symbol bar (+ macros, recorded macros)

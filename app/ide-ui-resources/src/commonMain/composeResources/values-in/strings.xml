@@ -1313,4 +1313,27 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <plurals name="you_releases">
         <item quantity="other">%1$d rilis</item>
     </plurals>
+    <string name="settings_language_servers">Server Bahasa</string>
+    <string name="settings_language_servers_subtitle">Galat, pelengkapan, dan navigasi dari server yang sudah Anda pasang</string>
+    <string name="lsp_intro">Tambahkan server Language Server Protocol yang sudah Anda pasang. File dengan ekstensinya mendapatkan galat, pelengkapan, navigasi, ganti nama, dan pemformatan dari server itu. Bahasa baru berlaku pada proyek berikutnya yang Anda buka.</string>
+    <string name="lsp_android_note">Di Android, server harus berupa file eksekusi yang dibawa aplikasi terpasang, seperti plugin.</string>
+    <string name="lsp_unsupported">Server bahasa tidak tersedia di perangkat ini.</string>
+    <string name="lsp_empty">Belum ada server bahasa. Tambahkan satu, atau mulai dari server umum di bawah.</string>
+    <string name="lsp_add">Tambah</string>
+    <string name="lsp_presets">Server umum</string>
+    <string name="lsp_new_title">Server bahasa baru</string>
+    <string name="lsp_edit_title">Edit server bahasa</string>
+    <string name="lsp_field_name">Nama</string>
+    <string name="lsp_field_command">Perintah</string>
+    <string name="lsp_field_extensions">Ekstensi file</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Id bahasa</string>
+    <string name="lsp_field_options">Opsi inisialisasi (JSON, opsional)</string>
+    <string name="lsp_check">Periksa perintah</string>
+    <string name="lsp_save">Simpan</string>
+    <string name="lsp_cancel">Batal</string>
+    <string name="lsp_delete">Hapus</string>
+    <string name="lsp_status_running">Berjalan</string>
+    <string name="lsp_status_starting">Memulai</string>
+    <string name="lsp_status_not_started">Belum dimulai</string>
 </resources>

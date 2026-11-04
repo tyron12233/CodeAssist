@@ -278,6 +278,16 @@ class LspSession(
         if (state == State.READY) rpc?.notify(method, params)
     }
 
+    /**
+     * A `WorkspaceEdit` this server sent, as edits per file, each in the text the server's positions refer to:
+     * its copy of an open document, else the file on disk. A file the edit creates comes back as one insertion
+     * at offset 0 into a file that does not exist yet.
+     */
+    fun documentEdits(edit: JsonObject): Map<Path, List<dev.ide.lang.incremental.DocumentEdit>> {
+        val converted = LspConvert.workspaceEdit(edit, null) { p -> document(p)?.text ?: LspConvert.readText(p) }
+        return converted.edits.entries.associate { (file, edits) -> java.nio.file.Paths.get(file.path) to edits }
+    }
+
     /** Whether the server advertised [provider] (`hoverProvider`, `renameProvider`, ...). */
     fun supports(provider: String): Boolean = capabilities.capability(provider)
 
@@ -319,13 +329,30 @@ class LspSession(
             val existing = documents[uri]
             if (existing != null) {
                 if (existing.text == content) return existing
+                val previous = existing.text
+                val previousLines = existing.lines
                 existing.version++
                 existing.text = content
                 existing.sentAt = diagnosticsSequence.incrementAndGet()
-                if (syncKind() != SYNC_NONE) {
+                val kind = syncKind()
+                if (kind != SYNC_NONE) {
                     connection.notify("textDocument/didChange", buildJsonObject {
                         putJsonObject("textDocument") { put("uri", uri); put("version", existing.version) }
-                        putJsonArray("contentChanges") { addJsonObject { put("text", content) } }
+                        putJsonArray("contentChanges") {
+                            if (kind == SYNC_INCREMENTAL) {
+                                // Only the span that changed: a keystroke in a large file is a few bytes, not the file.
+                                val change = incrementalChange(previous, content)
+                                addJsonObject {
+                                    putJsonObject("range") {
+                                        put("start", previousLines.position(change.start))
+                                        put("end", previousLines.position(change.oldEnd))
+                                    }
+                                    put("text", change.text)
+                                }
+                            } else {
+                                addJsonObject { put("text", content) }
+                            }
+                        }
                     })
                 }
                 return existing
@@ -592,6 +619,30 @@ class LspSession(
         private val POLL_NANOS = TimeUnit.MILLISECONDS.toNanos(20)
         private const val SYNC_NONE = 0
         private const val SYNC_FULL = 1
+        private const val SYNC_INCREMENTAL = 2
+
+        /** The one replacement that turns [old] into [new]: `old[start, oldEnd)` becomes [Change.text]. */
+        internal class Change(val start: Int, val oldEnd: Int, val text: String)
+
+        /**
+         * The smallest single replacement from [old] to [new]: the common prefix and suffix are left alone. Its
+         * ends never split a surrogate pair or a `\r\n`, whose middle has no position a server agrees on.
+         */
+        internal fun incrementalChange(old: String, new: String): Change {
+            var start = 0
+            val shorter = minOf(old.length, new.length)
+            while (start < shorter && old[start] == new[start]) start++
+            var oldEnd = old.length
+            var newEnd = new.length
+            while (oldEnd > start && newEnd > start && old[oldEnd - 1] == new[newEnd - 1]) { oldEnd--; newEnd-- }
+            fun splitsStart(i: Int, t: String) = i in 1 until t.length &&
+                (Character.isLowSurrogate(t[i]) || (t[i - 1] == '\r' && t[i] == '\n'))
+            while (start > 0 && (splitsStart(start, old) || splitsStart(start, new))) start--
+            fun splitsEnd(i: Int, t: String) = i in 1 until t.length &&
+                (Character.isLowSurrogate(t[i]) || (t[i - 1] == '\r' && t[i] == '\n'))
+            while (oldEnd < old.length && newEnd < new.length && (splitsEnd(oldEnd, old) || splitsEnd(newEnd, new))) { oldEnd++; newEnd++ }
+            return Change(start, oldEnd, new.substring(start, newEnd))
+        }
         private val EMPTY = JsonObject(emptyMap())
 
         val SEMANTIC_TOKEN_TYPES = listOf(
@@ -686,7 +737,7 @@ class LspSession(
                     putJsonObject("foldingRange") { put("collapsedText", true) }
                 }
                 putJsonObject("semanticTokens") {
-                    putJsonObject("requests") { put("full", true); put("range", false) }
+                    putJsonObject("requests") { putJsonObject("full") { put("delta", true) }; put("range", false) }
                     putJsonArray("tokenTypes") { SEMANTIC_TOKEN_TYPES.forEach { add(it) } }
                     putJsonArray("tokenModifiers") { SEMANTIC_TOKEN_MODIFIERS.forEach { add(it) } }
                     putJsonArray("formats") { add("relative") }

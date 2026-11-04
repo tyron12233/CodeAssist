@@ -201,6 +201,14 @@ class ProjectManager private constructor(
     )
 
     /**
+     * The language servers the user configured in Settings (gopls, rust-analyzer, ...), registered with the
+     * plugins' own before any project opens, so the first engine already serves their languages.
+     */
+    val userLanguageServers: dev.ide.core.lsp.UserLanguageServers =
+        dev.ide.core.lsp.UserLanguageServers(env, homeDir.resolve(dev.ide.core.lsp.UserLanguageServers.FILE_NAME))
+            .also { runCatching { it.apply() } }
+
+    /**
      * What has changed about the plugins since [env] loaded them: a plugin app installed, updated or
      * uninstalled on the device (reported by the host, which is the only side that watches the package
      * manager), and the enable/consent decisions made through this manager. Read by the Plugins screen,

@@ -989,6 +989,42 @@ whose intelligence is not a server (since SPI 3.3.0, in `analysis-api`):
 They are asked only for files of the languages they name, and never for `.java` or Kotlin files, which the
 built-in backends answer.
 
+### Run your language's tests
+
+`TEST_PROVIDER_EP` (`TestProvider`, in `build-api`, since SPI 3.3.0) gives a plugin language what JUnit has:
+a run mark beside every test, a "<name> · <module>" row in the Run picker, and the Run screen's Tests tab
+with re-run and re-run failed.
+
+```kotlin
+reg.register(TEST_PROVIDER_EP, object : TestProvider {
+    override val id = "dartTest"                       // also the run's kind: tasks are dartTest:<module>[:targets]
+    override val displayName = "Dart tests"
+    override val languages = setOf(LanguageId("dart"))
+    override fun appliesTo(module: Module) = File(module.dir.path, "test").isDirectory
+    override fun tests(module: Module, path: String, text: String) =
+        Regex("(?m)^\\s*test\\('([^']+)'").findAll(text)
+            .map { TestDeclaration(it.groupValues[1], it.range.first, "$path#${it.groupValues[1]}") }.toList()
+    override fun run(module: Module, targets: List<String>, project: Project, ctx: BuildContext): RunAction =
+        dartTestRun(module, targets)                   // a RunAction with a RunConsole, see below
+})
+```
+
+The run reports through the console: print `TestReport.run(id)` first (it is what makes a re-run come back to
+your provider), then `queued` / `started` / `passed` / `failed` / `skipped` per test and `finished()` at the
+end, to the console's `ProgramIo.stdout`. Everything else the run prints stays in the console as output. A
+re-run hands `run` the targets as `suite#test` (or a bare suite), in the names your records used. The Calc
+sample (`samples/lsp-plugin`, `CalcTestProvider`) is a complete one.
+
+### Language servers without a plugin
+
+Users can also add a language server themselves, in **Settings > Language Servers** (Code Intelligence):
+a name, the command, the file extensions and the protocol's language id, with presets for gopls,
+rust-analyzer, Pyright, typescript-language-server, clangd, Dart, Lua, zls and bash-language-server. They are
+stored in `language-servers.json` in the IDE's home folder and registered exactly like a plugin's definition,
+so everything above applies to them. On the desktop the command is looked up on PATH and in the folders
+toolchains install into (`~/go/bin`, `~/.cargo/bin`, `/opt/homebrew/bin`, ...), since an app started from the
+Dock or Start menu does not see the terminal's PATH.
+
 ### Put composables and pixels in the editor
 
 The decoration tier above covers everything expressible as data. Two things are not, and each has a UI-facet
@@ -2980,6 +3016,7 @@ Step-by-step guide: [custom-build-plugins.md](custom-build-plugins.md).
 | `dev.ide.build.BUILD_PLUGIN_EP` | `platform.buildPlugin` | `BuildPlugin` | Tasks applied to every build graph |
 | `dev.ide.build.RUN_TASK_PROVIDER_EP` | `platform.runTaskProvider` | `RunTaskProvider` | Entries in the Run picker |
 | `dev.ide.build.SOURCE_GENERATOR_EP` | `platform.sourceGenerator` | `SourceGenerator` | Generated sources before compilation |
+| `dev.ide.build.TEST_PROVIDER_EP` | `platform.testProvider` | `TestProvider` | Tests for a language: gutter marks, a Run row, the Tests tab |
 
 ### Actions, VCS, Android
 

@@ -45,6 +45,7 @@ class LspLanguageSupportTest {
     private lateinit var manager: LspSessionManager
     private lateinit var support: LspLanguageSupport
     private val changed = java.util.concurrent.CopyOnWriteArrayList<Set<Path>>()
+    private val applied = java.util.concurrent.CopyOnWriteArrayList<Map<Path, List<dev.ide.lang.incremental.DocumentEdit>>>()
 
     @BeforeTest
     fun setUp() {
@@ -53,6 +54,10 @@ class LspLanguageSupportTest {
         manager = LspSessionManager(object : LspSessionManager.Host {
             override fun projectRootFor(file: Path): Path? = root.takeIf { file.toAbsolutePath().startsWith(it) }
             override fun diagnosticsChanged(paths: Set<Path>) { changed += paths }
+            override fun applyEdit(session: LspSession, edit: kotlinx.serialization.json.JsonObject): Boolean {
+                applied += session.documentEdits(edit)
+                return true
+            }
         })
         support = LspLanguageSupport(server.definition, manager)
     }
@@ -281,6 +286,22 @@ class LspLanguageSupportTest {
             parse(f, messy)
             val formatted = analyzer.formatting!!.format(f, messy, FormatStyle())
             assertEquals("fun greet() {}", LspConvert.applyEdits(messy, formatted))
+        }
+    }
+
+    @Test
+    fun anEditTheServerSendsOnItsOwnReachesTheHostAsFileEdits() {
+        runBlocking {
+            val f = file("own.toy", sample)
+            support.diagnostics.diagnose(target(f, sample))
+            val uri = uriOf(Path.of(f.path))
+            val answer = server.connection!!.request("workspace/applyEdit", kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"edit":{"changes":{"$uri":[{"range":{"start":{"line":1,"character":2},"end":{"line":1,"character":5}},"newText":"good"}]}}}"""
+            )).future.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            assertEquals("""{"applied":true}""", answer.toString())
+            val edits = applied.single().entries.single()
+            assertEquals(Path.of(f.path), edits.key)
+            assertEquals(sample.replace("bad", "good"), LspConvert.applyEdits(sample, edits.value))
         }
     }
 

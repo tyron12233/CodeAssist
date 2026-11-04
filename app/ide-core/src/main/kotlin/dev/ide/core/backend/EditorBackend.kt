@@ -476,6 +476,21 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
      * dependency changed, it restarted), as the editor paths they were analyzed under. The flow is the
      * application's, the same for every engine, so the first engine seen supplies it for good.
      */
+    override val externalEdits: Flow<Map<String, List<dev.ide.ui.backend.UiTextEdit>>> = flow {
+        var services = ctx.servicesOrNull
+        while (services == null) {
+            delay(LANGUAGE_SERVER_POLL_MS)
+            services = ctx.servicesOrNull
+        }
+        emitAll(
+            services.languageServerEdits.map { byFile ->
+                byFile.entries.associate { (path, edits) ->
+                    path.toString() to edits.map { dev.ide.ui.backend.UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+                }
+            },
+        )
+    }
+
     private val languageServerInvalidations: Flow<Set<String>> = flow {
         var services = ctx.servicesOrNull
         while (services == null) {

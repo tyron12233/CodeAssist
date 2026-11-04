@@ -1502,4 +1502,27 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
         <item quantity="one">%1$d versión</item>
         <item quantity="other">%1$d versiones</item>
     </plurals>
+    <string name="settings_language_servers">Servidores de lenguaje</string>
+    <string name="settings_language_servers_subtitle">Errores, autocompletado y navegación de servidores que tienes instalados</string>
+    <string name="lsp_intro">Añade un servidor de Language Server Protocol que tengas instalado. Los archivos con sus extensiones reciben sus errores, autocompletado, navegación, cambio de nombre y formato. Un lenguaje nuevo se aplica al siguiente proyecto que abras.</string>
+    <string name="lsp_android_note">En Android, el servidor debe ser un ejecutable incluido en una app instalada, como un complemento.</string>
+    <string name="lsp_unsupported">Los servidores de lenguaje no están disponibles en este dispositivo.</string>
+    <string name="lsp_empty">Aún no hay servidores de lenguaje. Añade uno o empieza con uno habitual de abajo.</string>
+    <string name="lsp_add">Añadir</string>
+    <string name="lsp_presets">Servidores habituales</string>
+    <string name="lsp_new_title">Nuevo servidor de lenguaje</string>
+    <string name="lsp_edit_title">Editar servidor de lenguaje</string>
+    <string name="lsp_field_name">Nombre</string>
+    <string name="lsp_field_command">Comando</string>
+    <string name="lsp_field_extensions">Extensiones de archivo</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Id del lenguaje</string>
+    <string name="lsp_field_options">Opciones de inicialización (JSON, opcional)</string>
+    <string name="lsp_check">Comprobar comando</string>
+    <string name="lsp_save">Guardar</string>
+    <string name="lsp_cancel">Cancelar</string>
+    <string name="lsp_delete">Eliminar</string>
+    <string name="lsp_status_running">En ejecución</string>
+    <string name="lsp_status_starting">Iniciando</string>
+    <string name="lsp_status_not_started">Sin iniciar</string>
 </resources>

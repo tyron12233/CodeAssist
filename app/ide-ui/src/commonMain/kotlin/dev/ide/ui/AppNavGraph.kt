@@ -81,6 +81,7 @@ import dev.ide.ui.screens.LearnSolutionsScreen
 import dev.ide.ui.screens.LearnThreadScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
+import dev.ide.ui.screens.LanguageServersScreen
 import dev.ide.ui.screens.PluginsScreen
 import dev.ide.ui.screens.ProjectsHomeScreen
 import dev.ide.ui.screens.ExploreFeed
@@ -201,6 +202,7 @@ private fun hubTargetOf(app: CodeAssistAppState, s: Screen): HubTarget? = when (
     Screen.SdkManager -> HubTarget.Tool(HubTool.SdkManager)
     Screen.KeystoreManager -> if (app.isHubPane(s)) HubTarget.Tool(HubTool.Keystore) else null
     Screen.Plugins -> HubTarget.Tool(HubTool.Plugins)
+    Screen.LanguageServers -> HubTarget.Tool(HubTool.LanguageServers)
     Screen.Storage -> HubTarget.Tool(HubTool.Storage)
     else -> null
 }
@@ -212,6 +214,7 @@ private fun screenOf(tool: HubTool): Screen = when (tool) {
     HubTool.SdkManager -> Screen.SdkManager
     HubTool.Keystore -> Screen.KeystoreManager
     HubTool.Plugins -> Screen.Plugins
+    HubTool.LanguageServers -> Screen.LanguageServers
     HubTool.Storage -> Screen.Storage
 }
 
@@ -594,6 +597,8 @@ private fun AppRoute(
                 key(shownId, shownArgument) { contribution.content(screenCtx) }
             }
         }
+
+        Screen.LanguageServers -> LanguageServersScreen(backend = state.backend, onBack = { app.navigateTo(Screen.Hub) })
 
         Screen.Plugins -> PluginsScreen(
             backend = state.backend,

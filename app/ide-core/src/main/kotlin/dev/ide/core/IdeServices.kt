@@ -2864,6 +2864,7 @@ class IdeServices private constructor(
      * file gets `androidTest:` marks, where instrumented tests can run (the desktop, over adb).
      */
     private fun testGutterMarks(file: Path, text: String): List<dev.ide.plugin.editor.GutterMark> {
+        pluginTestGutterMarks(file, text).takeIf { it.isNotEmpty() }?.let { return it }
         val name = file.fileName?.toString() ?: return emptyList()
         if (!name.endsWith(".kt") && !name.endsWith(".java")) return emptyList()
         val target = file.toAbsolutePath().normalize()
@@ -2893,6 +2894,34 @@ class IdeServices private constructor(
                 actionId = TestOutput.GUTTER_ACTION_PREFIX + taskId,
                 order = 100,
             )
+        }
+    }
+
+    /**
+     * Run marks for a plugin language's tests ([dev.ide.build.TEST_PROVIDER_EP]): the providers for [file]'s
+     * language name the tests in its live buffer, and each mark starts `<provider>:<module>:<target>`.
+     */
+    private fun pluginTestGutterMarks(file: Path, text: String): List<dev.ide.plugin.editor.GutterMark> {
+        val language = languageFor(file)
+        val providers = build.testProviders().filter { language in it.languages }
+        if (providers.isEmpty()) return emptyList()
+        val module = moduleForFile(file) ?: return emptyList()
+        val lineStarts = ArrayList<Int>().apply { add(0); text.forEachIndexed { i, c -> if (c == '\n') add(i + 1) } }
+        return providers.flatMap { provider ->
+            runCatching { provider.tests(module, file.toString(), text) }
+                .onFailure { navigationLog.warn("test provider '${provider.id}' failed on $file", it) }
+                .getOrDefault(emptyList())
+                .map { t ->
+                    val line = lineStarts.binarySearch(t.offset.coerceIn(0, text.length)).let { if (it >= 0) it else -it - 2 }
+                    dev.ide.plugin.editor.GutterMark(
+                        line = line,
+                        iconId = "run",
+                        tint = dev.ide.plugin.editor.DecorationTint.Success,
+                        tooltip = if (t.group) "Run all tests in ${t.name}" else "Run ${t.name}",
+                        actionId = TestOutput.GUTTER_ACTION_PREFIX + "${provider.id}:${module.name}:${t.target}",
+                        order = 100,
+                    )
+                }
         }
     }
 
@@ -5857,6 +5886,9 @@ class IdeServices private constructor(
 
     /** Files whose diagnostics a language server changed on its own; the editor re-analyzes the open ones. */
     val externalDiagnosticsChanged: kotlinx.coroutines.flow.Flow<Set<Path>> get() = env.languageServers.diagnosticsChanged
+
+    /** Edits a language server asked to make on its own; the editor applies them like a multi-file quick fix. */
+    val languageServerEdits: kotlinx.coroutines.flow.Flow<Map<Path, List<DocumentEdit>>> get() = env.languageServers.externalEdits
 
     /**
      * The last of construction, deliberately after every property: Kotlin runs property initializers and `init`

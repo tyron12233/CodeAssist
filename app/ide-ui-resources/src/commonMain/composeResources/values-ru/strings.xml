@@ -1372,4 +1372,27 @@
         <item quantity="many">%1$d выпусков</item>
         <item quantity="other">%1$d выпуска</item>
     </plurals>
+    <string name="settings_language_servers">Языковые серверы</string>
+    <string name="settings_language_servers_subtitle">Ошибки, автодополнение и навигация от установленных у вас серверов</string>
+    <string name="lsp_intro">Добавьте установленный у вас сервер Language Server Protocol. Файлы с его расширениями получат его ошибки, автодополнение, навигацию, переименование и форматирование. Новый язык применяется к следующему открытому проекту.</string>
+    <string name="lsp_android_note">На Android сервер должен быть исполняемым файлом из установленного приложения, например плагина.</string>
+    <string name="lsp_unsupported">Языковые серверы недоступны на этом устройстве.</string>
+    <string name="lsp_empty">Языковых серверов пока нет. Добавьте свой или начните с распространённого сервера ниже.</string>
+    <string name="lsp_add">Добавить</string>
+    <string name="lsp_presets">Распространённые серверы</string>
+    <string name="lsp_new_title">Новый языковой сервер</string>
+    <string name="lsp_edit_title">Изменить языковой сервер</string>
+    <string name="lsp_field_name">Название</string>
+    <string name="lsp_field_command">Команда</string>
+    <string name="lsp_field_extensions">Расширения файлов</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Id языка</string>
+    <string name="lsp_field_options">Параметры инициализации (JSON, необязательно)</string>
+    <string name="lsp_check">Проверить команду</string>
+    <string name="lsp_save">Сохранить</string>
+    <string name="lsp_cancel">Отмена</string>
+    <string name="lsp_delete">Удалить</string>
+    <string name="lsp_status_running">Работает</string>
+    <string name="lsp_status_starting">Запускается</string>
+    <string name="lsp_status_not_started">Не запущен</string>
 </resources>

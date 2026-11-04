@@ -130,6 +130,16 @@ class LspSessionManager(private val host: Host) : AutoCloseable {
         }
     }
 
+    /**
+     * Shut down every session of [definitionId]: the definition was removed, or its command changed. The next
+     * request for one of its files starts a fresh session (with a fresh restart budget) if it still exists.
+     */
+    fun closeDefinition(definitionId: String) {
+        val gone = slots.entries.filter { it.key.definition == definitionId }
+        gone.forEach { slots.remove(it.key) }
+        gone.forEach { e -> starter.execute { e.value.session.shutdown() } }
+    }
+
     /** Shut down every session started for [projectRoot]. */
     fun closeProject(projectRoot: Path) {
         val root = projectRoot.toAbsolutePath().normalize()

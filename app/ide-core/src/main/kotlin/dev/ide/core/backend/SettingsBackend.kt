@@ -65,6 +65,45 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         }.getOrNull()
     }
 
+    override fun languageServersSupported(): Boolean = ctx.manager != null
+
+    // ART's VM vendor; an app there may only execute what an installed package ships (W^X).
+    override fun languageServerExecutablesRestricted(): Boolean =
+        System.getProperty("java.vm.vendor").orEmpty().contains("Android", ignoreCase = true)
+
+    override fun languageServers(): List<dev.ide.ui.backend.UiLanguageServer> {
+        val servers = ctx.manager?.userLanguageServers ?: return emptyList()
+        return servers.list().map { it.toUi(servers.status(it.id)) }
+    }
+
+    override fun languageServerPresets(): List<dev.ide.ui.backend.UiLanguageServer> =
+        dev.ide.core.lsp.UserLanguageServers.PRESETS.map { it.toUi("") }
+
+    override fun saveLanguageServer(server: dev.ide.ui.backend.UiLanguageServer): String? {
+        val servers = ctx.manager?.userLanguageServers ?: return "No project manager."
+        return servers.save(
+            dev.ide.core.lsp.UserLanguageServer(
+                id = server.id, name = server.name, command = server.command, extensions = server.extensions,
+                languageId = server.languageId, enabled = server.enabled, initializationOptions = server.initializationOptions,
+            )
+        )
+    }
+
+    override fun deleteLanguageServer(id: String) {
+        ctx.manager?.userLanguageServers?.delete(id)
+    }
+
+    override fun checkLanguageServerCommand(command: String): dev.ide.ui.backend.UiCommandCheck {
+        val servers = ctx.manager?.userLanguageServers ?: return dev.ide.ui.backend.UiCommandCheck(false, "No project manager.")
+        val (found, message) = servers.check(command)
+        return dev.ide.ui.backend.UiCommandCheck(found, message)
+    }
+
+    private fun dev.ide.core.lsp.UserLanguageServer.toUi(status: String) = dev.ide.ui.backend.UiLanguageServer(
+        id = id, name = name, command = command, extensions = extensions, languageId = languageId,
+        enabled = enabled, initializationOptions = initializationOptions, status = status,
+    )
+
     override fun pluginCatalog(): List<UiPluginInfo> {
         val manager = ctx.manager ?: return emptyList()
         val catalog = manager.env.pluginCatalog

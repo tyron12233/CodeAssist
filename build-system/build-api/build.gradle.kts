@@ -9,6 +9,8 @@ plugins {
 // the BuildSystem / Task SPIs, so all three are `api`.
 dependencies {
     api(project(":project-model-api"))
+    // TestProvider.languages names the language a test runner scans (SPI 3.3.0).
+    api(project(":language-api"))
     api(project(":vfs-api"))
     api(project(":platform-core"))
 }

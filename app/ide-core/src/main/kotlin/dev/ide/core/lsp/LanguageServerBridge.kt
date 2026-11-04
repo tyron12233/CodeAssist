@@ -42,6 +42,15 @@ class LanguageServerBridge internal constructor(private val env: ApplicationEnvi
     /** Files whose diagnostics a server changed outside an analysis call; the editor re-analyzes the open ones. */
     val diagnosticsChanged: SharedFlow<Set<Path>> = diagnosticsFlow.asSharedFlow()
 
+    private val editsFlow = MutableSharedFlow<Map<Path, List<dev.ide.lang.incremental.DocumentEdit>>>(extraBufferCapacity = 16)
+
+    /**
+     * Edits a server asked for on its own (`workspace/applyEdit` outside a command the IDE ran: a refactoring
+     * that finished in the background, a fix-all on save). The editor applies them the way it applies a
+     * multi-file quick fix, so an open file is edited through its tab and stays undoable.
+     */
+    val externalEdits: SharedFlow<Map<Path, List<dev.ide.lang.incremental.DocumentEdit>>> = editsFlow.asSharedFlow()
+
     val sessions: LspSessionManager = LspSessionManager(object : LspSessionManager.Host {
         override fun projectRootFor(file: Path): Path? {
             val root = env.activeEngine?.workspaceRoot?.toAbsolutePath()?.normalize() ?: return null
@@ -50,6 +59,12 @@ class LanguageServerBridge internal constructor(private val env: ApplicationEnvi
 
         override fun diagnosticsChanged(paths: Set<Path>) {
             if (paths.isNotEmpty()) diagnosticsFlow.tryEmit(paths)
+        }
+
+        override fun applyEdit(session: dev.ide.lsp.client.LspSession, edit: kotlinx.serialization.json.JsonObject): Boolean {
+            val edits = runCatching { session.documentEdits(edit) }.getOrNull()?.filterValues { it.isNotEmpty() }.orEmpty()
+            // Applied only when an editor is listening for it; with none, the server is told so and can retry.
+            return edits.isNotEmpty() && editsFlow.subscriptionCount.value > 0 && editsFlow.tryEmit(edits)
         }
 
         override fun message(definition: LanguageServerDefinition, type: Int, text: String) {
@@ -71,22 +86,35 @@ class LanguageServerBridge internal constructor(private val env: ApplicationEnvi
     /** Whether any plugin registered a language server: the engine skips the bookkeeping otherwise. */
     val hasServers: Boolean get() = supports.isNotEmpty()
 
-    /** Definition ids already turned into adapters, so [registerAll] can run again for later contributions. */
-    private val registered = HashSet<String>()
-    private val registeredDefinitions = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<LanguageServerDefinition, Boolean>())
+    /** The adapters registered for each definition, by identity, so a removed definition can be taken back. */
+    private val registered = java.util.IdentityHashMap<LanguageServerDefinition, List<dev.ide.platform.Disposable>>()
 
     /**
-     * Register the adapters for every [LANGUAGE_SERVER_EP] contribution not registered yet. Called after the
-     * plugin load; calling it again (a test registering a definition afterwards) picks up only the new ones.
+     * Bring the adapters in line with the [LANGUAGE_SERVER_EP] contributions: register the ones not registered
+     * yet, and take back (adapters disposed, sessions shut down) the ones no longer contributed. Called after
+     * the plugin load, and again whenever the user's own servers change. A project that is already open keeps
+     * the languages it opened with; one opened afterwards sees the change.
      */
     @Synchronized
     internal fun registerAll() {
         val registry = env.platform.extensions
-        val claimed = registry.extensions(LANGUAGE_BACKEND_EP).flatMapTo(HashSet()) { it.languages }
-        for (contribution in registry.contributions(LANGUAGE_SERVER_EP)) {
+        val contributions = registry.contributions(LANGUAGE_SERVER_EP)
+        val current = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<LanguageServerDefinition, Boolean>())
+        contributions.forEach { current += it.impl }
+        for (gone in registered.keys.filter { it !in current }) {
+            registered.remove(gone)?.forEach { runCatching { it.dispose() } }
+            supports.removeAll { it.definition === gone }
+            sessions.closeDefinition(gone.id)
+            log.info("language server '${gone.id}' removed")
+        }
+        // Languages some OTHER backend serves: our own adapters' backends do not count against a definition.
+        val claimed = registry.extensions(LANGUAGE_BACKEND_EP)
+            .filter { b -> supports.none { it.backend === b } }
+            .flatMapTo(HashSet()) { it.languages }
+        for (contribution in contributions) {
             val definition = contribution.impl
-            if (!registeredDefinitions.add(definition)) continue
-            if (!registered.add(definition.id)) {
+            if (definition in registered) continue
+            if (registered.keys.any { it.id == definition.id }) {
                 log.warn("language server '${definition.id}' from '${contribution.plugin.value}' is already registered; skipped")
                 continue
             }
@@ -99,12 +127,26 @@ class LanguageServerBridge internal constructor(private val env: ApplicationEnvi
             // A plugin that also registers a backend of its own for these languages keeps it: the server then
             // answers only what the engine asks the providers for.
             val withBackend = definition.languages.none { it in claimed }
-            support.register(registry, contribution.plugin, withBackend)
+            registered[definition] = support.register(registry, contribution.plugin, withBackend)
             supports += support
             log.info("language server '${definition.id}' serves ${definition.languages.joinToString { it.id }}" +
                 if (withBackend) "" else " (alongside the plugin's own backend)")
         }
     }
+
+    /** How [definitionId]'s servers are doing, for Settings: running, starting, failed (with why), or not started. */
+    fun status(definitionId: String): String {
+        val mine = sessions.sessions().filter { it.definition.id == definitionId }
+        if (mine.isEmpty()) return "Not started"
+        mine.firstOrNull { it.state == dev.ide.lsp.client.LspSession.State.READY }?.let { return "Running" }
+        mine.firstOrNull { it.state == dev.ide.lsp.client.LspSession.State.STARTING || it.state == dev.ide.lsp.client.LspSession.State.NEW }
+            ?.let { return "Starting" }
+        val failed = mine.firstOrNull { it.failureReason != null }
+        return failed?.failureReason?.let { "Stopped: $it" } ?: "Stopped"
+    }
+
+    /** Shut down [definitionId]'s sessions, so the next request starts it with its current settings. */
+    fun restart(definitionId: String) = sessions.closeDefinition(definitionId)
 
     /** The project at [root] closed: shut its servers down. */
     fun projectClosed(root: Path) {

@@ -2285,4 +2285,27 @@
     <string name="you_delete_account_title">删除你的账号？</string>
     <string name="you_delete_account_body">这将永久删除你的 CodeAssist 账号及其保存的所有内容：个人资料、已发布的项目、评价、点赞、关注、挑战成绩和 AI 积分。此设备上的项目不受影响。此操作无法撤销。</string>
     <string name="you_delete_account_deleting">正在删除…</string>
+    <string name="settings_language_servers">语言服务器</string>
+    <string name="settings_language_servers_subtitle">来自你已安装服务器的错误提示、补全和导航</string>
+    <string name="lsp_intro">添加你已安装的语言服务器协议（LSP）服务器。带有其扩展名的文件会获得它提供的错误提示、补全、导航、重命名和格式化。新语言会在你下次打开项目时生效。</string>
+    <string name="lsp_android_note">在 Android 上，服务器必须是已安装应用（例如插件）自带的可执行文件。</string>
+    <string name="lsp_unsupported">此设备上无法使用语言服务器。</string>
+    <string name="lsp_empty">还没有语言服务器。添加一个，或从下面的常用服务器开始。</string>
+    <string name="lsp_add">添加</string>
+    <string name="lsp_presets">常用服务器</string>
+    <string name="lsp_new_title">新建语言服务器</string>
+    <string name="lsp_edit_title">编辑语言服务器</string>
+    <string name="lsp_field_name">名称</string>
+    <string name="lsp_field_command">命令</string>
+    <string name="lsp_field_extensions">文件扩展名</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">语言 ID</string>
+    <string name="lsp_field_options">初始化选项（JSON，可选）</string>
+    <string name="lsp_check">检查命令</string>
+    <string name="lsp_save">保存</string>
+    <string name="lsp_cancel">取消</string>
+    <string name="lsp_delete">删除</string>
+    <string name="lsp_status_running">运行中</string>
+    <string name="lsp_status_starting">正在启动</string>
+    <string name="lsp_status_not_started">未启动</string>
 </resources>

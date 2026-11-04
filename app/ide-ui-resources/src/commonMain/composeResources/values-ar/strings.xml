@@ -2627,4 +2627,27 @@
     <string name="you_delete_account_title">حذف حسابك؟</string>
     <string name="you_delete_account_body">سيؤدي هذا إلى حذف حسابك في CodeAssist نهائيًا مع كل ما هو محفوظ معه: ملفك الشخصي، والمشاريع المنشورة، والمراجعات، والإعجابات، والمتابعات، ونتائج التحديات، ونقاط الذكاء الاصطناعي. لن تتأثر المشاريع الموجودة على هذا الجهاز. لا يمكن التراجع عن ذلك.</string>
     <string name="you_delete_account_deleting">جارٍ الحذف…</string>
+    <string name="settings_language_servers">خوادم اللغات</string>
+    <string name="settings_language_servers_subtitle">الأخطاء والإكمال والتنقل من خوادم مثبتة لديك</string>
+    <string name="lsp_intro">أضف خادم بروتوكول خادم اللغة (LSP) مثبتًا لديك. الملفات ذات امتداداته تحصل على أخطائه وإكماله وتنقله وإعادة التسمية والتنسيق. تُطبَّق اللغة الجديدة على المشروع التالي الذي تفتحه.</string>
+    <string name="lsp_android_note">على أندرويد يجب أن يكون الخادم ملفًا تنفيذيًا يأتي مع تطبيق مثبت، مثل إضافة.</string>
+    <string name="lsp_unsupported">خوادم اللغات غير متاحة على هذا الجهاز.</string>
+    <string name="lsp_empty">لا توجد خوادم لغات بعد. أضف واحدًا، أو ابدأ من خادم شائع أدناه.</string>
+    <string name="lsp_add">إضافة</string>
+    <string name="lsp_presets">خوادم شائعة</string>
+    <string name="lsp_new_title">خادم لغة جديد</string>
+    <string name="lsp_edit_title">تعديل خادم اللغة</string>
+    <string name="lsp_field_name">الاسم</string>
+    <string name="lsp_field_command">الأمر</string>
+    <string name="lsp_field_extensions">امتدادات الملفات</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">معرّف اللغة</string>
+    <string name="lsp_field_options">خيارات التهيئة (JSON، اختياري)</string>
+    <string name="lsp_check">فحص الأمر</string>
+    <string name="lsp_save">حفظ</string>
+    <string name="lsp_cancel">إلغاء</string>
+    <string name="lsp_delete">حذف</string>
+    <string name="lsp_status_running">يعمل</string>
+    <string name="lsp_status_starting">قيد التشغيل</string>
+    <string name="lsp_status_not_started">لم يبدأ</string>
 </resources>

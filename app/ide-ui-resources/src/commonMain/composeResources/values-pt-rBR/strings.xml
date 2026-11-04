@@ -1394,4 +1394,27 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
         <item quantity="one">%1$d versão</item>
         <item quantity="other">%1$d versões</item>
     </plurals>
+    <string name="settings_language_servers">Servidores de linguagem</string>
+    <string name="settings_language_servers_subtitle">Erros, autocompletar e navegação de servidores que você instalou</string>
+    <string name="lsp_intro">Adicione um servidor de Language Server Protocol que você instalou. Arquivos com as extensões dele recebem seus erros, autocompletar, navegação, renomeação e formatação. Uma linguagem nova vale para o próximo projeto que você abrir.</string>
+    <string name="lsp_android_note">No Android, o servidor precisa ser um executável incluído em um app instalado, como um plugin.</string>
+    <string name="lsp_unsupported">Servidores de linguagem não estão disponíveis neste dispositivo.</string>
+    <string name="lsp_empty">Nenhum servidor de linguagem ainda. Adicione um ou comece por um servidor comum abaixo.</string>
+    <string name="lsp_add">Adicionar</string>
+    <string name="lsp_presets">Servidores comuns</string>
+    <string name="lsp_new_title">Novo servidor de linguagem</string>
+    <string name="lsp_edit_title">Editar servidor de linguagem</string>
+    <string name="lsp_field_name">Nome</string>
+    <string name="lsp_field_command">Comando</string>
+    <string name="lsp_field_extensions">Extensões de arquivo</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Id da linguagem</string>
+    <string name="lsp_field_options">Opções de inicialização (JSON, opcional)</string>
+    <string name="lsp_check">Verificar comando</string>
+    <string name="lsp_save">Salvar</string>
+    <string name="lsp_cancel">Cancelar</string>
+    <string name="lsp_delete">Excluir</string>
+    <string name="lsp_status_running">Em execução</string>
+    <string name="lsp_status_starting">Iniciando</string>
+    <string name="lsp_status_not_started">Não iniciado</string>
 </resources>

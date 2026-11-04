@@ -31,6 +31,8 @@ import dev.ide.ui.generated.resources.settings_sdk_manager
 import dev.ide.ui.generated.resources.settings_sdk_manager_subtitle
 import dev.ide.ui.generated.resources.settings_storage
 import dev.ide.ui.generated.resources.settings_storage_subtitle
+import dev.ide.ui.generated.resources.settings_language_servers
+import dev.ide.ui.generated.resources.settings_language_servers_subtitle
 import dev.ide.ui.generated.resources.settings_symbols
 import dev.ide.ui.generated.resources.settings_symbols_subtitle
 import dev.ide.ui.icons.CaIcons
@@ -38,7 +40,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** A destination of the Settings hub that is its own screen rather than a page of generated controls. */
-enum class HubTool { Colors, CodeStyle, Symbols, SdkManager, Keystore, Plugins, Storage }
+enum class HubTool { Colors, CodeStyle, Symbols, LanguageServers, SdkManager, Keystore, Plugins, Storage }
 
 /** What one hub entry opens: a settings page (built-in or plugin-contributed) by id, or a [HubTool]. */
 sealed interface HubTarget {
@@ -73,6 +75,7 @@ private val HubSlots: List<Pair<HubGroup, List<HubTarget>>> = listOf(
     HubGroup.Code to listOf(
         HubTarget.Page("completion"),
         HubTarget.Page("analysis"),
+        HubTarget.Tool(HubTool.LanguageServers),
     ),
     HubGroup.Build to listOf(
         HubTarget.Page("build"),
@@ -173,6 +176,7 @@ private fun toolEntry(target: HubTarget.Tool): HubEntry {
         HubTool.SdkManager -> Triple(CaIcons.pkg, Res.string.settings_sdk_manager, Res.string.settings_sdk_manager_subtitle)
         HubTool.Keystore -> Triple(CaIcons.key, Res.string.settings_keystore_manager, Res.string.settings_keystore_manager_subtitle)
         HubTool.Plugins -> Triple(CaIcons.box, Res.string.settings_plugins, Res.string.settings_plugins_subtitle)
+        HubTool.LanguageServers -> Triple(CaIcons.code, Res.string.settings_language_servers, Res.string.settings_language_servers_subtitle)
         HubTool.Storage -> Triple(CaIcons.layers, Res.string.settings_storage, Res.string.settings_storage_subtitle)
     }
     return HubEntry(target, icon, stringResource(title), stringResource(subtitle), scopeLabel = null, keywords = emptyList())

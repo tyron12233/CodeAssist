@@ -114,6 +114,10 @@ internal fun EditorCenter(
     frame: (@Composable (editorBody: @Composable () -> Unit) -> Unit)? = null,
 ) {
     val project = state.backend.project
+    // A language server's own edits (workspace/applyEdit outside a command): applied like a multi-file fix.
+    LaunchedEffect(state.backend) {
+        state.backend.editor.externalEdits.collect { edits -> state.applyWorkspaceEdits(edits) }
+    }
     // Local history for the active tab, opened from the top bar's ⋯ menu.
     if (state.localHistoryOpen) {
         val file = state.active
