@@ -76,6 +76,11 @@ internal class FlutterPreviewSession(val pkg: Path, tools: DartPlugin.Tools) {
     internal var refs = 0
     internal var parkedAt = 0L
 
+    init {
+        val main = Handler(Looper.getMainLooper())
+        controller.onPause = { paused -> main.post { engine.pause(paused) } }
+    }
+
     fun close() {
         engine.close()
         controller.close()
@@ -87,12 +92,16 @@ internal class FlutterPreviewSession(val pkg: Path, tools: DartPlugin.Tools) {
  *
  * Switching between Split and Preview, or away from the file and back, recreates the pane. The session is
  * not recreated with it: the new pane takes over the one the old pane showed, its compiler and its running
- * engine, so the previews carry on exactly as they were, state and scroll position included. A session no
- * pane has taken back within [KEEP_MS] is closed. Two panes on one package share a session; the one that
- * attached last shows it.
+ * engine, so the previews carry on exactly as they were, state and scroll position included. Two panes on one
+ * package share a session; the one that attached last shows it.
+ *
+ * What no pane shows is let go in two steps, the engine first: after [ENGINE_KEEP_MS] the engine (and with it the
+ * preview process), after [KEEP_MS] the compiler too. A pane back in between gets a new engine and the previews
+ * restarted in it, without a compile.
  */
 @RequiresApi(30)
 internal object FlutterPreviewSessions {
+    private const val ENGINE_KEEP_MS = 15_000L
     private const val KEEP_MS = 60_000L
     private val main = Handler(Looper.getMainLooper())
     private val sessions = HashMap<Path, FlutterPreviewSession>()
@@ -107,6 +116,10 @@ internal object FlutterPreviewSessions {
             if (session.refs > 0) return
             System.nanoTime().also { session.parkedAt = it }
         }
+        main.postDelayed({
+            val idle = synchronized(this) { session.refs == 0 && session.parkedAt == parkedAt }
+            if (idle) session.engine.close()
+        }, ENGINE_KEEP_MS)
         main.postDelayed({
             val expired = synchronized(this) {
                 if (session.refs == 0 && session.parkedAt == parkedAt && sessions[session.pkg] === session) {
@@ -182,6 +195,8 @@ internal class FlutterPreviewEngine(private val controller: FlutterPreviewContro
     private var surface: FlutterPreviewSurface? = null
     private var requested = false
     private var showing = false
+    /** Paused for a Run of the package ([FlutterPreviewController.onPause]): no engine wanted until it ends. */
+    private var paused = false
 
     private val replies = Messenger(Handler(Looper.getMainLooper()) { msg -> onReply(msg); true })
 
@@ -217,6 +232,19 @@ internal class FlutterPreviewEngine(private val controller: FlutterPreviewContro
         open()
     }
 
+    /** Let the engine go while the preview is [paused] (a Run of the package is going), and ask for a new one after. */
+    fun pause(paused: Boolean) {
+        if (this.paused == paused) return
+        this.paused = paused
+        if (paused) {
+            send(FlutterPreviewService.CLOSE)
+            requested = false
+            showing = false
+        } else {
+            open()
+        }
+    }
+
     /** [view] left its window. The engine keeps running for whichever surface attaches next. */
     fun detach(view: FlutterPreviewSurface) {
         if (surface !== view) return
@@ -238,15 +266,21 @@ internal class FlutterPreviewEngine(private val controller: FlutterPreviewContro
         send(FlutterPreviewService.INPUT, Bundle().apply { putParcelable(FlutterPreviewService.KEY_EVENT, MotionEvent.obtain(event)) })
     }
 
+    /**
+     * End the engine and the binding (the preview process goes once nothing else holds it). A surface that attaches
+     * afterwards binds again and gets a new engine.
+     */
     fun close() {
         send(FlutterPreviewService.CLOSE)
         if (bound) runCatching { context?.unbindService(connection) }
         bound = false
         service = null
-        surface = null
+        requested = false
+        showing = false
     }
 
     private fun open() {
+        if (paused) return
         val view = surface ?: return
         if (requested || service == null || view.width <= 0 || view.height <= 0) return
         val token = view.hostToken ?: return

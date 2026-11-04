@@ -141,9 +141,11 @@ internal class FlutterRunTask(
         }
         if (DartPackages.needsPubGet(pkg) && !pubGet()) return fail("pub get failed")
 
+        heartbeat()
         val app = FlutterSession(
-            pkg, sdk, flutter, entry, pkg.resolve(".dart_tool/codeassist/flutter"), out,
+            pkg, sdk, flutter, entry, FlutterSession.runWork(pkg), out,
             alsoChanged = { if (preview && writeGallery()) listOf(galleryFile) else emptyList() },
+            siblings = listOf(FlutterSession.paneWork(pkg).resolve("app.dill")),
         )
         var player: FlutterPlayer.Started? = null
         var watching: PackageWatcher? = null
@@ -171,8 +173,10 @@ internal class FlutterRunTask(
             val commands = LinkedBlockingQueue<String>()
             io?.stdin?.let { readCommands(it, commands) { watcher.wake.trySend(Unit) } }
             while (currentCoroutineContext().isActive && !app.engineGone) {
+                heartbeat()
                 // A save, a command or the app closing wakes this at once; otherwise the watcher's walk is due.
                 if (commands.isEmpty()) watcher.await()
+                app.releaseIfIdle()
                 when (commands.poll()?.trim()) {
                     "r" -> app.reload(dartFiles(watcher.changes()))
                     "R" -> app.restart(dartFiles(watcher.changes()))
@@ -195,6 +199,7 @@ internal class FlutterRunTask(
             // A run that stopped should not leave its player behind.
             player?.quit()
             watching?.close()
+            runCatching { Files.deleteIfExists(FlutterSession.runMarker(pkg)) }
             app.close()
         }
     }
@@ -205,6 +210,19 @@ internal class FlutterRunTask(
         val changed = DartPreviews.write(galleryFile, DartPreviews.gallery(previews))
         if (changed) out("${previews.size} preview(s): ${previews.joinToString(", ") { it.label }.ifEmpty { "none yet" }}")
         return changed
+    }
+
+    /**
+     * Tells a preview pane on this package that a Run is going ([FlutterSession.runMarker]), so it lets its own
+     * compiler and engine go until the Run ends. Called before the compile and on every pass of the loop.
+     */
+    private fun heartbeat() {
+        val marker = FlutterSession.runMarker(pkg)
+        runCatching {
+            Files.createDirectories(marker.parent)
+            if (Files.exists(marker)) Files.setLastModifiedTime(marker, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()))
+            else Files.write(marker, ByteArray(0))
+        }
     }
 
     private fun pubGet(): Boolean {

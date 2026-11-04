@@ -34,8 +34,8 @@ class DartLanguageServer(private val sdk: DartSdk, private val pub: Pub, private
             if (result != 0) context.logger.warn("pub get exited with $result; package imports may not resolve")
         }
         return LanguageServerConnection.process(
-            listOf(
-                runtime.toString(), server.toString(),
+            listOf(runtime.toString()) + DartSdk.VM_TUNING + listOf(
+                server.toString(),
                 "--protocol=lsp",
                 "--dart-sdk=${sdk.sdkDir}",
                 "--client-id=codeassist",

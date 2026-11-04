@@ -24,6 +24,11 @@ class FrontendServer(
     private val flutter: FlutterSdk,
     private val pkg: Path,
     val outputDill: Path,
+    /**
+     * Kernels to start from when [outputDill] does not exist yet, best first: another compile of this package
+     * (the Run's, the preview pane's), then a plugin-wide one. See [warm].
+     */
+    private val seeds: List<Path> = emptyList(),
 ) : AutoCloseable {
     /** A compile's outcome: the kernel file (null when it failed outright), its error count, what it said. */
     class Result(val dill: Path?, val errors: Int, val messages: List<String>) {
@@ -31,14 +36,29 @@ class FrontendServer(
     }
 
     private var process: Process? = null
-    private val lines = LinkedBlockingQueue<String>()
+    private var lines = LinkedBlockingQueue<String>()
+
+    /**
+     * Whether this compiler started from a kernel ([outputDill] from a previous run, or a seed) rather than from
+     * sources alone. It matters for memory far more than for time: a warm compiler of a Flutter app settles
+     * around 375 MB, a cold one around 590 MB, and it keeps that for as long as it runs. Starting warm is safe
+     * with any kernel of the same Flutter: the compiler checks each library it reuses against its source and
+     * compiles again the ones that changed.
+     */
+    var warm = false
+        private set
 
     fun start() {
         val runtime = sdk.runtime ?: throw IOException(DartSdk.NO_SDK)
         val compiler = sdk.frontendServer ?: throw IOException(DartSdk.NO_SDK)
         Files.createDirectories(outputDill.parent)
+        // The compiler initializes from its own output when there is one; failing that, from a seed.
+        val seed = if (Files.isRegularFile(outputDill)) null else seeds.firstOrNull { Files.isRegularFile(it) }
+        warm = Files.isRegularFile(outputDill) || seed != null
+        lines = LinkedBlockingQueue()
         val p = ProcessBuilder(
-            runtime.toString(), compiler.toString(),
+            listOf(runtime.toString()) + DartSdk.VM_TUNING + listOfNotNull(
+                compiler.toString(),
             "--sdk-root", flutter.platformDir.toString() + "/",
             "--target=flutter",
             "--incremental",
@@ -49,17 +69,20 @@ class FrontendServer(
             "-Ddart.vm.profile=false",
             "-Ddart.vm.product=false",
             "--no-print-incremental-dependencies",
+                seed?.let { "--initialize-from-dill=$it" },
+            ),
         ).directory(pkg.toFile()).redirectErrorStream(true)
             .apply { environment().putAll(sdk.environment()) }
             .start()
         process = p
+        val into = lines
         Thread({
             try {
-                p.inputStream.bufferedReader().forEachLine { lines.put(it) }
+                p.inputStream.bufferedReader().forEachLine { into.put(it) }
             } catch (_: IOException) {
                 // Closed by close().
             }
-            lines.put(EOF)
+            into.put(EOF)
         }, "flutter-frontend-server").apply { isDaemon = true }.start()
     }
 

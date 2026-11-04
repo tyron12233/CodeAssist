@@ -166,6 +166,25 @@ class DartSdk(
     }
 
     companion object {
+        /**
+         * Dart VM flags for the long-running tools (the analysis server, the Flutter compiler): a heap that grows more
+         * gently, is compacted, gives freed pages back, and is collected while the tool waits for its next request.
+         * Measured on the device with a Flutter app open, 30 edits and a completion: the analysis server settles at
+         * ~250 MB instead of ~320 MB (peak ~320 instead of ~340), the compiler at ~350 instead of ~375; request times
+         * unchanged. A capped heap (`--old_gen_heap_size`) is NOT among them: the compiler crashed at 256 MB.
+         *
+         * The VM refuses to start on a flag it does not know, so these are tied to the SDK this plugin carries.
+         */
+        val VM_TUNING = listOf(
+            "--old_gen_growth_space_ratio=10",
+            "--old_gen_growth_rate=60",
+            "--use_compactor",
+            "--dontneed_on_sweep",
+            "--mark_when_idle",
+            "--idle_timeout_micros=200000",
+            "--idle_duration_micros=200000",
+        )
+
         /** The SDK version staged by tools/dart-sdk; also the unpack stamp, so a new SDK unpacks afresh. */
         const val VERSION = "3.13.7"
         private const val ASSET = "assets/dart-sdk.zip"

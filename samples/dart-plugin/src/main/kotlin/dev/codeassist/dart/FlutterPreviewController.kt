@@ -14,7 +14,6 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The preview pane's side of a Flutter preview, in the IDE's process: the gallery of ONE file's `@Preview`
@@ -24,6 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * and hot-reloads it; saving any file of the package hot-reloads it, keeping the previews' state, as Run does.
  * The engine arrives separately ([engineReady]), from the pane's surface once the service has made one; a new
  * engine (the service's process died and the pane bound it again) gets the program restarted in it.
+ *
+ * Kept light: its compiler stops after [FlutterSession.IDLE_MS] without a save and starts again (from the kernel it
+ * left) on the next one, and the whole preview pauses while a Run of the same package is going.
  */
 internal class FlutterPreviewController(
     val pkg: Path,
@@ -39,7 +41,8 @@ internal class FlutterPreviewController(
     private val engines = Channel<Engine>(Channel.CONFLATED)
     /** Wakes the session loop: a save (through its [PackageWatcher]), another file shown, a new engine. */
     private val wake = Channel<Unit>(Channel.CONFLATED)
-    private val work = pkg.resolve(".dart_tool/codeassist/pane/${ids.incrementAndGet()}")
+    // One place per package, kept: the next pane on this package starts its compiler from the kernel left here.
+    private val work = FlutterSession.paneWork(pkg)
     private val galleryFile = work.resolve("gallery.dart")
 
     @Volatile private var file: Path? = null
@@ -50,6 +53,12 @@ internal class FlutterPreviewController(
     private var job: Job? = null
 
     private class Engine(val uri: String, val isolate: String?)
+
+    /**
+     * Told when the preview pauses for a Run of the package (true) and resumes after it (false), so the pane can let
+     * its engine go meanwhile. Called off the main thread.
+     */
+    @Volatile var onPause: (Boolean) -> Unit = {}
 
     /** Show [path]'s previews in the [dark] or light scheme. Cheap when nothing changed. */
     fun show(path: String, dark: Boolean) {
@@ -77,7 +86,6 @@ internal class FlutterPreviewController(
         scope.cancel()
         // The compiler blocks on its answers; closing it is what unblocks a run that is waiting on one.
         session?.close()
-        runCatching { work.toFile().deleteRecursively() }
     }
 
     private suspend fun run() {
@@ -100,17 +108,41 @@ internal class FlutterPreviewController(
             if (!pubGet()) return fail("pub get failed: open pubspec.yaml or Run to see why.")
         }
 
-        PackageWatcher(pkg, tools.bus, wake).use { watcher -> session(watcher) }
+        PackageWatcher(pkg, tools.bus, wake).use { watcher ->
+            while (scope.isActive) {
+                if (FlutterSession.runActive(pkg)) pauseWhileRunning(watcher)
+                live(watcher)
+            }
+        }
     }
 
-    private suspend fun session(watcher: PackageWatcher) {
+    /**
+     * A Run of this package holds a compiler and a Flutter engine of its own; the preview gives up both until the
+     * Run ends, then comes back with a fresh engine and a compiler that starts from the kernel it left.
+     */
+    private suspend fun pauseWhileRunning(watcher: PackageWatcher) {
+        _state.value = State("Paused while the app runs. The preview comes back when the Run ends.")
+        onPause(true)
+        while (engines.tryReceive().isSuccess) { /* engines from before the pause are gone with it */ }
+        while (scope.isActive && FlutterSession.runActive(pkg)) watcher.await()
+        watcher.changes() // whatever changed meanwhile is compiled from scratch anyway
+        dirty = true
+        onPause(false)
+    }
+
+    /** The preview, until a Run of the package starts (then it returns, its compiler closed) or the pane goes. */
+    private suspend fun live(watcher: PackageWatcher) {
         // The first compile, again after every save until there is one that compiles.
         var compiled: Path? = null
         var app: FlutterSession? = null
         while (compiled == null) {
+            if (FlutterSession.runActive(pkg)) return
             writeGallery()
             _state.value = State("Compiling the previews ...")
-            app = FlutterSession(pkg, tools.sdk, tools.flutter, galleryFile.toUri().toString(), work, ::log, ::galleryChanges)
+            app = FlutterSession(
+                pkg, tools.sdk, tools.flutter, galleryFile.toUri().toString(), work, ::log, ::galleryChanges,
+                siblings = listOf(FlutterSession.runWork(pkg).resolve("app.dill")),
+            )
             session = app
             val first = app.compile()
             if (first.ok) {
@@ -118,20 +150,38 @@ internal class FlutterPreviewController(
             } else {
                 app.close()
                 _state.value = State("The previews do not compile. Save a fix to try again.", errors(first))
-                while (scope.isActive && watcher.changes().isEmpty() && !dirty) watcher.await()
+                while (scope.isActive && watcher.changes().isEmpty() && !dirty && !FlutterSession.runActive(pkg)) watcher.await()
                 dirty = false
             }
         }
         app!!
+        try {
+            live(watcher, app, compiled)
+        } finally {
+            app.close()
+            session = null
+        }
+    }
 
+    private suspend fun live(watcher: PackageWatcher, app: FlutterSession, compiled: Path) {
         _state.value = State("Starting the Flutter engine ...")
-        var engine = engines.receive()
+        var first: Engine? = null
+        while (first == null) {
+            first = engines.tryReceive().getOrNull()
+            if (first == null) {
+                if (!scope.isActive || FlutterSession.runActive(pkg)) return
+                watcher.await()
+            }
+        }
+        var engine: Engine = first
         app.runIn(FlutterSession.connect(engine.uri), engine.isolate, compiled)
         _state.value = State(null)
         dirty = false
 
         while (scope.isActive) {
             watcher.await()
+            if (FlutterSession.runActive(pkg)) return
+            app.releaseIfIdle()
             engines.tryReceive().getOrNull()?.let { next ->
                 // A new engine: the old one went with its process. Start the program in it from scratch.
                 engine = next
@@ -192,8 +242,4 @@ internal class FlutterPreviewController(
     }
 
     private fun log(line: String) = tools.log.info("preview: $line")
-
-    private companion object {
-        val ids = AtomicInteger()
-    }
 }

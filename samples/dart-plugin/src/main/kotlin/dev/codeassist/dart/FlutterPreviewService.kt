@@ -53,11 +53,28 @@ class FlutterPreviewService : Service() {
     private val engines = HashMap<Int, Embedded>()
     private val messenger = Messenger(Handler(Looper.getMainLooper()) { msg -> handle(msg); true })
 
-    override fun onBind(intent: Intent): IBinder = messenger.binder
+    /** Whether a pane is bound: the process ends itself shortly after the last one unbinds. */
+    private var clients = false
 
+    override fun onBind(intent: Intent): IBinder {
+        clients = true
+        return messenger.binder
+    }
+
+    override fun onRebind(intent: Intent) {
+        clients = true
+    }
+
+    /**
+     * The last pane let go (its preview parked long enough, or the IDE went). Its engines go, and so does this
+     * process soon after: without an engine it still holds the Flutter library and a Dart VM, some 80 MB, for
+     * nothing. A pane that binds again in the meantime keeps it.
+     */
     override fun onUnbind(intent: Intent): Boolean {
+        clients = false
         closeAll()
-        return false
+        main.postDelayed({ if (!clients && engines.isEmpty()) Process.killProcess(Process.myPid()) }, 2_000)
+        return true
     }
 
     override fun onDestroy() {
