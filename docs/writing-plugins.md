@@ -919,7 +919,7 @@ class DartPlugin : Plugin {
 
             override fun start(context: LanguageServerContext): LanguageServerConnection? {
                 // On Android the executable must be in your APK's native library directory.
-                val dart = reg.nativeLibrary("libdart.so") ?: return null   // null: not available here
+                val dart = reg.nativeLibrary("dart") ?: return null   // libdart.so; null: not available here
                 return LanguageServerConnection.process(listOf(dart.toString(), "language-server"), context.root)
             }
 

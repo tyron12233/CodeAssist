@@ -5892,6 +5892,9 @@ class IdeServices private constructor(
      * round trip off the engine thread first ([dev.ide.lsp.client.LspLanguageSupport.prefetch]), so the engine
      * call that follows is a lookup rather than a wait on another process.
      */
+    /** [file]'s language id, as the file-type mappings route it (for diagnostics in the timing log). */
+    fun languageIdOf(file: Path): String = languageFor(file).id
+
     fun languageServerFor(file: Path): dev.ide.lsp.client.LspLanguageSupport? =
         if (env.languageServers.hasServers) env.languageServers.supportFor(languageFor(file)) else null
 

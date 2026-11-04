@@ -181,7 +181,12 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     ) {
         val services = ctx.servicesOrNull ?: return
         val file = Paths.get(path)
-        val support = runCatching { services.languageServerFor(file) }.getOrNull() ?: return
+        val support = runCatching { services.languageServerFor(file) }.getOrNull()
+        if (dev.ide.platform.log.PerfTrace.enabled) {
+            log.info("lsp-perf prefetch pass=${pass.name.lowercase()} file=.${file.fileName.toString().substringAfterLast('.', "")} " +
+                "server=${support?.definition?.id ?: "none (language ${services.languageIdOf(file)})"}")
+        }
+        support ?: return
         withContext(Dispatchers.IO) {
             val job = coroutineContext[Job]
             runCatching { support.prefetch(pass, file, text, offset, range) { job?.isActive != false } }

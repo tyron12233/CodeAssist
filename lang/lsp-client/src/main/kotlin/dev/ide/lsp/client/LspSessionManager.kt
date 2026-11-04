@@ -72,7 +72,12 @@ class LspSessionManager(
      */
     fun sessionFor(definition: LanguageServerDefinition, file: Path): LspSession? {
         if (closed) return null
-        val projectRoot = host.projectRootFor(file) ?: return null
+        val projectRoot = host.projectRootFor(file) ?: run {
+            if (dev.ide.platform.log.PerfTrace.enabled) {
+                host.loggerFor(definition).info("lsp-perf no session for $file: it is in no open project")
+            }
+            return null
+        }
         val root = rootFor(definition, file, projectRoot)
         val key = Key(definition.id, root)
         val slot = slots.computeIfAbsent(key) { Slot(newSession(definition, root, projectRoot)) }

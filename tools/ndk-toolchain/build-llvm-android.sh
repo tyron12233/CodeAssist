@@ -140,6 +140,12 @@ stage_deps() {
             "llvm-project-$LLVM_VERSION.src/cmake" \
             "llvm-project-$LLVM_VERSION.src/third-party"
     fi
+    # clangd lives in clang-tools-extra, which only the clangd stage needs; a tree extracted before that
+    # stage existed has everything else.
+    if [ ! -d "$SRC/clang-tools-extra" ]; then
+        log "extracting clang-tools-extra"
+        tar -C "$WORK" -xf "$DL/llvm.tar.xz" "llvm-project-$LLVM_VERSION.src/clang-tools-extra"
+    fi
 
     apply_patches
 
@@ -411,12 +417,45 @@ stage_daemon() {
     "$toolchain/bin/llvm-strip" --strip-all "$OUT/jniLibs/arm64-v8a/libndkrun.so"
 }
 
+# clangd, the Language Server Protocol server for C and C++, built from the same LLVM against the same shared
+# libLLVM.so / libclang-cpp.so the package already ships, so it costs only its own code (a few MB). It is a
+# separate stage over the EXISTING build trees: re-running CMake on their caches with clang-tools-extra
+# enabled keeps every other setting, and Ninja then builds only clangd and what it needs.
+#
+# Two of clangd's dependencies generate sources with tools that must run on THIS machine: clang-pseudo-gen and
+# clang-tidy-confusable-chars-gen. They are built in the native tree, which the cross build already reads its
+# tablegens from (LLVM_NATIVE_TOOL_DIR). Packaged as `libclangd.so`, the shape the installer makes executable.
+stage_clangd() {
+    require_disk 6
+    [ -d "$SRC/clang-tools-extra" ] || { echo "no clang-tools-extra under $SRC; run the deps stage" >&2; exit 1; }
+    log "native: the generators clangd's build runs"
+    "$CMAKE" -S "$SRC/llvm" -B "$NATIVE_BUILD" -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra"
+    "$NINJA" -C "$NATIVE_BUILD" -j "$JOBS" clang-pseudo-gen clang-tidy-confusable-chars-gen
+
+    log "cross: clangd for Android"
+    "$CMAKE" -S "$SRC/llvm" -B "$CROSS_BUILD" \
+        -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
+        -DCLANGD_BUILD_XPC=OFF \
+        -DCLANGD_ENABLE_REMOTE=OFF \
+        -DCLANG_TIDY_CONFUSABLE_CHARS_GEN="$NATIVE_BUILD/bin/clang-tidy-confusable-chars-gen" \
+        -DCLANG_PSEUDO_GEN="$NATIVE_BUILD/bin/clang-pseudo-gen"
+    "$NINJA" -C "$CROSS_BUILD" -j "$JOBS" clangd
+
+    local strip="$NDK/toolchains/llvm/prebuilt"
+    strip="$strip/$(ls "$strip" | head -1)/bin/llvm-strip"
+    mkdir -p "$OUT/jniLibs/arm64-v8a"
+    cp "$CROSS_BUILD/bin/clangd" "$OUT/jniLibs/arm64-v8a/libclangd.so"
+    "$strip" --strip-all "$OUT/jniLibs/arm64-v8a/libclangd.so"
+    log "clangd: $(du -h "$OUT/jniLibs/arm64-v8a/libclangd.so" | cut -f1)"
+}
+
 case "${1:-all}" in
     deps) stage_deps ;;
     native) stage_native ;;
     cross) stage_cross ;;
     package) stage_package ;;
     daemon) stage_daemon ;;
+    clangd) stage_clangd ;;
     all) stage_deps; stage_native; stage_cross; stage_package ;;
     *) echo "unknown stage: $1" >&2; exit 2 ;;
 esac
