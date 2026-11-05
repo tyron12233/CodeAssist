@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.ide.plugin.ui.ColorScheme
 import dev.ide.plugin.ui.EditorLanguage
 import dev.ide.plugin.ui.EditorPreview
 import dev.ide.plugin.ui.EditorPreviewContext
@@ -44,6 +45,16 @@ class HelloUiPlugin : UiPlugin {
     override val id = "com.example.hello"
 
     override fun contribute(ui: UiRegistration) {
+        // A whole editor color scheme, listed beside the presets in Settings -> Editor Colors. The document is
+        // what the IDE's scheme editor exports, so a real theme plugin designs it there and ships the file.
+        // Inside `catch (LinkageError)` because the call arrived in SPI 3.4.0 and this sample still loads on
+        // older hosts (see minHostVersion in res/raw/codeassist_plugin.toml).
+        try {
+            ui.colorScheme(ColorScheme(id = "midnight", name = "Hello Midnight", json = MIDNIGHT_SCHEME))
+        } catch (e: LinkageError) {
+            // An older IDE: no plugin schemes there.
+        }
+
         ui.toolWindow(
             ToolWindow(
                 id = "com.example.hello.panel",
@@ -183,3 +194,30 @@ private fun HelloPanelPreview() {
 private fun HelloPanelNoFilePreview() {
     HelloPanel(UiContext.preview())
 }
+
+/** Sparse: only what it changes. Everything else falls back the way it does in any scheme. */
+private val MIDNIGHT_SCHEME = """
+{
+  "schema": 1,
+  "name": "Hello Midnight",
+  "dark": {
+    "editor.background": { "bg": "#0E1525" },
+    "editor.currentLine": { "bg": "#16213A" },
+    "editor.selection": { "bg": "#2A3F6B" },
+    "text": "#D7DEEE",
+    "keyword": { "fg": "#8FA8FF", "bold": true },
+    "string": "#9BE3B5",
+    "number": "#FFB86C",
+    "comment": { "fg": "#5E6B8A", "italic": true },
+    "function": "#7FD4FF",
+    "type": "#F4A6FF",
+    "annotation": "#FFD479"
+  },
+  "light": {
+    "keyword": { "fg": "#3046C4", "bold": true },
+    "string": "#1B7F45",
+    "comment": { "fg": "#7A84A0", "italic": true },
+    "type": "#9B2DB0"
+  }
+}
+"""
