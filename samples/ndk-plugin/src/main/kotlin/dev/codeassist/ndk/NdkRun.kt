@@ -70,7 +70,7 @@ class NdkRunTaskProvider(
             log.info("this IDE has no Run console for plugins; the program's output goes to the build log")
             null
         }
-        val run = NdkRunTask(TaskName(":${module.name}:runNative"), module, { link.outputFor(RUN_ABI) }, toolchain, console, log)
+        val run = NdkRunTask(TaskName(":${module.name}:runNative"), module, { link.outputFor((toolchain()?.hostAbi ?: NdkAbi.ARM64).abiName) }, toolchain, console, log)
         val action = RunAction("> Run ${module.name}", TwoStepGraph(link, run))
         if (console != null) {
             try {
@@ -84,9 +84,6 @@ class NdkRunTaskProvider(
 
     companion object {
         const val ID_PREFIX = "ndkRun:"
-
-        /** The ABI the bundled toolchain targets, and so the only program it can build to run here. */
-        const val RUN_ABI = "arm64-v8a"
     }
 }
 
@@ -102,7 +99,8 @@ internal class TwoStepGraph(private val first: Task, private val second: Task) :
  * its output in the build log otherwise.
  *
  * **How it runs at all.** Since Android 10 an app may not `exec()` a file in its own storage. The system
- * linker may load one, so the program runs as `/system/bin/linker64 <file>` -- the same SELinux rule that
+ * linker may load one, so the program runs as `/system/bin/linker64 <file>` (`/system/bin/linker` for a
+ * 32-bit ABI, armeabi-v7a or x86) -- the same SELinux rule that
  * allows an app to `dlopen` its own files. It is copied into the IDE's internal cache first, because shared
  * storage is mounted without execute permission at all. On Android 9 and older, and on the desktop, it is
  * executed directly.
@@ -136,7 +134,7 @@ internal class NdkRunTask(
         val write: (String) -> Unit = io?.let { it::stdout } ?: logLines::append
 
         val launch = try {
-            NativeLaunch.prepare(built, module.name, toolchain()?.runLauncher)
+            NativeLaunch.prepare(built, module.name, toolchain()?.runLauncher, abi = toolchain()?.hostAbi ?: NdkAbi.ARM64)
         } catch (e: IOException) {
             return TaskResult.Failed("ndk: could not stage the program to run: ${e.message}", e)
         }
@@ -206,7 +204,12 @@ internal class NdkRunTask(
  */
 internal class NativeLaunch(val command: List<String>, val environment: Map<String, String>) {
     companion object {
-        private const val SYSTEM_LINKER = "/system/bin/linker64"
+        /**
+         * The system linker that loads programs of [abi]: Android keeps the 64-bit one as `linker64` and the
+         * 32-bit one as `linker`, and a 64-bit device has both. The program decides, not the device: an arm64
+         * device runs an armeabi-v7a program through `linker`.
+         */
+        internal fun systemLinker(abi: NdkAbi): String = if (abi.is64Bit) "/system/bin/linker64" else "/system/bin/linker"
 
         /**
          * Stage [built] where it can be run and say how to run it.
@@ -215,8 +218,9 @@ internal class NativeLaunch(val command: List<String>, val environment: Map<Stri
          * in internal storage: the one place an app's file can be mapped executable. The C++ runtime is copied
          * beside it when the program links it (`stl = c++_shared`), and `LD_LIBRARY_PATH` names that directory.
          */
-        fun prepare(built: Path, moduleName: String, launcher: Path?): NativeLaunch {
-            val android = Files.isRegularFile(Paths.get(SYSTEM_LINKER))
+        fun prepare(built: Path, moduleName: String, launcher: Path?, abi: NdkAbi = NdkAbi.ARM64): NativeLaunch {
+            val linker = systemLinker(abi)
+            val android = Files.isRegularFile(Paths.get(linker))
             val runnable = if (android) {
                 val tmp = System.getProperty("java.io.tmpdir")?.takeIf { it.startsWith("/data/") }
                     ?: throw IOException("no internal storage to run from (java.io.tmpdir is not under /data)")
@@ -233,7 +237,7 @@ internal class NativeLaunch(val command: List<String>, val environment: Map<Stri
                 built
             }
 
-            val program = if (android && needsSystemLinker()) listOf(SYSTEM_LINKER, runnable.toString())
+            val program = if (android && needsSystemLinker()) listOf(linker, runnable.toString())
             else listOf(runnable.toString())
             val command = if (launcher != null) listOf(launcher.toString()) + program else program
             return NativeLaunch(

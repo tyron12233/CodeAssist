@@ -25,11 +25,10 @@ data class NdkFacet(
     val libraryName: String = "native-lib",
 
     /**
-     * ABIs to build for.
+     * ABIs to build for: any of [NdkAbi.names], since the bundled toolchain targets all four.
      *
-     * One by default, and the device's own, because that is what the packaged toolchain can target: the
-     * compiler ships with a single backend to keep the plugin installable. Naming more here is what a build
-     * for release would want and what the toolchain would have to be rebuilt for.
+     * One by default: each ABI is a full native build on the phone, so a module that names nothing gets the
+     * one almost every device runs, and a build for release lists the others.
      */
     val abis: List<String> = listOf("arm64-v8a"),
 

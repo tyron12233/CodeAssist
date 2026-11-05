@@ -1,9 +1,9 @@
 [plugin]
 id = "dev.codeassist.dart"
 name = "Dart"
-version = "0.1.0"
+version = "0.2.0"
 apiVersion = 4
-description = "Dart on the device, with a bundled Dart SDK for Android arm64. Dart's analysis server gives errors, completion, quick fixes, navigation, rename and formatting. Run compiles and runs bin/*.dart in the Run console, package:test tests run from the gutter with results in the Tests tab, pub get fetches packages, and there are Dart Console App and Flutter App templates. Flutter apps (Flutter 3.47.9, debug mode) run on this device in a built-in player with hot reload on save, and their @Preview widgets show live in the editor's preview pane (Android 11 and later) or in a hot-reloading gallery. Existing pub packages open as Dart projects."
+description = "Dart on the device, with a bundled Dart SDK for Android (arm64-v8a, armeabi-v7a or x86_64: one plugin APK per ABI). Dart's analysis server gives errors, completion, quick fixes, navigation, rename and formatting. Run compiles and runs bin/*.dart in the Run console, package:test tests run from the gutter with results in the Tests tab, pub get fetches packages, and there are Dart Console App and Flutter App templates. Flutter apps (Flutter 3.47.9, debug mode) run on this device in a built-in player with hot reload on save, and their @Preview widgets show live in the editor's preview pane (Android 11 and later) or in a hot-reloading gallery. Existing pub packages open as Dart projects."
 entryPoints = ["dev.codeassist.dart.DartPlugin"]
 uiEntryPoints = ["dev.codeassist.dart.DartUiPlugin"]
 capabilities = [

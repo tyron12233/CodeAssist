@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# Build clang/lld/llvm-tools that RUN ON an Android arm64 device, for the NDK plugin.
+# Build clang/lld/llvm-tools that RUN ON an Android device, for the NDK plugin, and the sysroot they compile
+# against for ALL FOUR Android ABIs (arm64-v8a, armeabi-v7a, x86, x86_64).
+#
+# Two ABIs are in play and they are independent:
+#   HOST   what the compiler itself runs on. One LLVM build per host ABI (HOST_ABI, default arm64-v8a), each
+#          packaged under jniLibs/<abi>/. Run the script again with another HOST_ABI to add one.
+#   TARGET what the compiler emits code for. One LLVM build covers every target (it carries the AArch64, ARM
+#          and X86 backends), and the sysroot/runtime half of the output holds all four.
 #
 # Why this exists: Google's NDK has no Android host build. Every `clang` in it is a
 # linux-x86_64/darwin/windows binary, so none of them can run on a phone. A CodeAssist plugin that
@@ -8,11 +15,12 @@
 # It also has to be SMALL, because of a second constraint: since Android 10 an app may not exec() or
 # dlopen() a file it wrote into its own storage, so a toolchain cannot be downloaded at runtime. It has to
 # ship inside the plugin APK, where the installer unpacks it into a directory that is executable. The size
-# levers below (one target backend, one shared libLLVM, MinSizeRel, the multicall llvm driver) are
+# levers below (only the target backends wanted, one shared libLLVM, MinSizeRel, the multicall llvm driver) are
 # therefore load-bearing, not tidiness.
 #
 # Usage:  ./build-llvm-android.sh [stage]
-#   stage: deps | native | cross | package | all   (default: all)
+#   stage: deps | native | cross | package | daemon | clangd | all   (default: all; several may be given)
+#   env:   HOST_ABI=arm64-v8a|armeabi-v7a|x86|x86_64   LLVM_TARGETS="AArch64;ARM;X86"   TARGET_ABIS="arm64-v8a ..."
 #
 # Needs ~13 GB of free disk and around an hour on ten cores.
 set -euo pipefail
@@ -20,16 +28,39 @@ set -euo pipefail
 LLVM_VERSION="${LLVM_VERSION:-18.1.8}"     # matches NDK r27's clang, so its libc++ headers pair exactly
 NDK_VERSION="${NDK_VERSION:-r27c}"
 ANDROID_API="${ANDROID_API:-26}"           # the IDE's own minSdk floor
-# Only the backend we emit code for. Each extra target is roughly 8-15 MB of the final binary, so this is
-# the single biggest size lever. Add "ARM;X86" here to cross-compile for the other Android ABIs.
-LLVM_TARGETS="${LLVM_TARGETS:-AArch64}"
+# The backends we emit code for. Each one is roughly 8-15 MB of the final binary, so this is the single biggest
+# size lever: AArch64 -> arm64-v8a, ARM -> armeabi-v7a, X86 -> both x86 and x86_64. Drop one here (and its ABI
+# from TARGET_ABIS) for a smaller toolchain.
+LLVM_TARGETS="${LLVM_TARGETS:-AArch64;ARM;X86}"
+# Which ABIs the sysroot and runtime libraries are packaged for. Each needs its backend in LLVM_TARGETS.
+TARGET_ABIS="${TARGET_ABIS:-arm64-v8a armeabi-v7a x86 x86_64}"
+# The ABI the compiler being built runs on (the device that has the plugin installed).
+HOST_ABI="${HOST_ABI:-arm64-v8a}"
+
+# Per-ABI facts, one line each: <clang triple> <sysroot lib dir> <compiler-rt arch> <libunwind dir> <backend>.
+# The clang triple and the sysroot directory differ for 32-bit ARM: clang is told armv7a-linux-androideabi but
+# the NDK's directory (which clang derives itself) is arm-linux-androideabi. compiler-rt and libunwind use
+# yet other names for 32-bit x86 (i686 and i386).
+abi_info() {
+    case "$1" in
+        arm64-v8a)   echo "aarch64-linux-android aarch64-linux-android aarch64 aarch64 AArch64" ;;
+        armeabi-v7a) echo "armv7a-linux-androideabi arm-linux-androideabi arm arm ARM" ;;
+        x86)         echo "i686-linux-android i686-linux-android i686 i386 X86" ;;
+        x86_64)      echo "x86_64-linux-android x86_64-linux-android x86_64 x86_64 X86" ;;
+        *) echo "unknown ABI '$1' (expected arm64-v8a, armeabi-v7a, x86 or x86_64)" >&2; return 1 ;;
+    esac
+}
+abi_field() { local info; info="$(abi_info "$1")" || exit 1; echo "$info" | cut -d' ' -f"$2"; }
+HOST_CLANG_TRIPLE="$(abi_field "$HOST_ABI" 1)"
+HOST_LIB_TRIPLE="$(abi_field "$HOST_ABI" 2)"
 
 WORK="${WORK:-$(pwd)/build}"
 DL="$WORK/dl"
 SRC="$WORK/llvm-project-$LLVM_VERSION.src"
 NDK="$WORK/android-ndk-$NDK_VERSION"
 NATIVE_BUILD="$WORK/build-native"
-CROSS_BUILD="$WORK/build-android"
+# One tree per host ABI. arm64 keeps the name it always had, so an existing build is still found.
+if [ "$HOST_ABI" = "arm64-v8a" ]; then CROSS_BUILD="$WORK/build-android"; else CROSS_BUILD="$WORK/build-android-$HOST_ABI"; fi
 OUT="$WORK/out"
 
 CMAKE="${CMAKE:-cmake}"
@@ -42,7 +73,7 @@ log() { printf '\n==> %s\n' "$*"; }
 # several GB of objects behind and no way to tell which are complete.
 require_disk() {
     local need_gb="$1" avail_gb
-    avail_gb=$(df -g "$WORK" | awk 'NR==2 {print $4}')
+    avail_gb=$(df -Pk "$WORK" | awk 'NR==2 {print int($4 / 1048576)}')
     if [ "$avail_gb" -lt "$need_gb" ]; then
         echo "Only ${avail_gb} GB free under $WORK; this stage needs ${need_gb} GB. Stopping." >&2
         exit 1
@@ -165,8 +196,14 @@ stage_deps() {
 stage_native() {
     require_disk 8
     log "configuring the native tablegen build"
+    # `-include cstdint`: LLVM 18's headers use uint64_t and friends without including <cstdint> (SmallVector.h
+    # is the first to break), which the host libstdc++ used to supply transitively. GCC 14 and 15 no longer do,
+    # so a stock Linux host with a recent GCC stops at the first file with "'uint64_t' was not declared". This
+    # only touches the build-machine tablegens; the Android build uses the NDK's clang and libc++, which are
+    # unaffected. Override with NATIVE_CXX_FLAGS (set it empty to drop the flag).
     "$CMAKE" -G Ninja -S "$SRC/llvm" -B "$NATIVE_BUILD" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="${NATIVE_CXX_FLAGS-"-include cstdint"}" \
         -DLLVM_ENABLE_PROJECTS="clang" \
         -DLLVM_TARGETS_TO_BUILD="$LLVM_TARGETS" \
         -DLLVM_ENABLE_ASSERTIONS=OFF \
@@ -185,14 +222,14 @@ stage_cross() {
     require_disk 8
     local toolchain="$NDK/toolchains/llvm/prebuilt"
     toolchain="$toolchain/$(ls "$toolchain" | head -1)"
-    log "configuring the Android build (targets: $LLVM_TARGETS, api $ANDROID_API)"
+    log "configuring the Android build (host: $HOST_ABI, targets: $LLVM_TARGETS, api $ANDROID_API)"
 
     # CMake's own Android support rather than the NDK's android.toolchain.cmake: fewer moving parts, and the
     # NDK's shim has not kept up with CMake 4.
     "$CMAKE" -G Ninja -S "$SRC/llvm" -B "$CROSS_BUILD" \
         -DCMAKE_SYSTEM_NAME=Android \
         -DCMAKE_SYSTEM_VERSION="$ANDROID_API" \
-        -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+        -DCMAKE_ANDROID_ARCH_ABI="$HOST_ABI" \
         -DCMAKE_ANDROID_NDK="$NDK" \
         -DCMAKE_ANDROID_STL_TYPE=c++_shared \
         \
@@ -209,8 +246,8 @@ stage_cross() {
         -DCMAKE_MODULE_LINKER_FLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384" \
         \
         `# What it runs on, and what it emits for when told nothing else.` \
-        -DLLVM_HOST_TRIPLE="aarch64-linux-android$ANDROID_API" \
-        -DLLVM_DEFAULT_TARGET_TRIPLE="aarch64-linux-android$ANDROID_API" \
+        -DLLVM_HOST_TRIPLE="$HOST_CLANG_TRIPLE$ANDROID_API" \
+        -DLLVM_DEFAULT_TARGET_TRIPLE="$HOST_CLANG_TRIPLE$ANDROID_API" \
         \
         `# The native tools from the stage above; without this the build tries to RUN the Android tablegen.` \
         -DLLVM_NATIVE_TOOL_DIR="$NATIVE_BUILD/bin" \
@@ -277,11 +314,30 @@ stage_cross() {
 # ["lib", "gnu", "lld.so"], so the middle component selects the GNU flavor, and the name still has the
 # lib-prefix and .so-suffix the installer expects. `liblld.so` would split to one component that matches
 # nothing, and lld would exit with "lld is a generic driver".
+#
+# Two halves again, and they follow the two ABIs differently. The executables are the HOST half: this run
+# writes jniLibs/$HOST_ABI/ and leaves any other host's directory alone, so the script can be run once per
+# host ABI into one $OUT. The asset tree is the TARGET half: headers, runtime archives and link libraries for
+# every ABI in TARGET_ABIS, identical whichever host produced it.
 stage_package() {
     local strip="$NDK/toolchains/llvm/prebuilt"
     strip="$strip/$(ls "$strip" | head -1)/bin/llvm-strip"
-    rm -rf "$OUT"
-    mkdir -p "$OUT/jniLibs/arm64-v8a" "$OUT/assets/toolchain"
+    local host_dir="$OUT/jniLibs/$HOST_ABI"
+
+    # Every target needs its backend, or the toolchain would package a sysroot it cannot compile for.
+    local abi backend
+    for abi in $TARGET_ABIS; do
+        backend="$(abi_field "$abi" 5)" || exit 1
+        case ";$LLVM_TARGETS;" in
+            *";$backend;"*) ;;
+            *) echo "TARGET_ABIS has $abi, which needs the $backend backend, but LLVM_TARGETS is '$LLVM_TARGETS'." >&2
+               echo "Rebuild LLVM with it, or drop $abi from TARGET_ABIS." >&2
+               exit 1 ;;
+        esac
+    done
+
+    rm -rf "$host_dir" "$OUT/assets"
+    mkdir -p "$host_dir" "$OUT/assets/toolchain"
 
     # There is only ONE executable. Both clang and lld are built with GENERATE_DRIVER, so they are folded
     # into `bin/llvm` along with ar/nm/objcopy/strip/ranlib/readelf, and normally reached through symlinks.
@@ -312,30 +368,32 @@ stage_package() {
     log "collecting the executables and shared libraries"
     local driver="$CROSS_BUILD/bin/llvm"
     [ -f "$driver" ] || { echo "no $driver; did the cross stage finish?" >&2; exit 1; }
-    cp "$driver" "$OUT/jniLibs/arm64-v8a/libllvmtools.so"
-    cp "$driver" "$OUT/jniLibs/arm64-v8a/libld-gnu-lld.so"
-    cp "$CROSS_BUILD/lib/libLLVM.so."*              "$OUT/jniLibs/arm64-v8a/libLLVM.so" 2>/dev/null \
-        || cp "$CROSS_BUILD/lib/libLLVM.so"         "$OUT/jniLibs/arm64-v8a/libLLVM.so"
-    cp "$CROSS_BUILD/lib/libclang-cpp.so"*          "$OUT/jniLibs/arm64-v8a/libclang-cpp.so" 2>/dev/null || true
+    cp "$driver" "$host_dir/libllvmtools.so"
+    cp "$driver" "$host_dir/libld-gnu-lld.so"
+    cp "$CROSS_BUILD/lib/libLLVM.so."*              "$host_dir/libLLVM.so" 2>/dev/null \
+        || cp "$CROSS_BUILD/lib/libLLVM.so"         "$host_dir/libLLVM.so"
+    cp "$CROSS_BUILD/lib/libclang-cpp.so"*          "$host_dir/libclang-cpp.so" 2>/dev/null || true
     # The C API. CMake's Android platform sets CMAKE_PLATFORM_NO_VERSIONED_SONAME, so its SONAME is the plain
     # `libclang.so` the installer needs (a `libclang.so.13` would be neither packaged nor found).
-    cp "$CROSS_BUILD/lib/libclang.so"               "$OUT/jniLibs/arm64-v8a/libclang.so"
-    # The STL the toolchain itself was linked against, from the NDK rather than from our build.
-    find "$NDK" -name libc++_shared.so -path '*aarch64*' -print -quit \
-        | xargs -I{} cp {} "$OUT/jniLibs/arm64-v8a/libc++_shared.so"
+    cp "$CROSS_BUILD/lib/libclang.so"               "$host_dir/libclang.so"
+    # The STL the toolchain itself was linked against, from the NDK rather than from our build: the HOST's.
+    local host_stl
+    host_stl="$(find "$NDK" -name libc++_shared.so -path "*/$HOST_LIB_TRIPLE/*" -print -quit)"
+    [ -n "$host_stl" ] || { echo "no libc++_shared.so for $HOST_LIB_TRIPLE under $NDK" >&2; exit 1; }
+    cp "$host_stl" "$host_dir/libc++_shared.so"
 
     log "stripping"
-    for f in "$OUT"/jniLibs/arm64-v8a/*.so; do "$strip" --strip-all "$f" || true; done
+    for f in "$host_dir"/*.so; do "$strip" --strip-all "$f" || true; done
 
     log "collecting the headers and link libraries the compiler needs at runtime"
     # clang computes its resource directory from its own path, which is wrong once it lives in a flat
     # jniLibs directory, so the plugin passes -resource-dir at this location instead.
     cp -R "$CROSS_BUILD/lib/clang" "$OUT/assets/toolchain/lib-clang"
 
-    # The resource directory needs two RUNTIME archives our build does not produce, because compiler-rt is
-    # deliberately not built here: they are libraries for the code being compiled, not part of the compiler,
-    # and the NDK already ships them built for the target. Without them every link fails on
-    # `libclang_rt.builtins-aarch64-android.a` and `-l:libunwind.a`.
+    # The resource directory needs two RUNTIME archives per target that our build does not produce, because
+    # compiler-rt is deliberately not built here: they are libraries for the code being compiled, not part of
+    # the compiler, and the NDK already ships them built for every target. Without them every link fails on
+    # `libclang_rt.builtins-<arch>-android.a` and `-l:libunwind.a`.
     #
     # Taken from the NDK's own clang resource directory, which is the same clang version as ours. The
     # sanitizer runtimes sitting beside them are deliberately left out: several MB each, and nothing on the
@@ -343,28 +401,45 @@ stage_package() {
     local ndk_res="$NDK/toolchains/llvm/prebuilt"
     ndk_res="$ndk_res/$(ls "$ndk_res" | head -1)/lib/clang/${LLVM_VERSION%%.*}/lib/linux"
     local out_res="$OUT/assets/toolchain/lib-clang/${LLVM_VERSION%%.*}/lib/linux"
-    mkdir -p "$out_res/aarch64"
-    cp "$ndk_res/libclang_rt.builtins-aarch64-android.a" "$out_res/"
-    cp "$ndk_res/aarch64/libunwind.a" "$out_res/aarch64/"
     local sysroot="$NDK/toolchains/llvm/prebuilt"
     sysroot="$sysroot/$(ls "$sysroot" | head -1)/sysroot"
-    mkdir -p "$OUT/assets/toolchain/sysroot/usr"
+    mkdir -p "$out_res" "$OUT/assets/toolchain/sysroot/usr"
     cp -R "$sysroot/usr/include" "$OUT/assets/toolchain/sysroot/usr/include"
-    # Only this ABI's link libraries, and only at the API level we target: the NDK carries every ABI at
-    # every level from 21 up, which is most of its size and all but one slice of it is dead weight here.
+
+    # One slice per target ABI, each at the single API level we target: the NDK carries every ABI at every
+    # level from 21 up, which is most of its size and all but these slices of it is dead weight here.
     #
     # The LAYOUT is copied exactly, not flattened or renamed. clang derives these paths itself
     # (<sysroot>/usr/lib/<triple>/<api> for the CRT objects and the versioned stubs, <sysroot>/usr/lib/<triple>
     # for the static libraries beside them), so a tidier arrangement is simply one it cannot find.
-    local libdir="$OUT/assets/toolchain/sysroot/usr/lib/aarch64-linux-android"
-    mkdir -p "$libdir/$ANDROID_API"
-    cp -R "$sysroot/usr/lib/aarch64-linux-android/$ANDROID_API/." "$libdir/$ANDROID_API/"
-    find "$sysroot/usr/lib/aarch64-linux-android" -maxdepth 1 -type f \( -name '*.a' -o -name '*.so' \) \
-        -exec cp {} "$libdir/" \;
+    local rt_arch unwind_dir lib_triple
+    for abi in $TARGET_ABIS; do
+        lib_triple="$(abi_field "$abi" 2)"
+        rt_arch="$(abi_field "$abi" 3)"
+        unwind_dir="$(abi_field "$abi" 4)"
+        log "  target $abi ($lib_triple)"
+
+        [ -f "$ndk_res/libclang_rt.builtins-$rt_arch-android.a" ] \
+            || { echo "missing $ndk_res/libclang_rt.builtins-$rt_arch-android.a for $abi" >&2; ls "$ndk_res" >&2; exit 1; }
+        [ -f "$ndk_res/$unwind_dir/libunwind.a" ] \
+            || { echo "missing $ndk_res/$unwind_dir/libunwind.a for $abi" >&2; ls "$ndk_res" >&2; exit 1; }
+        [ -d "$sysroot/usr/lib/$lib_triple/$ANDROID_API" ] \
+            || { echo "missing $sysroot/usr/lib/$lib_triple/$ANDROID_API for $abi" >&2; exit 1; }
+
+        mkdir -p "$out_res/$unwind_dir"
+        cp "$ndk_res/libclang_rt.builtins-$rt_arch-android.a" "$out_res/"
+        cp "$ndk_res/$unwind_dir/libunwind.a" "$out_res/$unwind_dir/"
+
+        local libdir="$OUT/assets/toolchain/sysroot/usr/lib/$lib_triple"
+        mkdir -p "$libdir/$ANDROID_API"
+        cp -R "$sysroot/usr/lib/$lib_triple/$ANDROID_API/." "$libdir/$ANDROID_API/"
+        find "$sysroot/usr/lib/$lib_triple" -maxdepth 1 -type f \( -name '*.a' -o -name '*.so' \) \
+            -exec cp {} "$libdir/" \;
+    done
 
     # Guard the case-collision above rather than trusting the reader to remember it.
     local lowered
-    lowered=$(ls "$OUT/jniLibs/arm64-v8a" | tr 'A-Z' 'a-z' | sort)
+    lowered=$(ls "$host_dir" | tr 'A-Z' 'a-z' | sort)
     if [ "$(echo "$lowered" | wc -l)" != "$(echo "$lowered" | uniq | wc -l)" ]; then
         echo "two packaged files differ only by case; on this case-insensitive file system one has" >&2
         echo "overwritten the other: $(echo "$lowered" | uniq -d | tr '\n' ' ')" >&2
@@ -385,7 +460,7 @@ stage_package() {
 
     log "sizes"
     du -sh "$OUT/jniLibs" "$OUT/assets" 2>/dev/null
-    ls -la "$OUT/jniLibs/arm64-v8a"
+    ls -la "$host_dir"
 }
 
 # The resident daemon: one small C program over libclang that keeps each open file's translation unit, and
@@ -397,24 +472,25 @@ stage_daemon() {
     local toolchain="$NDK/toolchains/llvm/prebuilt"
     toolchain="$toolchain/$(ls "$toolchain" | head -1)"
     local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    [ -f "$OUT/jniLibs/arm64-v8a/libclang.so" ] || { echo "no libclang.so in $OUT; run the package stage" >&2; exit 1; }
+    local host_dir="$OUT/jniLibs/$HOST_ABI"
+    [ -f "$host_dir/libclang.so" ] || { echo "no libclang.so in $OUT; run the package stage" >&2; exit 1; }
     log "building the resident daemon"
-    "$toolchain/bin/aarch64-linux-android$ANDROID_API-clang" -O2 -std=c11 -Wall -Wextra \
+    "$toolchain/bin/$HOST_CLANG_TRIPLE$ANDROID_API-clang" -O2 -std=c11 -Wall -Wextra \
         -I"$SRC/clang/include" \
         "$here/daemon/ndkclangd.c" \
-        -L"$OUT/jniLibs/arm64-v8a" -lclang \
+        -L"$host_dir" -lclang \
         -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 \
-        -o "$OUT/jniLibs/arm64-v8a/libndkclangd.so"
-    "$toolchain/bin/llvm-strip" --strip-all "$OUT/jniLibs/arm64-v8a/libndkclangd.so"
+        -o "$host_dir/libndkclangd.so"
+    "$toolchain/bin/llvm-strip" --strip-all "$host_dir/libndkclangd.so"
 
     # The Run launcher: runs a user's console program in a pseudo-terminal (see daemon/ndkrun.c). Needs only
     # bionic, whose openpty() has been there since API 23.
     log "building the Run launcher"
-    "$toolchain/bin/aarch64-linux-android$ANDROID_API-clang" -O2 -std=c11 -Wall -Wextra \
+    "$toolchain/bin/$HOST_CLANG_TRIPLE$ANDROID_API-clang" -O2 -std=c11 -Wall -Wextra \
         "$here/daemon/ndkrun.c" \
         -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 \
-        -o "$OUT/jniLibs/arm64-v8a/libndkrun.so"
-    "$toolchain/bin/llvm-strip" --strip-all "$OUT/jniLibs/arm64-v8a/libndkrun.so"
+        -o "$host_dir/libndkrun.so"
+    "$toolchain/bin/llvm-strip" --strip-all "$host_dir/libndkrun.so"
 }
 
 # clangd, the Language Server Protocol server for C and C++, built from the same LLVM against the same shared
@@ -443,21 +519,24 @@ stage_clangd() {
 
     local strip="$NDK/toolchains/llvm/prebuilt"
     strip="$strip/$(ls "$strip" | head -1)/bin/llvm-strip"
-    mkdir -p "$OUT/jniLibs/arm64-v8a"
-    cp "$CROSS_BUILD/bin/clangd" "$OUT/jniLibs/arm64-v8a/libclangd.so"
-    "$strip" --strip-all "$OUT/jniLibs/arm64-v8a/libclangd.so"
-    log "clangd: $(du -h "$OUT/jniLibs/arm64-v8a/libclangd.so" | cut -f1)"
+    mkdir -p "$OUT/jniLibs/$HOST_ABI"
+    cp "$CROSS_BUILD/bin/clangd" "$OUT/jniLibs/$HOST_ABI/libclangd.so"
+    "$strip" --strip-all "$OUT/jniLibs/$HOST_ABI/libclangd.so"
+    log "clangd: $(du -h "$OUT/jniLibs/$HOST_ABI/libclangd.so" | cut -f1)"
 }
 
-case "${1:-all}" in
-    deps) stage_deps ;;
-    native) stage_native ;;
-    cross) stage_cross ;;
-    package) stage_package ;;
-    daemon) stage_daemon ;;
-    clangd) stage_clangd ;;
-    all) stage_deps; stage_native; stage_cross; stage_package ;;
-    *) echo "unknown stage: $1" >&2; exit 2 ;;
-esac
+# One or more stages, in the order given: `./build-llvm-android.sh cross package`.
+for stage in "${@:-all}"; do
+    case "$stage" in
+        deps) stage_deps ;;
+        native) stage_native ;;
+        cross) stage_cross ;;
+        package) stage_package ;;
+        daemon) stage_daemon ;;
+        clangd) stage_clangd ;;
+        all) stage_deps; stage_native; stage_cross; stage_package ;;
+        *) echo "unknown stage: $stage" >&2; exit 2 ;;
+    esac
+done
 
 log "done"

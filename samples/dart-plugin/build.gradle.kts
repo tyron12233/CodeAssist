@@ -1,7 +1,8 @@
 // The Dart plugin: Dart on the device, shipped as its own Android app.
 //
-// It carries a Dart SDK that RUNS on Android arm64 (tools/dart-sdk). Those bytes are NOT in this repository:
-// `tools/dart-sdk/fetch-dart-android.sh` stages them, and this module packages whatever that left behind.
+// It carries a Dart SDK that RUNS on Android (tools/dart-sdk), one set of executables per ABI. Those bytes are
+// NOT in this repository: `tools/dart-sdk/fetch-dart-android.sh` stages them, once per ABI, and this module
+// packages whatever that left behind, as one APK per ABI that has anything staged.
 // Building the plugin without them produces an APK that installs and reports "no Dart SDK for this device",
 // which is what a user on an unsupported ABI sees too.
 import java.util.Properties
@@ -25,6 +26,19 @@ val generatedAssetsDir: File = layout.buildDirectory.dir("generated/dart-sdk/ass
  * them the plugin still builds and runs Dart; a Flutter app's Run then says the plugin carries no Flutter.
  */
 val flutterOut: File = File(sdkOut, "flutter")
+
+/**
+ * The ABIs a Dart SDK was staged for (its `jniLibs/<abi>` directories); a Flutter engine alone is no use without
+ * one. x86 (32-bit) is absent: Termux publishes no Dart for it.
+ *
+ * One APK is built for each (see `splits` below), carrying only that ABI's executables, instead of one APK with
+ * all of them. `-Pdart.abis=arm64-v8a,x86_64` narrows the set; `-Pdart.universalApk` adds the single APK with
+ * every ABI as well.
+ */
+val allAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+val stagedAbis: List<String> = (providers.gradleProperty("dart.abis").orNull
+    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: allAbis)
+    .filter { File(sdkLibs, it).isDirectory }
 
 /** The engine the staged Flutter was built on, which the player's Java embedding has to match. */
 val flutterEngine: String = File(flutterOut, "ENGINE").takeIf { it.isFile }?.readText()?.trim()
@@ -70,8 +84,8 @@ android {
         // The IDE's own floor: this code runs inside the IDE's process.
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     // Signed with the IDE's upload key when one is configured (a gitignored keystore.properties at the repo
@@ -108,6 +122,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // A separate APK for each ABI that has something staged, named like `dart-plugin-arm64-v8a-debug.apk`.
+    // With nothing staged there is nothing to split, and the build stays a single SDK-less APK.
+    splits {
+        abi {
+            isEnable = stagedAbis.isNotEmpty()
+            reset()
+            include(*stagedAbis.toTypedArray())
+            isUniversalApk = providers.gradleProperty("dart.universalApk").isPresent
+        }
     }
 
     sourceSets["main"].jniLibs.srcDir(sdkLibs)

@@ -8,7 +8,8 @@
 # the plugin's (fetch-dart-android.sh): Flutter 3.47.9 is Dart 3.13.7.
 #
 # What it stages, in build/out/flutter:
-#   jniLibs/arm64-v8a/libflutter.so   the engine, stripped (396 MB as shipped, 39 MB stripped)
+#   jniLibs/<abi>/libflutter.so       the engine for each ABI in FLUTTER_ABIS, stripped (396 MB as shipped,
+#                                     39 MB stripped, for arm64)
 #   root/                             a minimal FLUTTER_ROOT: the framework packages (flutter, flutter_test),
 #                                     sky_engine (dart:ui), the patched platform the compiler links against,
 #                                     and the version files pub reads. 44 MB, 10 MB compressed
@@ -20,6 +21,9 @@
 #
 # Usage:  FLUTTER_HOME=/path/to/flutter ./fetch-flutter.sh
 #   FLUTTER_HOME   a Flutter 3.47.9 SDK (any host). Only read, plus two `flutter build bundle` runs.
+#   FLUTTER_ABIS   the ABIs to stage an engine for, default "arm64-v8a armeabi-v7a x86_64" (the ABIs there is a
+#                  Dart SDK for; see fetch-dart-android.sh). An ABI whose
+#                  debug engine this Flutter does not ship is skipped with a warning, not an error.
 #   LLVM_OBJCOPY   an llvm-objcopy to strip the engine with; by default the NDK's, from ANDROID_NDK_HOME or
 #                  from the archive tools/ndk-toolchain downloads (build/dl/ndk.zip).
 set -euo pipefail
@@ -65,10 +69,33 @@ if [[ -z "$OBJCOPY" ]]; then
     OBJCOPY="$TMP/llvm-objcopy"
     chmod +x "$OBJCOPY"
 fi
-mkdir -p "$OUT/jniLibs/arm64-v8a"
-unzip -q -o -j "$FLUTTER_HOME/bin/cache/artifacts/engine/android-arm64/flutter.jar" lib/arm64-v8a/libflutter.so -d "$TMP"
-"$OBJCOPY" --strip-unneeded "$TMP/libflutter.so" "$OUT/jniLibs/arm64-v8a/libflutter.so"
-rm -f "$TMP/libflutter.so"
+
+# Flutter names its engine directories by CPU (android-arm64, android-arm, android-x64, android-x86), and the
+# jar holds the library under the Android ABI name. Same engine revision for all of them.
+engine_dir() {
+    case "$1" in
+        arm64-v8a)   echo android-arm64 ;;
+        armeabi-v7a) echo android-arm ;;
+        x86_64)      echo android-x64 ;;
+        x86)         echo android-x86 ;;
+        *) return 1 ;;
+    esac
+}
+staged=0
+for abi in ${FLUTTER_ABIS:-arm64-v8a armeabi-v7a x86_64}; do
+    dir="$(engine_dir "$abi")" || die "unknown ABI '$abi' in FLUTTER_ABIS"
+    jar="$FLUTTER_HOME/bin/cache/artifacts/engine/$dir/flutter.jar"
+    if [[ ! -f "$jar" ]] || ! unzip -l "$jar" "lib/$abi/libflutter.so" >/dev/null 2>&1; then
+        echo "WARNING: no debug engine for $abi in this Flutter ($jar); the plugin will carry no Flutter for it." >&2
+        continue
+    fi
+    mkdir -p "$OUT/jniLibs/$abi"
+    unzip -q -o -j "$jar" "lib/$abi/libflutter.so" -d "$TMP"
+    "$OBJCOPY" --strip-unneeded "$TMP/libflutter.so" "$OUT/jniLibs/$abi/libflutter.so"
+    rm -f "$TMP/libflutter.so"
+    staged=$((staged + 1))
+done
+[[ $staged -gt 0 ]] || die "no engine staged for any ABI in FLUTTER_ABIS."
 
 log "staging FLUTTER_ROOT"
 R="$OUT/root"

@@ -1,0 +1,183 @@
+name: Dart plugin APK
+
+# Builds the Dart plugin (samples/dart-plugin) as installable APKs, one per ABI. apk.yml only builds the IDE.
+#
+# The plugin carries a Dart SDK and Flutter that run ON the device, and neither is in the repository, so:
+#   1. sdk:     tools/dart-sdk/fetch-dart-android.sh once per ABI (downloads Termux's Dart package for it)
+#   2. flutter: tools/dart-sdk/fetch-flutter.sh once (the engine for every ABI Flutter ships one for, plus the
+#               ABI-independent framework files), from a Flutter SDK pinned to the Dart version
+#   3. plugin:  gather the results and run assembleDebug, which makes dart-plugin-<abi>-debug.apk for every ABI
+#               that has something staged
+#
+# Three ABIs: Termux publishes no Dart package for x86 (32-bit), so there is no x86 plugin. Every package is
+# checked against the checksum pinned in fetch-dart-android.sh. A failed SDK job leaves its ABI without an APK and
+# the plugin job builds with the others; arm64-v8a is required.
+#
+# Manual only. Trim the `abi` matrix, and the matching download and upload steps, for fewer APKs.
+
+on:
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: "25"
+  FLUTTER_VERSION: "3.47.9"
+
+concurrency:
+  group: dart-plugin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk:
+    name: Dart SDK ${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [ arm64-v8a, armeabi-v7a, x86_64 ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the ${{ matrix.abi }} Dart SDK
+        working-directory: tools/dart-sdk
+        env:
+          ABI: ${{ matrix.abi }}
+        run: ./fetch-dart-android.sh
+
+      - name: Upload the ${{ matrix.abi }} executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-host-${{ matrix.abi }}
+          path: tools/dart-sdk/build/out/jniLibs/${{ matrix.abi }}
+          if-no-files-found: error
+          retention-days: 7
+
+      # The SDK's libraries are the same whichever ABI produced them.
+      - name: Upload the shared SDK libraries
+        if: matrix.abi == 'arm64-v8a'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-assets
+          path: |
+            tools/dart-sdk/build/out/assets
+            tools/dart-sdk/build/out/DART_VERSION
+          if-no-files-found: error
+          retention-days: 7
+
+  flutter:
+    name: Flutter engines and framework
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      # llvm-objcopy, to strip the engines, comes from the runner's preinstalled NDK (ANDROID_NDK_HOME).
+      - name: Stage Flutter
+        working-directory: tools/dart-sdk
+        env:
+          FLUTTER_HOME: ${{ env.FLUTTER_ROOT }}
+        run: ./fetch-flutter.sh
+
+      - name: Upload Flutter
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-flutter
+          path: tools/dart-sdk/build/out/flutter
+          if-no-files-found: error
+          retention-days: 7
+
+  plugin:
+    name: assembleDebug
+    needs: [ sdk, flutter ]
+    # Carry on with whichever ABIs got an SDK; the check below insists on arm64-v8a.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the SDK libraries and Flutter
+        uses: actions/download-artifact@v4
+        with:
+          name: dart-assets
+          path: tools/dart-sdk/build/out
+      - uses: actions/download-artifact@v4
+        with:
+          name: dart-flutter
+          path: tools/dart-sdk/build/out/flutter
+        continue-on-error: true
+
+      - name: Fetch the per-ABI executables
+        uses: actions/download-artifact@v4
+        with:
+          name: dart-host-arm64-v8a
+          path: tools/dart-sdk/build/out/jniLibs/arm64-v8a
+      - uses: actions/download-artifact@v4
+        with:
+          name: dart-host-armeabi-v7a
+          path: tools/dart-sdk/build/out/jniLibs/armeabi-v7a
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: dart-host-x86_64
+          path: tools/dart-sdk/build/out/jniLibs/x86_64
+        continue-on-error: true
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: What was staged
+        run: |
+          find tools/dart-sdk/build/out -maxdepth 3 -type d | sort
+          test -f tools/dart-sdk/build/out/jniLibs/arm64-v8a/libdartvm.so
+
+      - name: Run the plugin's unit tests
+        run: ./gradlew :samples:dart-plugin:testDebugUnitTest --console=plain --stacktrace
+
+      - name: Build the plugin APKs
+        run: ./gradlew :samples:dart-plugin:assembleDebug --console=plain --stacktrace
+
+      - name: List the APKs
+        run: ls -la samples/dart-plugin/build/outputs/apk/debug/*.apk
+
+      # One artifact per ABI, so a phone only has to download its own. An ABI with no SDK has no APK.
+      - name: Upload arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-plugin-arm64-v8a
+          path: samples/dart-plugin/build/outputs/apk/debug/*arm64-v8a*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-plugin-armeabi-v7a
+          path: samples/dart-plugin/build/outputs/apk/debug/*armeabi-v7a*.apk
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-plugin-x86_64
+          path: samples/dart-plugin/build/outputs/apk/debug/*x86_64*.apk
+          if-no-files-found: ignore
+          retention-days: 30

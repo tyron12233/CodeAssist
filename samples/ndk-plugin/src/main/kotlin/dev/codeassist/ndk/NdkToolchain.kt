@@ -178,8 +178,17 @@ class NdkToolchain(
      * The shared C++ runtime an app linked with `c++_shared` has to carry in its APK beside its own library.
      * Null before [prepare] has unpacked the toolchain.
      */
-    val sharedCxxRuntime: Path?
-        get() = root.resolve("sysroot/usr/lib/aarch64-linux-android/libc++_shared.so").takeIf { Files.isRegularFile(it) }
+    fun sharedCxxRuntime(abi: NdkAbi = hostAbi): Path? =
+        root.resolve("sysroot/usr/lib/${abi.libTriple}/libc++_shared.so").takeIf { Files.isRegularFile(it) }
+
+    /**
+     * The ABI this device runs, which is the ABI the compiler itself was unpacked for and the only one whose
+     * programs can be started here. Editor tooling (errors, completion) checks against it too, since what a
+     * file means rarely depends on the target and the device's own is always installed.
+     */
+    val hostAbi: NdkAbi by lazy {
+        NdkAbi.forDevice(runCatching { android.os.Build.SUPPORTED_ABIS.toList() }.getOrDefault(emptyList()))
+    }
 
     /**
      * What a tool printed, and whether it succeeded. [bufferName] is the name diagnostics in [output] give the
@@ -200,6 +209,7 @@ class NdkToolchain(
         cpp: Boolean,
         extraFlags: List<String> = emptyList(),
         depFile: Path? = null,
+        abi: NdkAbi = hostAbi,
     ): ToolResult {
         val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
         Files.createDirectories(output.parent)
@@ -207,7 +217,7 @@ class NdkToolchain(
             buildList {
                 add(driver.toString()); add("clang")
                 if (cpp) add("--driver-mode=g++")
-                addAll(commonFlags())
+                addAll(commonFlags(abi))
                 addAll(extraFlags)
                 if (depFile != null) { add("-MD"); add("-MF"); add(depFile.toString()) }
                 add("-c"); add(source.toString())
@@ -477,7 +487,8 @@ class NdkToolchain(
         libs: List<String> = emptyList(),
         cpp: Boolean = false,
         stl: String = "c++_static",
-    ): ToolResult = link(objects, output, libs, cpp, stl, shared = true)
+        abi: NdkAbi = hostAbi,
+    ): ToolResult = link(objects, output, libs, cpp, stl, shared = true, abi)
 
     /**
      * Link [objects] into a program at [output], for Run.
@@ -493,7 +504,8 @@ class NdkToolchain(
         libs: List<String> = emptyList(),
         cpp: Boolean = false,
         stl: String = "c++_static",
-    ): ToolResult = link(objects, output, libs, cpp, stl, shared = false)
+        abi: NdkAbi = hostAbi,
+    ): ToolResult = link(objects, output, libs, cpp, stl, shared = false, abi)
 
     private fun link(
         objects: List<Path>,
@@ -502,6 +514,7 @@ class NdkToolchain(
         cpp: Boolean,
         stl: String,
         shared: Boolean,
+        abi: NdkAbi,
     ): ToolResult {
         val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
         val linker = linker ?: return ToolResult(false, "no linker for this device's ABI")
@@ -510,7 +523,7 @@ class NdkToolchain(
             buildList {
                 add(driver.toString()); add("clang")
                 if (cpp) add("--driver-mode=g++")
-                addAll(commonFlags())
+                addAll(commonFlags(abi))
                 if (shared) add("-shared")
                 add("-Wl,--no-undefined")
                 if (cpp) when (stl) {
@@ -567,11 +580,11 @@ class NdkToolchain(
      * both locations are named explicitly instead. Leaving either out produces a compiler that cannot find
      * `stddef.h`, which reads like a broken install rather than a missing flag.
      */
-    private fun commonFlags(): List<String> = listOf(
-        "--target=$TARGET_TRIPLE",
+    private fun commonFlags(abi: NdkAbi = hostAbi): List<String> = listOf(
+        "--target=${abi.target}",
         "-resource-dir", root.resolve("lib-clang").resolve(LLVM_MAJOR).toString(),
         "--sysroot", root.resolve("sysroot").toString(),
-    )
+    ) + abi.extraFlags
 
     private fun run(
         command: List<String>,
@@ -653,7 +666,15 @@ class NdkToolchain(
 
         const val ASSET_ARCHIVE = "assets/toolchain.zip"
         const val LLVM_MAJOR = "18"
-        const val TARGET_TRIPLE = "aarch64-linux-android26"
+
+        /**
+         * The API level the sysroot's link stubs and CRT objects were taken at; the NDK's `<triple><api>`.
+         * It is also the level every ABI's triple carries, since the build script ships one level per ABI.
+         */
+        const val API_LEVEL = 26
+
+        /** arm64's target, kept for callers that predate [NdkAbi]. New code asks the ABI for its [NdkAbi.target]. */
+        const val TARGET_TRIPLE = "aarch64-linux-android$API_LEVEL"
 
         /** Bump when the packaged asset layout changes, so an older unpacked tree is replaced rather than reused. */
         const val LAYOUT_VERSION = "1"

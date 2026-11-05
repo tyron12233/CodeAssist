@@ -15,7 +15,27 @@ tools/ndk-toolchain/build-llvm-android.sh          # ~35 min, needs cmake + ninj
 
 Point the module somewhere else with `-Pndk.toolchain.dir=/path/to/out`. Building with no toolchain present
 still produces a working APK; it installs and reports "this plugin ships no compiler for this device's ABI",
-which is exactly what a user on armeabi-v7a or x86 sees today.
+which is what a user sees on a device whose ABI the toolchain was not built for (see "ABIs" below).
+
+## ABIs
+
+Two different things are called "the ABI", and the plugin keeps them apart.
+
+**Target** is what a module's `abis` asks to be built: `arm64-v8a`, `armeabi-v7a`, `x86` and `x86_64` are all
+accepted, and each gets its own objects (`build/intermediates/ndk/obj/<abi>/`) and its own library
+(`build/intermediates/ndk/lib/<abi>/`). The bundled LLVM carries the AArch64, ARM and X86 backends and the
+sysroot carries the link libraries, C++ runtime and `libclang_rt`/`libunwind` of all four, so any device can
+build for any ABI. An ABI name the plugin does not know is skipped with a warning that lists the valid ones.
+
+**Host** is what the compiler itself runs on, which is the device's own ABI. Run builds and starts a program for
+the host ABI only, because nothing else can execute here. Editor errors and completion also check against it.
+The executables ship under `jniLibs/<abi>/` for every host ABI the toolchain was built for; the read-only half
+(`toolchain.zip`) is the same for all of them. A device whose ABI has no executables reports "this plugin ships
+no compiler for this device's ABI". Which hosts exist is decided by how `build-llvm-android.sh` was run (it
+builds one host per `HOST_ABI`; see tools/ndk-toolchain/README.md).
+
+Building for every ABI multiplies native build time on a phone by the number of ABIs, so a new project still
+defaults to `abis = ["arm64-v8a"]`.
 
 ## How the two halves are packaged, and why
 
@@ -84,7 +104,7 @@ the only reason a C++ build fits on a phone beside the compiler.
 [ndk]
 sourceDirs = ["src/main/cpp"]
 libraryName = "native-lib"
-abis = ["arm64-v8a"]
+abis = ["arm64-v8a"]            # any of arm64-v8a, armeabi-v7a, x86, x86_64
 minSdk = 26
 cppStandard = "c++17"
 stl = "c++_shared"
@@ -167,7 +187,7 @@ rebuilds everything, and the library is linked only when an object changed. Head
 and every header the last build recorded are task inputs too, so editing only a header is not "up to date".
 
 Compiler output is parsed by the same `ClangDiagnostics` the editor uses, so a build error and the squiggle
-on the same line say the same thing in the same words. An ABI the bundled toolchain cannot target is reported
+on the same line say the same thing in the same words. An ABI this plugin does not know is reported
 as a warning rather than silently producing nothing, and a device with no toolchain leaves the build
 succeeding with a warning — a missing compiler is not a broken build, it is a build with no native part.
 
@@ -395,4 +415,3 @@ Escape both characters in every pattern, and treat a JVM-green regex as unverifi
 
 - Updating the C++ when a Java method or class is renamed: the IDE has no rename hook a plugin can join, so
   today the rename leaves an orphan function, which the orphan check then points at.
-- More than one ABI, which needs a toolchain built with more than one backend.

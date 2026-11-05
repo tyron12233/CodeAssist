@@ -25,6 +25,18 @@ val toolchainAssets: File = File(toolchainOut, "assets/toolchain")
 val generatedAssetsDir: File = layout.buildDirectory.dir("generated/toolchain/assets").get().asFile
 
 /**
+ * The host ABIs there is a compiler for: every `jniLibs/<abi>` directory the toolchain build produced.
+ *
+ * One APK per ABI is built from these (see `splits` below), each carrying only its own compiler (~100 MB)
+ * instead of all of them in one (~400 MB). `-Pndk.abis=arm64-v8a,x86_64` narrows the set further;
+ * `-Pndk.universalApk` adds the single APK with every ABI as well.
+ */
+val allHostAbis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+val builtHostAbis: List<String> = (providers.gradleProperty("ndk.abis").orNull
+    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: allHostAbis)
+    .filter { File(toolchainLibs, it).isDirectory }
+
+/**
  * Pack the compiler's headers and link libraries into ONE archive.
  *
  * Not a convenience: the plugin reads them back through its classloader, over the installed APK, and a
@@ -58,8 +70,8 @@ android {
         // The IDE's own floor: this code runs inside the IDE's process.
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
     }
 
     // Signed with the same upload key the IDE is, when one is configured, so the published plugin APK is a
@@ -98,6 +110,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // A separate APK for each ABI that has a compiler, named like `ndk-plugin-arm64-v8a-debug.apk`. With no
+    // toolchain built at all there is nothing to split, and the build stays a single compiler-less APK.
+    splits {
+        abi {
+            isEnable = builtHostAbis.isNotEmpty()
+            reset()
+            include(*builtHostAbis.toTypedArray())
+            isUniversalApk = providers.gradleProperty("ndk.universalApk").isPresent
+        }
     }
 
     // The executables are static files produced outside this build, so they join the source set directly.

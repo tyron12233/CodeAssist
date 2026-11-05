@@ -188,6 +188,6 @@ class DartSdk(
         /** The SDK version staged by tools/dart-sdk; also the unpack stamp, so a new SDK unpacks afresh. */
         const val VERSION = "3.13.7"
         private const val ASSET = "assets/dart-sdk.zip"
-        const val NO_SDK = "This plugin has no Dart SDK for this device (it carries one for Android arm64 only)."
+        const val NO_SDK = "This plugin has no Dart SDK for this device's ABI. Install the plugin build made for it (arm64-v8a, armeabi-v7a or x86_64; there is none for x86)."
     }
 }

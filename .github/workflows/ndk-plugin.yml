@@ -1,0 +1,174 @@
+name: NDK plugin APK
+
+# Builds the NDK plugin (samples/ndk-plugin) as an installable APK. This is NOT built by apk.yml, which only
+# produces the IDE itself (:ide-android).
+#
+# The plugin needs a compiler that runs ON the device, and that compiler is not in the repository, so this is
+# two stages:
+#   1. toolchain: one LLVM build per HOST ABI (the ABI of the device that will run the compiler), in parallel.
+#      Each is a full LLVM build and takes one to two hours on a hosted runner.
+#   2. plugin: gather the four results and run assembleDebug, which packs whatever is in
+#      tools/ndk-toolchain/build/out.
+# The result is one APK PER ABI (ndk-plugin-arm64-v8a-debug.apk, ...-armeabi-v7a-..., ...-x86-..., ...-x86_64-...),
+# each about 110 MB and carrying only its own compiler. Install the one that matches the device. Every compiler
+# can emit code for all four ABIs (LLVM_TARGETS AArch64;ARM;X86), so whichever APK is installed builds for any.
+#
+# Manual only: it is too slow to run on every push. Trim `abi` in the matrix for a smaller, faster APK.
+
+on:
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: ndk-plugin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  toolchain:
+    name: LLVM host ${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [ arm64-v8a, armeabi-v7a, x86, x86_64 ]
+    steps:
+      - uses: actions/checkout@v4
+
+      # A hosted runner has about 14 GB free and the LLVM tree plus two build directories want about 13.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Cache downloads (LLVM source, NDK)
+        uses: actions/cache@v4
+        with:
+          path: tools/ndk-toolchain/build/dl
+          key: ndk-toolchain-dl-${{ hashFiles('tools/ndk-toolchain/build-llvm-android.sh') }}
+
+      - name: Build LLVM for a ${{ matrix.abi }} host
+        working-directory: tools/ndk-toolchain
+        env:
+          HOST_ABI: ${{ matrix.abi }}
+        # `daemon` builds the resident clang (completion, errors, semantic colours) and the Run launcher. It
+        # is a few seconds of C against the libclang `package` staged, and the plugin is half there without it.
+        run: ./build-llvm-android.sh deps native cross package daemon
+
+      - name: Upload the ${{ matrix.abi }} executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-host-${{ matrix.abi }}
+          path: tools/ndk-toolchain/build/out/jniLibs/${{ matrix.abi }}
+          if-no-files-found: error
+          retention-days: 7
+
+      # The headers, runtime archives and link libraries for all four targets are the same whichever host
+      # produced them, so one copy is enough.
+      - name: Upload the shared sysroot
+        if: matrix.abi == 'arm64-v8a'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-assets
+          path: tools/ndk-toolchain/build/out/assets
+          if-no-files-found: error
+          retention-days: 7
+
+  plugin:
+    name: assembleDebug
+    needs: toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the toolchain halves
+        uses: actions/download-artifact@v4
+        with:
+          name: ndk-assets
+          path: tools/ndk-toolchain/build/out/assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: ndk-host-arm64-v8a
+          path: tools/ndk-toolchain/build/out/jniLibs/arm64-v8a
+      - uses: actions/download-artifact@v4
+        with:
+          name: ndk-host-armeabi-v7a
+          path: tools/ndk-toolchain/build/out/jniLibs/armeabi-v7a
+      - uses: actions/download-artifact@v4
+        with:
+          name: ndk-host-x86
+          path: tools/ndk-toolchain/build/out/jniLibs/x86
+      - uses: actions/download-artifact@v4
+        with:
+          name: ndk-host-x86_64
+          path: tools/ndk-toolchain/build/out/jniLibs/x86_64
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Check every host ABI is in place
+        run: |
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            for lib in libllvmtools.so libndkclangd.so libndkrun.so; do
+              test -f tools/ndk-toolchain/build/out/jniLibs/$abi/$lib || { echo "no $lib for $abi"; exit 1; }
+            done
+          done
+          test -f tools/ndk-toolchain/build/out/assets/toolchain/sysroot/usr/lib/aarch64-linux-android/26/libc.so
+
+      - name: Run the plugin's unit tests
+        run: ./gradlew :samples:ndk-plugin:testDebugUnitTest --console=plain --stacktrace
+
+      - name: Build the plugin APK
+        run: ./gradlew :samples:ndk-plugin:assembleDebug --console=plain --stacktrace
+
+      - name: List the APKs
+        run: ls -la samples/ndk-plugin/build/outputs/apk/debug/*.apk
+
+      # One artifact per ABI, so a phone only has to download its own.
+      - name: Upload arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-arm64-v8a
+          path: samples/ndk-plugin/build/outputs/apk/debug/*arm64-v8a*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-armeabi-v7a
+          path: samples/ndk-plugin/build/outputs/apk/debug/*armeabi-v7a*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload x86 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-x86
+          # `*-x86-*` so it does not also match the x86_64 file.
+          path: samples/ndk-plugin/build/outputs/apk/debug/*-x86-*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-x86_64
+          path: samples/ndk-plugin/build/outputs/apk/debug/*x86_64*.apk
+          if-no-files-found: error
+          retention-days: 30

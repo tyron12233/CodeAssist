@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Stage a Dart SDK that RUNS ON an Android arm64 device, for the Dart plugin (samples/dart-plugin).
+# Stage a Dart SDK that RUNS ON an Android device, for the Dart plugin (samples/dart-plugin): one ABI per run
+# (arm64-v8a, armeabi-v7a or x86_64).
 #
 # Google publishes no Android build of the Dart SDK. Termux does: its `dart` package is the upstream SDK
 # built for android-arm64 against bionic, and its executables need nothing but the system's libc, libdl,
 # libm and liblog. This script downloads that package at a pinned version and checksum and splits it the
 # way an app has to carry it:
 #
-#   out/jniLibs/arm64-v8a/   everything that is EXECUTED, or mapped executable by the Dart VM
+#   out/jniLibs/<abi>/      everything that is EXECUTED, or mapped executable by the Dart VM
 #     libdartaotruntime.so   bin/dartaotruntime: runs the AOT snapshots below
 #     libdartvm.so           bin/dartvm: the JIT VM that runs the user's program
 #     libanalysis_server.so  the analysis server (the language server), an AOT snapshot
@@ -19,19 +20,46 @@
 # code, so the first group has to arrive inside the installed APK, under lib*.so names in jniLibs. The
 # second group is ordinary data the plugin unpacks on first use.
 #
-# Usage:  ./fetch-dart-android.sh          (re-running with the package already downloaded is quick)
+# Each ABI needs its own run, because the executables and the AOT snapshots are machine code for that ABI.
+# Runs accumulate: a run replaces out/jniLibs/<abi> and the (ABI-independent) assets and leaves the other ABIs'
+# directories alone, so run it once per ABI the plugin should support.
+#
+#   ABI=arm64-v8a    (default)  Termux package arch aarch64
+#   ABI=armeabi-v7a             arm
+#   ABI=x86_64                  x86_64
+#
+# x86 (32-bit) is not offered: Termux publishes no Dart package for i686 (there is none for 3.13.7).
+#
+# Each ABI's checksum is pinned below, as Termux's package index lists it (binary-<arch>/Packages). Another
+# DART_VERSION needs its own: set DEB_SHA256 to one you have verified, or ALLOW_UNVERIFIED=1 to go ahead and have
+# the script print the checksum it computed so it can be pinned.
+#
+# Usage:  [ABI=<abi>] ./fetch-dart-android.sh     (re-running with the package already downloaded is quick)
 set -euo pipefail
 
 DART_VERSION="${DART_VERSION:-3.13.7}"
-DEB_SHA256="${DEB_SHA256:-a351ce8f5075279971e29b9ce961fd239153547156b7a8d26b5592e1c7782605}"
-DEB_URL="${DEB_URL:-https://packages.termux.dev/apt/termux-main/pool/main/d/dart/dart_${DART_VERSION}_aarch64.deb}"
+ABI="${ABI:-arm64-v8a}"
+ALLOW_UNVERIFIED="${ALLOW_UNVERIFIED:-}"
+
+# The Termux package architecture for each Android ABI, and the checksum we have pinned for it (if any).
+case "$ABI" in
+    arm64-v8a)   DEB_ARCH=aarch64; PINNED_SHA256="a351ce8f5075279971e29b9ce961fd239153547156b7a8d26b5592e1c7782605" ;;
+    armeabi-v7a) DEB_ARCH=arm;     PINNED_SHA256="c83829bd189061a6c3da05d70ad0df63654f7c8f9544297055eb253f219845ad" ;;
+    x86_64)      DEB_ARCH=x86_64;  PINNED_SHA256="0d013616c02a5627f4df20a30a45e7d244cddd2fb234ea1e5637c855c994df7e" ;;
+    x86) echo "no Dart SDK for x86: Termux publishes no Dart package for i686" >&2; exit 2 ;;
+    *) echo "unknown ABI '$ABI' (expected arm64-v8a, armeabi-v7a or x86_64)" >&2; exit 2 ;;
+esac
+# The pins above are for Dart 3.13.7 only: another DART_VERSION needs its own checksums.
+[[ "$DART_VERSION" == "3.13.7" ]] || PINNED_SHA256=""
+DEB_SHA256="${DEB_SHA256:-$PINNED_SHA256}"
+DEB_URL="${DEB_URL:-https://packages.termux.dev/apt/termux-main/pool/main/d/dart/dart_${DART_VERSION}_${DEB_ARCH}.deb}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="${WORK:-$HERE/build}"
 DL="$WORK/dl"
-EXTRACT="$WORK/extract"
+EXTRACT="$WORK/extract-$DEB_ARCH"
 OUT="$WORK/out"
-DEB="$DL/dart_${DART_VERSION}_aarch64.deb"
+DEB="$DL/dart_${DART_VERSION}_${DEB_ARCH}.deb"
 
 log() { printf '\n==> %s\n' "$*"; }
 
@@ -41,12 +69,25 @@ sha256() {
 
 mkdir -p "$DL"
 if [[ ! -f "$DEB" ]]; then
-    log "downloading Dart $DART_VERSION for android-arm64 (Termux, ~96 MB)"
-    curl -fL --retry 3 -o "$DEB.part" "$DEB_URL"
+    log "downloading Dart $DART_VERSION for android $ABI (Termux package arch $DEB_ARCH, ~96 MB)"
+    curl -fL --retry 3 -o "$DEB.part" "$DEB_URL" || {
+        echo "could not download $DEB_URL" >&2
+        echo "If this is a 404, Termux publishes no Dart $DART_VERSION package for $DEB_ARCH, and there is no SDK to stage for $ABI." >&2
+        exit 1
+    }
     mv "$DEB.part" "$DEB"
 fi
 actual="$(sha256 "$DEB")"
-if [[ "$actual" != "$DEB_SHA256" ]]; then
+if [[ -z "$DEB_SHA256" ]]; then
+    if [[ -n "$ALLOW_UNVERIFIED" ]]; then
+        echo "WARNING: no pinned checksum for $ABI; going on without verifying. Computed sha256: $actual" >&2
+        echo "Pin it (DEB_SHA256 / the case table in this script) once you have checked it against a trusted source." >&2
+    else
+        echo "no pinned checksum for $ABI (Dart $DART_VERSION). The package's sha256 is $actual." >&2
+        echo "Verify that, then re-run with DEB_SHA256=$actual, or with ALLOW_UNVERIFIED=1 to accept it as is." >&2
+        exit 1
+    fi
+elif [[ "$actual" != "$DEB_SHA256" ]]; then
     echo "checksum mismatch for $DEB: expected $DEB_SHA256, got $actual" >&2
     echo "A different DART_VERSION needs its own DEB_SHA256." >&2
     exit 1
@@ -65,9 +106,10 @@ tar -xf "$EXTRACT"/data.tar.* -C "$EXTRACT"
 SDK="$EXTRACT/data/data/com.termux/files/usr/lib/dart-sdk"
 [[ -x "$SDK/bin/dartaotruntime" ]] || { echo "no dart-sdk in the package at $SDK" >&2; exit 1; }
 
-log "staging $OUT"
-rm -rf "$OUT"
-JNI="$OUT/jniLibs/arm64-v8a"
+log "staging $OUT (ABI $ABI)"
+# Only this ABI's executables and the (ABI-independent) assets are replaced; other ABIs' directories stay.
+JNI="$OUT/jniLibs/$ABI"
+rm -rf "$JNI" "$OUT/assets"
 ASSETS="$OUT/assets/dart-sdk"
 mkdir -p "$JNI" "$ASSETS"
 cp "$SDK/bin/dartaotruntime" "$JNI/libdartaotruntime.so"
