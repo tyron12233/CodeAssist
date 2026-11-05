@@ -1009,6 +1009,17 @@
     <string name="notify_launch_failed">刚才未能保存此设置。</string>
     <string name="review_actions">评价管理</string>
     <string name="review_report">举报</string>
+    <string name="review_copy">复制文字</string>
+    <string name="link_open_title">打开此链接？</string>
+    <string name="link_mail_title">给此地址写邮件？</string>
+    <string name="link_from_user">此链接由社区成员添加。CodeAssist 未检查它指向哪里。</string>
+    <string name="link_mail_from_user">此地址由社区成员添加。将打开你的邮件应用并新建一封发往该地址的邮件。</string>
+    <string name="link_warn_http">未加密 (http)：你所在网络中的其他人可以查看或篡改该页面。</string>
+    <string name="link_warn_userinfo">@ 之前的部分并不是网站。此链接实际前往 %1$s。</string>
+    <string name="link_warn_ip">它指向一个裸 IP 地址，而不是有名称的网站。</string>
+    <string name="link_warn_lookalike">该地址使用了可冒充知名网站名称的字符。</string>
+    <string name="link_open">打开</string>
+    <string name="link_copy">复制链接</string>
     <string name="review_reply">回复</string>
     <string name="review_reply_edit">编辑回复</string>
     <string name="review_reply_delete">删除回复</string>

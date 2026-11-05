@@ -74,6 +74,11 @@ import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.components.AdSlot
+import dev.ide.ui.markdown.linkify
+import dev.ide.ui.components.ExternalLinkGuard
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.foundation.text.selection.SelectionContainer
 import dev.ide.ui.components.CodeMotifColors
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
@@ -241,103 +246,106 @@ fun StoreItemScreen(
     // Neutral, like every other surface: the hero used to hash the item id to pick one of three tints.
     val pair = tonalPair(item.id.hashCode())
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
-            DetailTopBar(
-                title = item.title,
-                isSaved = isSaved,
-                onBack = onBack,
-                onToggleSaved = onToggleSaved,
-                onShare = onShare?.let { { it(item) } },
-            )
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
-                item("hero") {
-                    // The app's own icon, blurred into a wash of its colours: icons are made to be colourful,
-                    // and the first try (the first screenshot) went near-black on every project with a dark UI,
-                    // which is most of them. A plugin's generated icon gives it a colour of its own the same way.
-                    // Only a published item gets one: a bundled template's card stays tonal.
-                    val icon = rememberItemIcon(backend, item)
-                    val first = shots.firstOrNull { !hasSamplePreview(it) }
-                    DetailHero(
-                        backend, item, pair, onOpenPublisher,
-                        backdrop = when {
-                            icon != null -> icon
-                            first != null -> { m: Modifier -> ShotImage(backend, first, ContentScale.Crop, m) }
-                            else -> null
-                        },
-                    )
-                }
-                item("cta") {
-                    InstallRow(
-                        item = item,
-                        state = install,
-                        update = update,
-                        onOpen = (install as? InstallState.Installed)?.rootPath?.let { path ->
-                            onOpenInstalled?.let { open -> { open(path) } }
-                        },
-                        onRate = onRate,
-                        onPrimary = {
-                            when {
-                                item.templateId != null -> onCreateFromTemplate(item.templateId!!)
-                                // An update: in place when nothing the user did would be lost, otherwise the
-                                // choice. The check is the project on disk now, not what the page last saw.
-                                update != null && install is InstallState.Installed -> scope.launch {
-                                    message = null
-                                    val changes = runCatching { backend.store.localChanges(item.id) }.getOrNull()
-                                    if (changes != null && changes.blocksInPlace) {
-                                        conflict = changes
-                                    } else {
-                                        message = backend.store.update(item.id, asCopy = false).message
-                                        updateEpoch++
-                                    }
-                                }
-                                // Already on the device: open it. This branch used to be a literal no-op,
-                                // so the button that said "Open in editor" did nothing at all.
-                                install is InstallState.Installed ->
-                                    install.rootPath?.let { path -> onOpenInstalled?.invoke(path) }
-                                !item.available -> message = null
-                                else -> scope.launch {
-                                    message = null
-                                    val result = runCatching { backend.store.install(item.id) }.getOrNull()
-                                    message = result?.message
-                                }
-                            }
-                        },
-                    )
-                }
-                item("hint") {
-                    val versions = update?.let {
-                        stringResource(Res.string.store_update_versions, it.installedVersion ?: "?", it.availableVersion ?: "?")
-                    }
-                    val shown = message ?: progress?.message ?: versions
-                    InstallHint(item, shown, versionSaid = shown != null && shown == versions)
-                }
-
-                if (tabs.size > 1) {
-                    item("tabs") { TabRowPills(tabs, tab) { tab = it } }
-                }
-
-                when (tab) {
-                    StoreTab.Overview -> overview(backend, item, shots) { lightbox = it }
-                    StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
-                    StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
-                    StoreTab.Reviews -> item("reviews") {
-                        ReviewsPanel(
-                            backend = backend,
-                            item = item,
-                            onWrite = { reviewSheet = true },
-                            onNeedSignIn = { signInForReview = true },
-                            refresh = reviewsRefresh,
-                            onPage = { myReview = it.mine },
+        // Listings, READMEs, changelogs and reviews are written by other people: ask before leaving for their links.
+        ExternalLinkGuard {
+            Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
+                DetailTopBar(
+                    title = item.title,
+                    isSaved = isSaved,
+                    onBack = onBack,
+                    onToggleSaved = onToggleSaved,
+                    onShare = onShare?.let { { it(item) } },
+                )
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
+                    item("hero") {
+                        // The app's own icon, blurred into a wash of its colours: icons are made to be colourful,
+                        // and the first try (the first screenshot) went near-black on every project with a dark UI,
+                        // which is most of them. A plugin's generated icon gives it a colour of its own the same way.
+                        // Only a published item gets one: a bundled template's card stays tonal.
+                        val icon = rememberItemIcon(backend, item)
+                        val first = shots.firstOrNull { !hasSamplePreview(it) }
+                        DetailHero(
+                            backend, item, pair, onOpenPublisher,
+                            backdrop = when {
+                                icon != null -> icon
+                                first != null -> { m: Modifier -> ShotImage(backend, first, ContentScale.Crop, m) }
+                                else -> null
+                            },
                         )
                     }
-                }
+                    item("cta") {
+                        InstallRow(
+                            item = item,
+                            state = install,
+                            update = update,
+                            onOpen = (install as? InstallState.Installed)?.rootPath?.let { path ->
+                                onOpenInstalled?.let { open -> { open(path) } }
+                            },
+                            onRate = onRate,
+                            onPrimary = {
+                                when {
+                                    item.templateId != null -> onCreateFromTemplate(item.templateId!!)
+                                    // An update: in place when nothing the user did would be lost, otherwise the
+                                    // choice. The check is the project on disk now, not what the page last saw.
+                                    update != null && install is InstallState.Installed -> scope.launch {
+                                        message = null
+                                        val changes = runCatching { backend.store.localChanges(item.id) }.getOrNull()
+                                        if (changes != null && changes.blocksInPlace) {
+                                            conflict = changes
+                                        } else {
+                                            message = backend.store.update(item.id, asCopy = false).message
+                                            updateEpoch++
+                                        }
+                                    }
+                                    // Already on the device: open it. This branch used to be a literal no-op,
+                                    // so the button that said "Open in editor" did nothing at all.
+                                    install is InstallState.Installed ->
+                                        install.rootPath?.let { path -> onOpenInstalled?.invoke(path) }
+                                    !item.available -> message = null
+                                    else -> scope.launch {
+                                        message = null
+                                        val result = runCatching { backend.store.install(item.id) }.getOrNull()
+                                        message = result?.message
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    item("hint") {
+                        val versions = update?.let {
+                            stringResource(Res.string.store_update_versions, it.installedVersion ?: "?", it.availableVersion ?: "?")
+                        }
+                        val shown = message ?: progress?.message ?: versions
+                        InstallHint(item, shown, versionSaid = shown != null && shown == versions)
+                    }
 
-                // At the foot of whichever tab is open, rather than inside the overview builder: the
-                // listing is one page with four views of it, and an ad that appears on one view and
-                // vanishes on the next reads as a glitch. Below the install CTA either way, so it never
-                // stands between a reader and the button they came for.
-                item("ad") {
-                    AdSlot(AdPlacement.STORE_ITEM, Modifier.padding(horizontal = 20.dp).padding(top = 24.dp))
+                    if (tabs.size > 1) {
+                        item("tabs") { TabRowPills(tabs, tab) { tab = it } }
+                    }
+
+                    when (tab) {
+                        StoreTab.Overview -> overview(backend, item, shots) { lightbox = it }
+                        StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
+                        StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
+                        StoreTab.Reviews -> item("reviews") {
+                            ReviewsPanel(
+                                backend = backend,
+                                item = item,
+                                onWrite = { reviewSheet = true },
+                                onNeedSignIn = { signInForReview = true },
+                                refresh = reviewsRefresh,
+                                onPage = { myReview = it.mine },
+                            )
+                        }
+                    }
+
+                    // At the foot of whichever tab is open, rather than inside the overview builder: the
+                    // listing is one page with four views of it, and an ad that appears on one view and
+                    // vanishes on the next reads as a glitch. Below the install CTA either way, so it never
+                    // stands between a reader and the button they came for.
+                    item("ad") {
+                        AdSlot(AdPlacement.STORE_ITEM, Modifier.padding(horizontal = 20.dp).padding(top = 24.dp))
+                    }
                 }
             }
         }
@@ -1298,12 +1306,17 @@ private fun ChangelogCard(item: UiStoreItem) {
                 color = c.onSurface,
             )
         }
-        Text(
-            item.changelog.orEmpty(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = c.onSurfaceVariant,
-            modifier = Modifier.padding(start = 19.dp, top = 8.dp),
-        )
+        SelectionContainer(Modifier.padding(start = 19.dp, top = 8.dp)) {
+            Text(
+                linkify(
+                    item.changelog.orEmpty(),
+                    SpanStyle(),
+                    SpanStyle(color = c.primary, textDecoration = TextDecoration.Underline),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.onSurfaceVariant,
+            )
+        }
     }
 }
 

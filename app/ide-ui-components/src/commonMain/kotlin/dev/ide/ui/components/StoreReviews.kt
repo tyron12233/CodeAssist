@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -27,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiStoreReview
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.review_actions
+import dev.ide.ui.generated.resources.review_copy
 import dev.ide.ui.generated.resources.review_hide
 import dev.ide.ui.generated.resources.review_reply
 import dev.ide.ui.generated.resources.review_reply_delete
@@ -162,7 +166,9 @@ fun ReviewCard(
     translate: (@Composable () -> Unit)? = null,
 ) {
     var menuOpen by remember(review.authorId) { mutableStateOf(false) }
-    val hasMenu = onReport != null || onReply != null || onSetHidden != null || onDeleteReply != null
+    val copyText = reviewText?.takeIf { it.isNotBlank() }
+    val clipboard = LocalClipboardManager.current
+    val hasMenu = copyText != null || onReport != null || onReply != null || onSetHidden != null || onDeleteReply != null
     val c = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -231,6 +237,16 @@ fun ReviewCard(
                             }
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            copyText?.let { text ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.review_copy)) },
+                                    onClick = {
+                                        menuOpen = false
+                                        val reply = replyText?.takeIf { it.isNotBlank() }
+                                        clipboard.setText(AnnotatedString(if (reply != null) "$text\n\n$reply" else text))
+                                    },
+                                )
+                            }
                             onReply?.let { reply ->
                                 DropdownMenuItem(
                                     text = {
@@ -275,14 +291,17 @@ fun ReviewCard(
                 }
             }
             // Links open: a review is plain text, not Markdown, but "it is here: https://..." should be tappable.
+            // Selectable too, so a reader can copy a command or an address out of it with a long press.
             val linkStyle = SpanStyle(color = c.primary, textDecoration = TextDecoration.Underline)
             reviewText?.takeIf { it.isNotBlank() }?.let {
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    linkify(it, SpanStyle(), linkStyle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = c.onSurface,
-                )
+                SelectionContainer {
+                    Text(
+                        linkify(it, SpanStyle(), linkStyle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.onSurface,
+                    )
+                }
             }
             replyText?.takeIf { it.isNotBlank() }?.let { reply ->
                 Spacer(Modifier.height(12.dp))
@@ -290,11 +309,13 @@ fun ReviewCard(
                     Column(Modifier.padding(12.dp)) {
                         Eyebrow(stringResource(Res.string.reviews_reply))
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            linkify(reply, SpanStyle(), linkStyle),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = c.onSurfaceVariant,
-                        )
+                        SelectionContainer {
+                            Text(
+                                linkify(reply, SpanStyle(), linkStyle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

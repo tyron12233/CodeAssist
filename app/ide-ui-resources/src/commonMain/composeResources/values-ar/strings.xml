@@ -1085,6 +1085,17 @@
     <string name="notify_launch_failed">تعذّر حفظ ذلك الآن.</string>
     <string name="review_actions">إجراءات المراجعة</string>
     <string name="review_report">إبلاغ</string>
+    <string name="review_copy">نسخ النص</string>
+    <string name="link_open_title">فتح هذا الرابط؟</string>
+    <string name="link_mail_title">مراسلة هذا العنوان؟</string>
+    <string name="link_from_user">أضاف أحد أفراد المجتمع هذا الرابط. لم يتحقق CodeAssist من وجهته.</string>
+    <string name="link_mail_from_user">أضاف أحد أفراد المجتمع هذا العنوان. سيفتح تطبيق البريد برسالة جديدة إليه.</string>
+    <string name="link_warn_http">غير مشفّر (http): يمكن للآخرين على شبكتك رؤية الصفحة أو تغييرها.</string>
+    <string name="link_warn_userinfo">الجزء الذي قبل @ ليس هو الموقع. هذا الرابط يذهب إلى %1$s.</string>
+    <string name="link_warn_ip">يذهب إلى عنوان IP مجرد، لا إلى موقع باسم.</string>
+    <string name="link_warn_lookalike">يستخدم العنوان أحرفًا قد تقلّد اسم موقع معروف.</string>
+    <string name="link_open">فتح</string>
+    <string name="link_copy">نسخ الرابط</string>
     <string name="review_reply">رد</string>
     <string name="review_reply_edit">تحرير الرد</string>
     <string name="review_reply_delete">حذف الرد</string>

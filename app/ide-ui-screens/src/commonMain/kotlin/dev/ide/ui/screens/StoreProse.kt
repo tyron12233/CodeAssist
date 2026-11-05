@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -28,13 +29,15 @@ internal fun ListingProse(
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
-    Markdown(
-        text,
-        modifier = modifier,
-        paragraphStyle = style,
-        color = color,
-        headingStyle = { level -> listingHeading(level) },
-    )
+    // Selectable, so a reader can copy a command, a version or an address out of a description.
+    SelectionContainer(modifier) {
+        Markdown(
+            text,
+            paragraphStyle = style,
+            color = color,
+            headingStyle = { level -> listingHeading(level) },
+        )
+    }
 }
 
 @Composable

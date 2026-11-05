@@ -1020,6 +1020,17 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="notify_launch_failed">Could not save that just now.</string>
     <string name="review_actions">Review actions</string>
     <string name="review_report">Report</string>
+    <string name="review_copy">Copy text</string>
+    <string name="link_open_title">Open this link?</string>
+    <string name="link_mail_title">Write to this address?</string>
+    <string name="link_from_user">Someone in the community added this link. CodeAssist hasn't checked where it goes.</string>
+    <string name="link_mail_from_user">Someone in the community added this address. Your email app opens with a new message to it.</string>
+    <string name="link_warn_http">Not encrypted (http): others on your network can see or change the page.</string>
+    <string name="link_warn_userinfo">The part before the @ is not the site. This link goes to %1$s.</string>
+    <string name="link_warn_ip">It goes to a bare IP address, not a named site.</string>
+    <string name="link_warn_lookalike">The address uses characters that can imitate a well-known site's name.</string>
+    <string name="link_open">Open</string>
+    <string name="link_copy">Copy link</string>
     <string name="review_reply">Reply</string>
     <string name="review_reply_edit">Edit reply</string>
     <string name="review_reply_delete">Delete reply</string>
