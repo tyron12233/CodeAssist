@@ -31,7 +31,7 @@ data class NdkFacet(
      * compiler ships with a single backend to keep the plugin installable. Naming more here is what a build
      * for release would want and what the toolchain would have to be rebuilt for.
      */
-    val abis: List<String> = listOf("arm64-v8a"),
+    val abis: List<String> = listOf("arm64-v8a","armeabi-v7a","x86","x86_64",),
 
     /** The Android API level to compile against; the default matches the IDE's own floor. */
     val minSdk: Int = 26,
