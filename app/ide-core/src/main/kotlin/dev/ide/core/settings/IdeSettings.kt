@@ -106,6 +106,9 @@ data class IdeSettings(
         const val ACCENT_ORANGE = "orange"
         const val ACCENT_PUMPKIN = "pumpkin"
         const val ACCENT_CUSTOM = "custom"
+
+        /** An accent value naming an app theme a plugin ships: `theme:<id>` (see `ContributedAppThemes`). */
+        const val ACCENT_THEME_PREFIX = "theme:"
         const val CODE_FONT_JETBRAINS = "jetbrains"
         const val CODE_FONT_MONOSPACE = "monospace"
         // The editor's `CaretStyle` ids; the store accepts only these.

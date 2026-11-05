@@ -144,6 +144,12 @@ object PluginCapabilities {
     const val UI_COLOR_SCHEME = "ui.colorScheme"
 
     /**
+     * Ships whole app themes (`dev.ide.plugin.ui.AppTheme`), the Material colors of the IDE's interface,
+     * offered as Accent choices. Applied only when the user picks one. UI facet. Since SPI 3.4.0.
+     */
+    const val UI_APP_THEME = "ui.appTheme"
+
+    /**
      * Adds kinds of file to the file tree's New menu (`dev.ide.plugin.ui.NewFileTemplate`), whose content the
      * plugin writes. UI facet. Since SPI 3.1.0.
      */

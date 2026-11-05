@@ -2195,6 +2195,8 @@ data class UiSettings(
     val accent: UiAccent = UiAccent.Lime,
     /** The seed color for [UiAccent.Custom], as an `0xAARRGGBB` ARGB long. Ignored unless accent is Custom. */
     val customAccentColor: Long = 0xFF8B5CF6L,
+    /** The id of the plugin app theme the accent setting names (`ContributedAppThemes`), else null. */
+    val appTheme: String? = null,
     /** Keep tool window header actions always visible (off = only while the tool window is hovered or active). */
     val alwaysShowToolWindowActions: Boolean = false,
     /** Open a run's terminal full screen instead of docking it in the wide layout. */

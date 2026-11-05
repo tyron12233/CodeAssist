@@ -83,7 +83,7 @@ enum class CapabilityGroup(val label: StringResource, val glyph: Char) {
 }
 
 fun capabilityGroup(capability: String): CapabilityGroup = when {
-    capability.startsWith("ui.editor") || capability == "ui.colorAttribute" || capability == "ui.colorScheme" || capability == "ui.keyBinding" -> CapabilityGroup.Editor
+    capability.startsWith("ui.editor") || capability == "ui.colorAttribute" || capability == "ui.colorScheme" || capability == "ui.appTheme" || capability == "ui.keyBinding" -> CapabilityGroup.Editor
     capability.startsWith("ui.") -> CapabilityGroup.Screens
     capability.startsWith("lang.") -> CapabilityGroup.Languages
     capability.startsWith("model.") || capability.startsWith("build.") || capability == "interp.run" -> CapabilityGroup.Projects

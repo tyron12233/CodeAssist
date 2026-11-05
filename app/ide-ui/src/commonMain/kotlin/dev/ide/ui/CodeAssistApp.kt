@@ -157,6 +157,9 @@ fun CodeAssistApp(
         uiFont = uiFont,
         codeFont = resolvedCodeFont,
         editorColorScheme = app.editorColorScheme,
+        // A plugin's app theme, while its plugin is loaded; once it is not, the id resolves to nothing and the
+        // default accent applies, without the user's choice being forgotten.
+        appTheme = app.settings.appTheme?.let { dev.ide.ui.theme.colors.ContributedAppThemes.byId(it) },
     ) {
         // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
         // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the

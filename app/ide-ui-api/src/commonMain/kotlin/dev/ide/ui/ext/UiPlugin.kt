@@ -70,6 +70,9 @@ interface UiContributionScope {
     /** List a whole editor color scheme beside the presets ([dev.ide.ui.theme.colors.ContributedColorSchemes]). */
     fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme): Registration = Registration { }
 
+    /** Offer a whole app theme as an Accent choice ([dev.ide.ui.theme.colors.ContributedAppThemes]). */
+    fun appTheme(theme: dev.ide.ui.theme.colors.ContributedAppTheme): Registration = Registration { }
+
     /** Fill a slot of the home screen's tabs ([HomeTabContribution]). */
     fun homeTab(tab: HomeTabContribution): Registration = Registration { }
 }
@@ -197,6 +200,9 @@ object UiPluginHost {
 
         override fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme): Registration =
             track(dev.ide.ui.theme.colors.ContributedColorSchemes.register(scheme))
+
+        override fun appTheme(theme: dev.ide.ui.theme.colors.ContributedAppTheme): Registration =
+            track(dev.ide.ui.theme.colors.ContributedAppThemes.register(theme))
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)

@@ -449,6 +449,8 @@ fun CodeAssistTheme(
     codeFont: FontFamily = FontFamily.Monospace,
     /** The user's editor color scheme. The shipped default overrides nothing, so it renders as the theme. */
     editorColorScheme: EditorColorScheme = BuiltInColorSchemes.DEFAULT,
+    /** An app theme a plugin ships, when the user picked one: its Material roles win over everything else. */
+    appTheme: dev.ide.ui.theme.colors.ContributedAppTheme? = null,
     content: @Composable () -> Unit,
 ) {
     // Precedence: an explicit custom seed wins; else wallpaper dynamic color IF the user opted into it; else
@@ -456,7 +458,8 @@ fun CodeAssistTheme(
     val wallpaper = dynamicColorSchemeOrNull(dark)
     val fromSeed = remember(seedColor, dark) { seedColor?.let { expressiveColorSchemeFromSeed(it, dark) } }
     val fallback = remember(dark, accent) { expressiveColorScheme(accent, dark) }
-    val scheme = fromSeed ?: (if (useDynamic) wallpaper else null) ?: fallback
+    val fromPlugin = remember(appTheme, dark) { appTheme?.let { appThemeColorScheme(it, dark) } }
+    val scheme = fromPlugin ?: fromSeed ?: (if (useDynamic) wallpaper else null) ?: fallback
 
     val base = remember(dark, accent) { caColors(dark, accent) }
     val bridgedBase = remember(base, scheme) { base.bridgedTo(scheme) }

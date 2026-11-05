@@ -2689,6 +2689,7 @@
     <string name="plugin_consent_cap_ui_editor_language">تلوين لغة في المحرر وتحديد صيغة تعليقاتها، بما في ذلك اللغات التي تعرفها بيئة التطوير مسبقًا</string>
     <string name="plugin_consent_cap_ui_color_attribute">إضافة إدخالات إلى النظام اللوني للمحرر، وتغيير مظهر الإدخالات المدمجة</string>
     <string name="plugin_consent_cap_ui_color_scheme">إضافة أنظمة ألوان يمكنك اختيارها للمحرر</string>
+    <string name="plugin_consent_cap_ui_app_theme">إضافة سمات للتطبيق يمكنك اختيارها من المظهر</string>
     <string name="plugin_consent_cap_ui_new_file_template">إضافة أنواع ملفات إلى قائمة «جديد»</string>
     <string name="plugin_consent_cap_lang_backend">تعليم المحرر لغةً: التحليل والإكمال والأخطاء</string>
     <string name="plugin_consent_cap_lang_server">تشغيل خادم لغة: برنامج منفصل يفحص لغةً ويكملها ويتنقل فيها</string>

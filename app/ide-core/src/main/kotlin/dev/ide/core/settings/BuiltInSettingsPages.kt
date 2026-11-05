@@ -186,7 +186,11 @@ object BuiltInSettingsPages {
                     SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_PUMPKIN, "Pumpkin"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_CUSTOM, "Custom"),
-                ),
+                    // App themes plugins ship, after the IDE's own. Read per call, so a plugin's appear once its
+                    // UI has loaded, and go when it is turned off.
+                ) + dev.ide.ui.theme.colors.ContributedAppThemes.all.map {
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_THEME_PREFIX + it.id, it.name)
+                },
             ),
             SettingControl.Color(
                 "accentColor", "Custom color", "Pick any color; the full Material You theme regenerates from it",

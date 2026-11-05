@@ -386,7 +386,9 @@ const val PLUGIN_API_VERSION: Int = 4
  * And `dev.ide.plugin.ui.UiRegistration.colorScheme` with `dev.ide.plugin.ui.ColorScheme`
  * ([PluginCapabilities.UI_COLOR_SCHEME]): a plugin ships whole editor color schemes, as the JSON the IDE's
  * scheme editor exports, listed beside the presets and read-only like them. A plugin could add entries to a
- * scheme (`colorAttribute`) but not a scheme, so a theme plugin was not possible.
+ * scheme (`colorAttribute`) but not a scheme, so a theme plugin was not possible. With it,
+ * `UiRegistration.appTheme` and `dev.ide.plugin.ui.AppTheme` ([PluginCapabilities.UI_APP_THEME]): the whole
+ * app's Material palette, dark and light, as Material Theme Builder exports it, offered as an Accent choice.
  *
  * And `dev.ide.model.ModuleDependencies` on `MODULE_DEPENDENCIES` (`platform.moduleDependencies`, WORKSPACE)
  * in `project-model-api`: search the repositories, list an artifact's versions, read a module's resolved graph

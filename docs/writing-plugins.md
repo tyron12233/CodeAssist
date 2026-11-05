@@ -842,6 +842,24 @@ including entries the IDE adds later and other plugins' attributes, falls back t
 host older than 3.4.0 `colorScheme` throws `NoSuchMethodError`; call it inside `catch (e: LinkageError)` if
 you support one.
 
+#### A whole app theme
+
+The editor scheme colors code; an app theme colors everything around it: the Material roles of every screen,
+dark and light (since SPI 3.4.0). Design it in Material Theme Builder (m3.material.io/theme-builder), export
+"Material Theme (JSON)", and ship `material-theme.json` as it comes:
+
+```kotlin
+val json = javaClass.getResourceAsStream("/themes/dune.json")!!.reader().readText()
+ui.appTheme(AppTheme(id = "dune", name = "Dune", json = json))
+```
+
+Declare `PluginCapabilities.UI_APP_THEME`. The theme is offered under Settings → Appearance → Accent, after the
+IDE's own accents, and applies only when the user picks it. The builder's `schemes.light` and `schemes.dark`
+are what apply (its contrast variants are ignored), every role it names replaces the IDE's, and its `seed`
+generates any role it leaves out. A theme written by hand may name only a few roles, or only
+`{ "seed": "#RRGGBB" }`. Turned off or uninstalled, your plugin takes the theme with it and the IDE falls back to
+its default accent; the user's choice is kept, so the theme comes back with the plugin.
+
 ---
 
 ### Mark up the editor without owning a language

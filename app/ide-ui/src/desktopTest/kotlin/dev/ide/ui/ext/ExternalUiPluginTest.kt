@@ -109,6 +109,22 @@ class ExternalUiPluginTest {
      * those bytes as an sRGB pixel-format value instead.
      */
     @Test
+    fun anAppThemeIsOfferedUnderThePluginsOwnIdAndAnUnreadableOneIsSkipped() {
+        val facet = facet { ui ->
+            ui.appTheme(dev.ide.plugin.ui.AppTheme(id = "Dune", name = "Dune", json = """{"seed":"#8A5A2B"}"""))
+            ui.appTheme(dev.ide.plugin.ui.AppTheme(id = "broken", name = "Broken", json = "{}"))
+        }
+        val scope = RecordingScope("com.example.themes")
+
+        facet.asUiPlugin("com.example.themes").contributeUi(scope)
+
+        val theme = scope.appThemes.single()
+        assertEquals("com.example.themes.dune", theme.id)
+        assertEquals("Dune", theme.name)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF8A5A2B), theme.seed)
+    }
+
+    @Test
     fun aColorSchemeIsListedUnderThePluginsOwnIdAndAnUnreadableOneIsSkipped() {
         val facet = facet { ui ->
             ui.colorScheme(
@@ -705,6 +721,11 @@ class ExternalUiPluginTest {
 
         override fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme) =
             handle().also { colorSchemes += scheme }
+
+        val appThemes = mutableListOf<dev.ide.ui.theme.colors.ContributedAppTheme>()
+
+        override fun appTheme(theme: dev.ide.ui.theme.colors.ContributedAppTheme) =
+            handle().also { appThemes += theme }
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon) =
             handle().also { fileIcons += Triple(iconId, suffixes, icon) }

@@ -142,3 +142,29 @@ class ColorScheme(
     val json: String,
 )
 
+/**
+ * A whole app theme: the Material color roles of the IDE's interface, dark and light, offered under
+ * Settings → Appearance → Accent after the IDE's own accents.
+ *
+ * [json] is Material Theme Builder's export (`material-theme.json`), so the way to make one is to design it
+ * there (m3.material.io/theme-builder), export "Material Theme (JSON)", and ship the file. The builder writes
+ * every role for `light` and `dark` under `schemes`, plus the `seed` it started from; its contrast variants
+ * are ignored. A theme written by hand may name only some roles, or only a `seed`: what it leaves out is
+ * generated from the seed, or taken from the IDE's default theme without one.
+ *
+ * The editor keeps its own color scheme (see [ColorScheme] and Settings → Editor Colors); this themes
+ * everything around it. Applied only when the user picks it, and only while the plugin is loaded: turned off
+ * or uninstalled, the IDE falls back to its default accent and picks the theme up again if it comes back.
+ *
+ * Since SPI 3.4.0.
+ */
+class AppTheme(
+    /** Stable within this plugin: what the user's choice is remembered by. */
+    val id: String,
+
+    /** The name shown in the Accent list. Blank takes the document's `name`, else [id]. */
+    val name: String,
+
+    /** The theme document. One the IDE cannot read is skipped and logged, not thrown. */
+    val json: String,
+)

@@ -630,6 +630,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             else -> UiAccent.Lime
         },
         customAccentColor = accentColor,
+        appTheme = accent.takeIf { it.startsWith(IdeSettings.ACCENT_THEME_PREFIX) }?.removePrefix(IdeSettings.ACCENT_THEME_PREFIX),
         alwaysShowToolWindowActions = alwaysShowToolWindowActions,
         runFullScreen = runFullScreen,
         seasonalTouches = seasonalTouches,
