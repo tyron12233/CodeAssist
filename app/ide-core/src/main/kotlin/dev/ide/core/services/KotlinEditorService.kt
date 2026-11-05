@@ -87,14 +87,48 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
      */
     fun usages(target: KotlinUsageTarget): List<Pair<Path, TextRange>> {
         val files = target.scope?.let { listOf(Paths.get(it.first)) } ?: ctx.projectKotlinFiles()
-        val out = ArrayList<Pair<Path, TextRange>>()
-        for (f in files) {
+        // Everything that can create or look up shared engine state happens here, on the calling thread: the
+        // module's analyzer (built lazily, with its module container), the file handle, and the text. Only the
+        // per-file parse and resolution below may run on other threads.
+        class Job(val path: Path, val analyzer: KotlinSourceAnalyzer, val file: dev.ide.vfs.VirtualFile, val text: String)
+        val jobs = files.mapNotNull { f ->
             val abs = f.toAbsolutePath().normalize()
-            val text = textOf(abs) ?: continue
-            val analyzer = kotlinAnalyzer(abs) ?: continue
-            analyzer.usagesIn(ctx.store.vfs.fileFor(abs), text, target).forEach { out += abs to it }
+            val text = textOf(abs) ?: return@mapNotNull null
+            if (!target.name.let { n -> text.contains(n) }) return@mapNotNull null
+            val analyzer = kotlinAnalyzer(abs) ?: return@mapNotNull null
+            Job(abs, analyzer, ctx.store.vfs.fileFor(abs), text)
         }
+        fun run(job: Job): List<TextRange> = job.analyzer.usagesIn(job.file, job.text, target)
+        val results = arrayOfNulls<List<TextRange>>(jobs.size)
+        if (jobs.size < PARALLEL_SWEEP_MIN_FILES || SWEEP_THREADS < 2) {
+            jobs.forEachIndexed { i, job -> results[i] = run(job) }
+        } else {
+            // Each file is resolved on its own (its own resolver over the shared, concurrency-safe symbol
+            // service), so the files can be spread over the cores: on a phone this sweep is most of a rename.
+            val futures = jobs.map { job -> sweepPool.submit<List<TextRange>> { run(job) } }
+            futures.forEachIndexed { i, fut ->
+                // A file whose worker failed is done again here, so a problem costs time, never a reference.
+                results[i] = runCatching { fut.get() }.getOrNull() ?: run(jobs[i])
+            }
+        }
+        val out = ArrayList<Pair<Path, TextRange>>()
+        jobs.forEachIndexed { i, job -> results[i]?.forEach { out += job.path to it } }
         return out
+    }
+
+    private companion object {
+        /** Below this many candidate files the hand-off to other threads costs more than it saves. */
+        const val PARALLEL_SWEEP_MIN_FILES = 8
+
+        /** Workers for the usage sweep: the cores less one for the UI, at most four (memory on a phone). */
+        val SWEEP_THREADS = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 4)
+
+        val sweepPool: java.util.concurrent.ExecutorService by lazy {
+            val n = java.util.concurrent.atomic.AtomicInteger()
+            java.util.concurrent.Executors.newFixedThreadPool(SWEEP_THREADS) { r ->
+                Thread(r, "kotlin-usages-${n.incrementAndGet()}").apply { isDaemon = true }
+            }
+        }
     }
 
     /** Highlight-usages-at-caret over [file]'s live buffer; null when not Kotlin or nothing resolves there. */
