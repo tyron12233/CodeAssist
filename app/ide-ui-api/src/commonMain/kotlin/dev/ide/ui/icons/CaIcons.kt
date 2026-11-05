@@ -119,6 +119,22 @@ object CaIcons {
         roundRect(8.5f, 8.5f, 12f, 12f, 2.5f),                                          // front sheet
         s("M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"), // back sheet
     )
+    val cut = build(
+        "cut",
+        circle(6f, 6f, 3f),
+        circle(6f, 18f, 3f),
+        s("M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12"),
+    )
+    val paste = build(
+        "paste",
+        roundRect(5f, 4.5f, 14f, 16.5f, 2.5f),
+        roundRect(9f, 3f, 6f, 3.5f, 1.2f),
+    )
+    val trash = build(
+        "trash",
+        s("M4 7h16M10 11v6M14 11v6M9 7V4.5h6V7"),
+        s("M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"),
+    )
     val terminal = build("terminal", roundRect(3.5f, 4.5f, 17f, 15f, 3f), s("M7 9l3 2.5L7 14M12.5 14.5h4"))
     val gear = build(
         "gear",

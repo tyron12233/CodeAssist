@@ -328,6 +328,36 @@
     <string name="filetree_move">移动</string>
     <string name="filetree_copy">复制</string>
     <string name="filetree_delete">删除</string>
+    <string name="filetree_cut">剪切</string>
+    <string name="filetree_paste">粘贴</string>
+    <string name="filetree_duplicate">创建副本</string>
+    <string name="filetree_copy_path">复制路径</string>
+    <string name="filetree_copy_path_absolute">绝对路径</string>
+    <string name="filetree_copy_path_relative">相对于项目根目录的路径</string>
+    <string name="filetree_copy_name">名称</string>
+    <string name="filetree_copy_paths">复制所选路径</string>
+    <string name="filetree_move_to">移动到…</string>
+    <string name="filetree_copy_to">复制到…</string>
+    <string name="filetree_select_all">全选</string>
+    <string name="filetree_clear_selection">取消选择</string>
+    <string name="filetree_more_selection">所选项的更多操作</string>
+    <string name="filetree_paste_into">粘贴到 %1$s</string>
+    <string name="filetree_clear_clipboard">清空剪贴板</string>
+    <string name="filetree_drop_move">移动到 %1$s</string>
+    <string name="filetree_drop_copy">复制到 %1$s</string>
+    <string name="filetree_drop_nowhere">无法放置到此处</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="other">已选择 %1$d 项</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="other">%1$d 项待移动</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="other">%1$d 项待复制</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="other">%1$d 项</item>
+    </plurals>
     <string name="filetree_java_class">Java 类</string>
     <string name="filetree_kotlin_file">Kotlin 文件</string>
     <string name="filetree_aidl_file">AIDL 文件</string>
@@ -1290,6 +1320,44 @@
     <string name="fileop_empty_folder">此文件夹为空。</string>
     <string name="fileop_move_here">移动到此处</string>
     <string name="fileop_copy_here">复制到此处</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="other">将 %1$d 项移动到…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="other">将 %1$d 项复制到…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="other">删除 %1$d 项？</item>
+    </plurals>
+    <string name="fileop_delete_items_body">这会永久删除这些项，文件夹会连同其中所有内容一起删除，无法撤销。</string>
+    <string name="fileop_delete_items_body_undo">文件夹会连同其中所有内容一起删除。删除后可立即撤销。</string>
+    <string name="fileop_delete_dir_body_undo">这会删除该文件夹及其中所有内容。删除后可立即撤销。</string>
+    <string name="fileop_delete_file_body_undo">删除后可立即撤销。</string>
+    <string name="fileop_conflict_title">%2$s 中已存在“%1$s”</string>
+    <string name="fileop_conflict_body">替换已有项、保留两者（此项将重命名），或跳过此项。</string>
+    <string name="fileop_conflict_replace">替换</string>
+    <string name="fileop_conflict_keep_both">保留两者</string>
+    <string name="fileop_conflict_skip">跳过</string>
+    <string name="fileop_conflict_progress">第 %1$d 个冲突，共 %2$d 个</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="other">对其余 %1$d 个冲突执行相同操作</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="other">已将 %1$d 项移动到 %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="other">已将 %1$d 项复制到 %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="other">已为 %1$d 项创建副本</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="other">已删除 %1$d 项</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="other">%1$d 项失败：%2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">已撤销</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">发生意外错误，但应用仍在继续运行。</string>

@@ -110,6 +110,33 @@ import dev.ide.ui.generated.resources.filetree_resource_file
 import dev.ide.ui.generated.resources.filetree_file
 import dev.ide.ui.generated.resources.filetree_directory
 import dev.ide.ui.generated.resources.filetree_new_in
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.input.pointer.isShiftPressed
+import dev.ide.ui.backend.pathLeafName
+import dev.ide.ui.generated.resources.filetree_cut
+import dev.ide.ui.generated.resources.filetree_paste
+import dev.ide.ui.generated.resources.filetree_duplicate
+import dev.ide.ui.generated.resources.filetree_copy_path
+import dev.ide.ui.generated.resources.filetree_copy_path_absolute
+import dev.ide.ui.generated.resources.filetree_copy_path_relative
+import dev.ide.ui.generated.resources.filetree_copy_name
+import dev.ide.ui.generated.resources.filetree_copy_paths
+import dev.ide.ui.generated.resources.filetree_move_to
+import dev.ide.ui.generated.resources.filetree_copy_to
+import dev.ide.ui.generated.resources.filetree_select_all
+import dev.ide.ui.generated.resources.filetree_drag_items
+import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
@@ -187,6 +214,9 @@ fun FileNavigator(
     /** The tree's scroll position. Hoistable like [expandedState]; the default is saved and restored with the
      *  rest of the panel's state, so the tree reopens where the user left it (see [PanelContent]). */
     listState: LazyListState = rememberLazyListState(),
+    /** The batch file operations. Given, the tree offers multi-select (Ctrl/Shift+click, or long-press then tap
+     *  on touch), Cut / Copy / Paste, Duplicate, Copy Path, drag and drop to move, and keyboard commands. */
+    fileOps: TreeFileOps? = null,
 ) {
     // Host-owned expansion (persisted, survives navigation) when provided; else a local default-seeded map
     // re-seeded when the view mode flips (the two modes shape the tree with different node ids).
@@ -209,6 +239,23 @@ fun FileNavigator(
         onExport
     )
     val rootDir = root.dirPath
+    val selection = LocalTreeStateSeed.current?.selection ?: remember { TreeSelection() }
+    val drag = LocalTreeStateSeed.current?.drag ?: remember { TreeDrag() }
+    val nodeById = remember(root) {
+        HashMap<String, TreeNode>().also { m ->
+            fun walk(n: TreeNode) { m[n.id] = n; n.children.forEach(::walk) }
+            walk(root)
+        }
+    }
+    // A reload drops rows that are gone (moved, deleted) from the selection.
+    LaunchedEffect(nodeById) {
+        selection.ids.keys.filter { it !in nodeById }.forEach { selection.ids.remove(it) }
+        if (selection.ids.isEmpty()) selection.mode = false
+    }
+    val cb = TreeRowCallbacks(
+        onOpen, onNewFile, onNewFolder, onNewResource, onNewImageAsset, onNewSource, onViewDependencies,
+        onConfigureModule, onAddSourceRoot, canShare, onShare, ctx, fileOps, rootDir,
+    )
     // The header's actions: reveal, import, and the overflow menu. Sized for whichever header shows them.
     val headerActions: @Composable (Int, Int) -> Unit = { box, icon ->
         if (onOpenInFiles != null) IconButtonCa(
@@ -279,6 +326,44 @@ fun FileNavigator(
         val rows by remember(root, sort, expanded) {
             derivedStateOf { flattenVisible(root.children, 0, expanded, sort) }
         }
+        val visibleNodes = { rows.map { it.node } }
+        fun selectedNodes(): List<TreeNode> = selection.nodes(visibleNodes(), nodeById)
+        fun selectedPaths(): List<String> = selectedNodes().mapNotNull { it.selectablePath() }.distinct()
+        // Where a paste lands: the one selected folder (or a selected file's folder), else the focused row's.
+        fun pasteTarget(): String? {
+            val sel = selectedNodes()
+            val pick = sel.singleOrNull() ?: selection.focusId?.let(nodeById::get)
+            return pick?.newTargetDir() ?: rootDir
+        }
+        val showBar = fileOps != null && (selection.mode || selection.size > 1)
+        // The bar takes room above the list. Scroll the list by the same amount as it comes and goes, so the rows
+        // stay where they are on screen: the row under a finger that just long-pressed it stays under the finger.
+        var barHeight by remember { mutableStateOf(0) }
+        var scrolledForBar by remember { mutableStateOf(0) }
+        LaunchedEffect(showBar) {
+            if (showBar) {
+                val h = snapshotFlow { barHeight }.first { it > 0 }
+                scrolledForBar = listState.scrollBy(h.toFloat()).toInt()
+            } else if (scrolledForBar != 0) {
+                listState.scrollBy(-scrolledForBar.toFloat())
+                scrolledForBar = 0
+            }
+        }
+        if (showBar) SelectionBar(
+            modifier = Modifier.onSizeChanged { barHeight = it.height },
+            count = selection.size,
+            onClear = { selection.clear() },
+            onCut = { fileOps!!.onCut(selectedPaths()); selection.clear() },
+            onCopy = { fileOps!!.onCopy(selectedPaths()); selection.clear() },
+            onDelete = { fileOps!!.onDelete(selectedNodes()) },
+        ) { close ->
+            val nodes = selectedNodes()
+            val one = nodes.singleOrNull()
+            if (one != null) RowMenuItems(one, cb, selection, nodes, close)
+            else BatchMenuItems(nodes, cb, close, onSelectAll = {
+                visibleNodes().filter { it.selectablePath() != null }.forEach { selection.ids[it.id] = true }
+            })
+        }
         // Follow the editor: a file opened anywhere else (a search hit, a jump to a declaration, a file just
         // created) scrolls its row into view, so the tree shows what is being edited rather than wherever it
         // was left. Each file is revealed once, and that is remembered across the pane closing, so reopening
@@ -296,6 +381,100 @@ fun FileNavigator(
         // for a short beat afterwards purely so the gesture registers visually.
         val refreshScope = rememberCoroutineScope()
         var isRefreshing by remember { mutableStateOf(false) }
+        val focusRequester = remember { FocusRequester() }
+        var treeFocused by remember { mutableStateOf(false) }
+        val touch = touchInput
+        val requestTreeFocus = { if (!touch) runCatching { focusRequester.requestFocus() } }
+
+        // ---- drag and drop ----
+        fun rowAt(pos: Offset): TreeNode? {
+            val info = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { pos.y >= it.offset && pos.y < it.offset + it.size } ?: return null
+            return rows.getOrNull(info.index)?.node
+        }
+        val hover = remember { DragHover() }
+        fun retarget(pos: Offset) {
+            val node = rowAt(pos)
+            // A file row drops into its folder; a folder row (package, source root, module) into itself.
+            val dir = node?.let { if (it.kind == NodeKind.File) it.newTargetDir() else it.dirPath ?: it.newTargetDir() }
+            val folderRow = node?.takeIf { it.kind != NodeKind.File }
+            // Over a file, the folder it would land in lights up instead (when that folder has a row on screen).
+            val id = folderRow?.id ?: dir?.let { d -> rows.firstOrNull { it.node.kind != NodeKind.File && it.node.dirPath == d }?.node?.id }
+            if (id != drag.targetId) { drag.targetId = id; hover.restart() }
+            drag.targetDir = dir
+            // Holding over a closed folder opens it, so a drag can reach anywhere in the tree.
+            if (folderRow != null && id != null && folderRow.children.isNotEmpty() && expanded[id] != true && hover.elapsedMillis() > 700) {
+                expanded[id] = true
+            }
+        }
+        LaunchedEffect(drag.active) {
+            if (!drag.active) return@LaunchedEffect
+            // Near the top or bottom edge, scroll toward it, faster the closer the pointer is.
+            while (drag.active) {
+                withFrameNanos { }
+                val height = listState.layoutInfo.viewportSize.height
+                val edge = 64f
+                val y = drag.pointer.y
+                val dy = when {
+                    y < edge -> -(edge - y) / 4f
+                    y > height - edge -> (y - (height - edge)) / 4f
+                    else -> 0f
+                }
+                if (dy != 0f) listState.scrollBy(dy)
+                retarget(drag.pointer)
+            }
+        }
+        val keyScope = rememberCoroutineScope()
+        fun focusIndex(): Int = rows.indexOfFirst { it.node.id == selection.focusId }
+        fun focusRow(i: Int, extend: Boolean) {
+            val node = rows.getOrNull(i)?.node ?: return
+            if (fileOps != null && extend) selection.selectRange(visibleNodes(), i)
+            else if (fileOps != null && node.selectablePath() != null) selection.selectOnly(node.id)
+            else { selection.ids.clear(); selection.focusId = node.id; selection.anchorId = node.id }
+            keyScope.launch { listState.revealItem(i) }
+        }
+        val keys = TreeKeyCommands(
+            move = { d, extend ->
+                val i = focusIndex()
+                focusRow(if (i < 0) 0 else (i + d).coerceIn(0, rows.lastIndex), extend)
+            },
+            collapseOrParent = {
+                val i = focusIndex()
+                val row = rows.getOrNull(i)
+                if (row != null) {
+                    if (row.node.children.isNotEmpty() && expanded[row.node.id] == true) expanded[row.node.id] = false
+                    else (i - 1 downTo 0).firstOrNull { rows[it].depth < row.depth }?.let { focusRow(it, false) }
+                }
+            },
+            expandOrChild = {
+                val i = focusIndex()
+                val row = rows.getOrNull(i)
+                if (row != null && row.node.children.isNotEmpty()) {
+                    if (expanded[row.node.id] != true) expanded[row.node.id] = true else focusRow(i + 1, false)
+                }
+            },
+            activate = {
+                rows.getOrNull(focusIndex())?.node?.let { n ->
+                    when {
+                        n.filePath != null && n.moduleConfigName != null -> onConfigureModule(n)
+                        n.filePath != null -> onOpen(n)
+                        n.children.isNotEmpty() -> expanded[n.id] = expanded[n.id] != true
+                    }
+                }
+            },
+            delete = { selectedNodes().takeIf { it.isNotEmpty() }?.let { fileOps?.onDelete(it) } },
+            rename = { selectedNodes().singleOrNull()?.let { if (ctx.enabled) ctx.onRename(it) } },
+            cut = { selectedPaths().takeIf { it.isNotEmpty() }?.let { fileOps?.onCut(it) } },
+            copy = { selectedPaths().takeIf { it.isNotEmpty() }?.let { fileOps?.onCopy(it) } },
+            paste = { if (fileOps?.clipboard != null) pasteTarget()?.let(fileOps.onPaste) },
+            duplicate = { selectedPaths().takeIf { it.isNotEmpty() }?.let { fileOps?.onDuplicate(it) } },
+            selectAll = { visibleNodes().filter { it.selectablePath() != null }.forEach { selection.ids[it.id] = true } },
+            copyPath = { selectedPaths().takeIf { it.isNotEmpty() }?.let { fileOps?.onCopyText(it.joinToString("\n")) } },
+            moveTo = { selectedNodes().takeIf { it.isNotEmpty() }?.let { fileOps?.onMoveTo(it) } },
+            copyTo = { selectedNodes().takeIf { it.isNotEmpty() }?.let { fileOps?.onCopyTo(it) } },
+            undo = fileOps?.onUndo,
+            escape = { if (selection.hasSelection()) { selection.clear(); true } else false },
+        )
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
@@ -310,31 +489,71 @@ fun FileNavigator(
                 .weight(1f)
                 .padding(vertical = 6.dp),
         ) {
-            LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                itemsKeyed(rows, key = { it.node.id }) { row ->
-                    TreeRowContent(
-                        row.node,
-                        row.depth,
-                        expanded,
-                        activePath,
-                        onOpen,
-                        onNewFile,
-                        onNewFolder,
-                        onNewResource,
-                        onNewImageAsset,
-                        onNewSource,
-                        onViewDependencies,
-                        onConfigureModule,
-                        onAddSourceRoot,
-                        canShare,
-                        onShare,
-                        ctx,
-                        Modifier.animateItem(),
-                    )
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(
+                    Modifier.fillMaxSize()
+                        .treeDragGestures(
+                            enabled = fileOps != null,
+                            selection = selection,
+                            drag = drag,
+                            rowAt = ::rowAt,
+                            onStart = { node ->
+                                if (!selection.isSelected(node.id)) {
+                                    if (touch) { selection.ids[node.id] = true; selection.mode = true }
+                                    else selection.selectOnly(node.id)
+                                }
+                                selectedPaths()
+                            },
+                            onMove = { pos, copy -> drag.pointer = pos; drag.copy = copy; retarget(pos) },
+                            onDrop = {
+                                val dir = drag.targetDir
+                                if (drag.canDrop && dir != null) fileOps?.onDrop(drag.paths, dir, drag.copy)
+                            },
+                        )
+                        .onFocusChanged { treeFocused = it.isFocused }
+                        .onKeyEvent { handleTreeKey(it, keys) }
+                        .focusRequester(focusRequester)
+                        .focusable(),
+                    state = listState,
+                ) {
+                    itemsKeyed(rows, key = { it.node.id }) { row ->
+                        TreeRowContent(
+                            row.node,
+                            row.depth,
+                            expanded,
+                            activePath,
+                            cb,
+                            selection,
+                            drag,
+                            treeFocused,
+                            requestTreeFocus,
+                            visibleNodes,
+                            ::selectedNodes,
+                            Modifier.animateItem(),
+                        )
+                    }
                 }
+                if (drag.active) DragChip(drag, drag.targetDir?.let(::pathLeafName))
             }
         }
+        val clip = fileOps?.clipboard
+        if (clip != null) {
+            val target = pasteTarget()
+            ClipboardBanner(
+                clipboard = clip,
+                targetName = target?.let { t -> if (t == rootDir) root.name else pathLeafName(t) },
+                onPaste = { target?.let(fileOps.onPaste) },
+                onClear = fileOps.onClearClipboard,
+            )
+        }
     }
+}
+
+/** When the drag's pointer settled on its current row, for opening a folder held over. */
+private class DragHover {
+    private var mark = TimeSource.Monotonic.markNow()
+    fun restart() { mark = TimeSource.Monotonic.markNow() }
+    fun elapsedMillis(): Long = mark.elapsedNow().inWholeMilliseconds
 }
 
 /** One visible tree row after flattening: the [node] and its nesting [depth] (drives the row's indent). */
@@ -551,32 +770,26 @@ private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime
     return map
 }
 
-/** Renders a single already-flattened tree row (no recursion — the [LazyColumn] owns the child rows). The
- *  caret toggles this node's [expanded] entry; [modifier] carries the list's `animateItem()` placement. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun TreeRowContent(
-    node: TreeNode,
-    depth: Int,
-    expanded: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
-    activePath: String?,
-    onOpen: (TreeNode) -> Unit,
-    onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
-    onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
-    onNewResource: (TreeNode) -> Unit,
-    onNewImageAsset: (TreeNode) -> Unit,
-    onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
-    onViewDependencies: (TreeNode) -> Unit,
-    onConfigureModule: (TreeNode) -> Unit,
-    onAddSourceRoot: (TreeNode) -> Unit,
-    canShare: Boolean = false,
-    onShare: (TreeNode) -> Unit = {},
-    ctx: FileRowActions,
-    modifier: Modifier = Modifier,
-) {
-    val isExpandable = node.children.isNotEmpty()
-    val isOpen = expanded[node.id] == true
-    val isActive = node.filePath != null && node.filePath == activePath
+/** Everything a tree row (and its menus) calls out to, bundled so the row and the selection bar share it. */
+private class TreeRowCallbacks(
+    val onOpen: (TreeNode) -> Unit,
+    val onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    val onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    val onNewResource: (TreeNode) -> Unit,
+    val onNewImageAsset: (TreeNode) -> Unit,
+    val onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
+    val onViewDependencies: (TreeNode) -> Unit,
+    val onConfigureModule: (TreeNode) -> Unit,
+    val onAddSourceRoot: (TreeNode) -> Unit,
+    val canShare: Boolean,
+    val onShare: (TreeNode) -> Unit,
+    val ctx: FileRowActions,
+    val fileOps: TreeFileOps?,
+    val rootDir: String?,
+)
+
+/** What a row's menu can offer, worked out once from the node (shared by the row and the selection bar). */
+private class RowMenuFacts(node: TreeNode, cb: TreeRowCallbacks) {
     // New File / New Folder can target ANY directory (or a file's parent) — create anything, anywhere.
     val targetDir = node.newTargetDir()
     // Android res nodes additionally offer the templated "New resource" flow.
@@ -587,29 +800,120 @@ private fun TreeRowContent(
     val canNew = targetDir != null || canNewResource
     // Long-press / right-click opens delete/rename/move/copy for files, packages, and any directory
     // (res/ folders, build output, and plain folders all resolve a path now).
-    val canContext = ctx.enabled && node.fileOpPath() != null &&
-            (node.kind == NodeKind.File || node.kind == NodeKind.Package || node.kind == NodeKind.Folder)
+    val canContext = cb.ctx.enabled && node.selectablePath() != null
     // The menu is the only touch path to these (the hover `+`/gear/layers are invisible on a phone): New
     // File/Folder for any dir, New resource for res/, module settings/deps, reveal, and the file ops.
     val canModuleMenu = node.kind == NodeKind.Module
-    val canRevealHere = ctx.canReveal && node.fileOpPath() != null
+    val canRevealHere = cb.ctx.canReveal && node.fileOpPath() != null
     // Export ("Save As") applies to a concrete file — e.g. a built APK/AAB under the dimmed build-outputs node.
-    val canExportHere = ctx.canExport && node.kind == NodeKind.File && node.filePath != null
+    val canExportHere = cb.ctx.canExport && node.kind == NodeKind.File && node.filePath != null
     // Import external file(s) from the system file manager into this row's directory (a file's parent dir).
-    val canImportHere = ctx.canImport && targetDir != null
-    val hasMenu =
-        canNew || canContext || canModuleMenu || canRevealHere || canImportHere || canExportHere
+    val canImportHere = cb.ctx.canImport && targetDir != null
+    val canPasteHere = cb.fileOps?.clipboard != null && targetDir != null
+    val hasMenu = canNew || canContext || canModuleMenu || canRevealHere || canImportHere || canExportHere || canPasteHere
+}
+
+/** Renders a single already-flattened tree row (no recursion — the [LazyColumn] owns the child rows). The
+ *  caret toggles this node's [expanded] entry; [modifier] carries the list's `animateItem()` placement.
+ *
+ *  With batch file operations on ([TreeRowCallbacks.fileOps]): a click selects the row (Ctrl/Cmd+click adds or
+ *  removes it, Shift+click selects a range) and still opens a file; on touch a long press starts selection mode,
+ *  where a tap toggles a row and the caret expands. A row being dragged over shows as the drop target, and a row
+ *  on the clipboard by Cut is dimmed until the paste. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TreeRowContent(
+    node: TreeNode,
+    depth: Int,
+    expanded: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
+    activePath: String?,
+    cb: TreeRowCallbacks,
+    selection: TreeSelection,
+    drag: TreeDrag,
+    treeFocused: Boolean,
+    requestTreeFocus: () -> Unit,
+    visibleNodes: () -> List<TreeNode>,
+    selectedNodes: () -> List<TreeNode>,
+    modifier: Modifier = Modifier,
+) {
+    val onOpen = cb.onOpen
+    val onNewFile = cb.onNewFile
+    val onNewFolder = cb.onNewFolder
+    val onNewResource = cb.onNewResource
+    val onNewImageAsset = cb.onNewImageAsset
+    val onNewSource = cb.onNewSource
+    val onViewDependencies = cb.onViewDependencies
+    val onConfigureModule = cb.onConfigureModule
+    val canShare = cb.canShare
+    val onShare = cb.onShare
+    val fileOps = cb.fileOps
+    val isExpandable = node.children.isNotEmpty()
+    val isOpen = expanded[node.id] == true
+    val isActive = node.filePath != null && node.filePath == activePath
+    val facts = RowMenuFacts(node, cb)
+    val targetDir = facts.targetDir
+    val canNewResource = facts.canNewResource
+    val isSourceContext = facts.isSourceContext
+    val canNew = facts.canNew
+    val canContext = facts.canContext
+    val canRevealHere = facts.canRevealHere
+    val hasMenu = facts.hasMenu
+    val selectablePath = if (fileOps != null) node.selectablePath() else null
+    val isSelected = selectablePath != null && selection.isSelected(node.id)
+    val touch = touchInput
+    val inSelectionMode = touch && selection.mode && fileOps != null
+    val isDropTarget = drag.active && drag.targetId == node.id && drag.canDrop
+    val isCut = fileOps?.clipboard?.let { c -> c.cut && selectablePath != null && selectablePath in c.paths } == true
     var menuOpen by remember { mutableStateOf(false) }
-    // The context menu is two-level: root actions plus flyout submenus (the "New ▸" create options and any
-    // plugin-contributed submenu). Only one flyout is open at a time — this holds its key (null = none).
-    var openSubmenu by remember(menuOpen) { mutableStateOf<String?>(null) }
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
+
+    /** What a plain click on this row does: open the file, the module settings, or toggle the folder. */
+    fun primaryAction() {
+        when {
+            // A module.toml (filePath set + moduleConfigName) opens the Module Settings editor.
+            node.filePath != null && node.moduleConfigName != null -> onConfigureModule(node)
+            node.filePath != null -> onOpen(node)
+            else -> expanded[node.id] = !isOpen
+        }
+    }
+
+    fun onClick() {
+        if (fileOps == null) { primaryAction(); return }
+        val mods = selection.pressModifiers
+        when {
+            inSelectionMode -> if (selectablePath != null) selection.toggle(node.id) else if (isExpandable) expanded[node.id] = !isOpen
+            !touch && selectablePath != null && mods?.isShiftPressed == true ->
+                visibleNodes().indexOfFirst { it.id == node.id }.takeIf { it >= 0 }?.let { selection.selectRange(visibleNodes(), it) }
+            !touch && selectablePath != null && mods?.isCommandLike() == true -> selection.toggle(node.id)
+            else -> {
+                // A click selects the row with a pointer; a tap on touch only marks where a paste lands.
+                if (selectablePath != null && !touch) selection.selectOnly(node.id)
+                else { selection.ids.clear(); selection.focusId = node.id; selection.anchorId = node.id }
+                primaryAction()
+            }
+        }
+        requestTreeFocus()
+    }
+
+    val onLongClick: (() -> Unit)? = when {
+        // On touch, a long press starts (or adds to) a selection; the row's menu moves to the selection bar.
+        fileOps != null && touch && selectablePath != null -> ({
+            if (!selection.mode) { selection.ids.clear(); selection.mode = true }
+            selection.ids[node.id] = true
+            selection.anchorId = node.id
+            selection.focusId = node.id
+        })
+        hasMenu -> ({ menuOpen = true })
+        else -> null
+    }
 
     // Taller, finger-friendly rows on touch; denser on desktop where pointer precision is higher.
     val rowHeight = if (touchInput) 40.dp else 30.dp
     val indentStep = treeIndentStep()
     val guideColor = MaterialTheme.colorScheme.outlineVariant
+    val primary = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(Ca.radius.sm)
     Box(modifier.drawBehind { drawIndentGuides(depth, indentStep, guideColor) }) {
         // Rows read as inset rounded pills (the sidebar idiom of the design system) rather than
         // full-bleed stripes — the selection highlight is clipped to the pill.
@@ -618,9 +922,11 @@ private fun TreeRowContent(
                 .fillMaxWidth()
                 .height(rowHeight)
                 .padding(horizontal = 6.dp, vertical = 1.dp)
-                .clip(RoundedCornerShape(Ca.radius.sm))
+                .clip(shape)
                 .background(
                     when {
+                        isDropTarget -> primary.copy(alpha = 0.2f)
+                        isSelected -> primary.copy(alpha = 0.16f)
                         // The selected file: the muted M3 "selected list item" tone (secondaryContainer),
                         // consistent with the nav bar + editor tabs — not a loud full-primary fill.
                         isActive -> MaterialTheme.colorScheme.secondaryContainer
@@ -628,22 +934,21 @@ private fun TreeRowContent(
                         else -> Color.Transparent
                     }
                 )
-                .hoverable(interaction)
-                .combinedClickable(
-                    onClick = {
-                        when {
-                            // A module.toml (filePath set + moduleConfigName) opens the Module Settings editor.
-                            node.filePath != null && node.moduleConfigName != null -> onConfigureModule(
-                                node
-                            )
-
-                            node.filePath != null -> onOpen(node)
-                            else -> expanded[node.id] = !isOpen
-                        }
-                    },
-                    onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
+                .then(
+                    when {
+                        isDropTarget -> Modifier.border(1.5.dp, primary, shape)
+                        // The keyboard's row, while the tree has focus.
+                        treeFocused && selection.focusId == node.id -> Modifier.border(1.dp, primary.copy(alpha = 0.6f), shape)
+                        else -> Modifier
+                    }
                 )
-                .secondaryClickable(enabled = hasMenu) { menuOpen = true }
+                .hoverable(interaction)
+                .combinedClickable(onClick = ::onClick, onLongClick = onLongClick)
+                .secondaryClickable(enabled = hasMenu) {
+                    if (selectablePath != null && !selection.isSelected(node.id)) selection.selectOnly(node.id)
+                    menuOpen = true
+                }
+                .alpha(if (isCut) 0.5f else 1f)
                 .padding(start = TREE_ROW_INSET + indentStep * depth, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -651,17 +956,23 @@ private fun TreeRowContent(
                 // One caret glyph rotated a quarter turn so open/close reads as a smooth turn, not a swap.
                 val open = expandedCaretTurn()
                 val caretAngle by animateFloatAsState(if (isOpen) open else 0f, label = "caret")
-                Icon(
-                    CaIcons.caretRight,
-                    null,
-                    Modifier.size(14.dp).rotate(caretAngle),
-                    tint = MaterialTheme.colorScheme.outline,
-                )
-                Spacer(Modifier.width(4.dp))
+                // In selection mode a tap on the row toggles it, so the caret takes its own taps to expand.
+                Box(
+                    if (inSelectionMode) Modifier.size(width = 18.dp, height = rowHeight).clickable { expanded[node.id] = !isOpen }
+                    else Modifier.size(width = 18.dp, height = 14.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Icon(
+                        CaIcons.caretRight,
+                        null,
+                        Modifier.size(14.dp).rotate(caretAngle),
+                        tint = MaterialTheme.colorScheme.outline,
+                    )
+                }
             } else {
                 Spacer(Modifier.width(18.dp))
             }
-            NodeIcon(node, isOpen)
+            if (inSelectionMode && selectablePath != null) SelectionCheck(isSelected) else NodeIcon(node, isOpen)
             Spacer(Modifier.width(8.dp))
             // A multi-segment row (a compacted package `com.example.compose`, or a source-root label
             // `app/src/main/java`) renders as tappable segments so each middle level is its own New-target;
@@ -765,69 +1076,173 @@ private fun TreeRowContent(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
         ) {
-            if (canModuleMenu) {
-                FileActionItem(CaIcons.gear, stringResource(Res.string.filetree_module_settings)) {
-                    menuOpen = false; onConfigureModule(node)
-                }
-                FileActionItem(CaIcons.layers, stringResource(Res.string.filetree_dependencies)) {
-                    menuOpen = false; onViewDependencies(node)
-                }
-                FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_add_source_root)) {
-                    menuOpen = false; onAddSourceRoot(
-                    node
-                )
-                }
-            }
-            if (canNew) CaSubmenuItem(
-                label = stringResource(Res.string.filetree_new),
-                icon = CaIcons.plus,
-                expanded = openSubmenu == "new",
-                onExpandedChange = { openSubmenu = if (it) "new" else null },
+            val selected = selectedNodes()
+            if (fileOps != null && isSelected && selected.size > 1) BatchMenuItems(selected, cb, close = { menuOpen = false })
+            else RowMenuItems(node, cb, selection, selected, close = { menuOpen = false })
+        }
+    }
+}
+
+/** The touch selection-mode marker in place of a row's icon: a filled check when [selected], else an empty ring. */
+@Composable
+private fun SelectionCheck(selected: Boolean) {
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
+        Modifier.size(17.dp)
+            .then(
+                if (selected) Modifier.background(primary, RoundedCornerShape(Ca.radius.pill))
+                else Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(Ca.radius.pill))
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) Icon(CaIcons.check, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onPrimary)
+    }
+}
+
+/**
+ * The full menu for one [node]: module actions, New ▸, import/export/reveal, the clipboard (Cut, Copy, Paste,
+ * Duplicate, Copy Path ▸), then Rename, Move To…, Copy To… and Delete, and any plugin items. [close] dismisses
+ * the hosting menu (the row's own, or the selection bar's overflow).
+ */
+@Composable
+private fun RowMenuItems(
+    node: TreeNode,
+    cb: TreeRowCallbacks,
+    selection: TreeSelection,
+    selected: List<TreeNode>,
+    close: () -> Unit,
+) {
+    val facts = RowMenuFacts(node, cb)
+    val ctx = cb.ctx
+    val fileOps = cb.fileOps
+    val path = node.selectablePath()
+    // The context menu is two-level: root actions plus flyout submenus (the "New ▸" create options, Copy Path ▸
+    // and any plugin-contributed submenu). Only one flyout is open at a time — this holds its key (null = none).
+    var openSubmenu by remember { mutableStateOf<String?>(null) }
+    if (facts.canModuleMenu) {
+        FileActionItem(CaIcons.gear, stringResource(Res.string.filetree_module_settings)) {
+            close(); cb.onConfigureModule(node)
+        }
+        FileActionItem(CaIcons.layers, stringResource(Res.string.filetree_dependencies)) {
+            close(); cb.onViewDependencies(node)
+        }
+        FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_add_source_root)) {
+            close(); cb.onAddSourceRoot(node)
+        }
+    }
+    if (facts.canNew) CaSubmenuItem(
+        label = stringResource(Res.string.filetree_new),
+        icon = CaIcons.plus,
+        expanded = openSubmenu == "new",
+        onExpandedChange = { openSubmenu = if (it) "new" else null },
+    ) {
+        NewActionItems(
+            node,
+            facts.targetDir,
+            facts.isSourceContext,
+            facts.canNewResource,
+            cb.onNewFile,
+            cb.onNewFolder,
+            cb.onNewResource,
+            cb.onNewImageAsset,
+            cb.onNewSource,
+            close,
+        )
+    }
+    if (facts.canImportHere) facts.targetDir?.let { dir ->
+        FileActionItem(CaIcons.download, stringResource(Res.string.filetree_import_from_file_manager)) {
+            close(); ctx.onImportInto(dir)
+        }
+    }
+    if (facts.canExportHere) FileActionItem(CaIcons.save, stringResource(Res.string.filetree_export)) {
+        close(); ctx.onExport(node)
+    }
+    if (cb.canShare && node.kind == NodeKind.File && node.filePath != null && touchInput) {
+        FileActionItem(CaIcons.share, stringResource(Res.string.filetree_share_node, node.name)) { close(); cb.onShare(node) }
+    }
+    if (facts.canRevealHere) FileActionItem(CaIcons.share, stringResource(Res.string.filetree_reveal_in_file_manager)) {
+        close(); ctx.onReveal(node)
+    }
+    if (fileOps != null && (path != null || facts.canPasteHere)) {
+        MenuDivider()
+        if (path != null) {
+            FileActionItem(CaIcons.cut, stringResource(Res.string.filetree_cut)) { close(); fileOps.onCut(listOf(path)); selection.clear() }
+            FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy)) { close(); fileOps.onCopy(listOf(path)); selection.clear() }
+        }
+        if (facts.canPasteHere) facts.targetDir?.let { dir ->
+            FileActionItem(CaIcons.paste, stringResource(Res.string.filetree_paste)) { close(); fileOps.onPaste(dir) }
+        }
+        if (path != null) {
+            FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_duplicate)) { close(); fileOps.onDuplicate(listOf(path)) }
+            CaSubmenuItem(
+                label = stringResource(Res.string.filetree_copy_path),
+                icon = CaIcons.docText,
+                expanded = openSubmenu == "path",
+                onExpandedChange = { openSubmenu = if (it) "path" else null },
             ) {
-                NewActionItems(
-                    node,
-                    targetDir,
-                    isSourceContext,
-                    canNewResource,
-                    onNewFile,
-                    onNewFolder,
-                    onNewResource,
-                    onNewImageAsset,
-                    onNewSource
-                ) { menuOpen = false }
-            }
-            if (canImportHere) targetDir?.let { dir ->
-                FileActionItem(CaIcons.download, stringResource(Res.string.filetree_import_from_file_manager)) {
-                    menuOpen = false; ctx.onImportInto(dir)
+                FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_copy_path_absolute)) {
+                    close(); fileOps.onCopyText(path)
                 }
-            }
-            if (canExportHere) FileActionItem(CaIcons.save, stringResource(Res.string.filetree_export)) {
-                menuOpen = false; ctx.onExport(node)
-            }
-            if (canRevealHere) FileActionItem(CaIcons.share, stringResource(Res.string.filetree_reveal_in_file_manager)) {
-                menuOpen = false; ctx.onReveal(node)
-            }
-            if (canContext) {
-                FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_rename)) { menuOpen = false; ctx.onRename(node) }
-                FileActionItem(CaIcons.arrowRight, stringResource(Res.string.filetree_move)) { menuOpen = false; ctx.onMove(node) }
-                FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy)) { menuOpen = false; ctx.onCopy(node) }
-                FileActionItem(CaIcons.close, stringResource(Res.string.filetree_delete), danger = true) {
-                    menuOpen = false; ctx.onDelete(node)
+                cb.rootDir?.takeIf { isUnderPath(path, it) && path != it }?.let { root ->
+                    FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_copy_path_relative)) {
+                        close(); fileOps.onCopyText(path.substring(root.length).trimStart('/', '\\'))
+                    }
                 }
-            }
-            // Plugin-contributed file actions (the `fileContext` place). Resolved lazily when the menu
-            // opens; nothing renders until a plugin contributes.
-            val pluginItems = ctx.contextMenu(node).items
-            if (pluginItems.isNotEmpty()) {
-                MenuDivider()
-                PluginMenuItems(pluginItems) { id ->
-                    menuOpen = false; ctx.onContextAction(
-                    id,
-                    node
-                )
+                FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_copy_name)) {
+                    close(); fileOps.onCopyText(pathLeafName(path))
                 }
             }
         }
+    }
+    if (facts.canContext) {
+        MenuDivider()
+        FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_rename)) { close(); ctx.onRename(node) }
+        if (fileOps != null) {
+            FileActionItem(CaIcons.arrowRight, stringResource(Res.string.filetree_move_to)) { close(); fileOps.onMoveTo(listOf(node)) }
+            FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy_to)) { close(); fileOps.onCopyTo(listOf(node)) }
+            FileActionItem(CaIcons.trash, stringResource(Res.string.filetree_delete), danger = true) {
+                close(); fileOps.onDelete(listOf(node))
+            }
+        } else {
+            FileActionItem(CaIcons.arrowRight, stringResource(Res.string.filetree_move)) { close(); ctx.onMove(node) }
+            FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy)) { close(); ctx.onCopy(node) }
+            FileActionItem(CaIcons.close, stringResource(Res.string.filetree_delete), danger = true) {
+                close(); ctx.onDelete(node)
+            }
+        }
+    }
+    // Plugin-contributed file actions (the `fileContext` place). Resolved lazily when the menu
+    // opens; nothing renders until a plugin contributes.
+    val pluginItems = ctx.contextMenu(node).items
+    if (pluginItems.isNotEmpty()) {
+        MenuDivider()
+        PluginMenuItems(pluginItems) { id -> close(); ctx.onContextAction(id, node) }
+    }
+}
+
+/** The menu for several selected rows: the operations that apply to all of them at once. */
+@Composable
+private fun BatchMenuItems(
+    nodes: List<TreeNode>,
+    cb: TreeRowCallbacks,
+    close: () -> Unit,
+    onSelectAll: (() -> Unit)? = null,
+) {
+    val fileOps = cb.fileOps ?: return
+    val paths = nodes.mapNotNull { it.selectablePath() }.distinct()
+    MenuSectionLabel(pluralStringResource(Res.plurals.filetree_drag_items, paths.size, paths.size))
+    if (onSelectAll != null) FileActionItem(CaIcons.check, stringResource(Res.string.filetree_select_all)) { close(); onSelectAll() }
+    FileActionItem(CaIcons.cut, stringResource(Res.string.filetree_cut)) { close(); fileOps.onCut(paths) }
+    FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy)) { close(); fileOps.onCopy(paths) }
+    FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_duplicate)) { close(); fileOps.onDuplicate(paths) }
+    FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_copy_paths)) {
+        close(); fileOps.onCopyText(paths.joinToString("\n"))
+    }
+    MenuDivider()
+    FileActionItem(CaIcons.arrowRight, stringResource(Res.string.filetree_move_to)) { close(); fileOps.onMoveTo(nodes) }
+    FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy_to)) { close(); fileOps.onCopyTo(nodes) }
+    FileActionItem(CaIcons.trash, stringResource(Res.string.filetree_delete), danger = true) {
+        close(); fileOps.onDelete(nodes)
     }
 }
 

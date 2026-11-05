@@ -20,6 +20,9 @@ import dev.ide.ui.ext.ViewModeRegistry
 import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.backend.UiRenameResult
+import dev.ide.ui.backend.UiConflictChoice
+import dev.ide.ui.backend.UiTransferItem
+import dev.ide.ui.backend.UiTransferKind
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiSourceSetScope
@@ -1618,14 +1621,8 @@ class IdeUiState(
 
     // ---- file & package operations (delete / rename / move / copy) ----
 
-    /** Delete a file or directory/package (off the main thread): close any open tabs under it, refresh the tree. */
-    fun deletePath(path: String) {
-        scope.launch {
-            if (!withContext(ioDispatcher) { backend.files.deletePath(path) }) return@launch
-            closeTabsUnder(path)
-            loadTree()
-        }
-    }
+    /** Delete a file or directory/package (into the trash, undoable): see [deletePaths]. */
+    fun deletePath(path: String) = deletePaths(listOf(path))
 
     /** Rename a file/directory to [newName]; rebase open tabs onto the new path + refresh. Returns the result. */
     suspend fun renamePath(path: String, newName: String): UiRenameResult {
@@ -1644,22 +1641,183 @@ class IdeUiState(
         }
     }
 
-    /** Move a file/directory into [destDir] (off the main thread); rebase open tabs + refresh. */
-    fun movePath(path: String, destDir: String) {
+    /** Move a file/directory into [destDir]: see [requestTransfer]. */
+    fun movePath(path: String, destDir: String) = requestTransfer(UiTransferKind.Move, listOf(path), destDir)
+
+    /** Copy a file/directory into [destDir]: see [requestTransfer]. */
+    fun copyPath(path: String, destDir: String) = requestTransfer(UiTransferKind.Copy, listOf(path), destDir)
+
+    // ---- the file tree's clipboard, batch operations, and their undo ----
+
+    /** What Cut or Copy in the file tree put aside: [paths], to move ([cut]) or copy on the next paste. */
+    data class FileClipboard(val paths: List<String>, val cut: Boolean)
+
+    /** The file tree's clipboard (inside the IDE only); null when empty. */
+    var fileClipboard by mutableStateOf<FileClipboard?>(null)
+
+    /** A transfer waiting on the user: [conflicts] are the [paths] whose names are taken in [destDir]. */
+    data class PendingTransfer(
+        val kind: UiTransferKind,
+        val paths: List<String>,
+        val destDir: String,
+        val conflicts: List<String>,
+        val clearsClipboard: Boolean,
+    )
+
+    /** Set while the name-conflict dialog asks what to do; [resolveTransfer] or [cancelTransfer] clears it. */
+    var pendingTransfer by mutableStateOf<PendingTransfer?>(null)
+
+    /** What a finished file operation reports in the tree's snackbar. */
+    enum class FileOpKind { Moved, Copied, Deleted, Undone }
+
+    /**
+     * The snackbar's report of the last file operation: [count] items [kind] (into [target], a folder's name, for a
+     * transfer), [failures] by path with the backend's reason, and the [undoTokens] that reverse it (empty when it
+     * can't be undone). [id] tells two equal reports apart, so the snackbar restarts its timer.
+     */
+    data class FileOpNotice(
+        val id: Long,
+        val kind: FileOpKind,
+        val count: Int,
+        val target: String? = null,
+        val failures: Map<String, String> = emptyMap(),
+        val undoTokens: List<String> = emptyList(),
+        val message: String = "",
+    )
+
+    var fileOpNotice by mutableStateOf<FileOpNotice?>(null)
+        private set
+    private var noticeIds = 0L
+
+    /** The undo of the newest file operation (what Ctrl+Z in the tree reverses); null when there is none. */
+    private var lastFileOpUndo: List<String> = emptyList()
+
+    private fun notify(kind: FileOpKind, count: Int, target: String?, failures: Map<String, String>, undo: List<String>, message: String = "") {
+        if (undo.isNotEmpty()) lastFileOpUndo = undo
+        fileOpNotice = FileOpNotice(++noticeIds, kind, count, target, failures, undo, message)
+    }
+
+    fun dismissFileOpNotice() { fileOpNotice = null }
+
+    /** Put [paths] on the file clipboard, to be moved by the next paste. */
+    fun cutToClipboard(paths: List<String>) { if (paths.isNotEmpty()) fileClipboard = FileClipboard(paths, cut = true) }
+
+    /** Put [paths] on the file clipboard, to be copied by the next paste. */
+    fun copyToClipboard(paths: List<String>) { if (paths.isNotEmpty()) fileClipboard = FileClipboard(paths, cut = false) }
+
+    fun clearClipboard() { fileClipboard = null }
+
+    /** Paste the file clipboard into [destDir]: a cut moves (and empties the clipboard), a copy copies. */
+    fun pasteInto(destDir: String) {
+        val clip = fileClipboard ?: return
+        requestTransfer(if (clip.cut) UiTransferKind.Move else UiTransferKind.Copy, clip.paths, destDir, clearsClipboard = clip.cut)
+    }
+
+    /** Copy each of [paths] next to itself under a free name ("Foo copy"), as one undoable step. */
+    fun duplicatePaths(paths: List<String>) {
         scope.launch {
-            val newPath = withContext(ioDispatcher) { backend.files.movePath(path, destDir) } ?: return@launch
-            rebaseTabs(path, newPath) // re-read moved tabs off the main thread
-            refreshCleanTabs() // a move rewrites importers' package/import lines — reflect that in open tabs
+            val byParent = paths.groupBy { parentOf(it) }
+            val done = LinkedHashMap<String, String>()
+            val failed = LinkedHashMap<String, String>()
+            val tokens = ArrayList<String>()
+            withContext(ioDispatcher) {
+                for ((dir, items) in byParent) {
+                    val r = backend.files.transferPaths(UiTransferKind.Copy, items.map { UiTransferItem(it, UiConflictChoice.KeepBoth) }, dir)
+                    done += r.done; failed += r.failed; r.undoToken?.let(tokens::add)
+                }
+            }
             loadTree()
+            notify(FileOpKind.Copied, done.size, null, failed, tokens)
         }
     }
 
-    /** Copy a file/directory into [destDir] (off the main thread); refresh the tree. */
-    fun copyPath(path: String, destDir: String) {
+    /**
+     * Move or copy [paths] into [destDir]. When some names are taken there, [pendingTransfer] asks first (a copy
+     * into an item's own folder needs no question: it lands next to itself under a free name).
+     */
+    fun requestTransfer(kind: UiTransferKind, paths: List<String>, destDir: String, clearsClipboard: Boolean = false) {
+        if (paths.isEmpty()) return
         scope.launch {
-            if (withContext(ioDispatcher) { backend.files.copyPath(path, destDir) } != null) loadTree()
+            val conflicts = withContext(ioDispatcher) { backend.files.conflictsIn(kind, paths, destDir) }
+                .filterNot { kind == UiTransferKind.Copy && parentOf(it) == destDir }
+            if (conflicts.isEmpty()) runTransfer(kind, paths, destDir, emptyMap(), clearsClipboard)
+            else pendingTransfer = PendingTransfer(kind, paths, destDir, conflicts, clearsClipboard)
         }
     }
+
+    /** Run the [pendingTransfer] with the user's [choices] for its conflicts (unlisted ones are skipped). */
+    fun resolveTransfer(choices: Map<String, UiConflictChoice>) {
+        val p = pendingTransfer ?: return
+        pendingTransfer = null
+        scope.launch { runTransfer(p.kind, p.paths, p.destDir, choices, p.clearsClipboard) }
+    }
+
+    fun cancelTransfer() { pendingTransfer = null }
+
+    private suspend fun runTransfer(
+        kind: UiTransferKind, paths: List<String>, destDir: String, choices: Map<String, UiConflictChoice>, clearsClipboard: Boolean,
+    ) {
+        val items = paths.map { p ->
+            val self = kind == UiTransferKind.Copy && parentOf(p) == destDir
+            UiTransferItem(p, if (self) UiConflictChoice.KeepBoth else choices[p] ?: UiConflictChoice.Skip)
+        }
+        val r = withContext(ioDispatcher) { backend.files.transferPaths(kind, items, destDir) }
+        if (kind == UiTransferKind.Move) {
+            for ((from, to) in r.done) rebaseTabs(from, to) // open tabs follow their files
+            refreshCleanTabs() // a move rewrites importers' package/import lines; show that in open tabs
+        }
+        loadTree()
+        if (clearsClipboard && r.failed.isEmpty()) fileClipboard = null
+        notify(
+            if (kind == UiTransferKind.Move) FileOpKind.Moved else FileOpKind.Copied,
+            r.done.size, leafOf(destDir), r.failed, listOfNotNull(r.undoToken),
+        )
+    }
+
+    /** Delete [paths] (and everything under them) into the trash: their tabs close, and the snackbar can undo it. */
+    fun deletePaths(paths: List<String>) {
+        if (paths.isEmpty()) return
+        scope.launch {
+            val r = withContext(ioDispatcher) { backend.files.deletePaths(paths) }
+            r.deleted.forEach(::closeTabsUnder)
+            fileClipboard = fileClipboard?.let { c -> c.copy(paths = c.paths.filterNot { p -> r.deleted.any { underPath(p, it) } }) }
+                ?.takeIf { it.paths.isNotEmpty() }
+            loadTree()
+            notify(FileOpKind.Deleted, r.deleted.size, null, r.failed, listOfNotNull(r.undoToken))
+        }
+    }
+
+    /** True when there is a file operation Ctrl+Z in the tree can reverse. */
+    val canUndoFileOp: Boolean get() = lastFileOpUndo.isNotEmpty()
+
+    /** Reverse the newest file operation (Ctrl+Z in the tree). */
+    fun undoLastFileOp() { undoFileOps(lastFileOpUndo) }
+
+    /** Reverse the file operation the [tokens] belong to (newest first); open tabs follow moved files back. */
+    fun undoFileOps(tokens: List<String>) {
+        if (tokens.isEmpty()) return
+        if (tokens == lastFileOpUndo) lastFileOpUndo = emptyList()
+        fileOpNotice = null
+        scope.launch {
+            val results = withContext(ioDispatcher) { tokens.asReversed().map { backend.files.undoFileOperation(it) } }
+            for (r in results) {
+                for ((from, to) in r.moved) rebaseTabs(from, to)
+                r.removed.forEach(::closeTabsUnder)
+            }
+            refreshCleanTabs()
+            loadTree()
+            val count = results.sumOf { it.moved.size + it.removed.size + it.restored.size }
+            val message = results.map { it.message }.filter { it.isNotBlank() }.joinToString(" ")
+            notify(FileOpKind.Undone, count, null, emptyMap(), emptyList(), message)
+        }
+    }
+
+    private fun parentOf(path: String): String {
+        val cut = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+        return if (cut <= 0) path else path.substring(0, cut)
+    }
+
+    private fun leafOf(path: String): String = path.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
 
     /** True if [p] is [root] or lives under it (matching on either path separator). */
     private fun underPath(p: String, root: String): Boolean =

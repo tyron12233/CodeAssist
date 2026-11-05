@@ -66,6 +66,66 @@ interface FileService {
     /** Copy a file/dir into [destDir]; returns the new path or null. Bumps [fileSystemEpoch]. */
     fun copyPath(path: String, destDir: String): String? = null
 
+    /**
+     * The [paths] whose names are already taken in [destDir], so the UI can ask what to do before
+     * [transferPaths]. A move into the folder an item is already in is no conflict (it is skipped); a copy there
+     * is (it lands next to itself).
+     */
+    fun conflictsIn(kind: UiTransferKind, paths: List<String>, destDir: String): List<String> {
+        val existing = listDirectory(destDir).map { it.path }.toSet()
+        val names = existing.map(::pathLeafName).toSet()
+        return paths.filter { p ->
+            pathLeafName(p) in names && !(kind == UiTransferKind.Move && p in existing)
+        }
+    }
+
+    /**
+     * Move or copy every item into [destDir] in one call: one reindex, one import sweep for the moved sources,
+     * and one undo step for the lot. Each item's [UiTransferItem.onConflict] says what happens when its name is
+     * taken. Bumps [fileSystemEpoch] once when anything changed.
+     *
+     * The default goes item by item through [movePath]/[copyPath]: Replace deletes the existing item for good,
+     * and Keep both is not available.
+     */
+    fun transferPaths(kind: UiTransferKind, items: List<UiTransferItem>, destDir: String): UiTransferResult {
+        val done = LinkedHashMap<String, String>()
+        val skipped = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        for (item in items) {
+            val existing = listDirectory(destDir).firstOrNull { it.name == pathLeafName(item.path) }
+            if (existing != null && existing.path == item.path && kind == UiTransferKind.Move) {
+                skipped += item.path; continue
+            }
+            if (existing != null) when (item.onConflict) {
+                UiConflictChoice.Skip -> { skipped += item.path; continue }
+                UiConflictChoice.KeepBoth -> { failed[item.path] = "Keep both is not supported here."; continue }
+                UiConflictChoice.Replace -> if (existing.path == item.path || !deletePath(existing.path)) {
+                    failed[item.path] = "Could not replace '${existing.name}'."; continue
+                }
+            }
+            val landed = if (kind == UiTransferKind.Move) movePath(item.path, destDir) else copyPath(item.path, destDir)
+            if (landed != null) done[item.path] = landed else failed[item.path] = "Could not transfer it."
+        }
+        return UiTransferResult(done, skipped, failed)
+    }
+
+    /**
+     * Delete every path, recoverably where the backend can (the result's undo token restores them). Bumps
+     * [fileSystemEpoch] once. The default deletes each one for good through [deletePath].
+     */
+    fun deletePaths(paths: List<String>): UiDeleteResult {
+        val deleted = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        for (p in paths) if (deletePath(p)) deleted += p else failed[p] = "Could not delete it."
+        return UiDeleteResult(deleted, failed)
+    }
+
+    /** True when [deletePaths] keeps what it deletes in a trash, so [undoFileOperation] can bring it back. */
+    val supportsUndo: Boolean get() = false
+
+    /** Reverse the [transferPaths] or [deletePaths] call that returned [token]. A token undoes once. */
+    fun undoFileOperation(token: String): UiUndoResult = UiUndoResult(false, "Undo is not supported here.")
+
     /** Bumps whenever a file is created/imported/removed, so the UI re-reads [fileTree]. */
     val fileSystemEpoch: StateFlow<Int> get() = MutableStateFlow(0)
 }

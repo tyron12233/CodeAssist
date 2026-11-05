@@ -196,6 +196,48 @@
     <string name="filetree_move">Переместить</string>
     <string name="filetree_copy">Копировать</string>
     <string name="filetree_delete">Удалить</string>
+    <string name="filetree_cut">Вырезать</string>
+    <string name="filetree_paste">Вставить</string>
+    <string name="filetree_duplicate">Дублировать</string>
+    <string name="filetree_copy_path">Копировать путь</string>
+    <string name="filetree_copy_path_absolute">Абсолютный путь</string>
+    <string name="filetree_copy_path_relative">Путь от корня проекта</string>
+    <string name="filetree_copy_name">Имя</string>
+    <string name="filetree_copy_paths">Копировать пути</string>
+    <string name="filetree_move_to">Переместить в…</string>
+    <string name="filetree_copy_to">Копировать в…</string>
+    <string name="filetree_select_all">Выделить всё</string>
+    <string name="filetree_clear_selection">Снять выделение</string>
+    <string name="filetree_more_selection">Дополнительные действия для выделенного</string>
+    <string name="filetree_paste_into">Вставить в %1$s</string>
+    <string name="filetree_clear_clipboard">Очистить буфер обмена</string>
+    <string name="filetree_drop_move">Переместить в %1$s</string>
+    <string name="filetree_drop_copy">Копировать в %1$s</string>
+    <string name="filetree_drop_nowhere">Сюда нельзя перетащить</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="one">Выбрано: %1$d</item>
+        <item quantity="few">Выбрано: %1$d</item>
+        <item quantity="many">Выбрано: %1$d</item>
+        <item quantity="other">Выбрано: %1$d</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="one">%1$d элемент для перемещения</item>
+        <item quantity="few">%1$d элемента для перемещения</item>
+        <item quantity="many">%1$d элементов для перемещения</item>
+        <item quantity="other">%1$d элементов для перемещения</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="one">%1$d элемент для копирования</item>
+        <item quantity="few">%1$d элемента для копирования</item>
+        <item quantity="many">%1$d элементов для копирования</item>
+        <item quantity="other">%1$d элементов для копирования</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="one">%1$d элемент</item>
+        <item quantity="few">%1$d элемента</item>
+        <item quantity="many">%1$d элементов</item>
+        <item quantity="other">%1$d элементов</item>
+    </plurals>
     <string name="filetree_java_class">Класс Java</string>
     <string name="filetree_kotlin_file">Файл Kotlin</string>
     <string name="filetree_resource_file">Файл ресурсов</string>
@@ -671,6 +713,71 @@
     <string name="fileop_empty_folder">Эта папка пуста.</string>
     <string name="fileop_move_here">Переместить сюда</string>
     <string name="fileop_copy_here">Копировать сюда</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="one">Переместить %1$d элемент в…</item>
+        <item quantity="few">Переместить %1$d элемента в…</item>
+        <item quantity="many">Переместить %1$d элементов в…</item>
+        <item quantity="other">Переместить %1$d элементов в…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="one">Копировать %1$d элемент в…</item>
+        <item quantity="few">Копировать %1$d элемента в…</item>
+        <item quantity="many">Копировать %1$d элементов в…</item>
+        <item quantity="other">Копировать %1$d элементов в…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="one">Удалить %1$d элемент?</item>
+        <item quantity="few">Удалить %1$d элемента?</item>
+        <item quantity="many">Удалить %1$d элементов?</item>
+        <item quantity="other">Удалить %1$d элементов?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">Это навсегда удалит их, а папки — вместе со всем содержимым. Отменить это действие нельзя.</string>
+    <string name="fileop_delete_items_body_undo">Папки удаляются вместе со всем содержимым. Сразу после этого удаление можно отменить.</string>
+    <string name="fileop_delete_dir_body_undo">Это удалит папку и всё её содержимое. Сразу после этого удаление можно отменить.</string>
+    <string name="fileop_delete_file_body_undo">Сразу после этого удаление можно отменить.</string>
+    <string name="fileop_conflict_title">«%1$s» уже существует в %2$s</string>
+    <string name="fileop_conflict_body">Замените существующий элемент, сохраните оба (этот получит новое имя) или пропустите его.</string>
+    <string name="fileop_conflict_replace">Заменить</string>
+    <string name="fileop_conflict_keep_both">Сохранить оба</string>
+    <string name="fileop_conflict_skip">Пропустить</string>
+    <string name="fileop_conflict_progress">Конфликт %1$d из %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="one">Сделать то же для остальных конфликтов (%1$d)</item>
+        <item quantity="few">Сделать то же для остальных конфликтов (%1$d)</item>
+        <item quantity="many">Сделать то же для остальных конфликтов (%1$d)</item>
+        <item quantity="other">Сделать то же для остальных конфликтов (%1$d)</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="one">Перемещён %1$d элемент в %2$s</item>
+        <item quantity="few">Перемещено %1$d элемента в %2$s</item>
+        <item quantity="many">Перемещено %1$d элементов в %2$s</item>
+        <item quantity="other">Перемещено %1$d элементов в %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="one">Скопирован %1$d элемент в %2$s</item>
+        <item quantity="few">Скопировано %1$d элемента в %2$s</item>
+        <item quantity="many">Скопировано %1$d элементов в %2$s</item>
+        <item quantity="other">Скопировано %1$d элементов в %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="one">Продублирован %1$d элемент</item>
+        <item quantity="few">Продублировано %1$d элемента</item>
+        <item quantity="many">Продублировано %1$d элементов</item>
+        <item quantity="other">Продублировано %1$d элементов</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="one">Удалён %1$d элемент</item>
+        <item quantity="few">Удалено %1$d элемента</item>
+        <item quantity="many">Удалено %1$d элементов</item>
+        <item quantity="other">Удалено %1$d элементов</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="one">Не удалось обработать %1$d элемент: %2$s</item>
+        <item quantity="few">Не удалось обработать %1$d элемента: %2$s</item>
+        <item quantity="many">Не удалось обработать %1$d элементов: %2$s</item>
+        <item quantity="other">Не удалось обработать %1$d элементов: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Отменено</string>
     <string name="errdlg_unexpected">Произошла непредвиденная ошибка. Приложение продолжает работать.</string>
     <string name="errdlg_hide_details">Скрыть подробности</string>
     <string name="errdlg_show_details">Показать подробности</string>

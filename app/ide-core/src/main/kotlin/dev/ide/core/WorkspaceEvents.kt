@@ -171,6 +171,16 @@ internal class WorkspaceEventHub(
         publish(events)
     }
 
+    /** A batch file operation (the tree's move/copy/delete of many items, or its undo): [moved] old -> new,
+     *  [created] files, [deleted] items, published as ONE batch so the reaction runs once for the lot. */
+    fun filesTransferred(moved: Map<Path, Path>, created: List<Path>, deleted: List<Path>) {
+        val events = ArrayList<VfsEvent>(moved.size + created.size + deleted.size)
+        moved.mapTo(events) { (from, to) -> FileMoved(store.vfs.fileFor(to), from.toString(), to.toString()) }
+        created.mapTo(events) { FileCreated(store.vfs.fileFor(it)) }
+        deleted.mapTo(events) { FileDeleted(store.vfs.fileFor(it)) }
+        publish(events)
+    }
+
     fun fileCreated(path: Path) = publish(listOf(FileCreated(store.vfs.fileFor(path))))
 
     /** A batch of created files (a directory copy). One event per real file so remote consumers see the

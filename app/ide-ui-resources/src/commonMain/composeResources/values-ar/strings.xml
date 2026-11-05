@@ -374,6 +374,56 @@
     <string name="filetree_move">نقل</string>
     <string name="filetree_copy">نسخ</string>
     <string name="filetree_delete">حذف</string>
+    <string name="filetree_cut">قص</string>
+    <string name="filetree_paste">لصق</string>
+    <string name="filetree_duplicate">تكرار</string>
+    <string name="filetree_copy_path">نسخ المسار</string>
+    <string name="filetree_copy_path_absolute">المسار المطلق</string>
+    <string name="filetree_copy_path_relative">المسار من جذر المشروع</string>
+    <string name="filetree_copy_name">الاسم</string>
+    <string name="filetree_copy_paths">نسخ المسارات</string>
+    <string name="filetree_move_to">نقل إلى…</string>
+    <string name="filetree_copy_to">نسخ إلى…</string>
+    <string name="filetree_select_all">تحديد الكل</string>
+    <string name="filetree_clear_selection">مسح التحديد</string>
+    <string name="filetree_more_selection">المزيد من الإجراءات للعناصر المحددة</string>
+    <string name="filetree_paste_into">لصق في %1$s</string>
+    <string name="filetree_clear_clipboard">مسح الحافظة</string>
+    <string name="filetree_drop_move">نقل إلى %1$s</string>
+    <string name="filetree_drop_copy">نسخ إلى %1$s</string>
+    <string name="filetree_drop_nowhere">لا يمكن الإفلات هنا</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="zero">المحدد: %1$d</item>
+        <item quantity="one">المحدد: %1$d</item>
+        <item quantity="two">المحدد: %1$d</item>
+        <item quantity="few">المحدد: %1$d</item>
+        <item quantity="many">المحدد: %1$d</item>
+        <item quantity="other">المحدد: %1$d</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="zero">%1$d عنصر للنقل</item>
+        <item quantity="one">عنصر واحد للنقل</item>
+        <item quantity="two">عنصران للنقل</item>
+        <item quantity="few">%1$d عناصر للنقل</item>
+        <item quantity="many">%1$d عنصرًا للنقل</item>
+        <item quantity="other">%1$d عنصر للنقل</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="zero">%1$d عنصر للنسخ</item>
+        <item quantity="one">عنصر واحد للنسخ</item>
+        <item quantity="two">عنصران للنسخ</item>
+        <item quantity="few">%1$d عناصر للنسخ</item>
+        <item quantity="many">%1$d عنصرًا للنسخ</item>
+        <item quantity="other">%1$d عنصر للنسخ</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="zero">%1$d عنصر</item>
+        <item quantity="one">عنصر واحد</item>
+        <item quantity="two">عنصران</item>
+        <item quantity="few">%1$d عناصر</item>
+        <item quantity="many">%1$d عنصرًا</item>
+        <item quantity="other">%1$d عنصر</item>
+    </plurals>
     <string name="filetree_java_class">صنف Java</string>
     <string name="filetree_kotlin_file">ملف Kotlin</string>
     <string name="filetree_aidl_file">ملف AIDL</string>
@@ -1367,6 +1417,89 @@
     <string name="fileop_empty_folder">هذا المجلد فارغ.</string>
     <string name="fileop_move_here">النقل هنا</string>
     <string name="fileop_copy_here">النسخ هنا</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="zero">نقل %1$d عنصر إلى…</item>
+        <item quantity="one">نقل عنصر واحد إلى…</item>
+        <item quantity="two">نقل عنصرين إلى…</item>
+        <item quantity="few">نقل %1$d عناصر إلى…</item>
+        <item quantity="many">نقل %1$d عنصرًا إلى…</item>
+        <item quantity="other">نقل %1$d عنصر إلى…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="zero">نسخ %1$d عنصر إلى…</item>
+        <item quantity="one">نسخ عنصر واحد إلى…</item>
+        <item quantity="two">نسخ عنصرين إلى…</item>
+        <item quantity="few">نسخ %1$d عناصر إلى…</item>
+        <item quantity="many">نسخ %1$d عنصرًا إلى…</item>
+        <item quantity="other">نسخ %1$d عنصر إلى…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="zero">حذف %1$d عنصر؟</item>
+        <item quantity="one">حذف عنصر واحد؟</item>
+        <item quantity="two">حذف عنصرين؟</item>
+        <item quantity="few">حذف %1$d عناصر؟</item>
+        <item quantity="many">حذف %1$d عنصرًا؟</item>
+        <item quantity="other">حذف %1$d عنصر؟</item>
+    </plurals>
+    <string name="fileop_delete_items_body">يؤدي هذا إلى إزالتها نهائيًا، وإزالة المجلدات مع كل ما بداخلها. لا يمكن التراجع عن هذا.</string>
+    <string name="fileop_delete_items_body_undo">تُحذف المجلدات مع كل ما بداخلها. يمكنك التراجع عن هذا بعد ذلك مباشرةً.</string>
+    <string name="fileop_delete_dir_body_undo">يؤدي هذا إلى حذف المجلد وكل ما بداخله. يمكنك التراجع عن هذا بعد ذلك مباشرةً.</string>
+    <string name="fileop_delete_file_body_undo">يمكنك التراجع عن هذا بعد ذلك مباشرةً.</string>
+    <string name="fileop_conflict_title">"%1$s" موجود بالفعل في %2$s</string>
+    <string name="fileop_conflict_body">استبدل العنصر الموجود، أو احتفظ بكليهما (يحصل هذا العنصر على اسم جديد)، أو تخطَّه.</string>
+    <string name="fileop_conflict_replace">استبدال</string>
+    <string name="fileop_conflict_keep_both">الاحتفاظ بكليهما</string>
+    <string name="fileop_conflict_skip">تخطي</string>
+    <string name="fileop_conflict_progress">التعارض %1$d من %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="zero">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+        <item quantity="one">تطبيق الإجراء نفسه على التعارض الآخر</item>
+        <item quantity="two">تطبيق الإجراء نفسه على التعارضين الآخرين</item>
+        <item quantity="few">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+        <item quantity="many">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+        <item quantity="other">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="zero">تم نقل %1$d عنصر إلى %2$s</item>
+        <item quantity="one">تم نقل عنصر واحد إلى %2$s</item>
+        <item quantity="two">تم نقل عنصرين إلى %2$s</item>
+        <item quantity="few">تم نقل %1$d عناصر إلى %2$s</item>
+        <item quantity="many">تم نقل %1$d عنصرًا إلى %2$s</item>
+        <item quantity="other">تم نقل %1$d عنصر إلى %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="zero">تم نسخ %1$d عنصر إلى %2$s</item>
+        <item quantity="one">تم نسخ عنصر واحد إلى %2$s</item>
+        <item quantity="two">تم نسخ عنصرين إلى %2$s</item>
+        <item quantity="few">تم نسخ %1$d عناصر إلى %2$s</item>
+        <item quantity="many">تم نسخ %1$d عنصرًا إلى %2$s</item>
+        <item quantity="other">تم نسخ %1$d عنصر إلى %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="zero">تم تكرار %1$d عنصر</item>
+        <item quantity="one">تم تكرار عنصر واحد</item>
+        <item quantity="two">تم تكرار عنصرين</item>
+        <item quantity="few">تم تكرار %1$d عناصر</item>
+        <item quantity="many">تم تكرار %1$d عنصرًا</item>
+        <item quantity="other">تم تكرار %1$d عنصر</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="zero">تم حذف %1$d عنصر</item>
+        <item quantity="one">تم حذف عنصر واحد</item>
+        <item quantity="two">تم حذف عنصرين</item>
+        <item quantity="few">تم حذف %1$d عناصر</item>
+        <item quantity="many">تم حذف %1$d عنصرًا</item>
+        <item quantity="other">تم حذف %1$d عنصر</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="zero">فشل %1$d عنصر: %2$s</item>
+        <item quantity="one">فشل عنصر واحد: %2$s</item>
+        <item quantity="two">فشل عنصران: %2$s</item>
+        <item quantity="few">فشلت %1$d عناصر: %2$s</item>
+        <item quantity="many">فشل %1$d عنصرًا: %2$s</item>
+        <item quantity="other">فشل %1$d عنصر: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">تم التراجع</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">حدث خطأ غير متوقع. ظل التطبيق يعمل.</string>

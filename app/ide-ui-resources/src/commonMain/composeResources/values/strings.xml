@@ -336,6 +336,40 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="filetree_move">Move</string>
     <string name="filetree_copy">Copy</string>
     <string name="filetree_delete">Delete</string>
+    <string name="filetree_cut">Cut</string>
+    <string name="filetree_paste">Paste</string>
+    <string name="filetree_duplicate">Duplicate</string>
+    <string name="filetree_copy_path">Copy Path</string>
+    <string name="filetree_copy_path_absolute">Absolute Path</string>
+    <string name="filetree_copy_path_relative">Path From Project Root</string>
+    <string name="filetree_copy_name">Name</string>
+    <string name="filetree_copy_paths">Copy Paths</string>
+    <string name="filetree_move_to">Move To…</string>
+    <string name="filetree_copy_to">Copy To…</string>
+    <string name="filetree_select_all">Select All</string>
+    <string name="filetree_clear_selection">Clear selection</string>
+    <string name="filetree_more_selection">More actions for the selection</string>
+    <string name="filetree_paste_into">Paste into %1$s</string>
+    <string name="filetree_clear_clipboard">Clear clipboard</string>
+    <string name="filetree_drop_move">Move to %1$s</string>
+    <string name="filetree_drop_copy">Copy to %1$s</string>
+    <string name="filetree_drop_nowhere">Can't drop here</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="one">%1$d item to move</item>
+        <item quantity="other">%1$d items to move</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="one">%1$d item to copy</item>
+        <item quantity="other">%1$d items to copy</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
     <string name="filetree_java_class">Java Class</string>
     <string name="filetree_kotlin_file">Kotlin File</string>
     <string name="filetree_aidl_file">AIDL File</string>
@@ -1307,6 +1341,53 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="fileop_empty_folder">This folder is empty.</string>
     <string name="fileop_move_here">Move here</string>
     <string name="fileop_copy_here">Copy here</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="one">Move %1$d item to…</item>
+        <item quantity="other">Move %1$d items to…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="one">Copy %1$d item to…</item>
+        <item quantity="other">Copy %1$d items to…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="one">Delete %1$d item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">This permanently removes them, and folders with everything inside them. This can't be undone.</string>
+    <string name="fileop_delete_items_body_undo">Folders are deleted with everything inside them. You can undo this right after.</string>
+    <string name="fileop_delete_dir_body_undo">This deletes the folder and everything inside it. You can undo this right after.</string>
+    <string name="fileop_delete_file_body_undo">You can undo this right after.</string>
+    <string name="fileop_conflict_title">'%1$s' already exists in %2$s</string>
+    <string name="fileop_conflict_body">Replace the item that is there, keep both (this one gets a new name), or skip it.</string>
+    <string name="fileop_conflict_replace">Replace</string>
+    <string name="fileop_conflict_keep_both">Keep Both</string>
+    <string name="fileop_conflict_skip">Skip</string>
+    <string name="fileop_conflict_progress">Conflict %1$d of %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="one">Do the same for the other conflict</item>
+        <item quantity="other">Do the same for the other %1$d conflicts</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="one">Moved %1$d item to %2$s</item>
+        <item quantity="other">Moved %1$d items to %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="one">Copied %1$d item to %2$s</item>
+        <item quantity="other">Copied %1$d items to %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="one">Duplicated %1$d item</item>
+        <item quantity="other">Duplicated %1$d items</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="one">Deleted %1$d item</item>
+        <item quantity="other">Deleted %1$d items</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="one">%1$d item failed: %2$s</item>
+        <item quantity="other">%1$d items failed: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Undone</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">An unexpected error occurred. The app has kept running.</string>

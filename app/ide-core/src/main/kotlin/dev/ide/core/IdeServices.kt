@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.ui.backend.RunGutter
+import dev.ide.ui.backend.keepBothName
 import dev.ide.ui.backend.TestOutput
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
@@ -3745,6 +3746,22 @@ class IdeServices private constructor(
      * quick-fix. Touches disk and the live overlay together; callers do the reindex.
      */
     private fun fixPackagesAfterRelocation(dest: Path, updateReferences: Boolean) {
+        val typeRenames = LinkedHashMap<String, String>() // old FQN → new FQN, for the import sweep
+        val movedKeys = HashSet<Path>()
+        relocatePackages(dest, updateReferences, typeRenames, movedKeys)
+        if (updateReferences && typeRenames.isNotEmpty()) updateImportsForMovedTypes(
+            typeRenames, movedKeys
+        )
+    }
+
+    /**
+     * The per-item half of [fixPackagesAfterRelocation]: rewrite the `package` line of each source at or under
+     * [dest], adding to [typeRenames] (old FQN → new FQN, when [updateReferences]) and [movedKeys] (the rewritten
+     * files) so a batch of items runs one import sweep at the end instead of one per item.
+     */
+    private fun relocatePackages(
+        dest: Path, updateReferences: Boolean, typeRenames: MutableMap<String, String>, movedKeys: MutableSet<Path>,
+    ) {
         val movedFiles = when {
             Files.isDirectory(dest) -> runCatching {
                 Files.walk(dest).use { s ->
@@ -3755,8 +3772,6 @@ class IdeServices private constructor(
             isRelocatableSource(dest) -> listOf(dest)
             else -> return
         }
-        val typeRenames = LinkedHashMap<String, String>() // old FQN → new FQN, for the import sweep
-        val movedKeys = HashSet<Path>()
         for (f in movedFiles) {
             val parent = f.parent ?: continue
             val newPkg =
@@ -3775,9 +3790,6 @@ class IdeServices private constructor(
                 typeRenames[oldFqn] = newFqn
             }
         }
-        if (updateReferences && typeRenames.isNotEmpty()) updateImportsForMovedTypes(
-            typeRenames, movedKeys
-        )
     }
 
     /** A moved file whose `package` line tracks its directory: Java and Kotlin sources (not `.kts` scripts). */
@@ -3946,6 +3958,193 @@ class IdeServices private constructor(
             events.filesCreated(filesUnder(dest))
             dest
         }.getOrNull()
+    }
+
+    // ---- batch file operations with undo (the file tree's multi-select, clipboard and drag and drop) ----
+
+    private val fileOps by lazy { FileOpJournal(store.rootPath.resolve(".platform").resolve("trash")) }
+
+    /** [paths] normalized, without any that sit inside another of them (moving the folder carries them along). */
+    private fun outermost(paths: List<Path>): List<Path> {
+        val all = paths.map { normPath(it) }.distinct()
+        return all.filter { p -> all.none { q -> q != p && p.startsWith(q) } }
+    }
+
+    /** Put [target] aside in [token]'s trash; the trashed path, or null when it could not be moved there. */
+    private fun moveToTrash(target: Path, token: String): Path? = runCatching {
+        val dest = fileOps.trashSlot(token).resolve(target.fileName.toString())
+        Files.move(target, dest)
+        dest
+    }.getOrNull()
+
+    /**
+     * Move ([move]) or copy every item into [destDir], as one operation: one import sweep for the moved sources,
+     * one batch of workspace events (so one reindex), and one undo token for the lot.
+     *
+     * An item inside another item is carried along by it rather than transferred twice. A move into the folder an
+     * item is already in is skipped. When the item's name is taken in [destDir], its [ConflictChoice] decides: Skip
+     * leaves it, Replace puts the existing item in the trash first, Keep both lands it under [keepBothName]. A Java
+     * source that lands under a new name has its own top-level type renamed to match, and every moved or copied
+     * source gets the `package` line of where it landed (a move also repoints the project's imports of it).
+     */
+    fun transferPaths(move: Boolean, items: List<Pair<Path, ConflictChoice>>, destDir: Path): TransferOutcome {
+        val dir = normPath(destDir)
+        val done = LinkedHashMap<Path, Path>()
+        val skipped = ArrayList<Path>()
+        val failed = LinkedHashMap<Path, String>()
+        if (!Files.isDirectory(dir)) {
+            items.forEach { failed[normPath(it.first)] = "'${dir.fileName}' is not a folder." }
+            return TransferOutcome(done, skipped, failed, null)
+        }
+        val choiceOf = items.associate { normPath(it.first) to it.second }
+        val token = fileOps.newToken()
+        val steps = ArrayList<FileOpJournal.Step>()
+        val typeRenames = LinkedHashMap<String, String>()
+        val relocated = HashSet<Path>()
+        val created = ArrayList<Path>()
+        val trashed = ArrayList<Path>()
+        for (abs in outermost(items.map { it.first })) {
+            val name = abs.fileName?.toString() ?: continue
+            if (!Files.exists(abs)) { failed[abs] = "'$name' no longer exists."; continue }
+            if (dir.startsWith(abs)) {
+                failed[abs] = if (move) "A folder can't move into itself." else "A folder can't be copied into itself."
+                continue
+            }
+            var dest = dir.resolve(name)
+            if (move && dest == abs) { skipped.add(abs); continue }
+            if (Files.exists(dest)) when (choiceOf[abs] ?: ConflictChoice.Skip) {
+                ConflictChoice.Skip -> { skipped.add(abs); continue }
+                ConflictChoice.KeepBoth ->
+                    dest = dir.resolve(keepBothName(name, Files.isDirectory(abs)) { Files.exists(dir.resolve(it)) })
+                ConflictChoice.Replace -> {
+                    if (dest == abs || abs.startsWith(dest)) { failed[abs] = "'$name' can't replace itself."; continue }
+                    val aside = moveToTrash(dest, token)
+                    if (aside == null) { failed[abs] = "Could not put the existing '$name' aside."; continue }
+                    steps += FileOpJournal.Step.Trashed(dest, aside)
+                    trashed.add(dest)
+                }
+            }
+            runCatching {
+                if (move) {
+                    Files.move(abs, dest)
+                    rekeyOverlays(abs, dest)
+                    steps += FileOpJournal.Step.Moved(abs, dest)
+                } else {
+                    if (Files.isDirectory(abs)) abs.toFile().copyRecursively(dest.toFile(), overwrite = false)
+                    else Files.copy(abs, dest)
+                    steps += FileOpJournal.Step.Created(dest)
+                }
+                if (dest.fileName.toString() != name) renameJavaTypeToFileName(dest, name)
+                relocatePackages(dest, updateReferences = move, typeRenames, relocated)
+                if (!move) created += filesUnder(dest)
+                done[abs] = dest
+            }.onFailure { failed[abs] = "Could not ${if (move) "move" else "copy"} '$name': ${it.message}" }
+        }
+        if (move && typeRenames.isNotEmpty()) updateImportsForMovedTypes(typeRenames, relocated)
+        events.filesTransferred(moved = if (move) done else emptyMap(), created = created, deleted = trashed)
+        val undoToken = token.takeIf { steps.isNotEmpty() }
+        fileOps.record(token, steps)
+        return TransferOutcome(done, skipped, failed, undoToken)
+    }
+
+    /**
+     * When a Java file landed as [dest] under a new name (Keep both), rename the top-level type that was named
+     * after its old file name ([oldName]), with the copy's own uses of it, so the file still compiles.
+     */
+    private fun renameJavaTypeToFileName(dest: Path, oldName: String) {
+        if (!oldName.endsWith(".java") || !dest.toString().endsWith(".java")) return
+        val oldType = oldName.removeSuffix(".java")
+        val newType = dest.fileName.toString().removeSuffix(".java")
+        if (!isValidJavaIdentifier(oldType) || !isValidJavaIdentifier(newType)) return
+        val key = normPath(dest)
+        val text = runCatching { dest.readText() }.getOrNull() ?: return
+        if (javaTypeNameOffset(text, oldType) == null) return
+        val updated = Regex("\\b${Regex.escape(oldType)}\\b").replace(text, newType)
+        runCatching { dest.writeText(updated) }.onSuccess { putInStep(key, updated) }
+    }
+
+    /**
+     * Delete every path (an item inside another is carried along), into the trash so the returned token can bring
+     * them back. An item the trash cannot take is deleted for good. One batch of workspace events for the lot.
+     */
+    fun deletePaths(paths: List<Path>): DeleteOutcome {
+        val token = fileOps.newToken()
+        val steps = ArrayList<FileOpJournal.Step>()
+        val deleted = ArrayList<Path>()
+        val failed = LinkedHashMap<Path, String>()
+        for (abs in outermost(paths)) {
+            val name = abs.fileName?.toString() ?: continue
+            if (!Files.exists(abs)) { failed[abs] = "'$name' no longer exists."; continue }
+            val aside = moveToTrash(abs, token)
+            if (aside != null) {
+                steps += FileOpJournal.Step.Trashed(abs, aside)
+                deleted.add(abs)
+                continue
+            }
+            val gone = runCatching {
+                if (Files.isDirectory(abs)) abs.toFile().deleteRecursively() else Files.deleteIfExists(abs)
+            }.getOrDefault(false)
+            if (gone) deleted.add(abs) else failed[abs] = "Could not delete '$name'."
+        }
+        events.filesTransferred(moved = emptyMap(), created = emptyList(), deleted = deleted)
+        val undoToken = token.takeIf { steps.isNotEmpty() }
+        fileOps.record(token, steps)
+        return DeleteOutcome(deleted, failed, undoToken)
+    }
+
+    /**
+     * Reverse the [transferPaths] or [deletePaths] call that returned [token], last step first: moved items go
+     * back (their packages and the project's imports follow), copies are deleted, and trashed items come back. A
+     * step whose place has been taken since is left out and named in the message.
+     */
+    fun undoFileOperation(token: String): UndoOutcome {
+        val steps = fileOps.take(token) ?: return UndoOutcome(false, "That change can no longer be undone.")
+        val moved = LinkedHashMap<Path, Path>()
+        val removed = ArrayList<Path>()
+        val restored = ArrayList<Path>()
+        val created = ArrayList<Path>()
+        val problems = ArrayList<String>()
+        val typeRenames = LinkedHashMap<String, String>()
+        val relocated = HashSet<Path>()
+        for (step in steps.asReversed()) when (step) {
+            is FileOpJournal.Step.Moved -> {
+                val (from, to) = step
+                when {
+                    !Files.exists(to) -> problems += "'${to.fileName}' is gone"
+                    Files.exists(from) -> problems += "something else is at '${from.fileName}'"
+                    else -> runCatching {
+                        from.parent?.let { Files.createDirectories(it) }
+                        Files.move(to, from)
+                        rekeyOverlays(to, from)
+                        relocatePackages(from, updateReferences = true, typeRenames, relocated)
+                        moved[to] = from
+                    }.onFailure { problems += "could not move '${to.fileName}' back" }
+                }
+            }
+            is FileOpJournal.Step.Created -> runCatching {
+                val p = step.path
+                if (Files.isDirectory(p)) p.toFile().deleteRecursively() else Files.deleteIfExists(p)
+                removed.add(p)
+            }.onFailure { problems += "could not remove '${step.path.fileName}'" }
+            is FileOpJournal.Step.Trashed -> {
+                val (original, aside) = step
+                when {
+                    !Files.exists(aside) -> problems += "the deleted '${original.fileName}' is gone"
+                    Files.exists(original) -> problems += "something else is at '${original.fileName}'"
+                    else -> runCatching {
+                        original.parent?.let { Files.createDirectories(it) }
+                        Files.move(aside, original)
+                        restored.add(original)
+                        created += filesUnder(original)
+                    }.onFailure { problems += "could not restore '${original.fileName}'" }
+                }
+            }
+        }
+        if (typeRenames.isNotEmpty()) updateImportsForMovedTypes(typeRenames, relocated)
+        events.filesTransferred(moved = moved, created = created, deleted = removed)
+        fileOps.finish(token)
+        val message = if (problems.isEmpty()) "" else "Not undone: " + problems.joinToString("; ") + "."
+        return UndoOutcome(problems.size < steps.size, message, moved, removed, restored)
     }
 
     /** [root] itself for a file, or every regular file under it for a directory (for created-file events). */

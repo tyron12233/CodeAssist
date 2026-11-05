@@ -220,6 +220,36 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="filetree_move">Pindahkan</string>
     <string name="filetree_copy">Salin</string>
     <string name="filetree_delete">Hapus</string>
+    <string name="filetree_cut">Potong</string>
+    <string name="filetree_paste">Tempel</string>
+    <string name="filetree_duplicate">Duplikat</string>
+    <string name="filetree_copy_path">Salin path</string>
+    <string name="filetree_copy_path_absolute">Path absolut</string>
+    <string name="filetree_copy_path_relative">Path dari root proyek</string>
+    <string name="filetree_copy_name">Nama</string>
+    <string name="filetree_copy_paths">Salin semua path</string>
+    <string name="filetree_move_to">Pindahkan ke…</string>
+    <string name="filetree_copy_to">Salin ke…</string>
+    <string name="filetree_select_all">Pilih semua</string>
+    <string name="filetree_clear_selection">Hapus pilihan</string>
+    <string name="filetree_more_selection">Tindakan lainnya untuk pilihan</string>
+    <string name="filetree_paste_into">Tempel ke %1$s</string>
+    <string name="filetree_clear_clipboard">Kosongkan papan klip</string>
+    <string name="filetree_drop_move">Pindahkan ke %1$s</string>
+    <string name="filetree_drop_copy">Salin ke %1$s</string>
+    <string name="filetree_drop_nowhere">Tidak dapat dilepas di sini</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="other">%1$d dipilih</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="other">%1$d item akan dipindahkan</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="other">%1$d item akan disalin</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="other">%1$d item</item>
+    </plurals>
     <string name="filetree_java_class">Kelas Java</string>
     <string name="filetree_kotlin_file">File Kotlin</string>
     <string name="filetree_resource_file">File Resource</string>
@@ -704,6 +734,44 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="fileop_empty_folder">Folder ini kosong.</string>
     <string name="fileop_move_here">Pindahkan ke sini</string>
     <string name="fileop_copy_here">Salin ke sini</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="other">Pindahkan %1$d item ke…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="other">Salin %1$d item ke…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="other">Hapus %1$d item?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">Ini menghapusnya secara permanen, termasuk folder beserta semua isinya. Tindakan ini tidak dapat dibatalkan.</string>
+    <string name="fileop_delete_items_body_undo">Folder dihapus beserta semua isinya. Anda dapat mengurungkannya segera setelahnya.</string>
+    <string name="fileop_delete_dir_body_undo">Ini menghapus folder dan semua yang ada di dalamnya. Anda dapat mengurungkannya segera setelahnya.</string>
+    <string name="fileop_delete_file_body_undo">Anda dapat mengurungkannya segera setelahnya.</string>
+    <string name="fileop_conflict_title">'%1$s' sudah ada di %2$s</string>
+    <string name="fileop_conflict_body">Ganti item yang sudah ada, simpan keduanya (item ini mendapat nama baru), atau lewati.</string>
+    <string name="fileop_conflict_replace">Ganti</string>
+    <string name="fileop_conflict_keep_both">Simpan keduanya</string>
+    <string name="fileop_conflict_skip">Lewati</string>
+    <string name="fileop_conflict_progress">Konflik %1$d dari %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="other">Lakukan hal yang sama untuk %1$d konflik lainnya</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="other">%1$d item dipindahkan ke %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="other">%1$d item disalin ke %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="other">%1$d item diduplikat</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="other">%1$d item dihapus</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="other">%1$d item gagal: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Diurungkan</string>
     <string name="errdlg_unexpected">Terjadi kesalahan yang tidak terduga. Aplikasi tetap berjalan.</string>
     <string name="errdlg_hide_details">Sembunyikan detail</string>
     <string name="errdlg_show_details">Tampilkan detail</string>

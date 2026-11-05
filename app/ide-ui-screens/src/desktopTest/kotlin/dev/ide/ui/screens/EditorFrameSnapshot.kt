@@ -111,7 +111,7 @@ class EditorFrameSnapshot {
                     onToggleTheme = {}, onOpenHub = {}, onOpenIconManager = {},
                     indexStatus = IndexUiStatus(), buildState = BuildState(),
                     onNewFile = { _, _ -> }, onNewFolder = { _, _ -> }, onNewResource = {}, onNewImageAsset = {},
-                    onNewSource = { _, _, _ -> }, onFileOp = { _, _ -> },
+                    onNewSource = { _, _, _ -> }, onFileOp = { },
                     onOpenDependencies = {}, onOpenModuleConfig = {}, onCloseProject = {},
                     fileActions = FileActions.None,
                 ) else expanded(state)
@@ -136,7 +136,7 @@ class EditorFrameSnapshot {
         onToggleTheme = {}, onOpenHub = {}, onOpenIconManager = {},
         indexStatus = IndexUiStatus(), buildState = BuildState(),
         onNewFile = { _, _ -> }, onNewFolder = { _, _ -> }, onNewResource = {}, onNewImageAsset = {},
-        onNewSource = { _, _, _ -> }, onFileOp = { _, _ -> },
+        onNewSource = { _, _, _ -> }, onFileOp = { },
         onOpenDependencies = {}, onOpenModuleConfig = {}, onCloseProject = {},
         fileActions = FileActions.None,
     )

@@ -17,6 +17,11 @@ import dev.ide.platform.ProgressReporter
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.NodeKind
+import dev.ide.ui.backend.UiConflictChoice
+import dev.ide.ui.backend.UiTransferItem
+import dev.ide.ui.backend.UiTransferKind
+import dev.ide.ui.backend.UiTransferResult
+import dev.ide.ui.backend.keepBothName
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.UiAction
@@ -312,6 +317,38 @@ class IosBackend(
         if (IosFiles.exists(dest) || !IosFiles.copy(path, dest)) return null
         bumpFs()
         return dest
+    }
+
+    /** The batch transfer with each item's conflict choice; Replace deletes the existing item (no trash here). */
+    override fun transferPaths(kind: UiTransferKind, items: List<UiTransferItem>, destDir: String): UiTransferResult {
+        val done = LinkedHashMap<String, String>()
+        val skipped = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        val move = kind == UiTransferKind.Move
+        val sources = items.map { it.path }
+        for (item in items) {
+            val src = item.path
+            // An item inside another selected one travels with it.
+            if (sources.any { it != src && (src.startsWith("$it/")) }) continue
+            val name = IosFiles.nameOf(src)
+            if (!IosFiles.exists(src)) { failed[src] = "'$name' no longer exists."; continue }
+            if (destDir == src || destDir.startsWith("$src/")) { failed[src] = "A folder can't go into itself."; continue }
+            var dest = IosFiles.join(destDir, name)
+            if (move && dest == src) { skipped += src; continue }
+            if (IosFiles.exists(dest)) when (item.onConflict) {
+                UiConflictChoice.Skip -> { skipped += src; continue }
+                UiConflictChoice.KeepBoth -> dest = IosFiles.join(
+                    destDir, keepBothName(name, IosFiles.isDirectory(src)) { IosFiles.exists(IosFiles.join(destDir, it)) },
+                )
+                UiConflictChoice.Replace -> if (dest == src || !IosFiles.delete(dest)) {
+                    failed[src] = "Could not replace '$name'."; continue
+                }
+            }
+            val ok = if (move) IosFiles.move(src, dest) else IosFiles.copy(src, dest)
+            if (ok) done[src] = dest else failed[src] = "Could not ${if (move) "move" else "copy"} '$name'."
+        }
+        if (done.isNotEmpty()) bumpFs()
+        return UiTransferResult(done, skipped, failed)
     }
 
     // ---- EditorService ------------------------------------------------------------------------------

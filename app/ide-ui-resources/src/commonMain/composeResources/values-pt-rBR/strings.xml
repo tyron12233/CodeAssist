@@ -223,6 +223,40 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="filetree_move">Mover</string>
     <string name="filetree_copy">Copiar</string>
     <string name="filetree_delete">Excluir</string>
+    <string name="filetree_cut">Recortar</string>
+    <string name="filetree_paste">Colar</string>
+    <string name="filetree_duplicate">Duplicar</string>
+    <string name="filetree_copy_path">Copiar caminho</string>
+    <string name="filetree_copy_path_absolute">Caminho absoluto</string>
+    <string name="filetree_copy_path_relative">Caminho a partir da raiz do projeto</string>
+    <string name="filetree_copy_name">Nome</string>
+    <string name="filetree_copy_paths">Copiar caminhos</string>
+    <string name="filetree_move_to">Mover para…</string>
+    <string name="filetree_copy_to">Copiar para…</string>
+    <string name="filetree_select_all">Selecionar tudo</string>
+    <string name="filetree_clear_selection">Limpar seleção</string>
+    <string name="filetree_more_selection">Mais ações para a seleção</string>
+    <string name="filetree_paste_into">Colar em %1$s</string>
+    <string name="filetree_clear_clipboard">Limpar área de transferência</string>
+    <string name="filetree_drop_move">Mover para %1$s</string>
+    <string name="filetree_drop_copy">Copiar para %1$s</string>
+    <string name="filetree_drop_nowhere">Não é possível soltar aqui</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="one">%1$d selecionado</item>
+        <item quantity="other">%1$d selecionados</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="one">%1$d item para mover</item>
+        <item quantity="other">%1$d itens para mover</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="one">%1$d item para copiar</item>
+        <item quantity="other">%1$d itens para copiar</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d itens</item>
+    </plurals>
     <string name="filetree_java_class">Classe Java</string>
     <string name="filetree_kotlin_file">Arquivo Kotlin</string>
     <string name="filetree_resource_file">Arquivo de recurso</string>
@@ -728,6 +762,53 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="fileop_empty_folder">Esta pasta está vazia.</string>
     <string name="fileop_move_here">Mover para cá</string>
     <string name="fileop_copy_here">Copiar para cá</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="one">Mover %1$d item para…</item>
+        <item quantity="other">Mover %1$d itens para…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="one">Copiar %1$d item para…</item>
+        <item quantity="other">Copiar %1$d itens para…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="one">Excluir %1$d item?</item>
+        <item quantity="other">Excluir %1$d itens?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">Isso os remove permanentemente, e as pastas com tudo o que está dentro delas. Não pode ser desfeito.</string>
+    <string name="fileop_delete_items_body_undo">As pastas são excluídas com tudo o que está dentro delas. Você pode desfazer isso logo em seguida.</string>
+    <string name="fileop_delete_dir_body_undo">Isso exclui a pasta e tudo o que está dentro dela. Você pode desfazer isso logo em seguida.</string>
+    <string name="fileop_delete_file_body_undo">Você pode desfazer isso logo em seguida.</string>
+    <string name="fileop_conflict_title">'%1$s' já existe em %2$s</string>
+    <string name="fileop_conflict_body">Substitua o item que já existe, mantenha ambos (este recebe um novo nome) ou pule-o.</string>
+    <string name="fileop_conflict_replace">Substituir</string>
+    <string name="fileop_conflict_keep_both">Manter ambos</string>
+    <string name="fileop_conflict_skip">Pular</string>
+    <string name="fileop_conflict_progress">Conflito %1$d de %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="one">Fazer o mesmo para o outro conflito</item>
+        <item quantity="other">Fazer o mesmo para os outros %1$d conflitos</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="one">%1$d item movido para %2$s</item>
+        <item quantity="other">%1$d itens movidos para %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="one">%1$d item copiado para %2$s</item>
+        <item quantity="other">%1$d itens copiados para %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="one">%1$d item duplicado</item>
+        <item quantity="other">%1$d itens duplicados</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="one">%1$d item excluído</item>
+        <item quantity="other">%1$d itens excluídos</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="one">%1$d item falhou: %2$s</item>
+        <item quantity="other">%1$d itens falharam: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Desfeito</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">Ocorreu um erro inesperado. O app continuou funcionando.</string>

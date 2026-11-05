@@ -96,6 +96,12 @@ import dev.ide.ui.components.BuildDock
 import dev.ide.ui.components.DockBarHeight
 import dev.ide.ui.components.FileNavigator
 import dev.ide.ui.components.FileOpKind
+import dev.ide.ui.components.FileOpRequest
+import dev.ide.ui.components.TreeClipboard
+import dev.ide.ui.components.TreeFileOps
+import dev.ide.ui.backend.UiTransferKind
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import dev.ide.ui.components.fileOpPath
 import dev.ide.ui.components.ToolWindowSurface
 import dev.ide.ui.components.NewSourceLang
@@ -190,7 +196,7 @@ internal fun buildLeftPanels(
     onNewResource: (TreeNode) -> Unit,
     onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
-    onFileOp: (TreeNode, FileOpKind) -> Unit,
+    onFileOp: (FileOpRequest) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
     closeDrawer: () -> Unit,
@@ -263,7 +269,7 @@ private fun FilesPanelContent(
     onNewResource: (TreeNode) -> Unit,
     onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
-    onFileOp: (TreeNode, FileOpKind) -> Unit,
+    onFileOp: (FileOpRequest) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
     closeDrawer: () -> Unit,
@@ -271,6 +277,7 @@ private fun FilesPanelContent(
     val project = state.backend.project
     val fileCtxScope = rememberCoroutineScope()
     val pluginNavigator = LocalPluginNavigator.current
+    val clipboard = LocalClipboardManager.current
     FileNavigator(
         root = state.tree,
         moduleCount = project.moduleCount,
@@ -293,10 +300,10 @@ private fun FilesPanelContent(
         canExport = fileActions.canExport,
         onExport = { node -> node.filePath?.let { fileActions.exportFile(it) } },
         canModify = true,
-        onRename = { onFileOp(it, FileOpKind.Rename) },
-        onMove = { onFileOp(it, FileOpKind.Move) },
-        onCopy = { onFileOp(it, FileOpKind.Copy) },
-        onDelete = { onFileOp(it, FileOpKind.Delete) },
+        onRename = { onFileOp(FileOpRequest(it, FileOpKind.Rename)) },
+        onMove = { onFileOp(FileOpRequest(it, FileOpKind.Move)) },
+        onCopy = { onFileOp(FileOpRequest(it, FileOpKind.Copy)) },
+        onDelete = { onFileOp(FileOpRequest(it, FileOpKind.Delete)) },
         canReveal = fileActions.canReveal,
         onReveal = { node -> node.fileOpPath()?.let { fileActions.reveal(it) } },
         contextMenuFor = { node ->
@@ -316,6 +323,22 @@ private fun FilesPanelContent(
         mode = state.treeMode,
         onModeChange = { state.selectTreeMode(it) },
         expandedState = state.treeExpanded,
+        fileOps = TreeFileOps(
+            clipboard = state.fileClipboard?.let { TreeClipboard(it.paths, it.cut) },
+            onCut = state::cutToClipboard,
+            onCopy = state::copyToClipboard,
+            onPaste = state::pasteInto,
+            onClearClipboard = state::clearClipboard,
+            onDuplicate = state::duplicatePaths,
+            onMoveTo = { nodes -> nodes.firstOrNull()?.let { onFileOp(FileOpRequest(it, FileOpKind.Move, nodes)) } },
+            onCopyTo = { nodes -> nodes.firstOrNull()?.let { onFileOp(FileOpRequest(it, FileOpKind.Copy, nodes)) } },
+            onDelete = { nodes -> nodes.firstOrNull()?.let { onFileOp(FileOpRequest(it, FileOpKind.Delete, nodes)) } },
+            onDrop = { paths, dest, copy ->
+                state.requestTransfer(if (copy) UiTransferKind.Copy else UiTransferKind.Move, paths, dest)
+            },
+            onCopyText = { text -> clipboard.setText(AnnotatedString(text)) },
+            onUndo = { if (state.canUndoFileOp) state.undoLastFileOp() },
+        ),
     )
 }
 
@@ -342,7 +365,7 @@ internal fun ExpandedLayout(
     onNewResource: (TreeNode) -> Unit,
     onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
-    onFileOp: (TreeNode, FileOpKind) -> Unit,
+    onFileOp: (FileOpRequest) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
     onCloseProject: () -> Unit,
@@ -690,7 +713,7 @@ internal fun CompactLayout(
     onNewResource: (TreeNode) -> Unit,
     onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
-    onFileOp: (TreeNode, FileOpKind) -> Unit,
+    onFileOp: (FileOpRequest) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
     onCloseProject: () -> Unit,

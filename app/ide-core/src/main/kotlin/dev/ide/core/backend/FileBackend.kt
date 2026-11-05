@@ -10,7 +10,14 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.backend.UiConflictChoice
+import dev.ide.ui.backend.UiDeleteResult
 import dev.ide.ui.backend.UiDirEntry
+import dev.ide.ui.backend.UiTransferItem
+import dev.ide.ui.backend.UiTransferKind
+import dev.ide.ui.backend.UiTransferResult
+import dev.ide.ui.backend.UiUndoResult
+import dev.ide.core.ConflictChoice
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSourceRootRole
@@ -291,7 +298,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         val name = dir.fileName?.toString() ?: return false
         if (name == ".gradle" || name == ".idea") return true
         // The platform caches can be large + transient; keep `.platform/workspace.json` etc. visible though.
-        return dir.parent?.fileName?.toString() == ".platform" && (name == "caches" || name == "local-history")
+        return dir.parent?.fileName?.toString() == ".platform" && (name == "caches" || name == "local-history" || name == "trash")
     }
 
     /** A surfaced content root. `SOURCE`/`GENERATED`/`AIDL` roots are package contexts (compactable,
@@ -548,6 +555,50 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
 
     override fun copyPath(path: String, destDir: String): String? =
         ctx.services.copyPath(Paths.get(path), Paths.get(destDir))?.toString()?.also { ctx.bumpFileSystemEpoch() }
+
+    override fun transferPaths(kind: UiTransferKind, items: List<UiTransferItem>, destDir: String): UiTransferResult {
+        val r = ctx.services.transferPaths(
+            move = kind == UiTransferKind.Move,
+            items = items.map { Paths.get(it.path) to it.onConflict.toCore() },
+            destDir = Paths.get(destDir),
+        )
+        if (r.done.isNotEmpty() || r.undoToken != null) ctx.bumpFileSystemEpoch()
+        // Report against the caller's own spellings of the sources, so it can match them back to its selection.
+        val asGiven = items.associateBy({ Paths.get(it.path).toAbsolutePath().normalize() }, { it.path })
+        fun given(p: Path) = asGiven[p] ?: p.toString()
+        return UiTransferResult(
+            done = r.done.entries.associate { (from, to) -> given(from) to to.toString() },
+            skipped = r.skipped.map(::given),
+            failed = r.failed.entries.associate { (p, why) -> given(p) to why },
+            undoToken = r.undoToken,
+        )
+    }
+
+    override fun deletePaths(paths: List<String>): UiDeleteResult {
+        val r = ctx.services.deletePaths(paths.map { Paths.get(it) })
+        if (r.deleted.isNotEmpty()) ctx.bumpFileSystemEpoch()
+        return UiDeleteResult(r.deleted.map { it.toString() }, r.failed.mapKeys { it.key.toString() }, r.undoToken)
+    }
+
+    override val supportsUndo: Boolean get() = true
+
+    override fun undoFileOperation(token: String): UiUndoResult {
+        val r = ctx.services.undoFileOperation(token)
+        if (r.moved.isNotEmpty() || r.removed.isNotEmpty() || r.restored.isNotEmpty()) ctx.bumpFileSystemEpoch()
+        return UiUndoResult(
+            ok = r.ok,
+            message = r.message,
+            moved = r.moved.entries.associate { (from, to) -> from.toString() to to.toString() },
+            removed = r.removed.map { it.toString() },
+            restored = r.restored.map { it.toString() },
+        )
+    }
+
+    private fun UiConflictChoice.toCore(): ConflictChoice = when (this) {
+        UiConflictChoice.Replace -> ConflictChoice.Replace
+        UiConflictChoice.KeepBoth -> ConflictChoice.KeepBoth
+        UiConflictChoice.Skip -> ConflictChoice.Skip
+    }
 
     override fun listDirectory(dirPath: String): List<UiDirEntry> {
         val dir = Paths.get(dirPath)
