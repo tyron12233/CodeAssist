@@ -28,6 +28,9 @@ enum class NdkAbi(
     X86("x86", "i686-linux-android", "i686-linux-android", listOf("-mstackrealign")),
     X86_64("x86_64", "x86_64-linux-android", "x86_64-linux-android");
 
+    /** Whether its programs are 64-bit, which picks the system linker that loads them (`linker64` or `linker`). */
+    val is64Bit: Boolean get() = this == ARM64 || this == X86_64
+
     /** What goes after `--target=`: the architecture with the API level the sysroot's stubs were taken at. */
     val target: String get() = "$clangArch${NdkToolchain.API_LEVEL}"
 

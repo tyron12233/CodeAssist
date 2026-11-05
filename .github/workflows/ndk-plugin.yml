@@ -53,7 +53,9 @@ jobs:
         working-directory: tools/ndk-toolchain
         env:
           HOST_ABI: ${{ matrix.abi }}
-        run: ./build-llvm-android.sh deps native cross package
+        # `daemon` builds the resident clang (completion, errors, semantic colours) and the Run launcher. It
+        # is a few seconds of C against the libclang `package` staged, and the plugin is half there without it.
+        run: ./build-llvm-android.sh deps native cross package daemon
 
       - name: Upload the ${{ matrix.abi }} executables
         uses: actions/upload-artifact@v4
@@ -125,7 +127,9 @@ jobs:
       - name: Check every host ABI is in place
         run: |
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            test -f tools/ndk-toolchain/build/out/jniLibs/$abi/libllvmtools.so || { echo "no toolchain for $abi"; exit 1; }
+            for lib in libllvmtools.so libndkclangd.so libndkrun.so; do
+              test -f tools/ndk-toolchain/build/out/jniLibs/$abi/$lib || { echo "no $lib for $abi"; exit 1; }
+            done
           done
           test -f tools/ndk-toolchain/build/out/assets/toolchain/sysroot/usr/lib/aarch64-linux-android/26/libc.so
 

@@ -59,4 +59,12 @@ class NdkAbiTest {
         assertEquals(NdkAbi.ARM64, NdkAbi.forDevice(emptyList()))
         assertEquals(NdkAbi.ARM64, NdkAbi.forDevice(listOf("mips")))
     }
+
+    @Test
+    fun `a 32-bit program is loaded by linker and a 64-bit one by linker64`() {
+        assertEquals("/system/bin/linker64", NativeLaunch.systemLinker(NdkAbi.ARM64))
+        assertEquals("/system/bin/linker64", NativeLaunch.systemLinker(NdkAbi.X86_64))
+        assertEquals("/system/bin/linker", NativeLaunch.systemLinker(NdkAbi.ARM32))
+        assertEquals("/system/bin/linker", NativeLaunch.systemLinker(NdkAbi.X86))
+    }
 }
