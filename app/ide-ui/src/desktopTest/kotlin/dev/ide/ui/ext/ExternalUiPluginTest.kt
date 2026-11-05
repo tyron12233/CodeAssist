@@ -109,6 +109,29 @@ class ExternalUiPluginTest {
      * those bytes as an sRGB pixel-format value instead.
      */
     @Test
+    fun aColorSchemeIsListedUnderThePluginsOwnIdAndAnUnreadableOneIsSkipped() {
+        val facet = facet { ui ->
+            ui.colorScheme(
+                dev.ide.plugin.ui.ColorScheme(
+                    id = "Midnight Blue",
+                    name = "",
+                    json = """{"name":"Midnight","dark":{"keyword":"#C678DD"},"light":{"keyword":{"fg":"#A626A4","bold":true}}}""",
+                ),
+            )
+            ui.colorScheme(dev.ide.plugin.ui.ColorScheme(id = "broken", name = "Broken", json = "not json"))
+        }
+        val scope = RecordingScope("com.example.themes")
+
+        facet.asUiPlugin("com.example.themes").contributeUi(scope)
+
+        val scheme = scope.colorSchemes.single()
+        assertEquals("plugin.com.example.themes.midnight-blue", scheme.id, "namespaced, so it cannot shadow a preset or a user's")
+        assertEquals("Midnight", scheme.name, "a blank name takes the document's")
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFC678DD), scheme.dark["keyword"]?.foreground)
+        assertEquals(true, scheme.light["keyword"]?.bold)
+    }
+
+    @Test
     fun colorAttributeAndItsTokenMappingAreCarriedOver() {
         val facet = facet { ui ->
             ui.colorAttribute(
@@ -677,6 +700,11 @@ class ExternalUiPluginTest {
 
         override fun colorAttribute(attribute: ColorAttribute) =
             handle().also { colorAttributes += attribute }
+
+        val colorSchemes = mutableListOf<dev.ide.ui.theme.colors.EditorColorScheme>()
+
+        override fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme) =
+            handle().also { colorSchemes += scheme }
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon) =
             handle().also { fileIcons += Triple(iconId, suffixes, icon) }

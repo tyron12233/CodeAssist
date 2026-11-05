@@ -819,6 +819,29 @@ layer, and a `LanguageBackend` reaches the same attribute by emitting a highligh
 before being dropped, so the two halves need nothing wired between them. See
 [editor-color-schemes.md](editor-color-schemes.md) for the model.
 
+#### A whole color scheme
+
+A theme plugin ships complete schemes instead (since SPI 3.4.0). Design the scheme in the IDE itself
+(Settings → Editor Colors), export it, put the file in your plugin, and hand its text over:
+
+```kotlin
+override fun contribute(ui: UiRegistration) {
+    val json = javaClass.getResourceAsStream("/schemes/midnight.json")!!.reader().readText()
+    ui.colorScheme(ColorScheme(id = "midnight", name = "Midnight", json = json))
+}
+```
+
+Declare `PluginCapabilities.UI_COLOR_SCHEME`. The scheme is listed beside the presets and is read-only like
+them: picking it applies it, editing it gives the user a copy of their own. It is only there while your
+plugin is loaded, so a user who had it active goes back to the default when the plugin is turned off or
+uninstalled; a copy they made stays. `id` is what the user's choice is remembered by, so keep it stable. A
+document the IDE cannot read is skipped and logged rather than failing your plugin's UI.
+
+The document is sparse, the same as a user's scheme: it names what it overrides, and everything else,
+including entries the IDE adds later and other plugins' attributes, falls back through the usual chain. On a
+host older than 3.4.0 `colorScheme` throws `NoSuchMethodError`; call it inside `catch (e: LinkageError)` if
+you support one.
+
 ---
 
 ### Mark up the editor without owning a language

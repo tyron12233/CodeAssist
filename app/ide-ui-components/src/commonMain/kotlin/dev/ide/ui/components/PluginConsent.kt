@@ -39,6 +39,7 @@ import dev.ide.ui.generated.resources.plugin_consent_cap_model_module_type
 import dev.ide.ui.generated.resources.plugin_consent_cap_net
 import dev.ide.ui.generated.resources.plugin_consent_cap_ui_action
 import dev.ide.ui.generated.resources.plugin_consent_cap_ui_color_attribute
+import dev.ide.ui.generated.resources.plugin_consent_cap_ui_color_scheme
 import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_action
 import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_decoration
 import dev.ide.ui.generated.resources.plugin_consent_cap_ui_editor_language
@@ -231,6 +232,7 @@ internal fun capabilityDescription(capability: String): StringResource? = when (
     "ui.editorPainter" -> Res.string.plugin_consent_cap_ui_editor_painter
     "ui.editorLanguage" -> Res.string.plugin_consent_cap_ui_editor_language
     "ui.colorAttribute" -> Res.string.plugin_consent_cap_ui_color_attribute
+    "ui.colorScheme" -> Res.string.plugin_consent_cap_ui_color_scheme
     "ui.newFileTemplate" -> Res.string.plugin_consent_cap_ui_new_file_template
     "lang.backend" -> Res.string.plugin_consent_cap_lang_backend
     "lang.server" -> Res.string.plugin_consent_cap_lang_server

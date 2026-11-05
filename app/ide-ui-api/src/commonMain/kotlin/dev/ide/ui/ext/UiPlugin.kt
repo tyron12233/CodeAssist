@@ -67,6 +67,9 @@ interface UiContributionScope {
     /** Add a kind of file to the file tree's New menu ([NewFileTemplateContribution]). */
     fun newFileTemplate(template: NewFileTemplateContribution): Registration = Registration { }
 
+    /** List a whole editor color scheme beside the presets ([dev.ide.ui.theme.colors.ContributedColorSchemes]). */
+    fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme): Registration = Registration { }
+
     /** Fill a slot of the home screen's tabs ([HomeTabContribution]). */
     fun homeTab(tab: HomeTabContribution): Registration = Registration { }
 }
@@ -191,6 +194,9 @@ object UiPluginHost {
 
         override fun colorAttribute(attribute: ColorAttribute): Registration =
             track(ColorAttributes.register(attribute))
+
+        override fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme): Registration =
+            track(dev.ide.ui.theme.colors.ContributedColorSchemes.register(scheme))
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)

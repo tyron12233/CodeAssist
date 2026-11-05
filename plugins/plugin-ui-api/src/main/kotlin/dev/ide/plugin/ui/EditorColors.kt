@@ -115,3 +115,30 @@ object ColorAttributeKeys {
     const val PUNCTUATION: String = "punctuation"
     const val NAMESPACE: String = "namespace"
 }
+
+/**
+ * A whole editor color scheme, listed in Settings → Editor Colors beside the IDE's presets.
+ *
+ * [json] is the format the IDE's own scheme editor exports (Editor Colors → Export), so the way to make one is
+ * to design it in the IDE, export it, and ship the file in the plugin (a raw resource or an asset, read at
+ * `contribute` time). The document is sparse: it names only what it overrides, and every entry it leaves out,
+ * including any the IDE adds later, falls back the way it does in a user's scheme. Both the dark and the light
+ * variant may be given; a scheme that sets only one leaves the other at the defaults.
+ *
+ * A contributed scheme is read-only, as the presets are: picking it applies it, and editing it makes the user
+ * a copy of their own. It is listed only while the plugin is loaded, so turning the plugin off or uninstalling
+ * it removes it, and a user who had it active goes back to the default scheme.
+ *
+ * Since SPI 3.4.0.
+ */
+class ColorScheme(
+    /** Stable within this plugin (`"midnight"`): what a user's choice is remembered by. Changing it un-picks it. */
+    val id: String,
+
+    /** The name shown in the picker. Blank takes the name the [json] carries. */
+    val name: String,
+
+    /** The scheme document, as exported. A document the IDE cannot read is skipped and logged, not thrown. */
+    val json: String,
+)
+

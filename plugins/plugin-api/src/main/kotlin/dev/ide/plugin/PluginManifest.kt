@@ -382,6 +382,11 @@ const val PLUGIN_API_VERSION: Int = 4
  * and the variant the editor analyses). A plugin could not read any of it, since the facet lives in the
  * unpublished Android support module. Read-only, and its types are interfaces, so it can grow without a break.
  * On an older host the key resolves to nothing.
+ *
+ * And `dev.ide.plugin.ui.UiRegistration.colorScheme` with `dev.ide.plugin.ui.ColorScheme`
+ * ([PluginCapabilities.UI_COLOR_SCHEME]): a plugin ships whole editor color schemes, as the JSON the IDE's
+ * scheme editor exports, listed beside the presets and read-only like them. A plugin could add entries to a
+ * scheme (`colorAttribute`) but not a scheme, so a theme plugin was not possible.
  */
 const val PLUGIN_SPI_VERSION: String = "3.4.0"
 

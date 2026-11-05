@@ -40,6 +40,34 @@ class ColorSchemeStoreTest {
     )
 
     @Test
+    fun aPluginsSchemeIsListedReadOnlyAndGoesAwayWithThePlugin() {
+        val prefs = FakePreferences()
+        val s = store(prefs)
+        val id = ContributedColorSchemes.idFor("com.example.themes", "midnight")
+        val handle = ContributedColorSchemes.register(sample.copy(id = id, basedOn = null))
+        try {
+            val listed = s.all()
+            assertTrue(listed.any { it.id == id }, "listed beside the presets")
+            assertTrue(listed.indexOfFirst { it.id == id } < BuiltInColorSchemes.all.size + 1, "after the presets, before the user's")
+            assertTrue(s.byId(id)!!.builtIn, "read-only, so the screen edits a copy")
+
+            s.setActiveId(id)
+            assertEquals(id, s.activeId())
+            s.save(sample.copy(id = id, name = "Hijacked"))
+            s.delete(id)
+            assertEquals("Midnight", s.byId(id)?.name, "neither saved over nor deleted")
+
+            val copy = s.duplicate(s.byId(id)!!, "My midnight")
+            assertEquals(id, copy.basedOn, "a copy records the plugin's scheme so Reset has a target")
+        } finally {
+            handle.dispose()
+        }
+        assertNull(s.byId(id))
+        assertEquals(BuiltInColorSchemes.DEFAULT_ID, s.activeId(), "a scheme that went with its plugin falls back to the default")
+        assertTrue(s.userSchemes().any { it.name == "My midnight" }, "the user's copy is theirs and stays")
+    }
+
+    @Test
     fun aSchemeSurvivesARoundTripThroughItsFileFormat() {
         val decoded = ColorSchemeJson.decode(ColorSchemeJson.encode(sample))
         assertEquals(sample.id, decoded?.id)

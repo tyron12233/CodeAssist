@@ -132,6 +132,12 @@ object PluginCapabilities {
     const val UI_COLOR_ATTRIBUTE = "ui.colorAttribute"
 
     /**
+     * Ships whole editor color schemes (`dev.ide.plugin.ui.ColorScheme`), listed beside the presets. Read-only
+     * and applied only when the user picks one, so it changes nothing by itself. UI facet. Since SPI 3.4.0.
+     */
+    const val UI_COLOR_SCHEME = "ui.colorScheme"
+
+    /**
      * Adds kinds of file to the file tree's New menu (`dev.ide.plugin.ui.NewFileTemplate`), whose content the
      * plugin writes. UI facet. Since SPI 3.1.0.
      */

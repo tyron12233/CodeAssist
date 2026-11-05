@@ -8,6 +8,7 @@ import dev.ide.ui.theme.colors.ColorAttribute
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
 import dev.ide.plugin.ui.ColorAttribute as ExternalColorAttribute
+import dev.ide.plugin.ui.ColorScheme as ExternalColorScheme
 import dev.ide.plugin.ui.Overlay
 import dev.ide.plugin.ui.EditorAnchor as ExternalAnchorPoint
 import dev.ide.plugin.ui.EditorLanguage as ExternalEditorLanguage
@@ -194,6 +195,24 @@ private class BridgedRegistration(
                 parent = attribute.parent,
                 defaultDark = attribute.styleFor(attribute.darkColor),
                 defaultLight = attribute.styleFor(attribute.lightColor),
+            ),
+        )
+        return UiHandle { registration.dispose() }
+    }
+
+    override fun colorScheme(scheme: ExternalColorScheme): UiHandle {
+        val decoded = dev.ide.ui.theme.colors.ColorSchemeJson.decode(scheme.json, fallbackId = scheme.id, fallbackName = scheme.name)
+        if (decoded == null) {
+            // Skipped rather than thrown: one unreadable document should not withdraw the plugin's whole UI.
+            dev.ide.platform.log.Log.logger("CodeAssist", pluginId)
+                .warn("color scheme '${scheme.id}' is not a scheme document the IDE can read; it is not listed")
+            return UiHandle { }
+        }
+        val registration = scope.colorScheme(
+            decoded.copy(
+                id = dev.ide.ui.theme.colors.ContributedColorSchemes.idFor(pluginId, scheme.id),
+                name = scheme.name.ifBlank { decoded.name },
+                basedOn = null,
             ),
         )
         return UiHandle { registration.dispose() }

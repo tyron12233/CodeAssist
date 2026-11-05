@@ -139,7 +139,13 @@ colorScheme.def.<id>     the scheme's JSON
 ```
 
 The presets (`CodeAssist`, `Darcula`, `One`, `Solarized`, `GitHub`) are code, not storage. They are read-only;
-editing one duplicates it first, which is what keeps "Reset" meaningful. Deleting blanks the stored document
+editing one duplicates it first, which is what keeps "Reset" meaningful.
+
+Schemes a plugin ships (`UiRegistration.colorScheme`, SPI 3.4.0) sit between the two: listed after the presets
+by `ContributedColorSchemes`, read-only like them (they carry `builtIn = true`, which is what the screen keys
+off), and never stored, so they leave with their plugin. Their ids are `plugin.<pluginId>.<id>`, so they
+cannot collide with a preset or a user's scheme, and an active one that went away resolves like any stale id:
+to the default. Deleting blanks the stored document
 as well as unindexing it, because a preference store can only be written to, not deleted from.
 
 ## The editor screen
