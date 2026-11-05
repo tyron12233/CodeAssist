@@ -217,7 +217,7 @@ class ProjectManager private constructor(
         pluginSources = pluginSources,
         hostVersion = hostVersion,
         // Under the app's own home rather than a cache dir: a plugin's data is its state, not something the
-        // IDE may drop to reclaim space, and it is swept up by the same backup the projects are.
+        // IDE may drop to reclaim space. (The project backup does not include it: it holds projects only.)
         pluginDataRoot = pluginDataRoot,
         pluginPrivateDataRoot = pluginPrivateRoot,
         // Read lazily: this manager's preference file is opened on demand, so handing over the reader during

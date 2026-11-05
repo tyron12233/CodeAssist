@@ -79,8 +79,8 @@ class ApplicationEnvironment(
     val hostVersion: String? = null,
     /**
      * Where each plugin's `PluginRegistration.dataDir` is created, one subdirectory per plugin id. The host
-     * passes a directory under its own app storage so a plugin's files are backed up and removed with the
-     * app; null (desktop bootstraps, tests) falls back to a per-process temporary root.
+     * passes a directory under its own app storage, removed with the app; null (desktop bootstraps, tests) falls
+     * back to a per-process temporary root.
      */
     val pluginDataRoot: Path? = null,
     /**
