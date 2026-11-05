@@ -1499,6 +1499,17 @@
     <string name="storage_cat_projects_desc">你的源代码和项目设置</string>
     <string name="storage_cat_leftovers_title">残留的项目文件夹</string>
     <string name="storage_cat_leftovers_desc">已删除项目留下的，可以安全删除</string>
+    <string name="plugins_leftovers_title">已移除插件留下的数据</string>
+    <string name="plugins_leftovers_body">卸载插件后，它的数据会留下来。删除可释放空间；如果你打算重新安装，也可以保留。</string>
+    <string name="plugins_leftover_delete">删除</string>
+    <string name="plugins_leftovers_delete_all">全部删除（%1$s）</string>
+    <string name="plugins_leftover_confirm_title">删除 %1$s 的数据？</string>
+    <string name="plugins_leftovers_confirm_all_title">删除所有已移除插件的数据？</string>
+    <string name="plugins_leftover_confirm_body">这将释放 %1$s。之后重新安装的插件会从头开始。</string>
+    <string name="storage_cat_plugin_leftovers_title">已移除插件的数据</string>
+    <string name="storage_cat_plugin_leftovers_desc">由你卸载的插件留下</string>
+    <string name="storage_clear_plugin_leftovers_title">删除已移除插件的数据？</string>
+    <string name="storage_clear_plugin_leftovers_body">这将删除已卸载插件留下的 %1$s。之后重新安装的插件会从头开始。</string>
     <string name="storage_cat_other_title">其他</string>
     <string name="storage_cat_other_desc">密钥库、备份和应用数据</string>
     <string name="plugins_restart_hint">重启后将应用插件更改。</string>

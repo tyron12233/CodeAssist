@@ -38,16 +38,19 @@ object StorageUsage {
     /** Folders in the projects folder left by deleted projects (and the delete trash). Sized here; which
      *  folders count, and removing them, is the project manager's call, so [clearCategory] leaves them. */
     const val LEFTOVERS = "leftovers"
+    /** Data folders of plugins that are no longer installed. Sized here; which folders count, and removing
+     *  them, is the host's call (it knows what is installed), so [clearCategory] leaves them too. */
+    const val PLUGIN_LEFTOVERS = "plugin-leftovers"
     const val OTHER = "other"
 
     /** Fixed display order of categories in a [Report]. */
-    val ORDER = listOf(DEPENDENCIES, INDEX, BUILD, PREVIEW, LANGUAGE, SDK, PROJECTS, LEFTOVERS, OTHER)
+    val ORDER = listOf(DEPENDENCIES, INDEX, BUILD, PREVIEW, LANGUAGE, SDK, PROJECTS, LEFTOVERS, PLUGIN_LEFTOVERS, OTHER)
 
-    /** Categories the Storage screen offers to clear. [clearCategory] acts on all but [LEFTOVERS]. */
-    val CLEARABLE = setOf(DEPENDENCIES, INDEX, BUILD, PREVIEW, LANGUAGE, SDK, LEFTOVERS)
+    /** Categories the Storage screen offers to clear. [clearCategory] acts on all but the two leftover ones. */
+    val CLEARABLE = setOf(DEPENDENCIES, INDEX, BUILD, PREVIEW, LANGUAGE, SDK, LEFTOVERS, PLUGIN_LEFTOVERS)
 
     /** Categories whose clear is destructive enough to warrant a confirmation before it runs. */
-    val DESTRUCTIVE = setOf(SDK, LEFTOVERS)
+    val DESTRUCTIVE = setOf(SDK, LEFTOVERS, PLUGIN_LEFTOVERS)
 
     data class Report(
         val storageRoot: String,
@@ -102,13 +105,20 @@ object StorageUsage {
      * tree is walked exactly once (files bucketed into a cache category or the project's source), each
      * shared cache/SDK dir once, and everything else under [storageRoot] once (pruning the already-counted
      * subtrees), so nothing is walked or counted twice. [totalBytes] is the sum of the categories.
-     * [leftoverRoots] are counted as [LEFTOVERS].
+     * [leftoverRoots] are counted as [LEFTOVERS], [pluginLeftoverRoots] as [PLUGIN_LEFTOVERS] (wherever they
+     * are: a plugin's private data sits outside [storageRoot]).
      *
      * `@JvmOverloads` keeps the three-argument form in the bytecode: this is published SPI, and a plugin
      * compiled before [leftoverRoots] existed links against that exact signature.
      */
     @JvmOverloads
-    fun report(storageRoot: Path, projectRoots: List<Path>, sharedRoot: Path, leftoverRoots: List<Path> = emptyList()): Report {
+    fun report(
+        storageRoot: Path,
+        projectRoots: List<Path>,
+        sharedRoot: Path,
+        leftoverRoots: List<Path> = emptyList(),
+        pluginLeftoverRoots: List<Path> = emptyList(),
+    ): Report {
         val bytes = LinkedHashMap<String, Long>().apply { ORDER.forEach { put(it, 0L) } }
         val projects = ArrayList<Proj>()
 
@@ -137,11 +147,13 @@ object StorageUsage {
 
         // 3. Leftover folders.
         for (dir in leftoverRoots) bytes.merge(LEFTOVERS, treeSize(dir), Long::plus)
+        for (dir in pluginLeftoverRoots) bytes.merge(PLUGIN_LEFTOVERS, treeSize(dir), Long::plus)
 
         // 4. Everything else under storageRoot → "other", pruning the subtrees already counted above.
         val counted = buildSet {
             projectRoots.forEach { add(it.normalize()) }
             leftoverRoots.forEach { add(it.normalize()) }
+            pluginLeftoverRoots.forEach { add(it.normalize()) }
             SHARED_CATEGORIES.forEach { id -> sharedTargets(id, sharedRoot).forEach { add(it.normalize()) } }
         }
         bytes.merge(OTHER, otherSize(storageRoot, counted), Long::plus)
@@ -161,7 +173,7 @@ object StorageUsage {
      * unknown id — the guarantee that clearing never removes source, config, or keystores.
      */
     fun clearCategory(id: String, projectRoots: List<Path>, sharedRoot: Path): Long {
-        if (id !in CLEARABLE || id == LEFTOVERS) return 0L
+        if (id !in CLEARABLE || id == LEFTOVERS || id == PLUGIN_LEFTOVERS) return 0L
         val targets = ArrayList<Path>()
         targets.addAll(sharedTargets(id, sharedRoot))
         val names = PROJECT_CACHE_CATEGORY.filterValues { it == id }.keys

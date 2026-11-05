@@ -164,7 +164,20 @@ class ProjectManager private constructor(
     private val pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
     /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
     private val hostVersion: String? = null,
+    /** Where plugins' `privateDataDir`s go: the app's PRIVATE storage on a device. Null puts them beside
+     *  `plugin-data` under the home, which is right on a desktop. */
+    pluginPrivateDataRoot: Path? = null,
+    /** Per plugin id, directories it kept data in before it had a `privateDataDir`; see [PluginLeftovers]. */
+    legacyPluginDirs: Map<String, List<Path>> = emptyMap(),
 ) {
+    private val pluginPrivateRoot: Path = pluginPrivateDataRoot ?: homeDir.resolve("plugin-private")
+    private val pluginDataRoot: Path = homeDir.resolve("plugin-data")
+
+    /** The data uninstalled plugins left behind; see [dev.ide.core.plugins.PluginLeftovers]. Declared before
+     *  [env]'s init blocks, which record plugin names into it. */
+    val pluginLeftoverStore: dev.ide.core.plugins.PluginLeftovers =
+        dev.ide.core.plugins.PluginLeftovers(listOf(pluginDataRoot, pluginPrivateRoot), legacyPluginDirs)
+
     private val log = dev.ide.platform.log.Log.logger("ide.projects")
 
     // Declared before anything the constructor runs: [env] below already reads preferences.
@@ -205,13 +218,22 @@ class ProjectManager private constructor(
         hostVersion = hostVersion,
         // Under the app's own home rather than a cache dir: a plugin's data is its state, not something the
         // IDE may drop to reclaim space, and it is swept up by the same backup the projects are.
-        pluginDataRoot = homeDir.resolve("plugin-data"),
+        pluginDataRoot = pluginDataRoot,
+        pluginPrivateDataRoot = pluginPrivateRoot,
         // Read lazily: this manager's preference file is opened on demand, so handing over the reader during
         // construction is safe and the keymap sees a rebinding the moment it is saved.
         preferences = { key -> preference(key) },
         crashSuspended = pluginCrashGuard.crashSuspended(),
         safeMode = pluginCrashGuard.safeModeRequested(),
     )
+
+    init {
+        // Named while installed, so a plugin uninstalled later reads as itself under "left behind".
+        val named = env.installedPlugins.associate { it.manifest.id to it.manifest.name }
+        if (named.isNotEmpty()) {
+            Thread({ pluginLeftoverStore.remember(named) }, "plugin-names").apply { isDaemon = true }.start()
+        }
+    }
 
     init {
         // A plugin turned off for crashing that has since been updated loaded again above; take it out of the
@@ -654,6 +676,28 @@ class ProjectManager private constructor(
 
     /** Delete every [leftoverFolders] folder; returns whether all of them are gone. */
     fun deleteLeftoverFolders(): Boolean = leftoverFolders().map { deleteTreeLenient(it) }.all { it }
+
+    /**
+     * Every id and package name that may own a plugin data directory this launch: the built-ins, the installed
+     * plugins whether or not they loaded, and the packages whose manifest could not be read. Null when plugin
+     * discovery failed, so that nothing is offered for deletion on a partial picture.
+     */
+    private fun pluginOwners(): Set<String>? {
+        if (!env.pluginDiscoveryComplete) return null
+        return buildSet {
+            env.pluginCatalog.all.forEach { add(it.id) }
+            env.installedPlugins.forEach { add(it.manifest.id); add(it.origin.label) }
+            env.rejectedPlugins.forEach { add(it.origin.label) }
+        }
+    }
+
+    /** What uninstalled plugins left behind, largest first; empty when it cannot be told safely. */
+    fun pluginLeftovers(): List<dev.ide.core.plugins.PluginLeftovers.Leftover> =
+        pluginOwners()?.let { pluginLeftoverStore.scan(it) }.orEmpty()
+
+    /** Deletes what the uninstalled plugin [id] left; returns the bytes freed (0 when it is installed or gone). */
+    fun deletePluginLeftover(id: String): Long =
+        pluginOwners()?.let { pluginLeftoverStore.delete(id, it) } ?: 0L
 
     /**
      * Give the project rooted at [rootPath] the display name [name]. Only the name changes: the directory, the
@@ -1198,6 +1242,10 @@ class ProjectManager private constructor(
             pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
             /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
             hostVersion: String? = null,
+            /** The app's private storage for plugins' `privateDataDir`s (`<filesDir>/plugin-private`). */
+            pluginPrivateDataRoot: Path? = null,
+            /** Directories plugins used before `privateDataDir`, by plugin id. */
+            legacyPluginDirs: Map<String, List<Path>> = emptyMap(),
         ): ProjectManager {
 
 
@@ -1230,6 +1278,8 @@ class ProjectManager private constructor(
                 kotlinCompiler = kotlinCompiler,
                 pluginSources = pluginSources,
                 hostVersion = hostVersion,
+                pluginPrivateDataRoot = pluginPrivateDataRoot,
+                legacyPluginDirs = legacyPluginDirs,
             )
         }
     }

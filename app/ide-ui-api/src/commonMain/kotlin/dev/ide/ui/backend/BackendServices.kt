@@ -1782,6 +1782,9 @@ interface SdkService {
  * One built-in plugin in the Plugins settings screen. [essential] plugins are shown locked (the IDE can't run
  * without them). [enabled] is the user's persisted choice; changes apply on the next launch (restart-apply).
  */
+/** What one uninstalled plugin left behind: [id] is its folder name, [name] its name when it was seen installed. */
+data class UiPluginLeftover(val id: String, val name: String?, val sizeBytes: Long)
+
 data class UiPluginInfo(
     val id: String,
     val name: String,
@@ -1956,6 +1959,17 @@ interface SettingsService {
 
     /** Open the system page of the installed plugin app [id] (where it is also uninstalled). */
     fun openPluginAppInfo(id: String): Boolean = false
+
+    /**
+     * The data uninstalled plugins left behind (their data folders, public and private), largest first. Nothing
+     * is deleted unasked: Android uninstalls a plugin from its own settings, so this is where the user decides.
+     * Empty when the IDE could not tell which plugins are installed this launch. Walks the folders: call it off
+     * the main thread.
+     */
+    suspend fun pluginLeftovers(): List<UiPluginLeftover> = emptyList()
+
+    /** Deletes what the uninstalled plugin [id] left (an id from [pluginLeftovers]); true when anything went. */
+    suspend fun deletePluginLeftover(id: String): Boolean = false
 
     /** Launch installed plugin app [id]'s own screen: what it is, and the licenses of what it carries. */
     fun openPluginApp(id: String): Boolean = false

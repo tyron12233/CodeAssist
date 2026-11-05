@@ -483,6 +483,14 @@ object AndroidIde {
             // read-only APK the system already installed and optimised.
             pluginSources = if (sandbox) listOfNotNull(sandboxPlugin) else listOf(ApkPluginSource(context)),
             hostVersion = BuildConfig.VERSION_NAME,
+            // Plugins' private data (symlinks, nothing another app may read) goes in internal storage; the sandbox
+            // keeps its own, as it keeps its own home.
+            pluginPrivateDataRoot = File(context.filesDir, if (sandbox) "plugin-sandbox-home/plugin-private" else "plugin-private").toPath(),
+            // The Dart plugin kept its SDK and pub cache in `files/dart-plugin` before plugins had a private data
+            // directory. Claimed for it here, so a copy left by an uninstalled older Dart plugin is offered too.
+            legacyPluginDirs = if (sandbox) emptyMap() else mapOf(
+                "dev.codeassist.dart" to listOf(File(context.filesDir, "dart-plugin").toPath()),
+            ),
         ).also {
             managerRef.set(it)
             it.applyMemoryMode()

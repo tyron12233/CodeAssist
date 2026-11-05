@@ -1,5 +1,15 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.plugins_leftover_confirm_body
+import dev.ide.ui.generated.resources.plugins_leftovers_confirm_all_title
+import dev.ide.ui.generated.resources.plugins_leftover_confirm_title
+import dev.ide.ui.generated.resources.plugins_leftovers_delete_all
+import dev.ide.ui.generated.resources.plugins_leftover_delete
+import dev.ide.ui.generated.resources.plugins_leftovers_body
+import dev.ide.ui.generated.resources.plugins_leftovers_title
+import dev.ide.ui.backend.UiPluginLeftover
+import androidx.compose.material3.AlertDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -298,6 +308,8 @@ fun PluginsScreen(
                                     }
                                 }
                             }
+                            // What uninstalled plugins left, under the plugins that are still here.
+                            if (tab == PluginsTab.Installed && query.isBlank()) PluginLeftovers(backend)
                             AdSlot(AdPlacement.SETTINGS)
                         }
                     }
@@ -315,6 +327,100 @@ fun PluginsScreen(
                 asking = null
             },
             onDismiss = { asking = null },
+        )
+    }
+}
+
+/**
+ * The data plugins that are no longer installed left behind, each with its size and a Delete, and Delete all.
+ *
+ * Android uninstalls a plugin from its own settings, so the IDE never gets to ask at that moment: this is where
+ * the user decides, and nothing is deleted without them. Keeping is the default for a reason: uninstalling to
+ * reinstall (a build signed with another key) should not cost a plugin its settings or downloads. Hidden while
+ * there is nothing, which is also what the backend answers when it could not tell what is installed.
+ */
+@Composable
+private fun PluginLeftovers(backend: IdeBackend) {
+    val c = MaterialTheme.colorScheme
+    var leftovers by remember { mutableStateOf<List<UiPluginLeftover>>(emptyList()) }
+    var generation by remember { mutableStateOf(0) }
+    var confirming by remember { mutableStateOf<List<UiPluginLeftover>?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(generation) { leftovers = backend.settings.pluginLeftovers() }
+
+    AnimatedVisibility(
+        visible = leftovers.isNotEmpty(),
+        enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet)) + fadeIn(tween(Motion.BASE)),
+        exit = shrinkVertically(tween(Motion.FAST, easing = Motion.soft)) + fadeOut(tween(Motion.FAST)),
+    ) {
+        Surface(shape = RoundedCornerShape(24.dp), color = c.surfaceContainerLow, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Symbol(CaSymbols.delete, contentDescription = null, size = 20.dp, tint = c.onSurfaceVariant)
+                    Text(
+                        stringResource(Res.string.plugins_leftovers_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = c.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(formatSizeShort(leftovers.sumOf { it.sizeBytes }), style = MaterialTheme.typography.labelLarge, color = c.onSurfaceVariant)
+                }
+                Text(stringResource(Res.string.plugins_leftovers_body), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+                leftovers.forEach { l ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(l.name ?: l.id, style = MaterialTheme.typography.bodyMedium, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (l.name != null) "${l.id} · ${formatSizeShort(l.sizeBytes)}" else formatSizeShort(l.sizeBytes),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(onClick = { confirming = listOf(l) }, enabled = !busy) {
+                            Text(stringResource(Res.string.plugins_leftover_delete))
+                        }
+                    }
+                }
+                if (leftovers.size > 1) {
+                    FilledTonalButton(onClick = { confirming = leftovers }, enabled = !busy, modifier = Modifier.align(Alignment.End)) {
+                        Text(stringResource(Res.string.plugins_leftovers_delete_all, formatSizeShort(leftovers.sumOf { it.sizeBytes })))
+                    }
+                }
+            }
+        }
+    }
+
+    confirming?.let { targets ->
+        val size = formatSizeShort(targets.sumOf { it.sizeBytes })
+        val one = targets.singleOrNull()
+        AlertDialog(
+            onDismissRequest = { if (!busy) confirming = null },
+            icon = { Symbol(CaSymbols.delete, contentDescription = null, size = 24.dp) },
+            title = {
+                Text(
+                    if (one != null) stringResource(Res.string.plugins_leftover_confirm_title, one.name ?: one.id)
+                    else stringResource(Res.string.plugins_leftovers_confirm_all_title),
+                )
+            },
+            text = { Text(stringResource(Res.string.plugins_leftover_confirm_body, size)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            targets.forEach { backend.settings.deletePluginLeftover(it.id) }
+                            busy = false
+                            confirming = null
+                            generation++
+                        }
+                    },
+                ) { Text(stringResource(Res.string.plugins_leftover_delete), color = c.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirming = null }, enabled = !busy) { Text(stringResource(Res.string.cancel)) } },
         )
     }
 }

@@ -158,6 +158,19 @@ class StorageUsageTest {
         assertTrue(Files.exists(husk.resolve(".platform/caches/seg.bin")))
     }
 
+    /** A removed plugin's data is its own slice too, counted wherever it is, and only the host removes it. */
+    @Test
+    fun pluginLeftoversAreCountedApartAndNotClearedHere() {
+        val projects = seed()
+        val data = file("plugin-data/dev.gone.plugin/cache.bin", 400).parent
+        val before = cat(StorageUsage.report(root, projects, root), StorageUsage.OTHER)
+        val r = StorageUsage.report(root, projects, root, pluginLeftoverRoots = listOf(data))
+        assertEquals(400L, cat(r, StorageUsage.PLUGIN_LEFTOVERS))
+        assertEquals(before - 400L, cat(r, StorageUsage.OTHER))
+        assertEquals(0L, StorageUsage.clearCategory(StorageUsage.PLUGIN_LEFTOVERS, projects, root))
+        assertTrue(Files.exists(data.resolve("cache.bin")))
+    }
+
     @Test
     fun clearingProjectsAndOtherAreNoOps() {
         val projects = seed()

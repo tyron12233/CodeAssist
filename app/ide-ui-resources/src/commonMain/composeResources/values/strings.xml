@@ -1530,6 +1530,17 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="storage_cat_projects_desc">Your source code and project settings</string>
     <string name="storage_cat_leftovers_title">Leftover project folders</string>
     <string name="storage_cat_leftovers_desc">Left behind by deleted projects, safe to remove</string>
+    <string name="plugins_leftovers_title">Left by removed plugins</string>
+    <string name="plugins_leftovers_body">Uninstalling a plugin leaves its data behind. Delete it to free the space, or keep it in case you reinstall.</string>
+    <string name="plugins_leftover_delete">Delete</string>
+    <string name="plugins_leftovers_delete_all">Delete all (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">Delete %1$s's data?</string>
+    <string name="plugins_leftovers_confirm_all_title">Delete all removed plugins' data?</string>
+    <string name="plugins_leftover_confirm_body">This frees %1$s. A plugin you reinstall later starts fresh.</string>
+    <string name="storage_cat_plugin_leftovers_title">Removed plugins' data</string>
+    <string name="storage_cat_plugin_leftovers_desc">Left by plugins you uninstalled</string>
+    <string name="storage_clear_plugin_leftovers_title">Delete removed plugins' data?</string>
+    <string name="storage_clear_plugin_leftovers_body">This deletes %1$s that uninstalled plugins left behind. A plugin you reinstall later starts fresh.</string>
     <string name="storage_cat_other_title">Other</string>
     <string name="storage_cat_other_desc">Keystores, backups, and app data</string>
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>

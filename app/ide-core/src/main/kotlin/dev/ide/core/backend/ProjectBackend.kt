@@ -199,6 +199,7 @@ internal class ProjectBackend(
                 val androidByPath = summaries.associate { it.rootPath to it.isAndroid }
                 val r = StorageUsage.report(
                     mgr.storageRoot, summaries.map { Paths.get(it.rootPath) }, mgr.sharedRoot, mgr.leftoverFolders(),
+                    mgr.pluginLeftovers().flatMap { it.paths },
                 )
                 UiStorageReport(
                     storageRootPath = r.storageRoot,
@@ -227,6 +228,10 @@ internal class ProjectBackend(
             runCatching {
                 // Removing folders, not regenerable caches: kept to the manager's own narrow test of a leftover.
                 if (id == StorageUsage.LEFTOVERS) return@runCatching mgr.deleteLeftoverFolders()
+                if (id == StorageUsage.PLUGIN_LEFTOVERS) {
+                    mgr.pluginLeftovers().forEach { mgr.deletePluginLeftover(it.id) }
+                    return@runCatching mgr.pluginLeftovers().isEmpty()
+                }
                 StorageUsage.clearCategory(id, mgr.list().map { Paths.get(it.rootPath) }, mgr.sharedRoot)
                 true
             }.getOrElse { e -> log.error("Couldn't clear storage category $id", e); false }
@@ -243,6 +248,7 @@ internal class ProjectBackend(
         StorageUsage.SDK -> "warning"
         StorageUsage.PROJECTS -> "accentStrong"
         StorageUsage.LEFTOVERS -> "error"
+        StorageUsage.PLUGIN_LEFTOVERS -> "error"
         else -> "textTertiary"
     }
 

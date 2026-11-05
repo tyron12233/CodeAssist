@@ -368,8 +368,15 @@ const val PLUGIN_API_VERSION: Int = 4
  *   re-run), which were the JVM's alone. `build-api` now depends on `language-api` for `LanguageId`.
  * The editor's folding pass now runs for every file, as the semantic pass already did. Additive, so
  * [PLUGIN_API_VERSION] stays at `4`.
+ *
+ * `3.4.0` adds [PluginRegistration.privateDataDir], a per-plugin directory on the IDE's private storage, for
+ * what [PluginRegistration.dataDir] (shared storage) cannot hold: symbolic links, and files no other app may
+ * read. A plugin that needed that had picked a path of its own under the app's data, which nothing tracked, so
+ * it outlived the plugin. The IDE now lists both directories of an uninstalled plugin and deletes them when
+ * the user asks. Additive, so [PLUGIN_API_VERSION] stays at `4`; on an older host reading the property throws
+ * `NoSuchMethodError`, which a plugin can catch.
  */
-const val PLUGIN_SPI_VERSION: String = "3.3.0"
+const val PLUGIN_SPI_VERSION: String = "3.4.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

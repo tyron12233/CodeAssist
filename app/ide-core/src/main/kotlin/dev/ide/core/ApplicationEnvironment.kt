@@ -84,6 +84,11 @@ class ApplicationEnvironment(
      */
     val pluginDataRoot: Path? = null,
     /**
+     * Where each plugin's `PluginRegistration.privateDataDir` is created: the host's PRIVATE storage (on a
+     * device, the app's internal files). Null falls back to a per-process temporary root, as [pluginDataRoot].
+     */
+    val pluginPrivateDataRoot: Path? = null,
+    /**
      * Reads an app-global preference, for the built-ins that need one at load. The keymap is the reason it
      * exists: a user's rebinding has to be in force from the first key press, and the preference store lives
      * on the host's [dev.ide.core.project.ProjectManager], which is built around this environment rather than
@@ -174,6 +179,15 @@ class ApplicationEnvironment(
      * looking like one the IDE never saw.
      */
     val rejectedPlugins: List<RejectedPlugin>
+
+    /**
+     * False when a [PluginSource] failed to enumerate this launch, so [installedPlugins] may be missing plugins
+     * that ARE installed. Nothing is then offered as left behind by an uninstalled plugin: its data would be
+     * that of a plugin the IDE merely failed to see.
+     */
+    @Volatile
+    var pluginDiscoveryComplete: Boolean = true
+        private set
 
     /**
      * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED plugins, in load order: the built-ins
@@ -296,6 +310,7 @@ class ApplicationEnvironment(
             .toMap()
         pluginManager = PluginManager(
             platform.extensions, platform.messageBus, hostVersion, container, pluginDataRoot, nativeLibraryDirs,
+            pluginPrivateDataRoot,
         )
 
         // One ordered load over both tiers, so an installed plugin's dependency on a built-in is a real edge.
@@ -440,6 +455,7 @@ class ApplicationEnvironment(
                 source.discover()
             } catch (t: Throwable) {
                 log.warn("plugin source '${source.id}' failed to enumerate installed plugins", t)
+                pluginDiscoveryComplete = false
                 continue
             }
             for (candidate in found) {

@@ -1,5 +1,9 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.generated.resources.storage_cat_plugin_leftovers_desc
+import dev.ide.ui.generated.resources.storage_cat_plugin_leftovers_title
+import dev.ide.ui.generated.resources.storage_clear_plugin_leftovers_body
+import dev.ide.ui.generated.resources.storage_clear_plugin_leftovers_title
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
@@ -139,12 +143,21 @@ fun StorageScreen(
 
     // ---- confirmations ----
     val pending = state.pendingClear
-    val leftovers = pending?.id == "leftovers"
     ConfirmDialog(
         visible = pending != null,
-        title = stringResource(if (leftovers) Res.string.storage_clear_leftovers_title else Res.string.storage_clear_sdk_title),
+        title = stringResource(
+            when (pending?.id) {
+                "leftovers" -> Res.string.storage_clear_leftovers_title
+                "plugin-leftovers" -> Res.string.storage_clear_plugin_leftovers_title
+                else -> Res.string.storage_clear_sdk_title
+            },
+        ),
         body = stringResource(
-            if (leftovers) Res.string.storage_clear_leftovers_body else Res.string.storage_clear_sdk_body,
+            when (pending?.id) {
+                "leftovers" -> Res.string.storage_clear_leftovers_body
+                "plugin-leftovers" -> Res.string.storage_clear_plugin_leftovers_body
+                else -> Res.string.storage_clear_sdk_body
+            },
             pending?.let { formatBytes(it.bytes) } ?: "",
         ),
         confirmLabel = stringResource(Res.string.storage_clear),
@@ -416,6 +429,7 @@ private fun categoryTitle(id: String): String = when (id) {
     "sdk" -> stringResource(Res.string.storage_cat_sdk_title)
     "projects" -> stringResource(Res.string.storage_cat_projects_title)
     "leftovers" -> stringResource(Res.string.storage_cat_leftovers_title)
+    "plugin-leftovers" -> stringResource(Res.string.storage_cat_plugin_leftovers_title)
     else -> stringResource(Res.string.storage_cat_other_title)
 }
 
@@ -429,6 +443,7 @@ private fun categoryDescription(id: String): String = when (id) {
     "sdk" -> stringResource(Res.string.storage_cat_sdk_desc)
     "projects" -> stringResource(Res.string.storage_cat_projects_desc)
     "leftovers" -> stringResource(Res.string.storage_cat_leftovers_desc)
+    "plugin-leftovers" -> stringResource(Res.string.storage_cat_plugin_leftovers_desc)
     else -> stringResource(Res.string.storage_cat_other_desc)
 }
 

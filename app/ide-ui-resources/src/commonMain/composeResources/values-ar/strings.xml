@@ -1646,6 +1646,17 @@
     <string name="storage_cat_projects_desc">شفرتك المصدرية وإعدادات مشاريعك</string>
     <string name="storage_cat_leftovers_title">مجلدات مشاريع متبقية</string>
     <string name="storage_cat_leftovers_desc">تركتها المشاريع المحذوفة، ويمكن إزالتها بأمان</string>
+    <string name="plugins_leftovers_title">بقايا الإضافات المحذوفة</string>
+    <string name="plugins_leftovers_body">إلغاء تثبيت إضافة يترك بياناتها خلفه. احذفها لتحرير المساحة، أو احتفظ بها إن كنت ستعيد تثبيتها.</string>
+    <string name="plugins_leftover_delete">حذف</string>
+    <string name="plugins_leftovers_delete_all">حذف الكل (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">حذف بيانات %1$s؟</string>
+    <string name="plugins_leftovers_confirm_all_title">حذف بيانات كل الإضافات المحذوفة؟</string>
+    <string name="plugins_leftover_confirm_body">سيحرر هذا %1$s. الإضافة التي تعيد تثبيتها لاحقًا تبدأ من جديد.</string>
+    <string name="storage_cat_plugin_leftovers_title">بيانات الإضافات المحذوفة</string>
+    <string name="storage_cat_plugin_leftovers_desc">تركتها إضافات ألغيت تثبيتها</string>
+    <string name="storage_clear_plugin_leftovers_title">حذف بيانات الإضافات المحذوفة؟</string>
+    <string name="storage_clear_plugin_leftovers_body">سيحذف هذا %1$s تركتها إضافات ألغي تثبيتها. الإضافة التي تعيد تثبيتها لاحقًا تبدأ من جديد.</string>
     <string name="storage_cat_other_title">أخرى</string>
     <string name="storage_cat_other_desc">ملفات المفاتيح والنسخ الاحتياطية وبيانات التطبيق</string>
     <string name="plugins_restart_hint">أعد التشغيل لتطبيق تغييرات الإضافات.</string>

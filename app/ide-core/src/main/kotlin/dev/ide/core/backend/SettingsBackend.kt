@@ -169,6 +169,22 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
     private fun packageOf(id: String): String? =
         ctx.manager?.env?.installedPlugins?.firstOrNull { it.manifest.id == id }?.origin?.label
 
+    override suspend fun pluginLeftovers(): List<dev.ide.ui.backend.UiPluginLeftover> {
+        val manager = ctx.manager ?: return emptyList()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { manager.pluginLeftovers() }.getOrDefault(emptyList())
+                .map { dev.ide.ui.backend.UiPluginLeftover(it.id, it.name, it.bytes) }
+        }
+    }
+
+    override suspend fun deletePluginLeftover(id: String): Boolean {
+        val manager = ctx.manager ?: return false
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { manager.deletePluginLeftover(id) > 0 || manager.pluginLeftovers().none { it.id == id } }
+                .getOrDefault(false)
+        }
+    }
+
     override fun openPluginAppInfo(id: String): Boolean =
         packageOf(id)?.let { pluginPackages?.openAppInfo(it) } ?: false
 

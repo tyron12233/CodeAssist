@@ -43,6 +43,9 @@ class PluginManager(
      * in a standalone test, and a plugin missing from it is simply handed no directory.
      */
     private val nativeLibraryDirs: Map<String, Path> = emptyMap(),
+    /** Where each plugin's [PluginRegistration.privateDataDir] is created, as [dataRoot] is for `dataDir`: the
+     *  host's private storage. Null in a standalone test, which gets a per-process temporary root. */
+    private val privateDataRoot: Path? = null,
 ) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
@@ -116,6 +119,7 @@ class PluginManager(
                     id, registry, teardown, bus, hostVersion, appServices,
                     dataRoot ?: defaultDataRoot(),
                     nativeLibraryDir,
+                    privateDataRoot ?: defaultPrivateDataRoot(),
                 )
             )
         } catch (t: Throwable) {

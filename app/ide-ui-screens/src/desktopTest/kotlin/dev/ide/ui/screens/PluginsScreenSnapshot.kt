@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.UiPluginLeftover
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -113,6 +114,15 @@ class PluginsScreenSnapshot {
         override fun canRestartApplication(): Boolean = true
     }
 
+    /** Two plugins uninstalled from Android's settings left their data behind; one was seen installed before. */
+    private class LeftoversBackend : StubBackend() {
+        override fun pluginCatalog(): List<UiPluginInfo> = NoInstalledBackend().pluginCatalog() + FakeBackend().pluginCatalog().filterNot { it.builtIn }.take(1)
+        override suspend fun pluginLeftovers(): List<UiPluginLeftover> = listOf(
+            UiPluginLeftover("dev.codeassist.dart", "Dart & Flutter", 300_000_000L),
+            UiPluginLeftover("kz.codingOnTheMoon.dartpluginv1", null, 17_400_000L),
+        )
+    }
+
     /** With nothing installed, the Installed tab still exists and shows its empty state. */
     private class NoInstalledBackend : StubBackend() {
         override fun pluginCatalog(): List<UiPluginInfo> = listOf(
@@ -135,6 +145,11 @@ class PluginsScreenSnapshot {
     @Test
     fun renderInstalledTabWithNothingInstalled() {
         snapshot("plugins-installed-empty.png", NoInstalledBackend(), startTab = PluginsTab.Installed)
+    }
+
+    @Test
+    fun renderLeftoversOfRemovedPlugins() {
+        snapshot("plugins-leftovers.png", LeftoversBackend(), startTab = PluginsTab.Installed)
     }
 
     @Test

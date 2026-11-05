@@ -1284,10 +1284,17 @@ selection as plain strings and offsets, with no model object, so it can resolve 
 services fits better on `ACTION_PROVIDER_EP`, which is given an `AnalysisTarget`.
 
 **From the registrar**, for an APPLICATION-scoped service with no scope object in sight.
-`reg.dataDir` is a directory this plugin owns, created on first read and removed when the plugin is
-uninstalled: for a cache, a downloaded index, a small database, anything that is state rather than a setting.
-It is application-scoped, so it survives a project switch; per-project content belongs in the project, through
-`MODULE_RESOURCES` or the file system.
+`reg.dataDir` is a directory this plugin owns, created on first read: for a cache, a downloaded index, a small
+database, anything that is state rather than a setting. It is application-scoped, so it survives a project
+switch; per-project content belongs in the project, through `MODULE_RESOURCES` or the file system.
+
+On a device `dataDir` is on shared storage, which cannot hold a symbolic link and which a file manager can
+read. `reg.privateDataDir` (SPI 3.4.0) is its counterpart on the IDE's private internal storage: use it for an
+unpacked toolchain that links into your native library directory, a package cache with links, or anything no
+other app should see. Do not pick a path of your own under the app's data instead; the IDE does not know it is
+yours. When your plugin is uninstalled, the IDE lists what it left in both directories (on the Plugins screen
+and under Storage) and deletes it when the user asks, never on its own, so a reinstall finds its data again.
+On an older host, reading `privateDataDir` throws `NoSuchMethodError`, which you can catch to fall back.
 
 `reg.nativeLibraryDir` and `reg.nativeLibrary(name)` find the native libraries your plugin **packaged**, which
 the installer unpacked when the plugin app was installed. Package one the way an Android app does, as

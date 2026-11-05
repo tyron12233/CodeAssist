@@ -84,6 +84,33 @@ class PluginManagerTest {
         }
     }
 
+    private class PrivateDirPlugin(id: String) : Plugin {
+        override val manifest = PluginManifest(id = id, name = id)
+        lateinit var dir: Path
+            private set
+
+        override fun register(reg: PluginRegistration) {
+            dir = reg.privateDataDir
+        }
+    }
+
+    @Test
+    fun `the private data directory is the plugin's own under the private root`() {
+        val data = Files.createTempDirectory("plugin-data-root")
+        val private = Files.createTempDirectory("plugin-private-root")
+        try {
+            val a = PrivateDirPlugin("alpha")
+            val evil = PrivateDirPlugin("../../etc")
+            PluginManager(ExtensionRegistryImpl(), dataRoot = data, privateDataRoot = private).loadAll(listOf(a, evil))
+            assertEquals(private.resolve("alpha"), a.dir)
+            assertTrue(Files.isDirectory(a.dir))
+            assertTrue(evil.dir.normalize().startsWith(private), "must stay under the private root, was ${evil.dir}")
+        } finally {
+            data.toFile().deleteRecursively()
+            private.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `a plugin id that is not a safe path name cannot escape the data root`() {
         val root = Files.createTempDirectory("plugin-data-root")
