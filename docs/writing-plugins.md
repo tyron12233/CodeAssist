@@ -1350,12 +1350,13 @@ A key is usable only if you can name its type, and that differs by tier:
 Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
 `Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Seven engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+Eight engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
 Five are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`,
 `MODULE_RESOURCES`), each declared in the api module whose types it already speaks, and each typed to a
 *narrowed* interface rather than to the engine class behind it. The seventh is `CODE_INTERPRETER`
 (`interp-api`), the only one at APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
-than being scoped to one (see section 14b). `:ide-core` registers the narrow key
+than being scoped to one (see section 14b). The eighth, `ANDROID_MODULES` (`project-model-api`), is a
+read-only view over the Android module settings with no engine service behind it (section 14d). `:ide-core` registers the narrow key
 alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
 index, and the same module model.
 
@@ -2711,6 +2712,31 @@ file rather than through it. When the target is a file the user is looking at, u
 an `ActionEffect.ApplyWorkspaceEdit` from a `UI_ACTION_EP` action, or a `WorkspaceEdit` from a `QuickFix`,
 both of which go through the editor's own text path and land in the same undo step as typing.
 
+## 14d. Read an Android module's settings
+
+`ANDROID_MODULES` (`dev.ide.model.AndroidModules`, WORKSPACE, since SPI 3.4.0) is the read half of each
+module's `android { … }` block: what a lint rule needs to know the API level, what a manifest tool needs to
+know the application id, what a Compose-only feature checks before it offers itself.
+
+```kotlin
+val android = workspace.service(ANDROID_MODULES)
+val app = android.info(module) ?: return            // null: not an Android module
+if (app.minSdk < 26 && usesJavaTime && !app.coreLibraryDesugaring) warn("java.time needs API 26 or desugaring")
+val id = app.variants.first { it.name == app.activeVariant }.applicationId   // e.g. com.example.app.debug
+if (app.buildFeatures.compose) offerComposePreview()
+```
+
+The values are the ones the build uses, not the raw DSL. `applicationId` is the namespace when the build file
+sets none; each variant's `applicationId` already has its flavor's id and the flavor and build-type suffixes
+applied; a `versionCode` or `versionName` left at AGP's default reads as null, since the manifest's value then
+wins. `activeVariant` is the variant the editor analyses the module as, the one the user picked under Build
+Variants. A library module has no application id, so it and its variants answer null there.
+
+Every call reads the model as it stands, so the answer follows a settings edit or a sync; there is nothing to
+subscribe to. The view is read-only: the configuration is the user's, edited in the module settings or by the
+Gradle importer. The types are interfaces the IDE implements, so a fact added later is a new member rather
+than a change your compiled plugin would trip on.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -3237,6 +3263,7 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.build.BUILD_CONTROL` | WORKSPACE | `BuildControl` | Start or stop the build; compile and run a module's `main` and capture its output |
 | `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
 | `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
+| `dev.ide.model.ANDROID_MODULES` | WORKSPACE | `AndroidModules` | Each Android module's configuration as the build resolves it: SDK levels, namespace and application id, build features, build types, flavors, variants with their application ids, and the active variant (section 14d) |
 | `dev.ide.model.MODULE_RESOURCES` | WORKSPACE | `ModuleResources` | A module's resources: generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model (query `@type/name`, write `res/values` entries and file resources) |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
 | `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |

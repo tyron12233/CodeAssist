@@ -375,6 +375,13 @@ const val PLUGIN_API_VERSION: Int = 4
  * it outlived the plugin. The IDE now lists both directories of an uninstalled plugin and deletes them when
  * the user asks. Additive, so [PLUGIN_API_VERSION] stays at `4`; on an older host reading the property throws
  * `NoSuchMethodError`, which a plugin can catch.
+ *
+ * `3.4.0` also adds `dev.ide.model.AndroidModules` on `ANDROID_MODULES` (`platform.androidModules`,
+ * WORKSPACE) in `project-model-api`: each Android module's configuration as the build resolves it (SDK levels,
+ * namespace and application id, build features, build types, flavors, every variant with its application id,
+ * and the variant the editor analyses). A plugin could not read any of it, since the facet lives in the
+ * unpublished Android support module. Read-only, and its types are interfaces, so it can grow without a break.
+ * On an older host the key resolves to nothing.
  */
 const val PLUGIN_SPI_VERSION: String = "3.4.0"
 
