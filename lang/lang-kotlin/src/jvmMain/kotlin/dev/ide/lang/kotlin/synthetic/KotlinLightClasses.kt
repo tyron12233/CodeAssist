@@ -24,7 +24,10 @@ import dev.ide.vfs.VirtualFile
  * module list, so a consumer can skip all work on a reference check. Rendered classes carry no method bodies, so
  * an edit inside a function body changes nothing a consumer sees.
  *
- * Thread-safe: every call runs under one lock.
+ * Thread-safe: every call runs under one lock. Inside a call, the parsing and the rendering of several files are
+ * spread over a few worker threads ([inParallel]): each is a function of one file's text (and the module's class
+ * names, fixed by then), and after a wide edit (a rename across the project) or on the first Java lookup of a
+ * session there are hundreds of them, one after another, before Java code can resolve anything.
  */
 class KotlinLightClasses {
 
@@ -49,10 +52,10 @@ class KotlinLightClasses {
     private val entries = HashMap<String, FileEntry>()
     private val modules = HashMap<String, ModuleState>()
 
+    private val parses = java.util.concurrent.atomic.AtomicInteger()
+
     /** How many files have been parsed so far, for tests that check how much work an edit cost. */
-    @Volatile
-    var parseCount: Int = 0
-        private set
+    val parseCount: Int get() = parses.get()
 
     /**
      * The light classes of the module [moduleKey], whose Kotlin source lives under [roots]. [bufferText] returns
@@ -78,6 +81,7 @@ class KotlinLightClasses {
         // until it is rendered below, once the module's class names are known.
         val parsed = HashMap<String, SourceFile?>()
         val texts = HashMap<String, Pair<String, Boolean>>()
+        val toParse = ArrayList<VirtualFile>()
         for (vf in files) {
             val path = vf.path
             val buffer = bufferText(path)
@@ -96,8 +100,10 @@ class KotlinLightClasses {
                 continue
             }
             texts[path] = text to (buffer != null)
-            parsed[path] = parse(vf, text)
+            toParse += vf
         }
+        inParallel(toParse) { vf -> parse(vf, texts.getValue(vf.path).first) }
+            .forEachIndexed { i, source -> parsed[toParse[i].path] = source }
 
         val classNames = HashSet<String>()
         for (vf in files) {
@@ -109,33 +115,44 @@ class KotlinLightClasses {
         if (namesChanged) state.classNames = classNames
 
         // Render what was parsed, and re-render any other file whose class-name lookups now answer differently.
+        val reparse = ArrayList<VirtualFile>()
         for (vf in files) {
             val path = vf.path
-            if (path !in parsed) {
-                val entry = entries[path] ?: continue
-                if (!namesChanged || entry.lookups.all { (fqn, known) -> (fqn in classNames) == known }) continue
-                val text = (if (entry.fromBuffer) bufferText(path) else null) ?: readText(vf) ?: continue
-                texts[path] = text to entry.fromBuffer
-                parsed[path] = parse(vf, text)
-            }
+            if (path in parsed) continue
+            val entry = entries[path] ?: continue
+            if (!namesChanged || entry.lookups.all { (fqn, known) -> (fqn in classNames) == known }) continue
+            val text = (if (entry.fromBuffer) bufferText(path) else null) ?: readText(vf) ?: continue
+            texts[path] = text to entry.fromBuffer
+            reparse += vf
+        }
+        inParallel(reparse) { vf -> parse(vf, texts.getValue(vf.path).first) }
+            .forEachIndexed { i, source -> parsed[reparse[i].path] = source }
+
+        val toRender = files.filter { it.path in parsed }
+        val rendered = inParallel(toRender) { vf ->
+            val source = parsed[vf.path] ?: return@inParallel null
+            val renderer = LightClassRenderer(source) { it in classNames }
+            val classes = runCatching { renderer.render() }.getOrDefault(emptyList())
+            classes to HashMap(renderer.lookups)
+        }
+        toRender.forEachIndexed { i, vf ->
+            val path = vf.path
             val (text, fromBuffer) = texts.getValue(path)
             val source = parsed[path]
+            val result = rendered[i]
             val previous = entries[path]
-            val entry = if (source == null) {
+            entries[path] = if (source == null || result == null) {
                 FileEntry(hash64(text), fromBuffer, emptySet(), emptyMap(), emptyList())
             } else {
-                val renderer = LightClassRenderer(source) { it in classNames }
-                val rendered = runCatching { renderer.render() }.getOrDefault(emptyList())
                 FileEntry(
                     textHash = hash64(text),
                     fromBuffer = fromBuffer,
                     declared = source.classes.mapTo(HashSet()) { it.fqn },
-                    lookups = HashMap(renderer.lookups),
+                    lookups = result.second,
                     // Same shape as before: hand back the previous list so consumers see an unchanged result.
-                    classes = previous?.classes?.takeIf { it == rendered } ?: rendered,
+                    classes = previous?.classes?.takeIf { it == result.first } ?: result.first,
                 )
             }
-            entries[path] = entry
         }
 
         val parts = files.map { entries[it.path]?.classes ?: emptyList() }
@@ -173,7 +190,7 @@ class KotlinLightClasses {
     }
 
     private fun parse(vf: VirtualFile, text: String): SourceFile? {
-        parseCount++
+        parses.incrementAndGet()
         return runCatching { SourceIndexBuilder.extract(vf, text) }.getOrNull()
     }
 
@@ -191,6 +208,29 @@ class KotlinLightClasses {
     }
 
     private companion object {
+        /** Below this many files the hand-off to other threads costs more than it saves. */
+        const val PARALLEL_MIN = 8
+
+        val workers = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 4)
+
+        val pool: java.util.concurrent.ExecutorService by lazy {
+            val n = java.util.concurrent.atomic.AtomicInteger()
+            java.util.concurrent.Executors.newFixedThreadPool(workers) { r ->
+                Thread(r, "kotlin-light-${n.incrementAndGet()}").apply { isDaemon = true }
+            }
+        }
+
+        /**
+         * [work] over [items], in order, on the worker pool when there are enough of them. [work] must touch nothing
+         * shared but what it is handed (no entries, no callbacks into the caller). An item whose worker failed is
+         * done again on the calling thread.
+         */
+        fun <T, R> inParallel(items: List<T>, work: (T) -> R): List<R> {
+            if (items.size < PARALLEL_MIN || workers < 2) return items.map(work)
+            val futures = items.map { item -> pool.submit<R> { work(item) } }
+            return futures.mapIndexed { i, f -> runCatching { f.get() }.getOrElse { work(items[i]) } }
+        }
+
         /** 64-bit FNV-1a over the UTF-16 units, mixed with the length: a text identity that keeps no copy. */
         fun hash64(text: String): Long {
             var h = -0x340d631b7bdddcdbL

@@ -178,8 +178,14 @@ internal class RefactorService(
     }
 
     /** A Kotlin target's references: in Kotlin, and in the Java code that reaches it through its light class. */
-    private fun kotlinTargetUsages(target: KotlinUsageTarget): List<Pair<Path, TextRange>> =
-        kotlin.usages(target) + javaRefsToKotlin(target)
+    private fun kotlinTargetUsages(target: KotlinUsageTarget): List<Pair<Path, TextRange>> {
+        val t0 = System.nanoTime()
+        val kt = kotlin.usages(target)
+        val t1 = System.nanoTime()
+        val java = javaRefsToKotlin(target)
+        log.info("usages '${target.name}': kotlin ${kt.size} in ${(t1 - t0) / 1_000_000} ms, java ${java.size} in ${(System.nanoTime() - t1) / 1_000_000} ms")
+        return kt + java
+    }
 
     /**
      * The Java references to Kotlin [target], each the range of the name Java writes: the declaration's own, or
@@ -308,7 +314,11 @@ internal class RefactorService(
                 ?: return RenameOutcome(false, "Place the caret on a symbol to rename.")
             if (name == target.oldName) return RenameOutcome(false, "The new name is the same as the current one.")
             findStarted = System.nanoTime()
-            refs = javaRefs(module, file, text, target) + kotlinRefsToJava(module, file, text, offset, target)
+            val java = javaRefs(module, file, text, target)
+            val t1 = System.nanoTime()
+            val kt = kotlinRefsToJava(module, file, text, offset, target)
+            log.info("usages '${target.oldName}': java ${java.size} in ${(t1 - findStarted) / 1_000_000} ms, kotlin ${kt.size} in ${(System.nanoTime() - t1) / 1_000_000} ms")
+            refs = java + kt
         } catch (e: LinkageError) {
             ctx.markAnalysisUnavailable(ctx.languageFor(file))
             return RenameOutcome(false, "Java analysis is unavailable.")
