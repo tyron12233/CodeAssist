@@ -625,6 +625,7 @@ class IdeServices private constructor(
         override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
         override fun projectKotlinFiles() = this@IdeServices.projectFilesEndingWith(".kt")
         override fun javaDeclarationAt(file: Path, text: String, offset: Int) = this@IdeServices.javaDeclarationAt(file, text, offset)
+        override fun javaDeclarationsAt(file: Path, text: String, offsets: List<Int>) = this@IdeServices.javaDeclarationsAt(file, text, offsets)
         override fun pluginTarget(file: Path, text: String) = this@IdeServices.pluginTarget(file, text)
         override fun isValidJavaIdentifier(s: String) = this@IdeServices.isValidJavaIdentifier(s)
         override val composePreviewRunner get() = this@IdeServices.composePreviewRunner
@@ -3351,6 +3352,19 @@ class IdeServices private constructor(
      * Java's go-to-declaration: a Java declaration, or a Kotlin one reached through its light class. Null when it
      * resolves to nothing or to a library.
      */
+    /** [javaDeclarationAt] for several [offsets] in [file], over one parse of [text]. */
+    internal fun javaDeclarationsAt(file: Path, text: String, offsets: List<Int>): List<Pair<Path, Int>?> {
+        if (offsets.isEmpty()) return emptyList()
+        val java = javaAnalyzerFor(file) ?: return offsets.map { null }
+        val all = runCatching {
+            java.navigationTargetsAt(store.vfs.fileFor(file), text, offsets, dev.ide.lang.java.navigate.JavaNavKind.DECLARATION)
+        }.getOrNull() ?: return offsets.map { null }
+        return all.map { raw ->
+            javaNavTargets(file, raw).firstOrNull { it.kind != "library" }
+                ?.let { t -> Paths.get(t.file.path).toAbsolutePath().normalize() to t.offset }
+        }
+    }
+
     internal fun javaDeclarationAt(file: Path, text: String, offset: Int): Pair<Path, Int>? {
         val java = javaAnalyzerFor(file) ?: return null
         val raw = runCatching {

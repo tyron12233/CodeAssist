@@ -244,6 +244,16 @@ class JavaSourceAnalyzer private constructor(
     fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: JavaNavKind): List<JavaNavTarget> =
         IntellijPsiHost.withParseLock { navigation.targets(psiOf(file, text), offset, kind) }
 
+    /**
+     * [navigationTargets] for several [offsets] in one file, over ONE parse of [text]. A project-wide sweep resolves
+     * every occurrence of a name, and each single call parses the whole file again.
+     */
+    fun navigationTargetsAt(file: VirtualFile, text: CharSequence, offsets: List<Int>, kind: JavaNavKind): List<List<JavaNavTarget>> =
+        IntellijPsiHost.withParseLock {
+            val psi = psiOf(file, text)
+            offsets.map { at -> runCatching { navigation.targets(psi, at, kind) }.getOrDefault(emptyList()) }
+        }
+
     /** Where the source class [fqn], or its [member], is declared, for a go-to from another language. */
     fun declarationOf(fqn: String, member: String?, paramTypes: List<String>? = null): JavaNavTarget? =
         IntellijPsiHost.withParseLock { navigation.declarationOf(fqn, member, paramTypes) }

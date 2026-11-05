@@ -153,6 +153,9 @@ internal interface EngineContext {
      *  a Kotlin declaration is reached through its light class. Null when nothing in the project. */
     fun javaDeclarationAt(file: Path, text: String, offset: Int): Pair<Path, Int>?
 
+    /** [javaDeclarationAt] for several [offsets] in one Java file, parsed once; one answer per offset. */
+    fun javaDeclarationsAt(file: Path, text: String, offsets: List<Int>): List<Pair<Path, Int>?>
+
     /** The analysis target a plugin provider is handed for [file]'s live buffer [text]; null when unanalysable. */
     fun pluginTarget(file: Path, text: String): dev.ide.analysis.AnalysisTarget?
 

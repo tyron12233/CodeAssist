@@ -26,6 +26,18 @@ class KotlinUsageTarget internal constructor(
     internal val importFqns: Set<String>,
     /** The file that is named after this symbol (a top-level class in its own `Name.kt`), renamed with it. */
     val fileNamedAfter: String?,
+    /**
+     * For a top-level function or property: the facade class Java reaches it through (`ModelKt`, or the file's
+     * `@JvmName`). Java cannot name such a symbol without naming its facade (a call, or a static import), so a
+     * Java file that never mentions it holds no reference. Null when that does not hold or is not known.
+     */
+    val javaFacade: String? = null,
+    /**
+     * For a top-level class or object: its package. Java names a top-level type only through an import, from the
+     * same package, or by its qualified name, so a Java file in another package that never writes `pkg.` cannot
+     * refer to it. Null for anything else.
+     */
+    val topLevelTypePackage: String? = null,
 ) {
     /** Rename edits Kotlin declarations; a Java or library symbol is renamed (if at all) from its own side. */
     val renameable: Boolean get() = declarations.isNotEmpty()
@@ -37,7 +49,6 @@ class KotlinUsageTarget internal constructor(
 
 internal fun usageIdentity(path: String, offset: Int): String = "$path#$offset"
 
-/** Whether [name] occurs in [text] as a whole identifier: the cheap filter before a file is parsed. */
 /** Where [name] occurs in [text] as a whole identifier (not part of a longer one), in order. */
 internal fun identifierOccurrences(text: CharSequence, name: String): List<Int> {
     if (name.isEmpty()) return emptyList()
@@ -52,6 +63,7 @@ internal fun identifierOccurrences(text: CharSequence, name: String): List<Int> 
     return out
 }
 
+/** Whether [name] occurs in [text] as a whole identifier: the cheap filter before a file is parsed. */
 internal fun containsIdentifier(text: CharSequence, name: String): Boolean {
     if (name.isEmpty()) return false
     var i = text.indexOf(name, 0)

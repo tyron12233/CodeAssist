@@ -195,15 +195,34 @@ internal class RefactorService(
         for (f in ctx.projectJavaFiles()) {
             val path = f.toAbsolutePath().normalize()
             val text = textOf(path) ?: continue
-            for (name in names) {
-                if (!text.contains(name)) continue
-                for (m in Regex("""\b${Regex.escape(name)}\b""").findAll(text)) {
-                    val decl = runCatching { ctx.javaDeclarationAt(path, text, m.range.first) }.getOrNull() ?: continue
-                    if (target.isDeclaredAt(decl.first.toString(), decl.second)) out += path to TextRange(m.range.first, m.range.last + 1)
-                }
+            if (!javaCanReach(target, text)) continue
+            val hits = names.flatMap { name ->
+                if (!text.contains(name)) emptyList()
+                else Regex("""\b${Regex.escape(name)}\b""").findAll(text).map { it.range }.toList()
+            }
+            if (hits.isEmpty()) continue
+            // One parse of the file for all of its occurrences.
+            val decls = runCatching { ctx.javaDeclarationsAt(path, text, hits.map { it.first }) }.getOrNull() ?: continue
+            hits.forEachIndexed { i, r ->
+                val decl = decls.getOrNull(i) ?: return@forEachIndexed
+                if (target.isDeclaredAt(decl.first.toString(), decl.second)) out += path to TextRange(r.first, r.last + 1)
             }
         }
         return out
+    }
+
+    /**
+     * Whether Java [text] could name Kotlin [target] at all, judged from the text alone and only where that is
+     * certain: a top-level function or property is reached through its facade class, and a top-level type from
+     * its own package, an import, or its qualified name. Everything else is resolved.
+     */
+    private fun javaCanReach(target: KotlinUsageTarget, text: String): Boolean {
+        target.javaFacade?.let { facade -> if (!containsWord(text, facade)) return false }
+        target.topLevelTypePackage?.let { pkg ->
+            val own = PACKAGE.find(text)?.groupValues?.get(1).orEmpty()
+            if (own != pkg && (pkg.isEmpty() || !text.contains("$pkg."))) return false
+        }
+        return true
     }
 
     /** The names Java writes [target] by: its own, and for a property its getter and setter. */
