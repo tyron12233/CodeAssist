@@ -514,7 +514,8 @@ class BuildDaemonService : Service() {
         super.onCreate()
         log.info("daemon(pid=${Process.myPid()}): service created in :build process")
         // Leave the error behind if this process dies of one, so the UI can say what it was.
-        DaemonCrashNote.install(this)
+        // And name the installed plugin it died in, when there is one, so the UI can turn that plugin off.
+        DaemonCrashNote.install(this) { t -> manager?.blameCrash(t) }
         // Builds here record the APKs they sign, and the installer here checks them (BuiltApks).
         dev.ide.android.AndroidIde.initBuiltApks(this)
         // The engine's ApkInstaller runs in THIS process; after an install it asks the bridge to launch the

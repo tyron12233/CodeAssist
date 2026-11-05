@@ -740,6 +740,18 @@ class ProjectManager private constructor(
     private fun readDisabledPlugins(): Set<String> =
         preference(DISABLED_PLUGINS_KEY)?.split(",")?.mapNotNull { it.trim().ifEmpty { null } }?.toSet() ?: emptySet()
 
+    /**
+     * The installed plugin whose code is on [t]'s stack (or a cause's), with what the crash guard records of it;
+     * null when none is. For a process with no UI of its own (the `:build` daemon) to name the plugin that is
+     * killing it, so the UI process can turn that plugin off.
+     */
+    fun blameCrash(t: Throwable): dev.ide.core.plugins.PluginCrashGuard.Blamed? {
+        val loaders = env.externalPluginLoaders.takeIf { it.isNotEmpty() } ?: return null
+        val id = dev.ide.core.plugins.PluginBlame.ofLoaders(loaders).blame(t) ?: return null
+        val manifest = env.installedPlugins.firstOrNull { it.manifest.id == id }?.manifest
+        return dev.ide.core.plugins.PluginCrashGuard.Blamed(id, manifest?.version ?: "?", manifest?.name ?: id)
+    }
+
     /** Persist [ids] as the disabled built-in plugins; takes effect on the next launch. */
     fun setDisabledPlugins(ids: Set<String>) {
         // A plugin turned off for crashing that the user turns back on is theirs to try again: forget the crash.

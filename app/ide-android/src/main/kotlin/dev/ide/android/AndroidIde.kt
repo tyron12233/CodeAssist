@@ -189,13 +189,18 @@ object AndroidIde {
         )
         if (sandbox) {
             // A crash in the sandbox goes back to the real IDE, where its developer is looking.
-            dev.ide.android.plugins.SandboxProcess.reportCrashesToHost(
-                appContext, manager.env.installedPlugins.firstOrNull()?.manifest?.name,
-            )
+            val plugin = manager.env.installedPlugins.firstOrNull()?.manifest
+            dev.ide.android.plugins.SandboxProcess.reportCrashesToHost(appContext, plugin?.name, plugin?.id)
+            // And so does everything its plugin logs, into the real IDE's Logs viewer.
+            plugin?.id?.let { dev.ide.android.plugins.SandboxProcess.relayPluginLogs(appContext, it) }
         } else {
             // An installed plugin that crashed the last launch is off now; say so, and settle safe mode. See
             // PluginCrashGuard.
             backend.startPluginCrashSafety()
+            // A plugin that crashes the `:build` process is turned off the same way.
+            dev.ide.android.daemon.RemoteBuildRunner.pluginCrashHandler = { blamed ->
+                backend.suspendPluginAfterProcessCrash(blamed, "the build process")
+            }
             // "Run plugin in sandbox": a second copy of the IDE for a plugin build, whose crashes land here.
             manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_SANDBOX) {
                 dev.ide.android.plugins.AndroidPluginSandbox(appContext) { report ->
@@ -212,6 +217,7 @@ object AndroidIde {
         // the installed plugin whose code caused one.
         (appContext.applicationContext as? android.app.Application)?.let { app ->
             val pluginName = manager.env.installedPlugins.firstOrNull()?.manifest?.name
+            val pluginId = manager.env.installedPlugins.firstOrNull()?.manifest?.id
             MainThreadWatchdog(
                 app,
                 report = { frames, durationMs, uptimeMs, fg -> backend.reportMainStall(frames, durationMs, uptimeMs, fg) },
@@ -221,6 +227,7 @@ object AndroidIde {
                 onStop = { frames, stalledMs ->
                     dev.ide.android.plugins.SandboxProcess.stopForStall(
                         appContext, pluginName, frames, stalledMs, blamed = backend.blamePlugin(frames) != null,
+                        pluginId = pluginId,
                     )
                 },
             ).start()
@@ -929,7 +936,7 @@ object AndroidIde {
         )
         // Bridge the logging facade to analytics: caught ERROR logs become scrubbed `error_logged` events
         // (no messages/paths). No-ops while the service is disabled, and starts working on consent.
-        addSink(AnalyticsLogSink(service))
+        addSink(AnalyticsLogSink(service, ignore = { dev.ide.core.PluginSandbox.isRelayed(it) }))
         return service
     }
 

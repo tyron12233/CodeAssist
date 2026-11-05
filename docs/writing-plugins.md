@@ -2750,6 +2750,10 @@ What makes it worth using is what happens when the plugin misbehaves there:
   sandbox"). That is the same work that would make the real IDE stop responding, so move it off the main thread.
 - A shorter freeze (from about 2.5 seconds) is reported inside the sandbox, as a notification naming the plugin.
 
+What the plugin logs in the sandbox through `reg.logger(...)` also shows in the Logs viewer of the IDE you ran it
+from, under the source `sandbox:<plugin id>`, so you can read it without switching windows. A crash report from
+the sandbox ends with the plugin's last few log lines.
+
 The sandbox ends itself before Android records either one, so testing a broken build never counts against the
 IDE's crash or ANR rate on Google Play. A native crash in your plugin's own `.so` is the exception: it goes
 straight to the system.
@@ -2758,8 +2762,9 @@ straight to the system.
 whose class came from a plugin's own APK. A crash that takes the IDE down turns that plugin off for the next
 launch, and the user is told which plugin it was and why. It turns back on when a new version is installed
 (any reinstall while the IDE runs counts, so your next build is tried again), or when the user switches it back
-on. A plugin that keeps the main thread blocked for seconds is named in a notification, and its log gets the
-stack. If the IDE dies right after starting twice in a row and no plugin can be blamed, the next launch starts
+on. The same goes for a crash in the build process, which loads installed plugins too: the plugin is turned
+off, the user is told right away, and the build log says which plugin it was. A plugin that keeps the main
+thread blocked for seconds is named in a notification, and its log gets the stack. If the IDE dies right after starting twice in a row and no plugin can be blamed, the next launch starts
 without any installed plugin and says so; the one after that tries them again.
 
 Three things go into the plugin app, and a fourth if it has UI.

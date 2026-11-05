@@ -388,7 +388,7 @@ class IdeServicesBackend(
     /** Turns engine ERROR logs (caught failures) into the non-fatal dialog. Registered on [Log] in [init]. */
     private val errorDialogSink = LogSink { record ->
         val t = record.throwable
-        if (record.level == LogLevel.ERROR && t != null) {
+        if (record.level == LogLevel.ERROR && t != null && !PluginSandbox.isRelayed(record)) {
             showError(t.javaClass.simpleName.ifEmpty { "Error" }, record.message, stackTraceString(t))
         }
     }
@@ -875,6 +875,35 @@ class IdeServicesBackend(
         analyticsScope.launch {
             delay(dev.ide.core.plugins.PluginCrashGuard.STABLE_AFTER_MS)
             runCatching { guard.markStable() }
+        }
+    }
+
+    /**
+     * An installed plugin crashed one of the app's helper processes ([where], e.g. "the build process"), which
+     * died of it and named it on the way down. Turn it off exactly as a crash of this process would (see
+     * [dev.ide.core.plugins.PluginCrashGuard]), and say so now: unlike a crash of this process, the IDE is
+     * still here to tell the user.
+     */
+    fun suspendPluginAfterProcessCrash(blamed: dev.ide.core.plugins.PluginCrashGuard.Blamed, where: String) {
+        val m = manager ?: return
+        if (blamed.id in m.disabledPlugins()) return
+        runCatching {
+            m.pluginCrashGuard.onFatalCrash(blamed, Long.MAX_VALUE, m.disabledPlugins())
+            // Said below, now; the next launch has nothing left to say about it.
+            m.pluginCrashGuard.takeNotice()
+        }
+        runCatching {
+            Log.logger("CodeAssist", blamed.id).error("${blamed.name} ${blamed.version} crashed $where and was turned off")
+        }
+        runCatching {
+            notificationCenter.post(
+                kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
+                title = "${blamed.name} was turned off",
+                body = "It crashed $where. It stays off until a new version is installed, or until you turn it back " +
+                    "on in Plugins.",
+                target = dev.ide.ui.backend.UiNotificationTarget.Screen(PLUGINS_ROUTE),
+                key = "plugin-crash:${blamed.id}",
+            )
         }
     }
 

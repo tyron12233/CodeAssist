@@ -125,6 +125,19 @@ interface PluginSandbox {
      * to [log]. Returns false when it could not be started, having said why through [log].
      */
     fun launch(apk: java.nio.file.Path, log: (String) -> Unit): Boolean
+
+    companion object {
+        /**
+         * Begins the [dev.ide.platform.log.LogRecord.source] of a record the sandbox's plugin logged, relayed into
+         * the real IDE's log so its developer reads it where they work (`sandbox:<plugin id>`). The real IDE shows
+         * those in its Logs viewer and nothing more: the sandbox already put up its own error dialog, and its
+         * errors are not the real IDE's to report.
+         */
+        const val LOG_SOURCE_PREFIX = "sandbox:"
+
+        /** True for a record relayed from the sandbox; see [LOG_SOURCE_PREFIX]. */
+        fun isRelayed(record: dev.ide.platform.log.LogRecord): Boolean = record.source?.startsWith(LOG_SOURCE_PREFIX) == true
+    }
 }
 
 /** Implemented by the launcher; see [APP_RESTARTER]. */

@@ -11,6 +11,7 @@ import android.os.Process
 import dalvik.system.PathClassLoader
 import dev.ide.android.SandboxActivity
 import dev.ide.core.PluginSandbox
+import dev.ide.core.plugins.SandboxLogLine
 import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.platform.log.Log
 import dev.ide.plugin.PluginManifest
@@ -62,6 +63,53 @@ object SandboxProcess {
 
     internal const val CRASH_FILE = "last-crash.txt"
 
+    /** The sandbox plugin's log records, one per line, appended by the sandbox and read by the real IDE. */
+    internal const val LOG_FILE = "plugin-log.txt"
+
+    internal fun logFile(context: Context): File = File(stateDir(context), LOG_FILE)
+
+    /** Past this the sandbox stops relaying (a plugin logging in a loop must not fill the device). */
+    private const val LOG_FILE_CAP = 4L * 1024 * 1024
+
+    /**
+     * In the sandbox: append every record the plugin under test logs ([pluginId] is its records' source) to
+     * [logFile], where the real IDE picks it up ([AndroidPluginSandbox]) and shows it in its own Logs viewer.
+     * Written on a thread of its own, so a plugin logging on the main thread does no disk work there.
+     */
+    fun relayPluginLogs(context: Context, pluginId: String) {
+        val file = logFile(context)
+        val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "sandbox-log-relay").apply { isDaemon = true }
+        }
+        val stopped = java.util.concurrent.atomic.AtomicBoolean(false)
+        dev.ide.platform.log.Log.addSink { record ->
+            if (record.source != pluginId || stopped.get()) return@addSink
+            val line = SandboxLogLine.encode(record)
+            writer.execute {
+                if (stopped.get()) return@execute
+                runCatching {
+                    if (file.length() > LOG_FILE_CAP) {
+                        stopped.set(true)
+                        file.appendText(SandboxLogLine.encodeNote(pluginId, "The sandbox stopped relaying this plugin's log at 4 MB."))
+                    } else {
+                        file.appendText(line)
+                    }
+                }
+            }
+        }
+    }
+
+    /** The plugin's last few log records, for a crash report: what it was doing just before. */
+    private fun recentPluginLog(pluginId: String?): String {
+        if (pluginId == null) return ""
+        val records = dev.ide.platform.log.Log.recent().filter { it.source == pluginId }.takeLast(15)
+        if (records.isEmpty()) return ""
+        return buildString {
+            append("\nThe plugin's last log lines:\n")
+            records.forEach { append("    ").append(it.level.name).append(' ').append(it.tag).append(": ").append(it.message.replace("\n", "\n        ")).append('\n') }
+        }
+    }
+
     /** How a stall report (rather than a crash report) begins, so the host can title it. */
     const val STALL_REPORT_PREFIX = "Stopped the sandbox: "
 
@@ -78,7 +126,7 @@ object SandboxProcess {
      * CodeAssist's crash rate; a process that exits on its own is not a crash report. A throw on any other
      * thread is left to the handler installed earlier, which keeps the sandbox up behind its error dialog.
      */
-    fun reportCrashesToHost(context: Context, pluginName: String?) {
+    fun reportCrashesToHost(context: Context, pluginName: String?, pluginId: String? = null) {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         val main = android.os.Looper.getMainLooper().thread
         Thread.setDefaultUncaughtExceptionHandler { thread, t ->
@@ -91,6 +139,7 @@ object SandboxProcess {
                 buildString {
                     append(pluginName ?: "The plugin").append(" crashed the sandbox on thread '").append(thread.name).append("':\n")
                     append(t.stackTraceToString())
+                    append(recentPluginLog(pluginId))
                 },
             )
             endQuietly()
@@ -102,7 +151,14 @@ object SandboxProcess {
      * process before the system's 5 s input timeout turns it into an ANR, which Play would count against the app
      * just like a crash. Called by the sandbox's [dev.ide.android.MainThreadWatchdog].
      */
-    fun stopForStall(context: Context, pluginName: String?, frames: List<StackTraceElement>, stalledMs: Long, blamed: Boolean) {
+    fun stopForStall(
+        context: Context,
+        pluginName: String?,
+        frames: List<StackTraceElement>,
+        stalledMs: Long,
+        blamed: Boolean,
+        pluginId: String? = null,
+    ) {
         report(
             context,
             buildString {
@@ -112,6 +168,7 @@ object SandboxProcess {
                 append("reported CodeAssist as not responding at 5 s. Move that work off the main thread.\n")
                 append("Main thread while it was blocked:\n")
                 frames.forEach { append("    at ").append(it).append('\n') }
+                append(recentPluginLog(pluginId))
             },
         )
         endQuietly()
@@ -209,7 +266,8 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
 }
 
 /**
- * The real IDE's side: hand a plugin build to a fresh sandbox, and relay the sandbox's crashes back.
+ * The real IDE's side: hand a plugin build to a fresh sandbox, and relay the sandbox's crashes and its plugin's
+ * log back.
  */
 class AndroidPluginSandbox(
     context: Context,
@@ -222,16 +280,52 @@ class AndroidPluginSandbox(
         current = this
     }
 
-    // Held for the IDE's lifetime: a FileObserver that is collected stops observing.
-    private val crashWatch = object : FileObserver(SandboxProcess.stateDir(appContext).absolutePath, MOVED_TO or CLOSE_WRITE) {
+    /** How far into the sandbox's [SandboxProcess.logFile] the real IDE has read. Starts at the end: a log
+     *  left by an earlier session was already shown then. */
+    private var logOffset = SandboxProcess.logFile(appContext).length()
+    private val logLock = Any()
+
+    // ONE observer for the directory, held for the IDE's lifetime (a collected FileObserver stops observing).
+    // One because before API 29 two observers of the same path in a process share an inotify watch, and the
+    // later one's start silently replaces the earlier one's.
+    private val stateWatch = object : FileObserver(SandboxProcess.stateDir(appContext).absolutePath, MOVED_TO or CLOSE_WRITE or MODIFY or CREATE) {
         override fun onEvent(event: Int, path: String?) {
-            if (path != SandboxProcess.CRASH_FILE) return
-            val file = SandboxProcess.crashFile(appContext)
-            val text = runCatching { file.readText() }.getOrNull() ?: return
-            file.delete()
-            runCatching { onSandboxCrash(text) }
+            when (path) {
+                SandboxProcess.LOG_FILE -> readNewLogLines()
+                SandboxProcess.CRASH_FILE -> if ((event and (MOVED_TO or CLOSE_WRITE)) != 0) relayCrash()
+            }
         }
     }.also { it.startWatching() }
+
+    private fun relayCrash() {
+        // The plugin's last lines first: the crash report ends the sandbox, and anything it logged on the way
+        // down belongs before the dialog.
+        readNewLogLines()
+        val file = SandboxProcess.crashFile(appContext)
+        val text = runCatching { file.readText() }.getOrNull() ?: return
+        file.delete()
+        runCatching { onSandboxCrash(text) }
+    }
+
+    /** Replays the lines appended since the last read into this process's log, under a `sandbox:` source. */
+    private fun readNewLogLines() = synchronized(logLock) {
+        runCatching {
+            val file = SandboxProcess.logFile(appContext)
+            val length = file.length()
+            if (length < logOffset) logOffset = 0 // a new sandbox started the file over
+            if (length == logOffset) return@runCatching
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                raf.seek(logOffset)
+                val bytes = ByteArray((length - logOffset).toInt())
+                raf.readFully(bytes)
+                // Only whole lines: the sandbox may be mid-write on the last one.
+                val end = bytes.lastIndexOf('\n'.code.toByte())
+                if (end < 0) return@runCatching
+                logOffset += end + 1
+                String(bytes, 0, end, Charsets.UTF_8).lineSequence().forEach { SandboxLogLine.replay(it) }
+            }
+        }
+    }
 
     override fun launch(apk: Path, log: (String) -> Unit): Boolean {
         val source = apk.toFile()
@@ -258,13 +352,19 @@ class AndroidPluginSandbox(
         // ART's compiled code for those builds, which it keeps beside them and never removes by itself.
         File(dir, "oat").deleteRecursively()
         SandboxProcess.crashFile(appContext).delete()
+        synchronized(logLock) {
+            SandboxProcess.logFile(appContext).delete()
+            logOffset = 0
+        }
         SandboxProcess.setCurrent(appContext, copy)
-        val name = runCatching { DevApkPluginSource(appContext, copy).manifest()?.name }.getOrNull()
+        val manifest = runCatching { DevApkPluginSource(appContext, copy).manifest() }.getOrNull()
+        val name = manifest?.name
         appContext.startActivity(
             Intent(appContext, SandboxActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         log("Started the plugin sandbox with ${name ?: "the plugin"} (${copy.length() / 1024} KB).")
+        manifest?.id?.let { log("What it logs shows in this IDE's Logs viewer under ${PluginSandbox.LOG_SOURCE_PREFIX}$it.") }
         return true
     }
 
@@ -289,3 +389,4 @@ class AndroidPluginSandbox(
         }
     }
 }
+
