@@ -141,6 +141,13 @@ interface AdHost {
     val interstitialState: String get() = "none"
 
     /**
+     * When [interstitialState] is `failed_<code>`, a short account of that failure for analytics: the SDK's
+     * error domain and message, plus which mediation adapters answered with what. Code 0 ("internal error")
+     * covers both an ad-blocked device and a flaky network, and only this tells them apart. Null otherwise.
+     */
+    val interstitialFailureDetail: String? get() = null
+
+    /**
      * Whether the device is short of physical memory. Full-screen ads skip builds here: the ad's WebView next to
      * an on-device build makes the system more likely to kill one of them. That is decided by RAM, so a host
      * should not count a merely small Java heap. False by default.

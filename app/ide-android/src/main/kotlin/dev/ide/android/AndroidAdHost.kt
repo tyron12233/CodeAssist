@@ -131,6 +131,8 @@ class AndroidAdHost(
     @Volatile private var loadingInterstitial = false
     // Why the last load failed (`failed_<code>`), until the next one starts; reported by [interstitialState].
     @Volatile private var interstitialFailure: String? = null
+    @Volatile private var failureDetail: String? = null
+    override val interstitialFailureDetail: String? get() = failureDetail?.takeIf { interstitialFailure != null }
     // A preload asked for before [start]: carried out by [start].
     private var preloadWanted = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -158,6 +160,7 @@ class AndroidAdHost(
             val ctx = activityProvider()?.applicationContext ?: return@post
             loadingInterstitial = true
             interstitialFailure = null
+            failureDetail = null
             runCatching {
                 InterstitialAd.load(
                     ctx,
@@ -178,6 +181,7 @@ class AndroidAdHost(
                         override fun onAdFailedToLoad(error: LoadAdError) {
                             loadingInterstitial = false
                             interstitialFailure = "failed_${error.code}"
+                            failureDetail = failureDetailOf(error)
                             // Code 3 is NO_FILL (expected for a while on a fresh real unit); other codes point at
                             // a config/network problem. Never crash — we just don't show one this time.
                             adLog.warn(
@@ -723,3 +727,17 @@ private const val ID_MEDIA = 0x7f_00_00_05
 
 /** A loaded interstitial unused for this long is dropped: AdMob asks that one older than an hour isn't shown. */
 private const val INTERSTITIAL_MAX_AGE_MS = 55 * 60_000L
+
+/**
+ * A failed load in a few words for analytics (see [AdHost.interstitialFailureDetail]): `domain: message`, then each
+ * mediation adapter that answered as `Adapter=code`. Capped so one event stays small; no user data in any of it.
+ */
+private fun failureDetailOf(error: LoadAdError): String = runCatching {
+    val adapters = error.responseInfo?.adapterResponses.orEmpty().joinToString(",") { a ->
+        "${a.adapterClassName.substringAfterLast('.')}=${a.adError?.code ?: "ok"}"
+    }
+    buildString {
+        append(error.domain.substringAfterLast('.')).append(": ").append(error.message.take(80))
+        if (adapters.isNotEmpty()) append(" [").append(adapters).append(']')
+    }.take(200)
+}.getOrDefault("code ${error.code}")

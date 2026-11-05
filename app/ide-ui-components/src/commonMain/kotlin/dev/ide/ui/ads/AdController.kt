@@ -172,10 +172,16 @@ class AdController(
 
     /**
      * A long build reached the point where it could have shown an ad and didn't, because of [reason]. For
-     * `not_ready`, [state] is the host's [AdHost.interstitialState] at that moment.
+     * `not_ready`, [state] is the host's [AdHost.interstitialState] at that moment and [detail] its
+     * [AdHost.interstitialFailureDetail] when that state is a failed load.
      */
-    fun interstitialSkipped(reason: String, state: String? = null) =
-        track(AD_SKIPPED, mapOf("trigger" to "build", "reason" to reason) + (state?.let { mapOf("state" to it) } ?: emptyMap()))
+    fun interstitialSkipped(reason: String, state: String? = null, detail: String? = null) =
+        track(
+            AD_SKIPPED,
+            mapOf("trigger" to "build", "reason" to reason) +
+                (state?.let { mapOf("state" to it) } ?: emptyMap()) +
+                (detail?.let { mapOf("detail" to it) } ?: emptyMap()),
+        )
 
     private fun track(event: String, props: Map<String, String>) = backend.diagnostics.track(event, props)
 

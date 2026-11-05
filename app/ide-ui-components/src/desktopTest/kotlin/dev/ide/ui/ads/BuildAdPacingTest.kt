@@ -225,10 +225,15 @@ class AdControllerEventsTest {
         val ads = AdController(backend, ReadyAdHost("build-1"))
         ads.interstitialSkipped("cooldown")
         ads.interstitialSkipped("not_ready", "failed_3")
+        ads.interstitialSkipped("not_ready", "failed_0", "ads: Internal error. [AdMobAdapter=0]")
         assertEquals(
             listOf(
                 mapOf("trigger" to "build", "reason" to "cooldown"),
                 mapOf("trigger" to "build", "reason" to "not_ready", "state" to "failed_3"),
+                mapOf(
+                    "trigger" to "build", "reason" to "not_ready", "state" to "failed_0",
+                    "detail" to "ads: Internal error. [AdMobAdapter=0]",
+                ),
             ),
             backend.events.map { it.second },
         )
