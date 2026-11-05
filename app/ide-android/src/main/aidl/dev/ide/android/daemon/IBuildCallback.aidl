@@ -31,6 +31,10 @@ interface IBuildCallback {
     // background-activity-launch rules — the UI has a foreground activity, so it can.
     oneway void onLaunchPackage(String packageName);
 
+    // A plugin build for "Run plugin in sandbox" is ready at [apkPath]; start the sandbox HERE in the UI process,
+    // for the same reason as onLaunchPackage: only a process with a visible activity may start one.
+    oneway void onLaunchPluginSandbox(String apkPath);
+
     // The android "Run" install needs the user to confirm; start the OS confirmation [confirm] HERE in the UI
     // process, which holds it while a full-screen ad is on screen (FullScreenAdGate).
     oneway void onInstallConfirm(in Intent confirm);

@@ -622,6 +622,17 @@ class CodeAssistAppState(
         screen = Screen.Plugins
     }
 
+    /**
+     * The Plugins screen on its Installed tab, back to Home: where a "plugin was turned off after it crashed"
+     * or "started without plugins" notification leads, so the user can see which and turn it back on.
+     */
+    fun openInstalledPlugins() {
+        pluginsReturn = Screen.Projects
+        pluginsStartTab = dev.ide.ui.screens.PluginsTab.Installed
+        hubReturn = Screen.Projects
+        screen = Screen.Plugins
+    }
+
     /** Any other way into the Plugins screen (the hub): its usual tab, back to the hub. */
     fun resetPluginsEntry() {
         pluginsReturn = Screen.Hub
@@ -1361,6 +1372,7 @@ class CodeAssistAppState(
             // "Someone answered your question": the route carries the thread.
             route.startsWith(LEARN_THREAD_ROUTE) -> openThread(route.removePrefix(LEARN_THREAD_ROUTE))
             route.equals(Screen.You.name, ignoreCase = true) -> openYou()
+            route.equals("plugins", ignoreCase = true) -> openInstalledPlugins()
             // A home tab by name (`challenges` for the daily challenge, `Store`, `Learn`).
             else -> HomeTab.entries.firstOrNull { it.name.equals(route, ignoreCase = true) }?.let {
                 selectHomeTab(it)

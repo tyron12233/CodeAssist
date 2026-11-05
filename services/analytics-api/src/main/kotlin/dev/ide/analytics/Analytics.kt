@@ -149,6 +149,10 @@ object Events {
     const val APP_CRASH = "app_crash"       // uncaught exception (fatal path)
     const val ERROR_LOGGED = "error_logged"  // a caught ERROR-level failure (non-fatal, scrubbed)
     const val APP_ANR = "app_anr"            // a previous process killed for not responding (scrubbed thread dump)
+    // The main thread blocked for seconds and then recovered (`duration_ms`, the scrubbed main stack sampled
+    // while it was stuck, `in_plugin`). Play counts these as ANRs when input was waiting; [APP_ANR] only ever
+    // sees the ones that ended the process.
+    const val MAIN_STALL = "main_stall"
 
     // ads: how often full-screen ads show and how people respond to them (Android only). The `ad_` and `ads_`
     // prefixes are what [categoryOf] keys on.
@@ -159,7 +163,7 @@ object Events {
 
     /** The category an event name belongs to: PERFORMANCE unless it is a stability, usage or ad event. */
     fun categoryOf(name: String): EventCategory = when {
-        name == APP_CRASH || name == ERROR_LOGGED || name == APP_ANR -> EventCategory.CRASH
+        name == APP_CRASH || name == ERROR_LOGGED || name == APP_ANR || name == MAIN_STALL -> EventCategory.CRASH
         name == FEATURE_USED -> EventCategory.USAGE
         name.startsWith("ad_") || name.startsWith("ads_") -> EventCategory.ADS
         else -> EventCategory.PERFORMANCE

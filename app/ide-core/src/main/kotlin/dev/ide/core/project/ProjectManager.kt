@@ -174,6 +174,17 @@ class ProjectManager private constructor(
     private var prefsCache: Properties? = null
     private var prefsStamp: PrefsStamp? = null
 
+    /**
+     * What turns a crashing installed plugin off for the next launch, and starts without plugins after repeated
+     * unexplained crashes (see [dev.ide.core.plugins.PluginCrashGuard]). Declared before [env], which it gates.
+     */
+    val pluginCrashGuard: dev.ide.core.plugins.PluginCrashGuard by lazy {
+        dev.ide.core.plugins.PluginCrashGuard(object : dev.ide.core.plugins.PluginCrashGuard.Prefs {
+            override fun get(key: String): String? = preference(key)
+            override fun set(values: Map<String, String>) = setPreferences(values)
+        })
+    }
+
     init {
         Files.createDirectories(projectsRoot)
         // What an earlier delete could not remove. Off the caller's thread: this runs at app start, and a
@@ -198,7 +209,19 @@ class ProjectManager private constructor(
         // Read lazily: this manager's preference file is opened on demand, so handing over the reader during
         // construction is safe and the keymap sees a rebinding the moment it is saved.
         preferences = { key -> preference(key) },
+        crashSuspended = pluginCrashGuard.crashSuspended(),
+        safeMode = pluginCrashGuard.safeModeRequested(),
     )
+
+    init {
+        // A plugin turned off for crashing that has since been updated loaded again above; take it out of the
+        // disabled set too, before [pluginChanges] reads that set as this launch's starting point.
+        val lifted = env.liftedCrashSuspensions
+        if (lifted.isNotEmpty()) {
+            setPreference(DISABLED_PLUGINS_KEY, (readDisabledPlugins() - lifted).sorted().joinToString(","))
+            pluginCrashGuard.forget(lifted)
+        }
+    }
 
     /**
      * The language servers the user configured in Settings (gopls, rust-analyzer, ...), registered with the
@@ -719,6 +742,8 @@ class ProjectManager private constructor(
 
     /** Persist [ids] as the disabled built-in plugins; takes effect on the next launch. */
     fun setDisabledPlugins(ids: Set<String>) {
+        // A plugin turned off for crashing that the user turns back on is theirs to try again: forget the crash.
+        pluginCrashGuard.forget(readDisabledPlugins() - ids)
         setPreference(DISABLED_PLUGINS_KEY, ids.sorted().joinToString(","))
         pluginChanges.choicesChanged(ids, consentedPlugins())
     }

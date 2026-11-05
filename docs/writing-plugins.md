@@ -2736,6 +2736,32 @@ exactly as written, and so is one whose facet the plugin does not declare (`ui.t
 id, and **Settings > Plugins** offers **Logs** on an installed plugin's row, which opens the Logs viewer
 filtered to that plugin. That is the difference between reading your own output and reading the whole IDE's.
 
+**Trying a build in the plugin sandbox.** A plugin project's Run picker offers **Run plugin in sandbox** first
+(on device). It builds the APK and opens a second copy of CodeAssist, in its own process and with its own
+projects and settings, that loads this build straight from the output: nothing is installed, nothing asks for
+consent, and the IDE you are working in is untouched. The sandbox's status bar is amber and names the plugin, so
+the two windows are never confused. Run again to try a new build; the old sandbox is replaced.
+
+What makes it worth using is what happens when the plugin misbehaves there:
+
+- A throw on the sandbox's main thread ends the sandbox, and the stack trace appears in the IDE you ran it from
+  ("Plugin crashed the sandbox").
+- A main thread blocked for about 3.5 seconds ends the sandbox too, with where it was stuck ("Plugin froze the
+  sandbox"). That is the same work that would make the real IDE stop responding, so move it off the main thread.
+- A shorter freeze (from about 2.5 seconds) is reported inside the sandbox, as a notification naming the plugin.
+
+The sandbox ends itself before Android records either one, so testing a broken build never counts against the
+IDE's crash or ANR rate on Google Play. A native crash in your plugin's own `.so` is the exception: it goes
+straight to the system.
+
+**What happens to an installed plugin that crashes the IDE.** CodeAssist names a crash after the topmost frame
+whose class came from a plugin's own APK. A crash that takes the IDE down turns that plugin off for the next
+launch, and the user is told which plugin it was and why. It turns back on when a new version is installed
+(any reinstall while the IDE runs counts, so your next build is tried again), or when the user switches it back
+on. A plugin that keeps the main thread blocked for seconds is named in a notification, and its log gets the
+stack. If the IDE dies right after starting twice in a row and no plugin can be blamed, the next launch starts
+without any installed plugin and says so; the one after that tries them again.
+
 Three things go into the plugin app, and a fourth if it has UI.
 
 **1. The plugin manifest**, as `res/raw/codeassist_plugin.toml`. This is `PluginManifest` in TOML, and it is

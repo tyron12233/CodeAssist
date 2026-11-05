@@ -90,6 +90,17 @@ class ApplicationEnvironment(
      * before it. Defaults to nothing stored, which is correct for a test or a standalone bootstrap.
      */
     val preferences: (String) -> String? = { null },
+    /**
+     * Installed plugins turned off because they crashed the IDE, by id, with the version that crashed. Each is
+     * also in [disabledPluginIds]; this says why, for its row. One whose installed version is now different
+     * (it was updated) loads again and is listed in [liftedCrashSuspensions] so the host can forget it.
+     */
+    crashSuspended: Map<String, String> = emptyMap(),
+    /**
+     * Start without any installed plugin: the host saw the IDE crash repeatedly right after launch and could
+     * not tell which code did it. Built-ins load as usual; each installed plugin's row says why it did not.
+     */
+    safeMode: Boolean = false,
 ) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
@@ -175,6 +186,18 @@ class ApplicationEnvironment(
      */
     val enabledUiPlugins: List<UiPlugin>
 
+    /**
+     * Each installed plugin that loaded this launch, by id, with the classloader its code came off: what a
+     * crash or a stalled main thread is blamed by (see [dev.ide.core.plugins.PluginBlame]).
+     */
+    val externalPluginLoaders: Map<String, ClassLoader>
+
+    /** Crash-suspended plugins that load again this launch because their installed version changed. */
+    val liftedCrashSuspensions: Set<String>
+
+    /** True when [safeMode] was asked for AND there were installed plugins it kept from loading. */
+    val safeModeApplied: Boolean
+
     init {
         // Before any plugin loads, so a plugin's `register` can resolve it. This is the one service a plugin
         // may need during load itself: what it reports at startup ("no toolchain for this device's ABI") is
@@ -196,9 +219,21 @@ class ApplicationEnvironment(
         val discovered = scan.usable
         rejectedPlugins = scan.rejected
         val failures = LinkedHashMap<String, String>()
+        // A plugin turned off for crashing gets another chance once it is a different version: an update is the
+        // fix its author shipped, and it should not stay off until someone thinks to look for it.
+        liftedCrashSuspensions = discovered.filter { d ->
+            crashSuspended[d.manifest.id]?.let { it != d.manifest.version } == true
+        }.mapTo(HashSet()) { it.manifest.id }
+        for (d in discovered) {
+            val crashedVersion = crashSuspended[d.manifest.id] ?: continue
+            if (d.manifest.id in liftedCrashSuspensions || d.manifest.id !in disabledPluginIds) continue
+            // Shown after "Did not load:" on the plugin's page, so it reads as the rest of that sentence.
+            failures[d.manifest.id] = "it was turned off after it crashed CodeAssist (version $crashedVersion). " +
+                "It turns back on when a new version is installed, or turn it on here to try again."
+        }
         pluginCatalog = PluginCatalog(
             all = builtIns.map { it.engine.manifest } + discovered.map { it.manifest },
-            disabledIds = disabledPluginIds,
+            disabledIds = disabledPluginIds - liftedCrashSuspensions,
             externalIds = discovered.mapTo(HashSet()) { it.manifest.id },
             consentedIds = consentedPluginIds,
         )
@@ -211,7 +246,15 @@ class ApplicationEnvironment(
         // loader its engine facet came from, and a class named in both of the manifest's lists is the SAME
         // object, which is what makes the two halves one program (see ExternalUiFacets).
         val loaded = LinkedHashMap<String, ExternalPluginLoader.Result.Loaded>()
-        for (d in discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }) {
+        val wouldLoad = discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }
+        safeModeApplied = safeMode && wouldLoad.isNotEmpty()
+        if (safeModeApplied) {
+            for (d in wouldLoad) {
+                failures[d.manifest.id] = "CodeAssist started without plugins this time, after closing " +
+                    "unexpectedly several times in a row. It loads again on the next start."
+            }
+        }
+        for (d in if (safeModeApplied) emptyList() else wouldLoad) {
             when (val r = loader.load(d)) {
                 is ExternalPluginLoader.Result.Loaded -> {
                     external[r.manifest.id] = r.plugin
@@ -277,6 +320,9 @@ class ApplicationEnvironment(
         installedPlugins = discovered.map {
             InstalledPlugin(it.manifest, it.origin, error = failures[it.manifest.id])
         }
+        // Every plugin that got a classloader: even one whose register() threw may have left code behind (a
+        // thread, a listener) that runs later, and its frames should still be named for what they are.
+        externalPluginLoaders = loaded.mapValues { it.value.classLoader }
         enabledUiPlugins = enabledBuiltIns.mapNotNull { it.ui } + externalUi
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
         // After every plugin: a definition's adapters must know which languages already have a backend.

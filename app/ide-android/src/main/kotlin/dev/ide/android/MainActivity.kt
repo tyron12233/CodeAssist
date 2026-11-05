@@ -50,7 +50,7 @@ private const val ADS_STARTUP_DELAY_MS = 5_000L
  * ad init, source-root search) in AndroidHostUi. This activity is just lifecycle + the Compose host + the SAF
  * launchers (which must be remembered in composition). A splash shows while the engine starts.
  */
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
 
     private var session: AndroidIde.Session? = null
 
@@ -62,6 +62,12 @@ class MainActivity : ComponentActivity() {
 
     /** UMP consent flow (gathers ad consent before AdMob init; drives the "Manage ad consent" Settings entry). */
     private val adConsent by lazy { AdConsentManager(this) }
+
+    @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
+    private fun shareResourceContext() = org.jetbrains.compose.resources.setResourceReaderAndroidContext(applicationContext)
+
+    /** True in the plugin sandbox's process: a throwaway IDE for a plugin build, with no ads. */
+    private val inSandbox by lazy { dev.ide.android.plugins.SandboxProcess.isSandbox(this) }
 
     /**
      * A store sign-in redirect that arrived before the engine finished booting.
@@ -97,6 +103,10 @@ class MainActivity : ComponentActivity() {
         // `SystemBarStyle.dark` here forced light icons even in light mode.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Compose resources find their Context through a ContentProvider, and providers only start in the app's
+        // main process. The plugin sandbox runs this activity in its own process, where every stringResource()
+        // threw "Android context is not initialized" on the first frame; hand the context over directly.
+        if (inSandbox) shareResourceContext()
         // Lets Settings offer "App icon"; the engine shared with the desktop has no launcher of its own.
         AppIcons.host = AndroidAppIcons(applicationContext)
         // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
@@ -107,7 +117,9 @@ class MainActivity : ComponentActivity() {
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement). Failure resolves
         // too, so a consent hiccup never blocks the IDE. The SDK itself starts later, once launch has settled
         // (see the LaunchedEffect below the ad host).
-        adConsent.gather(this) { adConsentResolved.value = true }
+        // The plugin sandbox (this activity's subclass, in its own process) shows no ads, so it asks for no
+        // ad consent either.
+        if (!inSandbox) adConsent.gather(this) { adConsentResolved.value = true }
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
@@ -308,7 +320,7 @@ class MainActivity : ComponentActivity() {
             // wait (see AndroidAdHost.start); one that is gone by then never requests.
             val engineUp = backend != null
             LaunchedEffect(engineUp, adConsentResolved.value) {
-                if (!engineUp || !adConsentResolved.value) return@LaunchedEffect
+                if (!engineUp || !adConsentResolved.value || inSandbox) return@LaunchedEffect
                 delay(ADS_STARTUP_DELAY_MS)
                 // Off the main thread, as the SDK asks: initialize() loads WebView classes and builds package
                 // contexts synchronously before its async part, and that stall showed up in ANR reports.
@@ -372,18 +384,22 @@ class MainActivity : ComponentActivity() {
                 onDispose { registration?.dispose() }
             }
             when {
-                b != null -> CodeAssistApp(
-                    b,
-                    fileActions = fileActions,
-                    adHost = adHost,
-                    composePreviewHost = previewHost,
-                    importPackagePath = importPackagePath,
-                    openStoreItemId = storeLink.value,
-                    onStoreItemIdHandled = { storeLink.value = null },
-                    openNotificationTarget = notificationTarget.value,
-                    onNotificationTargetHandled = { notificationTarget.value = null },
-                    onProjectOpenChange = { projectOpen.value = it },
-                )
+                b != null -> androidx.compose.foundation.layout.Box {
+                    CodeAssistApp(
+                        b,
+                        fileActions = fileActions,
+                        adHost = adHost,
+                        composePreviewHost = previewHost,
+                        importPackagePath = importPackagePath,
+                        openStoreItemId = storeLink.value,
+                        onStoreItemIdHandled = { storeLink.value = null },
+                        openNotificationTarget = notificationTarget.value,
+                        onNotificationTargetHandled = { notificationTarget.value = null },
+                        onProjectOpenChange = { projectOpen.value = it },
+                    )
+                    // The sandbox looks exactly like the IDE it was started from; say which one this is.
+                    if (inSandbox) SandboxBand()
+                }
 
                 error != null -> Splash("Failed to start: $error")
                 else -> Splash("Starting CodeAssist…")

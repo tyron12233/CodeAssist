@@ -31,6 +31,17 @@ object PackageLaunchBridge {
      *  caller must NOT also launch locally); false if there's no UI to forward to. */
     fun forwardLaunch(packageName: String): Boolean = forwarder?.invoke(packageName) ?: false
 
+    @Volatile
+    private var sandboxForwarder: ((String) -> Boolean)? = null
+
+    /** Registered alongside [setForwarder]: ships "start the plugin sandbox with this APK" to the UI process. */
+    fun setSandboxForwarder(f: ((String) -> Boolean)?) {
+        sandboxForwarder = f
+    }
+
+    /** Try to hand the plugin sandbox start to the UI process. True if it was handed off. */
+    fun forwardSandbox(apkPath: String): Boolean = sandboxForwarder?.invoke(apkPath) ?: false
+
     /** Registered alongside [setForwarder]: ships an install confirmation to the UI process. */
     fun setConfirmForwarder(f: ((Intent) -> Boolean)?) {
         confirmForwarder = f

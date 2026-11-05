@@ -206,6 +206,15 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
                 dev.ide.android.ApkLauncher.launch(appContext, pkg) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
             }
         },
+        onLaunchPluginSandbox = { path ->
+            // The daemon built the plugin; the sandbox is started from this process, which has the visible activity.
+            val sandbox = dev.ide.android.plugins.AndroidPluginSandbox.current
+            if (path.isNotEmpty() && sandbox != null) {
+                runCatching {
+                    sandbox.launch(java.nio.file.Paths.get(path)) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
+                }
+            }
+        },
         onInstallConfirm = { confirm ->
             dev.ide.android.FullScreenAdGate.runWhenClear {
                 runCatching { appContext.startActivity(confirm.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }

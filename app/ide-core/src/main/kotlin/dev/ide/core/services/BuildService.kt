@@ -735,6 +735,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 // On device, the android Run builds + installs + launches. On desktop it does the same onto a
                 // device over adb, one entry per connected device, and the assemble task stays beside them.
                 val installer = ctx.apkInstaller
+                // A plugin is tried in the sandbox IDE first: no install, no restart, and a crash there leaves
+                // this IDE standing. Listed ahead of "Install plugin" so it is what Run does by default.
+                if (PluginProject.isPluginModule(m) && pluginSandbox() != null) {
+                    add(RunTaskOption("pluginSandbox:${m.name}:${v.name}", "Run plugin in sandbox $cap · ${m.name}", "android"))
+                }
                 if (installer != null) {
                     val action = if (PluginProject.isPluginModule(m)) "Install plugin" else "Run"
                     val targets = if (installer.choosesTarget) installer.targets() else emptyList()
@@ -1079,6 +1084,37 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                     launch(
                         module.name, graph, "> build ${module.name}"
                     ) { log -> log("Built: ${jarPath(module)}") }
+                }
+
+                id.startsWith("pluginSandbox:") -> {
+                    val parts = id.removePrefix("pluginSandbox:").split(":", limit = 2)
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val sandbox = pluginSandbox() ?: return fail("The plugin sandbox is only available on device.")
+                    val android = androidBuild ?: return fail("Android SDK not found.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val graph = android.createBuildGraph(
+                        project,
+                        BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE),
+                        buildContext(),
+                    )
+                    val apk = AndroidBuildSystem.signedApkPath(module, variant)
+                    launch(
+                        module.name,
+                        graph,
+                        "> Run plugin in sandbox $variant · ${module.name}",
+                        firstBuildDexBanner(module, variant)
+                    ) { log ->
+                        if (sandbox.launch(apk, log)) {
+                            log("")
+                            log("Opened a sandbox copy of CodeAssist with this build of the plugin loaded. It has")
+                            log("its own projects and settings; this IDE is untouched. If the plugin crashes it,")
+                            log("the stack trace comes back here. Run again to try a new build.")
+                        }
+                    }
                 }
 
                 id.startsWith("androidRun:") -> {
@@ -1616,6 +1652,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
 
     /** A build-blocking message when [module] (or a module it depends on) has unresolved declared dependencies,
      *  else null. A build can't succeed against a missing classpath, so we refuse with a clear, actionable why. */
+    /** The host's sandbox IDE for trying a plugin build, or null where there is none (desktop, tests). */
+    private fun pluginSandbox(): dev.ide.core.PluginSandbox? =
+        runCatching { ctx.store.workspace.serviceOrNull(dev.ide.core.PLUGIN_SANDBOX) }.getOrNull()
+
     private fun unresolvedBlocker(module: Module): String? {
         val bad = ctx.moduleBuildClosure(module)
             .flatMap { m -> ctx.dependencies.declaredUnresolved(m).map { m.name to it } }

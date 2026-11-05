@@ -28,6 +28,8 @@ class PluginPackageWatcher(
     context: Context,
     private val source: ApkPluginSource,
     private val changes: PluginChanges,
+    /** Told the id of each plugin app installed or updated while the IDE runs (a new build of it is new code). */
+    private val onPluginInstalled: (pluginId: String) -> Unit = {},
 ) {
 
     private val appContext = context.applicationContext
@@ -73,6 +75,7 @@ class PluginPackageWatcher(
         // Installs are reported for every app on the device, so this is where non-plugins are dropped.
         val candidate = source.candidate(pkg) ?: return
         changes.packageInstalled(pkg, nameOf(candidate))
+        (candidate as? DiscoveredPlugin)?.let { runCatching { onPluginInstalled(it.manifest.id) } }
         log.info("plugin app installed or updated: $pkg (restart to apply)")
     }
 

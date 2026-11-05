@@ -109,6 +109,24 @@ interface NotificationPresenter {
  */
 val APP_RESTARTER = ServiceKey<AppRestarter>("platform.appRestarter")
 
+/**
+ * A host that can run a second, throwaway copy of the IDE with a plugin under development loaded straight from
+ * its build output: the plugin's "Run". On Android it is the same installed app in its own process, with its own
+ * home (projects, preferences, caches), so the plugin can crash or freeze it without touching the IDE the
+ * developer is working in, and nothing is installed or restarted to try a change. Absent (desktop, tests) means
+ * a plugin project offers only "Install plugin".
+ */
+val PLUGIN_SANDBOX = ServiceKey<PluginSandbox>("platform.pluginSandbox")
+
+/** Implemented by the launcher; see [PLUGIN_SANDBOX]. */
+interface PluginSandbox {
+    /**
+     * Stop any sandbox already running and start a fresh one that loads the plugin in [apk], writing progress
+     * to [log]. Returns false when it could not be started, having said why through [log].
+     */
+    fun launch(apk: java.nio.file.Path, log: (String) -> Unit): Boolean
+}
+
 /** Implemented by the launcher; see [APP_RESTARTER]. */
 interface AppRestarter {
     /** Take the app down, every process of it, and bring its UI back up. Does not return on a host that
