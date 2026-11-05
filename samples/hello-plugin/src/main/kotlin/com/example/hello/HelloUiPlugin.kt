@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.ide.plugin.ui.AppTheme
 import dev.ide.plugin.ui.ColorScheme
 import dev.ide.plugin.ui.EditorLanguage
 import dev.ide.plugin.ui.EditorPreview
@@ -51,6 +52,9 @@ class HelloUiPlugin : UiPlugin {
         // older hosts (see minHostVersion in res/raw/codeassist_plugin.toml).
         try {
             ui.colorScheme(ColorScheme(id = "midnight", name = "Hello Midnight", json = MIDNIGHT_SCHEME))
+            // And a whole app theme, offered under Appearance -> Accent. A real one is Material Theme Builder's
+            // export; this names a seed and a few roles, and the rest is generated from the seed.
+            ui.appTheme(AppTheme(id = "dune", name = "Hello Dune", json = DUNE_THEME))
         } catch (e: LinkageError) {
             // An older IDE: no plugin schemes there.
         }
@@ -218,6 +222,28 @@ private val MIDNIGHT_SCHEME = """
     "string": "#1B7F45",
     "comment": { "fg": "#7A84A0", "italic": true },
     "type": "#9B2DB0"
+  }
+}
+"""
+
+/** Material Theme Builder's shape, trimmed: a seed, and the roles worth pinning by hand. */
+private val DUNE_THEME = """
+{
+  "seed": "#C08A3E",
+  "schemes": {
+    "dark": {
+      "primary": "#F2BE73",
+      "onPrimary": "#452B00",
+      "primaryContainer": "#634000",
+      "background": "#17120C",
+      "surface": "#17120C",
+      "surfaceContainer": "#241D15",
+      "surfaceContainerHigh": "#2F271F"
+    },
+    "light": {
+      "primary": "#7C5800",
+      "surface": "#FFF8F2"
+    }
   }
 }
 """
