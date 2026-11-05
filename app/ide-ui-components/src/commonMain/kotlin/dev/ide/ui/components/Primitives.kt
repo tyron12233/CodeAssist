@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
@@ -133,6 +135,36 @@ fun Modifier.entranceSlideUp(delayMillis: Int = 0): Modifier {
     )
     return this.graphicsLayer { translationY = (1f - progress) * 9.dp.toPx() }
 }
+
+/**
+ * One-shot entrance for a screen's parts: fade in while rising [rise], each [order] starting
+ * [ENTRANCE_STAGGER_MS] after the one before (capped at [ENTRANCE_MAX_ORDER], so a long list does not keep
+ * the last item waiting). Give a screen's pieces increasing orders, top to bottom, to stagger them.
+ *
+ * The wait is the tween's own `delayMillis`, not a coroutine `delay`, so it runs on the frame clock and
+ * scales with the system's animation speed: with animations turned off (MotionDurationScale 0, Android's
+ * animator scale or iOS Reduce Motion) everything is simply there on the first frame. Read in
+ * `graphicsLayer`, so the animation redraws the layer without recomposing what it wraps. It replays when
+ * the element re-enters composition (a tab revisited), never on recomposition.
+ */
+@Composable
+fun Modifier.entranceReveal(order: Int = 0, rise: Dp = 14.dp): Modifier {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            1f,
+            tween(Motion.BASE, delayMillis = order.coerceIn(0, ENTRANCE_MAX_ORDER) * ENTRANCE_STAGGER_MS, easing = Motion.quiet),
+        )
+    }
+    return graphicsLayer {
+        val p = progress.value
+        alpha = p
+        translationY = (1f - p) * rise.toPx()
+    }
+}
+
+private const val ENTRANCE_STAGGER_MS = 30
+private const val ENTRANCE_MAX_ORDER = 6
 
 /**
  * One-shot pop entrance (`scale(0.96) translateY(5px) → none`, expressive spring). Used for popovers like

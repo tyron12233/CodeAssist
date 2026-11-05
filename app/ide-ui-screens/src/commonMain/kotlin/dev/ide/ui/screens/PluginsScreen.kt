@@ -1,5 +1,13 @@
 package dev.ide.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.key
+import dev.ide.ui.theme.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +66,7 @@ import dev.ide.ui.backend.UiPluginChangeKind
 import dev.ide.ui.backend.UiPluginDownload
 import dev.ide.ui.backend.UiPluginDownloads
 import dev.ide.ui.backend.UiPluginInfo
+import dev.ide.ui.components.entranceReveal
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.CapabilityList
@@ -214,56 +223,83 @@ fun PluginsScreen(
         large = detail == null,
     ) { innerPadding ->
         Column(Modifier.widthIn(max = 720.dp).fillMaxSize().padding(innerPadding)) {
-            // Above the tabs: a change on any tab needs the same restart, so the hint is not per-tab.
-            if (pending.isNotEmpty()) RestartHint(pending, onRestart)
+            // Above the tabs: a change on any tab needs the same restart, so the hint is not per-tab. It grows
+            // in when a toggle first leaves something waiting and folds away when the change is undone; the
+            // last list is kept while it folds so the hint does not empty out on its way out (a plain holder,
+            // not state: writing state during composition would invalidate the composition writing it).
+            val lastPending = remember { arrayOf(pending) }
+            if (pending.isNotEmpty()) lastPending[0] = pending
+            AnimatedVisibility(
+                visible = pending.isNotEmpty(),
+                enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet)) + fadeIn(tween(Motion.BASE)),
+                exit = shrinkVertically(tween(Motion.FAST, easing = Motion.soft)) + fadeOut(tween(Motion.FAST)),
+            ) {
+                RestartHint(lastPending[0], onRestart, Modifier.entranceReveal(order = 0))
+            }
             if (detail != null) {
-                PluginDetail(
-                    p = detail,
-                    onReview = { asking = detail },
-                    onToggle = { enabled -> backend.settings.setPluginEnabled(detail.id, enabled); refresh() },
-                    onOpenLogs = onOpenLogs?.takeIf { !detail.builtIn && detail.togglable }?.let { open -> { open(detail.id) } },
-                    onOpenApp = detail.app?.takeIf { it.canOpen }?.let { { backend.settings.openPluginApp(detail.id) } },
-                    onOpenAppInfo = detail.app?.let { { backend.settings.openPluginAppInfo(detail.id) } },
-                )
+                // Keyed by plugin, so opening a page reveals it the same way the list came in.
+                key(detail.id) {
+                    Box(Modifier.entranceReveal(order = 0)) {
+                        PluginDetail(
+                            p = detail,
+                            onReview = { asking = detail },
+                            onToggle = { enabled -> backend.settings.setPluginEnabled(detail.id, enabled); refresh() },
+                            onOpenLogs = onOpenLogs?.takeIf { !detail.builtIn && detail.togglable }?.let { open -> { open(detail.id) } },
+                            onOpenApp = detail.app?.takeIf { it.canOpen }?.let { { backend.settings.openPluginApp(detail.id) } },
+                            onOpenAppInfo = detail.app?.let { { backend.settings.openPluginAppInfo(detail.id) } },
+                        )
+                    }
+                }
                 return@Column
             }
-            PluginTabs(tab, installed.size, builtIn.size) { tab = it; query = "" }
-            when (tab) {
-                PluginsTab.Get -> GetPlugins(backend, onOpenUrl)
-                else -> {
-                    val all = if (tab == PluginsTab.BuiltIn) builtIn else installed
-                    val shown = if (query.isBlank()) all else all.filter { it.matches(query) }
-                    Column(
-                        Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        // A search is worth its space once a list no longer fits a screen.
-                        if (all.size > 6) {
-                            OutlinedTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                singleLine = true,
-                                placeholder = { Text(stringResource(Res.string.plugins_search)) },
-                                leadingIcon = { Symbol(CaSymbols.search, contentDescription = null, size = 20.dp) },
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                shape = RoundedCornerShape(Ca.radius.pill),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                        when {
-                            all.isEmpty() -> EmptyNote(stringResource(Res.string.plugins_installed_empty))
-                            shown.isEmpty() -> EmptyNote(stringResource(Res.string.plugins_search_none, query))
-                            else -> for (p in shown) {
-                                PluginCard(
-                                    p,
-                                    onOpen = { detailId = p.id },
-                                    onReview = { asking = p },
-                                    onToggle = { enabled -> backend.settings.setPluginEnabled(p.id, enabled); refresh() },
+            Box(Modifier.entranceReveal(order = 1)) {
+                PluginTabs(tab, installed.size, builtIn.size) { tab = it; query = "" }
+            }
+            // Keyed by tab: switching tabs composes the new tab's list afresh, so it staggers in again.
+            key(tab) {
+                when (tab) {
+                    PluginsTab.Get -> GetPlugins(backend, onOpenUrl)
+                    else -> {
+                        val all = if (tab == PluginsTab.BuiltIn) builtIn else installed
+                        val shown = if (query.isBlank()) all else all.filter { it.matches(query) }
+                        Column(
+                            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            // A search is worth its space once a list no longer fits a screen.
+                            if (all.size > 6) {
+                                OutlinedTextField(
+                                    value = query,
+                                    onValueChange = { query = it },
+                                    singleLine = true,
+                                    placeholder = { Text(stringResource(Res.string.plugins_search)) },
+                                    leadingIcon = { Symbol(CaSymbols.search, contentDescription = null, size = 20.dp) },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    shape = RoundedCornerShape(Ca.radius.pill),
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
+                            when {
+                                all.isEmpty() -> EmptyNote(stringResource(Res.string.plugins_installed_empty))
+                                shown.isEmpty() -> EmptyNote(stringResource(Res.string.plugins_search_none, query))
+                                // Keyed by id: a toggle re-reads the list without re-revealing its cards, and a
+                                // plugin that turns up (installed meanwhile, or back from a search) slides in alone.
+                                else -> shown.forEachIndexed { i, p ->
+                                    key(p.id) {
+                                        Box(Modifier.entranceReveal(order = 2 + i)) {
+                                            PluginCard(
+                                                p,
+                                                onOpen = { detailId = p.id },
+                                                onReview = { asking = p },
+                                                onToggle = { enabled -> backend.settings.setPluginEnabled(p.id, enabled); refresh() },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            AdSlot(AdPlacement.SETTINGS)
                         }
-                        AdSlot(AdPlacement.SETTINGS)
                     }
                 }
             }
@@ -348,9 +384,9 @@ private const val MAX_LISTED_CHANGES = 4
  * than counted, so an installed plugin app's update is visible as something the IDE has seen.
  */
 @Composable
-private fun RestartHint(changes: List<UiPluginChange>, onRestart: (() -> Unit)?) {
+private fun RestartHint(changes: List<UiPluginChange>, onRestart: (() -> Unit)?, modifier: Modifier = Modifier) {
     Column(
-        Modifier.fillMaxWidth()
+        modifier.fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.lg))
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -682,7 +718,12 @@ private fun GetPlugins(backend: IdeBackend, onOpenUrl: ((String) -> Unit)?) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(Res.string.plugins_get_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            stringResource(Res.string.plugins_get_intro),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.entranceReveal(order = 2),
+        )
         val r = result
         when {
             r == null -> Row(
@@ -705,7 +746,8 @@ private fun GetPlugins(backend: IdeBackend, onOpenUrl: ((String) -> Unit)?) {
                         TextButton({ result = null; attempt++ }) { Text(stringResource(Res.string.plugins_get_retry)) }
                     }
                 }
-                for (d in r.plugins) DownloadCard(d, onOpenUrl)
+                // The list arrives after a fetch, so it staggers in when it lands rather than with the screen.
+                r.plugins.forEachIndexed { i, d -> key(d.id) { Box(Modifier.entranceReveal(order = 1 + i)) { DownloadCard(d, onOpenUrl) } } }
             }
         }
     }

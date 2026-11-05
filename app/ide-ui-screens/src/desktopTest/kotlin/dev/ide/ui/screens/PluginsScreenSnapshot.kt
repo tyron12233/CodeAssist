@@ -171,14 +171,16 @@ class PluginsScreenSnapshot {
         }
         try {
             scene.render()
-            scene.render(16_000_000L)
+            // The screen staggers in; step the clock until it has settled (and before a click, so the click
+            // lands where the settled layout puts its target).
+            for (frame in 1..20) scene.render(frame * 50_000_000L)
             if (click != null) {
                 scene.sendPointerEvent(PointerEventType.Press, click)
                 scene.sendPointerEvent(PointerEventType.Release, click)
-                // The tab indicator animates across; step the clock until it has settled.
-                for (frame in 2..40) scene.render(frame * 50_000_000L)
+                // The tab indicator animates across and the new list staggers in; step until both settle.
+                for (frame in 21..60) scene.render(frame * 50_000_000L)
             }
-            val img = scene.render(2_400_000_000L)
+            val img = scene.render(3_200_000_000L)
             val png = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
             File("$OUT_DIR/$name").apply { parentFile?.mkdirs() }.writeBytes(png)
             println("wrote snapshot: $OUT_DIR/$name (${png.size} bytes)")

@@ -145,13 +145,17 @@ class AiHomeSnapshot {
         snapshot("ai-home-chat-dark.png", dark = true) { Home(backend(chat)) }
     }
 
-    private fun snapshot(name: String, dark: Boolean, content: @Composable () -> Unit) {
+    /** The landing part-way into its entrance: greeting in, the ideas and composer still arriving. */
+    @Test
+    fun renderLandingEnteringDark() = snapshot("ai-home-entering-dark.png", dark = true, frames = 8) { Home(backend()) }
+
+    private fun snapshot(name: String, dark: Boolean, frames: Int = 60, content: @Composable () -> Unit) {
         val scene = ImageComposeScene(width = 822, height = 1780, density = Density(2f)) {
             CodeAssistTheme(dark = dark) { content() }
         }
         try {
             var img = scene.render()
-            for (frame in 1..60) img = scene.render(frame * 16_666_667L)
+            for (frame in 1..frames) img = scene.render(frame * 16_666_667L)
             val out = System.getenv("SNAPSHOT_DIR") ?: "build/snapshots"
             File(out).mkdirs()
             File("$out/$name").writeBytes(img.encodeToData(EncodedImageFormat.PNG)!!.bytes)
