@@ -70,7 +70,7 @@ class NdkRunTaskProvider(
             log.info("this IDE has no Run console for plugins; the program's output goes to the build log")
             null
         }
-        val run = NdkRunTask(TaskName(":${module.name}:runNative"), module, { link.outputFor(RUN_ABI) }, toolchain, console, log)
+        val run = NdkRunTask(TaskName(":${module.name}:runNative"), module, { link.outputFor((toolchain()?.hostAbi ?: NdkAbi.ARM64).abiName) }, toolchain, console, log)
         val action = RunAction("> Run ${module.name}", TwoStepGraph(link, run))
         if (console != null) {
             try {
@@ -84,9 +84,6 @@ class NdkRunTaskProvider(
 
     companion object {
         const val ID_PREFIX = "ndkRun:"
-
-        /** The ABI the bundled toolchain targets, and so the only program it can build to run here. */
-        const val RUN_ABI = "arm64-v8a"
     }
 }
 

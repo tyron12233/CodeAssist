@@ -133,7 +133,7 @@ class NativeCppTemplate : ProjectTemplate {
         # $library
 
         A shared library compiled on the device. The toolchain is a clang and an lld built to RUN on Android
-        arm64 and packaged inside the NDK plugin, so nothing here needs a desktop.
+        devices and packaged inside the NDK plugin, so nothing here needs a desktop.
 
         - `app/src/main/cpp/$library.$ext` is the implementation and `$library.h` is its public header.
         - The `[ndk]` table in `app/module.toml` is the build configuration: source directories, ABIs, the

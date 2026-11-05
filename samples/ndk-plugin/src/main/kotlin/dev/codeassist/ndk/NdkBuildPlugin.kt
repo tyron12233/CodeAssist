@@ -191,18 +191,21 @@ internal class NdkCompileTask(
             is NdkToolchain.Status.Ready -> status.version.also { ctx.logger()("ndk: $it") }
         }
 
-        // The toolchain ships one backend, so only the ABI it can target is built. Saying so beats emitting
-        // nothing for the others and leaving the user to wonder why the APK has one lib directory.
-        val buildable = facet.abis.filter { it == SUPPORTED_ABI }
-        (facet.abis - buildable.toSet()).forEach {
-            ctx.diagnostics.report(
-                BuildDiagnostic(
-                    severity = BuildSeverity.WARNING,
-                    message = "ndk: skipping ABI '$it' — the bundled toolchain only targets $SUPPORTED_ABI",
-                    source = "ndk",
-                    location = DiagnosticLocation(module.dir.path),
+        // A library is built for every ABI the module asks for. A program (Run) is built for exactly one: the
+        // device's own, because it is started here and nothing else can run. An ABI the toolchain does not know
+        // is reported rather than dropped, so the user is not left wondering why the APK lacks a lib directory.
+        val buildable: List<NdkAbi> = if (executable) listOf(toolchain.hostAbi) else facet.abis.mapNotNull { NdkAbi.byName(it) }.distinct()
+        if (!executable) {
+            facet.abis.filter { NdkAbi.byName(it) == null }.forEach {
+                ctx.diagnostics.report(
+                    BuildDiagnostic(
+                        severity = BuildSeverity.WARNING,
+                        message = "ndk: skipping unknown ABI '$it' — supported: ${NdkAbi.names.joinToString()}",
+                        source = "ndk",
+                        location = DiagnosticLocation(module.dir.path),
+                    )
                 )
-            )
+            }
         }
         if (buildable.isEmpty()) return skip(ctx, "no ABI this toolchain can target")
 
@@ -210,7 +213,7 @@ internal class NdkCompileTask(
             ctx.checkCanceled()
             val result = buildAbi(ctx, toolchain, version, sources, abi)
             if (result != null) return result
-            if (!executable) removeLegacyOutput(ctx, abi)
+            if (!executable) removeLegacyOutput(ctx, abi.abiName)
         }
         return TaskResult.Success
     }
@@ -242,8 +245,9 @@ internal class NdkCompileTask(
         toolchain: NdkToolchain,
         version: String,
         sources: List<Path>,
-        abi: String,
+        target: NdkAbi,
     ): TaskResult? {
+        val abi = target.abiName
         val objDir = objRoot.resolve(abi)
 
         // The glue is compiled into the app rather than linked: the NDK ships it as source for exactly that.
@@ -282,6 +286,7 @@ internal class NdkCompileTask(
                 source, obj, cpp = isCpp,
                 extraFlags = NdkFlags.build(facet, toolchain, isCpp),
                 depFile = depFileFor(obj),
+                abi = target,
             )
             report(ctx, compiled.output, source)
             if (!compiled.ok) {
@@ -313,14 +318,14 @@ internal class NdkCompileTask(
         }
 
         ctx.progress.report(stale.size.toDouble() / (stale.size + 1), "Linking ${out.fileName}")
-        val linked = if (executable) toolchain.linkExecutable(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl)
-        else toolchain.linkShared(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl)
+        val linked = if (executable) toolchain.linkExecutable(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl, abi = target)
+        else toolchain.linkShared(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl, abi = target)
         report(ctx, linked.output, null)
         if (!linked.ok) {
             runCatching { Files.deleteIfExists(linkStampFile) }
             return TaskResult.Failed("ndk: ${out.fileName} did not link")
         }
-        packageCxxRuntime(ctx, toolchain, cpp, out)?.let { return it }
+        packageCxxRuntime(ctx, toolchain, cpp, out, target)?.let { return it }
         writeStamp(linkStampFile, linkStamp)
 
         ctx.logger()("ndk: wrote ${out.fileName} (${runCatching { Files.size(out) }.getOrDefault(0L)} bytes) for $abi")
@@ -332,11 +337,11 @@ internal class NdkCompileTask(
      * nothing else packages it. With any other runtime, a copy this task left there earlier is removed, but
      * only from the build directory: in `src/main/jniLibs` the file may be the user's own.
      */
-    private fun packageCxxRuntime(ctx: TaskContext, toolchain: NdkToolchain, cpp: Boolean, out: Path): TaskResult? {
+    private fun packageCxxRuntime(ctx: TaskContext, toolchain: NdkToolchain, cpp: Boolean, out: Path, abi: NdkAbi): TaskResult? {
         val target = out.resolveSibling(CXX_SHARED)
         if (cpp && facet.stl == "c++_shared") {
-            val runtime = toolchain.sharedCxxRuntime
-                ?: return TaskResult.Failed("ndk: stl = c++_shared, but the toolchain has no $CXX_SHARED")
+            val runtime = toolchain.sharedCxxRuntime(abi)
+                ?: return TaskResult.Failed("ndk: stl = c++_shared, but the toolchain has no $CXX_SHARED for ${abi.abiName}")
             runCatching { Files.copy(runtime, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
                 .onFailure { return TaskResult.Failed("ndk: could not package $CXX_SHARED: ${it.message}", it) }
             ctx.logger()("ndk: packaged $CXX_SHARED")
@@ -427,8 +432,5 @@ internal class NdkCompileTask(
         val SOURCE_EXTENSIONS = setOf("c", "cc", "cpp", "cxx", "c++")
         val HEADER_EXTENSIONS = setOf("h", "hh", "hpp", "hxx", "inl")
         const val CXX_SHARED = "libc++_shared.so"
-
-        /** What the bundled toolchain was built to target; see tools/ndk-toolchain/README.md. */
-        const val SUPPORTED_ABI = "arm64-v8a"
     }
 }

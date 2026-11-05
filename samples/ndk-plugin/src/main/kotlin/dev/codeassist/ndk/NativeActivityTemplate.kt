@@ -171,7 +171,7 @@ class NativeActivityTemplate : ProjectTemplate {
         # Native activity
 
         An Android app written entirely in C++, compiled on the device. The toolchain is a clang and an lld
-        built to RUN on Android arm64 and packaged inside the NDK plugin, so nothing here needs a desktop.
+        built to RUN on Android and packaged inside the NDK plugin, so nothing here needs a desktop.
 
         - `app/src/main/cpp/$library.cpp` holds `android_main`, which the platform calls. There is no Java.
         - `AndroidManifest.xml` names `android.app.NativeActivity` and points `android.app.lib_name` at
