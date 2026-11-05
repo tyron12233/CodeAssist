@@ -19,9 +19,11 @@ import java.util.zip.ZipInputStream
  * the AOT snapshots, is in this package's native library directory, the one place Android lets an app run a
  * file from. What is only read, the SDK's libraries, is `assets/dart-sdk.zip`, unpacked here on first use.
  *
- * The unpacked SDK lives in the IDE's INTERNAL storage, not [PluginRegistration.dataDir]. `dart pub` finds
- * its SDK by walking up from the path it was started by, so [launcher] is a symlink at `<sdk>/bin/dart`
- * pointing at the runtime in the native library directory, and shared storage cannot hold a symlink.
+ * The unpacked SDK lives in the IDE's INTERNAL storage, [PluginRegistration.privateDataDir], not
+ * [PluginRegistration.dataDir]. `dart pub` finds its SDK by walking up from the path it was started by, so
+ * [launcher] is a symlink at `<sdk>/bin/dart` pointing at the runtime in the native library directory, and
+ * shared storage cannot hold a symlink. Being the plugin's own directory, the IDE offers to delete it once the
+ * plugin is uninstalled; the path this plugin picked for itself before (`files/dart-plugin`) outlived it.
  *
  * Safe to use from several processes at once: the IDE's (the language server) and `:build`'s (Run) both
  * prepare it, and a file lock makes one of them unpack while the other waits.
@@ -36,8 +38,45 @@ class DartSdk(
         data class Unavailable(val reason: String) : Status
     }
 
-    /** Where everything this plugin writes for itself lives: the SDK, the pub cache, a home and a temp dir. */
-    val home: Path by lazy { internalHome() ?: reg.dataDir }
+    /**
+     * Where everything this plugin writes for itself lives: the SDK, the pub cache, a home and a temp dir. The
+     * plugin's [PluginRegistration.privateDataDir]; on a host older than SPI 3.4.0, which has none, the path
+     * this plugin used before it existed.
+     */
+    val home: Path by lazy { privateHome() ?: internalHome() ?: reg.dataDir }
+
+    private fun privateHome(): Path? {
+        // NoSuchMethodError (or AbstractMethodError) on a host from before the property.
+        val dir = try { reg.privateDataDir } catch (e: LinkageError) { return null }
+        internalHome()?.let { legacy ->
+            runCatching { adoptLegacyHome(legacy, dir) }
+                .onFailure { log.warn("could not move the Dart SDK from $legacy to $dir; it stays there", it) }
+        }
+        return dir
+    }
+
+    /**
+     * Moves [legacy], where an earlier version of this plugin kept everything, into [dir], once, and leaves a link
+     * in its place. The link matters: a project's `.dart_tool/package_config.json` names its packages by their
+     * absolute path in the pub cache, so the old path has to keep resolving until the next `pub get` rewrites it.
+     * A rename within one file system, so it is instant whatever the pub cache holds. Under a lock, since the IDE
+     * and `:build` may both get here first; whichever is second finds the link and does nothing.
+     */
+    private fun adoptLegacyHome(legacy: Path, dir: Path) {
+        if (!Files.isDirectory(legacy, LinkOption.NOFOLLOW_LINKS)) return
+        val root = dir.parent ?: return
+        withFileLock(root.resolve(".dart-plugin-move.lock")) {
+            if (!Files.isDirectory(legacy, LinkOption.NOFOLLOW_LINKS)) return@withFileLock
+            // Something already here means the move happened another way; the old copy is left for the IDE to
+            // offer rather than merged into a directory that is in use.
+            val empty = Files.newDirectoryStream(dir).use { !it.iterator().hasNext() }
+            if (!empty) return@withFileLock
+            Files.delete(dir)
+            Files.move(legacy, dir, StandardCopyOption.ATOMIC_MOVE)
+            Files.createSymbolicLink(legacy, dir)
+            log.info("moved the Dart SDK and pub cache from $legacy to $dir")
+        }
+    }
 
     val sdkDir: Path get() = home.resolve("sdk")
     val pubCache: Path get() = home.resolve("pub-cache")
