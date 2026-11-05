@@ -1,8 +1,34 @@
 # The on-device Dart SDK
 
-`fetch-dart-android.sh` stages a Dart SDK that **runs on an Android arm64 device**, for the Dart plugin
-(`samples/dart-plugin`). Run it once before building the plugin; the plugin build packages whatever it left in
-`build/out`, and builds an APK with no SDK (which says so at runtime) when it finds nothing there.
+`fetch-dart-android.sh` stages a Dart SDK that **runs on an Android device**, for the Dart plugin
+(`samples/dart-plugin`), one ABI per run (`ABI=arm64-v8a|armeabi-v7a|x86_64|x86`, default arm64-v8a). Run it
+before building the plugin, once for each ABI the plugin should support; the plugin build packages whatever it
+left in `build/out`, and builds an APK with no SDK (which says so at runtime) when it finds nothing there.
+
+## ABIs
+
+The executables and the AOT snapshots are machine code, so each ABI has its own set under `jniLibs/<abi>/`; the
+SDK's libraries (`assets/dart-sdk/`) are the same for all and are rewritten by each run. Runs accumulate: a run
+replaces only its own ABI's directory.
+
+```
+./fetch-dart-android.sh                                  # arm64-v8a (pinned checksum)
+ABI=armeabi-v7a ALLOW_UNVERIFIED=1 ./fetch-dart-android.sh
+ABI=x86_64      ALLOW_UNVERIFIED=1 ./fetch-dart-android.sh
+ABI=x86         ALLOW_UNVERIFIED=1 ./fetch-dart-android.sh
+```
+
+Two things to know about the ABIs other than arm64:
+
+- **Termux has to publish the package.** The script downloads `dart_<version>_<arch>.deb`, where `<arch>` is
+  `arm`, `x86_64` or `i686`. Whether Termux builds Dart for those for this version is not something this script
+  can decide; a 404 means it does not, and there is then no SDK to stage for that ABI (build it from the Dart
+  sources with `--os=android --arch=arm`, `x64` or `ia32` instead).
+- **Only arm64 has a pinned checksum.** For the others, the script refuses to go on until you either give it a
+  `DEB_SHA256` you have verified or pass `ALLOW_UNVERIFIED=1`, in which case it prints the checksum it computed
+  so you can pin it in the table at the top of the script.
+
+The plugin build makes one APK per ABI that has anything staged (see the plugin's `build.gradle.kts`).
 
 ## Where the SDK comes from
 
@@ -58,7 +84,7 @@ script checks both.
 
 | Staged as | What it is |
 | --- | --- |
-| `jniLibs/arm64-v8a/libflutter.so` | the Android arm64 debug engine, stripped with the NDK's `llvm-objcopy` (396 MB to 39 MB) |
+| `jniLibs/<abi>/libflutter.so` | the Android debug engine for each ABI that Flutter ships one for (`FLUTTER_ABIS`; arm64-v8a, armeabi-v7a, x86_64, x86), stripped with the NDK's `llvm-objcopy` (396 MB to 39 MB for arm64) |
 | `root/` | a minimal FLUTTER_ROOT: `packages/flutter` and `flutter_test` (sources only), `sky_engine` (`dart:ui`), the patched platform dill, the version files pub reads (44 MB) |
 | `player/flutter_assets/` | the player's own bundle: a 4 KB `dart:ui` stub (`flutter-player/main.dart`) and the VM snapshots |
 | `base-assets/` | what every app's bundle starts from: the Material icons font, the framework's compiled shaders, NOTICES |

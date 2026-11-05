@@ -89,7 +89,7 @@ class PluginInfoActivity : Activity() {
 
             It adds Dart and Flutter: errors, completion and quick fixes from Dart's analysis server, Run for
             command-line programs and Flutter apps (with hot reload), live @Preview widgets in the editor, tests,
-            and pub, with a Dart SDK and Flutter for arm64 inside.
+            and pub, with a Dart SDK and Flutter for this device's ABI inside.
 
             Open CodeAssist, then Settings and tools > Plugins to allow it to run.
 
