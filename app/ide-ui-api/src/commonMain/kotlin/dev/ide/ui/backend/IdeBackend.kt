@@ -1333,6 +1333,8 @@ data class UiKeystore(
     val certSubject: String?,
     val sha256: String?,
     val validUntilEpochMs: Long?,
+    /** The key certificate's SHA-1, colon-separated like [sha256]: Firebase and Google sign-in ask for both. */
+    val sha1: String? = null,
 )
 
 /** One certificate inside a keystore (owner/issuer, validity window, fingerprints). */

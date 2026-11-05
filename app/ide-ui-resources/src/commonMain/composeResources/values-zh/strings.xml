@@ -1527,7 +1527,8 @@
     <string name="keystore_empty">暂无密钥库。创建或导入一个密钥库以签署发布构建。</string>
     <string name="keystore_deleted">已删除 %1$s</string>
     <string name="keystore_row_subtitle">%1$s · 密钥：%2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">复制 %1$s 指纹</string>
+    <string name="keystore_fingerprint_copied">已复制 %1$s</string>
     <string name="keystore_expires">约在 %1$s 过期</string>
     <string name="keystore_cert_unreadable"><![CDATA[无法读取证书（密码可能已变更）。]]></string>
     <string name="keystore_create_title">新建密钥库</string>

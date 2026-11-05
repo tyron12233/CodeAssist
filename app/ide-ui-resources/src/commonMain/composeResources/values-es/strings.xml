@@ -952,7 +952,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="keystore_empty">Aún no hay keystores. Crea o importa uno para firmar compilaciones de lanzamiento.</string>
     <string name="keystore_deleted">Se eliminó %1$s</string>
     <string name="keystore_row_subtitle">%1$s · clave: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Copiar huella %1$s</string>
+    <string name="keystore_fingerprint_copied">%1$s copiada</string>
     <string name="keystore_expires">caduca ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[No se pudo leer el certificado (la contraseña puede haber cambiado).]]></string>
     <string name="keystore_create_title">Nuevo keystore</string>

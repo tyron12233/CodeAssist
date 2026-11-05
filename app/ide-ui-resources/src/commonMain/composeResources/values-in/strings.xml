@@ -860,7 +860,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="keystore_empty">Belum ada keystore. Buat atau impor satu untuk menandatangani build rilis.</string>
     <string name="keystore_deleted">Menghapus %1$s</string>
     <string name="keystore_row_subtitle">%1$s · kunci: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Salin sidik jari %1$s</string>
+    <string name="keystore_fingerprint_copied">%1$s disalin</string>
     <string name="keystore_expires">kedaluwarsa ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Tidak dapat membaca sertifikat (kata sandi mungkin telah berubah).]]></string>
     <string name="keystore_create_title">Keystore Baru</string>

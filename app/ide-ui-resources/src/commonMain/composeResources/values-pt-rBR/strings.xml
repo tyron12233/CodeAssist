@@ -908,7 +908,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="keystore_empty">Nenhuma keystore ainda. Crie ou importe uma para assinar compilações de release.</string>
     <string name="keystore_deleted">%1$s excluída</string>
     <string name="keystore_row_subtitle">%1$s · chave: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Copiar impressão digital %1$s</string>
+    <string name="keystore_fingerprint_copied">%1$s copiada</string>
     <string name="keystore_expires">expira ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Não foi possível ler o certificado (a senha pode ter mudado).]]></string>
     <string name="keystore_create_title">Nova keystore</string>

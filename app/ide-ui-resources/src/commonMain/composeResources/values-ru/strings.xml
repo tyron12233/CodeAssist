@@ -869,7 +869,8 @@
     <string name="keystore_empty">Хранилищ ключей пока нет. Создайте или импортируйте одно, чтобы подписывать релизные сборки.</string>
     <string name="keystore_deleted">Удалено %1$s</string>
     <string name="keystore_row_subtitle">%1$s · ключ: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Копировать отпечаток %1$s</string>
+    <string name="keystore_fingerprint_copied">%1$s скопирован</string>
     <string name="keystore_expires">истекает ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Не удалось прочитать сертификат (возможно, пароль изменился).]]></string>
     <string name="keystore_create_title">Новое хранилище ключей</string>

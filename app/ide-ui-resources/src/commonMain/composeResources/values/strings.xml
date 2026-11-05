@@ -1617,7 +1617,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="keystore_empty">No keystores yet. Create or import one to sign release builds.</string>
     <string name="keystore_deleted">Deleted %1$s</string>
     <string name="keystore_row_subtitle">%1$s · key: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Copy %1$s fingerprint</string>
+    <string name="keystore_fingerprint_copied">%1$s copied</string>
     <string name="keystore_expires">expires ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Couldn't read the certificate (password may have changed).]]></string>
     <string name="keystore_create_title">New Keystore</string>

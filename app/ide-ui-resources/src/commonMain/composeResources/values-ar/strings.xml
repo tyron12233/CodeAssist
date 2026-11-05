@@ -1674,7 +1674,8 @@
     <string name="keystore_empty">لا توجد مخازن مفاتيح بعد. أنشئ أو استورد واحدًا لتوقيع إصدارات النشر.</string>
     <string name="keystore_deleted">تم حذف %1$s</string>
     <string name="keystore_row_subtitle">%1$s · المفتاح: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">نسخ بصمة %1$s</string>
+    <string name="keystore_fingerprint_copied">تم نسخ %1$s</string>
     <string name="keystore_expires">تنتهي الصلاحية ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[تعذّر قراءة الشهادة (ربما تغيّرت كلمة المرور).]]></string>
     <string name="keystore_create_title">مخزن مفاتيح جديد</string>
