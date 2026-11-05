@@ -1432,4 +1432,27 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="lsp_status_running">Berjalan</string>
     <string name="lsp_status_starting">Memulai</string>
     <string name="lsp_status_not_started">Belum dimulai</string>
+    <string name="review_copy">Salin teks</string>
+    <string name="link_open_title">Buka tautan ini?</string>
+    <string name="link_mail_title">Tulis ke alamat ini?</string>
+    <string name="link_from_user">Seseorang di komunitas menambahkan tautan ini. CodeAssist belum memeriksa ke mana tujuannya.</string>
+    <string name="link_mail_from_user">Seseorang di komunitas menambahkan alamat ini. Aplikasi email Anda akan terbuka dengan pesan baru untuknya.</string>
+    <string name="link_warn_http">Tidak terenkripsi (http): orang lain di jaringan Anda dapat melihat atau mengubah halaman.</string>
+    <string name="link_warn_userinfo">Bagian sebelum @ bukan situsnya. Tautan ini menuju %1$s.</string>
+    <string name="link_warn_ip">Tautan ini menuju alamat IP, bukan situs bernama.</string>
+    <string name="link_warn_lookalike">Alamat ini memakai karakter yang dapat meniru nama situs terkenal.</string>
+    <string name="link_open">Buka</string>
+    <string name="link_copy">Salin tautan</string>
+    <string name="plugins_leftovers_title">Sisa dari plugin yang dihapus</string>
+    <string name="plugins_leftovers_body">Mencopot plugin meninggalkan datanya. Hapus untuk mengosongkan ruang, atau simpan jika Anda akan memasangnya lagi.</string>
+    <string name="plugins_leftover_delete">Hapus</string>
+    <string name="plugins_leftovers_delete_all">Hapus semua (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">Hapus data %1$s?</string>
+    <string name="plugins_leftovers_confirm_all_title">Hapus data semua plugin yang dihapus?</string>
+    <string name="plugins_leftover_confirm_body">Ini mengosongkan %1$s. Plugin yang Anda pasang lagi nanti akan mulai dari awal.</string>
+    <string name="storage_cat_plugin_leftovers_title">Data plugin yang dihapus</string>
+    <string name="storage_cat_plugin_leftovers_desc">Ditinggalkan oleh plugin yang Anda copot</string>
+    <string name="storage_clear_plugin_leftovers_title">Hapus data plugin yang dihapus?</string>
+    <string name="storage_clear_plugin_leftovers_body">Ini menghapus %1$s yang ditinggalkan plugin yang dicopot. Plugin yang Anda pasang lagi nanti akan mulai dari awal.</string>
+    <string name="colors_plugin_notice">%1$s berasal dari sebuah plugin. Perubahan Anda disimpan ke salinan.</string>
 </resources>

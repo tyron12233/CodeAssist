@@ -2415,4 +2415,5 @@
     <string name="lsp_status_running">运行中</string>
     <string name="lsp_status_starting">正在启动</string>
     <string name="lsp_status_not_started">未启动</string>
+    <string name="colors_plugin_notice">%1$s 来自插件。你的更改会保存到副本。</string>
 </resources>

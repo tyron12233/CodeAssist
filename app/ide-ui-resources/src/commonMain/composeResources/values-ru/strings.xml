@@ -1530,4 +1530,27 @@
     <string name="lsp_status_running">Работает</string>
     <string name="lsp_status_starting">Запускается</string>
     <string name="lsp_status_not_started">Не запущен</string>
+    <string name="review_copy">Копировать текст</string>
+    <string name="link_open_title">Открыть эту ссылку?</string>
+    <string name="link_mail_title">Написать на этот адрес?</string>
+    <string name="link_from_user">Эту ссылку добавил кто-то из сообщества. CodeAssist не проверял, куда она ведёт.</string>
+    <string name="link_mail_from_user">Этот адрес добавил кто-то из сообщества. Почтовое приложение откроется с новым письмом на него.</string>
+    <string name="link_warn_http">Без шифрования (http): другие в вашей сети могут видеть или изменять страницу.</string>
+    <string name="link_warn_userinfo">Часть до @ — это не сайт. Ссылка ведёт на %1$s.</string>
+    <string name="link_warn_ip">Ссылка ведёт на IP-адрес, а не на сайт с именем.</string>
+    <string name="link_warn_lookalike">В адресе есть символы, которые могут подделывать имя известного сайта.</string>
+    <string name="link_open">Открыть</string>
+    <string name="link_copy">Копировать ссылку</string>
+    <string name="plugins_leftovers_title">Остатки удалённых плагинов</string>
+    <string name="plugins_leftovers_body">После удаления плагина его данные остаются. Удалите их, чтобы освободить место, или оставьте, если переустановите плагин.</string>
+    <string name="plugins_leftover_delete">Удалить</string>
+    <string name="plugins_leftovers_delete_all">Удалить всё (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">Удалить данные %1$s?</string>
+    <string name="plugins_leftovers_confirm_all_title">Удалить данные всех удалённых плагинов?</string>
+    <string name="plugins_leftover_confirm_body">Освободится %1$s. Плагин, установленный заново, начнёт с чистого листа.</string>
+    <string name="storage_cat_plugin_leftovers_title">Данные удалённых плагинов</string>
+    <string name="storage_cat_plugin_leftovers_desc">Остались от удалённых вами плагинов</string>
+    <string name="storage_clear_plugin_leftovers_title">Удалить данные удалённых плагинов?</string>
+    <string name="storage_clear_plugin_leftovers_body">Будет удалено %1$s, оставленных удалёнными плагинами. Плагин, установленный заново, начнёт с чистого листа.</string>
+    <string name="colors_plugin_notice">%1$s поставляется с плагином. Ваши изменения сохраняются в копию.</string>
 </resources>

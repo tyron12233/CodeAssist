@@ -1634,4 +1634,27 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="lsp_status_running">En ejecución</string>
     <string name="lsp_status_starting">Iniciando</string>
     <string name="lsp_status_not_started">Sin iniciar</string>
+    <string name="review_copy">Copiar texto</string>
+    <string name="link_open_title">¿Abrir este enlace?</string>
+    <string name="link_mail_title">¿Escribir a esta dirección?</string>
+    <string name="link_from_user">Alguien de la comunidad añadió este enlace. CodeAssist no ha comprobado adónde lleva.</string>
+    <string name="link_mail_from_user">Alguien de la comunidad añadió esta dirección. Tu app de correo se abre con un mensaje nuevo para ella.</string>
+    <string name="link_warn_http">Sin cifrar (http): otras personas en tu red pueden ver o cambiar la página.</string>
+    <string name="link_warn_userinfo">La parte antes de la @ no es el sitio. Este enlace lleva a %1$s.</string>
+    <string name="link_warn_ip">Lleva a una dirección IP, no a un sitio con nombre.</string>
+    <string name="link_warn_lookalike">La dirección usa caracteres que pueden imitar el nombre de un sitio conocido.</string>
+    <string name="link_open">Abrir</string>
+    <string name="link_copy">Copiar enlace</string>
+    <string name="plugins_leftovers_title">Restos de plugins eliminados</string>
+    <string name="plugins_leftovers_body">Al desinstalar un plugin, sus datos se quedan. Bórralos para liberar espacio o consérvalos por si lo vuelves a instalar.</string>
+    <string name="plugins_leftover_delete">Borrar</string>
+    <string name="plugins_leftovers_delete_all">Borrar todo (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">¿Borrar los datos de %1$s?</string>
+    <string name="plugins_leftovers_confirm_all_title">¿Borrar los datos de todos los plugins eliminados?</string>
+    <string name="plugins_leftover_confirm_body">Esto libera %1$s. Un plugin que reinstales después empezará de cero.</string>
+    <string name="storage_cat_plugin_leftovers_title">Datos de plugins eliminados</string>
+    <string name="storage_cat_plugin_leftovers_desc">Los dejaron plugins que desinstalaste</string>
+    <string name="storage_clear_plugin_leftovers_title">¿Borrar los datos de plugins eliminados?</string>
+    <string name="storage_clear_plugin_leftovers_body">Esto borra %1$s que dejaron plugins desinstalados. Un plugin que reinstales después empezará de cero.</string>
+    <string name="colors_plugin_notice">%1$s viene con un plugin. Tus cambios se guardan en una copia.</string>
 </resources>
