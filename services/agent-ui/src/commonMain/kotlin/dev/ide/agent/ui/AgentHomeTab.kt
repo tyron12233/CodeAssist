@@ -1,6 +1,11 @@
 package dev.ide.agent.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import dev.ide.ui.theme.Motion
+import dev.ide.ui.platform.isMobilePlatform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -140,12 +145,31 @@ internal object AgentHomeState {
 internal fun AgentHomeTab(ctx: HomeTabContext) {
     val backend = ctx.backend
     val state = AgentHomeState
-    if (state.inChat) {
-        AgentHomeChat(ctx) { state.inChat = false }
-    } else {
-        AgentHomeLanding(ctx)
+    // Into a chat and back out move like the app's screens do (ScreenHost): on a phone the chat slides in
+    // from the right while the start page slides away, and Back reverses it; on desktop a quick fade.
+    AnimatedContent(
+        targetState = state.inChat,
+        transitionSpec = {
+            if (isMobilePlatform) {
+                val dir = if (targetState) 1 else -1
+                (slideInHorizontally(tween(Motion.BASE, easing = Motion.quiet)) { w -> dir * w / 4 } +
+                    fadeIn(tween(Motion.BASE, easing = Motion.soft))) togetherWith
+                    (slideOutHorizontally(tween(Motion.BASE, easing = Motion.quiet)) { w -> -dir * w / 4 } +
+                        fadeOut(tween(Motion.BASE, easing = Motion.soft)))
+            } else {
+                fadeIn(tween(Motion.FAST, easing = Motion.soft)) togetherWith fadeOut(tween(Motion.FAST, easing = Motion.soft))
+            }
+        },
+        label = "aiHome",
+    ) { inChat ->
+        if (inChat) AgentHomeChat(ctx) { state.inChat = false } else AgentHomeLanding(ctx)
     }
-    state.opening?.let { OpeningOverlay(it) }
+    AnimatedVisibility(state.opening != null, enter = fadeIn(tween(Motion.FAST)), exit = fadeOut(tween(Motion.FAST))) {
+        // Kept while fading out: `opening` is already null by then.
+        var shown by remember { mutableStateOf("") }
+        state.opening?.let { shown = it }
+        OpeningOverlay(shown)
+    }
     // Signed out of Free AI (or no key for the chosen provider): ask before starting rather than failing the turn.
     when (gate.value) {
         Gate.SignIn -> if (backend.agent.config().selectedProvider == FREE_AI_PROVIDER) {
