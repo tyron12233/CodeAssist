@@ -9,8 +9,9 @@ name: NDK plugin APK
 #      Each is a full LLVM build and takes one to two hours on a hosted runner.
 #   2. plugin: gather the four results and run assembleDebug, which packs whatever is in
 #      tools/ndk-toolchain/build/out.
-# Every host build can emit code for all four ABIs (LLVM_TARGETS AArch64;ARM;X86), so the finished APK runs on
-# arm64-v8a, armeabi-v7a, x86 and x86_64 devices and builds for any of them.
+# The result is one APK PER ABI (ndk-plugin-arm64-v8a-debug.apk, ...-armeabi-v7a-..., ...-x86-..., ...-x86_64-...),
+# each about 110 MB and carrying only its own compiler. Install the one that matches the device. Every compiler
+# can emit code for all four ABIs (LLVM_TARGETS AArch64;ARM;X86), so whichever APK is installed builds for any.
 #
 # Manual only: it is too slow to run on every push. Trim `abi` in the matrix for a smaller, faster APK.
 
@@ -134,10 +135,36 @@ jobs:
       - name: Build the plugin APK
         run: ./gradlew :samples:ndk-plugin:assembleDebug --console=plain --stacktrace
 
-      - name: Upload APK
+      - name: List the APKs
+        run: ls -la samples/ndk-plugin/build/outputs/apk/debug/*.apk
+
+      # One artifact per ABI, so a phone only has to download its own.
+      - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: ndk-plugin-debug-apk
-          path: samples/ndk-plugin/build/outputs/apk/debug/*.apk
+          name: ndk-plugin-arm64-v8a
+          path: samples/ndk-plugin/build/outputs/apk/debug/*arm64-v8a*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-armeabi-v7a
+          path: samples/ndk-plugin/build/outputs/apk/debug/*armeabi-v7a*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload x86 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-x86
+          # `*-x86-*` so it does not also match the x86_64 file.
+          path: samples/ndk-plugin/build/outputs/apk/debug/*-x86-*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-x86_64
+          path: samples/ndk-plugin/build/outputs/apk/debug/*x86_64*.apk
           if-no-files-found: error
           retention-days: 30
