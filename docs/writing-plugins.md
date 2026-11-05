@@ -2740,7 +2740,15 @@ filtered to that plugin. That is the difference between reading your own output 
 (on device). It builds the APK and opens a second copy of CodeAssist, in its own process and with its own
 projects and settings, that loads this build straight from the output: nothing is installed, nothing asks for
 consent, and the IDE you are working in is untouched. The sandbox's status bar is amber and names the plugin, so
-the two windows are never confused. Run again to try a new build; the old sandbox is replaced.
+the two windows are never confused.
+
+Run again while the sandbox is open and the new build is swapped into it in place, usually in well under a
+second: the old build is unloaded (its contributions withdrawn and its `dispose` called), the new one registers,
+and the sandbox comes to the front on the project and screen it was showing. Two things do not carry over, so
+close the sandbox from Recents for a fresh start when they matter: work the old build started and did not stop
+in `dispose` (a thread, a posted callback) keeps running the old code, and what an open project took from the
+plugin when it opened stays as it was until that project is opened again. A build that cannot be swapped in
+(it fails to load, or it now depends on another plugin) starts a fresh sandbox instead.
 
 What makes it worth using is what happens when the plugin misbehaves there:
 

@@ -99,6 +99,117 @@ object SandboxProcess {
         }
     }
 
+    /** Written by the real IDE: the path of a new build for the running sandbox to swap in ([listenForReloads]). */
+    internal const val RELOAD_REQUEST = "reload-request"
+
+    /** Written by the sandbox in answer to [RELOAD_REQUEST]: [ReloadAnswer] as text. */
+    internal const val RELOAD_RESULT = "reload-result"
+
+    internal fun reloadResultFile(context: Context): File = File(stateDir(context), RELOAD_RESULT)
+
+    /** What the sandbox answers a reload request with: whether the new build is in, and anything to say. A
+     *  failed reload is followed by a fresh start, which loads the build the usual way (and shows on the
+     *  plugin's row there why it did not load, if it still does not). */
+    data class ReloadAnswer(val ok: Boolean, val message: String) {
+        internal fun encode(): String = (if (ok) "ok\n" else "fail\n") + message.replace('\n', ' ')
+
+        internal companion object {
+            fun decode(text: String): ReloadAnswer? {
+                val parts = text.split('\n', limit = 2)
+                if (parts.size < 2) return null
+                return ReloadAnswer(parts[0] == "ok", parts[1])
+            }
+        }
+    }
+
+    // Held for the sandbox's lifetime: a collected FileObserver stops observing.
+    @Volatile
+    private var reloadWatch: FileObserver? = null
+
+    /**
+     * In the sandbox: swap in the plugin build the real IDE names in [RELOAD_REQUEST], through [reload], and
+     * answer in [RELOAD_RESULT]. One at a time, on a thread of its own ([reload] hops to the main thread for
+     * the UI half itself).
+     */
+    fun listenForReloads(context: Context, reload: (File) -> ReloadAnswer) {
+        val dir = stateDir(context)
+        val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "sandbox-reload").apply { isDaemon = true }
+        }
+        reloadWatch = object : FileObserver(dir.absolutePath, MOVED_TO or CLOSE_WRITE) {
+            override fun onEvent(event: Int, path: String?) {
+                if (path != RELOAD_REQUEST) return
+                worker.execute {
+                    val request = File(dir, RELOAD_REQUEST)
+                    val apk = runCatching { request.readText().trim() }.getOrNull()?.let(::File) ?: return@execute
+                    request.delete()
+                    val answer = runCatching { reload(apk) }
+                        .getOrElse { ReloadAnswer(false, it.message ?: it.toString()) }
+                    runCatching {
+                        val tmp = File(dir, "$RELOAD_RESULT.tmp")
+                        tmp.writeText(answer.encode())
+                        tmp.renameTo(reloadResultFile(context))
+                    }
+                }
+            }
+        }.also { it.startWatching() }
+    }
+
+    /**
+     * In the sandbox: swap the loaded plugin for the build in [apk], live. The UI half comes out first (on the
+     * main thread, so nothing of the old build draws while its engine half is torn down), then the engine half
+     * is replaced ([ApplicationEnvironment.reloadInstalledPlugin]), then the new UI half goes in.
+     */
+    fun reloadPlugin(context: Context, env: dev.ide.core.ApplicationEnvironment, apk: File): ReloadAnswer {
+        val discovered = when (val c = DevApkPluginSource(context, apk).discover().firstOrNull()) {
+            is DiscoveredPlugin -> c
+            is RejectedPlugin -> return ReloadAnswer(false, c.reason)
+            else -> return ReloadAnswer(false, "the build has no plugin in it")
+        }
+        val id = discovered.manifest.id
+        val oldUi = env.enabledUiPlugins.firstOrNull { it.id == id }
+        onMainThread { dev.ide.ui.ext.UiPluginHost.replace(id, null) }
+        return when (val r = env.reloadInstalledPlugin(discovered)) {
+            is dev.ide.core.ApplicationEnvironment.PluginReload.Reloaded -> {
+                val contributed = onMainThread { dev.ide.ui.ext.UiPluginHost.replace(id, r.ui) } ?: false
+                if (contributed) {
+                    ReloadAnswer(true, "")
+                } else {
+                    val why = dev.ide.ui.ext.UiPluginHost.failures[id]
+                    ReloadAnswer(false, "its UI facet failed: ${why?.let { PluginLoadFailureText.of(it) } ?: "did not answer"}")
+                }
+            }
+            is dev.ide.core.ApplicationEnvironment.PluginReload.Failed -> {
+                // Still the old build, untouched: put its UI back for as long as it keeps running.
+                if (!r.unloaded) onMainThread { dev.ide.ui.ext.UiPluginHost.replace(id, oldUi) }
+                ReloadAnswer(false, r.reason)
+            }
+        }
+    }
+
+    /** Run [body] on the main thread and wait for it (up to a few seconds); null when it did not run in time. */
+    private fun <T> onMainThread(body: () -> T): T? {
+        val main = android.os.Looper.getMainLooper()
+        if (android.os.Looper.myLooper() == main) return body()
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var result: T? = null
+        var failure: Throwable? = null
+        android.os.Handler(main).post {
+            try {
+                result = body()
+            } catch (t: Throwable) {
+                failure = t
+            } finally {
+                latch.countDown()
+            }
+        }
+        if (!latch.await(MAIN_THREAD_WAIT_S, java.util.concurrent.TimeUnit.SECONDS)) return null
+        failure?.let { throw it }
+        return result
+    }
+
+    private const val MAIN_THREAD_WAIT_S = 5L
+
     /** The plugin's last few log records, for a crash report: what it was doing just before. */
     private fun recentPluginLog(pluginId: String?): String {
         if (pluginId == null) return ""
@@ -344,11 +455,17 @@ class AndroidPluginSandbox(
             log("Could not stage the plugin for the sandbox: ${it.message}")
             return false
         }
+        val manifest = runCatching { DevApkPluginSource(appContext, copy).manifest() }.getOrNull()
+        val name = manifest?.name
+        // A sandbox that is already up takes the new build in place: no new process, no app start, and the
+        // project and screen it was on stay where they were.
+        if (sandboxPid() != null && hotReload(copy, name, log)) {
+            SandboxProcess.setCurrent(appContext, copy)
+            deleteOtherBuilds(dir, copy)
+            return true
+        }
         stopRunningSandbox()
-        // Older builds and their unpacked libraries: the running sandbox (now stopped) was the last reader.
-        dir.listFiles().orEmpty()
-            .filter { it != copy && (it.name.startsWith("plugin-")) && !it.name.startsWith(copy.nameWithoutExtension) }
-            .forEach { it.deleteRecursively() }
+        deleteOtherBuilds(dir, copy)
         // ART's compiled code for those builds, which it keeps beside them and never removes by itself.
         File(dir, "oat").deleteRecursively()
         SandboxProcess.crashFile(appContext).delete()
@@ -357,15 +474,72 @@ class AndroidPluginSandbox(
             logOffset = 0
         }
         SandboxProcess.setCurrent(appContext, copy)
-        val manifest = runCatching { DevApkPluginSource(appContext, copy).manifest() }.getOrNull()
-        val name = manifest?.name
         appContext.startActivity(
             Intent(appContext, SandboxActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         log("Started the plugin sandbox with ${name ?: "the plugin"} (${copy.length() / 1024} KB).")
+        log("")
+        log("It is a separate copy of CodeAssist with its own projects and settings; this IDE is untouched. If the")
+        log("plugin crashes it, the stack trace comes back here. Run again while it is open to reload the plugin in")
+        log("place; close it from Recents for a fresh start.")
         manifest?.id?.let { log("What it logs shows in this IDE's Logs viewer under ${PluginSandbox.LOG_SOURCE_PREFIX}$it.") }
         return true
+    }
+
+    /**
+     * Ask the running sandbox to swap in [copy]. The sandbox is brought to the front FIRST: in the background
+     * Android may have frozen it, and a frozen process reads no request; the user is about to look at it anyway.
+     * Returns false (having said why) when it could not, so the caller starts it fresh instead.
+     */
+    private fun hotReload(copy: File, name: String?, log: (String) -> Unit): Boolean {
+        val dir = SandboxProcess.stateDir(appContext)
+        val result = SandboxProcess.reloadResultFile(appContext)
+        result.delete()
+        val started = System.currentTimeMillis()
+        runCatching {
+            val tmp = File(dir, "${SandboxProcess.RELOAD_REQUEST}.tmp")
+            tmp.writeText(copy.absolutePath)
+            tmp.renameTo(File(dir, SandboxProcess.RELOAD_REQUEST))
+        }.onFailure {
+            log("Could not hand the new build to the running sandbox (${it.message}); starting it again.")
+            return false
+        }
+        runCatching {
+            appContext.startActivity(Intent(appContext, SandboxActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+        while (System.currentTimeMillis() - started < RELOAD_TIMEOUT_MS) {
+            if (result.isFile) {
+                val answer = runCatching { SandboxProcess.ReloadAnswer.decode(result.readText()) }.getOrNull()
+                result.delete()
+                if (answer == null) break
+                val ms = System.currentTimeMillis() - started
+                if (answer.ok) {
+                    log("Reloaded ${name ?: "the plugin"} in the running sandbox in $ms ms.")
+                    if (answer.message.isNotEmpty()) log(answer.message)
+                    log("Close the sandbox from Recents for a fresh start, for instance to rerun what an open project")
+                    log("took from the plugin when it opened.")
+                    return true
+                }
+                log("The running sandbox could not reload the plugin (${answer.message}); starting it again.")
+                return false
+            }
+            if (sandboxPid() == null) {
+                log("The sandbox closed while reloading; starting it again.")
+                return false
+            }
+            Thread.sleep(100)
+        }
+        log("The running sandbox did not answer; starting it again.")
+        return false
+    }
+
+    /** Older builds and their unpacked libraries. A sandbox still running one keeps it open, so removing the
+     *  file does not pull it out from under it. */
+    private fun deleteOtherBuilds(dir: File, copy: File) {
+        dir.listFiles().orEmpty()
+            .filter { it != copy && (it.name.startsWith("plugin-")) && !it.name.startsWith(copy.nameWithoutExtension) }
+            .forEach { it.deleteRecursively() }
     }
 
     companion object {
@@ -373,20 +547,33 @@ class AndroidPluginSandbox(
         @Volatile
         var current: AndroidPluginSandbox? = null
             private set
+
+        /** How long the host waits for a running sandbox to answer a reload before starting it fresh. */
+        private const val RELOAD_TIMEOUT_MS = 20_000L
+    }
+
+    /** The running `:sandbox` process's pid, or null when there is none. */
+    private fun sandboxPid(): Int? {
+        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return null
+        return runCatching { am.runningAppProcesses }.getOrNull().orEmpty()
+            .firstOrNull { it.processName == appContext.packageName + SandboxProcess.PROCESS_SUFFIX }?.pid
     }
 
     /** Kill the `:sandbox` process if one runs, so the next start is a fresh process with the new build. */
     private fun stopRunningSandbox() {
         val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
-        val sandbox = runCatching { am.runningAppProcesses }.getOrNull().orEmpty()
-            .firstOrNull { it.processName == appContext.packageName + SandboxProcess.PROCESS_SUFFIX } ?: return
-        Process.killProcess(sandbox.pid)
+        val pid = sandboxPid() ?: return
+        Process.killProcess(pid)
         // Give the system a moment to reap it, so the start below does not land in the dying process.
         repeat(20) {
-            val alive = runCatching { am.runningAppProcesses }.getOrNull().orEmpty().any { it.pid == sandbox.pid }
+            val alive = runCatching { am.runningAppProcesses }.getOrNull().orEmpty().any { it.pid == pid }
             if (!alive) return
             Thread.sleep(50)
         }
     }
 }
 
+/** A throwable as one line for the reload answer. */
+private object PluginLoadFailureText {
+    fun of(t: Throwable): String = t.message?.let { "${t.javaClass.simpleName}: $it" } ?: t.javaClass.name
+}

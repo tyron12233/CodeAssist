@@ -193,6 +193,10 @@ object AndroidIde {
             dev.ide.android.plugins.SandboxProcess.reportCrashesToHost(appContext, plugin?.name, plugin?.id)
             // And so does everything its plugin logs, into the real IDE's Logs viewer.
             plugin?.id?.let { dev.ide.android.plugins.SandboxProcess.relayPluginLogs(appContext, it) }
+            // "Run plugin in sandbox" again while this one is open swaps the new build in here, live.
+            dev.ide.android.plugins.SandboxProcess.listenForReloads(appContext) { apk ->
+                dev.ide.android.plugins.SandboxProcess.reloadPlugin(appContext, manager.env, apk)
+            }
         } else {
             // An installed plugin that crashed the last launch is off now; say so, and settle safe mode. See
             // PluginCrashGuard.

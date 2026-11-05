@@ -1108,12 +1108,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         "> Run plugin in sandbox $variant · ${module.name}",
                         firstBuildDexBanner(module, variant)
                     ) { log ->
-                        if (sandbox.launch(apk, log)) {
-                            log("")
-                            log("Opened a sandbox copy of CodeAssist with this build of the plugin loaded. It has")
-                            log("its own projects and settings; this IDE is untouched. If the plugin crashes it,")
-                            log("the stack trace comes back here. Run again to try a new build.")
-                        }
+                        // The sandbox says what it did: started fresh, or reloaded the plugin in place.
+                        sandbox.launch(apk, log)
                     }
                 }
 

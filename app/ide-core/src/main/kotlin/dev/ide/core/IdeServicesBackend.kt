@@ -840,9 +840,18 @@ class IdeServicesBackend(
     /** An installed plugin a stack was blamed on. */
     data class BlamedPlugin(val id: String, val name: String, val version: String)
 
-    private val pluginBlame: dev.ide.core.plugins.PluginBlame? by lazy {
-        manager?.env?.externalPluginLoaders?.takeIf { it.isNotEmpty() }?.let { dev.ide.core.plugins.PluginBlame.ofLoaders(it) }
-    }
+    /** The blame built for one set of plugin loaders; rebuilt when a reload replaces the set (plugin sandbox). */
+    @Volatile
+    private var blameCache: Pair<Map<String, ClassLoader>, dev.ide.core.plugins.PluginBlame?>? = null
+
+    private val pluginBlame: dev.ide.core.plugins.PluginBlame?
+        get() {
+            val loaders = manager?.env?.externalPluginLoaders ?: return null
+            blameCache?.let { (forLoaders, blame) -> if (forLoaders === loaders) return blame }
+            val blame = loaders.takeIf { it.isNotEmpty() }?.let { dev.ide.core.plugins.PluginBlame.ofLoaders(it) }
+            blameCache = loaders to blame
+            return blame
+        }
 
     /** The installed plugin whose code is topmost in [frames] (or, given [t], anywhere in its cause chain). */
     fun blamePlugin(frames: List<StackTraceElement>, t: Throwable? = null): BlamedPlugin? {

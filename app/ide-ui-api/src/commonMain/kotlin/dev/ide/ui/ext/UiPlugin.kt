@@ -131,12 +131,32 @@ object UiPluginHost {
         return try {
             plugin.contributeUi(scope)
             failed.remove(plugin.id)
+            scopes[plugin.id] = scope
             true
         } catch (t: Throwable) {
             scope.withdraw()
             failed[plugin.id] = t
             false
         }
+    }
+
+    /** What each plugin that contributed cleanly registered, so it can be withdrawn again ([replace]). */
+    private val scopes = HashMap<String, Scope>()
+
+    /**
+     * Swap plugin [pluginId]'s UI for [replacement]'s, live: everything the old facet registered is withdrawn,
+     * and [replacement] (null for none) contributes in its place when the UI has already loaded. For the plugin
+     * sandbox's hot reload, where a new build of a plugin replaces the old one without restarting the app.
+     * Call on the UI thread, like everything that touches the registries. Returns whether [replacement]
+     * contributed cleanly (true when there is none).
+     */
+    fun replace(pluginId: String, replacement: UiPlugin?): Boolean {
+        scopes.remove(pluginId)?.withdraw()
+        plugins.removeAll { it.id == pluginId }
+        failed.remove(pluginId)
+        if (replacement == null) return true
+        plugins.add(replacement)
+        return if (loaded) contribute(replacement) else true
     }
 
     /** The UI plugins whose `contributeUi` threw during [ensureLoaded], by plugin id, with what they threw. */

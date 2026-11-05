@@ -162,7 +162,9 @@ class ApplicationEnvironment(
      * lists these under Installed, separately from the built-ins, and shows [InstalledPlugin.error] against
      * one that did not load.
      */
-    val installedPlugins: List<InstalledPlugin>
+    @Volatile
+    var installedPlugins: List<InstalledPlugin>
+        private set
 
     /**
      * Plugin packages a [PluginSource] found this launch but could not offer for loading: a missing or
@@ -184,13 +186,20 @@ class ApplicationEnvironment(
      * Installed plugins come last so one can override a built-in registration that is last-writer-wins (a
      * file-tree icon), rather than being overridden by it.
      */
-    val enabledUiPlugins: List<UiPlugin>
+    @Volatile
+    var enabledUiPlugins: List<UiPlugin>
+        private set
 
     /**
      * Each installed plugin that loaded this launch, by id, with the classloader its code came off: what a
      * crash or a stalled main thread is blamed by (see [dev.ide.core.plugins.PluginBlame]).
      */
-    val externalPluginLoaders: Map<String, ClassLoader>
+    @Volatile
+    var externalPluginLoaders: Map<String, ClassLoader>
+        private set
+
+    /** Loads an installed plugin's code; kept for [reloadInstalledPlugin]. */
+    private val externalLoader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
 
     /** Crash-suspended plugins that load again this launch because their installed version changed. */
     val liftedCrashSuspensions: Set<String>
@@ -240,7 +249,7 @@ class ApplicationEnvironment(
 
         val enabledBuiltIns = builtIns.filter { pluginCatalog.isEnabled(it.engine.manifest.id) }
         val builtInLoadIds = enabledBuiltIns.mapTo(HashSet()) { it.engine.manifest.id }
-        val loader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
+        val loader = externalLoader
         val external = LinkedHashMap<String, Plugin>()
         // Each load's result, kept for its entry-point instances: a plugin's UI facets come off the SAME
         // loader its engine facet came from, and a class named in both of the manifest's lists is the SAME
@@ -327,6 +336,68 @@ class ApplicationEnvironment(
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
         // After every plugin: a definition's adapters must know which languages already have a backend.
         runCatching { languageServers.registerAll() }.onFailure { log.warn("could not register the language servers", it) }
+    }
+
+    /** What [reloadInstalledPlugin] did. */
+    sealed interface PluginReload {
+        /** The new build is loaded. [ui] is its UI facet, for the caller to swap in on the UI thread. */
+        data class Reloaded(val manifest: PluginManifest, val ui: UiPlugin?) : PluginReload
+
+        /**
+         * It could not be swapped in this process; [reason] says why. When [unloaded], the old build is already
+         * gone too, so the only way back to a working plugin is a fresh start.
+         */
+        data class Failed(val reason: String, val unloaded: Boolean = false) : PluginReload
+    }
+
+    /**
+     * Replace the installed plugin [replacement] is a new build of, in this running app: the old build's engine
+     * facet is unloaded (its contributions withdrawn, its `dispose` called) and [replacement] is loaded and
+     * registered in its place, through the same checks a launch applies. Its UI facet comes back in the result
+     * for the caller to swap into the UI registries ([dev.ide.ui.ext.UiPluginHost.replace]) on the UI thread.
+     *
+     * This is the plugin sandbox's hot reload. It covers what the plugin contributes to the app; anything the
+     * old build left running that `dispose` did not stop keeps running the old code, and what an open project
+     * took from the plugin when it opened stays as it was until the project is opened again.
+     *
+     * Not thread-safe against another reload; the sandbox runs one at a time.
+     */
+    fun reloadInstalledPlugin(replacement: DiscoveredPlugin): PluginReload {
+        val manifest = replacement.manifest
+        val id = manifest.id
+        if (id !in externalPluginLoaders) return PluginReload.Failed("'$id' is not the plugin loaded here")
+        val dependents = installedPlugins.filter { it.manifest.id != id && id in it.manifest.dependsOn }
+        if (dependents.isNotEmpty()) {
+            return PluginReload.Failed("${dependents.joinToString { it.manifest.id }} depends on it")
+        }
+        val loadedIds = pluginManager.loadedIds.mapTo(HashSet()) { it.value }
+        manifest.dependsOn.firstOrNull { it !in loadedIds }?.let {
+            return PluginReload.Failed("it now requires plugin '$it', which is not loaded")
+        }
+        val loaded = when (val r = externalLoader.load(replacement)) {
+            is ExternalPluginLoader.Result.Failed -> return PluginReload.Failed(r.reason)
+            is ExternalPluginLoader.Result.Loaded -> r
+        }
+
+        pluginManager.unload(PluginId(id))
+        // From here the plugin is the new build's, whatever happens next: blame its frames by its new loader.
+        externalPluginLoaders = externalPluginLoaders + (id to loaded.classLoader)
+        val failure = try {
+            pluginManager.load(loaded.plugin, replacement.nativeLibraryDir)
+            null
+        } catch (t: Throwable) {
+            log.warn("installed plugin '$id' failed to load", t)
+            t.message ?: t.toString()
+        }
+        var uiFailure: String? = null
+        val ui = if (failure != null) null else ExternalUiFacets.load(manifest, loaded.instances, uiServices) { reason ->
+            uiFailure = listOfNotNull(uiFailure, reason).joinToString("; ")
+        }
+        installedPlugins = installedPlugins.map {
+            if (it.manifest.id != id) it else InstalledPlugin(manifest, replacement.origin, error = failure ?: uiFailure)
+        }
+        enabledUiPlugins = enabledUiPlugins.filter { it.id != id } + listOfNotNull(ui)
+        return if (failure != null) PluginReload.Failed(failure, unloaded = true) else PluginReload.Reloaded(manifest, ui)
     }
 
     /** Warn, in the plugin's own log, about each contribution to [ep] whose id an earlier registration holds. */

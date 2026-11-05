@@ -79,22 +79,40 @@ internal class MainThreadWatchdog(
 
     private fun loop() {
         var reports = 0
+        // When this watch (re)started: a stall is never timed from before it. The main thread's last answer can
+        // be from before the app went to the background, and timing from there turned the first slow frame after
+        // coming back into a "stall" as long as the whole time away (77 s, and a sandbox stopped for it).
+        var watchingSince = SystemClock.uptimeMillis()
         while (reports < MAX_REPORTS_PER_PROCESS) {
             try {
                 if (started == 0) {
                     // Parked until an activity starts: no ticks for an app in the background.
                     synchronized(lock) { if (started == 0) lock.wait(IDLE_RECHECK_MS) }
+                    watchingSince = SystemClock.uptimeMillis()
                     continue
                 }
                 // The last moment the main thread was seen answering. A stall started after it, so timing from
                 // here can read up to one tick long but never short: a threshold met by this measure is met.
-                val aliveAt = if (ackedAt > 0) ackedAt else SystemClock.uptimeMillis()
+                val aliveAt = maxOf(ackedAt, watchingSince)
                 acked = false
                 main.post(ack)
-                Thread.sleep(TICK_MS)
+                if (!pause(TICK_MS)) {
+                    watchingSince = SystemClock.uptimeMillis()
+                    continue
+                }
                 if (acked) continue
                 // Not answered yet: wait out the threshold, then sample while it is still stuck.
-                while (!acked && SystemClock.uptimeMillis() - aliveAt < STALL_MS) Thread.sleep(POLL_MS)
+                var paused = false
+                while (!acked && SystemClock.uptimeMillis() - aliveAt < STALL_MS) {
+                    if (!pause(POLL_MS)) {
+                        paused = true
+                        break
+                    }
+                }
+                if (paused) {
+                    watchingSince = SystemClock.uptimeMillis()
+                    continue
+                }
                 if (acked || Debug.isDebuggerConnected()) continue
                 val frames = mainThread.stackTrace.toList()
                 val foreground = started > 0
@@ -105,7 +123,16 @@ internal class MainThreadWatchdog(
                     if (stopAfterMs != null && stalled >= stopAfterMs && started > 0) {
                         onStop(mainThread.stackTrace.toList(), stalled)
                     }
-                    Thread.sleep(POLL_MS)
+                    if (!pause(POLL_MS)) {
+                        paused = true
+                        break
+                    }
+                }
+                if (paused) {
+                    // The process itself was stopped part-way (frozen, or a debugger): how long the main thread
+                    // was really blocked cannot be told apart from that, so this one goes unreported.
+                    watchingSince = SystemClock.uptimeMillis()
+                    continue
                 }
                 val duration = ackedAt - aliveAt
                 reports++
@@ -117,6 +144,17 @@ internal class MainThreadWatchdog(
                 // Never let the watchdog itself be what fails.
             }
         }
+    }
+
+    /**
+     * Sleep [ms] and say whether this thread really was only away that long. False when it came back much later:
+     * the whole process was not running (Android froze it, or a debugger suspended it), which is not the main
+     * thread being blocked, and every clock reading spanning it is meaningless as a stall.
+     */
+    private fun pause(ms: Long): Boolean {
+        val before = SystemClock.uptimeMillis()
+        Thread.sleep(ms)
+        return SystemClock.uptimeMillis() - before < ms + PROCESS_PAUSE_MS
     }
 
     private fun uptime(): Long = SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()
@@ -132,6 +170,9 @@ internal class MainThreadWatchdog(
         /** Input dispatch ANRs at 5 s; 2.5 s catches the stalls that come close, and every one that gets there. */
         const val STALL_MS = 2_500L
         const val IDLE_RECHECK_MS = 30_000L
+        /** Oversleeping a short sleep by this much means the process was not running, not that it was busy: a
+         *  busy device delays a minimum-priority thread by tens of milliseconds, not seconds. */
+        const val PROCESS_PAUSE_MS = 1_500L
         /** A device stuck in a stall storm should not flood the analytics queue. */
         const val MAX_REPORTS_PER_PROCESS = 20
     }

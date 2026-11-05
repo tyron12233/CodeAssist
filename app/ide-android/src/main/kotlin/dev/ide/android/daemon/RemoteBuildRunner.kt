@@ -210,7 +210,9 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         onLaunchPluginSandbox = { path ->
             // The daemon built the plugin; the sandbox is started from this process, which has the visible activity.
             val sandbox = dev.ide.android.plugins.AndroidPluginSandbox.current
-            if (path.isNotEmpty() && sandbox != null) {
+            // Off the binder thread: reloading a running sandbox waits on it for seconds, and the daemon's other
+            // callbacks queue behind this one until it returns.
+            if (path.isNotEmpty() && sandbox != null) scope.launch(Dispatchers.IO) {
                 runCatching {
                     sandbox.launch(java.nio.file.Paths.get(path)) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
                 }
