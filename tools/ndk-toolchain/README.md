@@ -154,6 +154,23 @@ These are independent, and the script keeps them apart.
   the APK. The 32-bit hosts (`armeabi-v7a`, `x86`) are the least exercised: a 32-bit process has a 4 GB address
   space at best and a large translation unit can exhaust it. Check them on a device before shipping.
 
+## Built in CI, released with the app
+
+Two GitHub workflows do the release, so nothing here has to be built on a desktop:
+
+- **NDK toolchain** (`.github/workflows/ndk-toolchain.yml`) runs this script (`deps native cross package daemon`)
+  once per host ABI and publishes the results as the prerelease `ndk-toolchain-<key>`, where `<key>` is
+  `./toolchain-key.sh`'s hash of this script and the daemon sources. It runs when those change on `main`, or by
+  hand; a key that already has a complete build is skipped. Each host takes one to two hours.
+- **NDK plugin release** (`.github/workflows/ndk-plugin.yml`) runs when a CodeAssist release is published:
+  it downloads the toolchain for the release commit's key, builds `:samples:ndk-plugin:assembleRelease` signed
+  with the upload key (repository secrets), and attaches `CodeAssist-NDK-Plugin-<version>-<abi>.apk` for every
+  ABI. Its summary prints the `plugin_catalog` update for the Get plugins page. Run it by hand with a tag to
+  redo a release, or with no tag to only build.
+
+A release whose commit changed the toolchain's sources has no toolchain yet: the plugin job stops and says so.
+Let the NDK toolchain run finish, then run NDK plugin release by hand for the tag.
+
 ## Running it
 
 ```
