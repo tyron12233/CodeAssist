@@ -428,8 +428,21 @@ interface SdkNetFetcher {
         openRange(url, start, endInclusive)?.use { it.readBytes() }
 }
 
-/** Default [SdkNetFetcher] over `HttpURLConnection` (works on desktop and ART). */
+/**
+ * Default [SdkNetFetcher] over `HttpURLConnection` (works on desktop and ART).
+ *
+ * Every archive request asks for the identity encoding. ART's `HttpURLConnection` (an old OkHttp) otherwise
+ * adds `Accept-Encoding: gzip` on its own, even to a Range request, and dl.google.com then applies the range
+ * to a gzip copy of the zip (a different length and ETag): the offsets read from the zip's central directory
+ * land on the wrong bytes, and a gzip body left on a pooled connection came back as an "Unexpected status
+ * line" made of zip bytes.
+ */
 object HttpSdkNetFetcher : SdkNetFetcher {
+    private const val IDENTITY = "identity"
+
+    private fun isIdentity(contentEncoding: String?): Boolean =
+        contentEncoding.isNullOrBlank() || contentEncoding.trim().equals(IDENTITY, ignoreCase = true)
+
     override fun fetchText(url: String): String? = runCatching {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000; readTimeout = 30_000; instanceFollowRedirects = true
@@ -441,9 +454,14 @@ object HttpSdkNetFetcher : SdkNetFetcher {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000; readTimeout = 60_000; instanceFollowRedirects = true
             setRequestProperty("Range", "bytes=$start-$endInclusive")
+            setRequestProperty("Accept-Encoding", IDENTITY)
         }
         return try {
-            if (conn.responseCode != HttpURLConnection.HTTP_PARTIAL) { conn.disconnect(); null } else conn.inputStream
+            // Only the raw file's own bytes will do: a 206 for another start, or of an encoded copy, is unusable.
+            val usable = conn.responseCode == HttpURLConnection.HTTP_PARTIAL &&
+                isIdentity(conn.contentEncoding) &&
+                conn.getHeaderField("Content-Range")?.trim()?.startsWith("bytes $start-") == true
+            if (!usable) { conn.disconnect(); null } else conn.inputStream
         } catch (e: IOException) {
             conn.disconnect(); null
         }
@@ -461,10 +479,17 @@ object HttpSdkNetFetcher : SdkNetFetcher {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000; readTimeout = 60_000; instanceFollowRedirects = true
             if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
+            setRequestProperty("Accept-Encoding", IDENTITY)
         }
         val code = conn.responseCode
         if (code == 416) return true // requested range past EOF ⇒ already fully downloaded
         if (code >= 400) { conn.disconnect(); throw SdkHttpException(code, url) }
+        if (code == HttpURLConnection.HTTP_PARTIAL && !isIdentity(conn.contentEncoding)) {
+            // The tail of an encoded copy cannot be appended to the raw bytes: drop the partial, start over.
+            conn.disconnect()
+            Files.deleteIfExists(dest)
+            throw IOException("The server sent an encoded partial download; retry to download it again.")
+        }
         val resume = code == HttpURLConnection.HTTP_PARTIAL && existing > 0
         val total = if (resume) existing + conn.contentLengthLong else conn.contentLengthLong
         val opts = if (resume) arrayOf(StandardOpenOption.WRITE, StandardOpenOption.APPEND)
