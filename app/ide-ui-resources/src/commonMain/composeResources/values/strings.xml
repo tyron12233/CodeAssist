@@ -949,6 +949,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="notif_open">Open</string>
     <string name="notif_dismiss">Dismiss</string>
     <string name="notif_section_new">New</string>
+    <string name="notif_view">View</string>
+    <string name="notif_more_row_desc">What happened while you worked</string>
     <string name="notif_section_earlier">Earlier</string>
     <string name="notif_show_more">Show more</string>
     <string name="notif_show_less">Show less</string>

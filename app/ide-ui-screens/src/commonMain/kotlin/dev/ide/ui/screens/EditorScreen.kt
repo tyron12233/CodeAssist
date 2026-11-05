@@ -284,6 +284,13 @@ fun EditorScreen(
             onResolve = state::resolveTransfer,
             onCancel = state::cancelTransfer,
         )
+        // A notification that arrives mid-session shows briefly at the top, with View into the tool window.
+        NotificationHeadsUp(
+            backend = state.backend,
+            suppressed = state.isToolWindowShown(NOTIFICATIONS_TOOL_WINDOW),
+            onView = { state.showToolWindow(NOTIFICATIONS_TOOL_WINDOW) },
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp),
+        )
         val notice = state.fileOpNotice
         FileOpSnackbar(
             text = notice?.let { fileOpNoticeText(it) },

@@ -65,6 +65,11 @@ class ToolWindowContribution(
      * Before [content], so a body passed as a trailing lambda still binds to [content].
      */
     val busy: (@Composable (IdeBackend) -> Boolean)? = null,
+    /**
+     * How many things in the tool window want attention (unread notifications). Above zero, the count shows on
+     * its button wherever it shows (the stripe, the phone's More tab). Before [content], like [busy].
+     */
+    val badge: (@Composable (IdeBackend) -> Int)? = null,
     val content: @Composable (ToolWindowContext) -> Unit,
 )
 

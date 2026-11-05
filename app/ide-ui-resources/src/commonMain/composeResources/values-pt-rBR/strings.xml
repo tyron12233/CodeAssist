@@ -1487,6 +1487,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="notif_open">Abrir</string>
     <string name="notif_dismiss">Dispensar</string>
     <string name="notif_section_new">Novas</string>
+    <string name="notif_view">Ver</string>
+    <string name="notif_more_row_desc">O que aconteceu enquanto você trabalhava</string>
     <string name="notif_section_earlier">Anteriores</string>
     <string name="notif_show_more">Mostrar mais</string>
     <string name="notif_show_less">Mostrar menos</string>

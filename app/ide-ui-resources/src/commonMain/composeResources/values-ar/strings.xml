@@ -1016,6 +1016,8 @@
     <string name="notif_open">فتح</string>
     <string name="notif_dismiss">تجاهل</string>
     <string name="notif_section_new">الجديدة</string>
+    <string name="notif_view">عرض</string>
+    <string name="notif_more_row_desc">ما حدث أثناء عملك</string>
     <string name="notif_section_earlier">السابقة</string>
     <string name="notif_show_more">عرض المزيد</string>
     <string name="notif_show_less">عرض أقل</string>

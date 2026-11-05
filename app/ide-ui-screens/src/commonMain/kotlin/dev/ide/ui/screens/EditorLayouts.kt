@@ -872,6 +872,7 @@ internal fun CompactLayout(
                                     busy = tw.busy?.invoke(state.backend) == true,
                                 )
                             },
+                            moreBadge = state.backend.notifications.unreadCount().collectAsState().value,
                         )
                     },
                 ) {

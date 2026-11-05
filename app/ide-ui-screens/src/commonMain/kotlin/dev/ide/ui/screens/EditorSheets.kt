@@ -1,5 +1,9 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.generated.resources.notif_more_row_desc
+import dev.ide.ui.generated.resources.notif_title
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -143,7 +147,17 @@ internal fun DestinationSheets(
                 onDone = { state.moreOpen = false },
             )
         }
-        MoreSheetContent(host = moreHost, modifier = Modifier.fillMaxWidth().weight(1f))
+        val unread by state.backend.notifications.unreadCount().collectAsState()
+        MoreSheetContent(
+            host = moreHost,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            // The phone has no right stripe, so the notification center opens from here.
+            notificationsUnread = unread,
+            onOpenNotifications = {
+                state.moreOpen = false
+                state.selectRightPanel(NOTIFICATIONS_TOOL_WINDOW)
+            },
+        )
     }
     // The phone's Logs viewer: opened from the More menu or the palette; a tall sheet so a stack trace has room.
     BottomSheet(
@@ -167,6 +181,9 @@ internal fun DestinationSheets(
 internal fun MoreSheetContent(
     host: UiActionHost,
     modifier: Modifier = Modifier,
+    notificationsUnread: Int = 0,
+    /** Opens the Notifications tool window; null leaves its row out. */
+    onOpenNotifications: (() -> Unit)? = null,
 ) {
     UiPluginHost.ensureLoaded()
     val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host)
@@ -175,6 +192,10 @@ internal fun MoreSheetContent(
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
         Text(stringResource(Res.string.more), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
+        if (onOpenNotifications != null) MoreRow(
+            actionIcon("bell"), stringResource(Res.string.notif_title), stringResource(Res.string.notif_more_row_desc),
+            badge = notificationsUnread, onClick = onOpenNotifications,
+        )
         actions.forEach { a ->
             MoreRow(actionIcon(a.iconId), localizedUiActionText(a), localizedUiActionDescription(a) ?: "") { a.perform(host) }
         }
@@ -182,7 +203,13 @@ internal fun MoreSheetContent(
 }
 
 @Composable
-private fun MoreRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+private fun MoreRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    badge: Int = 0,
+    onClick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.md))
             .clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 10.dp),
@@ -196,6 +223,7 @@ private fun MoreRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title
             Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Text(subtitle, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
+        if (badge > 0) dev.ide.ui.components.CountBadge(badge)
         androidx.compose.material3.Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }

@@ -1393,6 +1393,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="notif_open">Buka</string>
     <string name="notif_dismiss">Tutup</string>
     <string name="notif_section_new">Baru</string>
+    <string name="notif_view">Lihat</string>
+    <string name="notif_more_row_desc">Yang terjadi saat Anda bekerja</string>
     <string name="notif_section_earlier">Sebelumnya</string>
     <string name="notif_show_more">Tampilkan lebih banyak</string>
     <string name="notif_show_less">Tampilkan lebih sedikit</string>

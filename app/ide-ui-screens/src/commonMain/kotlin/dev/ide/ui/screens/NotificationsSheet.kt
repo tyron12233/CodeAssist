@@ -4,6 +4,15 @@ import dev.ide.ui.components.HauntedGhost
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import dev.ide.ui.components.ToolWindowHeaderActions
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowContribution
+import dev.ide.ui.ext.UiContributionScope
+import dev.ide.ui.ext.UiPlugin
+import dev.ide.ui.generated.resources.notif_view
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
@@ -165,41 +174,207 @@ fun NotificationsSheet(
                 }
             }
             if (notifications.isEmpty()) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (LocalSeason.current == Season.Halloween) HauntedGhost(56.dp, Modifier.padding(bottom = 8.dp))
-                    Text(
-                        stringResource(Res.string.notif_empty),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        stringResource(Res.string.notif_empty_body),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                NotificationsEmpty()
                 return@Column
             }
-            val fresh = notifications.filter { it.id in newIds }
-            val earlier = notifications.filterNot { it.id in newIds }
-            LazyColumn(
-                Modifier.heightIn(max = 640.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // Headers only when there are both kinds; one group needs no label.
-                val labelled = fresh.isNotEmpty() && earlier.isNotEmpty()
-                if (labelled) item(key = "h-new") { SectionLabel(stringResource(Res.string.notif_section_new)) }
-                itemsKeyed(fresh, key = { it.id }) { n ->
-                    NotificationCard(n, now, isNew = true, onOpen = { onOpenTarget(n) }, onDismissOne = { backend.notifications.dismiss(n.id) })
+            NotificationList(
+                notifications, newIds, now,
+                onOpen = onOpenTarget,
+                onDismissOne = { backend.notifications.dismiss(it.id) },
+                modifier = Modifier.heightIn(max = 640.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The cards, newest first: what was unread when the list opened ([newIds]) under New, the rest under Earlier
+ * (headers only when there are both). Shared by the sheet and the editor's Notifications tool window.
+ */
+@Composable
+private fun NotificationList(
+    notifications: List<UiNotification>,
+    newIds: Set<String>,
+    now: Long,
+    onOpen: (UiNotification) -> Unit,
+    onDismissOne: (UiNotification) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fresh = notifications.filter { it.id in newIds }
+    val earlier = notifications.filterNot { it.id in newIds }
+    LazyColumn(
+        modifier,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val labelled = fresh.isNotEmpty() && earlier.isNotEmpty()
+        if (labelled) item(key = "h-new") { SectionLabel(stringResource(Res.string.notif_section_new)) }
+        itemsKeyed(fresh, key = { it.id }) { n ->
+            NotificationCard(n, now, isNew = true, onOpen = { onOpen(n) }, onDismissOne = { onDismissOne(n) })
+        }
+        if (labelled) item(key = "h-earlier") { SectionLabel(stringResource(Res.string.notif_section_earlier)) }
+        itemsKeyed(earlier, key = { it.id }) { n ->
+            NotificationCard(n, now, isNew = false, onOpen = { onOpen(n) }, onDismissOne = { onDismissOne(n) })
+        }
+    }
+}
+
+/** The empty list: nothing to catch up on. */
+@Composable
+private fun NotificationsEmpty() {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (LocalSeason.current == Season.Halloween) HauntedGhost(56.dp, Modifier.padding(bottom = 8.dp))
+        Text(stringResource(Res.string.notif_empty), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(Res.string.notif_empty_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** Opens what a notification points at (a store item, a project, a screen). Provided by the app shell, so a
+ *  surface below it (the editor's Notifications tool window) can follow a notification without knowing routes. */
+val LocalNotificationOpener = staticCompositionLocalOf<(UiNotification) -> Unit> { {} }
+
+/** The Notifications tool window's id. */
+const val NOTIFICATIONS_TOOL_WINDOW = "ide.notifications"
+
+/**
+ * The notification center as an editor tool window (right side; on a phone it opens from More), so what
+ * happened can be read without leaving the project. Like the sheet, showing it marks everything read, and what
+ * was unread when it opened (or arrived while it is open) stays under New.
+ */
+@Composable
+fun NotificationsPanel(backend: IdeBackend, onOpenTarget: (UiNotification) -> Unit) {
+    val notifications by backend.notifications.notifications().collectAsState()
+    val now = remember(notifications) { nowMillis() }
+    // Seeded in the first composition, before the effect below marks them read: a New header added a frame
+    // later would land above the list's first visible item, scrolled out of sight.
+    val newIds = remember { mutableStateListOf<String>().apply { addAll(notifications.filter { !it.read }.map { it.id }) } }
+    // While it is showing, anything unread is being seen: remember it as new, then mark it read.
+    LaunchedEffect(notifications) {
+        val unread = notifications.filter { !it.read }.map { it.id }
+        if (unread.isNotEmpty()) {
+            newIds.addAll(unread.filterNot { it in newIds })
+            backend.notifications.markAllRead()
+        }
+    }
+    val hosted = ToolWindowHeaderActions(
+        actions = {
+            if (notifications.isNotEmpty()) TextButton(onClick = { backend.notifications.clearAll() }) {
+                Text(stringResource(Res.string.notif_clear))
+            }
+        },
+    )
+    Column(Modifier.fillMaxSize()) {
+        if (!hosted) Row(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(Res.string.notif_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (notifications.isNotEmpty()) TextButton(onClick = { backend.notifications.clearAll() }) {
+                Text(stringResource(Res.string.notif_clear))
+            }
+        }
+        if (notifications.isEmpty()) NotificationsEmpty()
+        else NotificationList(
+            notifications, newIds.toSet(), now,
+            onOpen = onOpenTarget,
+            onDismissOne = { backend.notifications.dismiss(it.id) },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+/**
+ * Registers the Notifications tool window: right side, after the AI chat, with the unread count on its button.
+ * A host UI plugin, so the editor's stripes, the phone's right-hand drawer and the More sheet all find it
+ * the way they find any tool window.
+ */
+object NotificationsUiPlugin : UiPlugin {
+    override val id: String = "ide-notifications"
+
+    override fun contributeUi(scope: UiContributionScope) {
+        scope.toolWindow(
+            ToolWindowContribution(
+                id = NOTIFICATIONS_TOOL_WINDOW,
+                title = "Notifications",
+                iconId = "bell",
+                anchor = ToolWindowAnchor.RIGHT,
+                order = 2000,
+                badge = { backend -> backend.notifications.unreadCount().collectAsState().value },
+                content = { ctx -> NotificationsPanel(ctx.backend, LocalNotificationOpener.current) },
+            ),
+        )
+    }
+}
+
+/**
+ * A notification that arrives while the user is in the editor, shown for a few seconds as one line with View,
+ * so it is noticed without watching a badge. Only what is new since this was composed, and nothing while
+ * [suppressed] (the Notifications tool window is already showing it).
+ */
+@Composable
+fun NotificationHeadsUp(
+    backend: IdeBackend,
+    suppressed: Boolean,
+    onView: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val notifications by backend.notifications.notifications().collectAsState()
+    val seen = remember { notifications.map { it.id to it.count }.toMutableSet() }
+    var showing by remember { mutableStateOf<UiNotification?>(null) }
+    LaunchedEffect(notifications) {
+        // A repeat bumps the count of an entry already seen, which is news again.
+        val arrived = notifications.firstOrNull { !it.read && (it.id to it.count) !in seen }
+        notifications.forEach { seen += it.id to it.count }
+        if (arrived != null && !suppressed) showing = arrived
+    }
+    LaunchedEffect(showing) {
+        if (showing != null) { kotlinx.coroutines.delay(5000); showing = null }
+    }
+    LaunchedEffect(suppressed) { if (suppressed) showing = null }
+    androidx.compose.animation.AnimatedVisibility(
+        visible = showing != null,
+        modifier = modifier,
+        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { -it / 2 },
+        exit = androidx.compose.animation.fadeOut(),
+    ) {
+        var last by remember { mutableStateOf<UiNotification?>(null) }
+        showing?.let { last = it }
+        val n = last ?: return@AnimatedVisibility
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            shadowElevation = 6.dp,
+            modifier = Modifier.widthIn(max = 520.dp).padding(horizontal = 12.dp),
+        ) {
+            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                LevelIcon(n)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        n.source ?: kindLabel(n.kind),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        n.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                if (labelled) item(key = "h-earlier") { SectionLabel(stringResource(Res.string.notif_section_earlier)) }
-                itemsKeyed(earlier, key = { it.id }) { n ->
-                    NotificationCard(n, now, isNew = false, onOpen = { onOpenTarget(n) }, onDismissOne = { backend.notifications.dismiss(n.id) })
+                TextButton(onClick = { showing = null; onView() }) { Text(stringResource(Res.string.notif_view)) }
+                IconButton(onClick = { showing = null }, modifier = Modifier.size(36.dp)) {
+                    Symbol(CaSymbols.close, contentDescription = stringResource(Res.string.notif_dismiss), size = 18.dp, tint = MaterialTheme.colorScheme.outline)
                 }
             }
         }

@@ -47,6 +47,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -114,6 +115,8 @@ class SidebarPanel(
     val ownHeader: Boolean = false,
     /** Its work is running (see [dev.ide.ui.ext.ToolWindowContribution.busy]): the stripe animates its icon. */
     val busy: Boolean = false,
+    /** Things waiting in it (see [dev.ide.ui.ext.ToolWindowContribution.badge]): the stripe button shows the count. */
+    val badge: Int = 0,
     val content: @Composable () -> Unit,
 )
 
@@ -194,7 +197,10 @@ fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: 
         }
     }
     return tools.map { tw ->
-        SidebarPanel(tw.id, tw.title, actionIcon(tw.iconId), tw.order, busy = tw.busy?.invoke(backend) == true) { tw.content(ctx) }
+        SidebarPanel(
+            tw.id, tw.title, actionIcon(tw.iconId), tw.order,
+            busy = tw.busy?.invoke(backend) == true, badge = tw.badge?.invoke(backend) ?: 0,
+        ) { tw.content(ctx) }
     }
 }
 
@@ -258,6 +264,7 @@ fun ActivityRail(
                                 StripeButton(
                                     panel.icon, withShortcut(panel.title, panel.id), active = panel.id == selectedId,
                                     drag = DraggedToolWindow(panel.id, panel.title, panel.icon), busy = panel.busy,
+                                    badge = panel.badge,
                                 ) { onSelect(panel.id) }
                             }
                         }
@@ -280,7 +287,7 @@ fun ActivityRail(
                                         bottomPanels.forEach { panel ->
                                             StripeButton(
                                                 panel.icon, withShortcut(panel.title, panel.id), active = panel.id == bottomSelectedId,
-                                                drag = DraggedToolWindow(panel.id, panel.title, panel.icon),
+                                                drag = DraggedToolWindow(panel.id, panel.title, panel.icon), badge = panel.badge,
                                             ) { onSelect(panel.id) }
                                         }
                                     }
@@ -319,6 +326,7 @@ private fun StripeButton(
     active: Boolean,
     drag: DraggedToolWindow? = null,
     busy: Boolean = false,
+    badge: Int = 0,
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -361,7 +369,30 @@ private fun StripeButton(
                 Modifier.size(StripeIconSize),
                 tint = if (active) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
             )
+            if (badge > 0) CountBadge(badge, Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp))
         }
+    }
+}
+
+/**
+ * A small count over a button's corner (unread notifications on a tool window's button): a number, not a dot,
+ * because how many is what tells the user whether to look now. Caps at "9+".
+ */
+@Composable
+fun CountBadge(count: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier.heightIn(min = 16.dp).widthIn(min = 16.dp)
+            .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (count > 9) "9+" else count.toString(),
+            color = MaterialTheme.colorScheme.onError,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }
 

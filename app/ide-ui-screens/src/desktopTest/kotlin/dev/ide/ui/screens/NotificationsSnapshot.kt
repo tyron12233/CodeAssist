@@ -107,6 +107,42 @@ class NotificationsSnapshot {
         assertTrue(png > 0)
     }
 
+    /** A notification arriving after the editor opened shows as a heads-up; one already there does not. */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun aNewArrivalShowsAHeadsUp() {
+        val list = MutableStateFlow(sample)
+        val backend = object : StubBackend() {
+            override val notifications: NotificationService = object : NotificationService {
+                override fun notifications(): StateFlow<List<UiNotification>> = list
+            }
+        }
+        val scene = ImageComposeScene(width = 820, height = 300, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    NotificationHeadsUp(backend, suppressed = false, onView = {}, modifier = Modifier.padding(top = 24.dp))
+                }
+            }
+        }
+        try {
+            val before = scene.render(16_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
+            list.value = listOf(
+                UiNotification(
+                    id = "new", kind = UiNotificationKind.SYSTEM, source = "NDK Toolchain",
+                    level = dev.ide.ui.backend.UiNotificationLevel.WARNING,
+                    title = "Toolchain update available", timestampMs = System.currentTimeMillis(),
+                ),
+            ) + sample
+            var img = scene.render(32_000_000L)
+            for (f in 3..40) img = scene.render(f * 16_666_667L)
+            val after = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File("$OUT_DIR/notifications-heads-up.png").apply { parentFile?.mkdirs() }.writeBytes(after)
+            assertTrue(!before.contentEquals(after), "the arrival should draw a heads-up")
+        } finally {
+            scene.close()
+        }
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun render(name: String, width: Int = 480, height: Int = 200, content: @androidx.compose.runtime.Composable () -> Unit): Int {
         val scene = ImageComposeScene(width = width, height = height, density = Density(2f)) {

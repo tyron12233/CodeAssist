@@ -94,6 +94,8 @@ fun CodeAssistApp(
     // noinspection RememberReturnType
     remember(Unit) {
         backend.uiPlugins().forEach { UiPluginHost.register(it) }
+        // The shell's own tool window: the notification center, readable from inside a project.
+        UiPluginHost.register(dev.ide.ui.screens.NotificationsUiPlugin)
         UiPluginHost.ensureLoaded()
     }
 
@@ -170,6 +172,7 @@ fun CodeAssistApp(
             LocalAds provides app.adController,
             LocalHostFileActions provides fileActions,
             LocalPluginNavigator provides app::openPluginScreen,
+            dev.ide.ui.screens.LocalNotificationOpener provides { n -> app.openNotificationTarget(n) },
             LocalSettingsPageOpener provides { id -> app.openSettingsPageFrom(app.screen, id) },
             // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
             // user on the editor to see it. Guarded on a project being open, since a tab over nothing is not a

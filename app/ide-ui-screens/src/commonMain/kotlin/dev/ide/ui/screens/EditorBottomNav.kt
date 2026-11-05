@@ -43,6 +43,8 @@ internal fun BottomNav(
     /** The primary RIGHT tool window (the AI chat), the phone's way into the right-hand overlay that the wide
      *  layout reaches from its right stripe. Null when no plugin contributes one. */
     rightTool: RightToolNavItem? = null,
+    /** Unread notifications, shown on More (the phone's way into the Notifications tool window). */
+    moreBadge: Int = 0,
 ) {
     Row(
         Modifier.fillMaxWidth().height(60.dp),
@@ -56,7 +58,7 @@ internal fun BottomNav(
         if (rightTool != null) {
             BottomNavItem(rightTool.icon, rightTool.label, rightTool.open, busy = rightTool.busy, onClick = rightTool.onClick)
         }
-        BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More) { onSelect(RailDestination.More) }
+        BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More, badge = moreBadge) { onSelect(RailDestination.More) }
     }
 }
 
@@ -82,14 +84,7 @@ private fun BottomNavItem(
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Box {
             IconButtonCa(icon, label, onClick, Modifier.busyRing(busy), active = active, iconSize = 22, boxSize = 40)
-            if (badge > 0) {
-                Box(
-                    Modifier.align(Alignment.TopEnd)
-                        .height(15.dp).width(15.dp)
-                        .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.pill)),
-                    contentAlignment = Alignment.Center,
-                ) { Text("$badge", color = MaterialTheme.colorScheme.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
-            }
+            if (badge > 0) dev.ide.ui.components.CountBadge(badge, Modifier.align(Alignment.TopEnd))
         }
         Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, fontSize = 10.5f.sp)
     }

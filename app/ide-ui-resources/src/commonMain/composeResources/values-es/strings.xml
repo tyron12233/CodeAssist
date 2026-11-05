@@ -1595,6 +1595,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="notif_open">Abrir</string>
     <string name="notif_dismiss">Descartar</string>
     <string name="notif_section_new">Nuevas</string>
+    <string name="notif_view">Ver</string>
+    <string name="notif_more_row_desc">Lo que pasó mientras trabajabas</string>
     <string name="notif_section_earlier">Anteriores</string>
     <string name="notif_show_more">Mostrar más</string>
     <string name="notif_show_less">Mostrar menos</string>

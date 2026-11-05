@@ -1491,6 +1491,8 @@
     <string name="notif_open">Открыть</string>
     <string name="notif_dismiss">Скрыть</string>
     <string name="notif_section_new">Новые</string>
+    <string name="notif_view">Открыть</string>
+    <string name="notif_more_row_desc">Что произошло, пока вы работали</string>
     <string name="notif_section_earlier">Ранее</string>
     <string name="notif_show_more">Показать полностью</string>
     <string name="notif_show_less">Свернуть</string>

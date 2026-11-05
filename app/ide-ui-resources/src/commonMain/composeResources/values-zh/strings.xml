@@ -938,6 +938,8 @@
     <string name="notif_open">打开</string>
     <string name="notif_dismiss">关闭</string>
     <string name="notif_section_new">新通知</string>
+    <string name="notif_view">查看</string>
+    <string name="notif_more_row_desc">你工作时发生的事</string>
     <string name="notif_section_earlier">更早</string>
     <string name="notif_show_more">显示更多</string>
     <string name="notif_show_less">收起</string>

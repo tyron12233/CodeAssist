@@ -119,6 +119,11 @@ object CaIcons {
         roundRect(8.5f, 8.5f, 12f, 12f, 2.5f),                                          // front sheet
         s("M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"), // back sheet
     )
+    val bell = build(
+        "bell",
+        s("M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"),
+        s("M10 20.5a2 2 0 0 0 4 0"),
+    )
     val cut = build(
         "cut",
         circle(6f, 6f, 3f),
