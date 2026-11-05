@@ -142,7 +142,11 @@ object AndroidIde {
         // The "Get plugins" page: a public, read-only list, so it needs only the project config.
         if (BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_KEY.isNotBlank()) {
             manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_DOWNLOAD_SERVICE) {
-                dev.ide.store.impl.SupabasePluginDownloads(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY)
+                dev.ide.store.impl.SupabasePluginDownloads(
+                    BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY,
+                    // A plugin built per ABI is offered as this device's build.
+                    deviceAbis = Build.SUPPORTED_ABIS?.toList().orEmpty(),
+                )
             }
         }
         manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_PACKAGES) {

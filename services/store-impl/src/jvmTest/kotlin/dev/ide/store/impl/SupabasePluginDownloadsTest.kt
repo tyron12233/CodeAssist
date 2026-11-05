@@ -39,4 +39,30 @@ class SupabasePluginDownloadsTest {
         assertEquals(false, service.available())
         assertEquals(true, service.fetch() is dev.ide.store.StoreResult.Unavailable)
     }
+
+    /** The row the NDK plugin has once it is built per ABI: the device's own build, else the plain link. */
+    private val perAbiRow = """[{"id":"dev.codeassist.ndk","name":"NDK","version":"1.4.0","size_bytes":100,
+        "download_url":"https://example.com/ndk-arm64.apk",
+        "abi_downloads":{"arm64-v8a":{"url":"https://example.com/ndk-arm64.apk","size":100},
+                         "x86_64":{"url":"https://example.com/ndk-x86_64.apk","size":200},
+                         "armeabi-v7a":{"url":"http://example.com/not-https.apk","size":300}}}]"""
+
+    @Test
+    fun aDeviceGetsTheBuildForItsFirstListedAbi() {
+        val x86 = SupabasePluginDownloads(url = "", apiKey = "", deviceAbis = listOf("x86_64", "x86", "arm64-v8a"))
+        val d = x86.parse(perAbiRow).single()
+        assertEquals("https://example.com/ndk-x86_64.apk", d.downloadUrl)
+        assertEquals(200L, d.sizeBytes)
+    }
+
+    @Test
+    fun aDeviceWithNoListedAbiGetsThePlainLink() {
+        // armeabi-v7a is listed, but not over https, so it is not offered; nor is x86, which is absent.
+        val arm32 = SupabasePluginDownloads(url = "", apiKey = "", deviceAbis = listOf("armeabi-v7a", "x86"))
+        val d = arm32.parse(perAbiRow).single()
+        assertEquals("https://example.com/ndk-arm64.apk", d.downloadUrl)
+        assertEquals(100L, d.sizeBytes)
+        // And off a device (no ABIs), the plain link too.
+        assertEquals("https://example.com/ndk-arm64.apk", service.parse(perAbiRow).single().downloadUrl)
+    }
 }

@@ -15,7 +15,10 @@ data class PluginDownload(
     /** The oldest CodeAssist the plugin loads in, or null for any. */
     val minHostVersion: String? = null,
     val sizeBytes: Long? = null,
-    /** An https link to the APK. The app opens it in the browser; it never fetches or runs it itself. */
+    /**
+     * An https link to the APK. The app opens it in the browser; it never fetches or runs it itself. For a plugin
+     * built per ABI it is already the build for this device (see `SupabasePluginDownloads`).
+     */
     val downloadUrl: String,
     /** The release page (notes, the APK among the other assets), when there is one. */
     val pageUrl: String? = null,
