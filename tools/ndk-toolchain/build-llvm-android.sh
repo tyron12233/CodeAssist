@@ -196,8 +196,14 @@ stage_deps() {
 stage_native() {
     require_disk 8
     log "configuring the native tablegen build"
+    # `-include cstdint`: LLVM 18's headers use uint64_t and friends without including <cstdint> (SmallVector.h
+    # is the first to break), which the host libstdc++ used to supply transitively. GCC 14 and 15 no longer do,
+    # so a stock Linux host with a recent GCC stops at the first file with "'uint64_t' was not declared". This
+    # only touches the build-machine tablegens; the Android build uses the NDK's clang and libc++, which are
+    # unaffected. Override with NATIVE_CXX_FLAGS (set it empty to drop the flag).
     "$CMAKE" -G Ninja -S "$SRC/llvm" -B "$NATIVE_BUILD" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="${NATIVE_CXX_FLAGS-"-include cstdint"}" \
         -DLLVM_ENABLE_PROJECTS="clang" \
         -DLLVM_TARGETS_TO_BUILD="$LLVM_TARGETS" \
         -DLLVM_ENABLE_ASSERTIONS=OFF \
