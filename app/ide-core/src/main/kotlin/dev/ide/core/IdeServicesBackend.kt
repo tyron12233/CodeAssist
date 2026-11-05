@@ -434,10 +434,19 @@ class IdeServicesBackend(
      */
     private val userMessageRelay: dev.ide.platform.Disposable? = manager?.userMessages?.onMessage { posted ->
         runCatching {
+            val (title, body) = dev.ide.core.backend.splitMessage(posted.message.text)
             notificationCenter.post(
                 kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
-                title = posted.message.text,
-                body = null,
+                title = title,
+                body = body,
+                // The plugin whose code posted it, so the entry says who is talking.
+                source = runCatching { blamePlugin(posted.origin)?.name }.getOrNull(),
+                foldRepeats = true,
+                level = when (posted.message.severity) {
+                    dev.ide.platform.notify.MessageSeverity.ERROR -> dev.ide.ui.backend.UiNotificationLevel.ERROR
+                    dev.ide.platform.notify.MessageSeverity.WARNING -> dev.ide.ui.backend.UiNotificationLevel.WARNING
+                    else -> dev.ide.ui.backend.UiNotificationLevel.INFO
+                },
             )
         }
     }

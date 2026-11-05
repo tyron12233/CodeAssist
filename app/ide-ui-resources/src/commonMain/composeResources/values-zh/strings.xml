@@ -937,6 +937,17 @@
     <string name="notif_clear">清除</string>
     <string name="notif_open">打开</string>
     <string name="notif_dismiss">关闭</string>
+    <string name="notif_section_new">新通知</string>
+    <string name="notif_section_earlier">更早</string>
+    <string name="notif_show_more">显示更多</string>
+    <string name="notif_show_less">收起</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">商店</string>
+    <string name="notif_kind_update">商店更新</string>
+    <string name="notif_kind_build">构建</string>
+    <string name="notif_kind_agent">AI 智能体</string>
+    <string name="notif_kind_learn">学习</string>
+    <string name="notif_kind_system">CodeAssist</string>
     <string name="notif_just_now">刚刚</string>
     <string name="notif_minutes">%1$d 分钟前</string>
     <string name="notif_hours">%1$d 小时前</string>

@@ -1015,6 +1015,17 @@
     <string name="notif_clear">مسح</string>
     <string name="notif_open">فتح</string>
     <string name="notif_dismiss">تجاهل</string>
+    <string name="notif_section_new">الجديدة</string>
+    <string name="notif_section_earlier">السابقة</string>
+    <string name="notif_show_more">عرض المزيد</string>
+    <string name="notif_show_less">عرض أقل</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">المتجر</string>
+    <string name="notif_kind_update">تحديث من المتجر</string>
+    <string name="notif_kind_build">البناء</string>
+    <string name="notif_kind_agent">وكيل الذكاء الاصطناعي</string>
+    <string name="notif_kind_learn">تعلّم</string>
+    <string name="notif_kind_system">CodeAssist</string>
     <string name="notif_just_now">قبل قليل</string>
     <string name="notif_minutes">قبل %1$d د</string>
     <string name="notif_hours">قبل %1$d س</string>

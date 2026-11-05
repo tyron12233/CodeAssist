@@ -4,6 +4,30 @@ import dev.ide.ui.components.HauntedGhost
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import dev.ide.ui.backend.UiNotificationLevel
+import dev.ide.ui.generated.resources.notif_section_new
+import dev.ide.ui.generated.resources.notif_section_earlier
+import dev.ide.ui.generated.resources.notif_show_more
+import dev.ide.ui.generated.resources.notif_show_less
+import dev.ide.ui.generated.resources.notif_repeat_count
+import dev.ide.ui.generated.resources.notif_kind_store
+import dev.ide.ui.generated.resources.notif_kind_update
+import dev.ide.ui.generated.resources.notif_kind_build
+import dev.ide.ui.generated.resources.notif_kind_agent
+import dev.ide.ui.generated.resources.notif_kind_learn
+import dev.ide.ui.generated.resources.notif_kind_system
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +41,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -103,8 +126,10 @@ fun NotificationBell(backend: IdeBackend, onClick: () -> Unit, modifier: Modifie
  * The notification list.
  *
  * Opening it marks everything read. That is the honest reading of the gesture: the user came to see what
- * happened, and leaving a badge up after they looked would only train them to ignore it. Dismissing is
- * separate and permanent, because it is a decision rather than a glance.
+ * happened, and leaving a badge up after they looked would only train them to ignore it. What was unread when
+ * the sheet opened is still shown apart, under New, so the entries the user came for are the first thing they
+ * read. Dismissing is separate and permanent, because it is a decision rather than a glance: the × on a card,
+ * or a swipe.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -114,15 +139,18 @@ fun NotificationsSheet(
     onOpenTarget: (UiNotification) -> Unit,
 ) {
     val notifications by backend.notifications.notifications().collectAsState()
-    val sheetState = rememberModalBottomSheetState()
+    // Open to the list's own height (capped below) rather than half-way, so the entries are not below the fold.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val now = remember { nowMillis() }
+    // Read before markAllRead runs (it runs after this first composition), so New keeps what was new on opening.
+    val newIds = remember { notifications.filter { !it.read }.map { it.id }.toSet() }
 
     LaunchedEffect(Unit) { backend.notifications.markAllRead() }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 4.dp),
+                Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -156,14 +184,22 @@ fun NotificationsSheet(
                 }
                 return@Column
             }
-            LazyColumn(Modifier.heightIn(max = 460.dp)) {
-                itemsKeyed(notifications, key = { it.id }) { n ->
-                    NotificationRow(
-                        notification = n,
-                        now = now,
-                        onOpen = { onOpenTarget(n) },
-                        onDismissOne = { backend.notifications.dismiss(n.id) },
-                    )
+            val fresh = notifications.filter { it.id in newIds }
+            val earlier = notifications.filterNot { it.id in newIds }
+            LazyColumn(
+                Modifier.heightIn(max = 640.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Headers only when there are both kinds; one group needs no label.
+                val labelled = fresh.isNotEmpty() && earlier.isNotEmpty()
+                if (labelled) item(key = "h-new") { SectionLabel(stringResource(Res.string.notif_section_new)) }
+                itemsKeyed(fresh, key = { it.id }) { n ->
+                    NotificationCard(n, now, isNew = true, onOpen = { onOpenTarget(n) }, onDismissOne = { backend.notifications.dismiss(n.id) })
+                }
+                if (labelled) item(key = "h-earlier") { SectionLabel(stringResource(Res.string.notif_section_earlier)) }
+                itemsKeyed(earlier, key = { it.id }) { n ->
+                    NotificationCard(n, now, isNew = false, onOpen = { onOpenTarget(n) }, onDismissOne = { backend.notifications.dismiss(n.id) })
                 }
             }
         }
@@ -171,51 +207,159 @@ fun NotificationsSheet(
 }
 
 @Composable
-private fun NotificationRow(
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 2.dp),
+    )
+}
+
+/**
+ * One notification as a card: who it is from and when on a small line, the title, then the body. A long body
+ * shows its first lines with Show more; a tap opens the notification's target, or, with none, expands it.
+ * Swiping the card away (or its ×) dismisses it.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun NotificationCard(
     notification: UiNotification,
     now: Long,
+    isNew: Boolean,
     onOpen: () -> Unit,
     onDismissOne: () -> Unit,
 ) {
-    val pair = tonalPair(notification.kind.ordinal)
-    Row(
-        Modifier.fillMaxWidth()
-            .then(if (notification.target != null) Modifier.clickable(onClick = onOpen) else Modifier)
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Surface(shape = CircleShape, color = pair.container, modifier = Modifier.size(40.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Symbol(glyphFor(notification.kind), contentDescription = null, size = 20.dp, tint = pair.onContainer)
-            }
-        }
-        Column(Modifier.weight(1f)) {
-            Text(notification.title, style = MaterialTheme.typography.titleSmall)
-            notification.body?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    var expanded by remember(notification.id) { mutableStateOf(false) }
+    var overflows by remember(notification.id) { mutableStateOf(false) }
+    val shape = RoundedCornerShape(20.dp)
+    val swipe = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value != SwipeToDismissBoxValue.Settled) { onDismissOne(); true } else false
+        },
+    )
+    SwipeToDismissBox(
+        state = swipe,
+        backgroundContent = {
+            Box(
+                Modifier.fillMaxSize().clip(shape).background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = if (swipe.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd,
+            ) {
+                Symbol(
+                    CaSymbols.close, contentDescription = null, size = 22.dp,
+                    tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(horizontal = 24.dp),
                 )
             }
-            Text(
-                relativeTime(notification.timestampMs, now),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
+        },
+    ) {
+        Surface(
+            shape = shape,
+            color = if (isNew) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth().clip(shape).clickable {
+                if (notification.target != null) onOpen() else if (overflows || expanded) expanded = !expanded
+            },
+        ) {
+            Row(Modifier.padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp)) {
+                LevelIcon(notification)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    // Who and when, small, so the title below can be the first thing read.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            notification.source ?: kindLabel(notification.kind),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Text(
+                            " · " + relativeTime(notification.timestampMs, now),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                        )
+                        if (notification.count > 1) {
+                            Spacer(Modifier.width(6.dp))
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+                                Text(
+                                    stringResource(Res.string.notif_repeat_count, notification.count),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        notification.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    notification.body?.let { body ->
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            body,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (expanded) Int.MAX_VALUE else BODY_LINES,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+                        )
+                        if (overflows || expanded) Text(
+                            stringResource(if (expanded) Res.string.notif_show_less else Res.string.notif_show_more),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp).clickable { expanded = !expanded },
+                        )
+                    }
+                }
+                IconButton(onClick = onDismissOne, modifier = Modifier.size(36.dp)) {
+                    Symbol(
+                        CaSymbols.close, contentDescription = stringResource(Res.string.notif_dismiss), size = 18.dp,
+                        tint = MaterialTheme.colorScheme.outline,
+                    )
+                }
+            }
         }
-        if (!notification.read) {
-            // An unread marker inside the sheet too: opening marks everything read, so without this the
-            // user could not tell which entries are the new ones they came for.
-            Box(
-                Modifier.size(8.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-                    .align(Alignment.CenterVertically),
-            )
-        }
-        TextButton(onClick = onDismissOne) { Text(stringResource(Res.string.notif_dismiss)) }
     }
 }
+
+/** The card's icon: a failure or a warning shows as one, anything else by what it is about. */
+@Composable
+private fun LevelIcon(notification: UiNotification) {
+    val scheme = MaterialTheme.colorScheme
+    val (glyph, container, content) = when (notification.level) {
+        UiNotificationLevel.ERROR -> Triple(CaSymbols.error, scheme.errorContainer, scheme.onErrorContainer)
+        UiNotificationLevel.WARNING -> Triple(CaSymbols.warning, scheme.tertiaryContainer, scheme.onTertiaryContainer)
+        UiNotificationLevel.INFO -> {
+            val pair = tonalPair(notification.kind.ordinal)
+            val g = if (notification.source != null && notification.kind == UiNotificationKind.SYSTEM) CaSymbols.extension
+            else glyphFor(notification.kind)
+            Triple(g, pair.container, pair.onContainer)
+        }
+    }
+    Surface(shape = CircleShape, color = container, modifier = Modifier.size(36.dp)) {
+        Box(contentAlignment = Alignment.Center) {
+            Symbol(glyph, contentDescription = null, size = 19.dp, tint = content)
+        }
+    }
+}
+
+@Composable
+private fun kindLabel(kind: UiNotificationKind): String = stringResource(
+    when (kind) {
+        UiNotificationKind.STORE_SUBMISSION -> Res.string.notif_kind_store
+        UiNotificationKind.STORE_UPDATE -> Res.string.notif_kind_update
+        UiNotificationKind.BUILD -> Res.string.notif_kind_build
+        UiNotificationKind.AGENT -> Res.string.notif_kind_agent
+        UiNotificationKind.LEARN -> Res.string.notif_kind_learn
+        UiNotificationKind.SYSTEM -> Res.string.notif_kind_system
+    },
+)
+
+private const val BODY_LINES = 3
 
 private fun glyphFor(kind: UiNotificationKind): Char = when (kind) {
     UiNotificationKind.STORE_SUBMISSION -> CaSymbols.upload

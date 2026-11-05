@@ -3,6 +3,7 @@ package dev.ide.core.backend
 import dev.ide.ui.backend.NotificationService
 import dev.ide.ui.backend.UiNotification
 import dev.ide.ui.backend.UiNotificationKind
+import dev.ide.ui.backend.UiNotificationLevel
 import dev.ide.ui.backend.UiNotificationTarget
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +51,16 @@ internal class NotificationCenter(
         body: String? = null,
         target: UiNotificationTarget? = null,
         key: String? = null,
+        source: String? = null,
+        level: UiNotificationLevel = UiNotificationLevel.INFO,
+        /** Fold this into an earlier keyless entry that says exactly the same, with a count, instead of adding a
+         *  row. For messages repeated verbatim (a plugin reporting the same thing on every run); off by
+         *  default, because two builds failing are two events. */
+        foldRepeats: Boolean = false,
     ): UiNotification {
+        val repeat = if (key != null || !foldRepeats) null else state.value.firstOrNull {
+            it.key == null && it.kind == kind && it.title == title && it.body == body && it.source == source && it.level == level
+        }
         val notification = UiNotification(
             id = key ?: "n-${now()}-${(0..0xFFFF).random().toString(16)}",
             kind = kind,
@@ -60,8 +70,11 @@ internal class NotificationCenter(
             read = false,
             target = target,
             key = key,
+            source = source,
+            level = level,
+            count = (repeat?.count ?: 0) + 1,
         )
-        state.value = (listOf(notification) + state.value.filterNot { it.matches(notification) })
+        state.value = (listOf(notification) + state.value.filterNot { it.matches(notification) || it === repeat })
             .take(MAX_KEPT)
         afterChange()
         runCatching { presenter?.invoke(notification) }
@@ -141,15 +154,24 @@ internal class NotificationCenter(
         // An unknown kind means a newer build wrote it; keep the notification and file it under SYSTEM
         // rather than dropping something the user has not seen.
         val kind = UiNotificationKind.entries.firstOrNull { it.name == kindName } ?: UiNotificationKind.SYSTEM
+        val storedTitle = dev.ide.platform.JsonReader.str(value, "title") ?: return null
+        val storedBody = dev.ide.platform.JsonReader.str(value, "body")
+        // A plugin message saved before messages were split has all of it in the title; split it the same way.
+        val (title, body) = if (storedBody == null && kind == UiNotificationKind.SYSTEM) splitMessage(storedTitle)
+        else storedTitle to storedBody
         return UiNotification(
             id = id,
             kind = kind,
-            title = dev.ide.platform.JsonReader.str(value, "title") ?: return null,
-            body = dev.ide.platform.JsonReader.str(value, "body"),
+            title = title,
+            body = body,
             timestampMs = dev.ide.platform.JsonReader.long(value, "timestampMs", 0L),
             read = dev.ide.platform.JsonReader.bool(value, "read", false),
             target = parseTarget(value),
             key = dev.ide.platform.JsonReader.str(value, "key"),
+            source = dev.ide.platform.JsonReader.str(value, "source"),
+            level = UiNotificationLevel.entries.firstOrNull { it.name == dev.ide.platform.JsonReader.str(value, "level") }
+                ?: UiNotificationLevel.INFO,
+            count = dev.ide.platform.JsonReader.long(value, "count", 1L).toInt().coerceAtLeast(1),
         )
     }
 
@@ -181,6 +203,9 @@ internal class NotificationCenter(
                         append(""""title":""").append(quote(n.title)).append(',')
                         n.body?.let { append(""""body":""").append(quote(it)).append(',') }
                         n.key?.let { append(""""key":""").append(quote(it)).append(',') }
+                        n.source?.let { append(""""source":""").append(quote(it)).append(',') }
+                        if (n.level != UiNotificationLevel.INFO) append(""""level":""").append(quote(n.level.name)).append(',')
+                        if (n.count > 1) append(""""count":""").append(n.count).append(',')
                         targetFields(n.target)?.let { append(it).append(',') }
                         append(""""read":""").append(n.read).append(',')
                         append(""""timestampMs":""").append(n.timestampMs)
@@ -218,3 +243,27 @@ internal class NotificationCenter(
         const val MAX_KEPT = 100
     }
 }
+
+/**
+ * A one-line message as a notification's title and body. A plugin says everything in one string ("Hello Plugin
+ * ran its packaged tool: hello from a binary ..., running as /data/app/..."), which as a title is a wall of text.
+ * A second line becomes the body; otherwise a long message is cut at its first ": " when what comes before reads
+ * as a headline. Anything else stays one title.
+ */
+internal fun splitMessage(text: String): Pair<String, String?> {
+    val t = text.trim()
+    val newline = t.indexOf('\n')
+    if (newline > 0) {
+        val rest = t.substring(newline + 1).trim()
+        return t.substring(0, newline).trim() to rest.ifEmpty { null }
+    }
+    if (t.length <= SHORT_TITLE) return t to null
+    val colon = t.indexOf(": ")
+    if (colon in 8..SHORT_TITLE) {
+        val rest = t.substring(colon + 2).trim()
+        if (rest.isNotEmpty()) return t.substring(0, colon).trim() to rest.replaceFirstChar { it.uppercaseChar() }
+    }
+    return t to null
+}
+
+private const val SHORT_TITLE = 72

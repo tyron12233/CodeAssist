@@ -948,6 +948,17 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="notif_clear">Clear</string>
     <string name="notif_open">Open</string>
     <string name="notif_dismiss">Dismiss</string>
+    <string name="notif_section_new">New</string>
+    <string name="notif_section_earlier">Earlier</string>
+    <string name="notif_show_more">Show more</string>
+    <string name="notif_show_less">Show less</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">Store</string>
+    <string name="notif_kind_update">Store update</string>
+    <string name="notif_kind_build">Build</string>
+    <string name="notif_kind_agent">AI agent</string>
+    <string name="notif_kind_learn">Learn</string>
+    <string name="notif_kind_system">CodeAssist</string>
     <string name="notif_just_now">just now</string>
     <string name="notif_minutes">%1$d min ago</string>
     <string name="notif_hours">%1$d h ago</string>

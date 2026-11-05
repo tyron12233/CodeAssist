@@ -30,6 +30,9 @@ enum class UiNotificationKind {
     SYSTEM,
 }
 
+/** How serious a notification is: it picks the icon and its color, so a failure stands out from news. */
+enum class UiNotificationLevel { INFO, WARNING, ERROR }
+
 /** Where tapping a notification should go. Null means it is informational and taps do nothing. */
 sealed interface UiNotificationTarget {
     /** Open a store item's detail page. */
@@ -62,6 +65,11 @@ data class UiNotification(
     val read: Boolean = false,
     val target: UiNotificationTarget? = null,
     val key: String? = null,
+    /** Who it is from when that is not the app itself, e.g. the plugin that said it. Shown above the title. */
+    val source: String? = null,
+    val level: UiNotificationLevel = UiNotificationLevel.INFO,
+    /** How many times this same message arrived; repeats fold into one entry instead of stacking. */
+    val count: Int = 1,
 )
 
 /**
