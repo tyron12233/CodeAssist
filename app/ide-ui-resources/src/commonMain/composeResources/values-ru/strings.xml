@@ -590,6 +590,10 @@
     <string name="edoverlay_rename_kind">Переименовать %1$s</string>
     <string name="edoverlay_renaming">Переименование…</string>
     <string name="edoverlay_rename_hint">Enter, чтобы переименовать «%1$s», Esc для отмены</string>
+    <string name="edoverlay_inline_rename_hint">Переименовать %1$s · Enter — применить, Esc — отмена</string>
+    <string name="edoverlay_inline_rename_apply">Применить</string>
+    <string name="edoverlay_renaming_elsewhere">Переименование в других файлах…</string>
+    <string name="edoverlay_rename_invalid">«%1$s» — недопустимое имя</string>
     <string name="edoverlay_go_to_line">Перейти к строке</string>
     <string name="edoverlay_go_to_line_hint">Строка 1–%1$d  (строка или строка:столбец)</string>
     <string name="edoverlay_no_documentation">Нет документации</string>

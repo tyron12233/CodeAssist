@@ -95,9 +95,14 @@ import dev.ide.ui.generated.resources.edoverlay_quick_documentation
 import dev.ide.ui.generated.resources.edoverlay_rename_hint
 import dev.ide.ui.generated.resources.edoverlay_rename_kind
 import dev.ide.ui.generated.resources.edoverlay_renaming
+import dev.ide.ui.generated.resources.edoverlay_inline_rename_apply
+import dev.ide.ui.generated.resources.edoverlay_inline_rename_hint
+import dev.ide.ui.generated.resources.edoverlay_renaming_elsewhere
+import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.edoverlay_select_all
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.platform.hasHardwareKeyboard
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -164,6 +169,66 @@ internal fun RenamePopup(
         Text(if (busy) stringResource(Res.string.edoverlay_renaming) else stringResource(Res.string.edoverlay_rename_hint, state.oldName),
             color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+/**
+ * The in-place rename's bar: what Enter and Esc do while the name is typed in the code (with Apply / Cancel
+ * buttons for a touch screen with no such keys), then "renaming in other files" while the rest of the project
+ * follows, and the reason when the rename was refused. [kind] is null once the name is no longer being typed.
+ */
+@Composable
+internal fun InlineRenameBar(
+    kind: String?,
+    busy: Boolean,
+    error: String?,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.padding(horizontal = 12.dp, vertical = 12.dp).widthIn(max = 420.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, if (error != null) MaterialTheme.colorScheme.error else Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val message = when {
+            error != null -> error
+            busy -> stringResource(Res.string.edoverlay_renaming_elsewhere)
+            // The keys are named only where there are keys: a phone has no Escape, and its Enter is the
+            // keyboard's own action key. There the buttons (and system Back, which cancels) are the way out.
+            kind != null && hasHardwareKeyboard() -> stringResource(Res.string.edoverlay_inline_rename_hint, kind)
+            kind != null -> stringResource(Res.string.edoverlay_rename_kind, kind)
+            else -> ""
+        }
+        Text(
+            message,
+            color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (!busy) {
+            Spacer(Modifier.width(8.dp))
+            if (kind != null) {
+                BarButton(stringResource(Res.string.edoverlay_inline_rename_apply), MaterialTheme.colorScheme.primary, onApply)
+            }
+            BarButton(stringResource(Res.string.cancel), MaterialTheme.colorScheme.onSurfaceVariant, onCancel)
+        }
+    }
+}
+
+@Composable
+private fun BarButton(label: String, color: Color, onClick: () -> Unit) {
+    Text(
+        label,
+        color = color,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(Ca.radius.control)).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    )
 }
 
 /**

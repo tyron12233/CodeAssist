@@ -19,6 +19,11 @@ internal class EditorPopupState {
     var rename by mutableStateOf<RenameUiState?>(null)
     var renameBusy by mutableStateOf(false)
     var renameError by mutableStateOf<String?>(null)
+    /** The in-place rename being typed, or null. */
+    var inlineRename by mutableStateOf<InlineRenameSession?>(null)
+    /** An in-place rename that was confirmed and is now running project-wide: kept so a refusal can put the old
+     *  name back in this buffer. Not state: nothing draws from it. */
+    var committedInlineRename: InlineRenameSession? = null
     /** The source-navigation dropdown / target picker (Go to Declaration / Implementation / Type / Super). */
     var navMenu by mutableStateOf<NavMenuState?>(null)
     /** Where a right-click opened the context menu, in pane coordinates. */

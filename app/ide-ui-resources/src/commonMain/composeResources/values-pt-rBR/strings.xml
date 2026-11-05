@@ -643,6 +643,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="edoverlay_rename_kind">Renomear %1$s</string>
     <string name="edoverlay_renaming">Renomeando…</string>
     <string name="edoverlay_rename_hint">Enter para renomear '%1$s', Esc para cancelar</string>
+    <string name="edoverlay_inline_rename_hint">Renomear %1$s · Enter para aplicar, Esc para cancelar</string>
+    <string name="edoverlay_inline_rename_apply">Aplicar</string>
+    <string name="edoverlay_renaming_elsewhere">Renomeando em outros arquivos…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' não é um nome válido</string>
     <string name="edoverlay_go_to_line">Ir para a linha</string>
     <string name="edoverlay_go_to_line_hint">Linha 1–%1$d  (linha ou linha:coluna)</string>
     <string name="edoverlay_no_documentation">Nenhuma documentação</string>

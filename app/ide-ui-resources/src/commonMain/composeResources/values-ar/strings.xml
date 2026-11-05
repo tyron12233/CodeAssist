@@ -1267,6 +1267,10 @@
     <string name="edoverlay_rename_kind">إعادة تسمية %1$s</string>
     <string name="edoverlay_renaming">جاري إعادة التسمية…</string>
     <string name="edoverlay_rename_hint">اضغط Enter لإعادة تسمية "%1$s"، وEsc للإلغاء</string>
+    <string name="edoverlay_inline_rename_hint">إعادة تسمية %1$s · Enter للتطبيق، Esc للإلغاء</string>
+    <string name="edoverlay_inline_rename_apply">تطبيق</string>
+    <string name="edoverlay_renaming_elsewhere">جارٍ إعادة التسمية في الملفات الأخرى…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' ليس اسمًا صالحًا</string>
     <string name="edoverlay_go_to_line">الانتقال إلى سطر</string>
     <string name="edoverlay_go_to_line_hint">السطر 1–%1$d  (سطر أو سطر:عمود)</string>
     <string name="edoverlay_no_documentation">لا يوجد توثيق</string>

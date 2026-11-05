@@ -270,6 +270,11 @@ internal class RefactorService(
         if (ctx.analysisDisabled(file)) return RenameOutcome(false, "Code analysis is unavailable for this file.")
         val renamers = pluginProviders(file, dev.ide.analysis.RENAME_PROVIDER_EP) { it.languages }
         if (renamers.isNotEmpty()) return renameThroughPlugin(renamers, file, text, offset, name)
+        // [text] is what the symbol is resolved from, and the engine has to agree with it while the references
+        // are found: an in-place rename has already put the new name into the editor's buffer, and an engine
+        // that had seen that buffer would know the declaration only by its new name and find no reference to
+        // the old one in any other file.
+        ctx.updateDocument(file.toAbsolutePath().normalize(), text)
         return if (isKotlin(file)) renameKotlin(file, text, offset, name) else renameJava(file, text, offset, name, newName)
     }
 

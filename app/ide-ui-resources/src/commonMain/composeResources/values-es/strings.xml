@@ -687,6 +687,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="edoverlay_rename_kind">Renombrar %1$s</string>
     <string name="edoverlay_renaming">Renombrando…</string>
     <string name="edoverlay_rename_hint">Intro para renombrar '%1$s', Esc para cancelar</string>
+    <string name="edoverlay_inline_rename_hint">Renombrar %1$s · Enter para aplicar, Esc para cancelar</string>
+    <string name="edoverlay_inline_rename_apply">Aplicar</string>
+    <string name="edoverlay_renaming_elsewhere">Renombrando en otros archivos…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' no es un nombre válido</string>
     <string name="edoverlay_go_to_line">Ir a la línea</string>
     <string name="edoverlay_go_to_line_hint">Línea 1–%1$d  (línea o línea:columna)</string>
     <string name="edoverlay_no_documentation">Sin documentación</string>

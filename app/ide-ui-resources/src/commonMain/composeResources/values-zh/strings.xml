@@ -1190,6 +1190,10 @@
     <string name="edoverlay_rename_kind">重命名 %1$s</string>
     <string name="edoverlay_renaming">正在重命名…</string>
     <string name="edoverlay_rename_hint">按 Enter 重命名“%1$s”，按 Esc 取消</string>
+    <string name="edoverlay_inline_rename_hint">重命名 %1$s · 按 Enter 应用，按 Esc 取消</string>
+    <string name="edoverlay_inline_rename_apply">应用</string>
+    <string name="edoverlay_renaming_elsewhere">正在其他文件中重命名…</string>
+    <string name="edoverlay_rename_invalid">“%1$s”不是有效的名称</string>
     <string name="edoverlay_go_to_line">转到行</string>
     <string name="edoverlay_go_to_line_hint">第 1–%1$d 行（行号或 行号：列号）</string>
     <string name="edoverlay_no_documentation">没有文档</string>

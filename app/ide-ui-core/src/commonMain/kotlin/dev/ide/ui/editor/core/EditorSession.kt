@@ -59,6 +59,14 @@ class EditorSession(
         private set
 
     /**
+     * A refactoring is editing this buffer ahead of the engine (an in-place rename: the name changes here as it
+     * is typed, and the project-wide rename that follows resolves the symbol from the text as it was). While set,
+     * the analysis daemon must not hand this buffer to the engine, or the engine would see the declaration
+     * already renamed and find no references to the old name anywhere else.
+     */
+    var engineSyncHeld by mutableStateOf(false)
+
+    /**
      * The first visible document line (0-based) — a lightweight scroll anchor persisted per tab so a reopened
      * tab scrolls back to roughly where the user left it (see `UiOpenTab.scrollLine`). The editor seeds its
      * scroll from this on first layout and keeps it updated (debounced) as the user scrolls; the host reads it

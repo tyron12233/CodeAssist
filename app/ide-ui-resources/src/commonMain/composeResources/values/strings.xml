@@ -1207,6 +1207,10 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="edoverlay_rename_kind">Rename %1$s</string>
     <string name="edoverlay_renaming">Renaming…</string>
     <string name="edoverlay_rename_hint">Enter to rename '%1$s', Esc to cancel</string>
+    <string name="edoverlay_inline_rename_hint">Rename %1$s · Enter to apply, Esc to cancel</string>
+    <string name="edoverlay_inline_rename_apply">Apply</string>
+    <string name="edoverlay_renaming_elsewhere">Renaming in other files…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' is not a valid name</string>
     <string name="edoverlay_go_to_line">Go to line</string>
     <string name="edoverlay_go_to_line_hint">Line 1–%1$d  (line or line:column)</string>
     <string name="edoverlay_no_documentation">No documentation</string>

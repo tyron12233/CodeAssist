@@ -86,6 +86,7 @@ import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.editor.core.wordRangeAt
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.rename_failed
+import dev.ide.ui.generated.resources.edoverlay_rename_invalid
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -384,6 +385,9 @@ private fun CodeEditorContent(
     var rename by popups::rename
     var renameBusy by popups::renameBusy
     var renameError by popups::renameError
+    var inlineRename by popups::inlineRename
+    // Completion would hand the engine this buffer, renamed ahead of it (see EditorSession.engineSyncHeld).
+    if (inlineRename != null || renameBusy) completion.autoPopupEnabled = false
     var navMenu by popups::navMenu
     // Mouse: the hover popups, the Ctrl/⌘ link and the right-click menu (see EditorMouseSupport).
     val hover = remember(path) { EditorHoverState() }
@@ -483,19 +487,73 @@ private fun CodeEditorContent(
     }
 
     fun startRename() {
-        if (renameBusy) return
+        if (renameBusy || inlineRename != null) return
         val text = editorSession.doc.text
         val caret = editorSession.selection.start
         scope.launch {
-            val target = runCatching { backend.editor.prepareRename(path, text, caret) }.getOrNull()
-            if (target != null) {
-                renameError = null
+            val target = runCatching { backend.editor.prepareRename(path, text, caret) }.getOrNull() ?: return@launch
+            renameError = null
+            // In place when this file's occurrences of the symbol resolve (the same answer highlight-usages
+            // draws), and the buffer has not moved on while they were found. Otherwise the prompt.
+            val highlights = if (readOnly) null
+            else runCatching { backend.editor.usageHighlights(path, text, caret) }.getOrNull()
+            val session = highlights?.takeIf { editorSession.doc.text == text }?.let { hs ->
+                InlineRenameSession.startOrNull(
+                    editorSession, hs.map { it.startOffset until it.endOffset }, caret, text, target.oldName, target.kind,
+                )
+            }
+            if (session == null) {
                 rename = RenameUiState(caret, target.oldName, target.kind, target.oldName)
+                return@launch
+            }
+            completion.dismiss(); snippet = null
+            editorSession.engineSyncHeld = true
+            inlineRename = session
+            session.selectPrimary()
+        }
+    }
+
+    val renameInvalidMsg = stringResource(Res.string.edoverlay_rename_invalid, "%s")
+    val renameFailedMsg = stringResource(Res.string.rename_failed)
+
+    /** End the in-place rename without renaming: the old name goes back everywhere it was changed. */
+    fun cancelInlineRename() {
+        val s = inlineRename ?: return
+        s.restore()
+        inlineRename = null
+        renameError = null
+        editorSession.engineSyncHeld = false
+    }
+
+    /**
+     * Confirm the in-place rename: this file already reads the new name, so what runs now is the rest of the
+     * project, resolved from the text as it was before the rename began. A refusal puts the old name back here.
+     */
+    fun commitInlineRename() {
+        val s = inlineRename ?: return
+        val name = s.currentName()
+        if (name.isBlank() || name == s.oldName) { cancelInlineRename(); return }
+        if (!isRenameableIdentifier(name)) { renameError = renameInvalidMsg.replace("%s", name); return }
+        inlineRename = null
+        popups.committedInlineRename = s
+        renameBusy = true; renameError = null
+        scope.launch {
+            val result = runCatching { backend.editor.rename(path, s.originalText, s.offset, name) }
+                .getOrElse { UiRenameResult(false, it.message ?: renameFailedMsg) }
+            renameBusy = false
+            popups.committedInlineRename = null
+            if (result.success) {
+                backend.diagnostics.countFeature(UiFeatures.RENAME)
+                editorSession.engineSyncHeld = false
+                onRenamed(result.newPath)
+            } else {
+                s.restore()
+                editorSession.engineSyncHeld = false
+                renameError = result.message
             }
         }
     }
 
-    val renameFailedMsg = stringResource(Res.string.rename_failed)
     fun commitRename() {
         val r = rename ?: return
         if (renameBusy || r.newName.isBlank() || r.newName == r.oldName) {
@@ -686,7 +744,12 @@ private fun CodeEditorContent(
     SideEffect {
         editorSession.onLinesShifted = { from, delta -> renderState.renderCache.shiftKeys(from, delta) }
         // Active template session re-anchors its tab stops on each edit (typing inside a placeholder).
-        editorSession.onSnippetEdit = { span -> snippet?.onEdit(span) }
+        editorSession.onSnippetEdit = { span ->
+            snippet?.onEdit(span)
+            // The in-place rename re-anchors its occurrences too, and keeps doing so after it was confirmed, so a
+            // refused rename can still find the names to put back.
+            (popups.inlineRename ?: popups.committedInlineRename)?.onEdit(span)
+        }
         // Soft-keyboard Tab (the touch symbol bar) accepts the highlighted completion when the popup is up,
         // mirroring the hardware-Tab path (onPreviewKey); the caller falls back to indent when this returns false.
         editorSession.acceptCompletionIfShowing = { if (showPopup) { accept(); true } else false }
@@ -696,11 +759,23 @@ private fun CodeEditorContent(
         // template), else step to the next stop. Returns false with no active template → the IME newlines as usual.
         editorSession.advanceTemplateOnEnter = {
             val sn = snippet
-            if (sn == null) false
+            // Soft-keyboard Enter confirms an in-place rename, as the hardware key does (onPreviewKey).
+            if (popups.inlineRename != null) { commitInlineRename(); true }
+            else if (sn == null) false
             else {
                 if (showPopup) accept() else if (!sn.next()) snippet = null
                 true
             }
+        }
+    }
+
+    // In-place rename: after every edit, the other occurrences take the edited name. An edit somewhere else
+    // entirely means the user moved on, which confirms the rename the way clicking away does in IntelliJ.
+    LaunchedEffect(inlineRename) {
+        val session = inlineRename ?: return@LaunchedEffect
+        snapshotFlow { editorSession.textRevision }.collect {
+            if (popups.inlineRename !== session) return@collect
+            if (session.strayEdit) commitInlineRename() else session.mirror()
         }
     }
 
@@ -1156,6 +1231,14 @@ private fun CodeEditorContent(
                 else -> false
             }
         }
+        // An in-place rename takes Enter (and Tab) to confirm and Escape to cancel, before anything else.
+        if (popups.inlineRename != null) {
+            when (ev.key) {
+                Key.Enter, Key.NumPadEnter, Key.Tab -> { commitInlineRename(); return true }
+                Key.Escape -> { cancelInlineRename(); return true }
+                else -> Unit
+            }
+        }
         // Active template (snippet) session steers Tab/Shift-Tab/Enter/Escape when the completion popup isn't up.
         val sn = snippet
         if (sn != null && !showPopup) {
@@ -1242,7 +1325,7 @@ private fun CodeEditorContent(
             bracketPair = bracketPair,
             occurrences = occurrences,
             conflicts = conflicts,
-            templateFields = { snippet?.fieldRanges().orEmpty() },
+            templateFields = { snippet?.fieldRanges().orEmpty() + popups.inlineRename?.fieldRanges().orEmpty() },
             painters = painters,
             drawColors = drawColors,
             handleColor = colors.accent,
@@ -1561,6 +1644,8 @@ private fun CodeEditorContent(
             commands = object : EditorDialogCommands {
                 override fun onCommitRename() = commitRename()
                 override fun onStartRename() = startRename()
+                override fun onCommitInlineRename() = commitInlineRename()
+                override fun onCancelInlineRename() = cancelInlineRename()
                 override fun onRunNav(kind: UiNavKind) = runNav(kind)
                 override fun onNavUsed(kind: UiNavKind) = backend.diagnostics.countFeature(UiFeatures.navigation(kind.name))
                 override fun onEditorCommand(id: String) = runEditorCommand(id)
@@ -1730,6 +1815,8 @@ private fun EditorCanvasLayer(
 private interface EditorDialogCommands {
     fun onCommitRename()
     fun onStartRename()
+    fun onCommitInlineRename()
+    fun onCancelInlineRename()
     fun onRunNav(kind: UiNavKind)
     /** A Go to menu entry was picked that navigates without running [onRunNav] (its targets were resolved). */
     fun onNavUsed(kind: UiNavKind)
@@ -1792,6 +1879,24 @@ private fun BoxScope.EditorDialogsLayer(
 
     // quick-documentation popup — a floating card; dismissed by Esc, a tap, or a navigation/edit key.
     quickDoc?.let { QuickDocPopup(it, Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) }
+
+    // in-place rename: a slim bar saying what Enter and Esc do (and buttons for them, on touch), then what is
+    // left to do once confirmed; the name itself is edited in the code
+    val inline = popups.inlineRename
+    // System Back cancels the rename being typed: the phone's Escape.
+    if (inline != null) PlatformBackHandler(enabled = true) { commands.onCancelInlineRename() }
+    if (inline != null || (renameBusy && rename == null) || (renameError != null && rename == null)) {
+        InlineRenameBar(
+            kind = inline?.kind,
+            busy = renameBusy,
+            error = renameError,
+            onApply = { commands.onCommitInlineRename() },
+            onCancel = { if (inline != null) commands.onCancelInlineRename() else renameError = null },
+            // At the bottom: the name being typed is usually near the top of what is on screen, and a bar there
+            // covered it.
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
 
     // rename prompt — a small centered card over the editor
     rename?.let { r ->

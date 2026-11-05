@@ -623,6 +623,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="edoverlay_rename_kind">Ganti nama %1$s</string>
     <string name="edoverlay_renaming">Mengganti nama…</string>
     <string name="edoverlay_rename_hint">Enter untuk mengganti nama '%1$s', Esc untuk batal</string>
+    <string name="edoverlay_inline_rename_hint">Ganti nama %1$s · Enter untuk menerapkan, Esc untuk batal</string>
+    <string name="edoverlay_inline_rename_apply">Terapkan</string>
+    <string name="edoverlay_renaming_elsewhere">Mengganti nama di file lain…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' bukan nama yang valid</string>
     <string name="edoverlay_go_to_line">Ke baris</string>
     <string name="edoverlay_go_to_line_hint">Baris 1-%1$d  (baris atau baris:kolom)</string>
     <string name="edoverlay_no_documentation">Tidak ada dokumentasi</string>

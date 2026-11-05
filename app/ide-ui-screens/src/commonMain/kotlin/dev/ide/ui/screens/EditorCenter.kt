@@ -704,8 +704,14 @@ private fun EditorDaemonEffect(
     LaunchedEffect(
         active.path, active.session.textRevision,
         state.inlayHintsEnabled, state.semanticHighlightingEnabled, state.codeFoldingEnabled,
-        state.analyzeOnTheFly, state.reparseDelayMs, state.analysisEpoch,
+        state.analyzeOnTheFly, state.reparseDelayMs, state.analysisEpoch, active.session.engineSyncHeld,
     ) {
+        // An in-place rename holds the engine's view of this buffer at its pre-rename text (see
+        // EditorSession.engineSyncHeld): stop any run that would push it, and run again once released.
+        if (active.session.engineSyncHeld) {
+            daemon.close()
+            return@LaunchedEffect
+        }
         // Apply the user's editor/analysis prefs (Settings) to the daemon before each run. Above the large-file
         // threshold the four heavy passes are forced off regardless of the prefs: parsing + resolving a very
         // large file builds an AST and symbol index many times the source size, which OOMs a low-heap device
@@ -731,7 +737,7 @@ private fun EditorDaemonEffect(
     // was edited and may report on any other, so nothing else would bring its results into an open tab.
     LaunchedEffect(daemon) {
         state.backend.editor.diagnosticsInvalidated.collect { paths ->
-            if (active.path in paths) {
+            if (active.path in paths && !active.session.engineSyncHeld) {
                 val doc = active.session.doc
                 daemon.restart { doc.awaitText() }
             }
@@ -741,7 +747,7 @@ private fun EditorDaemonEffect(
     LaunchedEffect(active.path, indexStatus.building) {
         val prev = wasIndexing
         wasIndexing = indexStatus.building
-        if (prev == true && !indexStatus.building) {
+        if (prev == true && !indexStatus.building && !active.session.engineSyncHeld) {
             val doc = active.session.doc
             daemon.restart { doc.awaitText() }
         }
