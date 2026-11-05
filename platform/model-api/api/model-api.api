@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:model-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:model-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/index/AnnotatedExternalizer
@@ -158,12 +158,14 @@ dev/ide/index/IndexId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/index/IndexId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/index/IndexInput
 	kind interface
 	field static CLASS_FILE Ljava/lang/String;
@@ -297,11 +299,19 @@ dev/ide/index/InputFilter
 dev/ide/index/JavaSourceMemberCodec
 	kind class
 	super java/lang/Object
+	field static CONSTRUCTOR Ljava/lang/String;
 	field static INSTANCE Ldev/ide/index/JavaSourceMemberCodec;
+	field static TYPE Ljava/lang/String;
 	method decodeField(Ljava/lang/String;)Ldev/ide/index/JavaSourceMemberCodec$Field;
 	method decodeMethod(Ljava/lang/String;)Ldev/ide/index/JavaSourceMemberCodec$Method;
+	method decodeType(Ljava/lang/String;)Ldev/ide/index/JavaSourceMemberCodec$SourceType;
 	method encodeField(ZLjava/lang/String;)Ljava/lang/String;
+	method encodeField(ZLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 	method encodeMethod(ZLjava/util/List;Ljava/util/List;Ljava/lang/String;I)Ljava/lang/String;
+	method encodeMethod(ZLjava/util/List;Ljava/util/List;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;)Ljava/lang/String;
+	method encodeType(Ldev/ide/index/JavaSourceMemberCodec$SourceType;)Ljava/lang/String;
+	method typeParametersOf(Ljava/lang/String;)Ljava/util/List;
+	method visibilityOf(Ljava/lang/String;Z)Ljava/lang/String;
 dev/ide/index/JavaSourceMemberCodec$Field
 	kind class
 	super java/lang/Object
@@ -333,6 +343,33 @@ dev/ide/index/JavaSourceMemberCodec$Method
 	method getVarargIndex()I
 	method hashCode()I
 	method static copy$default(Ldev/ide/index/JavaSourceMemberCodec$Method;ZLjava/util/List;Ljava/util/List;Ljava/lang/String;IILjava/lang/Object;)Ldev/ide/index/JavaSourceMemberCodec$Method;
+	method toString()Ljava/lang/String;
+dev/ide/index/JavaSourceMemberCodec$SourceType
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ZZLjava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()Z
+	method component3()Z
+	method component4()Ljava/util/List;
+	method component5()Ljava/util/List;
+	method component6()Ljava/lang/String;
+	method component7()Ljava/util/List;
+	method component8()Ljava/util/List;
+	method component9()Ljava/util/List;
+	method copy(Ljava/lang/String;ZZLjava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;)Ldev/ide/index/JavaSourceMemberCodec$SourceType;
+	method equals(Ljava/lang/Object;)Z
+	method getFileTypes()Ljava/util/List;
+	method getImports()Ljava/util/List;
+	method getKind()Ljava/lang/String;
+	method getPackageName()Ljava/lang/String;
+	method getStarImports()Ljava/util/List;
+	method getSupertypes()Ljava/util/List;
+	method getTypeParameters()Ljava/util/List;
+	method hashCode()I
+	method isAbstract()Z
+	method isFinal()Z
+	method static copy$default(Ldev/ide/index/JavaSourceMemberCodec$SourceType;Ljava/lang/String;ZZLjava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/index/JavaSourceMemberCodec$SourceType;
 	method toString()Ljava/lang/String;
 dev/ide/index/KeyDescriptor
 	kind interface
@@ -648,12 +685,14 @@ dev/ide/lang/dom/NodeKind
 	method equals(Ljava/lang/Object;)Z
 	method getId()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/lang/dom/NodeKind;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/lang/dom/NodeKind$Companion
 	kind class
 	super java/lang/Object
@@ -730,6 +769,7 @@ dev/ide/lang/resolve/DocFormat
 	super java/lang/Enum
 	field static JAVADOC Ldev/ide/lang/resolve/DocFormat;
 	field static KDOC Ldev/ide/lang/resolve/DocFormat;
+	field static MARKDOWN Ldev/ide/lang/resolve/DocFormat;
 	field static PLAIN Ldev/ide/lang/resolve/DocFormat;
 	method static getEntries()Lkotlin/enums/EnumEntries;
 	method static valueOf(Ljava/lang/String;)Ldev/ide/lang/resolve/DocFormat;
@@ -1021,12 +1061,14 @@ dev/ide/platform/ContentHash
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/platform/ContentHash;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/platform/ContentHash$Companion
 	kind class
 	super java/lang/Object
@@ -1079,6 +1121,19 @@ dev/ide/platform/DataWriter
 	method abstract writeLong(J)V
 	method abstract writeShort(I)V
 	method abstract writeUTF(Ljava/lang/String;)V
+dev/ide/platform/DeviceMemory
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/DeviceMemory;
+	field static MODE_AUTO Ljava/lang/String;
+	field static MODE_OFF Ljava/lang/String;
+	field static MODE_ON Ljava/lang/String;
+	method applyMode(Ljava/lang/String;)V
+	method getDetected()Ldev/ide/platform/MemoryTier;
+	method getTier()Ldev/ide/platform/MemoryTier;
+	method isLow()Z
+	method pick(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	method setDetected(Ldev/ide/platform/MemoryTier;)V
 dev/ide/platform/Disposable
 	kind interface
 	method abstract dispose()V
@@ -1169,6 +1224,14 @@ dev/ide/platform/Lock
 	super java/lang/Object
 	ctor ()V
 	method withLock(Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+dev/ide/platform/MemoryTier
+	kind enum
+	super java/lang/Enum
+	field static LOW Ldev/ide/platform/MemoryTier;
+	field static NORMAL Ldev/ide/platform/MemoryTier;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/MemoryTier;
+	method static values()[Ldev/ide/platform/MemoryTier;
 dev/ide/platform/PathNamesKt
 	kind class
 	super java/lang/Object
@@ -1186,12 +1249,14 @@ dev/ide/platform/PluginId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/platform/PluginId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/platform/PluginId$Companion
 	kind class
 	super java/lang/Object

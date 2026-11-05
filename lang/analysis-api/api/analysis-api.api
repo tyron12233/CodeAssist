@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:analysis-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:analysis-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/analysis/ActionProvider
@@ -99,12 +99,14 @@ dev/ide/analysis/AnalyzerId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/analysis/AnalyzerId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/analysis/AnalyzerTier
 	kind enum
 	super java/lang/Enum
@@ -181,6 +183,15 @@ dev/ide/analysis/Codes
 	field static UNRESOLVED_REFERENCE Ljava/lang/String;
 	field static UNUSED_IMPORT Ljava/lang/String;
 	field static UNUSED_LOCAL Ljava/lang/String;
+dev/ide/analysis/DeclarationProvider
+	kind interface
+	method abstract declarations(Ldev/ide/analysis/AnalysisTarget;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getId()Ljava/lang/String;
+	method getLanguages()Ljava/util/Set;
+dev/ide/analysis/DeclarationProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getLanguages(Ldev/ide/analysis/DeclarationProvider;)Ljava/util/Set;
 dev/ide/analysis/Diagnostic
 	kind class
 	super java/lang/Object
@@ -321,6 +332,38 @@ dev/ide/analysis/ModuleAnalysisKt
 	kind class
 	super java/lang/Object
 	method static getMODULE_ANALYSIS()Ldev/ide/platform/ServiceKey;
+dev/ide/analysis/NavigationKind
+	kind enum
+	super java/lang/Enum
+	field static IMPLEMENTATION Ldev/ide/analysis/NavigationKind;
+	field static TYPE_DECLARATION Ldev/ide/analysis/NavigationKind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/analysis/NavigationKind;
+	method static values()[Ldev/ide/analysis/NavigationKind;
+dev/ide/analysis/NavigationKt
+	kind class
+	super java/lang/Object
+	method static getDECLARATION_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getNAVIGATION_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/analysis/NavigationProvider
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract targets(Ldev/ide/analysis/AnalysisTarget;ILdev/ide/analysis/NavigationKind;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getLanguages()Ljava/util/Set;
+dev/ide/analysis/NavigationProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getLanguages(Ldev/ide/analysis/NavigationProvider;)Ljava/util/Set;
+dev/ide/analysis/NavigationTarget
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ILjava/lang/String;)V
+	method equals(Ljava/lang/Object;)Z
+	method getLabel()Ljava/lang/String;
+	method getOffset()I
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method toString()Ljava/lang/String;
 dev/ide/analysis/NodeIndex
 	kind class
 	super java/lang/Object
@@ -367,6 +410,21 @@ dev/ide/analysis/QuickFixProvider$DefaultImpls
 	kind class
 	super java/lang/Object
 	method static getLanguages(Ldev/ide/analysis/QuickFixProvider;)Ljava/util/Set;
+dev/ide/analysis/ReferenceProvider
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract references(Ldev/ide/analysis/AnalysisTarget;IZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getLanguages()Ljava/util/Set;
+	method highlights(Ldev/ide/analysis/AnalysisTarget;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/analysis/ReferenceProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getLanguages(Ldev/ide/analysis/ReferenceProvider;)Ljava/util/Set;
+	method static highlights(Ldev/ide/analysis/ReferenceProvider;Ldev/ide/analysis/AnalysisTarget;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/analysis/ReferencesKt
+	kind class
+	super java/lang/Object
+	method static getREFERENCE_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
 dev/ide/analysis/RelatedRange
 	kind class
 	super java/lang/Object
@@ -382,6 +440,57 @@ dev/ide/analysis/RelatedRange
 	method hashCode()I
 	method static copy$default(Ldev/ide/analysis/RelatedRange;Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/analysis/RelatedRange;
 	method toString()Ljava/lang/String;
+dev/ide/analysis/RenameKt
+	kind class
+	super java/lang/Object
+	method static getRENAME_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/analysis/RenameProvider
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract prepare(Ldev/ide/analysis/AnalysisTarget;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract rename(Ldev/ide/analysis/AnalysisTarget;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getLanguages()Ljava/util/Set;
+dev/ide/analysis/RenameProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getLanguages(Ldev/ide/analysis/RenameProvider;)Ljava/util/Set;
+dev/ide/analysis/RenameResult
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/analysis/WorkspaceEdit;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/analysis/RenameResult$Companion;
+	method getEdit()Ldev/ide/analysis/WorkspaceEdit;
+	method getError()Ljava/lang/String;
+	method static of(Ldev/ide/analysis/WorkspaceEdit;)Ldev/ide/analysis/RenameResult;
+	method static rejected(Ljava/lang/String;)Ldev/ide/analysis/RenameResult;
+dev/ide/analysis/RenameResult$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method of(Ldev/ide/analysis/WorkspaceEdit;)Ldev/ide/analysis/RenameResult;
+	method rejected(Ljava/lang/String;)Ldev/ide/analysis/RenameResult;
+dev/ide/analysis/RenameTarget
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/lang/dom/TextRange;)V
+	ctor (Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getKind()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getRange()Ldev/ide/lang/dom/TextRange;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/SymbolReference
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/lang/dom/TextRange;)V
+	ctor (Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Z)V
+	ctor (Ljava/lang/String;Ldev/ide/lang/dom/TextRange;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method getRange()Ldev/ide/lang/dom/TextRange;
+	method hashCode()I
+	method isDeclaration()Z
+	method toString()Ljava/lang/String;
 dev/ide/analysis/WorkspaceEdit
 	kind class
 	super java/lang/Object
@@ -394,11 +503,13 @@ dev/ide/analysis/WorkspaceEdit
 	method getFiles()Ljava/util/Set;
 	method hashCode()I
 	method isEmpty()Z
+	method plus(Ldev/ide/analysis/WorkspaceEdit;)Ldev/ide/analysis/WorkspaceEdit;
 	method static copy$default(Ldev/ide/analysis/WorkspaceEdit;Ljava/util/Map;ILjava/lang/Object;)Ldev/ide/analysis/WorkspaceEdit;
 	method toString()Ljava/lang/String;
 dev/ide/analysis/WorkspaceEdit$Companion
 	kind class
 	super java/lang/Object
 	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method createFile(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/analysis/WorkspaceEdit;
 	method getEMPTY()Ldev/ide/analysis/WorkspaceEdit;
 	method of(Ldev/ide/vfs/VirtualFile;[Ldev/ide/lang/incremental/DocumentEdit;)Ldev/ide/analysis/WorkspaceEdit;

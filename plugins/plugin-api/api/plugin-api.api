@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:plugin-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:plugin-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/plugin/Plugin
@@ -22,11 +22,15 @@ dev/ide/plugin/PluginCapabilities
 	field static INSTANCE Ldev/ide/plugin/PluginCapabilities;
 	field static INTERP_RUN Ljava/lang/String;
 	field static LANG_BACKEND Ljava/lang/String;
+	field static LANG_SERVER Ljava/lang/String;
+	field static MODEL_DEPENDENCIES Ljava/lang/String;
 	field static MODEL_FACET Ljava/lang/String;
 	field static MODEL_MODULE_TYPE Ljava/lang/String;
 	field static NET Ljava/lang/String;
 	field static UI_ACTION Ljava/lang/String;
+	field static UI_APP_THEME Ljava/lang/String;
 	field static UI_COLOR_ATTRIBUTE Ljava/lang/String;
+	field static UI_COLOR_SCHEME Ljava/lang/String;
 	field static UI_EDITOR_ACTION Ljava/lang/String;
 	field static UI_EDITOR_DECORATION Ljava/lang/String;
 	field static UI_EDITOR_LANGUAGE Ljava/lang/String;
@@ -34,6 +38,7 @@ dev/ide/plugin/PluginCapabilities
 	field static UI_EDITOR_PAINTER Ljava/lang/String;
 	field static UI_EDITOR_PREVIEW Ljava/lang/String;
 	field static UI_KEY_BINDING Ljava/lang/String;
+	field static UI_NEW_FILE_TEMPLATE Ljava/lang/String;
 	field static UI_OVERLAY Ljava/lang/String;
 	field static UI_SCREEN Ljava/lang/String;
 	field static UI_SETTINGS_PAGE Ljava/lang/String;
@@ -91,6 +96,7 @@ dev/ide/plugin/PluginRegistration
 	method abstract getDataDir()Ljava/nio/file/Path;
 	method abstract getMessageBus()Ldev/ide/platform/MessageBus;
 	method abstract getPluginId-0MWS1W8()Ljava/lang/String;
+	method abstract getPrivateDataDir()Ljava/nio/file/Path;
 	method abstract logger(Ljava/lang/String;)Ldev/ide/platform/log/Logger;
 	method abstract onDispose(Ldev/ide/platform/Disposable;)V
 	method abstract register(Ldev/ide/platform/ExtensionPoint;Ljava/lang/Object;)Ldev/ide/platform/Disposable;
@@ -122,11 +128,13 @@ dev/ide/plugin/action/ActionContext
 	method abstract getSelectionStart()Ljava/lang/Integer;
 	method getCaret()Ldev/ide/plugin/action/CaretContext;
 	method getDocumentText()Ljava/lang/String;
+	method getWorkspaceServices()Ldev/ide/platform/ServiceLookup;
 dev/ide/plugin/action/ActionContext$DefaultImpls
 	kind class
 	super java/lang/Object
 	method static getCaret(Ldev/ide/plugin/action/ActionContext;)Ldev/ide/plugin/action/CaretContext;
 	method static getDocumentText(Ldev/ide/plugin/action/ActionContext;)Ljava/lang/String;
+	method static getWorkspaceServices(Ldev/ide/plugin/action/ActionContext;)Ldev/ide/platform/ServiceLookup;
 dev/ide/plugin/action/ActionEffect
 	kind interface
 dev/ide/plugin/action/ActionEffect$ApplyEdits
@@ -295,12 +303,14 @@ dev/ide/plugin/action/ActionPlace
 	method equals(Ljava/lang/Object;)Z
 	method getId()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/plugin/action/ActionPlace;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/plugin/action/ActionPlaces
 	kind class
 	super java/lang/Object

@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:lsp-api, pinned at SPI 3.3.0.
+# The compiled surface of io.github.tyron12233:lsp-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/lsp/LanguageServerConnection
