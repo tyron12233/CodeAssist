@@ -1049,6 +1049,30 @@ whose intelligence is not a server (since SPI 3.3.0, in `analysis-api`):
 They are asked only for files of the languages they name, and never for `.java` or Kotlin files, which the
 built-in backends answer.
 
+### Members a Kotlin compiler plugin generates
+
+The Kotlin editor builds its symbols from source without running compiler plugins, so a member a compiler
+plugin generates (`Foo.serializer()`, `Foo.CREATOR`, a builder your plugin adds) is unknown to it: uses of it are
+flagged unresolved and it never completes. If your plugin ships or supports a compiler plugin, register its
+editor half on `KOTLIN_GENERATED_MEMBER_EP` (`language-api`, since SPI 3.4.0):
+
+```kotlin
+object AutoCreateMembers : KotlinGeneratedMemberProvider {
+    override val id = "com.example.autocreate"
+
+    override fun staticMembers(cls: KotlinSourceClass, ctx: KotlinGeneratedMemberContext) =
+        if ("AutoCreate" in cls.annotations && ctx.hasType("com.example.autocreate.AutoCreate"))
+            listOf(KotlinGeneratedMember.function("create", cls.constructorParameters.map { (n, t) -> n to t!! }, cls.fqName))
+        else emptyList()
+}
+reg.register(KOTLIN_GENERATED_MEMBER_EP, AutoCreateMembers)
+```
+
+It is asked about every project-source class the editor enumerates, so gate it on your annotation and on your
+runtime being on the classpath, and return an empty list otherwise. Types are Kotlin type text, fully qualified
+where the user's file would not import them. Library classes are not asked: they were compiled with the plugin
+and their real members are in the bytecode. A provider that throws contributes nothing for that class.
+
 ### Run your language's tests
 
 `TEST_PROVIDER_EP` (`TestProvider`, in `build-api`, since SPI 3.3.0) gives a plugin language what JUnit has:
@@ -3169,6 +3193,7 @@ Every published extension point, its id, the type it carries, and what contribut
 | `dev.ide.plugin.keymap.KEY_BINDING_EP` | `platform.keyBinding` | `KeyBinding` | A keyboard shortcut for an action |
 | `dev.ide.block.BLOCK_MAPPING_EP` | `platform.blockMapping` | `BlockMapping` | Block-editor projection for a language |
 | `dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP` | `platform.kotlinCompilerPlugin` | `KotlinCompilerPlugin` | A Kotlin compiler plugin |
+| `dev.ide.lang.KOTLIN_GENERATED_MEMBER_EP` | `platform.kotlinGeneratedMembers` | `KotlinGeneratedMemberProvider` | **Published (3.4.0).** The editor half of a compiler plugin: the members it generates |
 | `dev.ide.lang.kotlin.symbols.KOTLIN_SYNTHETIC_MEMBER_EP` | `platform.kotlinSyntheticMember` | `KotlinSyntheticMemberProvider` | Editor visibility of compiler-generated members |
 
 ### Build

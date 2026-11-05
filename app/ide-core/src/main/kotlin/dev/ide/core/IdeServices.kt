@@ -2594,7 +2594,11 @@ class IdeServices private constructor(
                     // `serializer()`): the contributed providers, or the built-ins when nothing is registered.
                     it.syntheticMemberProviders = {
                         platform.extensions.extensions(dev.ide.lang.kotlin.symbols.KOTLIN_SYNTHETIC_MEMBER_EP)
-                            .ifEmpty { dev.ide.lang.kotlin.symbols.BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS }
+                            .ifEmpty { dev.ide.lang.kotlin.symbols.BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS } +
+                            // An installed plugin's providers arrive on the published point, adapted. Read per
+                            // call (it is a lambda), so they follow the plugin set as it loads.
+                            platform.extensions.extensions(dev.ide.lang.KOTLIN_GENERATED_MEMBER_EP)
+                                .map { p -> dev.ide.lang.kotlin.symbols.PublishedGeneratedMembers(p) }
                     }
                 }
 

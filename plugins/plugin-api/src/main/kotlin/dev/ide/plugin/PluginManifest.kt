@@ -395,6 +395,11 @@ const val PLUGIN_API_VERSION: Int = 4
  * with its version conflicts, and add a library, a BOM or a repository the way the Dependencies screen does
  * ([PluginCapabilities.MODEL_DEPENDENCIES]). A plugin could attach a declaration nothing had resolved, and
  * could not check that a coordinate existed first.
+ *
+ * And `dev.ide.lang.KotlinGeneratedMemberProvider` on `KOTLIN_GENERATED_MEMBER_EP`
+ * (`platform.kotlinGeneratedMembers`) in `language-api`: the editor half of a Kotlin compiler plugin, the
+ * members it generates, so they complete and resolve. The engine's own point spoke the Kotlin backend's
+ * internal source model; this one speaks a read-only class view and plain member descriptions.
  */
 const val PLUGIN_SPI_VERSION: String = "3.4.0"
 
