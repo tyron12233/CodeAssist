@@ -96,6 +96,8 @@ tasks.named<Test>("test") {
     // Opt-in: LearnSolutionsTest compiles and runs every exercise's solution (slow, and coroutine lessons
     // download a dependency). The catalog publish flow turns it on: -Plearn.validateSolutions=true.
     providers.gradleProperty("learn.validateSolutions").orNull?.let { systemProperty("learn.validateSolutions", it) }
+    // Opt-in: RefactorBenchmarkTest times Find Usages / Rename on a generated project (-Prefactor.bench=true).
+    providers.gradleProperty("refactor.bench").orNull?.let { systemProperty("refactor.bench", it) }
     // Opt-in live test against a backend with the Learn migrations (LearnCatalogLiveTest).
     listOf("LEARN_LIVE_URL", "LEARN_LIVE_KEY").forEach { name -> System.getenv(name)?.let { environment(name, it) } }
 }

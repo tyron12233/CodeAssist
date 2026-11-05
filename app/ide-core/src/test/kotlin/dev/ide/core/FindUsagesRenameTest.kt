@@ -81,6 +81,37 @@ class FindUsagesRenameTest {
     } }
 
     /** A Java class overriding a Kotlin member: listed as an implementation, and renamed with the member. */
+    /**
+     * A second rename straight after the first must still find the Kotlin references the first one rewrote. The
+     * rewritten files are not open in the editor, and the Kotlin model takes disk as stable for the session, so it
+     * sees their new text only through the overlay the rename writes them into.
+     */
+    @Test
+    fun aSecondRenameRightAfterTheFirstFindsWhatTheFirstRewrote() { withTempDir("rename-twice") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val (circle, use, _) = setUp(ide)
+            val src = ide.coreSrc().resolve("com/example/core")
+            val other = src.resolve("Other.kt")
+            ide.save(other, "package com.example.core\n\nfun other(c: Circle): Double = c.area() + 1.0\n")
+            eventually("area resolves from Use.kt and Other.kt") { usages(ide, circle, "area").size == 2 }
+
+            val first = runBlocking {
+                val text = Files.readString(circle)
+                ide.rename(circle, text, text.indexOf("area"), "size")
+            }
+            assertTrue(first.success, first.message)
+            // No waiting for the re-index: this is the user renaming again at once.
+            val second = runBlocking {
+                val text = Files.readString(circle)
+                ide.rename(circle, text, text.indexOf("size"), "area")
+            }
+            assertTrue(second.success, second.message)
+            assertEquals(first.occurrences, second.occurrences, "the second rename found what the first one wrote")
+            assertTrue(Files.readString(use).contains("c.area()"), Files.readString(use))
+            assertTrue(Files.readString(other).contains("c.area()"), Files.readString(other))
+        }
+    } }
+
     @Test
     fun aJavaOverrideOfAKotlinMemberIsAnImplementationAndIsRenamedWithIt() { withTempDir("impl-java") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->

@@ -46,6 +46,13 @@ internal class RefactorService(
         val oldName: String, val kind: String, val fileLocal: Boolean, val isType: Boolean, val token: Any,
     )
 
+    private val log = dev.ide.platform.log.Log.logger("ide.refactor")
+
+    /** How long the last rename spent finding references and writing them, for the caller's perf sample. */
+    @Volatile
+    var lastRenamePhases: Pair<Long, Long>? = null
+        private set
+
     private fun isKotlin(file: Path): Boolean = ctx.languageFor(file) == KotlinLanguageBackend.LANGUAGE_ID
 
     /** The rename target under [offset] in [file]/[text], via whichever Java backend edits it (JDT or the
@@ -271,10 +278,12 @@ internal class RefactorService(
         val module = ctx.moduleForFile(file) ?: return RenameOutcome(false, "This file is not in a source module.")
         val target: RenameHit
         val refs: List<Pair<Path, TextRange>>
+        var findStarted = System.nanoTime()
         try {
             target = renameHitAt(module, file, text, offset)
                 ?: return RenameOutcome(false, "Place the caret on a symbol to rename.")
             if (name == target.oldName) return RenameOutcome(false, "The new name is the same as the current one.")
+            findStarted = System.nanoTime()
             refs = javaRefs(module, file, text, target) + kotlinRefsToJava(module, file, text, offset, target)
         } catch (e: LinkageError) {
             ctx.markAnalysisUnavailable(ctx.languageFor(file))
@@ -282,7 +291,7 @@ internal class RefactorService(
         }
         val fileAbs = file.toAbsolutePath().normalize()
         val renameFile = if (target.isType && fileAbs.fileName?.toString() == "${target.oldName}.java") fileAbs else null
-        return apply(target.oldName, name, refs, renameFile, ".java", note = null, focal = fileAbs to text)
+        return apply(target.oldName, name, refs, renameFile, ".java", note = null, focal = fileAbs to text, findStarted = findStarted)
     }
 
     private suspend fun renameKotlin(file: Path, text: String, offset: Int, name: String): RenameOutcome {
@@ -291,6 +300,7 @@ internal class RefactorService(
             ?: return RenameOutcome(false, "Place the caret on a symbol to rename.")
         if (!target.renameable) return RenameOutcome(false, "'${target.name}' is not declared in this project's Kotlin code.")
         if (name == target.name) return RenameOutcome(false, "The new name is the same as the current one.")
+        val findStarted = System.nanoTime()
         val declarations = target.declarations.map { (p, r) -> Paths.get(p).toAbsolutePath().normalize() to r }
         // A Java class overriding the member is part of its family: its declaration is in [declarations], and the
         // Java code calling that override is found by the Java side, from the override's own name.
@@ -309,7 +319,7 @@ internal class RefactorService(
         val renameFile = target.fileNamedAfter?.let { Paths.get(it).toAbsolutePath().normalize() }
         return apply(
             target.name, name, refs, renameFile, ".kt", note = null, focal = file.toAbsolutePath().normalize() to text,
-            alsoReplace = accessorRenames,
+            alsoReplace = accessorRenames, findStarted = findStarted,
         )
     }
 
@@ -324,7 +334,10 @@ internal class RefactorService(
         focal: Pair<Path, String>,
         /** Other texts a range may hold and what each becomes: a property's Java accessor names. */
         alsoReplace: Map<String, String> = emptyMap(),
+        /** When finding [refs] began ([System.nanoTime]), for the timing this logs. */
+        findStarted: Long = System.nanoTime(),
     ): RenameOutcome {
+        val applyStarted = System.nanoTime()
         val byPath = LinkedHashMap<Path, MutableSet<TextRange>>()
         refs.forEach { (p, r) -> byPath.getOrPut(p) { LinkedHashSet() } += r }
         if (byPath.isEmpty()) return RenameOutcome(false, "No occurrences of '$oldName' found.")
@@ -345,6 +358,9 @@ internal class RefactorService(
             }
             if (applied == 0) continue
             val updated = sb.toString()
+            // Through the overlay for every file, open or not: the Kotlin symbol model takes disk as stable for
+            // the session and learns of a file's new text only from the overlay, so a disk-only write left it
+            // resolving the old name (a second rename right after the first found no Kotlin references).
             ctx.updateDocument(path, updated)
             runCatching { path.parent?.let { Files.createDirectories(it) }; path.writeText(updated) }
             occurrences += applied
@@ -365,6 +381,11 @@ internal class RefactorService(
         // One batched mutation event: the hub coalesces the reaction (a multi-file edit / file rename
         // invalidates analyzers + synthetics and re-syncs the index exactly once).
         ctx.events.filesMutated(changed, newPath?.let { renameFile!! to it })
+        val done = System.nanoTime()
+        val findMs = (applyStarted - findStarted) / 1_000_000
+        val applyMs = (done - applyStarted) / 1_000_000
+        lastRenamePhases = findMs to applyMs
+        log.info("rename '$oldName': ${refs.size} refs in ${byPath.size} files found in $findMs ms, written in $applyMs ms")
         val message = "Renamed '$oldName' to '$newName'" + (note?.let { ". $it" } ?: "")
         return RenameOutcome(true, message, occurrences, changed.size, newPath?.toString())
     }

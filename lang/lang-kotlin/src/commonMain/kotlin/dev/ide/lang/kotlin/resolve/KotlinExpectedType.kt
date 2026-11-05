@@ -105,7 +105,7 @@ fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
 internal fun KotlinResolver.assignmentTargetDeclaredType(left: KtExpression): KotlinType? {
     if (left is KtNameReferenceExpression) {
         val name = left.getReferencedName()
-        localsAt(left.textRange.startOffset).firstOrNull { it.name == name }
+        localsAt(left.textRange.startOffset, name).firstOrNull()
             ?.let { return it.type as? KotlinType }
     }
     return inferType(left)

@@ -38,6 +38,20 @@ class KotlinUsageTarget internal constructor(
 internal fun usageIdentity(path: String, offset: Int): String = "$path#$offset"
 
 /** Whether [name] occurs in [text] as a whole identifier: the cheap filter before a file is parsed. */
+/** Where [name] occurs in [text] as a whole identifier (not part of a longer one), in order. */
+internal fun identifierOccurrences(text: CharSequence, name: String): List<Int> {
+    if (name.isEmpty()) return emptyList()
+    val out = ArrayList<Int>()
+    var i = text.indexOf(name, 0)
+    while (i >= 0) {
+        val before = if (i > 0) text[i - 1] else ' '
+        val after = if (i + name.length < text.length) text[i + name.length] else ' '
+        if (!before.isLetterOrDigit() && before != '_' && !after.isLetterOrDigit() && after != '_') out += i
+        i = text.indexOf(name, i + 1)
+    }
+    return out
+}
+
 internal fun containsIdentifier(text: CharSequence, name: String): Boolean {
     if (name.isEmpty()) return false
     var i = text.indexOf(name, 0)

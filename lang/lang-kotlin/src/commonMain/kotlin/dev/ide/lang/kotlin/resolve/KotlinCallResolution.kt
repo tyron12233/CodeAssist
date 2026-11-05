@@ -844,7 +844,7 @@ fun KotlinResolver.annotationParameters(entry: KtAnnotationEntry): List<ParamInf
  */
 internal fun KotlinResolver.nearerValueInvokeTargets(call: KtCallExpression, name: String): List<KotlinSymbol>? {
     val offset = call.textRange.startOffset
-    val local = localsAt(offset).firstOrNull { it.name == name }
+    val local = localsAt(offset, name).firstOrNull()
     val isValue = when {
         local != null -> local.kind != SymbolKind.METHOD // the nearest local decides: a local fun is a function
         else -> innermostClassDeclaresValue(offset, name) ?: return null
@@ -900,7 +900,7 @@ internal fun KotlinResolver.receiverValueInvokeTargets(
     receiverType: KotlinType?,
 ): List<KotlinSymbol> {
     val offset = call.textRange.startOffset
-    val local = localsAt(offset).firstOrNull { it.name == name }
+    val local = localsAt(offset, name).firstOrNull()
     val isValue = if (local != null) local.kind != SymbolKind.METHOD else innermostClassDeclaresValue(offset, name) == true
     if (!isValue) return emptyList()
     val type = typeOfName(name, offset) ?: return emptyList()

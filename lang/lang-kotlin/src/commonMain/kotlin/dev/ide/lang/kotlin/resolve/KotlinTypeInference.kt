@@ -801,7 +801,7 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     // resolve a receiver through inferType -> typeOfName). Off while the lowerer drives the stack above,
     // so the interpreter keeps its own authoritative flow-narrowing.
     if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
-    localsAt(offset).firstOrNull { it.name == name }?.let { return it.type as? KotlinType }
+    localsAt(offset, name).firstOrNull()?.let { return it.type as? KotlinType }
     // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
     for (recv in implicitReceiversAt(offset)) {
         // For a same-file class PROPERTY prefer the live PSI inference: the source model types an implicit-typed

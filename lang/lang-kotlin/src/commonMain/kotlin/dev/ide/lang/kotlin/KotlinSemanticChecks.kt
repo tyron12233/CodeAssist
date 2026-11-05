@@ -619,7 +619,7 @@ internal class KotlinSemanticChecks(
         // qualified `X.Y` can't be shadowed this way.
         if (full === ref) {
             val off = ref.textRange.startOffset
-            if (resolver.localsAt(off).any { it.name == name }) return null
+            if (resolver.localsAt(off, name).isNotEmpty()) return null
             if (resolver.enclosingClassMembersContain(off, name)) return null
             if (resolver.localTypesInScope(off).containsKey(name)) return null
             if (service.topLevelByName(name).any {
@@ -671,7 +671,7 @@ internal class KotlinSemanticChecks(
         // function candidate AND no value candidate — so a bare member/extension function (`setContent` inside a
         // ComponentActivity) IS flagged, while a bare property read (`dp`, a member `val`) is never mis-flagged.
         var function = false
-        for (local in resolver.localsAt(off)) if (local.name == name) {
+        for (local in resolver.localsAt(off, name)) {
             if (local.kind == SymbolKind.METHOD) function = true else return null // a local `fun` vs a `val`/param
         }
         if (resolver.isTypeParameterInScope(name, off)) return null        // a reified `T` in value position
@@ -2436,7 +2436,7 @@ internal class KotlinSemanticChecks(
             }
             is KtNameReferenceExpression -> {
                 val name = left.getReferencedName()
-                if (resolver.localsAt(left.textRange.startOffset).any { it.name == name }) return false
+                if (resolver.localsAt(left.textRange.startOffset, name).isNotEmpty()) return false
                 val cls = enclosingClassFqnOf(left) ?: return false
                 (service.typeByFqn(cls) ?: return false) to name
             }
@@ -2526,7 +2526,7 @@ internal class KotlinSemanticChecks(
         // `inferType` typed it from, so `val f = 5; f()` stays flagged.
         val name = callee.getReferencedName()
         val calleeOffset = callee.textRange.startOffset
-        if (resolver.localsAt(calleeOffset).none { it.name == name } &&
+        if (resolver.localsAt(calleeOffset, name).isEmpty() &&
             resolver.implicitReceiverMember(name, calleeOffset)?.kind == SymbolKind.METHOD
         ) return null
         val type = resolver.inferType(callee) ?: return null // unknown → unresolvedBareReference handles it

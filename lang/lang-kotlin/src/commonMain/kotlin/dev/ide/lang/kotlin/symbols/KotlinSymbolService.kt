@@ -3436,10 +3436,15 @@ class KotlinSymbolService(
                     name
                 )
             } else topLevelLibScan(idx, name)
+            // The source index answers for every project file, this module's included, which [src] already has
+            // from the live model with its types resolved. Keeping both made each project top-level two
+            // candidates, so every call to one ran overload inference over a declaration and its own copy (and
+            // Find Usages paid it once per scanned file). Only the files the model does not cover remain.
+            val modelKeys = if (src.isEmpty()) emptySet() else src.mapTo(HashSet()) { sourceDuplicateKey(it) }
             val srcIdx = idx.exact<CallableShape>(
                 KotlinSourceCallableIndex.id,
                 KotlinCallableIndex.topKey(name)
-            ).map { it.toSymbol(this, SOURCE) }.toList()
+            ).map { it.toSymbol(this, SOURCE) }.filterNot { sourceDuplicateKey(it) in modelKeys }.toList()
             val bi = if (usable) topLevelBuiltinMemo.getOrPut(name) {
                 topLevelBuiltinScan(
                     idx,
@@ -3452,6 +3457,11 @@ class KotlinSymbolService(
                     .filter { it.receiverTypeFqn == null && it.name == name }
         return src + cp
     }
+
+    /** What makes a source-index entry the same declaration as a live-model one: where it lives and its shape as
+     *  written (parameter NAMES, which the index keeps even where it could not resolve a parameter's type). */
+    private fun sourceDuplicateKey(s: KotlinSymbol): String =
+        "${s.packageName}|${s.name}|${s.kind}|${s.receiverTypeFqn}|${s.paramNames.joinToString(",")}"
 
     /** The library callable-index (`kotlin.callables`) half of [topLevelByName] — a disk-segment `exact` scan. */
     private fun topLevelLibScan(idx: IndexQueries, name: String): List<KotlinSymbol> =

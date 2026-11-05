@@ -134,8 +134,8 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     /**
      * A read-only request the user is waiting on (go to, expand selection, format). It runs on the interactive
      * lane so it preempts a background pass already holding the worker, instead of queuing behind it; the
-     * preempted pass runs again afterwards. Calls that write files (rename, actions) and per-caret-move calls
-     * stay off this lane: the first must not be cut short, and the second would keep preempting analysis.
+     * preempted pass runs again afterwards. Per-caret-move calls stay off this lane, since they would keep
+     * preempting analysis. Rename uses the lane too, but not through here: see [rename].
      */
     private suspend fun <T> userRequest(pass: String, path: String, block: suspend () -> T): T =
         ctx.interactive(op = op(pass, path), block = block)
@@ -329,21 +329,39 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             ctx.services.expandSelection(Paths.get(path), text, selStart, selEnd)
         }?.let { UiTextRange(it.start, it.end) }
 
-    override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
-        userRequest("prepareRename", path) {
-            ctx.services.prepareRename(
-                Paths.get(path), text, offset
-            )?.let { UiRenameTarget(it.oldName, it.kind) }
+    override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? {
+        val t0 = System.nanoTime()
+        var started = 0L
+        val target = userRequest("prepareRename", path) {
+            started = System.nanoTime()
+            ctx.services.prepareRename(Paths.get(path), text, offset)?.let { UiRenameTarget(it.oldName, it.kind) }
         }
+        recordLatency(Events.PASS_PERF, "prepare_rename", path, t0, started)
+        log.info("prepareRename: waited ${(started - t0) / 1_000_000} ms for the engine, ${(System.nanoTime() - started) / 1_000_000} ms on it")
+        return target
+    }
 
     override suspend fun rename(
         path: String, text: String, offset: Int, newName: String
-    ): UiRenameResult = withContext(ctx.engineDispatcher) {
-        val r = ctx.services.rename(Paths.get(path), text, offset, newName)
+    ): UiRenameResult {
+        val t0 = System.nanoTime()
+        var started = 0L
+        // On the interactive lane, so it preempts a background pass instead of queuing behind it: on a phone a
+        // rename waited 17 s for the engine while indexing ran. The lane itself is never preempted, and
+        // NonCancellable keeps a caller that goes away (the editor closing) from cutting the multi-file write
+        // short part-way.
+        val r = withContext(kotlinx.coroutines.NonCancellable) {
+            ctx.interactive(op = op("rename", path)) {
+                started = System.nanoTime()
+                ctx.services.rename(Paths.get(path), text, offset, newName)
+            }
+        }
         if (r.success) {
             ctx.bumpFileSystemEpoch() // the multi-file edit / file rename changed the tree + other buffers
         }
-        UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
+        recordLatency(Events.PASS_PERF, "rename", path, t0, started)
+        log.info("rename: waited ${(started - t0) / 1_000_000} ms for the engine, ${(System.nanoTime() - started) / 1_000_000} ms on it")
+        return UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
     }
 
     override fun updateDocument(path: String, text: String) =

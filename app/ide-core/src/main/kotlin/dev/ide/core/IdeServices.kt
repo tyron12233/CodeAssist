@@ -3370,11 +3370,21 @@ class IdeServices private constructor(
     ): Pair<Path, Int>? {
         val path = Paths.get(kotlinLightClasses.fileDeclaring(classFqn) ?: return null)
         val text = openDocuments[path] ?: runCatching { path.readText() }.getOrNull() ?: return null
+        // Keyed on the text itself (its hash and length) as well as the member, so an edit is never answered
+        // from before it. A Java sweep (Find Usages, Rename) lands here once per reference to the same Kotlin
+        // declaration, and each answer was a fresh parse of the declaring file.
+        val key = "$path|${text.length}|${text.hashCode()}|$classFqn|$member|$paramCount|$paramTypes"
+        lightClassOffsets[key]?.let { return path to it }
         val offset = runCatching {
             dev.ide.lang.kotlin.synthetic.LightClassDeclarations.offsetOf(path.fileName.toString(), text, classFqn, member, paramCount, paramTypes)
         }.getOrDefault(0)
+        if (lightClassOffsets.size > LIGHT_CLASS_OFFSET_MEMO_MAX) lightClassOffsets.clear()
+        lightClassOffsets[key] = offset
         return path to offset
     }
+
+    /** Where a light-class member's Kotlin declaration is, by file text and member; see [kotlinLightClassLocation]. */
+    private val lightClassOffsets = ConcurrentHashMap<String, Int>()
 
     /**
      * The go-to-declaration targets plugins contribute for [offset] in [file] ([text] = live buffer), through
@@ -5482,6 +5492,8 @@ class IdeServices private constructor(
     companion object {
         /** How long a module's on-disk res fingerprint is trusted without a VFS event (see [resDiskFingerprints]). */
         private const val RES_DISK_FINGERPRINT_TTL_MS = 3_000L
+        /** Entries [kotlinLightClassLocation] keeps before starting over; a sweep needs one per member. */
+        private const val LIGHT_CLASS_OFFSET_MEMO_MAX = 512
         /** The go-to kinds a [dev.ide.analysis.NavigationProvider] answers, as the editor's own. */
         private val PLUGIN_NAV_KINDS = listOf(
             dev.ide.lang.kotlin.NavKind.IMPLEMENTATION to dev.ide.analysis.NavigationKind.IMPLEMENTATION,

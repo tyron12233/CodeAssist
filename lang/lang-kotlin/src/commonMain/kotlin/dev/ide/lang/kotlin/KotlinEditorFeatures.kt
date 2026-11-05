@@ -783,7 +783,13 @@ class KotlinEditorFeatures(
         val ktFile = parsed.ktFile
         val resolver = KotlinResolver(ktFile, parsed, service)
         val out = ArrayList<Pair<TextRange, KtNameReferenceExpression?>>()
-        for (ref in ktFile.collectDescendantsOfType<KtNameReferenceExpression>()) {
+        // Only where the name is written: walking every reference in the file forced the lazy parse to build
+        // every function body in it, for the handful that can mention the name at all.
+        val visited = HashSet<Int>()
+        for (at in identifierOccurrences(text, target.name)) {
+            val leaf = ktFile.findElementAt(at) ?: continue
+            val ref = leaf as? KtNameReferenceExpression ?: leaf.getParentOfType<KtNameReferenceExpression>() ?: continue
+            if (!visited.add(ref.textRange.startOffset)) continue
             if (ref.getReferencedName() != target.name) continue
             val r = ref.textRange
             if (scope != null && (r.startOffset < scope.second.start || r.endOffset > scope.second.end)) continue
