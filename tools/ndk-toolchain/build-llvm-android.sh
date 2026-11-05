@@ -73,7 +73,7 @@ log() { printf '\n==> %s\n' "$*"; }
 # several GB of objects behind and no way to tell which are complete.
 require_disk() {
     local need_gb="$1" avail_gb
-    avail_gb=$(df -g "$WORK" | awk 'NR==2 {print $4}')
+    avail_gb=$(df -Pk "$WORK" | awk 'NR==2 {print int($4 / 1048576)}')
     if [ "$avail_gb" -lt "$need_gb" ]; then
         echo "Only ${avail_gb} GB free under $WORK; this stage needs ${need_gb} GB. Stopping." >&2
         exit 1
