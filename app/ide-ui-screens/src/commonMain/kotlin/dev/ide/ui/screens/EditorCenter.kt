@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -182,10 +183,18 @@ internal fun EditorCenter(
     // (derived from the run-task ids), so a non-Android project leaves it null and the chip is hidden. A
     // `variantEpoch` bump recomputes the label + re-analyzes open files after a switch.
     var variantEpoch by remember { mutableStateOf(0) }
-    val variantModule = remember(project.name, variantEpoch) {
-        state.backend.build.runTasks().firstNotNullOfOrNull { t ->
-            listOf("androidRun:", "assemble:", "bundle:").firstOrNull { t.id.startsWith(it) }
-                ?.let { p -> t.id.removePrefix(p).substringBefore(":") }
+    // Off the main thread: runTasks() looks for runnable mains, and while the index is still building (exactly
+    // when the editor first opens) that is a direct scan of every source file that also waits on the Kotlin
+    // parser lock the indexer holds. Read in composition it froze the UI: a Play ANR on 3.39.0
+    // (KotlinMainScan.parse under EditorCenter). The chip appears once the answer lands.
+    val variantModule by produceState<String?>(null, project.name, variantEpoch) {
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                state.backend.build.runTasks().firstNotNullOfOrNull { t ->
+                    listOf("androidRun:", "assemble:", "bundle:").firstOrNull { t.id.startsWith(it) }
+                        ?.let { p -> t.id.removePrefix(p).substringBefore(":") }
+                }
+            }.getOrNull()
         }
     }
     val activeVariant = remember(project.name, variantEpoch, variantModule) {

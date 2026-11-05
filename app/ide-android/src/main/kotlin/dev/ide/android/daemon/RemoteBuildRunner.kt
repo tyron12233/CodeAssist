@@ -360,7 +360,12 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the
         // daemon last opened, this differs and the daemon reloads module.toml before building — otherwise the
         // build would run against the daemon's stale, frozen-at-first-open model.
-        if (connected) runCatching { client.open(workspaceRoot, services.modelGeneration, id) } // → daemon onOpened → runs `pending`
+        // → daemon onOpened → runs `pending`. Off the caller's thread (the Run tap, on main): `open` is oneway, but
+        // a oneway call still blocks while the daemon's async binder buffer is full (Play ANR, 3.38.0).
+        if (connected) {
+            val generation = services.modelGeneration
+            scope.launch(Dispatchers.IO) { runCatching { client.open(workspaceRoot, generation, id) } }
+        }
         armWatchdog()
     }
 

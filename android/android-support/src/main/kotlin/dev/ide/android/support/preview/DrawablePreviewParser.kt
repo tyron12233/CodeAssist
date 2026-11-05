@@ -25,11 +25,19 @@ object DrawablePreviewParser {
     private const val DEFAULT_DURATION_MS = 300L
 
     /** Parse [text]; returns [DrawablePreview.Unsupported] on malformed XML rather than throwing. */
-    fun parse(text: String, resolver: DrawableResolver = DrawableResolver.NONE): DrawablePreview {
+    fun parse(text: String, resolver: DrawableResolver = DrawableResolver.NONE): DrawablePreview =
+        parse(text, resolver, 0)
+
+    /**
+     * [depth] carries across `@drawable` references. It used to restart at 0 for each referenced file, so a
+     * reference cycle (an adaptive icon whose layer resolves back to itself) never reached [MAX_DEPTH] and
+     * recursed until the stack overflowed, on the main thread: a Play ANR cluster through 3.38.0.
+     */
+    private fun parse(text: String, resolver: DrawableResolver, depth: Int): DrawablePreview {
         val root = runCatching {
             builder().parse(text.byteInputStream(Charsets.UTF_8)).documentElement
         }.getOrNull() ?: return DrawablePreview.Unsupported("?", "Malformed XML")
-        return parseElement(root, resolver, 0)
+        return parseElement(root, resolver, depth)
     }
 
     private fun parseElement(el: Element, r: DrawableResolver, depth: Int): DrawablePreview {
@@ -491,7 +499,7 @@ object DrawablePreviewParser {
         if (typeOf(t) == "color") return colorToken(t, r)?.let { DrawablePreview.SolidColor(it) }
             ?: DrawablePreview.Unsupported("color", "Unresolved color")
         return when (val rd = r.resolveDrawable(t)) {
-            is ResolvedDrawable.Xml -> parse(rd.text, r)
+            is ResolvedDrawable.Xml -> parse(rd.text, r, depth + 1)
             is ResolvedDrawable.BitmapFile -> DrawablePreview.BitmapRef(rd.resType, rd.resName, rd.path)
             null -> DrawablePreview.Unsupported("drawable", "Unresolved $t")
         }

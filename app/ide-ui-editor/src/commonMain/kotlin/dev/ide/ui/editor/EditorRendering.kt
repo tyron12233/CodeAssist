@@ -438,12 +438,19 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // diagnostic squiggles
+        // diagnostic squiggles. Every getHorizontalPosition re-measures the line from its start, so on a long line
+        // full of errors this loop cost (segments x line length) per frame: a Play ANR on 3.37-3.38 (drawEditor).
+        // Long unwrapped lines visit their segments left to right and stop at the first one starting past the
+        // viewport (positions only grow along LTR text, so the rest are off-screen too), and every squiggle path
+        // is clipped to the viewport instead of being built across the whole off-screen width.
+        val clipLeft = gutterWidth
+        val clipRight = size.width
         for (line in visibleLines) {
             val segs = diagByLine[line] ?: continue
             val layout = layoutFor(line)
             val maxCol = doc.lineLength(line)
-            for (seg in segs) {
+            val longLine = !wrap && maxCol > LONG_LINE_COLS
+            for (seg in if (longLine) segs.sortedBy { it.startCol } else segs) {
                 val color = when (seg.severity) {
                     UiSeverity.Error -> colors.error
                     UiSeverity.Warning -> if (seg.unused) colors.muted else colors.warning
@@ -458,9 +465,11 @@ internal fun DrawScope.drawEditor(
                 val drips = spookyErrors && seg.severity == UiSeverity.Error
                 if (!wrap) {
                     val x0 = textLeft + layout.getHorizontalPosition(v0, usePrimaryDirection = true)
+                    if (longLine && x0 > clipRight) break
                     val x1 = textLeft + layout.getHorizontalPosition(v1, usePrimaryDirection = true)
-                    wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f)
-                    if (drips) slimeDrips(slimeColor(color), x0, x1, lineTop(line) + lineH - 1f, lineH, line * 31 + c0)
+                    if (x1 < clipLeft || x0 > clipRight) continue
+                    wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f, clipLeft, clipRight)
+                    if (drips) slimeDrips(slimeColor(color), max(x0, clipLeft), min(x1, clipRight), lineTop(line) + lineH - 1f, lineH, line * 31 + c0)
                 } else {
                     val firstSub = layout.getLineForOffset(v0)
                     val lastSub = layout.getLineForOffset(v1)
@@ -811,16 +820,28 @@ private fun DrawScope.dottedUnderline(color: Color, x1: Float, x2: Float, y: Flo
     }
 }
 
-private fun DrawScope.wavyUnderline(color: Color, x1: Float, x2: Float, y: Float) {
-    if (x2 <= x1) return
+/** Squiggles longer than the long-line threshold take the bounded path in the diagnostic loop. */
+private const val LONG_LINE_COLS = 1000
+
+/**
+ * A wavy underline from [x1] to [x2], drawn only inside [[clipLeft], [clipRight]]. Clipping starts on a whole
+ * wave (an even number of steps past [x1]), so the pattern stays put under the text while scrolling sideways.
+ */
+private fun DrawScope.wavyUnderline(
+    color: Color, x1: Float, x2: Float, y: Float,
+    clipLeft: Float = Float.NEGATIVE_INFINITY, clipRight: Float = Float.POSITIVE_INFINITY,
+) {
     val amplitude = 1.6f
     val step = 2.2f
+    val start = if (x1 < clipLeft) x1 + floor((clipLeft - x1) / (2 * step)) * (2 * step) else x1
+    val end = min(x2, clipRight)
+    if (end <= start) return
     val path = Path().apply {
-        moveTo(x1, y)
-        var x = x1
+        moveTo(start, y)
+        var x = start
         var up = true
-        while (x < x2) {
-            val nx = (x + step).coerceAtMost(x2)
+        while (x < end) {
+            val nx = (x + step).coerceAtMost(end)
             lineTo(nx, if (up) y - amplitude else y + amplitude)
             x = nx
             up = !up

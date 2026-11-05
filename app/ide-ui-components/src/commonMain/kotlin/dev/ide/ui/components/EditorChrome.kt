@@ -68,7 +68,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -866,9 +870,10 @@ private fun RunControl(
         // tapped (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open. A
         // selected task the picker does not list (a gutter run of one `main`) stays on top, so it can be re-picked;
         // one remembered for a project that was at this path before is dropped (RunGutter.stillApplies).
-        val openMenu = {
-            keyboard?.hide(); query = ""
-            val listed = tasks()
+        // tasks() runs on Dispatchers.Default: right after a project opens it scans every source file for a `main`
+        // and can wait on the Kotlin parser lock the indexer holds, which froze the UI when it ran on the tap.
+        val scope = rememberCoroutineScope()
+        fun showMenu(listed: List<RunTaskOption>) {
             items = if (selected == null || listed.any { it.id == selected.id } || !RunGutter.stillApplies(selected, listed)) {
                 listed
             } else {
@@ -876,11 +881,18 @@ private fun RunControl(
             }
             open = true
         }
+        val openMenu: () -> Unit = {
+            keyboard?.hide(); query = ""
+            scope.launch { showMenu(withContext(Dispatchers.Default) { tasks() }) }
+        }
         // A remembered task that no longer applies would only fail ("No module 'app'"): pick from the list instead.
-        val runSelected = {
-            if (selected != null && RunGutter.stillApplies(selected, tasks())) {
-                keyboard?.hide(); onPickTask(selected)
-            } else openMenu()
+        val runSelected: () -> Unit = {
+            keyboard?.hide()
+            scope.launch {
+                val listed = withContext(Dispatchers.Default) { tasks() }
+                if (selected != null && RunGutter.stillApplies(selected, listed)) onPickTask(selected)
+                else { query = ""; showMenu(listed) }
+            }
         }
         val runLabel = stringResource(Res.string.run)
         val chooseLabel = stringResource(Res.string.run_choose_task)

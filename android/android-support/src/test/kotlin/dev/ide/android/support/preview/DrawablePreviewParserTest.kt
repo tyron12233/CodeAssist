@@ -251,4 +251,28 @@ class DrawablePreviewParserTest {
         assertEquals(0xFF6200EEL, entries[1].argb)
         assertNull(entries[2].argb)
     }
+
+    /**
+     * An adaptive icon whose foreground resolves back to the icon itself (`@mipmap/ic_launcher` →
+     * `@mipmap/ic_launcher`). Depth restarted at every referenced file, so this recursed until the stack
+     * overflowed: a main-thread ANR in Play Vitals. It must terminate with the cycle marked unsupported.
+     */
+    @Test
+    fun referenceCycleAcrossFilesTerminates() {
+        var resolutions = 0
+        val icon = """<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+                        <background android:drawable="#FF0000"/>
+                        <foreground android:drawable="@mipmap/ic_launcher"/></adaptive-icon>"""
+        val cyclic = object : DrawableResolver {
+            override fun resolveColor(ref: String): Long? = null
+            override fun resolveDimenDp(ref: String): Float? = null
+            override fun resolveDrawable(ref: String): ResolvedDrawable? {
+                resolutions++
+                return ResolvedDrawable.Xml(icon)
+            }
+        }
+        val preview = DrawablePreviewParser.parse(icon, cyclic)
+        assertTrue(preview is DrawablePreview.Layers, "the icon still renders its resolvable layers: $preview")
+        assertTrue(resolutions <= 16, "the cycle is cut off near MAX_DEPTH, not followed until the stack overflows ($resolutions)")
+    }
 }
