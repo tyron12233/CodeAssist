@@ -35,6 +35,7 @@ import dev.ide.ui.generated.resources.plugin_consent_cap_interp_run
 import dev.ide.ui.generated.resources.plugin_consent_cap_lang_backend
 import dev.ide.ui.generated.resources.plugin_consent_cap_lang_server
 import dev.ide.ui.generated.resources.plugin_consent_cap_model_facet
+import dev.ide.ui.generated.resources.plugin_consent_cap_model_dependencies
 import dev.ide.ui.generated.resources.plugin_consent_cap_model_module_type
 import dev.ide.ui.generated.resources.plugin_consent_cap_net
 import dev.ide.ui.generated.resources.plugin_consent_cap_ui_action
@@ -238,6 +239,7 @@ internal fun capabilityDescription(capability: String): StringResource? = when (
     "lang.server" -> Res.string.plugin_consent_cap_lang_server
     "model.moduleType" -> Res.string.plugin_consent_cap_model_module_type
     "model.facet" -> Res.string.plugin_consent_cap_model_facet
+    "model.dependencies" -> Res.string.plugin_consent_cap_model_dependencies
     // Phrased as what it does to the user's own code, since that is the part worth deciding about.
     "interp.run" -> Res.string.plugin_consent_cap_interp_run
     "build.task" -> Res.string.plugin_consent_cap_build_task

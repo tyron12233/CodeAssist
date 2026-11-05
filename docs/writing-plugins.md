@@ -1373,13 +1373,14 @@ A key is usable only if you can name its type, and that differs by tier:
 Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
 `Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Eight engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+Nine engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
 Five are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`,
 `MODULE_RESOURCES`), each declared in the api module whose types it already speaks, and each typed to a
 *narrowed* interface rather than to the engine class behind it. The seventh is `CODE_INTERPRETER`
 (`interp-api`), the only one at APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
 than being scoped to one (see section 14b). The eighth, `ANDROID_MODULES` (`project-model-api`), is a
-read-only view over the Android module settings with no engine service behind it (section 14d). `:ide-core` registers the narrow key
+read-only view over the Android module settings with no engine service behind it (section 14d), and the ninth,
+`MODULE_DEPENDENCIES`, an adapter over the engine's dependency service, which speaks the UI's types (section 14e). `:ide-core` registers the narrow key
 alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
 index, and the same module model.
 
@@ -2760,6 +2761,34 @@ subscribe to. The view is read-only: the configuration is the user's, edited in 
 Gradle importer. The types are interfaces the IDE implements, so a fact added later is a new member rather
 than a change your compiled plugin would trip on.
 
+## 14e. Find and add Maven dependencies
+
+`MODULE_DEPENDENCIES` (`dev.ide.model.ModuleDependencies`, WORKSPACE, since SPI 3.4.0) is what the
+Dependencies screen does, for a plugin: search, list versions, read a module's resolved graph, and add a
+library, a BOM or a repository. It is what an "add the library for this" quick fix needs: check that the
+coordinate exists and which version is current before offering, instead of writing a guess into the build file.
+
+```kotlin
+val deps = workspace.service(MODULE_DEPENDENCIES)
+val latest = deps.versions("com.squareup.retrofit2:retrofit").firstOrNull() ?: return   // empty: could not tell
+val change = deps.add(module, "com.squareup.retrofit2:retrofit:$latest")
+if (!change.added) reportToUser(change.message)
+
+val graph = deps.resolved(module)
+graph?.conflicts?.forEach { log("${it.artifact}: asked for ${it.requested}, using ${it.chosen}") }
+```
+
+Everything that reaches a repository suspends; call it off the main thread. An unreachable repository answers
+empty or with a failed change rather than throwing, so treat "no versions" as "could not tell", and
+`ArtifactSearch.indexUnavailable` as "could not search". `add` takes the same path as the screen: it resolves
+first, refuses what the module cannot take (an `.aar` on a plain Java module), writes the build file and
+re-indexes, and the user sees the progress. A coordinate without a version is fine when a BOM pins it, and
+`resolved` then reports the version the BOM chose. Only Maven artifacts are listed; module dependencies, the
+SDK and local jars are in the model already.
+
+Declare `PluginCapabilities.MODEL_DEPENDENCIES` (`model.dependencies`) if you add anything: it changes the
+user's build files and what their code compiles against, and the consent screen says so.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -3286,6 +3315,7 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.build.BUILD_CONTROL` | WORKSPACE | `BuildControl` | Start or stop the build; compile and run a module's `main` and capture its output |
 | `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
 | `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
+| `dev.ide.model.MODULE_DEPENDENCIES` | WORKSPACE | `ModuleDependencies` | Maven dependencies as the Dependencies screen sees them: search, versions, a module's resolved graph with conflicts, and adding a library, a BOM or a repository (section 14e) |
 | `dev.ide.model.ANDROID_MODULES` | WORKSPACE | `AndroidModules` | Each Android module's configuration as the build resolves it: SDK levels, namespace and application id, build features, build types, flavors, variants with their application ids, and the active variant (section 14d) |
 | `dev.ide.model.MODULE_RESOURCES` | WORKSPACE | `ModuleResources` | A module's resources: generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model (query `@type/name`, write `res/values` entries and file resources) |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |

@@ -154,6 +154,7 @@ import dev.ide.model.FACET_CODEC_EP
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FileIconRegistry
 import dev.ide.model.ANDROID_MODULES
+import dev.ide.model.MODULE_DEPENDENCIES
 import dev.ide.model.MODULE_RESOURCES
 import dev.ide.model.MODULE_SOURCES
 import dev.ide.model.ModuleTypeRegistry
@@ -955,6 +956,9 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(MODULE_RESOURCES, ServiceScopeLevel.WORKSPACE) { getService(ANDROID_RESOURCE_SERVICE) }
         // Published only, no internal key: nothing in the engine needs this view, it reads the facets directly.
+        reg.service(MODULE_DEPENDENCIES, ServiceScopeLevel.WORKSPACE) {
+            dev.ide.core.services.ModuleDependenciesService(getService(DEPENDENCY_SERVICE))
+        }
         reg.service(ANDROID_MODULES, ServiceScopeLevel.WORKSPACE) {
             dev.ide.core.services.AndroidModulesService(getService(ENGINE_CONTEXT))
         }

@@ -387,6 +387,12 @@ const val PLUGIN_API_VERSION: Int = 4
  * ([PluginCapabilities.UI_COLOR_SCHEME]): a plugin ships whole editor color schemes, as the JSON the IDE's
  * scheme editor exports, listed beside the presets and read-only like them. A plugin could add entries to a
  * scheme (`colorAttribute`) but not a scheme, so a theme plugin was not possible.
+ *
+ * And `dev.ide.model.ModuleDependencies` on `MODULE_DEPENDENCIES` (`platform.moduleDependencies`, WORKSPACE)
+ * in `project-model-api`: search the repositories, list an artifact's versions, read a module's resolved graph
+ * with its version conflicts, and add a library, a BOM or a repository the way the Dependencies screen does
+ * ([PluginCapabilities.MODEL_DEPENDENCIES]). A plugin could attach a declaration nothing had resolved, and
+ * could not check that a coordinate existed first.
  */
 const val PLUGIN_SPI_VERSION: String = "3.4.0"
 

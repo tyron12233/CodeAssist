@@ -78,6 +78,12 @@ object PluginCapabilities {
      */
     const val MODEL_FACET = "model.facet"
 
+    /**
+     * Adds libraries, BOMs and Maven repositories to the user's modules (`dev.ide.model.ModuleDependencies`),
+     * which changes their build files and what their code compiles against. Engine facet. Since SPI 3.4.0.
+     */
+    const val MODEL_DEPENDENCIES = "model.dependencies"
+
     /** Reads the files in the user's projects. */
     const val FS_READ = "fs.read"
 

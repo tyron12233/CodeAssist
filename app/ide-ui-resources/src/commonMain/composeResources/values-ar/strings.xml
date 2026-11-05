@@ -2694,6 +2694,7 @@
     <string name="plugin_consent_cap_lang_server">تشغيل خادم لغة: برنامج منفصل يفحص لغةً ويكملها ويتنقل فيها</string>
     <string name="plugin_consent_cap_model_module_type">إضافة نوع من الوحدات، وقوالب لإنشائه</string>
     <string name="plugin_consent_cap_model_facet">حفظ إعدادات خاصة بها في وحداتك</string>
+    <string name="plugin_consent_cap_model_dependencies">إضافة مكتبات ومستودعات Maven إلى مشاريعك</string>
     <string name="plugin_consent_cap_interp_run">تشغيل كود مشروعك داخل بيئة التطوير لمعاينته أو تشغيله</string>
     <string name="plugin_consent_cap_build_task">إضافة خطوات إلى عمليات البناء</string>
     <string name="plugin_consent_cap_build_source_generator">توليد كود مصدري داخل وحداتك</string>

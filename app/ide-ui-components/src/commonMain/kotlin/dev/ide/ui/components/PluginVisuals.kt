@@ -98,7 +98,7 @@ fun capabilityGroup(capability: String): CapabilityGroup = when {
  */
 fun isSensitiveCapability(capability: String): Boolean = capability in SENSITIVE
 
-private val SENSITIVE = setOf("fs.write", "net", "interp.run", "build.task", "build.runTask", "build.sourceGenerator", "lang.server")
+private val SENSITIVE = setOf("fs.write", "model.dependencies", "net", "interp.run", "build.task", "build.runTask", "build.sourceGenerator", "lang.server")
 
 /** [capabilities] grouped in [CapabilityGroup] order; an unknown one lands in Other, verbatim. */
 fun groupCapabilities(capabilities: List<String>): List<Pair<CapabilityGroup, List<String>>> =
