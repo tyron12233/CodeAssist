@@ -21,7 +21,8 @@
 #
 # Usage:  FLUTTER_HOME=/path/to/flutter ./fetch-flutter.sh
 #   FLUTTER_HOME   a Flutter 3.47.9 SDK (any host). Only read, plus two `flutter build bundle` runs.
-#   FLUTTER_ABIS   the ABIs to stage an engine for, default "arm64-v8a armeabi-v7a x86_64 x86". An ABI whose
+#   FLUTTER_ABIS   the ABIs to stage an engine for, default "arm64-v8a armeabi-v7a x86_64" (the ABIs there is a
+#                  Dart SDK for; see fetch-dart-android.sh). An ABI whose
 #                  debug engine this Flutter does not ship is skipped with a warning, not an error.
 #   LLVM_OBJCOPY   an llvm-objcopy to strip the engine with; by default the NDK's, from ANDROID_NDK_HOME or
 #                  from the archive tools/ndk-toolchain downloads (build/dl/ndk.zip).
@@ -81,7 +82,7 @@ engine_dir() {
     esac
 }
 staged=0
-for abi in ${FLUTTER_ABIS:-arm64-v8a armeabi-v7a x86_64 x86}; do
+for abi in ${FLUTTER_ABIS:-arm64-v8a armeabi-v7a x86_64}; do
     dir="$(engine_dir "$abi")" || die "unknown ABI '$abi' in FLUTTER_ABIS"
     jar="$FLUTTER_HOME/bin/cache/artifacts/engine/$dir/flutter.jar"
     if [[ ! -f "$jar" ]] || ! unzip -l "$jar" "lib/$abi/libflutter.so" >/dev/null 2>&1; then

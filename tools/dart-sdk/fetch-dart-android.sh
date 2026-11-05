@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Stage a Dart SDK that RUNS ON an Android device, for the Dart plugin (samples/dart-plugin): one ABI per run.
+# Stage a Dart SDK that RUNS ON an Android device, for the Dart plugin (samples/dart-plugin): one ABI per run
+# (arm64-v8a, armeabi-v7a or x86_64).
 #
 # Google publishes no Android build of the Dart SDK. Termux does: its `dart` package is the upstream SDK
 # built for android-arm64 against bionic, and its executables need nothing but the system's libc, libdl,
@@ -26,12 +27,12 @@
 #   ABI=arm64-v8a    (default)  Termux package arch aarch64
 #   ABI=armeabi-v7a             arm
 #   ABI=x86_64                  x86_64
-#   ABI=x86                     i686
 #
-# Only the arm64 package has a pinned checksum. For another ABI, either set DEB_SHA256 to a checksum you have
-# verified, or set ALLOW_UNVERIFIED=1 to go ahead and have the script print the checksum it computed so it can
-# be pinned. Whether Termux publishes a Dart package for an ABI at all is up to Termux; a 404 here means it
-# does not (for that Dart version).
+# x86 (32-bit) is not offered: Termux publishes no Dart package for i686 (there is none for 3.13.7).
+#
+# Each ABI's checksum is pinned below, as Termux's package index lists it (binary-<arch>/Packages). Another
+# DART_VERSION needs its own: set DEB_SHA256 to one you have verified, or ALLOW_UNVERIFIED=1 to go ahead and have
+# the script print the checksum it computed so it can be pinned.
 #
 # Usage:  [ABI=<abi>] ./fetch-dart-android.sh     (re-running with the package already downloaded is quick)
 set -euo pipefail
@@ -43,12 +44,12 @@ ALLOW_UNVERIFIED="${ALLOW_UNVERIFIED:-}"
 # The Termux package architecture for each Android ABI, and the checksum we have pinned for it (if any).
 case "$ABI" in
     arm64-v8a)   DEB_ARCH=aarch64; PINNED_SHA256="a351ce8f5075279971e29b9ce961fd239153547156b7a8d26b5592e1c7782605" ;;
-    armeabi-v7a) DEB_ARCH=arm;     PINNED_SHA256="" ;;
-    x86_64)      DEB_ARCH=x86_64;  PINNED_SHA256="" ;;
-    x86)         DEB_ARCH=i686;    PINNED_SHA256="" ;;
-    *) echo "unknown ABI '$ABI' (expected arm64-v8a, armeabi-v7a, x86 or x86_64)" >&2; exit 2 ;;
+    armeabi-v7a) DEB_ARCH=arm;     PINNED_SHA256="c83829bd189061a6c3da05d70ad0df63654f7c8f9544297055eb253f219845ad" ;;
+    x86_64)      DEB_ARCH=x86_64;  PINNED_SHA256="0d013616c02a5627f4df20a30a45e7d244cddd2fb234ea1e5637c855c994df7e" ;;
+    x86) echo "no Dart SDK for x86: Termux publishes no Dart package for i686" >&2; exit 2 ;;
+    *) echo "unknown ABI '$ABI' (expected arm64-v8a, armeabi-v7a or x86_64)" >&2; exit 2 ;;
 esac
-# The pin above is for Dart 3.13.7 only: another DART_VERSION needs its own checksum.
+# The pins above are for Dart 3.13.7 only: another DART_VERSION needs its own checksums.
 [[ "$DART_VERSION" == "3.13.7" ]] || PINNED_SHA256=""
 DEB_SHA256="${DEB_SHA256:-$PINNED_SHA256}"
 DEB_URL="${DEB_URL:-https://packages.termux.dev/apt/termux-main/pool/main/d/dart/dart_${DART_VERSION}_${DEB_ARCH}.deb}"

@@ -28,16 +28,17 @@ val generatedAssetsDir: File = layout.buildDirectory.dir("generated/dart-sdk/ass
 val flutterOut: File = File(sdkOut, "flutter")
 
 /**
- * The ABIs something was staged for: every `jniLibs/<abi>` directory the Dart SDK or the Flutter engine left.
+ * The ABIs a Dart SDK was staged for (its `jniLibs/<abi>` directories); a Flutter engine alone is no use without
+ * one. x86 (32-bit) is absent: Termux publishes no Dart for it.
  *
  * One APK is built for each (see `splits` below), carrying only that ABI's executables, instead of one APK with
  * all of them. `-Pdart.abis=arm64-v8a,x86_64` narrows the set; `-Pdart.universalApk` adds the single APK with
  * every ABI as well.
  */
-val allAbis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+val allAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
 val stagedAbis: List<String> = (providers.gradleProperty("dart.abis").orNull
     ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: allAbis)
-    .filter { File(sdkLibs, it).isDirectory || File(flutterOut, "jniLibs/$it").isDirectory }
+    .filter { File(sdkLibs, it).isDirectory }
 
 /** The engine the staged Flutter was built on, which the player's Java embedding has to match. */
 val flutterEngine: String = File(flutterOut, "ENGINE").takeIf { it.isFile }?.readText()?.trim()
