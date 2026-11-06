@@ -1,0 +1,7 @@
+Created file /home/j.json
+Appended to /home/j.json
+{"path": "C:\new\t.txt", "v": "$FOO", "q": 'x'}
+tail \n $FOO
+
+info: 4 commands OK (Ns)
+[exit 0]

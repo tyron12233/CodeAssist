@@ -1,0 +1,6 @@
+set +e
+$ echo hi
+zipcli$ ls
+create a | create b
+echo hello > out.txt
+echo $(date)

@@ -1,0 +1,33 @@
+Updated /home/e1.txt
+Updated /home/e2.txt
+Updated /home/e3.txt
+Updated /home/e4.txt
+Updated /home/e5.txt
+Updated /home/e6.txt
+Updated /home/e7.txt
+Updated /home/e8.txt
+Updated /home/e9.txt
+Updated /home/e10.txt
+==> /home/e1.txt <==
+C:\new\table.txt
+==> /home/e2.txt <==
+a
+b
+==> /home/e3.txt <==
+\\
+==> /home/e4.txt <==
+x $FOO
+==> /home/e5.txt <==
+x bar
+==> /home/e6.txt <==
+x $FOO
+==> /home/e7.txt <==
+x \$FOO
+==> /home/e8.txt <==
+it's
+==> /home/e9.txt <==
+it's
+==> /home/e10.txt <==
+C:\
+info: 12 commands OK (Ns)
+[exit 0]

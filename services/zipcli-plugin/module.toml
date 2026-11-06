@@ -1,0 +1,15 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "zipcli-plugin"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/kotlin"]
+
+[dependencies]
+api = [{ module = "zipcli-core" }]
+implementation = [{ module = "plugin-api" }, { module = "platform-core" }, { module = "agent-api" }, "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "kotlin-stdlib"]

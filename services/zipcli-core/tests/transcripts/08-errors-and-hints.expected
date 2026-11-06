@@ -1,0 +1,12 @@
+Created file /home/q1.txt
+Created file /home/a.zip
+error: line 4: [E_NOT_FOUND] Not found: /home/zzz.txt. /home contains: a.zip, q1.txt.
+error: line 5: [E_NOT_FOUND] Not found: /home/q2.txt. Did you mean 'q1.txt'?
+error: line 6: [E_USAGE] Unknown flag: -z for 'list'. Flags: -l/--long, -a/--all, --json. If it is literal text, write it after '--' or in quotes. Try 'help list'.
+error: line 7: [E_USAGE] Unknown command: 'lsit'. Did you mean 'edit'?
+Deleted /home/q1.txt
+Nothing to delete: /home/nothere.zip (already gone)
+error: line 10: [E_NOT_FOUND] No files match: /home/*.md
+error: line 11: [E_NOT_FOUND] Not found: /home/*.md. /home contains: a.zip. 'find' does not expand wildcards in <path>: give a folder and use --name '<glob>' with -r.
+error: 8 commands, 6 failed (Ns)
+[exit 3]

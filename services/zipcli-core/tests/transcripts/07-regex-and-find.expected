@@ -1,0 +1,11 @@
+Created file /home/r.txt
+/home/r.txt:2: foo 42
+1 match(es) in 1 file(s) (searched 1 file(s))
+/home/r.txt:1: Hello World
+/home/r.txt:2: foo 42
+/home/r.txt:3: bar
+3 match(es) in 1 file(s) (searched 1 file(s))
+1 match(es) in 1 file(s) (searched 1 file(s))
+error: line 5: [E_USAGE] Invalid pattern: Unclosed group (at position 1 of '(')
+error: stopped at line 5 after 5 command(s) (Ns)
+[exit 2]

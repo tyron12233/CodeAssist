@@ -1,0 +1,13 @@
+# Escaping matrix: every row of the quoting contract, asserting exact bytes with cat.
+set FOO=bar
+update /home/e1.txt --content 'C:\new\table.txt'
+update /home/e2.txt --content "a\nb"
+update /home/e3.txt --content '\\'
+update /home/e4.txt --content 'x $FOO'
+update /home/e5.txt --content "x $FOO"
+update /home/e6.txt --content "x \$FOO"
+update /home/e7.txt --content 'x \$FOO'
+update /home/e8.txt --content 'it\'s'
+update /home/e9.txt --content 'it'\''s'
+update /home/e10.txt --content "C:\\"
+cat /home/e1.txt /home/e2.txt /home/e3.txt /home/e4.txt /home/e5.txt /home/e6.txt /home/e7.txt /home/e8.txt /home/e9.txt /home/e10.txt

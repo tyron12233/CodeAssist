@@ -1,0 +1,9 @@
+# Heredoc bodies are byte-exact, whatever the delimiter quoting.
+set FOO=bar
+create /home/j.json <<'EOF'
+{"path": "C:\new\t.txt", "v": "$FOO", "q": 'x'}
+EOF
+update /home/j.json --append <<END
+tail \n $FOO
+END
+cat /home/j.json

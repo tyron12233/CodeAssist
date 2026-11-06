@@ -1,0 +1,5 @@
+Created file /home/a
+Created file /home/b
+error: line 3: [E_NOT_FOUND] Not found: /home/missing.txt. /home contains: a, b.
+error: stopped at line 3 after 3 command(s) (Ns), 1 command(s) not run
+[exit 3]

@@ -1,0 +1,5 @@
+Created file /home/x
+Created file /home/y
+error: line 3: [E_NEEDS_CONFIRM] confirmation required: Delete file /home/x (0 B)? [y/N] Not run. Authorise it with --yes on this command (or confirm=true over MCP).
+error: stopped at line 3: 1 command needs confirmation, 2 command(s) not run (Ns). Re-issue with --yes on line 3 (or confirm=true over MCP) to authorise it.
+[exit 4]

@@ -1,0 +1,5 @@
+create /home/a
+# a comment line and a blank line count towards the number
+
+update /home/a.txt --content 'it is never closed
+create /home/b

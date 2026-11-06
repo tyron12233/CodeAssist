@@ -1,0 +1,9 @@
+#!zipcli
+# Usage: run backup.zcli <folder> [-- ...]
+# Zips every .txt in the given folder into /home/backups with a dated-style name.
+set DIR=${1:-/home}
+create /home/backups/
+cd $DIR
+test -n "${1:-}" || echo "no folder given, using $DIR"
+zip /home/backups/notes.zip *.txt -o || echo "nothing to back up"
+ls /home/backups -l

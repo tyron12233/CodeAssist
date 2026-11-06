@@ -1,0 +1,14 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "zipcli-core"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/kotlin"]
+
+[dependencies]
+implementation = ["org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "kotlin-stdlib"]

@@ -1,0 +1,4 @@
+create /home/a
+create /home/b
+cat /home/missing.txt
+create /home/never

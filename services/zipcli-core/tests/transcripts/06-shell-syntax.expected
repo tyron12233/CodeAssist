@@ -1,0 +1,6 @@
+error: line 2: [E_USAGE] '$' looks like a shell prompt, not a command. Paste the command without the prompt (without '$'). ZipCLI has no pipes, no redirection, no command substitution and no arithmetic. Run commands as separate lines; use 'for' to loop. See 'help scripting'.
+error: line 3: [E_USAGE] 'zipcli$' looks like a shell prompt, not a command. Paste the command without the prompt (without 'zipcli$'). ZipCLI has no pipes, no redirection, no command substitution and no arithmetic. Run commands as separate lines; use 'for' to loop. See 'help scripting'.
+error: line 4: [E_USAGE] '|' on its own is not supported: ZipCLI has no pipes, no redirection, no command substitution and no arithmetic. Run commands as separate lines; use 'for' to loop and 'update --append' to add to a file. Quote it if it is literal text (e.g. echo 'a | b'). See 'help scripting'.
+error: line 5: [E_USAGE] '>' on its own is not supported: ZipCLI has no pipes, no redirection, no command substitution and no arithmetic. Run commands as separate lines; use 'for' to loop and 'update --append' to add to a file. Quote it if it is literal text (e.g. echo 'a > b'). See 'help scripting'.
+error: line 6: [E_USAGE] Arithmetic expansion and command substitution are not supported. Use 'set NAME=value' plus a variable reference, or quote the text to keep it literal.
+[exit 2]

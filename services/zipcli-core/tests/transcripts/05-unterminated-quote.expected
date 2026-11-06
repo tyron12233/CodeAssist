@@ -1,0 +1,4 @@
+error: [E_USAGE] Syntax error (line 4): unterminated quote
+error:   4 | update /home/a.txt --content 'it is never closed
+error:     |                              ^ opened here, never closed
+[exit 2]

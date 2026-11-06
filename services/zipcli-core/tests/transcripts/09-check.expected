@@ -1,0 +1,7 @@
+Updated /home/bad.zcli
+line 2: [E_USAGE] Unknown command: 'lsit'. Did you mean 'edit'?
+line 3: [E_USAGE] Unknown flag: -z for 'find'. Flags: -r/--recursive, -i/--ignore-case, -s/--case, -w/--word, -m/--multiline, --reindent, --dotall, --regex, --name, --max, --offset, --count-only, --summary, --json. If it is literal text, write it after '--' or in quotes. Try 'help find'.
+line 5: [E_USAGE] Unknown flag: --nope for 'create'. If it is literal text, write it after '--' or in quotes: create -- '<text>'
+check: 3 problem(s) in bad.zcli, nothing was run
+error: stopped at line 8 after 2 command(s) (Ns)
+[exit 2]

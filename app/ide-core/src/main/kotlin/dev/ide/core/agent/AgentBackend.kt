@@ -34,6 +34,8 @@ import dev.ide.agent.toolSchema
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
 import dev.ide.platform.log.Log
+import dev.ide.zipcli.plugin.ZipCliAgentTool
+import dev.ide.zipcli.plugin.ZipCliPlugin
 import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.UiAgentAttachment
 import dev.ide.ui.backend.UiAgentAttachmentKind
@@ -128,7 +130,14 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
     }
 
-    private val tools = SimpleToolRegistry(builtinTools(checkpoints) + ftpControlTool)
+    /** ZipCLI over the open project (see the ZipCLI plugin). In-app chat only: deliberately absent from
+     *  [mcpTools], whose allow-all gate would hand a remote client a delete/overwrite command line. */
+    private val zipCliTool = ZipCliAgentTool(
+        root = { ctx.servicesOrNull?.workspaceRoot },
+        enabled = { ctx.manager?.env?.pluginCatalog?.isEnabled(ZipCliPlugin.ID) != false },
+    )
+
+    private val tools = SimpleToolRegistry(builtinTools(checkpoints) + ftpControlTool + zipCliTool)
 
     /** The MCP server's tools write straight to the workspace: an external client's edits are not a chat turn,
      *  and recording them into one would let that turn's Undo revert someone else's work. */

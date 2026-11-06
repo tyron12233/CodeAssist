@@ -128,6 +128,8 @@ include(
     ":agent-api",   // agentic-coding SPI: provider-neutral LLM client + AgentTool + AgentWorkspace engine port
     ":agent-impl",  // the agent engine: OkHttp/SSE transport, Anthropic/OpenAI/Gemini providers, loop, built-in tools
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
+    ":zipcli-core",   // ZipCLI's pure-JVM command engine (file / search / replace / ZIP commands + scripts) over a project directory
+    ":zipcli-plugin", // the ZipCLI plugin + its `zipcli` AI-agent tool (depends on :agent-api and :zipcli-core)
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
     // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
@@ -247,6 +249,7 @@ val layers = mapOf(
         "deps-api", "deps-impl", "vcs-api", "vcs-impl", "vcs-ui",
         "store-api", "store-impl", "store-bridge",
         "analytics-api", "analytics-impl", "agent-api", "agent-impl", "agent-mcp", "agent-ui",
+        "zipcli-core", "zipcli-plugin",
     ),
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl", "spi-compat"),

@@ -1,6 +1,7 @@
 package dev.ide.core.plugins
 
 import dev.ide.agent.ui.AgentUiPlugin
+import dev.ide.zipcli.plugin.ZipCliPlugin
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.MODULE_ANALYSIS
@@ -240,6 +241,8 @@ object BuiltInPlugins {
         BuiltInPlugin(AgentPlugin(), ui = AgentUiPlugin),
         // Version control: engine facet (settings page + VcsBackend wiring) + its Compose Git UI.
         BuiltInPlugin(VcsPlugin(), ui = VcsUiPlugin),
+        // ZipCLI: file / search-and-replace / ZIP commands the AI agent can run over the open project.
+        BuiltInPlugin(ZipCliPlugin()),
     )
 }
 

@@ -1,0 +1,5 @@
+create /home/r.txt --content "Hello World\nfoo 42\nbar\n"
+find --regex 'foo\s+\d+' /home/r.txt
+find --regex '\p{Lu}\w+' /home/r.txt
+find --regex '^bar$' /home/r.txt --count-only
+find --regex '(' /home/r.txt

@@ -1,0 +1,8 @@
+update /home/bad.zcli <<'EOF2'
+create ok
+lsit /home
+find x -z
+
+create a b --nope
+EOF2
+check /home/bad.zcli

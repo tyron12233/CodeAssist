@@ -1,0 +1,11 @@
+set +e
+create /home/q1.txt
+create /home/a.zip
+cat /home/zzz.txt
+cat /home/q2.txt
+list -z
+lsit
+delete /home/q1.txt -f
+delete /home/nothere.zip -f
+list /home/*.md
+find x /home/*.md
