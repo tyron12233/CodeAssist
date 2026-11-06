@@ -467,10 +467,16 @@ class LspSession(
         })
     }
 
-    /** `workspace/didChangeWatchedFiles` with [changes] as (path, type: 1 created, 2 changed, 3 deleted). */
+    /**
+     * `workspace/didChangeWatchedFiles` with [changes] as (path, type: 1 created, 2 changed, 3 deleted), sent only
+     * once the server has registered for it. We advertise `dynamicRegistration`, so a server that wants file events
+     * asks for them (clangd does); one that watches the disk itself never does, and an unasked-for notification is
+     * an error to it: the Dart analysis server answered every save with an "Unknown method
+     * workspace/didChangeWatchedFiles" error toast.
+     */
     fun filesChanged(changes: List<Pair<Path, Int>>) {
-        if (changes.isEmpty()) return
-        notify("workspace/didChangeWatchedFiles", buildJsonObject {
+        if (changes.isEmpty() || !registered(DID_CHANGE_WATCHED_FILES)) return
+        notify(DID_CHANGE_WATCHED_FILES, buildJsonObject {
             putJsonArray("changes") {
                 for ((p, type) in changes) addJsonObject { put("uri", uriOf(p)); put("type", type) }
             }
@@ -677,6 +683,7 @@ class LspSession(
 
     companion object {
         const val INITIALIZE_TIMEOUT_MS = 60_000L
+        internal const val DID_CHANGE_WATCHED_FILES = "workspace/didChangeWatchedFiles"
         /** A request this slow, or an answer this large, is logged even with timing logs off. */
         const val SLOW_REQUEST_MS = 1_500L
         const val LARGE_RESPONSE_CHARS = 1_000_000
