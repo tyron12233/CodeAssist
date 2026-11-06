@@ -53,6 +53,24 @@ class DartLanguageServer(private val sdk: DartSdk, private val pub: Pub, private
     override fun initializationOptions(context: LanguageServerContext): String =
         """{"onlyAnalyzeProjectsWithOpenFiles":true,"suggestFromUnimportedLibraries":true,"closingLabels":false,"outline":false,"flutterOutline":false}"""
 
+    /**
+     * The server's client settings, which it asks for (`workspace/configuration`, section `dart`) once it is up.
+     * `completeFunctionCalls` makes completing a function insert its call, `print(object)`, with the arguments as
+     * snippet placeholders, rather than the bare name. It is off unless the client turns it on.
+     */
+    override fun configuration(section: String?, context: LanguageServerContext): String? = settings(section)
+
     override fun rootFor(file: Path, context: LanguageServerContext): Path? =
         DartPackages.packageRootOf(file, context.projectRoot)
+
+    companion object {
+        private const val DART_SETTINGS = """{"completeFunctionCalls":true}"""
+
+        /** The answer for [section]: the `dart` settings, all of them for no section, nothing for any other. */
+        fun settings(section: String?): String? = when (section) {
+            "dart" -> DART_SETTINGS
+            null -> """{"dart":$DART_SETTINGS}"""
+            else -> null
+        }
+    }
 }
