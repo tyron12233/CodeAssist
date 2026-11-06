@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -121,10 +122,14 @@ internal fun AccountsScreen(ctx: ScreenContext) {
         }
     }
 
-    ExpressiveScaffold(title = stringResource(Res.string.vcs_accounts), onBack = ctx::back, large = false) { padding ->
+    ExpressiveScaffold(
+        title = stringResource(Res.string.vcs_accounts),
+        onBack = ctx::back,
+        large = false,
+        snackbarHost = { FeedbackStrip(feedback, Modifier.navigationBarsPadding()) },
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             // Outside the scrolling column, so the result of a button at the bottom of the page is on screen.
-            FeedbackStrip(feedback, Modifier.padding(horizontal = 16.dp))
             Column(
                 Modifier
                     .fillMaxSize()

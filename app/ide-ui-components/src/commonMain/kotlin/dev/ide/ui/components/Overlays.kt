@@ -68,6 +68,9 @@ import kotlinx.coroutines.launch
  * release it settles to the nearest of resting / full, snapping past the midpoint.
  *
  * @param heightFraction resting sheet height as a fraction of the screen (~0.7 navigator, ~0.6 console).
+ * @param minRestingHeight the least resting height, whatever [heightFraction] comes to: on a short screen a
+ *   fixed share of it can be too little for fixed-size content (onboarding's illustrations), so the sheet rests
+ *   taller there instead, up to 95% of the screen. Zero (the default) keeps the plain fraction.
  * @param content laid out in a [ColumnScope] below the drag handle — use `Modifier.weight(1f)` to
  *   fill the remaining sheet height.
  */
@@ -77,6 +80,7 @@ fun BottomSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     heightFraction: Float = 0.6f,
+    minRestingHeight: androidx.compose.ui.unit.Dp = 0.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -89,11 +93,13 @@ fun BottomSheet(
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val heightPx = constraints.maxHeight.toFloat()
+            val minRestingPx = with(androidx.compose.ui.platform.LocalDensity.current) { minRestingHeight.toPx() }
+            val restingFraction = maxOf(heightFraction, (minRestingPx / heightPx).coerceAtMost(0.95f))
             val scope = rememberCoroutineScope()
             // The live sheet height, as a fraction of the screen. Driven by the drag gesture and
             // animated on settle; reset to the resting height each time the sheet reopens.
-            val fraction = remember { Animatable(heightFraction) }
-            LaunchedEffect(visible) { if (visible) fraction.snapTo(heightFraction) }
+            val fraction = remember { Animatable(restingFraction) }
+            LaunchedEffect(visible) { if (visible) fraction.snapTo(restingFraction) }
 
             val dragState = rememberDraggableState { delta ->
                 // delta > 0 is a downward drag → shrink the sheet; up → grow it. Floor below the
@@ -102,15 +108,15 @@ fun BottomSheet(
                 scope.launch { fraction.snapTo(next) }
             }
             val settle: suspend (Float) -> Unit = { velocity ->
-                val midpoint = (heightFraction + 1f) / 2f
+                val midpoint = (restingFraction + 1f) / 2f
                 when {
                     // Dragged (or flung) well below the resting height → close the sheet.
-                    fraction.value < heightFraction * 0.7f || velocity > heightPx ->
+                    fraction.value < restingFraction * 0.7f || velocity > heightPx ->
                         onDismiss()
                     fraction.value >= midpoint || velocity < -heightPx ->
                         fraction.animateTo(1f, tween(Motion.BASE, easing = Motion.quiet))
                     else ->
-                        fraction.animateTo(heightFraction, tween(Motion.BASE, easing = Motion.quiet))
+                        fraction.animateTo(restingFraction, tween(Motion.BASE, easing = Motion.quiet))
                 }
             }
 

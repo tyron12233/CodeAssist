@@ -66,4 +66,30 @@ class TomlTest {
         """.trimIndent()
         assertEquals(listOf("a", "b"), Toml.parse(text)["x"])
     }
+
+    // Hand-edited manifests use TOML 1.1's looser inline tables; the strict form failed the module open.
+    @Test
+    fun parsesInlineTablesSpanningLinesWithCommentsAndATrailingComma() {
+        val text = """
+            dependencies = [
+              {
+                module = "core", # the shared code
+                scope = "api",
+              },
+              { maven = "com.squareup:okio:3.9.0", },
+              {},
+            ]
+        """.trimIndent()
+        val deps = Toml.parse(text)["dependencies"] as List<*>
+        assertEquals(linkedMapOf("module" to "core", "scope" to "api"), deps[0])
+        assertEquals(linkedMapOf("maven" to "com.squareup:okio:3.9.0"), deps[1])
+        assertEquals(linkedMapOf<String, Any?>(), deps[2])
+    }
+
+    @Test
+    fun parsesLiteralStringsAsKeysAndValues() {
+        val doc = Toml.parse("""x = { 'odd key' = 'C:\path\no-escapes' }""" + "\ny = 'v'")
+        assertEquals(linkedMapOf("odd key" to "C:\\path\\no-escapes"), doc["x"])
+        assertEquals("v", doc["y"])
+    }
 }

@@ -119,6 +119,27 @@ object CaIcons {
         roundRect(8.5f, 8.5f, 12f, 12f, 2.5f),                                          // front sheet
         s("M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"), // back sheet
     )
+    val bell = build(
+        "bell",
+        s("M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"),
+        s("M10 20.5a2 2 0 0 0 4 0"),
+    )
+    val cut = build(
+        "cut",
+        circle(6f, 6f, 3f),
+        circle(6f, 18f, 3f),
+        s("M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12"),
+    )
+    val paste = build(
+        "paste",
+        roundRect(5f, 4.5f, 14f, 16.5f, 2.5f),
+        roundRect(9f, 3f, 6f, 3.5f, 1.2f),
+    )
+    val trash = build(
+        "trash",
+        s("M4 7h16M10 11v6M14 11v6M9 7V4.5h6V7"),
+        s("M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"),
+    )
     val terminal = build("terminal", roundRect(3.5f, 4.5f, 17f, 15f, 3f), s("M7 9l3 2.5L7 14M12.5 14.5h4"))
     val gear = build(
         "gear",
@@ -166,6 +187,8 @@ object CaIcons {
     val undo = mirroring("undo", s("M4 12h8.5a5.5 5.5 0 0 1 5.5 5.5"), s("M8 8l-4 4 4 4"))
     val redo = mirroring("redo", s("M20 12h-8.5a5.5 5.5 0 0 0-5.5 5.5"), s("M16 8l4 4-4 4"))
     val arrowRight = mirroring("arrow-right", s("M5 12h13M13 6l6 6-6 6"))
+    /** An arrow up against a bar — the Tab key. */
+    val tab = mirroring("tab", s("M3 12h13M11 7l5 5-5 5"), s("M20 5v14"))
     val arrowLeft = mirroring("arrow-left", s("M19 12H6M11 6l-6 6 6 6"))
     /** Arrow into a tray — import files from outside the app. */
     val download = build("download", s("M12 4v10M8 10.5l4 4 4-4"), s("M5 18.5h14"))
@@ -226,6 +249,13 @@ object CaIcons {
     val star = build(
         "star",
         s("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
+    )
+
+    /** [star], filled: a starred (favorite) item. */
+    val starFilled = build(
+        "star-filled",
+        s("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
+        f("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
     )
 
     /** A 2x2 rounded grid — the Projects Store / browse destination. */

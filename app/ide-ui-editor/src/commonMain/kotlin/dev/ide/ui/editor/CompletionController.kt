@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.backend.UiFeatures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -79,8 +80,10 @@ internal class CompletionController(
         inFlightTokenStart = tokenStart
         job = scope.launch {
             if (!immediate) delay(delayMs.milliseconds)
-            val text = session.doc.text
+            // The document and caret together, then the text off the UI thread (see EditorDocument.awaitText).
+            val doc = session.doc
             val caret = session.selection.start
+            val text = doc.awaitText()
             val res = runCatching { backend.editor.complete(path, text, caret) }.getOrNull()
                 ?: return@launch
             val sameToken = res.replaceStart == current?.tokenStart
@@ -103,6 +106,7 @@ internal class CompletionController(
      *  (frequently accepted items rank higher on later completions). Fire-and-forget. */
     fun noteAccepted(item: UiCompletionItem) {
         scope.launch { runCatching { backend.editor.completionAccepted(path, item.label) } }
+        backend.diagnostics.countFeature(UiFeatures.COMPLETION_ACCEPT)
     }
 
     /** Close the popup + cancel any in-flight request (Esc / accept / click-away / non-identifier). */

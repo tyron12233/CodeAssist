@@ -18,6 +18,7 @@ androidxComposeMaterial3 = "1.4.0"
 agp = "9.2.1"
 activityCompose = "1.13.0"
 androidxCore = "1.13.1"   # androidx.core — provides FileProvider for sharing app-private files
+androidxFragment = "1.8.9"  # androidx.fragment — never used directly; pinned so Play services' transitive 1.1.0 (flagged outdated by Play Console) resolves up
 androidxProfileInstaller = "1.4.1"  # androidx.profileinstaller — applies the baseline profile on sideloaded installs
 androidxTestRunner = "1.6.2"      # androidx.test:runner — AndroidJUnitRunner for connectedAndroidTest
 androidxTestExtJunit = "1.2.1"    # androidx.test.ext:junit — JUnit4 + AndroidJUnit4 on device
@@ -45,6 +46,8 @@ userMessagingPlatform = "4.0.0"        # com.google.android.ump — UMP/GDPR con
 admobMediationMeta = "6.22.0.1"        # com.google.ads.mediation:facebook — Meta Audience Network adapter (native-capable)
 admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pangle adapter (native-capable)
 admobMediationMintegral = "17.1.71.0"  # com.google.ads.mediation:mintegral — Mintegral adapter (native-capable)
+admobMediationUnity = "4.21.0.0"       # com.google.ads.mediation:unity — Unity Ads adapter (banner + interstitial; no native)
+unityAds = "4.21.0"                    # com.unity3d.ads:unity-ads — the Unity Ads SDK the adapter drives (Maven Central)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
 # Eclipse JGit: the pure-Java Git implementation behind :vcs-impl. The 6.10.x line targets Java 11
@@ -160,6 +163,7 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "androidxComposeMaterial3" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-core = { module = "androidx.core:core", version.ref = "androidxCore" }
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidxFragment" }
 androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "androidxProfileInstaller" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
@@ -173,6 +177,12 @@ android-r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 android-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 android-aapt2 = { module = "com.android.tools.build:aapt2", version.ref = "aapt2" }
 android-bundletool = { module = "com.android.tools.build:bundletool", version.ref = "bundletool" }
+# bundletool's runtime dependencies other than protobuf, as its 1.18.3 POM declares them. :ide-android dexes a
+# protobuf-relocated bundletool from :art-compat instead of the stock module (and so loses its transitive
+# edges), so it declares these itself. Re-check against bundletool's POM when bumping it.
+bundletool-dagger = { module = "com.google.dagger:dagger", version = "2.28.3" }
+bundletool-jose4j = { module = "org.bitbucket.b_c:jose4j", version = "0.9.5" }
+bundletool-gson = { module = "com.google.code.gson:gson", version = "2.8.9" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_configuration", version.ref = "desugarJdkLibs" }
@@ -201,6 +211,10 @@ user-messaging-platform = { module = "com.google.android.ump:user-messaging-plat
 admob-mediation-meta = { module = "com.google.ads.mediation:facebook", version.ref = "admobMediationMeta" }
 admob-mediation-pangle = { module = "com.google.ads.mediation:pangle", version.ref = "admobMediationPangle" }
 admob-mediation-mintegral = { module = "com.google.ads.mediation:mintegral", version.ref = "admobMediationMintegral" }
+# Unity Ads has no native format: it fills the banners (native-slot fallback, build footer) and the interstitial.
+# Its adapter does not pull the Unity SDK in, so both are declared.
+admob-mediation-unity = { module = "com.google.ads.mediation:unity", version.ref = "admobMediationUnity" }
+unity-ads = { module = "com.unity3d.ads:unity-ads", version.ref = "unityAds" }
 # The stub android.jar (every method throws "Stub!"): compileOnly for :applog-runtime, whose tiny debug
 # log-bridge (ContentProvider + LocalSocket forwarder) is compiled against the framework APIs but never links
 # them (they resolve against the real android.jar when the runtime jar is dexed into a user's app). Ancient

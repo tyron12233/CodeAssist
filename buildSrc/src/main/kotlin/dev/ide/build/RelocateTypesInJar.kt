@@ -55,6 +55,18 @@ abstract class RelocateTypesInJar : DefaultTask() {
     @get:Input
     abstract val renames: MapProperty<String, String>
 
+    /**
+     * Also move each entry whose path starts with a rename key to the renamed path (a relocated package's own
+     * classes, not just the references to it). Off by default: the ART patches above only redirect references
+     * to a type that lives elsewhere.
+     */
+    @get:Input
+    abstract val relocateEntryPaths: org.gradle.api.provider.Property<Boolean>
+
+    init {
+        relocateEntryPaths.convention(false)
+    }
+
     @TaskAction
     fun relocate() {
         val mapping = renames.get().entries.map { (k, v) ->
@@ -81,7 +93,10 @@ abstract class RelocateTypesInJar : DefaultTask() {
                         if (name.endsWith(".class")) relocateClass(data, mapping)?.also { patched++ } ?: data
                         else data
 
-                    out.putNextEntry(ZipEntry(name).apply { time = FIXED_TIME })
+                    val outName = if (relocateEntryPaths.get()) renames.get().entries
+                        .firstOrNull { name.startsWith(it.key) }?.let { it.value + name.removePrefix(it.key) } ?: name
+                    else name
+                    out.putNextEntry(ZipEntry(outName).apply { time = FIXED_TIME })
                     out.write(bytes)
                     out.closeEntry()
                 }

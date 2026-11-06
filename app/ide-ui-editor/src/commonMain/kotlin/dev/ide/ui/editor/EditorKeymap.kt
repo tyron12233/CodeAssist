@@ -55,6 +55,7 @@ object EditorCommands {
     const val DUPLICATE_LINE = "editor.duplicateLine"
     const val DELETE_LINE = "editor.deleteLine"
     const val JOIN_LINES = "editor.joinLines"
+    const val TOGGLE_BOOKMARK = "editor.toggleBookmark"
     const val MOVE_LINE_UP = "editor.moveLineUp"
     const val MOVE_LINE_DOWN = "editor.moveLineDown"
     const val CODE_ACTIONS = "editor.codeActions"

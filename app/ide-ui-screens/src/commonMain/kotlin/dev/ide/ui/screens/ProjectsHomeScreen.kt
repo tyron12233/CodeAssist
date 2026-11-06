@@ -1,5 +1,10 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.HalloweenBackdrop
+import dev.ide.ui.components.HauntedGhost
+import dev.ide.ui.components.SeasonalEmptyArt
+import dev.ide.ui.theme.LocalSeason
+import dev.ide.ui.theme.Season
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.text.BasicTextField
@@ -108,6 +113,8 @@ import dev.ide.ui.generated.resources.home_share
 import dev.ide.ui.generated.resources.home_sponsor
 import dev.ide.ui.generated.resources.home_star_github
 import dev.ide.ui.generated.resources.join_the_community
+import dev.ide.ui.generated.resources.home_get_plugins_content
+import dev.ide.ui.generated.resources.home_get_plugins
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.project_opened_days
 import dev.ide.ui.generated.resources.project_opened_hours
@@ -171,6 +178,9 @@ import dev.ide.ui.generated.resources.home_delete_confirm_body
 import dev.ide.ui.generated.resources.home_delete_confirm_title
 import dev.ide.ui.generated.resources.home_more_actions
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.backend.UiStoreUpdate
+import dev.ide.ui.generated.resources.store_update_versions
+import dev.ide.ui.generated.resources.home_update_review
 
 /** Which list the Home screen's segment chips are showing. */
 enum class HomeSegment { Projects, Updates, Saved }
@@ -208,6 +218,8 @@ fun ProjectsHomeScreen(
     onOpenHub: (() -> Unit)? = null,
     onSubmitSuggestions: (() -> Unit)? = null,
     onJoinDiscord: (() -> Unit)? = null,
+    /** Open the Plugins screen on its download tab. Null hides the card (a host that cannot open links). */
+    onGetPlugins: (() -> Unit)? = null,
     onSponsor: (() -> Unit)? = null,
     onStarOnGitHub: (() -> Unit)? = null,
     storagePath: String? = null,
@@ -239,6 +251,21 @@ fun ProjectsHomeScreen(
      */
     accountRequested: Boolean = false,
     onAccountRequestHandled: () -> Unit = {},
+    /**
+     * A seasonal card (Halloween's), shown above the project list. A slot rather than data so this screen does
+     * not need to know which season it is or what dressing up changes; null shows nothing.
+     */
+    seasonalCard: (@Composable (Modifier) -> Unit)? = null,
+    /**
+     * False while the host is still reading the project list from disk (it does that off the main thread).
+     * The empty "no projects yet" state is held back until then, so a user with projects does not see it
+     * flash on launch.
+     */
+    projectsLoaded: Boolean = true,
+    /** Store projects installed here that have a newer version: the Updates segment. */
+    updates: List<UiStoreUpdate> = emptyList(),
+    /** Opens an update's listing, where the update is applied (or offered as a copy). */
+    onOpenUpdate: (UiStoreUpdate) -> Unit = {},
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
     // Deleting wipes the project from disk and nothing else in this flow asks first.
@@ -269,6 +296,7 @@ fun ProjectsHomeScreen(
     if (maxWidth >= ProjectsWideBreakpoint) {
         WideProjectsHome(
             projects = ordered,
+            projectsLoaded = projectsLoaded,
             now = now,
             icons = icons,
             loadIcon = loadIcon,
@@ -282,12 +310,16 @@ fun ProjectsHomeScreen(
             onRequestRename = onRenameProject?.let { { project: ProjectInfo -> pendingRename = project } },
             showLegacyRecovery = showLegacyRecovery,
             onDismissLegacyRecovery = onDismissLegacyRecovery,
+            seasonalCard = seasonalCard,
             bell = bell,
             onOpenAccount = { sheet = HomeSheet.Account },
             onJoinDiscord = onJoinDiscord,
+            onGetPlugins = onGetPlugins,
         )
     } else
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
+      // Behind everything, so the list scrolls over it; draws nothing outside the Halloween season.
+      HalloweenBackdrop()
       PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
@@ -336,22 +368,35 @@ fun ProjectsHomeScreen(
                     CommunityCard(onJoinDiscord, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
                 }
             }
+            if (onGetPlugins != null) {
+                item("plugins") {
+                    GetPluginsCard(onGetPlugins, Modifier.padding(horizontal = 20.dp).padding(top = 12.dp))
+                }
+            }
             item("segments") {
                 SegmentRow(
                     segment = segment,
                     projectCount = ordered.size,
-                    // Both are 0 until the store backend lands; see the KDoc above.
-                    updateCount = 0,
+                    // Saved is still 0 until favorites reach Home; see the KDoc above.
+                    updateCount = updates.size,
                     savedCount = 0,
                     onSelect = { segment = it },
                 )
+            }
+
+            if (seasonalCard != null) {
+                item("seasonal") { seasonalCard(Modifier.padding(horizontal = PhoneListInset).padding(top = 16.dp)) }
             }
 
             if (showLegacyRecovery) {
                 item("legacy") { LegacyRecoveryNotice(onDismissLegacyRecovery) }
             }
 
-            if (segment == HomeSegment.Projects && ordered.isNotEmpty()) {
+            if (segment == HomeSegment.Updates && updates.isNotEmpty()) {
+                itemsIndexedKeyed(updates, key = { _, u -> "update_${u.item.id}" }) { _, u ->
+                    UpdateRow(u, onOpen = { onOpenUpdate(u) })
+                }
+            } else if (segment == HomeSegment.Projects && ordered.isNotEmpty()) {
                 itemsIndexedKeyed(ordered, key = { _, p -> p.rootPath }) { i, project ->
                     LocalProjectCard(
                         project = project,
@@ -372,7 +417,7 @@ fun ProjectsHomeScreen(
                     )
                 }
             } else {
-                item("empty") { EmptyList() }
+                if (projectsLoaded) item("empty") { EmptyList() }
             }
 
             // A native ad below the project list — an idle "between tasks" spot, never over the actions.
@@ -873,13 +918,63 @@ private fun EmptyList(inset: Dp = PhoneListInset, top: Dp = 24.dp) {
             .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Symbol(CaSymbols.folderOpen, contentDescription = null, size = 40.dp, tint = c.outlineVariant)
+        SeasonalEmptyArt(size = 56.dp) {
+            Symbol(CaSymbols.folderOpen, contentDescription = null, size = 40.dp, tint = c.outlineVariant)
+        }
         Text(
             stringResource(Res.string.home_empty_list),
             style = MaterialTheme.typography.bodyLarge,
             color = c.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+    }
+}
+
+/**
+ * One installed store project with a newer version: its name, the versions, and the way to it. The update
+ * itself happens on the listing, which is where the user can see what changed and where a project they have
+ * edited is offered as a copy instead.
+ */
+@Composable
+private fun UpdateRow(update: UiStoreUpdate, onOpen: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = PhoneListInset).padding(top = 12.dp),
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(c.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.update, contentDescription = null, size = 22.dp, tint = c.onPrimaryContainer)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    update.item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    stringResource(
+                        Res.string.store_update_versions,
+                        update.installedVersion ?: "?",
+                        update.availableVersion ?: "?",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                )
+            }
+            Text(stringResource(Res.string.home_update_review), style = MaterialTheme.typography.labelLarge, color = c.primary)
+        }
     }
 }
 
@@ -1111,6 +1206,42 @@ private fun CommunityCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/** Home's way to more languages and tools: the Plugins screen, on its download tab. */
+@Composable
+private fun GetPluginsCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainerLow,
+        contentColor = c.onSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, c.primary.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(44.dp).background(c.primary, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.extension, contentDescription = null, size = 24.dp, tint = c.onPrimary, filled = true)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.home_get_plugins), style = MaterialTheme.typography.titleMedium, color = c.onSurface)
+                Text(
+                    stringResource(Res.string.home_get_plugins_content),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onSurfaceVariant,
+                )
+            }
+            Symbol(CaSymbols.chevronRight, contentDescription = null, size = 22.dp, tint = c.onSurfaceVariant)
+        }
+    }
+}
+
 // ---- helpers ----
 
 @Composable
@@ -1211,6 +1342,7 @@ private enum class ProjectSort { Recent, Name }
 @Composable
 private fun WideProjectsHome(
     projects: List<ProjectInfo>,
+    projectsLoaded: Boolean,
     now: Long,
     icons: ProjectIconCache,
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)?,
@@ -1224,9 +1356,11 @@ private fun WideProjectsHome(
     onRequestRename: ((ProjectInfo) -> Unit)?,
     showLegacyRecovery: Boolean,
     onDismissLegacyRecovery: () -> Unit,
+    seasonalCard: (@Composable (Modifier) -> Unit)?,
     bell: (@Composable () -> Unit)?,
     onOpenAccount: () -> Unit,
     onJoinDiscord: (() -> Unit)?,
+    onGetPlugins: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
@@ -1239,6 +1373,7 @@ private fun WideProjectsHome(
     }
     val sidebarShown = LocalHomeSidebarShown.current
     BoxWithConstraints(Modifier.fillMaxSize().background(c.background)) {
+        HalloweenBackdrop()
         val showKind = maxWidth >= ProjectsKindColumnBreakpoint
         Column(Modifier.widthIn(max = ProjectsWideMaxWidth).fillMaxSize().padding(horizontal = 28.dp)) {
             Row(
@@ -1272,7 +1407,8 @@ private fun WideProjectsHome(
                     )
                 }
             }
-            if (onJoinDiscord != null) CommunityCard(onJoinDiscord, Modifier.padding(bottom = 16.dp))
+            if (onJoinDiscord != null) CommunityCard(onJoinDiscord, Modifier.padding(bottom = 12.dp))
+            if (onGetPlugins != null) GetPluginsCard(onGetPlugins, Modifier.padding(bottom = 16.dp))
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1289,22 +1425,29 @@ private fun WideProjectsHome(
                 SortChooser(sort) { sort = it }
             }
             // Every gap down the wide column is 16dp: the search row already leaves 8 below itself.
+            seasonalCard?.invoke(Modifier.padding(top = 8.dp, bottom = 8.dp))
             if (showLegacyRecovery) LegacyRecoveryNotice(onDismissLegacyRecovery, inset = 0.dp, top = 8.dp)
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                if (shown.isEmpty()) {
+                if (shown.isEmpty() && projectsLoaded) {
                     item("empty") {
                         if (projects.isEmpty()) {
                             EmptyList(inset = 0.dp, top = if (showLegacyRecovery) 16.dp else 8.dp)
                         } else {
-                            Text(
-                                stringResource(Res.string.home_no_match, query.trim()),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = c.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 24.dp),
-                            )
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 24.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                if (LocalSeason.current == Season.Halloween) HauntedGhost(44.dp)
+                                Text(
+                                    stringResource(Res.string.home_no_match, query.trim()),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = c.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

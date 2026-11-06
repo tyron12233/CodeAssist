@@ -71,7 +71,7 @@ fun AnalyticsConsentSheet(
                 onLearnMore = onLearnMore,
                 modifier = Modifier
                     .width(460.dp)
-                    .background(Ide.colors.glassThick, shape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
                     .border(1.dp, Ide.colors.glassEdge, shape)
                     .padding(28.dp),
             )

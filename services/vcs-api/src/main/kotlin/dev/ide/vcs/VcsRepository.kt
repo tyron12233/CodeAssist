@@ -44,6 +44,12 @@ interface VcsRepository : AutoCloseable {
     /** The full text of [path] at [ref] (`HEAD`, a branch, or a commit id), or null when absent there. */
     fun show(path: String, ref: String = "HEAD"): String?
 
+    /**
+     * Who last changed each line of [path] as of HEAD: one entry per line of its HEAD text, in order. Empty when
+     * the path is not in HEAD, or the repository cannot tell.
+     */
+    fun blame(path: String): List<VcsBlameLine?> = emptyList()
+
     /** The stash stack, most recent first. */
     fun stashes(): List<VcsStash>
 

@@ -68,6 +68,9 @@ object AndroidIde {
         // App-specific EXTERNAL storage (Android/data/<pkg>/files/codeassist)
         val home = appHomeDir(context).apply { mkdirs() }
         val manager = createProjectManager(context)
+        // The plugin sandbox (a second copy of the IDE, in its own process) shares this app's files, so anything
+        // below that writes app-wide state or speaks for the whole app is the real IDE's alone.
+        val sandbox = dev.ide.android.plugins.SandboxProcess.isSandbox(context)
 
         // Measure the forked-VM R8 heap ceiling once per app version, in the background, and cache it. The
         // Build Runtime settings use it as the heap slider's MAX (user scales down from the real device
@@ -84,9 +87,10 @@ object AndroidIde {
         // Crash breadcrumb: the 32-bit-ART SIGSEGV is a native fault, uncatchable in-process — so read what the
         // engine was doing if the PREVIOUS process died natively (via the OS exit reason), THEN arm the file for
         // this session's engine to write into. This is our only signal for that crash. See EngineBreadcrumb.
-        val crumbFile = File(home, "last-engine-op.log")
+        val crumbFile = File(if (sandbox) dev.ide.android.plugins.SandboxProcess.homeDir(home) else home, "last-engine-op.log")
         dev.ide.platform.EngineBreadcrumb.init(crumbFile.toPath())
-        reportPreviousNativeCrash(context, manager, analytics, dev.ide.platform.EngineBreadcrumb.readLast())
+        // Exit records are per app, not per process: in the sandbox they would be the real IDE's.
+        if (!sandbox) reportPreviousNativeCrash(context, manager, analytics, dev.ide.platform.EngineBreadcrumb.readLast())
 
         // Start with no project open (the picker is shown); opening one from it creates that project's engine
         // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
@@ -135,6 +139,34 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(DAILY_CHALLENGE_SERVICE) {
             buildDailyChallenges(supabaseAccounts)
         }
+        // The "Get plugins" page: a public, read-only list, so it needs only the project config.
+        if (BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_KEY.isNotBlank()) {
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_DOWNLOAD_SERVICE) {
+                dev.ide.store.impl.SupabasePluginDownloads(
+                    BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY,
+                    // A plugin built per ABI is offered as this device's build.
+                    deviceAbis = Build.SUPPORTED_ABIS?.toList().orEmpty(),
+                )
+            }
+        }
+        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_PACKAGES) {
+            dev.ide.android.plugins.AndroidPluginPackages(appContext)
+        }
+        // Learn: the lesson catalog (and later progress + discussions). Reads work signed out, so this needs
+        // only the project config; the session is used when there is one.
+        if (BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_KEY.isNotBlank()) {
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.LEARN_REMOTE_SERVICE) {
+                dev.ide.store.impl.SupabaseLearnService(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY, supabaseAccounts)
+            }
+        }
+        // CodeAssist Free AI rides on the same session: the proxy takes the user's access token as its key.
+        if (supabaseAccounts != null) {
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.AI_CREDITS_SERVICE) {
+                dev.ide.store.impl.SupabaseAiCreditsService(
+                    BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY, supabaseAccounts, proxyUrl = BuildConfig.AI_PROXY_URL,
+                )
+            }
+        }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
             buildRunnerFactory = { svc ->
@@ -153,20 +185,82 @@ object AndroidIde {
         // Process-wide uncaught-exception handler: report app_crash, keep the app alive behind the non-fatal
         // dialog for a worker-thread crash, and let the system kill the process for a main-thread one (its looper
         // is gone; swallowing it left a frozen process that Play counted as an ANR). See IdeServicesBackend.
-        backend.installCrashReporting(isFatal = { it === android.os.Looper.getMainLooper().thread })
+        backend.installCrashReporting(
+            isFatal = { it === android.os.Looper.getMainLooper().thread },
+            processUptimeMs = { android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis() },
+            // The sandbox exists to run a plugin that may crash: turning it off for that would defeat it.
+            guardAgainstPluginCrashes = !sandbox,
+        )
+        if (sandbox) {
+            // A crash in the sandbox goes back to the real IDE, where its developer is looking.
+            val plugin = manager.env.installedPlugins.firstOrNull()?.manifest
+            dev.ide.android.plugins.SandboxProcess.reportCrashesToHost(appContext, plugin?.name, plugin?.id)
+            // And so does everything its plugin logs, into the real IDE's Logs viewer.
+            plugin?.id?.let { dev.ide.android.plugins.SandboxProcess.relayPluginLogs(appContext, it) }
+            // "Run plugin in sandbox" again while this one is open swaps the new build in here, live.
+            dev.ide.android.plugins.SandboxProcess.listenForReloads(appContext) { apk ->
+                dev.ide.android.plugins.SandboxProcess.reloadPlugin(appContext, manager.env, apk)
+            }
+        } else {
+            // An installed plugin that crashed the last launch is off now; say so, and settle safe mode. See
+            // PluginCrashGuard.
+            backend.startPluginCrashSafety()
+            // A plugin that crashes the `:build` process is turned off the same way.
+            dev.ide.android.daemon.RemoteBuildRunner.pluginCrashHandler = { blamed ->
+                backend.suspendPluginAfterProcessCrash(blamed, "the build process")
+            }
+            // "Run plugin in sandbox": a second copy of the IDE for a plugin build, whose crashes land here.
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_SANDBOX) {
+                dev.ide.android.plugins.AndroidPluginSandbox(appContext) { report ->
+                    val froze = report.startsWith(dev.ide.android.plugins.SandboxProcess.STALL_REPORT_PREFIX)
+                    backend.showError(
+                        if (froze) "Plugin froze the sandbox" else "Plugin crashed the sandbox",
+                        report.lineSequence().firstOrNull().orEmpty(),
+                        report,
+                    )
+                }
+            }
+        }
+        // Main-thread stalls the user waited out (Play counts them as ANRs; exit records never see them), and
+        // the installed plugin whose code caused one.
+        (appContext.applicationContext as? android.app.Application)?.let { app ->
+            val pluginName = manager.env.installedPlugins.firstOrNull()?.manifest?.name
+            val pluginId = manager.env.installedPlugins.firstOrNull()?.manifest?.id
+            MainThreadWatchdog(
+                app,
+                report = { frames, durationMs, uptimeMs, fg -> backend.reportMainStall(frames, durationMs, uptimeMs, fg) },
+                // The sandbox ends itself at 3.5 s of blocked main thread, before the system's 5 s input timeout
+                // would record an ANR against the app in Play, and tells the real IDE where it was stuck.
+                stopAfterMs = if (sandbox) SANDBOX_STALL_STOP_MS else null,
+                onStop = { frames, stalledMs ->
+                    dev.ide.android.plugins.SandboxProcess.stopForStall(
+                        appContext, pluginName, frames, stalledMs, blamed = backend.blamePlugin(frames) != null,
+                        pluginId = pluginId,
+                    )
+                },
+            ).start()
+        }
         AndroidMemory.registerTrimHandler(appContext, backend)
         // Plugins load once per process, so applying an installed plugin's change means starting again. Both
         // halves of that are wired here, and only in the UI process: the restart itself, and the watch that
         // notices a plugin app being installed, updated or uninstalled while the IDE is running (the `:build`
         // and `:preview` processes stand up their own managers and have no screen to report it on).
-        manager.applicationContainer.registerServiceIfAbsent(APP_RESTARTER) { AppRestart(appContext) }
-        PluginPackageWatcher(appContext, ApkPluginSource(appContext), manager.pluginChanges).register()
+        // Not in the sandbox: a restart there would take the real IDE down too (it kills every process of the
+        // app), and the sandbox loads a plugin build, not installed plugin apps.
+        if (!sandbox) {
+            manager.applicationContainer.registerServiceIfAbsent(APP_RESTARTER) { AppRestart(appContext) }
+            PluginPackageWatcher(appContext, ApkPluginSource(appContext), manager.pluginChanges) { id ->
+                // A plugin turned off for crashing that its developer just reinstalled is a new build: let the
+                // restart the Plugins screen now offers load it again, even at the same manifest version.
+                if (id in manager.pluginCrashGuard.crashSuspended()) manager.setDisabledPlugins(manager.disabledPlugins() - id)
+            }.register()
+        }
         // Notifications that arrived by push while no engine existed (see CodeAssistMessagingService).
         runCatching { backend.adoptHostNotifications(PendingPushes.drain(appContext)) }
         // Register this device for push. Off the main thread and best-effort: a launch that cannot reach
         // the backend is simply not push-reachable until the next one, and nothing the user is doing should
         // wait on it or fail because of it.
-        registerForPush(appContext, manager, storeAccounts)
+        if (!sandbox) registerForPush(appContext, manager, storeAccounts)
         // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
         // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
         if (backend.diagnostics.analyticsConsent() == true) {
@@ -224,7 +318,14 @@ object AndroidIde {
         // directory ART permits executing binaries from.
         val nativeLibDir = Paths.get(context.applicationInfo.nativeLibraryDir)
 
-        val projectsRoot = File(home, "projects").toPath()
+        // The plugin sandbox keeps its own home beside the real one (its projects, prefs and caches), sharing only
+        // the read-only toolchain copied above, and loads nothing but the plugin build it was started for.
+        val sandbox = dev.ide.android.plugins.SandboxProcess.isSandbox(context)
+        val sandboxPlugin = if (sandbox) dev.ide.android.plugins.SandboxProcess.currentApk(context)
+            ?.let { dev.ide.android.plugins.DevApkPluginSource(context, it) } else null
+        val managerHome = if (sandbox) dev.ide.android.plugins.SandboxProcess.homeDir(home).apply { mkdirs() } else home
+        if (sandbox) prepareSandboxHome(managerHome, sandboxPlugin?.manifest()?.id)
+        val projectsRoot = File(managerHome, "projects").toPath()
         // android.jar MUST stay first: ProjectManager.onDevice treats bootClasspath.first() as the SDK
         // android.jar. The desugar stubs ride alongside it as the platform.
         val bootClasspath = listOf(androidJar.absolutePath, coreLambdaStubs.absolutePath)
@@ -356,11 +457,13 @@ object AndroidIde {
         // home (`home`, above) IS `filesDir/codeassist` = legacyInternalHome. Never list the active home as a
         // legacy source — it would import a directory into itself. (In the normal external case they differ.)
         val activeHome = home.toPath()
-        val legacyDataDirs = listOf(legacyProjectsDir, legacyInternalHome)
+        val legacyDataDirs = if (sandbox) emptyList() else listOf(legacyProjectsDir, legacyInternalHome)
             .filter { java.nio.file.Files.exists(it) && it != activeHome }
         return ProjectManager.onDevice(
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
-            storageRoot = externalHome(context).toPath(),
+            // The sandbox's own: notifications, the store's installed list and feed cache live here, and none of
+            // the real IDE's may be read or changed from inside the sandbox.
+            storageRoot = if (sandbox) managerHome.toPath() else externalHome(context).toPath(),
             legacyDataDirs = legacyDataDirs,
             programInterpreter = programInterpreter,
             deviceApiLevel = Build.VERSION.SDK_INT,
@@ -378,8 +481,16 @@ object AndroidIde {
             // Plugins the user installed as separate apps. Discovery reads each plugin app's packaged
             // manifest through the package manager; only a plugin the user leaves enabled is loaded, off the
             // read-only APK the system already installed and optimised.
-            pluginSources = listOf(ApkPluginSource(context)),
+            pluginSources = if (sandbox) listOfNotNull(sandboxPlugin) else listOf(ApkPluginSource(context)),
             hostVersion = BuildConfig.VERSION_NAME,
+            // Plugins' private data (symlinks, nothing another app may read) goes in internal storage; the sandbox
+            // keeps its own, as it keeps its own home.
+            pluginPrivateDataRoot = File(context.filesDir, if (sandbox) "plugin-sandbox-home/plugin-private" else "plugin-private").toPath(),
+            // The Dart plugin kept its SDK and pub cache in `files/dart-plugin` before plugins had a private data
+            // directory. Claimed for it here, so a copy left by an uninstalled older Dart plugin is offered too.
+            legacyPluginDirs = if (sandbox) emptyMap() else mapOf(
+                "dev.codeassist.dart" to listOf(File(context.filesDir, "dart-plugin").toPath()),
+            ),
         ).also {
             managerRef.set(it)
             it.applyMemoryMode()
@@ -841,7 +952,7 @@ object AndroidIde {
         )
         // Bridge the logging facade to analytics: caught ERROR logs become scrubbed `error_logged` events
         // (no messages/paths). No-ops while the service is disabled, and starts working on consent.
-        addSink(AnalyticsLogSink(service))
+        addSink(AnalyticsLogSink(service, ignore = { dev.ide.core.PluginSandbox.isRelayed(it) }))
         return service
     }
 
@@ -895,7 +1006,41 @@ object AndroidIde {
 
     /** The whole CodeAssist app directory (`<external-files>/codeassist`): projects, the SDK `android.jar`,
      *  the debug keystore, the kotlinc home, shared caches. This is the root surfaced to file managers. */
+    /**
+     * How long the sandbox's main thread may stay blocked before the sandbox ends itself. Android's input ANR is at
+     * 5 s; the watchdog's measure runs up to one 500 ms tick long, so this stops after 3 to 3.5 s real.
+     */
+    private const val SANDBOX_STALL_STOP_MS = 3_500L
+
     fun appHomeDir(context: Context): File = File(externalHome(context), "codeassist")
+
+    /**
+     * Seed a sandbox home's preferences before its project manager reads them: the plugin under test counts as
+     * accepted (it is the developer's own build, and the sandbox exists to run it), the first-launch sheets count
+     * as seen, analytics stays off, and builds run in-process, since the `:build` daemon belongs to the real IDE.
+     * Only keys not already set are written, so a choice made inside the sandbox sticks.
+     */
+    private fun prepareSandboxHome(home: File, pluginId: String?) {
+        runCatching {
+            val file = File(home, "prefs.properties")
+            val props = java.util.Properties()
+            if (file.isFile) file.inputStream().use { props.load(it) }
+            fun default(key: String, value: String) { if (props.getProperty(key) == null) props.setProperty(key, value) }
+            default("onboarding.seen", "true")
+            default("migration.acknowledged", "true")
+            default("learn.tourOffered", "true")
+            // Home's one-off cards: nothing to recover into a sandbox, and no season to dress it up for.
+            default("legacy.recovery.seen", "true")
+            default("seasonal.halloween.answeredAt", System.currentTimeMillis().toString())
+            default("analytics.consent", "denied")
+            default("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}", "false")
+            if (pluginId != null) {
+                val consented = props.getProperty("plugins.consented").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
+                props.setProperty("plugins.consented", (consented + pluginId).sorted().joinToString(","))
+            }
+            file.outputStream().use { props.store(it, "CodeAssist plugin sandbox") }
+        }
+    }
 
     /**
      * Point [dev.ide.android.support.BuiltApks] at its ledger, in every process that builds or installs (the IDE

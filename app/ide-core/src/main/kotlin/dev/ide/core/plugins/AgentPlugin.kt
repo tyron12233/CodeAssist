@@ -137,6 +137,7 @@ internal object AgentSettingsPage : SettingsPage {
             key = "geminiKey",
             title = "Gemini API key",
             description = "Used when the provider is Google Gemini.",
+            placeholder = "AIza...",
         ),
         SettingControl.Text(
             key = "openrouterKey",

@@ -101,4 +101,22 @@ class MainGutterRunTest {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!cond() && System.currentTimeMillis() < deadline) Thread.sleep(40)
     }
+
+    @Test
+    fun aRememberedRunTaskIsKeptOnlyForAModuleOfThisProject() {
+        val listed = listOf(
+            dev.ide.ui.backend.RunTaskOption("flutterRun:my_app", "Run Flutter app · my_app", "run"),
+            dev.ide.ui.backend.RunTaskOption("dartPub:my_app:get", "pub get · my_app", "build"),
+        )
+        fun task(id: String) = dev.ide.ui.backend.RunTaskOption(id, id, "run")
+        // Listed: plainly still applies.
+        assertTrue(RunGutter.stillApplies(task("flutterRun:my_app"), listed))
+        // A gutter run or a plugin's test of one of this project's modules: never listed, still applies.
+        assertTrue(RunGutter.stillApplies(task("run:my_app:bin.Main"), listed))
+        assertTrue(RunGutter.stillApplies(task("dartTest:my_app:test/a_test.dart"), listed))
+        // Remembered for the Android project that used to be at this path: its module is not here.
+        assertEquals(false, RunGutter.stillApplies(task("androidRun:app:debug"), listed))
+        // With nothing listed (no modules yet), nothing remembered applies.
+        assertEquals(false, RunGutter.stillApplies(task("run:my_app:bin.Main"), emptyList()))
+    }
 }

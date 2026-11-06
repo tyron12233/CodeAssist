@@ -171,6 +171,13 @@ interface StoreAccountService {
     fun signOut() {}
 
     /**
+     * Permanently delete the signed-in account and everything stored with it: the publisher profile, published
+     * projects and their files, reviews, likes, follows, challenge results, AI points and usage, and push
+     * registrations. Signs out on success. Google Play requires this for apps that create accounts.
+     */
+    fun deleteAccount(): StoreResult<Unit> = StoreResult.Unavailable("Sign-in is not available in this build")
+
+    /**
      * Tell the backend that this session owns the device holding [pushToken].
      *
      * Push registration is anonymous and has to be: a review decision has to reach a device whose user

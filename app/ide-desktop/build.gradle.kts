@@ -94,6 +94,9 @@ val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SU
     ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
 val judgeUrl = (findProperty("JUDGE_URL") as String?) ?: System.getenv("JUDGE_URL")
     ?: "https://codeassist-judge.vercel.app"
+// CodeAssist Free AI's primary proxy (a Cloudflare Worker); blank uses the Supabase `ai-proxy` function alone.
+val aiProxyUrl = (findProperty("AI_PROXY_URL") as String?) ?: System.getenv("AI_PROXY_URL")
+    ?: "https://codeassist-ai-proxy.lucena-tyronscott.workers.dev"
 // The R2 mirror of the public store files; blank reads Supabase Storage (see supabase/functions/r2-mirror).
 val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
     ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
@@ -125,6 +128,7 @@ val generateStoreConfig by tasks.registering {
                 const val SUPABASE_URL: String = "$supabaseUrl"
                 const val SUPABASE_KEY: String = "$supabaseKey"
                 const val JUDGE_URL: String = "$judgeUrl"
+                const val AI_PROXY_URL: String = "$aiProxyUrl"
                 const val STORE_MEDIA_URL: String = "$storeMediaUrl"
                 const val APP_BUILD: Int = $storeAppBuild
             }

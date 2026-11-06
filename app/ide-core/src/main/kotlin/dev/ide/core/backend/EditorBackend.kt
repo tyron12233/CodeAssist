@@ -22,6 +22,8 @@ import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiResourceSwatch
+import dev.ide.ui.backend.UiUsageHighlight
+import dev.ide.ui.backend.UiHistoryVersion
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
@@ -73,6 +75,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -82,11 +89,15 @@ import dev.ide.ui.backend.UiActionEdits
 /**
  * [EditorService]: the editor-time language features for the active buffer. Runs on the shared serialized
  * engine dispatcher via the priority lanes ([BackendContext.interactive] for completion,
- * [BackendContext.background] for analysis/hints/etc.); a preemption surfaces as [AnalysisPreempted] for the
- * host to retry. Maps the framework results onto the neutral UI DTOs.
+ * [BackendContext.background] for analysis/hints/etc.). The production background lane waits out a preemption
+ * and re-runs the call, so the `EngineCanceledException` -> [AnalysisPreempted] mappings below only fire for a
+ * host whose lane surfaces preemption (tests' fakes). Maps the framework results onto the neutral UI DTOs.
  */
 /** Quiet period after a per-file pass before the project-wide sweep runs, and its preemption retry policy. */
 private const val PROJECT_ANALYSIS_DELAY_MS = 800L
+
+/** How often the language-server invalidation flow looks for the first engine, before a project is open. */
+private const val LANGUAGE_SERVER_POLL_MS = 500L
 private const val PROJECT_ANALYSIS_RETRY_MS = 150L
 private const val PROJECT_ANALYSIS_MAX_RETRIES = 8
 
@@ -123,8 +134,8 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     /**
      * A read-only request the user is waiting on (go to, expand selection, format). It runs on the interactive
      * lane so it preempts a background pass already holding the worker, instead of queuing behind it; the
-     * preempted pass runs again afterwards. Calls that write files (rename, actions) and per-caret-move calls
-     * stay off this lane: the first must not be cut short, and the second would keep preempting analysis.
+     * preempted pass runs again afterwards. Per-caret-move calls stay off this lane, since they would keep
+     * preempting analysis. Rename uses the lane too, but not through here: see [rename].
      */
     private suspend fun <T> userRequest(pass: String, path: String, block: suspend () -> T): T =
         ctx.interactive(op = op(pass, path), block = block)
@@ -159,13 +170,50 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         ctx.recordPerf(event, (end - t0) / 1_000_000, dims, queuedMs = ((started - t0) / 1_000_000).coerceAtLeast(0))
     }
 
+    /**
+     * For a file a language server serves: do [pass]'s round trip to the server now, off the engine thread, so
+     * the engine call that follows finds the answer ready. Without it the engine's single worker would sit
+     * waiting on another process while Java and Kotlin work queued behind it. A no-op for every other file.
+     */
+    private suspend fun prefetchFromLanguageServer(
+        pass: dev.ide.lsp.client.LspLanguageSupport.Pass, path: String, text: String, offset: Int = 0,
+        range: dev.ide.lang.dom.TextRange? = null,
+    ) {
+        val services = ctx.servicesOrNull ?: return
+        val file = Paths.get(path)
+        val support = runCatching { services.languageServerFor(file) }.getOrNull()
+        if (dev.ide.platform.log.PerfTrace.enabled) {
+            log.info("lsp-perf prefetch pass=${pass.name.lowercase()} file=.${file.fileName.toString().substringAfterLast('.', "")} " +
+                "server=${support?.definition?.id ?: "none (language ${services.languageIdOf(file)})"}")
+        }
+        support ?: return
+        withContext(Dispatchers.IO) {
+            val job = coroutineContext[Job]
+            runCatching { support.prefetch(pass, file, text, offset, range) { job?.isActive != false } }
+        }
+    }
+
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.STRUCTURE, path, text)
         ctx.background(op = op("docBreadcrumb", path)) { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
     } catch (_: EngineCanceledException) {
         emptyList()
     } // re-runs on the next caret move
 
+    // Per caret move, so the background lane: it must never preempt analysis. Preempted or failed, it answers
+    // null and the editor keeps its textual highlight; the next caret move asks again.
+    override suspend fun usageHighlights(path: String, text: String, offset: Int): List<UiUsageHighlight>? = try {
+        ctx.background(op = op("usageHighlights", path)) {
+            ctx.services.usageHighlights(Paths.get(path), text, offset)
+        }?.map {
+            UiUsageHighlight(it.range.start, it.range.end, write = it.access != dev.ide.lang.highlight.UsageAccess.READ)
+        }
+    } catch (_: EngineCanceledException) {
+        null
+    }
+
     override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.STRUCTURE, path, text)
         // XML elements reuse the class/field kinds for container/leaf; the outline badges them as elements.
         val isXml = path.endsWith(".xml")
         ctx.background(op = op("fileStructure", path)) {
@@ -242,6 +290,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             ?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = try {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.HOVER, path, text, offset)
         ctx.background {
             ctx.services.quickDocAt(Paths.get(path), text, offset)?.let {
                 UiQuickDoc(
@@ -280,21 +329,39 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             ctx.services.expandSelection(Paths.get(path), text, selStart, selEnd)
         }?.let { UiTextRange(it.start, it.end) }
 
-    override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
-        userRequest("prepareRename", path) {
-            ctx.services.prepareRename(
-                Paths.get(path), text, offset
-            )?.let { UiRenameTarget(it.oldName, it.kind) }
+    override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? {
+        val t0 = System.nanoTime()
+        var started = 0L
+        val target = userRequest("prepareRename", path) {
+            started = System.nanoTime()
+            ctx.services.prepareRename(Paths.get(path), text, offset)?.let { UiRenameTarget(it.oldName, it.kind) }
         }
+        recordLatency(Events.PASS_PERF, "prepare_rename", path, t0, started)
+        log.info("prepareRename: waited ${(started - t0) / 1_000_000} ms for the engine, ${(System.nanoTime() - started) / 1_000_000} ms on it")
+        return target
+    }
 
     override suspend fun rename(
         path: String, text: String, offset: Int, newName: String
-    ): UiRenameResult = withContext(ctx.engineDispatcher) {
-        val r = ctx.services.rename(Paths.get(path), text, offset, newName)
+    ): UiRenameResult {
+        val t0 = System.nanoTime()
+        var started = 0L
+        // On the interactive lane, so it preempts a background pass instead of queuing behind it: on a phone a
+        // rename waited 17 s for the engine while indexing ran. The lane itself is never preempted, and
+        // NonCancellable keeps a caller that goes away (the editor closing) from cutting the multi-file write
+        // short part-way.
+        val r = withContext(kotlinx.coroutines.NonCancellable) {
+            ctx.interactive(op = op("rename", path)) {
+                started = System.nanoTime()
+                ctx.services.rename(Paths.get(path), text, offset, newName)
+            }
+        }
         if (r.success) {
             ctx.bumpFileSystemEpoch() // the multi-file edit / file rename changed the tree + other buffers
         }
-        UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
+        recordLatency(Events.PASS_PERF, "rename", path, t0, started)
+        log.info("rename: waited ${(started - t0) / 1_000_000} ms for the engine, ${(System.nanoTime() - started) / 1_000_000} ms on it")
+        return UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
     }
 
     override fun updateDocument(path: String, text: String) =
@@ -314,6 +381,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
      * must NOT happen is the throw escaping a UI coroutine and taking the process down, which is how this
      * surfaced in the field — one install, an unwritable project, and a crash on every save attempt.
      */
+    override suspend fun localHistory(path: String): List<UiHistoryVersion> = withContext(Dispatchers.IO) {
+        runCatching { ctx.services.localHistory.snapshots(Paths.get(path)) }.getOrDefault(emptyList())
+            .map { UiHistoryVersion(it.id, it.id, it.sizeChars) }
+    }
+
+    override suspend fun localHistoryText(path: String, id: Long): String? = withContext(Dispatchers.IO) {
+        runCatching { ctx.services.localHistory.text(Paths.get(path), id) }.getOrNull()
+    }
+
     override fun saveFile(path: String, text: String) {
         try {
             ctx.services.save(Paths.get(path), text)
@@ -346,6 +422,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.COMPLETION, path, text, offset)
         val t0 = System.nanoTime()
         var started = 0L
         val result = try {
@@ -390,6 +467,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.DIAGNOSTICS, path, text)
         // Routes through the full analysis engine for EVERY language: per-language diagnostic providers
         // (the JDT compiler, the hand-rolled Kotlin checks, the XML lint) plus the analyzers, merged,
         // suppression-filtered, and profile-adjusted into one set. Runs in the preemptible lane so a
@@ -404,22 +482,28 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
         scheduleProjectAnalysis(path)
-        return diagnostics.map { d ->
-            val (line, col) = lineColOf(text, d.range.start)
-            UiDiagnostic(
-                severity = when (d.severity) {
-                    Severity.ERROR -> UiSeverity.Error
-                    Severity.WARNING -> UiSeverity.Warning
-                    Severity.INFO -> UiSeverity.Info
-                    Severity.HINT -> UiSeverity.Hint
-                },
-                line = line,
-                col = col,
-                message = d.message,
-                startOffset = d.range.start,
-                endOffset = d.range.end,
-                unused = DiagnosticTag.UNUSED in d.tags,
-            )
+        if (diagnostics.isEmpty()) return emptyList()
+        // Off the caller's thread (the daemon calls from the UI thread): one line index, then a lookup per item.
+        return withContext(Dispatchers.Default) {
+            val lines = LineStarts(text)
+            diagnostics.map { d ->
+                val line = lines.line(d.range.start) + 1
+                val col = lines.column(d.range.start) + 1
+                UiDiagnostic(
+                    severity = when (d.severity) {
+                        Severity.ERROR -> UiSeverity.Error
+                        Severity.WARNING -> UiSeverity.Warning
+                        Severity.INFO -> UiSeverity.Info
+                        Severity.HINT -> UiSeverity.Hint
+                    },
+                    line = line,
+                    col = col,
+                    message = d.message,
+                    startOffset = d.range.start,
+                    endOffset = d.range.end,
+                    unused = DiagnosticTag.UNUSED in d.tags,
+                )
+            }
         }
     }
 
@@ -431,7 +515,40 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     private val analyzedPaths = ConcurrentHashMap<String, String>()
 
     private val invalidated = MutableSharedFlow<Set<String>>(extraBufferCapacity = 8)
-    override val diagnosticsInvalidated: Flow<Set<String>> get() = invalidated
+    override val diagnosticsInvalidated: Flow<Set<String>> get() = merge(invalidated, languageServerInvalidations)
+
+    /**
+     * Files a language server re-published diagnostics for on its own (it finished its first analysis, a
+     * dependency changed, it restarted), as the editor paths they were analyzed under. The flow is the
+     * application's, the same for every engine, so the first engine seen supplies it for good.
+     */
+    override val externalEdits: Flow<Map<String, List<dev.ide.ui.backend.UiTextEdit>>> = flow {
+        var services = ctx.servicesOrNull
+        while (services == null) {
+            delay(LANGUAGE_SERVER_POLL_MS)
+            services = ctx.servicesOrNull
+        }
+        emitAll(
+            services.languageServerEdits.map { byFile ->
+                byFile.entries.associate { (path, edits) ->
+                    path.toString() to edits.map { dev.ide.ui.backend.UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+                }
+            },
+        )
+    }
+
+    private val languageServerInvalidations: Flow<Set<String>> = flow {
+        var services = ctx.servicesOrNull
+        while (services == null) {
+            delay(LANGUAGE_SERVER_POLL_MS)
+            services = ctx.servicesOrNull
+        }
+        emitAll(
+            services.externalDiagnosticsChanged
+                .map { paths -> paths.mapNotNullTo(HashSet()) { analyzedPaths[engineKey(it.toString())] } }
+                .filter { it.isNotEmpty() },
+        )
+    }
 
     /**
      * Queue the project-tier analyzers to run once the editor has been quiet for [PROJECT_ANALYSIS_DELAY_MS].
@@ -474,6 +591,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun hintsAt(
         path: String, text: String, startOffset: Int, endOffset: Int
     ): List<UiInlayHint> {
+        prefetchFromLanguageServer(
+            dev.ide.lsp.client.LspLanguageSupport.Pass.INLAY, path, text, range = dev.ide.lang.dom.TextRange(startOffset, endOffset),
+        )
         val hints = try {
             timedPass("inlay", path, { it.size }) {
                 measuredBackground(Events.PASS_PERF, "inlay", path, "inlay") {
@@ -506,6 +626,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.SIGNATURE, path, text, offset)
         // Background lane: completion (interactive) preempts it. A preemption just means "no panel this round";
         // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
         val help = try {
@@ -534,6 +655,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.SEMANTIC, path, text)
         val tokens = try {
             timedPass("semantic", path, { it.size }) {
                 measuredBackground(Events.PASS_PERF, "semantic", path, "semantic") {
@@ -566,6 +688,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
+        prefetchFromLanguageServer(dev.ide.lsp.client.LspLanguageSupport.Pass.FOLDS, path, text)
         val folds = try {
             timedPass("folds", path, { it.size }) {
                 measuredBackground(Events.PASS_PERF, "folds", path, "folding") {
@@ -588,10 +711,18 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     // ---- code actions (quick-fixes + intentions) ----
 
-    override suspend fun decorations(path: String, text: String): UiEditorDecorations {
-        // Not wrapped in `ctx.background`, unlike the analyzer-backed passes: a provider is plugin code that
-        // suspends on its own terms, so pinning it to the serialized engine worker would let one slow plugin
-        // block analysis for every open file. It is timed like a pass so it shows up in the perf timeline.
+    override suspend fun decorations(path: String, text: String): UiEditorDecorations = withContext(Dispatchers.Default) {
+        decorationsOffMain(path, text)
+    }
+
+    /**
+     * The decorations pass, on a background thread. Not on the serialized engine worker (`ctx.background`): a
+     * provider is plugin code that suspends on its own terms, so pinning it there would let one slow plugin block
+     * analysis for every open file. And not on the caller's thread either: the daemon calls from the UI thread,
+     * the run/test gutter marks parse the file (Java under the process-wide PSI parse lock the engine also holds),
+     * and the plugin contract promises providers a background thread. Timed like a pass for the perf timeline.
+     */
+    private suspend fun decorationsOffMain(path: String, text: String): UiEditorDecorations {
         val collected = try {
             timedPass("decorations", path, { it.ranges.size + it.gutter.size + it.inlays.size }) {
                 ctx.services.editorDecorations(Paths.get(path), text)
@@ -788,18 +919,6 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         CodeActionKind.QUICK_FIX -> UiActionKind.QUICK_FIX
         CodeActionKind.INTENTION -> UiActionKind.INTENTION
         CodeActionKind.REFACTOR -> UiActionKind.REFACTOR
-    }
-
-    private fun lineColOf(text: String, offset: Int): Pair<Int, Int> {
-        var line = 1
-        var lineStart = 0
-        val end = offset.coerceIn(0, text.length)
-        for (i in 0 until end) {
-            if (text[i] == '\n') {
-                line++; lineStart = i + 1
-            }
-        }
-        return line to (end - lineStart + 1)
     }
 
     /** Flatten the framework's [CaretAction] to the UI's neutral [UiCaret] (null = caret at end of insert). */

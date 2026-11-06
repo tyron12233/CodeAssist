@@ -21,6 +21,7 @@
     <string name="vcs_branch">分支</string>
     <string name="vcs_detached">游离 HEAD</string>
     <string name="vcs_no_commits">尚无提交</string>
+    <string name="vcs_no_repo_branch">没有仓库</string>
     <string name="vcs_up_to_date">已是最新</string>
     <string name="vcs_not_pushed_yet">尚未推送</string>
     <string name="vcs_fetch">抓取</string>
@@ -77,6 +78,7 @@
     <string name="vcs_branches_none">没有匹配的分支。</string>
     <string name="vcs_new_branch">新建分支</string>
     <string name="vcs_new_branch_hint">分支名称</string>
+    <string name="vcs_new_branch_from">基于 %1$s</string>
     <string name="vcs_create">创建</string>
     <string name="vcs_current_branch">当前</string>
     <string name="vcs_merge_into">合并到 %1$s</string>
@@ -248,6 +250,7 @@
     <string name="vcs_msg_unknown_commit">未知的提交 %1$s</string>
     <string name="vcs_msg_diff_failed">无法比较 %1$s</string>
     <string name="vcs_msg_show_failed">无法读取 %2$s 处的 %1$s</string>
+    <string name="vcs_msg_blame_failed">无法确定是谁修改了 %1$s</string>
     <string name="vcs_msg_list_stashes_failed">无法列出贮藏</string>
     <string name="vcs_msg_stage_failed">无法暂存所选文件</string>
     <string name="vcs_msg_unstage_failed">无法取消暂存所选文件</string>
@@ -255,7 +258,7 @@
     <string name="vcs_msg_discard_conflicted">%1$s 存在合并冲突。请解决它，或中止合并以撤销全部更改。</string>
     <string name="vcs_msg_resolve_failed">无法将冲突标记为已解决</string>
     <string name="vcs_msg_commit_message_required">请输入提交信息</string>
-    <string name="vcs_msg_identity_required">提交前请在设置中填写你的姓名和邮箱</string>
+    <string name="vcs_msg_identity_required">请设置提交时使用的姓名和邮箱</string>
     <string name="vcs_msg_commit_failed">无法创建提交</string>
     <string name="vcs_msg_create_branch_failed">无法创建分支 %1$s</string>
     <string name="vcs_msg_checkout_failed">无法切换到 %1$s</string>

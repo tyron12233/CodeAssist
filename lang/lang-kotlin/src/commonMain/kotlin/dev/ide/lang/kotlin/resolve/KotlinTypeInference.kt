@@ -13,6 +13,8 @@ import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
+import dev.ide.kotlin.syntax.psi.KtReturnExpression
+import dev.ide.kotlin.syntax.psi.KtValueArgument
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression
@@ -30,6 +32,7 @@ import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.TypeRef
 
@@ -77,7 +80,7 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
             is KtParenthesizedExpression -> inferType(expr.expression)
             is KtConstantExpression -> constType(expr)
             is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
-            is KtNameReferenceExpression -> typeOfName(
+            is KtNameReferenceExpression -> companionValueType(expr) ?: typeOfName(
                 expr.getReferencedName(),
                 expr.textRange.startOffset
             )
@@ -138,6 +141,14 @@ internal fun KotlinResolver.inferBinaryType(e: KtBinaryExpression): KotlinType? 
             val rightType = inferType(e.right)
             when {
                 token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String" -> leftType
+                // `Char` is not a number: `'a' + 1` and `c - 1` are `Char` (`Char.plus/minus(Int)`), `c - 'a'` is
+                // an `Int` (`Char.minus(Char)`). Promotion ranked it with Byte/Short and typed all three `Int`.
+                leftType.qualifiedName == "kotlin.Char" && rightType != null &&
+                    (token == KtTokens.PLUS || token == KtTokens.MINUS) -> when (rightType.qualifiedName) {
+                    "kotlin.Int" -> service.typeByFqn("kotlin.Char")
+                    "kotlin.Char" -> if (token == KtTokens.MINUS) service.typeByFqn("kotlin.Int") else null
+                    else -> null
+                }
                 // Two primitive numbers → Kotlin's WIDENING promotion directly (`1 * 1.0` = Double, `1 + 1L` =
                 // Long; Byte/Short/Char promote to Int). NOT [arithmeticOperatorReturn]: its by-argument overload
                 // pick, over the built-in `times`/`plus` set whose numeric parameters accept each other loosely,
@@ -566,7 +577,7 @@ internal fun KotlinResolver.typeOfCall(
         // `object Api { data class Level(…) }`), matching the bare-name path in `typeOfName`.
         // A project `typealias` constructed by its own name (`DiskFile(path)`) — resolved before the
         // classifier lookup's verbatim fallback, which would hand back the alias name as if it were a type.
-        service.typeAliasTargetFqn(name)?.let { return constructorResultType(it, call) }
+        service.typeAliasTargetFqn(name, fileContext)?.let { return constructorResultType(it, call) }
         service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { typeFqn ->
             // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
             // (`Box("s")` → `Box<String>`). Two cases are NOT, and both route to a same-named top-level FACTORY
@@ -726,6 +737,7 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
         }
         return service.typeByFqn(fqn, args)
     }
+    samConstructorResultType(fqn, tps, call)?.let { return it }
     val paramTypes = service.constructorParamTypes(fqn, call.valueArguments.size)
         ?: return service.typeByFqn(fqn)
     val bindings = HashMap<String, TypeRef>()
@@ -736,6 +748,31 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
         inferType(expr)?.let { unify(pt, it, bindings) }
     }
     if (bindings.isEmpty()) return service.typeByFqn(fqn)
+    return service.typeByFqn(fqn, tps.map { bindings[it] ?: service.typeByFqn("kotlin.Any") })
+}
+
+/**
+ * The type of a generic SAM-constructor call with no explicit type arguments: `Callable { 42 }` is a
+ * `Callable<Int>`, from the lambda's RESULT bound against the single abstract method's return; and
+ * `Comparator { a, b -> … }` where a `Comparator<String>` is expected takes the expected arguments. An
+ * interface has no constructor, so the ordinary argument path left every parameter unbound and the call
+ * erased to `Callable<Any>`, which typed `Callable { 42 }.call()` as `Object`. Null when [fqn] is not an
+ * interface or the call has no lambda.
+ */
+private fun KotlinResolver.samConstructorResultType(fqn: String, tps: List<String>, call: KtCallExpression): KotlinType? {
+    if (service.isInterfaceType(fqn) != true) return null
+    val lambda = call.lambdaArguments.firstOrNull()?.getLambdaExpression()
+        ?: call.valueArguments.singleOrNull()?.getArgumentExpression() as? KtLambdaExpression
+        ?: return null
+    expectedTypeAt(call.textRange.startOffset)
+        ?.takeIf { sameSimpleName(it.qualifiedName, fqn) && it.typeArguments.size == tps.size && concreteArgs(it) }
+        ?.let { return service.typeByFqn(fqn, it.typeArguments) }
+    val generic = service.typeByFqn(fqn, tps.map { KotlinType(it, isTypeParameter = true) })
+    val ret = service.functionalShape(generic)?.returnType as? KotlinType ?: return null
+    val body = inferLambdaResult(lambda) as? KotlinType ?: return null
+    val bindings = HashMap<String, TypeRef>()
+    unify(ret, body, bindings)
+    if (bindings.isEmpty()) return null
     return service.typeByFqn(fqn, tps.map { bindings[it] ?: service.typeByFqn("kotlin.Any") })
 }
 
@@ -764,7 +801,7 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     // resolve a receiver through inferType -> typeOfName). Off while the lowerer drives the stack above,
     // so the interpreter keeps its own authoritative flow-narrowing.
     if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
-    localsAt(offset).firstOrNull { it.name == name }?.let { return it.type as? KotlinType }
+    localsAt(offset, name).firstOrNull()?.let { return it.type as? KotlinType }
     // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
     for (recv in implicitReceiversAt(offset)) {
         // For a same-file class PROPERTY prefer the live PSI inference: the source model types an implicit-typed
@@ -816,6 +853,27 @@ internal fun KotlinResolver.typeOfTypeName(expr: KtExpression): KotlinType? {
     return service.resolveTypeName(name, fileContext)?.let { service.typeByFqn(it) }
 }
 
+/**
+ * A class name used as a VALUE (`build(Widget)`, `val f: Factory<Widget> = Widget`, `return Widget`) denotes the
+ * class's companion object, so it has the companion's type. It typed as the class itself, and passing a
+ * companion that implements an interface read "inferred type is Widget but Factory<T> was expected". Only the
+ * plain value slots are recognized: a receiver (`Widget.create()`) keeps the type denotation that static,
+ * nested and enum lookups are built on. Null when [expr] names no class with a companion.
+ */
+private fun KotlinResolver.companionValueType(expr: KtNameReferenceExpression): KotlinType? {
+    if (expr.getReferencedName().firstOrNull()?.isUpperCase() != true) return null
+    val inValueSlot = when (val p = expr.parent) {
+        is KtValueArgument -> true
+        is KtProperty -> p.initializer === expr
+        is KtReturnExpression -> p.returnedExpression === expr
+        else -> false
+    }
+    if (!inValueSlot) return null
+    val fqn = typeDenotationFqn(expr) ?: return null
+    val companion = service.companionObjectFqn(fqn) ?: return null
+    return service.typeByFqn(companion)
+}
+
 /** `X::class` → `kotlin.reflect.KClass<X>`. The left-hand side is either a classifier name (`Main::class`,
  *  `Foo.Bar::class`, `String::class`) or a value expression (`instance::class`); either way its type is the
  *  literal's single type argument. So `Main::class.java` resolves the `KClass<T>.java` extension to
@@ -827,8 +885,15 @@ internal fun KotlinResolver.classLiteralType(e: KtClassLiteralExpression): Kotli
     return service.typeByFqn("kotlin.reflect.KClass", listOfNotNull(arg))
 }
 
-internal fun KotlinResolver.memberNamed(type: KotlinType, name: String): KotlinSymbol? =
-    service.membersNamed(type.qualifiedName, type.typeArguments, name).firstOrNull()
+internal fun KotlinResolver.memberNamed(type: KotlinType, name: String): KotlinSymbol? {
+    val all = service.membersNamed(type.qualifiedName, type.typeArguments, name)
+    // A property read wants a PROPERTY: `t.priority` is `Thread`'s `getPriority()` property, not its
+    // package-private `void priority(int)` method, which typed the read `Unit`. And a public one before a
+    // protected field: `Calendar`'s `protected long time` is out of reach where `c.time` is the `Date` that
+    // `getTime()`/`setTime(Date)` expose. Any member is still the fallback, as before.
+    val fields = all.filter { it.kind == SymbolKind.FIELD }
+    return fields.firstOrNull { Modifier.PROTECTED !in it.modifiers } ?: fields.firstOrNull() ?: all.firstOrNull()
+}
 
 /** The type of an anonymous object (`object : Foo { }`, `object { val a = 1 }`): the synthetic classifier its
  *  declaration was registered under in the source model ([SourceIndexBuilder.localTypeFqn]), computed from the

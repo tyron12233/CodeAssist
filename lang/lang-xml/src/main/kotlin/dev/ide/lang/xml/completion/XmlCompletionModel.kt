@@ -55,4 +55,11 @@ data class XmlCompletionPosition(
  */
 fun interface XmlCompletionContributor {
     fun contribute(position: XmlCompletionPosition): List<CompletionItem>
+
+    /**
+     * Whether typing on at [position] can bring in candidates [contribute] left out: a set it gates behind a
+     * longer prefix (framework `@android:` resources until `@android` is typed). The editor narrows a complete
+     * result locally as the user types, so an ungated-yet set must say so or its gated items never appear.
+     */
+    fun isIncomplete(position: XmlCompletionPosition): Boolean = false
 }

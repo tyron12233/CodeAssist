@@ -279,6 +279,40 @@ class ExploreFeedSnapshot {
         backend = ShotBackend(),
     )
 
+    /**
+     * Plugins (the live store's own ids, so the colours are the ones they really get), which ship no icon (a plugin is not an app, so there is no launcher icon to read). Every
+     * one used to draw the same generic glyph; each now gets a generated icon. One app with no icon is
+     * mixed in, which gets the monogram without the plugin mark.
+     */
+    @Test
+    fun pluginsWithoutIcons() {
+        fun plugin(id: String, title: String, rating: Float, installs: Int, category: String = "build") =
+            item(id, title, "Kotlin", "file", rating = rating, ratingCount = 3, installs = installs)
+                .copy(kind = UiStoreItemKind.Community, category = category, author = "Aio", templateId = null)
+        val plugins = listOf(
+            plugin("colorpicker-plugin-55d831", "ColorPicker Plugin", 4.5f, 296),
+            plugin("xml-formater-00f83d", "XML Formater", 4.0f, 120),
+            plugin("rainbown-brackets-728b97", "Rainbown Brackets", 5.0f, 88),
+            plugin("hardcoded-compose-strings-55d831", "Hardcoded Compose Strings", 4.7f, 297),
+            plugin("txtmanipulation-7af3bd", "txtManipulation", -1f, 12),
+            plugin("resource-tool-ffde48", "Resource Tool", -1f, 3, category = "java"),
+        )
+        snapshot(
+            "explore-plugin-icons.png",
+            UiStoreFeed(
+                mode = UiStoreMode.POPULATED,
+                state = UiStoreState(publishedProjectCount = 60),
+                sections = listOf(
+                    UiFeedSection.Shelf("plugins-carousel", "Plugins", null, null, layout = UiShelfLayout.CAROUSEL, items = plugins),
+                    UiFeedSection.Shelf("plugins-rows", "New & updated", null, null, layout = UiShelfLayout.ROWS, items = plugins),
+                    UiFeedSection.Shelf("plugins-poster", "Editor's Choice", null, "Editorial", layout = UiShelfLayout.POSTER, items = plugins.take(3)),
+                ),
+            ),
+            dark = true,
+            height = 2600,
+        )
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun snapshot(
         name: String,

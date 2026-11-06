@@ -19,6 +19,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -89,6 +91,17 @@ import dev.ide.ui.generated.resources.learn_show_solution
 import dev.ide.ui.generated.resources.learn_solution
 import dev.ide.ui.generated.resources.learn_step_progress
 import dev.ide.ui.generated.resources.learn_submit
+import dev.ide.ui.generated.resources.learn_check_layout
+import dev.ide.ui.generated.resources.learn_checking
+import dev.ide.ui.generated.resources.learn_checkpoint_good
+import dev.ide.ui.generated.resources.learn_checkpoint_perfect
+import dev.ide.ui.generated.resources.learn_checkpoint_retry
+import dev.ide.ui.generated.resources.learn_checkpoint_score
+import dev.ide.ui.generated.resources.learn_checkpoint_title
+import dev.ide.ui.generated.resources.learn_done
+import dev.ide.ui.generated.resources.learn_discussion
+import dev.ide.ui.generated.resources.learn_layout_preview
+import dev.ide.ui.editor.preview.LessonLayoutPreview
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -115,11 +128,27 @@ fun LessonPlayerScreen(
     inlayHintsEnabled: Boolean = true,
     /** The platform Compose renderer for [dev.ide.ui.backend.UiContentBlock.ComposePreview] lesson blocks. */
     host: dev.ide.ui.ComposePreviewHost? = null,
+    /**
+     * Moves a lesson with exercises into the full editor (its workspace project with the task banner). Called
+     * once when such a lesson loads; null keeps every lesson here, which is also the fallback when the
+     * workspace could not be opened.
+     */
+    onOpenInEditor: ((lessonId: String, stepIndex: Int) -> Unit)? = null,
+    /** The lesson's discussion (scoped to the current step). Null hides the top-bar button. */
+    onOpenDiscussion: ((lessonId: String, stepId: String?) -> Unit)? = null,
 ) {
     val state = rememberLessonPlayerState(backend, lessonId, initialStep)
     val lesson = state.lesson
     val steps = state.steps
     val step = state.step
+    val toEditor = onOpenInEditor != null && steps.any { it is UiLessonStep.Interactive }
+    if (toEditor) {
+        LaunchedEffect(lesson?.id) { lesson?.let { onOpenInEditor?.invoke(it.id, state.stepIndex) } }
+        Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp), contentAlignment = Alignment.Center) {
+            PreparingCard()
+        }
+        return
+    }
 
     // Ad gating (null on desktop / when hosted without ads). Drives the completion interstitial below.
     val ads = rememberAds()
@@ -141,6 +170,15 @@ fun LessonPlayerScreen(
                             color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
                         )
                     }
+                    if (onOpenDiscussion != null && lesson != null) {
+                        androidx.compose.material3.IconButton(onClick = { onOpenDiscussion(lesson.id, step?.id) }) {
+                            dev.ide.ui.theme.Symbol(
+                                dev.ide.ui.icons.CaSymbols.forum,
+                                contentDescription = stringResource(dev.ide.ui.generated.resources.Res.string.learn_discussion),
+                                size = 20.dp,
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 ProgressBar(
@@ -150,6 +188,11 @@ fun LessonPlayerScreen(
             }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (state.showingSummary) {
+                    val (right, total) = state.firstTryScore
+                    CheckpointSummary(right, total, Modifier.entrancePop())
+                    return@Box
+                }
                 // Slide steps in the direction of travel (forward on Next, back on Back) with a soft fade.
                 AnimatedContent(
                     targetState = state.stepIndex,
@@ -167,7 +210,10 @@ fun LessonPlayerScreen(
                     when (val s = steps.getOrNull(idx)) {
                         is UiLessonStep.Concept -> ConceptStep(s, backend, host)
                         is UiLessonStep.Interactive -> InteractiveStep(s, backend, lessonId, inlayHintsEnabled, host) { state.allowAdvance(true) }
-                        is UiLessonStep.Quiz -> QuizStep(s) { correct -> state.allowAdvance(correct) }
+                        is UiLessonStep.Quiz -> QuizStep(s) { correct ->
+                            state.recordQuizAnswer(s.id, correct)
+                            state.allowAdvance(correct)
+                        }
                         null -> {}
                     }
                 }
@@ -187,12 +233,16 @@ fun LessonPlayerScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (state.stepIndex > 0) {
+                if (state.stepIndex > 0 && !state.showingSummary) {
                     PlayerButton(stringResource(Res.string.back), primary = false, icon = CaIcons.chevronLeft, onClick = state::back)
                 }
                 Spacer(Modifier.weight(1f))
                 PlayerButton(
-                    if (isLast) stringResource(Res.string.learn_finish) else stringResource(Res.string.learn_next),
+                    when {
+                        state.showingSummary -> stringResource(Res.string.learn_done)
+                        isLast -> stringResource(Res.string.learn_finish)
+                        else -> stringResource(Res.string.learn_next)
+                    },
                     primary = true,
                     enabled = state.canAdvance && step != null,
                     icon = if (isLast) CaIcons.check else CaIcons.chevronRight,
@@ -212,7 +262,7 @@ fun LessonPlayerScreen(
 // ---- concept step ----
 
 @Composable
-private fun ConceptStep(step: UiLessonStep.Concept, backend: IdeBackend, host: dev.ide.ui.ComposePreviewHost?) {
+internal fun ConceptStep(step: UiLessonStep.Concept, backend: IdeBackend, host: dev.ide.ui.ComposePreviewHost?) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -234,8 +284,19 @@ private fun InteractiveStep(
     host: dev.ide.ui.ComposePreviewHost?,
     onSolved: () -> Unit,
 ) {
-    val lang = if (step.language.startsWith("kotlin")) CodeLanguage.Kotlin else CodeLanguage.Java
-    val fileName = if (step.language.startsWith("kotlin")) "Main.kt" else "Main.java"
+    // An Android layout exercise: XML in the editor, a live preview under it, and a structural check instead
+    // of a compile + run. It needs no scratch project, so it skips the preparing gate and the analysis passes.
+    val isLayout = step.language == "xml-layout"
+    val lang = when {
+        isLayout -> CodeLanguage.Xml
+        step.language.startsWith("kotlin") -> CodeLanguage.Kotlin
+        else -> CodeLanguage.Java
+    }
+    val fileName = when {
+        isLayout -> "activity_main.xml"
+        step.language.startsWith("kotlin") -> "Main.kt"
+        else -> "Main.java"
+    }
     var session by remember(step.id) { mutableStateOf(EditorSession(step.starterCode, lang)) }
     // Route the embedded editor's language services to the hidden scratch engine for this language, so the
     // lesson buffer gets real completion + diagnostics rather than the (unrelated) open project's.
@@ -248,12 +309,14 @@ private fun InteractiveStep(
 
     // Build the scratch project's index BEFORE the editor is usable, so completion + diagnostics work from the
     // first keystroke (a lesson never starts against a cold, dumb index).
-    var ready by remember(step.id) { mutableStateOf(false) }
-    LaunchedEffect(step.id) { ready = runCatching { backend.learn.prepare(step.language) }.getOrDefault(true) }
+    var ready by remember(step.id) { mutableStateOf(isLayout) }
+    LaunchedEffect(step.id) {
+        if (!isLayout) ready = runCatching { backend.learn.prepare(step.language) }.getOrDefault(true)
+    }
     // Once ready, watch for (re)indexing so we can show a hint and re-analyze when it settles.
     var indexing by remember(step.id) { mutableStateOf(false) }
     LaunchedEffect(step.id, ready) {
-        if (!ready) return@LaunchedEffect
+        if (!ready || isLayout) return@LaunchedEffect
         while (isActive) {
             indexing = runCatching { backend.learn.indexing(step.language) }.getOrDefault(false)
             delay(700)
@@ -262,8 +325,10 @@ private fun InteractiveStep(
     // Live diagnostics + inlay hints: (re)analyze on each settled edit and when indexing finishes; feed the
     // editor's squiggles and the inferred-type/parameter-name hints. Both run against the same buffer snapshot
     // and re-fire when a new edit bumps textRevision (which cancels this pass), so offsets stay consistent.
-    LaunchedEffect(step.id, ready, session.textRevision, indexing, inlayHintsEnabled) {
-        if (!ready) return@LaunchedEffect
+    // Keyed on the session itself as well as its revision: "Copy to editor" swaps in a new session whose
+    // revision counter starts where the old one did, which alone would leave the analysis stale.
+    LaunchedEffect(step.id, ready, session, session.textRevision, indexing, inlayHintsEnabled) {
+        if (!ready || isLayout) return@LaunchedEffect
         delay(250)
         val code = session.doc.text
         session.applyAnalysis(runCatching { backend.learn.analyze(step.language, code) }.getOrDefault(emptyList()))
@@ -307,22 +372,46 @@ private fun InteractiveStep(
                 session = session,
                 backend = editorBackend,
                 modifier = Modifier.fillMaxSize(),
-                completionAutoPopup = true,
+                completionAutoPopup = !isLayout,
             )
+        }
+
+        if (isLayout) {
+            // Re-render once typing settles rather than on every keystroke.
+            var previewXml by remember(step.id) { mutableStateOf(step.starterCode) }
+            LaunchedEffect(step.id, session, session.textRevision) {
+                delay(LAYOUT_PREVIEW_DEBOUNCE_MS)
+                previewXml = session.doc.text
+            }
+            Text(
+                stringResource(Res.string.learn_layout_preview),
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            LessonLayoutPreview(xml = previewXml, backend = backend, interactive = false, caption = "", modifier = Modifier.fillMaxWidth())
         }
 
         // Action row.
         val checkFailedMsg = stringResource(Res.string.learn_check_failed)
+        // On a phone the two links and the button do not fit one row, and the Row squeezed the button until its
+        // label broke ("Run &" over "Check"). The links take what is left after the button and wrap instead.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (step.hints.isNotEmpty() && hintsShown < step.hints.size) {
-                TextAction(stringResource(Res.string.learn_need_hint), CaIcons.lightbulb) { hintsShown++ }
+            FlowRow(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                if (step.hints.isNotEmpty() && hintsShown < step.hints.size) {
+                    TextAction(stringResource(Res.string.learn_need_hint), CaIcons.lightbulb) { hintsShown++ }
+                }
+                if (step.solution.isNotBlank() && !showSolution) {
+                    TextAction(stringResource(Res.string.learn_show_solution), CaIcons.eye) { showSolution = true }
+                }
             }
-            if (step.solution.isNotBlank() && !showSolution) {
-                TextAction(stringResource(Res.string.learn_show_solution), CaIcons.eye) { showSolution = true }
-            }
-            Spacer(Modifier.weight(1f))
             PlayerButton(
-                if (running) stringResource(Res.string.learn_running) else stringResource(Res.string.learn_run_check),
+                when {
+                    running && isLayout -> stringResource(Res.string.learn_checking)
+                    running -> stringResource(Res.string.learn_running)
+                    isLayout -> stringResource(Res.string.learn_check_layout)
+                    else -> stringResource(Res.string.learn_run_check)
+                },
                 primary = true,
                 enabled = !running,
                 icon = CaIcons.play,
@@ -365,7 +454,7 @@ private fun InteractiveStep(
 }
 
 @Composable
-private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier) {
+internal fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier) {
     val (icon, tint) = when {
         result.passed -> CaIcons.check to Ide.colors.success
         !result.compiled -> CaIcons.error to MaterialTheme.colorScheme.error
@@ -396,7 +485,7 @@ private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
+internal fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(Ca.radius.md)
     Row(
         modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.primaryContainer).border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), shape).padding(12.dp),
@@ -414,7 +503,7 @@ private fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
 // ---- quiz step ----
 
 @Composable
-private fun QuizStep(step: UiLessonStep.Quiz, onAnswered: (correct: Boolean) -> Unit) {
+internal fun QuizStep(step: UiLessonStep.Quiz, onAnswered: (correct: Boolean) -> Unit) {
     var selected by remember(step.id) { mutableStateOf(-1) }
     var submitted by remember(step.id) { mutableStateOf(false) }
     val correct = selected == step.correctIndex
@@ -507,12 +596,14 @@ private fun OptionRow(
 // ---- shared buttons ----
 
 @Composable
-private fun PlayerButton(
+internal fun PlayerButton(
     text: String,
     primary: Boolean,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    /** The slimmer size for a one-row header (the lesson banner) rather than a bottom action bar. */
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -526,28 +617,38 @@ private fun PlayerButton(
         },
         tween(Motion.BASE), label = "btn-bg",
     )
+    // The primary fill is the theme's primary (a light lime in the dark theme), so the label is its onPrimary,
+    // not white: white on lime read as washed out and failed contrast.
     val fg by animateColorAsState(
         when {
             !primary -> MaterialTheme.colorScheme.onSurface
-            enabled -> Color.White
+            enabled -> MaterialTheme.colorScheme.onPrimary
             else -> MaterialTheme.colorScheme.outline
         },
         tween(Motion.BASE), label = "btn-fg",
     )
-    val shape = RoundedCornerShape(Ca.radius.control)
+    // Compact is a pill: in a one-row header it sits beside icon buttons, and a squarer 36 dp block read as
+    // heavy and crowded the progress bar under it.
+    val shape = if (compact) RoundedCornerShape(50) else RoundedCornerShape(Ca.radius.control)
     Row(
         modifier
-            .height(44.dp)
+            .height(if (compact) 32.dp else 44.dp)
             .pressScale(interaction)
             .clip(shape)
             .background(bg)
             .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = if (compact) 12.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp),
     ) {
-        icon?.let { Icon(it, null, Modifier.size(16.dp), tint = fg) }
-        Text(text, color = fg, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        icon?.let { Icon(it, null, Modifier.size(if (compact) 14.dp else 16.dp), tint = fg) }
+        Text(
+            text,
+            color = fg,
+            style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -559,21 +660,72 @@ private fun PlayerButton(
  * and every other method falls back to the interface's safe (empty/null) default.
  */
 private class LessonEditorBackend(private val real: IdeBackend, private val language: String) : IdeBackend by real {
+    /** Layout exercises have no scratch engine behind them: the editor is plain, with no completion. */
+    private val plain = language == "xml-layout"
     override val editor: EditorService = object : EditorService {
         override fun updateDocument(path: String, text: String) {} // the live buffer is passed per-call
         override fun saveFile(path: String, text: String) {}        // lessons don't persist
         override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult =
-            real.learn.complete(language, text, offset)
+            if (plain) UiCompletionResult(emptyList(), offset, offset) else real.learn.complete(language, text, offset)
         override suspend fun analyze(path: String, text: String): List<UiDiagnostic> =
-            real.learn.analyze(language, text)
+            if (plain) emptyList() else real.learn.analyze(language, text)
         override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> =
-            real.learn.hints(language, text, startOffset, endOffset)
+            if (plain) emptyList() else real.learn.hints(language, text, startOffset, endOffset)
+    }
+}
+
+private const val LAYOUT_PREVIEW_DEBOUNCE_MS = 300L
+
+/**
+ * The end of a checkpoint: how many questions were right on the first try, with a line that fits the
+ * score. Shown in place of the steps; the bottom bar's Done leaves the lesson.
+ */
+@Composable
+internal fun CheckpointSummary(right: Int, total: Int, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    val fraction = if (total == 0) 1f else right.toFloat() / total
+    Column(
+        modifier.fillMaxSize().padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            Modifier.size(96.dp).clip(RoundedCornerShape(32.dp)).background(c.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("$right/$total", style = MaterialTheme.typography.headlineSmall, color = c.onPrimaryContainer, fontWeight = FontWeight.Bold)
+        }
+        Text(
+            stringResource(Res.string.learn_checkpoint_title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = c.onSurface,
+            modifier = Modifier.padding(top = 20.dp),
+        )
+        Text(
+            stringResource(Res.string.learn_checkpoint_score, right, total),
+            style = MaterialTheme.typography.titleMedium,
+            color = c.primary,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Text(
+            stringResource(
+                when {
+                    fraction >= 1f -> Res.string.learn_checkpoint_perfect
+                    fraction >= 0.6f -> Res.string.learn_checkpoint_good
+                    else -> Res.string.learn_checkpoint_retry
+                },
+            ),
+            style = MaterialTheme.typography.bodyLarge,
+            color = c.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(top = 12.dp),
+        )
     }
 }
 
 /** Shown while the scratch project's index is building, before the exercise editor is usable. */
 @Composable
-private fun PreparingCard() {
+internal fun PreparingCard() {
     val shape = RoundedCornerShape(Ca.radius.lg)
     Column(
         Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
@@ -606,7 +758,7 @@ private fun IndexingChip() {
 }
 
 @Composable
-private fun TextAction(text: String, icon: ImageVector, onClick: () -> Unit) {
+internal fun TextAction(text: String, icon: ImageVector, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier.clip(RoundedCornerShape(Ca.radius.control)).clickable(interaction, indication = null, onClick = onClick)

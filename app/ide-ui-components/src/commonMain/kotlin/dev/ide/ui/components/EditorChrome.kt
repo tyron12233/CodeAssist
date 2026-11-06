@@ -2,6 +2,7 @@ package dev.ide.ui.components
 
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.platform.claimWindowTitleBar
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.ext.AppCommands
 import androidx.compose.foundation.layout.widthIn
@@ -67,7 +68,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,6 +98,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.OpenFile
+import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.IndexUiStatus
@@ -125,6 +131,7 @@ import dev.ide.ui.generated.resources.edchrome_no_matching_tasks
 import dev.ide.ui.generated.resources.edchrome_no_variants
 import dev.ide.ui.generated.resources.edchrome_nothing_to_run
 import dev.ide.ui.generated.resources.edchrome_optimize_imports
+import dev.ide.ui.generated.resources.edchrome_local_history
 import dev.ide.ui.generated.resources.edchrome_reformat_code
 import dev.ide.ui.generated.resources.edchrome_resolving_dependencies
 import dev.ide.ui.generated.resources.edchrome_search_tasks
@@ -198,6 +205,8 @@ fun EditorTopBar(
     onFind: () -> Unit = {},
     onReformat: () -> Unit = {},
     onOptimizeImports: () -> Unit = {},
+    /** Opens the active file's local history; null leaves the item out. */
+    onLocalHistory: (() -> Unit)? = null,
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
     /** Compact (phone) top bar only: a single button opening the RIGHT tool-window drawer — the phone has no
@@ -209,6 +218,8 @@ fun EditorTopBar(
     onToggleRightTool: () -> Unit = {},
     /** Wide layout only: show the right tool window toggle in the bar, because the user hid the right stripe. */
     rightToolInBar: Boolean = false,
+    /** The right tool window's work is running (the agent mid-reply): its bar button animates. */
+    rightToolBusy: Boolean = false,
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -274,9 +285,13 @@ fun EditorTopBar(
             )
             if (compatibilityMode) CompatModeChip(compact = compact, onClick = onCompatClick)
             IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
-            // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works). A desktop
-            // has the keyboard for it and the tab's unsaved dot for the state, so only touch hosts show it.
-            if (compact || touchInput) {
+            // Save/undo/redo stay inline wherever a keyboard can't be assumed. A desktop window has one, so the
+            // shortcuts and the tab's unsaved dot cover them there. A phone or tablet keeps them even while a
+            // mouse drives it (DeX, an external display): the pointer says nothing about a keyboard, and keying
+            // this off the last pointer event made the buttons blink out on every mouse move (#1735).
+            val inlineEditActions = compact || isMobilePlatform || touchInput
+            // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
+            if (inlineEditActions) {
                 IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
             }
             if (compact) {
@@ -295,6 +310,7 @@ fun EditorTopBar(
                     onFind = onFind,
                     onReformat = onReformat,
                     onOptimizeImports = onOptimizeImports,
+                    onLocalHistory = onLocalHistory,
                     inlayHintsOn = inlayHintsOn,
                     onToggleInlayHints = onToggleInlayHints,
                     consoleOpen = consoleOpen,
@@ -311,10 +327,10 @@ fun EditorTopBar(
                     onZenMode = onZenMode,
                 )
             } else {
-                // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only on touch (no
-                // keyboard there); the console and preview toggles live on the left stripe and the breadcrumb row;
-                // find, reformat, imports and inlay hints move into the ⋯ menu below.
-                if (touchInput && hasActiveFile) {
+                // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only where there may
+                // be no keyboard (see inlineEditActions); the console and preview toggles live on the left stripe
+                // and the breadcrumb row; find, reformat, imports and inlay hints move into the ⋯ menu below.
+                if (inlineEditActions && hasActiveFile) {
                     IconButtonCa(CaIcons.undo, stringResource(Res.string.undo), onUndo, tint = if (canUndo) null else dim)
                     IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
                 }
@@ -322,7 +338,7 @@ fun EditorTopBar(
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
                 RunCluster(activeVariant, variants, onPickVariant, runTasks, onPickTask, selectedRunTask)
                 if (rightToolInBar && rightToolIconId != null) {
-                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, active = rightToolOpen)
+                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, Modifier.busyRing(rightToolBusy), active = rightToolOpen)
                 }
                 if (hasActiveFile) {
                     EditorOverflowMenu(
@@ -331,6 +347,7 @@ fun EditorTopBar(
                         onFind = onFind,
                         onReformat = onReformat,
                         onOptimizeImports = onOptimizeImports,
+                    onLocalHistory = onLocalHistory,
                         inlayHintsOn = inlayHintsOn,
                         onToggleInlayHints = onToggleInlayHints,
                         consoleOpen = consoleOpen,
@@ -452,6 +469,7 @@ private fun EditorOverflowMenu(
     onFind: () -> Unit,
     onReformat: () -> Unit,
     onOptimizeImports: () -> Unit,
+    onLocalHistory: (() -> Unit)?,
     inlayHintsOn: Boolean,
     onToggleInlayHints: () -> Unit,
     consoleOpen: Boolean,
@@ -484,6 +502,9 @@ private fun EditorOverflowMenu(
                 OverflowItem(CaIcons.search, stringResource(Res.string.edchrome_find_replace)) { open = false; onFind() }
                 OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
                 OverflowItem(CaIcons.layers, stringResource(Res.string.edchrome_optimize_imports)) { open = false; onOptimizeImports() }
+                if (onLocalHistory != null) {
+                    OverflowItem(CaIcons.clock, stringResource(Res.string.edchrome_local_history)) { open = false; onLocalHistory() }
+                }
             }
             if (!editOnly) OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
             // The AI assistant panel — a toggle, its on-state accented like the other tool windows.
@@ -847,14 +868,32 @@ private fun RunControl(
         // The task list is resolved lazily here (it scans sources), not on every recomposition. `keyboard.hide()`
         // drops any editor keyboard so the task list isn't covered; the search field stays unfocusable until
         // tapped (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open. A
-        // selected task the picker no longer lists (a gutter run of one `main`) stays on top, so it can be re-picked.
-        val openMenu = {
-            keyboard?.hide(); query = ""
-            val listed = tasks()
-            items = if (selected == null || listed.any { it.id == selected.id }) listed else listOf(selected) + listed
+        // selected task the picker does not list (a gutter run of one `main`) stays on top, so it can be re-picked;
+        // one remembered for a project that was at this path before is dropped (RunGutter.stillApplies).
+        // tasks() runs on Dispatchers.Default: right after a project opens it scans every source file for a `main`
+        // and can wait on the Kotlin parser lock the indexer holds, which froze the UI when it ran on the tap.
+        val scope = rememberCoroutineScope()
+        fun showMenu(listed: List<RunTaskOption>) {
+            items = if (selected == null || listed.any { it.id == selected.id } || !RunGutter.stillApplies(selected, listed)) {
+                listed
+            } else {
+                listOf(selected) + listed
+            }
             open = true
         }
-        val runSelected = { if (selected != null) { keyboard?.hide(); onPickTask(selected) } else openMenu() }
+        val openMenu: () -> Unit = {
+            keyboard?.hide(); query = ""
+            scope.launch { showMenu(withContext(Dispatchers.Default) { tasks() }) }
+        }
+        // A remembered task that no longer applies would only fail ("No module 'app'"): pick from the list instead.
+        val runSelected: () -> Unit = {
+            keyboard?.hide()
+            scope.launch {
+                val listed = withContext(Dispatchers.Default) { tasks() }
+                if (selected != null && RunGutter.stillApplies(selected, listed)) onPickTask(selected)
+                else { query = ""; showMenu(listed) }
+            }
+        }
         val runLabel = stringResource(Res.string.run)
         val chooseLabel = stringResource(Res.string.run_choose_task)
         if (compact) {
@@ -1557,12 +1596,17 @@ fun TabsStripPreview() {
  *  moves the segments change — the row crossfades (and resizes) between states rather than snapping. */
 @Composable
 fun Breadcrumb(segments: List<String>) {
+    // Rest at the END: the deepest segment (the file, the symbol at the caret) is the one worth reading, and in a
+    // narrow bar beside the view-mode buttons it was the one cut off ("activity_main.xm"). The leading folders
+    // scroll off instead, a swipe away.
+    val scroll = rememberScrollState()
+    LaunchedEffect(segments, scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
     Row(
         Modifier
             .fillMaxWidth()
             .height(32.dp)
             .background(Ide.colors.editorBg)
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(scroll)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

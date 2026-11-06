@@ -1,5 +1,6 @@
 package dev.ide.core.backend
 
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.core.BackendContext
 import dev.ide.core.plugins.VcsPlugin
 import dev.ide.core.project.ImportableKind
@@ -13,6 +14,7 @@ import dev.ide.ui.backend.UiVcsChange
 import dev.ide.ui.backend.UiVcsCommit
 import dev.ide.ui.backend.UiVcsCommitDetail
 import dev.ide.ui.backend.UiVcsDiff
+import dev.ide.ui.backend.UiBlameLine
 import dev.ide.ui.backend.UiVcsIdentity
 import dev.ide.ui.backend.UiVcsRemote
 import dev.ide.ui.backend.UiVcsResult
@@ -197,6 +199,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         // repository it was saved in, so a repository identity is usually a stale copy of it, and preferring
         // that meant a later edit in Settings was silently ignored.
         val commit = withRepository { repo -> repo.commit(message, configuredIdentity() ?: repo.identity(), amend) }
+        ctx.countFeature(UiFeatures.GIT_COMMIT)
         ok(VcsMessage.COMMITTED, commit.shortId)
     }
 
@@ -260,6 +263,28 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
             deletions = detail.deletions,
         )
     }
+
+    override suspend fun baseText(path: String): String? = read { repo ->
+        val abs = runCatching { java.nio.file.Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return@read null
+        val root = repo.root.toAbsolutePath().normalize()
+        if (!abs.startsWith(root)) return@read null
+        // Git paths are always `/`-separated, whatever the host's separator.
+        val rel = root.relativize(abs).joinToString("/")
+        repo.show(rel, "HEAD")?.takeUnless { '\u0000' in it } // a NUL byte: binary, nothing to mark
+    }
+
+    override suspend fun blame(path: String): List<UiBlameLine?> = read { repo ->
+        val abs = runCatching { java.nio.file.Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return@read emptyList()
+        val root = repo.root.toAbsolutePath().normalize()
+        if (!abs.startsWith(root)) return@read emptyList()
+        val now = System.currentTimeMillis()
+        val made = HashMap<String, UiBlameLine>() // one per commit, shared by its lines
+        repo.blame(root.relativize(abs).joinToString("/")).map { line ->
+            line?.let {
+                made.getOrPut(it.commitId) { UiBlameLine(it.author.name, ageLabel(it.timeMs, now), it.summary, it.shortId) }
+            }
+        }
+    }.orEmpty()
 
     override suspend fun diff(path: String, staged: Boolean, commitId: String?): UiVcsDiff? = read { repo ->
         val diff = repo.diff(path, staged, commitId)

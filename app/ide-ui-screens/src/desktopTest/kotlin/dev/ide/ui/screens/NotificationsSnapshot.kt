@@ -81,9 +81,71 @@ class NotificationsSnapshot {
         assertTrue(png > 0, "the bell row should render to a non-empty image")
     }
 
+    /** The sheet at phone size: a plugin's split message folded ×2, an error, and read entries under Earlier. */
+    @Test
+    fun renderSheet() {
+        val now = System.currentTimeMillis()
+        val items = listOf(
+            UiNotification(
+                id = "p", kind = UiNotificationKind.SYSTEM, source = "Hello Plugin", count = 2,
+                title = "Hello Plugin ran its packaged tool",
+                body = "Hello from a binary the plugin packaged, running as /data/app/~~tJbKcvM0kFoIgqzwYrNxEg==/" +
+                    "com.example.hello-G7XCzyO2_nVHX4neBQLSuw==/lib/arm64/libhellotool.so",
+                timestampMs = now - 6 * 60_000,
+            ),
+            UiNotification(
+                id = "e", kind = UiNotificationKind.SYSTEM, source = "NDK Toolchain",
+                level = dev.ide.ui.backend.UiNotificationLevel.ERROR,
+                title = "No toolchain for this device",
+                body = "This device is x86_64; the NDK plugin ships arm64 only.",
+                timestampMs = now - 20 * 60_000,
+            ),
+        ) + sample.map { it.copy(read = true) }
+        val png = render("notifications-sheet.png", width = 822, height = 1780) {
+            NotificationsSheet(NotifyingBackend(items, 2), onDismiss = {}, onOpenTarget = {})
+        }
+        assertTrue(png > 0)
+    }
+
+    /** A notification arriving after the editor opened shows as a heads-up; one already there does not. */
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun render(name: String, content: @androidx.compose.runtime.Composable () -> Unit): Int {
-        val scene = ImageComposeScene(width = 480, height = 200, density = Density(2f)) {
+    @Test
+    fun aNewArrivalShowsAHeadsUp() {
+        val list = MutableStateFlow(sample)
+        val backend = object : StubBackend() {
+            override val notifications: NotificationService = object : NotificationService {
+                override fun notifications(): StateFlow<List<UiNotification>> = list
+            }
+        }
+        val scene = ImageComposeScene(width = 820, height = 300, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    NotificationHeadsUp(backend, suppressed = false, onView = {}, modifier = Modifier.padding(top = 24.dp))
+                }
+            }
+        }
+        try {
+            val before = scene.render(16_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
+            list.value = listOf(
+                UiNotification(
+                    id = "new", kind = UiNotificationKind.SYSTEM, source = "NDK Toolchain",
+                    level = dev.ide.ui.backend.UiNotificationLevel.WARNING,
+                    title = "Toolchain update available", timestampMs = System.currentTimeMillis(),
+                ),
+            ) + sample
+            var img = scene.render(32_000_000L)
+            for (f in 3..40) img = scene.render(f * 16_666_667L)
+            val after = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File("$OUT_DIR/notifications-heads-up.png").apply { parentFile?.mkdirs() }.writeBytes(after)
+            assertTrue(!before.contentEquals(after), "the arrival should draw a heads-up")
+        } finally {
+            scene.close()
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun render(name: String, width: Int = 480, height: Int = 200, content: @androidx.compose.runtime.Composable () -> Unit): Int {
+        val scene = ImageComposeScene(width = width, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     Column { content() }
@@ -92,7 +154,8 @@ class NotificationsSnapshot {
         }
         return try {
             scene.render()
-            val img = scene.render(1_000_000_000L)
+            var img = scene.render(16_000_000L)
+            for (f in 2..60) img = scene.render(f * 16_666_667L)
             val png = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
             File("$OUT_DIR/$name").apply { parentFile?.mkdirs() }.writeBytes(png)
             println("wrote snapshot: $OUT_DIR/$name (${png.size} bytes)")

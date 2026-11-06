@@ -45,6 +45,51 @@ class EditorFrameSnapshot {
         }
     }
 
+    /** The Notifications tool window: open on the right stripe (its count on the button), and closed. */
+    @Test
+    fun renderNotificationsToolWindow() {
+        val now = System.currentTimeMillis()
+        val items = listOf(
+            dev.ide.ui.backend.UiNotification(
+                id = "p", kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM, source = "Hello Plugin", count = 2,
+                title = "Hello Plugin ran its packaged tool",
+                body = "Hello from a binary the plugin packaged, running as /data/app/com.example.hello/lib/arm64/libhellotool.so",
+                timestampMs = now - 6 * 60_000,
+            ),
+            dev.ide.ui.backend.UiNotification(
+                id = "b", kind = dev.ide.ui.backend.UiNotificationKind.BUILD, level = dev.ide.ui.backend.UiNotificationLevel.ERROR,
+                title = "Build failed", body = "2 errors in :app", timestampMs = now - 30 * 60_000,
+            ),
+            dev.ide.ui.backend.UiNotification(
+                id = "s", kind = dev.ide.ui.backend.UiNotificationKind.STORE_SUBMISSION, title = "Aurora Notes is live in the store",
+                body = "Approved by a moderator", timestampMs = now - 3 * 3_600_000, read = true,
+            ),
+        )
+        val backend = object : StubBackend() {
+            override val notifications = object : dev.ide.ui.backend.NotificationService {
+                override fun notifications() = kotlinx.coroutines.flow.MutableStateFlow(items)
+                override fun unreadCount() = kotlinx.coroutines.flow.MutableStateFlow(2)
+            }
+        }
+        val ai = ToolWindowRegistry.register(ToolWindowContribution("test.ai", "AI", "sparkle", ToolWindowAnchor.RIGHT) {})
+        val tw = ToolWindowRegistry.register(
+            ToolWindowContribution(
+                NOTIFICATIONS_TOOL_WINDOW, "Notifications", "bell", ToolWindowAnchor.RIGHT, order = 2000,
+                badge = { 2 },
+            ) { ctx -> NotificationsPanel(ctx.backend) {} },
+        )
+        try {
+            render("editor-frame-notifications.png", 1280, 760, dark = true, backend = backend) {
+                it.consoleOpen = false; it.showToolWindow(NOTIFICATIONS_TOOL_WINDOW)
+            }
+            render("editor-frame-notifications-closed.png", 1280, 760, dark = true, backend = backend) {
+                it.consoleOpen = false; it.selectLeftPanel("files")
+            }
+        } finally {
+            tw.dispose(); ai.dispose()
+        }
+    }
+
     /** Tool windows moved off their natural side, a phone in landscape (860x390dp) with the build console
      *  beside the editor, below it dragged taller, and maximized, and zen mode. */
     @Test
@@ -101,8 +146,11 @@ class EditorFrameSnapshot {
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun render(name: String, wDp: Int, hDp: Int, dark: Boolean, compact: Boolean = false, setup: (IdeUiState) -> Unit) {
-        val state = IdeUiState(StubBackend(), mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
+    private fun render(
+        name: String, wDp: Int, hDp: Int, dark: Boolean, compact: Boolean = false,
+        backend: dev.ide.ui.backend.IdeBackend = StubBackend(), setup: (IdeUiState) -> Unit,
+    ) {
+        val state = IdeUiState(backend, mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
         setup(state)
         val scene = ImageComposeScene(width = wDp * 2, height = hDp * 2, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
@@ -111,7 +159,7 @@ class EditorFrameSnapshot {
                     onToggleTheme = {}, onOpenHub = {}, onOpenIconManager = {},
                     indexStatus = IndexUiStatus(), buildState = BuildState(),
                     onNewFile = { _, _ -> }, onNewFolder = { _, _ -> }, onNewResource = {}, onNewImageAsset = {},
-                    onNewSource = { _, _, _ -> }, onFileOp = { _, _ -> },
+                    onNewSource = { _, _, _ -> }, onFileOp = { },
                     onOpenDependencies = {}, onOpenModuleConfig = {}, onCloseProject = {},
                     fileActions = FileActions.None,
                 ) else expanded(state)
@@ -136,7 +184,7 @@ class EditorFrameSnapshot {
         onToggleTheme = {}, onOpenHub = {}, onOpenIconManager = {},
         indexStatus = IndexUiStatus(), buildState = BuildState(),
         onNewFile = { _, _ -> }, onNewFolder = { _, _ -> }, onNewResource = {}, onNewImageAsset = {},
-        onNewSource = { _, _, _ -> }, onFileOp = { _, _ -> },
+        onNewSource = { _, _, _ -> }, onFileOp = { },
         onOpenDependencies = {}, onOpenModuleConfig = {}, onCloseProject = {},
         fileActions = FileActions.None,
     )

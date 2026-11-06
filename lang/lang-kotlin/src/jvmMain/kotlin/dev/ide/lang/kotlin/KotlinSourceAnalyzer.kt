@@ -144,6 +144,21 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
 
+    /**
+     * What the symbol service is given: [sourceDocProvider] as it is at each call. The service captures its
+     * provider once, when it is first built, and the host assigns [sourceDocProvider] after construction; when
+     * anything touched the service in between, the service kept NONE for good, and every Kotlin file lost its
+     * library docs and real parameter names (seen on a device: `ScrollView` completed with no doc).
+     */
+    private val currentSourceDocs = object : SourceDocProvider {
+        override fun method(declaringFqn: String, methodName: String, arity: Int) =
+            sourceDocProvider.method(declaringFqn, methodName, arity)
+        override fun classDoc(fqn: String) = sourceDocProvider.classDoc(fqn)
+        override fun methodRaw(declaringFqn: String, methodName: String, arity: Int) =
+            sourceDocProvider.methodRaw(declaringFqn, methodName, arity)
+        override fun classDocRaw(fqn: String) = sourceDocProvider.classDocRaw(fqn)
+    }
+
     /** Injected by the host: whether this module targets Android (has an `AndroidFacet`, or an `android-*`
      *  module type). When `true` it forces `android.*`/`androidx.*` type names to stay VISIBLE in completion;
      *  otherwise the decision falls to the module's own classpath (see [androidNamespacesVisible]). A `false`
@@ -226,7 +241,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             indexService,
             extensionCacheDir?.toString(),
             { syntheticClassProvider() },
-            sourceDocProvider,
+            currentSourceDocs,
             // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
             // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
             // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
@@ -397,16 +412,17 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-declaration memoization
      *  (and disk persistence when the host provided [previewLoweringCacheDir]). The disk salt is this module's
-     *  classpath jar fingerprint: a dependency change alters overload resolution, so stale entries must miss —
+     *  classpath jar fingerprint (paths and sizes): a dependency change alters overload resolution, so stale entries must miss —
      *  the same signal that makes the host dispose this whole analyzer on classpath change. */
     private val previewLowering by lazy {
         val disk = previewLoweringCacheDir?.let { dir ->
             runCatching {
+                // Path and size, not the modification time: a dependency change moves a jar's path (its version
+                // is in it) or its size, while an mtime moves on its own. The IDE re-copies its bundled jars, and
+                // emulated external storage reports an unreliable mtime for a freshly written file, so with the
+                // mtime in it this salt changed on every launch and the cache never served a cold start.
                 val fp = classpathJars.asSequence()
-                    .map { p ->
-                        val a = runCatching { Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes::class.java) }.getOrNull()
-                        "$p:${a?.size() ?: -1}:${a?.lastModifiedTime()?.toMillis() ?: -1}"
-                    }
+                    .map { p -> "$p:${runCatching { Files.size(p) }.getOrDefault(-1L)}" }
                     .sorted().joinToString("|").hashCode().toString(16)
                 PreviewLoweringDiskCache(dir, "cp=$fp")
             }.getOrNull()
@@ -446,6 +462,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         get() = features.javaSourceLocator
         set(value) { features.javaSourceLocator = value }
 
+    /** See [KotlinEditorFeatures.javaMemberLocator]. */
+    var javaMemberLocator: (fqn: String, member: String, paramTypes: List<String>?) -> NavTarget?
+        get() = features.javaMemberLocator
+        set(value) { features.javaMemberLocator = value }
+
     fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: NavKind): List<NavTarget> =
         features.navigationTargets(file, text, offset, kind)
 
@@ -453,6 +474,24 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         features.navigationOptions(file, text, offset)
 
     fun builtinStub(fqn: String): String? = features.builtinStub(fqn)
+
+    /** What Find Usages / Rename at [offset] acts on; see [KotlinEditorFeatures.usageTargetAt]. */
+    fun usageTargetAt(
+        file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?, includeOverloads: Boolean = false,
+    ): KotlinUsageTarget? = features.usageTargetAt(file, text, offset, readSource, includeOverloads)
+
+    /** See [KotlinEditorFeatures.usageTargetForDeclaration]. */
+    fun usageTargetForDeclaration(path: String, offset: Int, name: String, importFqn: String?): KotlinUsageTarget =
+        features.usageTargetForDeclaration(path, offset, name, importFqn)
+
+    /** References to [target] in [file]'s [text]; see [KotlinEditorFeatures.usagesIn]. */
+    fun usagesIn(file: VirtualFile, text: CharSequence, target: KotlinUsageTarget): List<dev.ide.lang.dom.TextRange> =
+        features.usagesIn(file, text, target)
+
+    /** Highlight-usages-at-caret for [file]'s [text]; see [KotlinEditorFeatures.usageHighlightsAt]. */
+    fun usageHighlightsAt(
+        file: VirtualFile, text: CharSequence, offset: Int, readSource: (String) -> CharSequence?,
+    ): List<dev.ide.lang.highlight.UsageHighlight>? = features.usageHighlightsAt(file, text, offset, readSource)
 
     /** Whether [file]'s last parse contains syntax errors; a preview must not interpret such a file. See
      *  [KotlinPreviewLowering.hasSyntaxErrors] for why. */
@@ -468,12 +507,18 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * runtime a value of the wrong shape. Runs the same semantic pass the editor runs per keystroke, over the
      * same snapshot and the same per-declaration cache, so on the preview's (debounced, later) pass it is
      * normally a cache hit; the analysis it does pay for is a fraction of the lowering it saves by refusing.
+     *
+     * With an [entry] (the `@Preview` function's name), only the declarations of this file the preview can reach
+     * are checked (see [IncrementalSemanticAnalysis.reachableDiagnostics]): an error the preview never runs does
+     * not block it, and the first preview of a file no longer waits for every class in it to be analysed.
      */
-    fun previewBlockingErrors(file: VirtualFile): List<String> {
+    fun previewBlockingErrors(file: VirtualFile, entry: String? = null): List<String> {
         val parsed = lastByFile[file.path] ?: return emptyList()
         refreshOverlay()
         syncFocal(parsed)
-        return (parsed.diagnostics + incrementalAnalysis.diagnostics(parsed))
+        val semantic = entry?.let { incrementalAnalysis.reachableDiagnostics(parsed, it) }
+            ?: incrementalAnalysis.diagnostics(parsed)
+        return (parsed.diagnostics + semantic)
             .filter { it.severity == Severity.ERROR && it.code in KotlinDiagnosticCodes.PREVIEW_BLOCKING }
             .map { it.message }
     }
@@ -573,6 +618,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun implementMembersFix(file: VirtualFile, offset: Int): KotlinImportFix? = features.implementMembersFix(file, offset)
 
     fun suspendModifierFix(file: VirtualFile, offset: Int): KotlinImportFix? = features.suspendModifierFix(file, offset)
+
+    /** The quick fixes for one of this analyzer's diagnostics; see [KotlinEditorFeatures.diagnosticFixes]. */
+    fun diagnosticFixes(file: VirtualFile, code: String, start: Int, end: Int, message: String): List<KotlinImportFix> =
+        features.diagnosticFixes(file, code, start, end, message)
 
     /** The minSdk check's quick fixes (`@RequiresApi`, an `SDK_INT` guard); see [KotlinEditorFeatures.newApiFixes]. */
     fun newApiFixes(file: VirtualFile, offset: Int, level: Int): List<KotlinImportFix> = features.newApiFixes(file, offset, level)

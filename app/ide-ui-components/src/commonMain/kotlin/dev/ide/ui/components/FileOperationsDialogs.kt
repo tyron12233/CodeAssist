@@ -58,6 +58,26 @@ import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.generated.resources.fileop_delete_items_title
+import dev.ide.ui.generated.resources.fileop_delete_items_body
+import dev.ide.ui.generated.resources.fileop_delete_items_body_undo
+import dev.ide.ui.generated.resources.fileop_delete_dir_body_undo
+import dev.ide.ui.generated.resources.fileop_delete_file_body_undo
+import dev.ide.ui.generated.resources.fileop_move_items_title
+import dev.ide.ui.generated.resources.fileop_copy_items_title
+import dev.ide.ui.backend.UiConflictChoice
+import dev.ide.ui.generated.resources.dismiss
+import dev.ide.ui.generated.resources.undo
+import dev.ide.ui.generated.resources.fileop_conflict_title
+import dev.ide.ui.generated.resources.fileop_conflict_body
+import dev.ide.ui.generated.resources.fileop_conflict_progress
+import dev.ide.ui.generated.resources.fileop_conflict_apply_all
+import dev.ide.ui.generated.resources.fileop_conflict_replace
+import dev.ide.ui.generated.resources.fileop_conflict_keep_both
+import dev.ide.ui.generated.resources.fileop_conflict_skip
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The on-disk path a node's file operations act on: a file's own path, a package's deepest directory, or a
@@ -73,8 +93,9 @@ fun TreeNode.fileOpPath(): String? = when (kind) {
 /** Which file operation a context-menu pick requested. */
 enum class FileOpKind { Rename, Move, Copy, Delete }
 
-/** A pending file operation: the [node] it targets and the [kind] of operation. */
-data class FileOpRequest(val node: TreeNode, val kind: FileOpKind)
+/** A pending file operation: the [node] it targets, the [kind] of operation, and for Move / Copy / Delete every
+ *  selected [nodes] it applies to ([node] is the first). */
+data class FileOpRequest(val node: TreeNode, val kind: FileOpKind, val nodes: List<TreeNode> = listOf(node))
 
 /**
  * Host the rename / move / copy / delete dialogs for [request]; [onDismiss] clears it.
@@ -89,10 +110,12 @@ fun FileOperationDialog(
     rootPath: String,
     listDir: (String) -> List<UiDirEntry>,
     onRename: (TreeNode, String) -> Unit,
-    onMove: (TreeNode, String) -> Unit,
-    onCopy: (TreeNode, String) -> Unit,
-    onDelete: (TreeNode) -> Unit,
+    onMove: (List<TreeNode>, String) -> Unit,
+    onCopy: (List<TreeNode>, String) -> Unit,
+    onDelete: (List<TreeNode>) -> Unit,
     onDismiss: () -> Unit,
+    /** True when a delete can be undone (the backend keeps a trash), so the confirmation says so. */
+    undoableDelete: Boolean = false,
 ) {
     // Retain the last request so the exit animation doesn't flash empty.
     var shown by remember { mutableStateOf<FileOpRequest?>(null) }
@@ -102,12 +125,12 @@ fun FileOperationDialog(
         val r = shown ?: return@DropdownOverlay
         when (r.kind) {
             FileOpKind.Rename -> RenamePanel(r.node, onDismiss) { onRename(r.node, it) }
-            FileOpKind.Delete -> DeletePanel(r.node, onDismiss) { onDelete(r.node) }
+            FileOpKind.Delete -> DeletePanel(r.nodes, undoableDelete, onDismiss) { onDelete(r.nodes) }
             FileOpKind.Move, FileOpKind.Copy -> {
                 val onPick: (String) -> Unit = { dest ->
-                    if (r.kind == FileOpKind.Move) onMove(r.node, dest) else onCopy(r.node, dest)
+                    if (r.kind == FileOpKind.Move) onMove(r.nodes, dest) else onCopy(r.nodes, dest)
                 }
-                DirectoryBrowserPanel(r.node, r.kind, rootPath, listDir, onDismiss, onPick)
+                DirectoryBrowserPanel(r.nodes, r.kind, rootPath, listDir, onDismiss, onPick)
             }
         }
     }
@@ -145,11 +168,25 @@ internal fun renameSelection(name: String, isFile: Boolean): TextRange {
 }
 
 @Composable
-private fun DeletePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun DeletePanel(nodes: List<TreeNode>, undoable: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val node = nodes.first()
+    val many = nodes.size > 1
     val isDir = node.kind != NodeKind.File
-    DialogCard(stringResource(if (isDir) Res.string.fileop_delete_dir_title else Res.string.fileop_delete_file_title, node.name)) {
+    val title = when {
+        many -> pluralStringResource(Res.plurals.fileop_delete_items_title, nodes.size, nodes.size)
+        else -> stringResource(if (isDir) Res.string.fileop_delete_dir_title else Res.string.fileop_delete_file_title, node.name)
+    }
+    val body = when {
+        many && undoable -> Res.string.fileop_delete_items_body_undo
+        many -> Res.string.fileop_delete_items_body
+        isDir && undoable -> Res.string.fileop_delete_dir_body_undo
+        isDir -> Res.string.fileop_delete_dir_body
+        undoable -> Res.string.fileop_delete_file_body_undo
+        else -> Res.string.fileop_delete_file_body
+    }
+    DialogCard(title) {
         Text(
-            stringResource(if (isDir) Res.string.fileop_delete_dir_body else Res.string.fileop_delete_file_body),
+            stringResource(body),
             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
         Spacer12()
@@ -200,7 +237,7 @@ private fun crumbsFor(root: String, cur: String): List<Crumb> {
  */
 @Composable
 private fun DirectoryBrowserPanel(
-    node: TreeNode,
+    nodes: List<TreeNode>,
     kind: FileOpKind,
     rootPath: String,
     listDir: (String) -> List<UiDirEntry>,
@@ -208,21 +245,25 @@ private fun DirectoryBrowserPanel(
     onConfirm: (String) -> Unit,
 ) {
     val isMove = kind == FileOpKind.Move
-    val srcPath = node.fileOpPath()
-    val srcLeaf = srcPath?.let(::leafName)
-    val start = remember(node) {
+    val node = nodes.first()
+    val srcPaths = remember(nodes) { nodes.mapNotNull { it.fileOpPath() } }
+    val srcPath = srcPaths.firstOrNull()
+    val start = remember(nodes) {
         val parent = srcPath?.let(::parentDir)
         if (parent != null && isUnder(parent, rootPath)) parent else rootPath
     }
-    var cur by remember(node) { mutableStateOf(start) }
+    var cur by remember(nodes) { mutableStateOf(start) }
     val entries = remember(cur) { listDir(cur) }
-    val names = remember(entries) { entries.map { it.name }.toSet() }
 
-    // Can't land here when it's the source's own dir (self-move), inside the moved folder, or a name clash.
-    val blocked = (srcPath != null && (cur == srcPath || isUnder(cur, srcPath))) ||
-        (srcLeaf != null && srcLeaf in names)
+    // Can't land inside a moved/copied folder, or move everything back into the folder it is already in. A name
+    // that is taken here is no block: the transfer asks what to do with it.
+    val blocked = srcPaths.any { cur == it || isUnder(cur, it) } ||
+        (isMove && srcPaths.all { parentDir(it) == cur })
 
-    DialogCard(stringResource(if (isMove) Res.string.fileop_move_title else Res.string.fileop_copy_title, node.name)) {
+    val title = if (nodes.size > 1) pluralStringResource(
+        if (isMove) Res.plurals.fileop_move_items_title else Res.plurals.fileop_copy_items_title, nodes.size, nodes.size,
+    ) else stringResource(if (isMove) Res.string.fileop_move_title else Res.string.fileop_copy_title, node.name)
+    DialogCard(title) {
         // Breadcrumb pills.
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -253,7 +294,7 @@ private fun DirectoryBrowserPanel(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 entries.forEach { e ->
-                    val intoSelf = e.isDirectory && e.path == srcPath
+                    val intoSelf = e.isDirectory && e.path in srcPaths
                     val dimmed = !e.isDirectory || intoSelf
                     Row(
                         Modifier.fillMaxWidth()
@@ -287,7 +328,7 @@ private fun EntryIcon(iconId: String) {
 private fun DialogCard(title: String, content: @Composable () -> Unit) {
     Column(
         Modifier.widthIn(max = 520.dp).fillMaxWidth().padding(horizontal = 12.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
@@ -313,5 +354,138 @@ private fun DangerButton(label: String, onClick: () -> Unit) {
             .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 9.dp),
     ) {
         Text(label, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * Asks what to do with each item whose name is taken in the destination ([conflicts], absolute paths; null hides
+ * the dialog): Replace, Keep both, or Skip, one conflict at a time, with "do the same for the rest" for a batch.
+ * [onResolve] gets a choice for every conflict; [onCancel] drops the whole transfer.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TransferConflictDialog(
+    conflicts: List<String>?,
+    destName: String,
+    onResolve: (Map<String, UiConflictChoice>) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var shown by remember { mutableStateOf<List<String>?>(null) }
+    if (conflicts != null) shown = conflicts
+    DropdownOverlay(visible = conflicts != null, onDismiss = onCancel, topPadding = 110.dp) {
+        val all = shown ?: return@DropdownOverlay
+        var index by remember(all) { mutableStateOf(0) }
+        var applyToRest by remember(all) { mutableStateOf(false) }
+        val choices = remember(all) { LinkedHashMap<String, UiConflictChoice>() }
+        val current = all.getOrNull(index) ?: return@DropdownOverlay
+        val rest = all.size - index - 1
+        fun choose(choice: UiConflictChoice) {
+            if (applyToRest) all.drop(index).forEach { choices[it] = choice } else choices[current] = choice
+            if (applyToRest || index == all.lastIndex) onResolve(choices.toMap()) else index++
+        }
+        DialogCard(stringResource(Res.string.fileop_conflict_title, leafName(current), destName)) {
+            if (all.size > 1) {
+                Text(
+                    stringResource(Res.string.fileop_conflict_progress, index + 1, all.size),
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelMedium,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            Text(
+                stringResource(Res.string.fileop_conflict_body),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+            )
+            if (rest > 0) {
+                Spacer12()
+                Row(
+                    Modifier.clickable { applyToRest = !applyToRest }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(18.dp).then(
+                            if (applyToRest) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(5.dp))
+                            else Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(5.dp))
+                        ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (applyToRest) Icon(CaIcons.check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                    Spacer(Modifier.size(10.dp))
+                    Text(
+                        pluralStringResource(Res.plurals.fileop_conflict_apply_all, rest, rest),
+                        color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            Spacer12()
+            // Wraps onto two lines on a phone: the three choices first, Cancel last.
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onCancel)
+                DialogButton(stringResource(Res.string.fileop_conflict_skip), primary = false, enabled = true) { choose(UiConflictChoice.Skip) }
+                DialogButton(stringResource(Res.string.fileop_conflict_keep_both), primary = false, enabled = true) { choose(UiConflictChoice.KeepBoth) }
+                DialogButton(stringResource(Res.string.fileop_conflict_replace), primary = true, enabled = true) { choose(UiConflictChoice.Replace) }
+            }
+        }
+    }
+}
+
+/**
+ * The report of a finished file operation along the bottom of the editor: [text], an Undo button when [canUndo],
+ * and dismiss. It goes away on its own after a few seconds; [key] restarts that when a new report replaces it.
+ */
+@Composable
+fun FileOpSnackbar(
+    text: String?,
+    error: Boolean,
+    canUndo: Boolean,
+    key: Long,
+    onUndo: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LaunchedEffect(key, text) {
+        if (text != null) { kotlinx.coroutines.delay(if (canUndo) 8000 else 5000); onDismiss() }
+    }
+    androidx.compose.animation.AnimatedVisibility(
+        visible = text != null,
+        modifier = modifier,
+        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it / 2 },
+        exit = androidx.compose.animation.fadeOut(),
+    ) {
+        var last by remember { mutableStateOf("") }
+        if (text != null) last = text
+        Row(
+            Modifier.widthIn(max = 560.dp).padding(horizontal = 16.dp, vertical = 16.dp)
+                .background(MaterialTheme.colorScheme.inverseSurface, RoundedCornerShape(Ca.radius.lg))
+                .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                last,
+                color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseOnSurface,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 3,
+                modifier = Modifier.weight(1f, fill = false).padding(vertical = 8.dp),
+            )
+            Spacer(Modifier.size(8.dp))
+            if (canUndo) Box(
+                Modifier.clickable(onClick = onUndo).padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    stringResource(Res.string.undo),
+                    color = MaterialTheme.colorScheme.inversePrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            IconButtonCa(
+                CaIcons.close, stringResource(Res.string.dismiss), onClick = onDismiss, boxSize = 36, iconSize = 16,
+                tint = MaterialTheme.colorScheme.inverseOnSurface,
+            )
+        }
     }
 }

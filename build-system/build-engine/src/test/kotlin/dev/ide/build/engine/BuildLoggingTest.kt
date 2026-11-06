@@ -6,6 +6,7 @@ import dev.ide.build.BuildLogLevel
 import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.DiagnosticLocation
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -124,5 +125,24 @@ class BuildLoggingTest {
 
         assertTrue(entries.all { it.level == BuildLogLevel.DEBUG }, "$entries")
         assertFalse(entries.any { "at com.android" in it.message }, "frames are dropped, not demoted: $entries")
+    }
+
+    @Test fun aLongStepSaysItIsStillRunningUntilItReturns() {
+        val entries = java.util.Collections.synchronizedList(mutableListOf<BuildLogEntry>())
+        val ctx = SimpleTaskContext(onLog = { entries.add(it) })
+
+        val result = runBlocking { ctx.withHeartbeat("Compiling Kotlin", everyMs = 40) { Thread.sleep(300); 42 } }
+
+        assertEquals(42, result)
+        val beats = entries.filter { it.message.startsWith("Compiling Kotlin: still running (") }
+        assertTrue(beats.size >= 2, "$entries")
+        assertTrue(beats.all { it.level == BuildLogLevel.INFO }, "$beats")
+        Thread.sleep(150)
+        assertEquals(beats.size, entries.count { "still running" in it.message }, "the heartbeat stops with the step")
+    }
+
+    @Test fun elapsedTimeReadsAsMinutesAndSeconds() {
+        assertEquals("45s", formatElapsed(45_000_000_000))
+        assertEquals("2m 05s", formatElapsed(125_000_000_000))
     }
 }

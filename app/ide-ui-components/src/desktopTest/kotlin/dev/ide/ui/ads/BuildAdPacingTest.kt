@@ -5,6 +5,11 @@ import androidx.compose.ui.Modifier
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,6 +31,27 @@ class BuildAdPacingTest {
         assertNull(p.skipReason(lowMemory = false))
         // Persisted while counting, then never again.
         assertEquals((1..FREE_LONG_BUILDS).toList(), persisted)
+    }
+
+    /** [BuildAdPacing.wouldShow] predicts [BuildAdPacing.skipReason] without counting the build. */
+    @Test
+    fun wouldShowMatchesTheSkipDecisionWithoutCounting() {
+        val grace = pacing(seen = FREE_LONG_BUILDS - 1)
+        assertFalse(grace.wouldShow(lowMemory = false))
+        assertTrue(persisted.isEmpty())
+
+        val p = pacing()
+        assertTrue(p.wouldShow(lowMemory = false))
+        assertFalse(p.wouldShow(lowMemory = true))
+        p.lastBuildFailed = true
+        assertFalse(p.wouldShow(lowMemory = false))
+        p.lastBuildFailed = false
+        assertNull(p.skipReason(lowMemory = false))
+        p.shown()
+        assertFalse(p.wouldShow(lowMemory = false))
+        now += 4 * 60_000L
+        assertTrue(p.wouldShow(lowMemory = false))
+        assertFalse(pacing(firstSession = true).wouldShow(lowMemory = false))
     }
 
     @Test
@@ -68,6 +94,82 @@ class BuildAdPacingTest {
         assertFalse(p.mayShowLater(lowMemory = false))
         repeat(FREE_LONG_BUILDS) { p.skipReason(lowMemory = false) }
         assertTrue(p.mayShowLater(lowMemory = false))
+    }
+}
+
+/** When the next interstitial is loaded while the IDE sits idle (see [preloadWhileIdle]). */
+@OptIn(ExperimentalCoroutinesApi::class)
+class IdlePreloadTest {
+
+    @Test
+    fun loadsAfterTheIdleDelayThenRetriesWithBackoff() = runTest {
+        var loads = 0
+        launch { preloadWhileIdle(firstDelayMs = 15_000, active = { true }, preload = { loads++ }) }
+        advanceTimeBy(14_999); runCurrent()
+        assertEquals(0, loads)
+        advanceTimeBy(1); runCurrent()
+        assertEquals(1, loads)
+        advanceTimeBy(60_000); runCurrent()
+        assertEquals(2, loads)
+        advanceTimeBy(2 * 60_000); runCurrent()
+        assertEquals(3, loads)
+        advanceTimeBy(4 * 60_000); runCurrent()
+        assertEquals(4, loads)
+        // Then every four minutes, for about half an hour of idling in all.
+        advanceTimeBy(4 * 60_000); runCurrent()
+        assertEquals(5, loads)
+        advanceTimeBy(6 * 4 * 60_000); runCurrent()
+        assertEquals(10, loads)
+        advanceTimeBy(60 * 60_000); runCurrent()
+        assertEquals(10, loads)
+    }
+
+    @Test
+    fun aLoadInFlightAtTheThresholdIsWaitedFor() = runTest {
+        var state = "loading"
+        var result: Pair<String, Long>? = null
+        launch { result = awaitInFlightLoad { state } }
+        advanceTimeBy(3_000); runCurrent()
+        assertNull(result)
+        state = "ready"
+        advanceTimeBy(250); runCurrent()
+        assertEquals("ready", result?.first)
+        assertTrue(result!!.second in 3_000L..3_250L)
+    }
+
+    @Test
+    fun aReadyOrFailedLoadIsNotWaitedFor() = runTest {
+        assertEquals("ready" to 0L, awaitInFlightLoad { "ready" })
+        assertEquals("failed_0" to 0L, awaitInFlightLoad { "failed_0" })
+    }
+
+    @Test
+    fun aLoadThatNeverLandsGivesUpAfterTheWait() = runTest {
+        var result: Pair<String, Long>? = null
+        launch { result = awaitInFlightLoad { "loading" } }
+        advanceTimeBy(IN_FLIGHT_LOAD_WAIT_MS - 1); runCurrent()
+        assertNull(result)
+        advanceTimeBy(1); runCurrent()
+        assertEquals("loading" to IN_FLIGHT_LOAD_WAIT_MS, result)
+    }
+
+    @Test
+    fun atLaunchItLoadsAtOnce() = runTest {
+        var loads = 0
+        launch { preloadWhileIdle(firstDelayMs = 0, active = { true }, preload = { loads++ }) }
+        runCurrent()
+        assertEquals(1, loads)
+    }
+
+    @Test
+    fun stopsOnceAdsCanNoLongerShow() = runTest {
+        var loads = 0
+        var active = true
+        launch { preloadWhileIdle(firstDelayMs = 0, active = { active }, preload = { loads++ }) }
+        runCurrent()
+        active = false
+        advanceTimeBy(10 * 60_000); runCurrent()
+        assertEquals(1, loads)
     }
 }
 
@@ -118,9 +220,31 @@ class AdControllerEventsTest {
     }
 
     @Test
-    fun onlyRealSettingChangesAreRecorded() {
+    fun aSkipCarriesTheHostStateOnlyWhenGiven() {
         val backend = TrackingBackend()
         val ads = AdController(backend, ReadyAdHost("build-1"))
+        ads.interstitialSkipped("cooldown")
+        ads.interstitialSkipped("not_ready", "failed_3")
+        ads.interstitialSkipped("not_ready", "failed_0", "ads: Internal error. [AdMobAdapter=0]")
+        assertEquals(
+            listOf(
+                mapOf("trigger" to "build", "reason" to "cooldown"),
+                mapOf("trigger" to "build", "reason" to "not_ready", "state" to "failed_3"),
+                mapOf(
+                    "trigger" to "build", "reason" to "not_ready", "state" to "failed_0",
+                    "detail" to "ads: Internal error. [AdMobAdapter=0]",
+                ),
+            ),
+            backend.events.map { it.second },
+        )
+    }
+
+    @Test
+    fun onlyRealSettingChangesAreRecorded() {
+        val backend = TrackingBackend()
+        var now = 0L
+        val ads = AdController(backend, ReadyAdHost("build-1")) { now }
+        now = ADS_OFF_LOCK_MS // past the fresh install's turn-off lock
         ads.updateAdsEnabled(true)
         ads.updateInterstitialsEnabled(false, via = "prompt")
         ads.updateAdsEnabled(false)
@@ -142,5 +266,15 @@ class AdControllerEventsTest {
         val updated = TrackingBackend().apply { prefs[ADS_ENABLED_STAMP_PREF] = "build-0" }
         // An existing install has no long-build count yet: it starts past the grace, not back at zero.
         assertNull(AdController(updated, ReadyAdHost("build-1")).buildPacing.skipReason(lowMemory = false))
+    }
+
+    /** A console run past its compile belongs to the program: no build ad over a prompt the user is answering. */
+    @Test
+    fun noBuildAdWhileTheProgramItselfRuns() {
+        val running = dev.ide.ui.backend.RunConsoleUi(1, "app", "Main", phase = dev.ide.ui.backend.RunPhase.Running)
+        assertTrue(programIsRunning(running))
+        assertFalse(programIsRunning(running.copy(phase = dev.ide.ui.backend.RunPhase.Building)), "still compiling: an ad may show")
+        assertFalse(programIsRunning(running.copy(phase = dev.ide.ui.backend.RunPhase.Finished)))
+        assertFalse(programIsRunning(null), "an ordinary build has no console run")
     }
 }

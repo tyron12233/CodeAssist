@@ -4,6 +4,7 @@ import dev.ide.analysis.AnalyzerId
 import dev.ide.core.BackendContext
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.plugins.PluginChangeKind
+import dev.ide.core.settings.AppIcons
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.IdeSettings
@@ -64,6 +65,44 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         }.getOrNull()
     }
 
+    // Not on ART: an app there may only execute what an installed package ships (W^X), so a server the user
+    // installed elsewhere could never start. Android gets its language servers from plugins.
+    override fun languageServersSupported(): Boolean =
+        ctx.manager != null && !System.getProperty("java.vm.vendor").orEmpty().contains("Android", ignoreCase = true)
+
+    override fun languageServers(): List<dev.ide.ui.backend.UiLanguageServer> {
+        val servers = ctx.manager?.userLanguageServers ?: return emptyList()
+        return servers.list().map { it.toUi(servers.status(it.id)) }
+    }
+
+    override fun languageServerPresets(): List<dev.ide.ui.backend.UiLanguageServer> =
+        dev.ide.core.lsp.UserLanguageServers.PRESETS.map { it.toUi("") }
+
+    override fun saveLanguageServer(server: dev.ide.ui.backend.UiLanguageServer): String? {
+        val servers = ctx.manager?.userLanguageServers ?: return "No project manager."
+        return servers.save(
+            dev.ide.core.lsp.UserLanguageServer(
+                id = server.id, name = server.name, command = server.command, extensions = server.extensions,
+                languageId = server.languageId, enabled = server.enabled, initializationOptions = server.initializationOptions,
+            )
+        )
+    }
+
+    override fun deleteLanguageServer(id: String) {
+        ctx.manager?.userLanguageServers?.delete(id)
+    }
+
+    override fun checkLanguageServerCommand(command: String): dev.ide.ui.backend.UiCommandCheck {
+        val servers = ctx.manager?.userLanguageServers ?: return dev.ide.ui.backend.UiCommandCheck(false, "No project manager.")
+        val (found, message) = servers.check(command)
+        return dev.ide.ui.backend.UiCommandCheck(found, message)
+    }
+
+    private fun dev.ide.core.lsp.UserLanguageServer.toUi(status: String) = dev.ide.ui.backend.UiLanguageServer(
+        id = id, name = name, command = command, extensions = extensions, languageId = languageId,
+        enabled = enabled, initializationOptions = initializationOptions, status = status,
+    )
+
     override fun pluginCatalog(): List<UiPluginInfo> {
         val manager = ctx.manager ?: return emptyList()
         val catalog = manager.env.pluginCatalog
@@ -90,6 +129,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
                 // The certificate of the package as installed, from the package manager, not a claim the
                 // plugin makes about itself.
                 signature = fromSource?.origin?.signature,
+                minHostVersion = m.minHostVersion,
+                apiVersion = m.apiVersion,
+                app = fromSource?.let { appFacts(it.origin.label) },
             )
         }
         // Plugins with no usable manifest are not in the catalog and have no id to persist a choice against,
@@ -106,6 +148,84 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         return (catalogued + unusable)
             .sortedWith(compareByDescending<UiPluginInfo> { it.essential }.thenBy { it.name.lowercase() })
     }
+
+    private val pluginPackages: dev.ide.core.plugins.PluginPackages?
+        get() = ctx.manager?.applicationContainer?.getServiceOrNull(dev.ide.core.PLUGIN_PACKAGES)
+
+    private fun appFacts(packageName: String): dev.ide.ui.backend.UiPluginApp? {
+        val facts = pluginPackages?.facts(packageName) ?: return null
+        return dev.ide.ui.backend.UiPluginApp(
+            packageName = packageName,
+            appVersion = facts.appVersion,
+            firstInstalledAt = facts.firstInstalledAt,
+            lastUpdatedAt = facts.lastUpdatedAt,
+            sizeBytes = facts.sizeBytes,
+            signedLikeIde = facts.signedLikeIde,
+            installer = facts.installer,
+        )
+    }
+
+    /** The installed plugin app [id] came from, by its manifest id. */
+    private fun packageOf(id: String): String? =
+        ctx.manager?.env?.installedPlugins?.firstOrNull { it.manifest.id == id }?.origin?.label
+
+    override suspend fun pluginLeftovers(): List<dev.ide.ui.backend.UiPluginLeftover> {
+        val manager = ctx.manager ?: return emptyList()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { manager.pluginLeftovers() }.getOrDefault(emptyList())
+                .map { dev.ide.ui.backend.UiPluginLeftover(it.id, it.name, it.bytes) }
+        }
+    }
+
+    override suspend fun deletePluginLeftover(id: String): Boolean {
+        val manager = ctx.manager ?: return false
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { manager.deletePluginLeftover(id) > 0 || manager.pluginLeftovers().none { it.id == id } }
+                .getOrDefault(false)
+        }
+    }
+
+    override fun openPluginAppInfo(id: String): Boolean =
+        packageOf(id)?.let { pluginPackages?.openAppInfo(it) } ?: false
+
+    override fun openPluginApp(id: String): Boolean =
+        packageOf(id)?.let { pluginPackages?.openApp(it) } ?: false
+
+    /**
+     * The downloadable plugins, each set against what this device has: installed (and at which version), an
+     * update, or too new for this IDE. The list as fetched is kept, so the page still shows it offline.
+     */
+    override suspend fun pluginDownloads(): dev.ide.ui.backend.UiPluginDownloads =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val manager = ctx.manager
+            val service = manager?.applicationContainer?.getServiceOrNull(dev.ide.core.PLUGIN_DOWNLOAD_SERVICE)
+                ?: return@withContext dev.ide.ui.backend.UiPluginDownloads(emptyList(), unavailable = "Plugin downloads are not available in this build.")
+            val fetched = service.fetch()
+            val cachedBody = manager.preference(PLUGIN_DOWNLOADS_CACHE)
+            val (body, cached, problem) = when (fetched) {
+                is dev.ide.store.StoreResult.Ok -> {
+                    runCatching { manager.setPreference(PLUGIN_DOWNLOADS_CACHE, fetched.value) }
+                    Triple(fetched.value, false, null)
+                }
+                else -> Triple(cachedBody, cachedBody != null, "Could not reach the plugin list. Check your connection.")
+            }
+            if (body == null) return@withContext dev.ide.ui.backend.UiPluginDownloads(emptyList(), unavailable = problem)
+            val host = manager.env.hostVersion
+            val installed = manager.env.pluginCatalog.all.associateBy { it.id }
+            val plugins = service.parse(body).map { d ->
+                val have = installed[d.id]?.version
+                dev.ide.ui.backend.UiPluginDownload(
+                    id = d.id, name = d.name, tagline = d.tagline, description = d.description,
+                    publisher = d.publisher, version = d.version, sizeBytes = d.sizeBytes,
+                    downloadUrl = d.downloadUrl, pageUrl = d.pageUrl, capabilities = d.capabilities,
+                    languages = d.languages,
+                    installedVersion = have,
+                    updateAvailable = have != null && dev.ide.plugin.PluginVersions.compare(have, d.version) < 0,
+                    needsHost = d.minHostVersion?.takeUnless { dev.ide.plugin.PluginVersions.satisfies(host, it) },
+                )
+            }
+            dev.ide.ui.backend.UiPluginDownloads(plugins, unavailable = if (plugins.isEmpty()) problem else null, cached = cached)
+        }
 
     override fun setPluginConsent(id: String, granted: Boolean) {
         val manager = ctx.manager ?: return
@@ -317,6 +437,10 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             BuiltInSettingsPages.ANALYSIS -> if (key == BuiltInSettingsPages.PERF_LOGGING) {
                 PerfTrace.applyUserPreference(readSetting(page.id, key, project = false)?.toBooleanStrictOrNull() ?: false)
             }
+            // The launcher icon is the host's to change; the UI never sees it, so it is applied here.
+            BuiltInSettingsPages.APPEARANCE -> if (key == BuiltInSettingsPages.APP_ICON) {
+                readSetting(page.id, key, project = false)?.let { AppIcons.host?.apply(it) }
+            }
             else -> if (!isBuiltIn(page.id)) page.onChanged(key, scopedReader(page)) // plugin pages react themselves
         }
     }
@@ -500,13 +624,16 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             IdeSettings.ACCENT_LIME -> UiAccent.Lime
             IdeSettings.ACCENT_TEAL -> UiAccent.Teal
             IdeSettings.ACCENT_ORANGE -> UiAccent.Orange
+            IdeSettings.ACCENT_PUMPKIN -> UiAccent.Pumpkin
             IdeSettings.ACCENT_CUSTOM -> UiAccent.Custom
             IdeSettings.ACCENT_VIOLET -> UiAccent.Violet
             else -> UiAccent.Lime
         },
         customAccentColor = accentColor,
+        appTheme = accent.takeIf { it.startsWith(IdeSettings.ACCENT_THEME_PREFIX) }?.removePrefix(IdeSettings.ACCENT_THEME_PREFIX),
         alwaysShowToolWindowActions = alwaysShowToolWindowActions,
         runFullScreen = runFullScreen,
+        seasonalTouches = seasonalTouches,
         editorFontScale = editorFontScale,
         codeFont = codeFont,
         fontLigatures = fontLigatures,
@@ -525,8 +652,11 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         wordWrap = wordWrap,
         wrapIndent = wrapIndent,
         horizontalScrollbar = horizontalScrollbar,
+        caretStyle = caretStyle,
         twoAxisScroll = twoAxisScroll,
         pinchZoom = pinchZoom,
+        volumeKeysMoveCaret = volumeKeysMoveCaret,
+        inlineBlame = inlineBlame,
         softKeyboardSuggestions = softKeyboardSuggestions,
         formatOnSave = formatOnSave,
     )
@@ -555,3 +685,6 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
 /** The shortest reparse debounce the editor uses on a [dev.ide.platform.MemoryTier.LOW] device. */
 private const val LOW_MEMORY_MIN_REPARSE_DELAY_MS = 500
+
+/** The last plugin list fetched, kept for the "Get plugins" page offline. */
+private const val PLUGIN_DOWNLOADS_CACHE = "plugins.downloads.cache"

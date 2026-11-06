@@ -43,7 +43,7 @@ object R8ForkSupport {
     fun launcher(): String? = LAUNCHERS.firstOrNull { File(it).exists() }
 
     /**
-     * Copy `assets/$R8_DEX_ASSET` out to `cacheDir/r8-dex/` and return it, ready to put on a fork's `-cp`.
+     * Copy `assets/$R8_DEX_ASSET` out to `noBackupFilesDir/r8-dex/` and return it, ready to put on a fork's `-cp`.
      *
      * The asset goes on the classpath AS A ZIP rather than being unpacked into loose `classes*.dex`, because
      * a classloader built over loose dex files sees code but no resources: R8 would lose its API database,
@@ -52,30 +52,62 @@ object R8ForkSupport {
      * It is also made READ-ONLY. ART refuses a WRITABLE dex on a command-line VM's classpath (W^X:
      * `SecurityException: Writable dex file '…' is not allowed`, aborting the VM while it builds the system
      * classloader). A zip container is not subject to that check, but the extracted copy is immutable by
-     * contract and the flag costs nothing. Marker-guarded by the app's `lastUpdateTime` so a new APK (possibly
-     * a new r8) re-extracts; the stale read-only file is cleared first so the rewrite can't hit it.
+     * contract and the flag costs nothing.
+     *
+     * The returned file must stay put for as long as the process forks with it: the forked dexer and shrinker
+     * resolve it ONCE and reuse the path. It used to live in `cacheDir`, guarded by a marker, and that broke
+     * two ways, both seen as `Unable to locate class 'com/android/tools/r8/D8'` failing a build outright:
+     *  - the IDE, `:build` and `:preview` processes each extract it, and after an app update every one of them
+     *    found the marker stale, DELETED the directory and rewrote the zip, under a sibling that had already
+     *    resolved it (or was forking while the copy was half written);
+     *  - `cacheDir` is the directory Android empties when storage runs low, and "Clear cache" empties it while
+     *    the app is running.
+     * So now the file is named for the installed APK (`r8-<lastUpdateTime>.dex.zip`) in `noBackupFilesDir`, which
+     * the system does not trim, and it only ever appears whole: the copy goes to a private temp file that is
+     * renamed into place. A process never deletes the current version's file, only older versions'.
      */
     fun extractR8Zip(context: Context): File? {
         val ctx = context.applicationContext
-        val dir = File(ctx.cacheDir, "r8-dex")
-        val stamp = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime }.getOrDefault(0L).toString()
-        val marker = File(dir, ".extracted")
-        val zip = File(dir, R8_DEX_ASSET)
-        if (marker.exists() && runCatching { marker.readText() == stamp }.getOrDefault(false) &&
-            zip.isFile && zip.length() > 0L
-        ) {
-            return zip
-        }
-        dir.mkdirs()
-        // Clear anything from a prior extract (read-only, and possibly the old loose-dex layout) so the fresh
-        // write can't hit a read-only file.
-        dir.listFiles()?.forEach { runCatching { it.setWritable(true); it.delete() } }
+        val stamp = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime }.getOrDefault(0L)
+        val dir = File(ctx.noBackupFilesDir, "r8-dex")
+        val zip = File(dir, "r8-$stamp.dex.zip")
+        // Present means complete: the only writer is the rename below.
+        if (zip.isFile && zip.length() > 0L) return zip
         return runCatching {
-            ctx.assets.open(R8_DEX_ASSET).use { ins -> zip.outputStream().use { ins.copyTo(it) } }
-            zip.setReadOnly()
-            marker.writeText(stamp)
+            dir.mkdirs()
+            val tmp = File.createTempFile("r8-", ".part", dir)
+            try {
+                ctx.assets.open(R8_DEX_ASSET).use { ins -> tmp.outputStream().use { ins.copyTo(it) } }
+                tmp.setReadOnly()
+                // rename(2) is atomic within a directory and replaces a target another process published first,
+                // with the same bytes, so a race between processes is harmless either way.
+                if (!tmp.renameTo(zip) && !(zip.isFile && zip.length() > 0L)) error("could not publish ${zip.name}")
+            } finally {
+                if (tmp.exists()) { tmp.setWritable(true); tmp.delete() }
+            }
+            removeStaleR8Copies(ctx, dir, keep = zip)
             zip.takeIf { it.isFile && it.length() > 0L }
         }.onFailure { log.warn("r8-fork: failed to extract $R8_DEX_ASSET: ${it.message}") }.getOrNull()
+    }
+
+    /**
+     * Older APKs' copies, abandoned temp files, and the copy the old layout kept in `cacheDir`. A temp file younger than a
+     * few minutes may be a sibling process's copy in flight, so it is left alone.
+     */
+    private fun removeStaleR8Copies(ctx: Context, dir: File, keep: File) {
+        val cutoff = System.currentTimeMillis() - 5 * 60_000L
+        dir.listFiles()?.forEach { f ->
+            val stale = when {
+                f == keep -> false
+                f.name.endsWith(".part") -> f.lastModified() < cutoff
+                else -> true
+            }
+            if (stale) runCatching { f.setWritable(true); f.delete() }
+        }
+        runCatching {
+            File(ctx.cacheDir, "r8-dex").listFiles()?.forEach { it.setWritable(true); it.delete() }
+            File(ctx.cacheDir, "r8-dex").delete()
+        }
     }
 
     /** True if a forked `launcher -Xmx<n>m -cp <r8 asset> R8 --version` starts (heap granted + R8 loaded). */

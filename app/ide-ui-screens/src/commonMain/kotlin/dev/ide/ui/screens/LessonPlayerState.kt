@@ -3,6 +3,7 @@ package dev.ide.ui.screens
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -10,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLesson
+import dev.ide.ui.backend.UiLessonKind
 import dev.ide.ui.backend.UiLessonStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -31,6 +33,17 @@ internal class LessonPlayerState(
     var stepIndex: Int by mutableStateOf(initialStep.coerceAtLeast(0))
         private set
     var canAdvance: Boolean by mutableStateOf(false)
+        private set
+
+    /** Each quiz's FIRST answer (right or wrong), for a checkpoint's score. Retries never change it. */
+    private val firstAnswers = mutableStateMapOf<String, Boolean>()
+
+    /** Quizzes answered right on the first try, out of the quizzes in this lesson. */
+    val firstTryScore: Pair<Int, Int>
+        get() = firstAnswers.count { it.value } to steps.count { it is UiLessonStep.Quiz }
+
+    /** True once a checkpoint's last step is finished: the player shows the score before leaving. */
+    var showingSummary: Boolean by mutableStateOf(false)
         private set
 
     val steps: List<UiLessonStep> get() = lesson?.steps ?: emptyList()
@@ -56,6 +69,11 @@ internal class LessonPlayerState(
     /** An interactive step was solved, or a quiz answered: unlock (or re-lock) the Next button. */
     fun allowAdvance(value: Boolean) { canAdvance = value }
 
+    /** A quiz was submitted. Only the first submission per quiz counts toward the checkpoint score. */
+    fun recordQuizAnswer(stepId: String, correct: Boolean) {
+        if (stepId !in firstAnswers) firstAnswers[stepId] = correct
+    }
+
     fun back() {
         if (stepIndex > 0) stepIndex--
     }
@@ -64,7 +82,11 @@ internal class LessonPlayerState(
     fun next(onFinish: () -> Unit) {
         val current = step
         if (lessonId != null && current != null) backend.learn.markStepComplete(lessonId, current.id)
-        if (isLast) onFinish() else stepIndex++
+        when {
+            !isLast -> stepIndex++
+            lesson?.kind == UiLessonKind.CHECKPOINT && !showingSummary -> showingSummary = true
+            else -> onFinish()
+        }
     }
 }
 

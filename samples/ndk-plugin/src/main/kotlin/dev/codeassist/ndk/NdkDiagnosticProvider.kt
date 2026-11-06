@@ -5,8 +5,6 @@ import dev.ide.analysis.DiagnosticProvider
 import dev.ide.lang.LanguageId
 import dev.ide.analysis.Diagnostic
 import dev.ide.platform.log.Logger
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.nio.file.Paths
 
 /**
@@ -61,20 +59,22 @@ class NdkDiagnosticProvider(
         synchronized(this) { if (cachedKey == key) return cached }
 
         val cpp = NdkPlugin.CPP_SUFFIXES.any { path.fileName.toString().endsWith(it) }
-        val result = withContext(Dispatchers.IO) {
+        // killableTool, not a plain withContext(IO): the engine cancels this pass as soon as the user types
+        // again, and the compiler it launched has to stop with it rather than finish a check nobody will see.
+        val result = killableTool { cancellation ->
             // Preparing is cheap after the first call and unavoidable before it: this is usually the first
             // thing in a session that needs a compiler, and an unprepared toolchain has no sysroot to
             // compile against.
             when (toolchain.prepare()) {
                 is NdkToolchain.Status.Unavailable -> null
                 is NdkToolchain.Status.Ready ->
-                    toolchain.syntaxCheck(path, text, cpp, NdkFlags.editor(facet, toolchain, cpp))
+                    toolchain.syntaxCheck(path, text, cpp, NdkFlags.editor(facet, toolchain, cpp), cancellation)
             }
         } ?: return emptyList()
 
         target.checkCanceled()
 
-        val diagnostics = runCatching { ClangDiagnostics.parse(result.output, text) }
+        val diagnostics = runCatching { ClangDiagnostics.parse(result.output, text, result.bufferName) }
             .onFailure { log.warn("could not read clang's diagnostics", it) }
             .getOrDefault(emptyList())
 

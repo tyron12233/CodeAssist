@@ -1,5 +1,6 @@
 package dev.ide.core.project
 
+import dev.ide.platform.ProjectFiles
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
@@ -163,7 +164,20 @@ class ProjectManager private constructor(
     private val pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
     /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
     private val hostVersion: String? = null,
+    /** Where plugins' `privateDataDir`s go: the app's PRIVATE storage on a device. Null puts them beside
+     *  `plugin-data` under the home, which is right on a desktop. */
+    pluginPrivateDataRoot: Path? = null,
+    /** Per plugin id, directories it kept data in before it had a `privateDataDir`; see [PluginLeftovers]. */
+    legacyPluginDirs: Map<String, List<Path>> = emptyMap(),
 ) {
+    private val pluginPrivateRoot: Path = pluginPrivateDataRoot ?: homeDir.resolve("plugin-private")
+    private val pluginDataRoot: Path = homeDir.resolve("plugin-data")
+
+    /** The data uninstalled plugins left behind; see [dev.ide.core.plugins.PluginLeftovers]. Declared before
+     *  [env]'s init blocks, which record plugin names into it. */
+    val pluginLeftoverStore: dev.ide.core.plugins.PluginLeftovers =
+        dev.ide.core.plugins.PluginLeftovers(listOf(pluginDataRoot, pluginPrivateRoot), legacyPluginDirs)
+
     private val log = dev.ide.platform.log.Log.logger("ide.projects")
 
     // Declared before anything the constructor runs: [env] below already reads preferences.
@@ -172,6 +186,17 @@ class ProjectManager private constructor(
     /** The last-read prefs and the file identity it was read from; see [cachedPrefs]. Guarded by [prefsLock]. */
     private var prefsCache: Properties? = null
     private var prefsStamp: PrefsStamp? = null
+
+    /**
+     * What turns a crashing installed plugin off for the next launch, and starts without plugins after repeated
+     * unexplained crashes (see [dev.ide.core.plugins.PluginCrashGuard]). Declared before [env], which it gates.
+     */
+    val pluginCrashGuard: dev.ide.core.plugins.PluginCrashGuard by lazy {
+        dev.ide.core.plugins.PluginCrashGuard(object : dev.ide.core.plugins.PluginCrashGuard.Prefs {
+            override fun get(key: String): String? = preference(key)
+            override fun set(values: Map<String, String>) = setPreferences(values)
+        })
+    }
 
     init {
         Files.createDirectories(projectsRoot)
@@ -192,12 +217,41 @@ class ProjectManager private constructor(
         pluginSources = pluginSources,
         hostVersion = hostVersion,
         // Under the app's own home rather than a cache dir: a plugin's data is its state, not something the
-        // IDE may drop to reclaim space, and it is swept up by the same backup the projects are.
-        pluginDataRoot = homeDir.resolve("plugin-data"),
+        // IDE may drop to reclaim space. (The project backup does not include it: it holds projects only.)
+        pluginDataRoot = pluginDataRoot,
+        pluginPrivateDataRoot = pluginPrivateRoot,
         // Read lazily: this manager's preference file is opened on demand, so handing over the reader during
         // construction is safe and the keymap sees a rebinding the moment it is saved.
         preferences = { key -> preference(key) },
+        crashSuspended = pluginCrashGuard.crashSuspended(),
+        safeMode = pluginCrashGuard.safeModeRequested(),
     )
+
+    init {
+        // Named while installed, so a plugin uninstalled later reads as itself under "left behind".
+        val named = env.installedPlugins.associate { it.manifest.id to it.manifest.name }
+        if (named.isNotEmpty()) {
+            Thread({ pluginLeftoverStore.remember(named) }, "plugin-names").apply { isDaemon = true }.start()
+        }
+    }
+
+    init {
+        // A plugin turned off for crashing that has since been updated loaded again above; take it out of the
+        // disabled set too, before [pluginChanges] reads that set as this launch's starting point.
+        val lifted = env.liftedCrashSuspensions
+        if (lifted.isNotEmpty()) {
+            setPreference(DISABLED_PLUGINS_KEY, (readDisabledPlugins() - lifted).sorted().joinToString(","))
+            pluginCrashGuard.forget(lifted)
+        }
+    }
+
+    /**
+     * The language servers the user configured in Settings (gopls, rust-analyzer, ...), registered with the
+     * plugins' own before any project opens, so the first engine already serves their languages.
+     */
+    val userLanguageServers: dev.ide.core.lsp.UserLanguageServers =
+        dev.ide.core.lsp.UserLanguageServers(env, homeDir.resolve(dev.ide.core.lsp.UserLanguageServers.FILE_NAME))
+            .also { runCatching { it.apply() } }
 
     /**
      * What has changed about the plugins since [env] loaded them: a plugin app installed, updated or
@@ -385,6 +439,31 @@ class ProjectManager private constructor(
      * its `Main` source per exercise and runs it through [IdeServices.runAndCapture]; the lesson editor also
      * completes against it, so it opens as a FULL engine (not build-only) to have the editor/language stack.
      */
+    /**
+     * The Learn workspace for [key]: a real project the learner edits in the full editor during a lesson, kept
+     * under `<home>/learn-workspaces/` so it never appears in [list] or the picker's recent order. Opened fresh
+     * each call (the caller makes it the active engine, which owns and closes it); created from [templateId]
+     * the first time, with [onCreated] run on the new engine (e.g. to clear the template's sample sources).
+     */
+    fun learnWorkspace(
+        key: String,
+        templateId: String,
+        args: Map<String, String> = emptyMap(),
+        onCreated: (IdeServices) -> Unit = {},
+    ): IdeServices {
+        val dir = learnWorkspaceDir(key)
+        if (ModelPersistence.exists(dir.toString())) return open(dir.toString())
+        val services = IdeServices.createProjectAt(
+            dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel,
+            sharedCachesRoot = homeDir, env = env,
+        )
+        runCatching { onCreated(services) }
+        return services
+    }
+
+    /** Where [learnWorkspace] keeps the workspace for [key]. */
+    fun learnWorkspaceDir(key: String): Path = homeDir.resolve("learn-workspaces").resolve(key)
+
     fun scratch(key: String, templateId: String = key, args: Map<String, String> = emptyMap()): IdeServices {
         scratchEngines[key]?.let { return it }
         val dir = homeDir.resolve(".scratch").resolve(key)
@@ -599,6 +678,28 @@ class ProjectManager private constructor(
     fun deleteLeftoverFolders(): Boolean = leftoverFolders().map { deleteTreeLenient(it) }.all { it }
 
     /**
+     * Every id and package name that may own a plugin data directory this launch: the built-ins, the installed
+     * plugins whether or not they loaded, and the packages whose manifest could not be read. Null when plugin
+     * discovery failed, so that nothing is offered for deletion on a partial picture.
+     */
+    private fun pluginOwners(): Set<String>? {
+        if (!env.pluginDiscoveryComplete) return null
+        return buildSet {
+            env.pluginCatalog.all.forEach { add(it.id) }
+            env.installedPlugins.forEach { add(it.manifest.id); add(it.origin.label) }
+            env.rejectedPlugins.forEach { add(it.origin.label) }
+        }
+    }
+
+    /** What uninstalled plugins left behind, largest first; empty when it cannot be told safely. */
+    fun pluginLeftovers(): List<dev.ide.core.plugins.PluginLeftovers.Leftover> =
+        pluginOwners()?.let { pluginLeftoverStore.scan(it) }.orEmpty()
+
+    /** Deletes what the uninstalled plugin [id] left; returns the bytes freed (0 when it is installed or gone). */
+    fun deletePluginLeftover(id: String): Long =
+        pluginOwners()?.let { pluginLeftoverStore.delete(id, it) } ?: 0L
+
+    /**
      * Give the project rooted at [rootPath] the display name [name]. Only the name changes: the directory, the
      * project id, its modules and settings stay as they are. Guarded like [delete].
      *
@@ -683,8 +784,22 @@ class ProjectManager private constructor(
     private fun readDisabledPlugins(): Set<String> =
         preference(DISABLED_PLUGINS_KEY)?.split(",")?.mapNotNull { it.trim().ifEmpty { null } }?.toSet() ?: emptySet()
 
+    /**
+     * The installed plugin whose code is on [t]'s stack (or a cause's), with what the crash guard records of it;
+     * null when none is. For a process with no UI of its own (the `:build` daemon) to name the plugin that is
+     * killing it, so the UI process can turn that plugin off.
+     */
+    fun blameCrash(t: Throwable): dev.ide.core.plugins.PluginCrashGuard.Blamed? {
+        val loaders = env.externalPluginLoaders.takeIf { it.isNotEmpty() } ?: return null
+        val id = dev.ide.core.plugins.PluginBlame.ofLoaders(loaders).blame(t) ?: return null
+        val manifest = env.installedPlugins.firstOrNull { it.manifest.id == id }?.manifest
+        return dev.ide.core.plugins.PluginCrashGuard.Blamed(id, manifest?.version ?: "?", manifest?.name ?: id)
+    }
+
     /** Persist [ids] as the disabled built-in plugins; takes effect on the next launch. */
     fun setDisabledPlugins(ids: Set<String>) {
+        // A plugin turned off for crashing that the user turns back on is theirs to try again: forget the crash.
+        pluginCrashGuard.forget(readDisabledPlugins() - ids)
         setPreference(DISABLED_PLUGINS_KEY, ids.sorted().joinToString(","))
         pluginChanges.choicesChanged(ids, consentedPlugins())
     }
@@ -768,8 +883,10 @@ class ProjectManager private constructor(
         val name = file.fileName.toString()
         if (name == "android.jar" || name == "debug.keystore") return true
         val rel = root.relativize(file).toString().replace(File.separatorChar, '/')
-        if (rel.contains(".platform/caches/")) return true
-        return rel.split('/').any { it == "build" || it == "exports" || it == ".gradle" || it == TRASH_DIR }
+        if (rel.contains(".platform/caches/") || rel.contains(".platform/local-history/")) return true
+        if (rel.split('/').any { it == ".gradle" || it == TRASH_DIR }) return true
+        // `build/` and `exports/` are output only outside a source tree; a package named `build` is source.
+        return ProjectFiles.isBuildOutput(rel, isDirectory = false, outputDirs = COPY_OUTPUT_DIRS, products = false)
     }
 
     // --- shareable project packages (.caproj) ---
@@ -977,8 +1094,9 @@ class ProjectManager private constructor(
         Files.walk(src).use { stream ->
             stream.forEach { path ->
                 val rel = src.relativize(path).toString().replace(File.separatorChar, '/')
-                if (rel.contains(".platform/caches/") ||
-                    rel.split('/').any { it == "build" || it == ".gradle" }
+                if (rel.contains(".platform/caches/") || rel.contains(".platform/local-history/") ||
+                    rel.split('/').any { it == ".gradle" } ||
+                    ProjectFiles.isBuildOutput(rel, isDirectory = Files.isDirectory(path), outputDirs = setOf("build"), products = false)
                 ) return@forEach
                 val target = dest.resolve(src.relativize(path).toString())
                 if (Files.isDirectory(path)) Files.createDirectories(target)
@@ -1124,6 +1242,10 @@ class ProjectManager private constructor(
             pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
             /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
             hostVersion: String? = null,
+            /** The app's private storage for plugins' `privateDataDir`s (`<filesDir>/plugin-private`). */
+            pluginPrivateDataRoot: Path? = null,
+            /** Directories plugins used before `privateDataDir`, by plugin id. */
+            legacyPluginDirs: Map<String, List<Path>> = emptyMap(),
         ): ProjectManager {
 
 
@@ -1156,6 +1278,8 @@ class ProjectManager private constructor(
                 kotlinCompiler = kotlinCompiler,
                 pluginSources = pluginSources,
                 hostVersion = hostVersion,
+                pluginPrivateDataRoot = pluginPrivateDataRoot,
+                legacyPluginDirs = legacyPluginDirs,
             )
         }
     }

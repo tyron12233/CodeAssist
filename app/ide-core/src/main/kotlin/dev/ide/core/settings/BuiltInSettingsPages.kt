@@ -30,6 +30,12 @@ object BuiltInSettingsPages {
      *  Read once at startup by the UI app state through [REOPEN_LAST_PROJECT_KEY]. */
     const val REOPEN_LAST_PROJECT = "reopenLastProject"
 
+    /** The launcher icon (Appearance), offered only where an [AppIcons.host] can switch it. */
+    const val APP_ICON = "appIcon"
+    const val APP_ICON_KEY = "settings.$APPEARANCE.$APP_ICON"
+    const val APP_ICON_DEFAULT = "default"
+    const val APP_ICON_PUMPKIN = "pumpkin"
+
     /** Full preference key of [REOPEN_LAST_PROJECT]. */
     const val REOPEN_LAST_PROJECT_KEY = "settings.$APPEARANCE.$REOPEN_LAST_PROJECT"
 
@@ -159,7 +165,7 @@ object BuiltInSettingsPages {
     )
 
     private val appearance = page(APPEARANCE, "Appearance", "moon", 0) {
-        listOf(
+        listOfNotNull(
             SettingControl.Choice(
                 "themeMode", "Theme", "Use a fixed theme or follow the operating system",
                 default = d.themeMode,
@@ -178,13 +184,30 @@ object BuiltInSettingsPages {
                     SettingControl.Choice.Option(IdeSettings.ACCENT_VIOLET, "Violet"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_TEAL, "Teal"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_PUMPKIN, "Pumpkin"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_CUSTOM, "Custom"),
-                ),
+                    // App themes plugins ship, after the IDE's own. Read per call, so a plugin's appear once its
+                    // UI has loaded, and go when it is turned off.
+                ) + dev.ide.ui.theme.colors.ContributedAppThemes.all.map {
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_THEME_PREFIX + it.id, it.name)
+                },
             ),
             SettingControl.Color(
                 "accentColor", "Custom color", "Pick any color; the full Material You theme regenerates from it",
                 default = d.accentColor,
             ),
+            // Read per call, so it appears once the host has installed its switcher.
+            AppIcons.host?.let { host ->
+                SettingControl.Choice(
+                    APP_ICON, "App icon",
+                    "The icon your launcher shows. Some launchers take a few seconds to update, and may remove a home screen shortcut to the old icon",
+                    default = host.current(),
+                    options = listOf(
+                        SettingControl.Choice.Option(APP_ICON_DEFAULT, "Default"),
+                        SettingControl.Choice.Option(APP_ICON_PUMPKIN, "Pumpkin"),
+                    ),
+                )
+            },
             SettingControl.Toggle(
                 "toolWindowActions", "Always show tool window actions",
                 "Keep the buttons in tool window headers visible. Off shows them only while the pointer is over a tool window or it is the one you're working in (mouse and trackpad only)",
@@ -199,6 +222,11 @@ object BuiltInSettingsPages {
                 "runFullScreen", "Full-screen Run output",
                 "Open a running program's output full screen, as on a phone in portrait. Off docks it beside the editor on wide screens and phones in landscape",
                 default = d.runFullScreen,
+            ),
+            SettingControl.Toggle(
+                "seasonal", "Seasonal touches",
+                "Small decorations around holidays, like bats after a successful build at Halloween. Your theme and editor only change if you choose to dress up",
+                default = d.seasonalTouches,
             ),
             SettingControl.Toggle(
                 REOPEN_LAST_PROJECT, "Reopen last project on launch",
@@ -219,6 +247,16 @@ object BuiltInSettingsPages {
                     SettingControl.Choice.Option(IdeSettings.CODE_FONT_MONOSPACE, "System monospace"),
                 ),
             ),
+            SettingControl.Choice(
+                "caretStyle", "Caret style", "How the text cursor is drawn",
+                default = d.caretStyle,
+                options = listOf(
+                    SettingControl.Choice.Option(IdeSettings.CARET_LINE, "Line"),
+                    SettingControl.Choice.Option(IdeSettings.CARET_BLOCK, "Block"),
+                    SettingControl.Choice.Option(IdeSettings.CARET_UNDERLINE, "Underline"),
+                    SettingControl.Choice.Option(IdeSettings.CARET_CANDLE, "Candle"),
+                ),
+            ),
             SettingControl.Toggle("fontLigatures", "Font ligatures", "Render programming ligatures (-> != >= …) when the code font has them", default = d.fontLigatures),
             SettingControl.Toggle("inlayHints", "Inlay hints", "Inferred types and parameter-name hints, shown inline", default = d.inlayHints),
             SettingControl.Toggle("semanticHighlighting", "Semantic highlighting", "Type-aware coloring layered over the lexer", default = d.semanticHighlighting),
@@ -226,6 +264,7 @@ object BuiltInSettingsPages {
             SettingControl.Toggle("wordWrap", "Word wrap", "Soft-wrap long lines at the viewport edge instead of scrolling horizontally", default = d.wordWrap),
             SettingControl.Toggle("wrapIndent", "Indent wrapped lines", "Align a wrapped line's continuation rows to its indentation (when word wrap is on)", default = d.wrapIndent),
             SettingControl.Toggle("horizontalScrollbar", "Horizontal scrollbar", "Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)", default = d.horizontalScrollbar),
+            SettingControl.Toggle("inlineBlame", "Who changed this line", "In a Git project, show who last changed the caret's line, when, and why, faded after its end", default = d.inlineBlame),
             SettingControl.Choice(
                 CLOSE_UNSAVED, "Closing a tab with unsaved changes", "Ask first, or always save or discard the changes without asking",
                 default = CLOSE_UNSAVED_ASK,
@@ -238,6 +277,7 @@ object BuiltInSettingsPages {
             ),
             SettingControl.Toggle("twoAxisScroll", "Two-axis scrolling", "Drag in any direction to scroll both axes at once (touch)", default = d.twoAxisScroll, group = "Gestures"),
             SettingControl.Toggle("pinchZoom", "Pinch to zoom", "Pinch with two fingers to change the code font size", default = d.pinchZoom, group = "Gestures"),
+            SettingControl.Toggle("volumeKeysMoveCaret", "Volume keys move the cursor", "While typing on a phone, volume up moves the cursor left and volume down moves it right, instead of changing the volume", default = d.volumeKeysMoveCaret, group = "Gestures"),
             SettingControl.Toggle("softKeyboardSuggestions", "Keyboard suggestions", "Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.", default = d.softKeyboardSuggestions, group = "Keyboard"),
         )
     }

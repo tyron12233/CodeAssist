@@ -1,6 +1,9 @@
 package dev.ide.agent.ui
 
 
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.ui.components.*
 
 import androidx.compose.animation.AnimatedVisibility
@@ -27,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,6 +61,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import dev.ide.agent.ui.generated.resources.chat_tool_result
+import dev.ide.agent.ui.generated.resources.chat_tool_input
+import dev.ide.agent.ui.generated.resources.chat_tool_image
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -106,6 +119,7 @@ import dev.ide.ui.itemsKeyed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import dev.ide.ui.backend.FileActions
+import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentCommand
 import dev.ide.ui.backend.UiAgentMention
@@ -126,7 +140,18 @@ import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.conn_menu
+import dev.ide.agent.ui.generated.resources.chat_close
+import dev.ide.agent.ui.generated.resources.chat_status_answer
+import dev.ide.agent.ui.generated.resources.chat_status_minutes
+import dev.ide.agent.ui.generated.resources.chat_status_seconds
+import dev.ide.agent.ui.generated.resources.chat_status_waiting
+import dev.ide.agent.ui.generated.resources.chat_status_running
+import dev.ide.agent.ui.generated.resources.chat_status_writing
+import dev.ide.agent.ui.generated.resources.chat_status_thinking
 import dev.ide.agent.ui.generated.resources.chat_add_key
+import dev.ide.agent.ui.generated.resources.free_ai_model_points
+import dev.ide.agent.ui.generated.resources.free_ai_model_points_note
 import dev.ide.agent.ui.generated.resources.chat_attach
 import dev.ide.agent.ui.generated.resources.chat_attach_file
 import dev.ide.agent.ui.generated.resources.chat_attach_image
@@ -148,6 +173,7 @@ import dev.ide.agent.ui.generated.resources.chat_usage_cached
 import dev.ide.agent.ui.generated.resources.chat_usage_input
 import dev.ide.agent.ui.generated.resources.chat_usage_output
 import dev.ide.agent.ui.generated.resources.chat_manage_keys
+import dev.ide.agent.ui.generated.resources.chat_usage
 import dev.ide.agent.ui.generated.resources.chat_empty_body
 import dev.ide.agent.ui.generated.resources.chat_empty_title
 import dev.ide.agent.ui.generated.resources.chat_mode_ask
@@ -188,6 +214,14 @@ fun ChatDrawer(
     modifier: Modifier = Modifier,
     fileActions: FileActions = FileActions.None,
     activeFilePath: String? = null,
+    /** Opens a file in the editor (a skill's SKILL.md); null where the host cannot. */
+    onOpenFile: ((String) -> Unit)? = null,
+    /** A back arrow in place of the sparkle, for a host that shows the chat as its own page (the AI tab). */
+    onBack: (() -> Unit)? = null,
+    /** The header's title instead of the assistant's name (the project being worked on). */
+    title: String? = null,
+    /** Host buttons in the header, before the mode chip (the AI tab's Run and Open in editor). */
+    headerActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val chat by backend.agent.chatState.collectAsState()
     val models by backend.agent.models.collectAsState()
@@ -195,6 +229,18 @@ fun ChatDrawer(
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var showProviders by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showUsage by remember { mutableStateOf(false) }
+    var showConnections by remember { mutableStateOf(false) }
+    val usageLimits by backend.agent.usageLimits.collectAsState()
+    // The agent's ask_user questions, answered in a card over the composer while the turn waits.
+    val question by backend.agent.questionRequest.collectAsState()
+    // CodeAssist Free AI selected with nobody signed in: the chat prompts for a sign-in instead of a key. For the
+    // free tier "configured" IS "signed in", so this reads the same snapshot as the rest of the drawer.
+    val freeAi by backend.agent.freeAi.collectAsState()
+    val needsFreeSignIn = cfg.selectedProvider == FREE_AI_PROVIDER && !cfg.configured
+    var showFreeSignIn by remember { mutableStateOf(false) }
+    // The sign-in happens in the browser and lands through the store's deep link; re-read the config when it does.
+    LaunchedEffect(freeAi.signedIn) { cfg = backend.agent.config() }
     var modelMenuOpen by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -202,10 +248,17 @@ fun ChatDrawer(
 
     // Fetch the provider's live model list when the drawer opens or the provider changes.
     LaunchedEffect(cfg.selectedProvider) { backend.agent.refreshModels() }
+    // Which limit matters depends on the provider and on whether the model is a free one.
+    LaunchedEffect(cfg.selectedProvider, cfg.model, cfg.configured) { backend.agent.refreshUsageLimits() }
 
     fun submit() {
         val text = input.text.trim()
         if (text.isEmpty()) return
+        if (needsFreeSignIn) {
+            // Keep what they typed; it goes out once they are signed in.
+            showFreeSignIn = true
+            return
+        }
         input = TextFieldValue("")
         if (text.startsWith("/")) {
             val name = text.removePrefix("/").substringBefore(' ').lowercase()
@@ -213,12 +266,14 @@ fun ChatDrawer(
             when (name) {
                 "resume", "history" -> { showHistory = true; return }
                 "model" -> { modelMenuOpen = true; return }
+                "mcp", "skills", "connections" -> { showConnections = true; return }
             }
             if (backend.agent.runCommand(name, args)) {
                 cfg = backend.agent.config()
                 return
             }
         }
+        backend.diagnostics.countFeature(UiFeatures.AI_MESSAGE)
         backend.agent.send(text)
     }
 
@@ -239,10 +294,10 @@ fun ChatDrawer(
         hasClipboardImage = fileActions::hasClipboardImage,
     )
 
+    val headerModels = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() }
+    val onPickModel: (String) -> Unit = { backend.agent.setModel(it); cfg = backend.agent.config() }
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxSize()) {
-            val headerModels = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() }
-            val onPickModel: (String) -> Unit = { backend.agent.setModel(it); cfg = backend.agent.config() }
             val onCycleMode = {
                 backend.agent.setPermissionMode(nextMode(cfg.mode))
                 cfg = backend.agent.config()
@@ -251,7 +306,7 @@ fun ChatDrawer(
             // chip and the menu go into it rather than a second header row.
             val hosted = ToolWindowHeaderActions(
                 leading = {
-                    ModelPicker(cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it }, onPick = onPickModel)
+                    ModelPicker(cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it })
                 },
                 actions = {
                     ModeChip(cfg.mode, onCycleMode)
@@ -259,6 +314,8 @@ fun ChatDrawer(
                         onNew = { backend.agent.newSession() },
                         onHistory = { showHistory = true },
                         onManage = { showProviders = true },
+                        onUsage = { showUsage = true },
+                        onConnections = { showConnections = true },
                     )
                 },
             )
@@ -269,18 +326,28 @@ fun ChatDrawer(
                         models = headerModels,
                         modelMenuOpen = modelMenuOpen,
                         onModelMenu = { modelMenuOpen = it },
-                        onPickModel = onPickModel,
                         onManage = { showProviders = true },
                         onHistory = { showHistory = true },
+                        onUsage = { showUsage = true },
+                        onConnections = { showConnections = true },
                         onCycleMode = onCycleMode,
                         onNew = { backend.agent.newSession() },
                         onClose = onClose,
+                        onBack = onBack,
+                        title = title,
+                        headerActions = headerActions,
                     )
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (chat.messages.isEmpty()) {
-                    EmptyState(configured = cfg.configured, onManage = { showProviders = true })
+                    if (needsFreeSignIn) {
+                        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                            FreeAiSignInPrompt(backend, onUseOwnKey = { showProviders = true })
+                        }
+                    } else {
+                        EmptyState(configured = cfg.configured, onManage = { showProviders = true })
+                    }
                 } else {
                     Transcript(
                         chat.messages,
@@ -305,6 +372,12 @@ fun ChatDrawer(
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
                         )
                     }
+                    if (chat.busy) AgentBusyLine(chat.messages, awaitingAnswer = question != null)
+                    question?.let { q -> QuestionCard(q) { answers -> backend.agent.answerQuestion(q.id, answers) } }
+                    if (cfg.selectedProvider == FREE_AI_PROVIDER) {
+                        FreeAiStrip(backend, onManage = { showProviders = true })
+                    }
+                    UsageWarningStrip(usageLimits, onOpen = { showUsage = true })
                     Suggestions(
                         backend = backend,
                         input = input,
@@ -317,7 +390,9 @@ fun ChatDrawer(
                     )
                     Composer(
                     value = input,
-                    configured = cfg.configured,
+                    // Signed out on the free tier the composer stays usable: typing and pressing send is what
+                    // brings up the sign-in.
+                    configured = cfg.configured || needsFreeSignIn,
                     busy = chat.busy,
                     images = imageSources,
                     activeFilePath = activeFilePath,
@@ -331,11 +406,29 @@ fun ChatDrawer(
                 }
             }
         }
+        if (modelMenuOpen) {
+            ModelPickerOverlay(backend.agent, cfg, headerModels, onPick = onPickModel, onDismiss = { modelMenuOpen = false })
+        }
         if (showProviders) {
             AgentProvidersSheet(backend) {
                 showProviders = false
                 cfg = backend.agent.config()
             }
+        }
+        if (showUsage) {
+            AgentUsageSheet(backend) { showUsage = false }
+        }
+        if (showConnections) {
+            AgentConnectionsSheet(backend, onOpenFile?.let { open -> { path: String -> showConnections = false; open(path) } }) {
+                showConnections = false
+            }
+        }
+        if (showFreeSignIn) {
+            FreeAiSignInDialog(
+                backend,
+                onUseOwnKey = { showProviders = true },
+                onDismiss = { showFreeSignIn = false; cfg = backend.agent.config() },
+            )
         }
         if (showHistory) {
             AgentHistorySheet(backend) {
@@ -452,22 +545,30 @@ private fun ChatHeader(
     models: List<UiAgentModel>,
     modelMenuOpen: Boolean,
     onModelMenu: (Boolean) -> Unit,
-    onPickModel: (String) -> Unit,
     onManage: () -> Unit,
     onHistory: () -> Unit,
+    onUsage: () -> Unit,
+    onConnections: () -> Unit,
     onCycleMode: () -> Unit,
     onNew: () -> Unit,
     onClose: (() -> Unit)?,
+    onBack: (() -> Unit)? = null,
+    title: String? = null,
+    headerActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Row(
         Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SparkleBadge(size = 26)
+        if (onBack != null) {
+            IconButtonCa(CaIcons.arrowLeft, stringResource(Res.string.chat_close), onBack, iconSize = 18, boxSize = 32)
+        } else {
+            SparkleBadge(size = 26)
+        }
         Column(Modifier.weight(1f)) {
             Text(
-                stringResource(Res.string.chat_title),
+                title ?: stringResource(Res.string.chat_title),
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -476,10 +577,11 @@ private fun ChatHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
+            ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu)
         }
+        headerActions?.invoke(this)
         ModeChip(cfg.mode, onCycleMode)
-        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage)
+        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage, onConnections = onConnections)
         if (onClose != null) HideToolWindowButton(onClose)
     }
 }
@@ -513,7 +615,7 @@ private fun ModeChip(mode: UiAgentPermissionMode, onCycleMode: () -> Unit) {
 
 /** The header's occasional actions, in one menu so the title and the model name keep room to read. */
 @Composable
-private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit) {
+private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit, onUsage: () -> Unit, onConnections: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 28)
@@ -521,6 +623,8 @@ private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> U
             HeaderMenuItem(CaIcons.plus, stringResource(Res.string.chat_new)) { menuOpen = false; onNew() }
             HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
             HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
+            HeaderMenuItem(CaIcons.layers, stringResource(Res.string.conn_menu)) { menuOpen = false; onConnections() }
+            HeaderMenuItem(CaIcons.info, stringResource(Res.string.chat_usage)) { menuOpen = false; onUsage() }
         }
     }
 }
@@ -540,12 +644,10 @@ private fun ModelPicker(
     models: List<UiAgentModel>,
     open: Boolean,
     onOpen: (Boolean) -> Unit,
-    onPick: (String) -> Unit,
 ) {
-    val provider = cfg.providers.firstOrNull { it.id == cfg.selectedProvider }
-    val current = cfg.model.ifBlank { provider?.defaultModel ?: "" }
+    val current = currentModel(cfg)
     val label = models.firstOrNull { it.id == current }?.displayName
-        ?: current.ifBlank { provider?.displayName ?: "" }
+        ?: current.ifBlank { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.displayName ?: "" }
     Box {
         Row(
             Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable { onOpen(true) },
@@ -556,15 +658,55 @@ private fun ModelPicker(
             val chevron by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
             Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        CaDropdownMenu(expanded = open, onDismissRequest = { onOpen(false) }) {
-            models.forEach { model ->
-                DropdownMenuItem(
-                    text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) },
-                    onClick = { onPick(model.id); onOpen(false) },
-                )
-            }
-        }
     }
+}
+
+/** The selected model's id, or the provider's default when none is chosen. */
+private fun currentModel(cfg: UiAgentConfig): String =
+    cfg.model.ifBlank { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.defaultModel ?: "" }
+
+/**
+ * The model picker's dialog. [CenteredDialog] is an in-layout overlay (a full-size scrim + a centred card), not a
+ * window of its own, so it must be composed where it can fill the chat: at the drawer's root, beside the other
+ * sheets. Composed next to the picker's chip it landed inside the tool window's header row, which it stretched
+ * to the whole drawer's height while squeezing itself into the row's leftover width: the header floated in the
+ * middle, the conversation got no height at all, and the dialog was a dark sliver with nothing in it.
+ */
+/** Points to one decimal, without a trailing ".0": 1.3, 20, 126.4. */
+internal fun formatPoints(points: Double): String {
+    val tenths = kotlin.math.round(points * 10).toLong()
+    return if (tenths % 10 == 0L) (tenths / 10).toString() else "${tenths / 10}.${tenths % 10}"
+}
+
+@Composable
+private fun ModelPickerOverlay(
+    agent: AgentService,
+    cfg: UiAgentConfig,
+    models: List<UiAgentModel>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Read once per opening: a pick or a star made inside it changes both.
+    var favorites by remember { mutableStateOf(agent.favoriteModels()) }
+    val recents = remember { agent.recentModels() }
+    // On CodeAssist Free AI each model is labelled with what a step costs in points.
+    val freeAi by agent.freeAi.collectAsState()
+    val onFreeAi = cfg.selectedProvider == FREE_AI_PROVIDER
+    val pointsLabel = stringResource(Res.string.free_ai_model_points)
+    val prices = if (!onFreeAi) emptyMap() else freeAi.models.filter { it.pointsPerStep > 0 }.associate { m ->
+        m.id to pointsLabel.replace("%1\$s", formatPoints(m.pointsPerStep))
+    }
+    ModelPickerDialog(
+        prices = prices,
+        priceNote = if (onFreeAi) stringResource(Res.string.free_ai_model_points_note) else null,
+        models = models,
+        current = currentModel(cfg),
+        favorites = favorites,
+        recents = recents,
+        onPick = onPick,
+        onToggleFavorite = { id, fav -> agent.setModelFavorite(id, fav); favorites = agent.favoriteModels() },
+        onDismiss = onDismiss,
+    )
 }
 
 /**
@@ -805,6 +947,76 @@ private fun ErrorMessage(
     }
 }
 
+/** What a running turn is doing right now, as far as the transcript can tell. */
+internal enum class Activity { THINKING, WRITING, RUNNING_TOOL }
+
+private fun Step.visible(): Boolean = when (this) {
+    is Step.Text -> text.isNotBlank()
+    is Step.Thinking -> text.isNotBlank()
+    is Step.Tools -> calls.isNotEmpty()
+}
+
+/**
+ * The newest step decides: a tool still running, text still arriving, or (anything else) the model thinking. A
+ * trailing step with nothing to draw (an empty thinking block) means a new step has started that is not visible
+ * yet, which is thinking, not the earlier text continuing.
+ */
+private fun activityOf(steps: List<Step>): Activity {
+    val last = steps.lastOrNull() ?: return Activity.THINKING
+    if (!last.visible()) return Activity.THINKING
+    return when (last) {
+        is Step.Tools -> if (last.calls.any { it.status == UiAgentToolStatus.RUNNING }) Activity.RUNNING_TOOL else Activity.THINKING
+        is Step.Text -> Activity.WRITING
+        is Step.Thinking -> Activity.THINKING
+    }
+}
+
+/**
+ * One line over the composer for as long as a turn runs: a pulsing mark, what the agent is doing ("Thinking",
+ * "Running <tool>", "Writing", "Waiting"), and how long the turn has taken, so a long silent step never reads as a
+ * stall. The stop control is the send button beside it.
+ */
+@Composable
+private fun AgentBusyLine(messages: List<UiAgentMessage>, awaitingAnswer: Boolean = false) {
+    val msg = messages.lastOrNull { it.role == UiAgentRole.ASSISTANT && it.streaming } ?: return
+    val steps = remember(msg.segments, msg.toolCalls, msg.text, msg.thinking) { stepsOf(msg) }
+    val activity = activityOf(steps)
+    val running = msg.toolCalls.lastOrNull { it.status == UiAgentToolStatus.RUNNING }
+    val label = when {
+        awaitingAnswer -> stringResource(Res.string.chat_status_answer)
+        msg.waitUntilMs != null -> stringResource(Res.string.chat_status_waiting)
+        activity == Activity.RUNNING_TOOL && running != null ->
+            stringResource(Res.string.chat_status_running, running.title.lineSequence().first().take(60))
+        activity == Activity.WRITING -> stringResource(Res.string.chat_status_writing)
+        else -> stringResource(Res.string.chat_status_thinking)
+    }
+    // Timed from when this reply started, per message, so a retry starts the clock again.
+    val started = remember(msg.id) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+    var now by remember { mutableStateOf(started) }
+    LaunchedEffect(msg.id) {
+        while (true) {
+            now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+            delay(1000)
+        }
+    }
+    val seconds = ((now - started) / 1000).coerceAtLeast(0)
+    val elapsed = if (seconds < 60) stringResource(Res.string.chat_status_seconds, seconds.toInt())
+    else stringResource(Res.string.chat_status_minutes, (seconds / 60).toInt(), (seconds % 60).toInt())
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CaIcons.sparkle, null, Modifier.size(14.dp), tint = pulseColor(true))
+        Text(
+            label, color = scheme.onSurface, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(elapsed, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
 /** One step as the transcript draws it: a [UiAgentSegment] with its tool ids resolved to their calls. */
 private sealed interface Step {
     data class Text(val text: String) : Step
@@ -837,28 +1049,31 @@ private fun stepsOf(msg: UiAgentMessage): List<Step> {
 @Composable
 private fun AssistantMessage(msg: UiAgentMessage) {
     val steps = remember(msg.segments, msg.toolCalls, msg.text, msg.thinking) { stepsOf(msg) }
+    // Everything up to the last tool call is the agent's working: its tool calls and the reasoning and narration
+    // between them. It folds into one row, as in the Claude app; what follows the last tool is the answer.
+    val lastTool = steps.indexOfLast { it is Step.Tools && it.calls.isNotEmpty() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (lastTool >= 0) {
+            DisableSelection { WorkBlock(msg.id, steps.subList(0, lastTool + 1), live = msg.streaming && lastTool == steps.lastIndex) }
+        }
         steps.forEachIndexed { i, step ->
-            // The newest step of a running turn is the live one: its reasoning stays open and its tool run stays
-            // expanded until the turn moves past it.
+            if (i <= lastTool) return@forEachIndexed
+            // The newest step of a running turn is the live one: its reasoning stays open until the turn moves on.
             val live = msg.streaming && i == steps.lastIndex
             key(i) {
                 when (step) {
                     is Step.Thinking -> if (step.text.isNotBlank()) ThinkingStep(step.text, live)
-                    is Step.Tools -> if (step.calls.isNotEmpty()) DisableSelection { ToolRun(step.calls, live) }
+                    is Step.Tools -> Unit
                     is Step.Text -> if (step.text.isNotBlank()) AssistantMarkdown(step.text)
                 }
             }
         }
         msg.waitUntilMs?.let { WaitRow(it, msg.waitReason) }
-        val lastStep = steps.lastOrNull()
+        val activity = activityOf(steps)
         // A blinking caret while the answer is still streaming in.
-        if (msg.streaming && lastStep is Step.Text && lastStep.text.isNotBlank()) TypingCaret()
-        // Something live at the end of a running turn that has nothing streaming yet: before the first token, and
-        // between a finished batch of tools and the model's next step, which otherwise looks stalled.
-        val idle = lastStep == null ||
-            (lastStep is Step.Tools && lastStep.calls.none { it.status == UiAgentToolStatus.RUNNING })
-        if (msg.streaming && msg.waitUntilMs == null && idle) ThinkingStep(thinking = "", live = true)
+        if (msg.streaming && activity == Activity.WRITING) TypingCaret()
+        // What the agent is doing between visible steps is shown once, by the status line over the composer
+        // (AgentBusyLine), not by a second live row here.
         // Copy the finished answer.
         DisableSelection {
             if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)
@@ -899,29 +1114,38 @@ private fun compactTokens(count: Int): String = when {
 }
 
 /**
- * A run of consecutive tool calls. One call is a single compact row. Several get a summary header and stay open
- * while the run is live or still running, then fold to that header once the turn moves past them, so a tool-heavy
- * turn reads as its prose with a line per batch of work. A tap on the header overrides the automatic choice.
+ * A turn's working, folded into one row: how many tools it ran and files it changed, and (folded) what it is doing
+ * or did last. Collapsed by default, even while it runs; opened, it lays out the steps in order (the narration,
+ * the reasoning, each tool call), every tool call openable on its own. A tap on the header is remembered per message.
  */
 @Composable
-private fun ToolRun(calls: List<UiAgentToolCall>, live: Boolean) {
-    if (calls.size == 1) {
-        ToolCallRow(calls[0])
-        return
-    }
-    var choice by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    val expanded = choice ?: (live || calls.any { it.status == UiAgentToolStatus.RUNNING })
+private fun WorkBlock(messageId: Long, steps: List<Step>, live: Boolean) {
+    val calls = remember(steps) { steps.flatMap { (it as? Step.Tools)?.calls.orEmpty() } }
+    var expanded by rememberSaveable(messageId) { mutableStateOf(false) }
     val rail = MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().entranceSlideUp()) {
-        ToolRunHeader(calls, expanded) { choice = !expanded }
-        if (expanded) {
-            // A hairline rail ties the rows to their header, the way a nested list is indented under its parent.
+        ToolRunHeader(calls, expanded) { expanded = !expanded }
+        AnimatedVisibility(expanded) {
             Column(
                 Modifier.fillMaxWidth().padding(start = 8.dp)
                     .drawBehind { drawRect(rail, size = Size(1.dp.toPx(), size.height)) }
-                    .padding(start = 10.dp),
+                    .padding(start = 10.dp, top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                calls.forEach { call -> key(call.id) { ToolCallRow(call) } }
+                steps.forEachIndexed { i, step ->
+                    key(i) {
+                        when (step) {
+                            is Step.Thinking -> if (step.text.isNotBlank()) ThinkingStep(step.text, live && i == steps.lastIndex)
+                            is Step.Tools -> step.calls.forEach { call -> key(call.id) { ToolCallRow(call) } }
+                            is Step.Text -> if (step.text.isNotBlank()) {
+                                // The narration between tool calls, quieter than the answer.
+                                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                                    AssistantMarkdown(step.text)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1032,7 +1256,8 @@ private fun ThinkingStep(thinking: String, live: Boolean) {
 private fun ToolCallRow(call: UiAgentToolCall) {
     var open by rememberSaveable(call.id) { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
-    val canOpen = call.detail.isNotBlank()
+    val shownInput = remember(call.input) { prettyArguments(call.input) }
+    val canOpen = call.detail.isNotBlank() || call.output.isNotBlank() || shownInput.isNotBlank() || call.images.isNotEmpty()
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
@@ -1049,22 +1274,104 @@ private fun ToolCallRow(call: UiAgentToolCall) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             if (canOpen && !open) {
+                // What the agent was shown, at a glance: a thumbnail of its image, else the result's first line.
+                val thumb = call.images.firstOrNull()?.let { img -> remember(img.base64) { decodeBase64Image(img.base64) } }
+                if (thumb != null) {
+                    Image(
+                        thumb, stringResource(Res.string.chat_tool_image),
+                        Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else if (call.detail.isNotBlank()) {
+                    Text(
+                        call.detail,
+                        Modifier.widthIn(max = 160.dp),
+                        style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (canOpen) {
+                val rotation by animateFloatAsState(if (open) 0f else -90f, label = "toolChevron")
+                Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(rotation), tint = scheme.onSurfaceVariant)
+            }
+        }
+        if (open) ToolCallDetails(call, shownInput)
+        if (call.changes.isNotEmpty()) Box(Modifier.padding(start = 22.dp, top = 2.dp)) { FileChangesList(call.changes) }
+    }
+}
+
+/** An opened tool call: the images the agent was shown, what it asked the tool for, and what came back. */
+@Composable
+private fun ToolCallDetails(call: UiAgentToolCall, shownInput: String) {
+    val scheme = MaterialTheme.colorScheme
+    var zoomed by remember { mutableStateOf<ImageBitmap?>(null) }
+    Column(Modifier.fillMaxWidth().padding(start = 22.dp, top = 2.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        call.images.forEach { img ->
+            val bitmap = remember(img.base64) { decodeBase64Image(img.base64) } ?: return@forEach
+            Image(
+                bitmap, stringResource(Res.string.chat_tool_image),
+                Modifier.fillMaxWidth().heightIn(max = 420.dp).clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .clickable { zoomed = bitmap },
+                contentScale = ContentScale.Fit,
+            )
+        }
+        if (shownInput.isNotBlank()) ToolSection(stringResource(Res.string.chat_tool_input), shownInput, maxHeight = 180)
+        val result = call.output.ifBlank { call.detail }
+        if (result.isNotBlank()) ToolSection(stringResource(Res.string.chat_tool_result), result, maxHeight = 320)
+    }
+    zoomed?.let { bitmap ->
+        Dialog(onDismissRequest = { zoomed = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black).clickable { zoomed = null },
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(bitmap, stringResource(Res.string.chat_tool_image), Modifier.fillMaxSize().padding(12.dp), contentScale = ContentScale.Fit)
+            }
+        }
+    }
+}
+
+/** A labelled, selectable, scrolling block of monospace text. */
+@Composable
+private fun ToolSection(label: String, text: String, maxHeight: Int) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Box(
+            Modifier.fillMaxWidth().heightIn(max = maxHeight.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(scheme.surfaceContainerHigh)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            SelectionContainer {
                 Text(
-                    call.detail,
-                    Modifier.widthIn(max = 160.dp),
-                    style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    text, color = scheme.onSurface,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 )
             }
         }
-        if (open) {
-            Text(
-                call.detail,
-                Modifier.padding(start = 24.dp, bottom = 4.dp),
-                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
-            )
+    }
+}
+
+/**
+ * A tool call's JSON arguments as `key: value` lines, the way a person would read them; long string values (a
+ * file being written) keep their own line breaks. Empty for a call with no arguments. Falls back to the raw text
+ * when it is not a flat JSON object.
+ */
+internal fun prettyArguments(json: String): String {
+    val trimmed = json.trim()
+    if (trimmed.isEmpty() || trimmed == "{}") return ""
+    val obj = dev.ide.platform.JsonReader.obj(dev.ide.platform.JsonReader.parseOrNull(trimmed)) ?: return trimmed
+    return obj.entries.joinToString("\n") { (key, value) ->
+        val shown = when (value) {
+            is String -> value
+            null -> "null"
+            else -> value.toString()
         }
-        if (call.changes.isNotEmpty()) Box(Modifier.padding(start = 22.dp, top = 2.dp)) { FileChangesList(call.changes) }
+        if ('\n' in shown) "$key:\n$shown" else "$key: $shown"
     }
 }
 
@@ -1129,12 +1436,14 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
         Text(
             stringResource(Res.string.chat_empty_title),
             modifier = Modifier.entranceSlideUp(90),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             if (configured) stringResource(Res.string.chat_empty_body) else stringResource(Res.string.chat_need_key),
             modifier = Modifier.entranceSlideUp(150),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
         if (!configured) {
@@ -1281,7 +1590,7 @@ private fun Composer(
  * separately-branded panel bolted into the IDE.
  */
 @Composable
-private fun SparkleBadge(size: Int, animated: Boolean = false) {
+internal fun SparkleBadge(size: Int, animated: Boolean = false) {
     val breathe = rememberInfiniteTransition(label = "sparkle")
     val pulse by breathe.animateFloat(
         initialValue = 0.9f,

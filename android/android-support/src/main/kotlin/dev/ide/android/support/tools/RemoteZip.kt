@@ -138,6 +138,10 @@ object RemoteZip {
                     Files.deleteIfExists(part)
                     throw IOException("Checksum mismatch for ${e.name}")
                 }
+                // Read the rest of the range (the data descriptor) so the response ends cleanly and its
+                // connection goes back to the pool with nothing of this body left on it.
+                val rest = ByteArray(1024)
+                while (input.read(rest) >= 0) Unit
             }
             Files.move(part, target, StandardCopyOption.REPLACE_EXISTING)
             done += e.compressedSize

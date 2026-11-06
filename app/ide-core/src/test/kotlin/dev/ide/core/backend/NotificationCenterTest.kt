@@ -2,6 +2,7 @@ package dev.ide.core.backend
 
 import dev.ide.ui.backend.UiNotification
 import dev.ide.ui.backend.UiNotificationKind
+import dev.ide.ui.backend.UiNotificationLevel
 import dev.ide.ui.backend.UiNotificationTarget
 import java.io.File
 import kotlin.test.AfterTest
@@ -281,5 +282,43 @@ and a tab:	end"""
         c.post(UiNotificationKind.SYSTEM, "Ephemeral")
         assertEquals(1, c.notifications().value.size)
         assertEquals(1, c.unreadCount().value)
+    }
+
+    @Test
+    fun aRepeatedMessageFoldsIntoOneEntryWithACount() {
+        val c = center(dir())
+        c.post(UiNotificationKind.SYSTEM, "Tool ran", "ok", source = "Hello Plugin", foldRepeats = true)
+        c.post(UiNotificationKind.SYSTEM, "Something else")
+        c.post(UiNotificationKind.SYSTEM, "Tool ran", "ok", source = "Hello Plugin", foldRepeats = true)
+        val list = c.notifications().value
+        assertEquals(listOf("Tool ran", "Something else"), list.map { it.title }, "the repeat moves to the front")
+        assertEquals(2, list.first().count)
+        assertEquals(2, c.unreadCount().value)
+    }
+
+    @Test
+    fun sourceLevelAndCountSurviveARestart() {
+        val root = dir()
+        center(root).apply {
+            post(UiNotificationKind.SYSTEM, "Failed", source = "NDK", level = UiNotificationLevel.ERROR, foldRepeats = true)
+            post(UiNotificationKind.SYSTEM, "Failed", source = "NDK", level = UiNotificationLevel.ERROR, foldRepeats = true)
+        }
+        val n = center(root).notifications().value.single()
+        assertEquals("NDK", n.source)
+        assertEquals(UiNotificationLevel.ERROR, n.level)
+        assertEquals(2, n.count)
+    }
+
+    @Test
+    fun aLongOneLineMessageSplitsIntoATitleAndABody() {
+        val (title, body) = splitMessage(
+            "Hello Plugin ran its packaged tool: hello from a binary the plugin packaged, running as /data/app/x/lib/arm64/libhellotool.so",
+        )
+        assertEquals("Hello Plugin ran its packaged tool", title)
+        assertEquals("Hello from a binary the plugin packaged, running as /data/app/x/lib/arm64/libhellotool.so", body)
+        assertEquals("Toolchain ready" to null, splitMessage("Toolchain ready"))
+        assertEquals("Unpacked" to "3 files", splitMessage("Unpacked\n3 files"))
+        val long = "x".repeat(100)
+        assertEquals(long to null, splitMessage(long), "no headline to cut at: keep it whole")
     }
 }

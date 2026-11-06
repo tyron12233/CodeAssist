@@ -1,6 +1,19 @@
 package dev.ide.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import dev.ide.ui.components.SupportingOnContainer
+import dev.ide.ui.components.dashedBorder
+import dev.ide.ui.theme.CaShapes
+import org.jetbrains.compose.resources.pluralStringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -46,8 +58,12 @@ import dev.ide.ui.backend.UiStoreSubmission
 import dev.ide.ui.backend.UiSubmissionStatus
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
-import dev.ide.ui.components.StatFigure
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.learn_section_title
+import dev.ide.ui.generated.resources.you_delete_account_deleting
+import dev.ide.ui.generated.resources.you_delete_account_body
+import dev.ide.ui.generated.resources.you_delete_account_title
+import dev.ide.ui.generated.resources.you_delete_account
 import dev.ide.ui.generated.resources.*
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
@@ -106,6 +122,10 @@ fun YouScreen(
     var submissions by remember { mutableStateOf<List<UiStoreSubmission>>(emptyList()) }
     var published by remember { mutableStateOf<List<UiPublishedItem>>(emptyList()) }
     var editing by remember { mutableStateOf(false) }
+    // Deleting the whole account: the confirmation, the call in flight, and its failure if it had one.
+    var confirmAccountDelete by remember { mutableStateOf(false) }
+    var deletingAccount by remember { mutableStateOf(false) }
+    var accountDeleteError by remember { mutableStateOf<String?>(null) }
     // The submission a Delete tap is asking about. Deleting removes the upload from the store, so it asks
     // first, and it names the version: a listing can have several here and the wrong one is the mistake
     // worth preventing.
@@ -113,6 +133,15 @@ fun YouScreen(
     // Why a delete did not happen, from the backend. "That one is still in review" and "that one is
     // published" both name the next step, so they are shown as they were written.
     var deleteError by remember { mutableStateOf<String?>(null) }
+    // The Learning section: synced first, so a phone that just signed in shows the account's figures.
+    var learning by remember { mutableStateOf<dev.ide.ui.backend.UiLearnAccount?>(null) }
+    var lessonsStarted by remember { mutableStateOf(0) }
+    LaunchedEffect(epoch, signedIn) {
+        if (!signedIn) { learning = null; return@LaunchedEffect }
+        runCatching { backend.learn.syncProgress() }
+        learning = runCatching { backend.learn.account() }.getOrNull()?.takeIf { it.signedIn }
+        lessonsStarted = runCatching { backend.learn.progress().completedByLesson.size }.getOrDefault(0)
+    }
 
     LaunchedEffect(epoch, signedIn) {
         if (!signedIn) {
@@ -132,7 +161,8 @@ fun YouScreen(
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             DetailTopBar(
-                title = profile?.displayName ?: stringResource(Res.string.you_title),
+                // The page's own header carries the name, so the bar does not repeat it.
+                title = stringResource(Res.string.you_title),
                 isSaved = false,
                 onBack = onBack,
             )
@@ -147,101 +177,77 @@ fun YouScreen(
                     onCancel = { editing = false },
                     onSaved = { editing = false; epoch++ },
                 )
-                else -> LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
-                    item("head") {
-                        ProfileHead(backend, current) { editing = true }
-                    }
-                    if (onModerate != null && current.isModerator) {
-                        item("moderation") {
-                            Spacer(Modifier.height(20.dp))
-                            ModerationEntry(current.moderationQueue, onModerate)
+                else -> YouPage(
+                    backend = backend,
+                    profile = current,
+                    submissions = submissions,
+                    published = published,
+                    deleteError = deleteError,
+                    accountDeleteError = accountDeleteError,
+                    onEdit = { editing = true },
+                    onModerate = onModerate?.takeIf { current.isModerator },
+                    onWithdraw = { submission ->
+                        scope.launch {
+                            backend.store.withdrawSubmission(submission.itemId, submission.version)
+                            epoch++
                         }
-                    }
-                    item("submissions") {
-                        Spacer(Modifier.height(24.dp))
-                        Eyebrow(
-                            stringResource(Res.string.you_submissions),
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        if (submissions.isEmpty()) {
-                            Muted(stringResource(Res.string.you_submissions_none))
-                        }
-                    }
-                    itemsKeyed(submissions, key = { "${it.itemId}:${it.version}" }) { submission ->
-                        SubmissionRow(
-                            submission = submission,
-                            onWithdraw = {
-                                scope.launch {
-                                    backend.store.withdrawSubmission(submission.itemId, submission.version)
-                                    epoch++
-                                }
-                            },
-                            onUpdate = onUpdateListing?.let { start -> { start(submission.itemId) } },
-                            onDelete = { deleteError = null; pendingDelete = submission },
-                        )
-                    }
-                    deleteError?.let { reason ->
-                        item("delete_error") {
-                            Text(
-                                reason,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                    item("published") {
-                        Spacer(Modifier.height(24.dp))
-                        Eyebrow(
-                            stringResource(Res.string.you_published),
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        if (published.isEmpty()) {
-                            Muted(stringResource(Res.string.you_published_none))
-                        }
-                    }
-                    itemsKeyed(published, key = { it.slug }) { item ->
-                        PublishedRow(backend, item) { onOpenItem(item.slug) }
-                    }
-                    item("actions") {
-                        Spacer(Modifier.height(28.dp))
-                        Column(
-                            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            if (onPublish != null) {
-                                Button(onPublish, Modifier.fillMaxWidth()) {
-                                    Text(stringResource(Res.string.you_publish))
-                                }
-                            }
-                            OutlinedButton(
-                                onClick = { onOpenPublicProfile(current.handle) },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(stringResource(Res.string.you_view_public))
-                            }
-                            TextButton(
-                                onClick = {
-                                    backend.store.signOut()
-                                    // Back to where this was opened from: a signed-out You screen has
-                                    // nothing on it but an invitation to sign in again.
-                                    onBack()
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    stringResource(Res.string.you_sign_out),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(32.dp))
-                    }
-                }
+                    },
+                    onUpdate = onUpdateListing,
+                    onDelete = { deleteError = null; pendingDelete = it },
+                    onOpenItem = onOpenItem,
+                    onPublish = onPublish,
+                    learning = learning,
+                    lessonsStarted = lessonsStarted,
+                    onOpenPublicProfile = { onOpenPublicProfile(current.handle) },
+                    onSignOut = {
+                        backend.store.signOut()
+                        // Back to where this was opened from: a signed-out You screen has nothing on it but
+                        // an invitation to sign in again.
+                        onBack()
+                    },
+                    onDeleteAccount = if (backend.store.accountDeletionAvailable()) {
+                        { accountDeleteError = null; confirmAccountDelete = true }
+                    } else {
+                        null
+                    },
+                )
             }
         }
+    }
+
+    // Deleting the account cannot be undone, so it says exactly what goes, and that projects on the device stay.
+    if (confirmAccountDelete) {
+        AlertDialog(
+            onDismissRequest = { if (!deletingAccount) confirmAccountDelete = false },
+            title = { Text(stringResource(Res.string.you_delete_account_title)) },
+            text = { Text(stringResource(Res.string.you_delete_account_body)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !deletingAccount,
+                    onClick = {
+                        deletingAccount = true
+                        scope.launch {
+                            val error = backend.store.deleteAccount()
+                            deletingAccount = false
+                            confirmAccountDelete = false
+                            accountDeleteError = error
+                            // Signed out now: a signed-out You screen has nothing on it, so leave it.
+                            if (error == null) onBack()
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(if (deletingAccount) Res.string.you_delete_account_deleting else Res.string.you_delete_account),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !deletingAccount, onClick = { confirmAccountDelete = false }) {
+                    Text(stringResource(Res.string.cancel))
+                }
+            },
+        )
     }
 
     // Deleting takes the upload out of the store and can take the project row with it, so it asks. The
@@ -276,282 +282,546 @@ fun YouScreen(
 }
 
 /**
+ * The signed-in page itself, once there is a profile to draw.
+ *
+ * Top to bottom it answers, in order: who am I here (the hero and the numbers), is anything waiting on me
+ * (moderation, then submissions that are still open), what have I shipped (the app grid, which ends in the
+ * way to ship the next one), and the account itself.
+ *
+ * Live submissions are not listed as submissions. Every one of them is already an app in the grid, and
+ * listing them twice made the page read as twice as long as the account actually is; a listing's release
+ * count is carried on its card instead.
+ */
+@Composable
+private fun YouPage(
+    backend: IdeBackend,
+    profile: UiMyProfile,
+    submissions: List<UiStoreSubmission>,
+    published: List<UiPublishedItem>,
+    deleteError: String?,
+    accountDeleteError: String?,
+    onEdit: () -> Unit,
+    onModerate: (() -> Unit)?,
+    onWithdraw: (UiStoreSubmission) -> Unit,
+    onUpdate: ((String) -> Unit)?,
+    onDelete: (UiStoreSubmission) -> Unit,
+    onOpenItem: (String) -> Unit,
+    onPublish: (() -> Unit)?,
+    onOpenPublicProfile: () -> Unit,
+    onSignOut: () -> Unit,
+    onDeleteAccount: (() -> Unit)?,
+    learning: dev.ide.ui.backend.UiLearnAccount? = null,
+    lessonsStarted: Int = 0,
+) {
+    val open = submissions.filter { it.status != UiSubmissionStatus.PUBLISHED }
+    val iconBySlug = published.associate { it.slug to it.iconPath }
+    // A newer version of a live app that is still being looked at: the app's card says so, so the grid
+    // does not claim the live version is the whole story.
+    val pendingBySlug = open
+        .filter { it.status == UiSubmissionStatus.SUBMITTED || it.status == UiSubmissionStatus.BUILDING }
+        .groupBy { it.itemId }
+        .mapValues { (_, list) -> list.first().version }
+    val releases = submissions.filter { it.status == UiSubmissionStatus.PUBLISHED }
+        .groupingBy { it.itemId }.eachCount()
+    // Null is the Publish tile, which closes the grid so the next app has an obvious place to go.
+    val cells: List<UiPublishedItem?> = published + if (onPublish != null) listOf(null) else emptyList()
+    val rows = cells.chunked(2)
+
+    LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
+        item("head") {
+            ProfileHero(
+                backend = backend,
+                displayName = profile.displayName,
+                handle = profile.handle,
+                avatarUrl = profile.avatarUrl,
+                verified = profile.verified,
+                bio = profile.bio,
+                location = profile.location,
+                linkUrl = profile.linkUrl,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(start = 14.dp, end = 18.dp),
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Symbol(CaSymbols.edit, contentDescription = null, size = 18.dp)
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(Res.string.you_edit))
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+            ProfileStats(
+                listOf(
+                    ProfileStat(CaSymbols.rocketLaunch, profile.publishedCount.toString(), stringResource(Res.string.you_stat_published)),
+                    ProfileStat(CaSymbols.hourglassTop, profile.pendingCount.toString(), stringResource(Res.string.you_stat_review)),
+                    ProfileStat(CaSymbols.person, compactCount(profile.followers), stringResource(Res.string.you_stat_followers)),
+                    ProfileStat(CaSymbols.download, compactCount(profile.totalInstalls), stringResource(Res.string.you_stat_installs)),
+                ),
+            )
+        }
+        if (onModerate != null) {
+            item("moderation") {
+                Spacer(Modifier.height(12.dp))
+                ModerationEntry(profile.moderationQueue, onModerate)
+            }
+        }
+        if (open.isNotEmpty()) {
+            item("submissions_head") {
+                Spacer(Modifier.height(28.dp))
+                ProfileSectionHeader(stringResource(Res.string.you_submissions), open.size)
+                Spacer(Modifier.height(12.dp))
+            }
+            itemsKeyed(open, key = { "${it.itemId}:${it.version}" }) { submission ->
+                SubmissionCard(
+                    backend = backend,
+                    submission = submission,
+                    iconPath = iconBySlug[submission.itemId],
+                    onWithdraw = { onWithdraw(submission) },
+                    onUpdate = onUpdate?.let { start -> { start(submission.itemId) } },
+                    onDelete = { onDelete(submission) },
+                )
+            }
+            deleteError?.let { reason ->
+                item("delete_error") {
+                    Text(
+                        reason,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    )
+                }
+            }
+        }
+        item("published_head") {
+            Spacer(Modifier.height(28.dp))
+            ProfileSectionHeader(stringResource(Res.string.you_published), published.size)
+            Spacer(Modifier.height(12.dp))
+            if (published.isEmpty()) {
+                Muted(stringResource(Res.string.you_published_none))
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+        items(rows.size, key = { "apps_$it" }) { r ->
+            Row(
+                Modifier.fillMaxWidth().height(IntrinsicSize.Max)
+                    .padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                rows[r].forEach { cell ->
+                    val cellModifier = Modifier.weight(1f).fillMaxHeight()
+                    if (cell == null) {
+                        PublishTile(onPublish ?: {}, cellModifier)
+                    } else {
+                        AppCard(
+                            backend = backend,
+                            item = cell,
+                            pendingVersion = pendingBySlug[cell.slug],
+                            releases = releases[cell.slug] ?: 0,
+                            onOpen = { onOpenItem(cell.slug) },
+                            modifier = cellModifier,
+                        )
+                    }
+                }
+                // Alone on the page (nothing published yet) the Publish tile takes the whole row: half a
+                // row of empty slot beside nothing reads as a layout that failed to load.
+                if (rows[r].size == 1 && published.isNotEmpty()) Spacer(Modifier.weight(1f))
+            }
+        }
+        if (learning != null) {
+            item("learning") {
+                Spacer(Modifier.height(16.dp))
+                ProfileSectionHeader(stringResource(Res.string.learn_section_title))
+                Spacer(Modifier.height(12.dp))
+                LearnProfileCard(learning.streak, learning.bestStreak, lessonsStarted, learning.badges)
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+        item("account") {
+            Spacer(Modifier.height(16.dp))
+            ProfileSectionHeader(stringResource(Res.string.you_account))
+            Spacer(Modifier.height(12.dp))
+            AccountCard(onOpenPublicProfile, onSignOut, onDeleteAccount)
+            accountDeleteError?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+/**
  * The way in to the review queue.
  *
- * A row rather than a button in the action stack at the foot: moderating is not something the owner of
- * this profile does to their own account, and burying it under Publish / View public profile / Sign out
- * would read as one of those. The count is on it because whether anything is waiting is the only reason
- * to tap it.
+ * A card of its own rather than a button in the account group: moderating is not something the owner of
+ * this profile does to their own account. The count is the largest thing on it because whether anything
+ * is waiting is the only reason to tap it.
  */
 @Composable
 private fun ModerationEntry(waiting: Int, onOpen: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        onClick = onOpen,
+        shape = RoundedCornerShape(24.dp),
         color = c.secondaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).clickable(onClick = onOpen),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
     ) {
         Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.padding(start = 14.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Symbol(CaSymbols.gavel, contentDescription = null, size = 22.dp, tint = c.onSecondaryContainer)
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).background(c.onSecondaryContainer.copy(alpha = 0.13f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.gavel, contentDescription = null, size = 22.dp, tint = c.onSecondaryContainer)
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     stringResource(Res.string.you_moderation),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = c.onSecondaryContainer,
                 )
-                Text(
+                SupportingOnContainer(
                     if (waiting > 0) {
                         stringResource(Res.string.you_moderation_waiting, waiting)
                     } else {
                         stringResource(Res.string.you_moderation_clear)
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.onSecondaryContainer,
+                    onContainer = c.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = c.onSecondaryContainer)
-        }
-    }
-}
-
-@Composable
-private fun ProfileHead(backend: IdeBackend, profile: UiMyProfile, onEdit: () -> Unit) {
-    val c = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Avatar(backend, profile)
-            Column(Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
+            if (waiting > 0) {
+                Surface(shape = CircleShape, color = c.primary) {
                     Text(
-                        profile.displayName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = c.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        compactCount(waiting),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = c.onPrimary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
-                    if (profile.verified) {
-                        Symbol(CaSymbols.verified, contentDescription = null, size = 18.dp, tint = c.primary)
-                    }
                 }
-                Text("@${profile.handle}", style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
-            }
-            OutlinedButton(onClick = onEdit) {
-                Symbol(CaSymbols.edit, contentDescription = null, size = 16.dp, tint = c.onSurface)
-                Spacer(Modifier.size(6.dp))
-                Text(stringResource(Res.string.you_edit))
-            }
-        }
-        profile.bio?.takeIf { it.isNotBlank() }?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = c.onSurface)
-        }
-        val meta = listOfNotNull(profile.location, profile.linkUrl)
-        if (meta.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Text(meta.joinMeta(), style = MaterialTheme.typography.bodySmall, color = c.outline)
-        }
-        Spacer(Modifier.height(18.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            StatFigure(
-                value = profile.publishedCount.toString(),
-                label = stringResource(Res.string.you_stat_published),
-                onContainer = c.onSurface,
-            )
-            StatFigure(
-                value = profile.pendingCount.toString(),
-                label = stringResource(Res.string.you_stat_review),
-                onContainer = c.onSurface,
-            )
-            StatFigure(
-                value = compactCount(profile.followers),
-                label = stringResource(Res.string.you_stat_followers),
-                onContainer = c.onSurface,
-            )
-            StatFigure(
-                value = compactCount(profile.totalInstalls),
-                label = stringResource(Res.string.you_stat_installs),
-                onContainer = c.onSurface,
-            )
-        }
-    }
-}
-
-/** The provider's picture where there is one, and the initials it falls back to where there is not. */
-@Composable
-private fun Avatar(backend: IdeBackend, profile: UiMyProfile) {
-    val c = MaterialTheme.colorScheme
-    val file by produceState<String?>(null, profile.avatarUrl) {
-        value = profile.avatarUrl?.let { runCatching { backend.store.avatarFile(it) }.getOrNull() }
-    }
-    Surface(shape = CircleShape, color = c.primaryContainer, modifier = Modifier.size(64.dp)) {
-        val path = file
-        if (path != null) {
-            ShotImage(backend, path, ContentScale.Crop, Modifier.fillMaxSize().clip(CircleShape))
-        } else {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    initialsOf(profile.displayName),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = c.onPrimaryContainer,
-                )
+            } else {
+                Symbol(CaSymbols.chevronRight, contentDescription = null, size = 22.dp, tint = c.onSecondaryContainer)
             }
         }
     }
 }
 
-/** At most two letters, from the first two words that have one. */
-private fun initialsOf(name: String): String =
-    name.split(' ', '-', '_').mapNotNull { it.firstOrNull { ch -> ch.isLetterOrDigit() } }
-        .take(2).joinToString("").uppercase().ifEmpty { "?" }
+/** The glyph a status is drawn with where there is no app icon to show instead. */
+private fun statusGlyph(status: UiSubmissionStatus): Char = when (status) {
+    UiSubmissionStatus.SUBMITTED -> CaSymbols.hourglassTop
+    UiSubmissionStatus.BUILDING -> CaSymbols.construction
+    UiSubmissionStatus.CHANGES_REQUESTED -> CaSymbols.rateReview
+    UiSubmissionStatus.REJECTED -> CaSymbols.block
+    UiSubmissionStatus.PUBLISHED -> CaSymbols.checkCircle
+}
 
+/**
+ * One submission that is still open: in review, building, or answered with something to do.
+ *
+ * Shows the app's own icon when the listing has one, so "Nimbus Weather 1.1.0 is in review" is
+ * recognisably the Nimbus in the grid below, and the status glyph otherwise.
+ */
 @Composable
-private fun SubmissionRow(
+private fun SubmissionCard(
+    backend: IdeBackend,
     submission: UiStoreSubmission,
+    iconPath: String?,
     onWithdraw: () -> Unit,
     onUpdate: (() -> Unit)? = null,
     /** Offered for a decision that is finished with: a rejection is not a thing to keep looking at. */
     onDelete: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    submission.projectName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = c.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    stringResource(Res.string.you_version, submission.version),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.onSurfaceVariant,
-                )
-            }
-            StatusChip(submission.status)
-        }
-        // The note is the whole point of a rejection, so it is labelled as what it is. Unlabelled, a
-        // paragraph under a red chip could be read as a description of the project rather than the
-        // reason it was turned down and the thing to fix.
-        submission.note?.takeIf { it.isNotBlank() }?.let { note ->
-            Spacer(Modifier.height(8.dp))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = when (submission.status) {
-                    UiSubmissionStatus.REJECTED -> c.errorContainer
-                    else -> c.surfaceContainerHighest
-                },
-            ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Eyebrow(
-                        when (submission.status) {
-                            UiSubmissionStatus.REJECTED -> stringResource(Res.string.you_reason_rejected)
-                            UiSubmissionStatus.CHANGES_REQUESTED -> stringResource(Res.string.you_reason_changes)
-                            else -> stringResource(Res.string.you_reason_note)
-                        },
-                        color = when (submission.status) {
-                            UiSubmissionStatus.REJECTED -> c.onErrorContainer
-                            else -> c.onSurfaceVariant
-                        },
-                    )
-                    Spacer(Modifier.height(4.dp))
+    val rejected = submission.status == UiSubmissionStatus.REJECTED
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (iconPath != null) {
+                    ListingIcon(backend, iconPath, size = 44.dp)
+                } else {
+                    val (container, content) = statusColors(submission.status)
+                    Box(
+                        Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(container),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Symbol(statusGlyph(submission.status), contentDescription = null, size = 22.dp, tint = content)
+                    }
+                }
+                Column(Modifier.weight(1f)) {
                     Text(
-                        note,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = when (submission.status) {
-                            UiSubmissionStatus.REJECTED -> c.onErrorContainer
-                            else -> c.onSurfaceVariant
-                        },
+                        submission.projectName,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = c.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        stringResource(Res.string.you_version, submission.version),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.onSurfaceVariant,
                     )
                 }
+                StatusChip(submission.status)
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (submission.status == UiSubmissionStatus.SUBMITTED) {
-                TextButton(onWithdraw) { Text(stringResource(Res.string.submit_withdraw)) }
+            // The note is the whole point of a rejection, so it is labelled as what it is. Unlabelled, a
+            // paragraph under a red chip could be read as a description of the project rather than the
+            // reason it was turned down and the thing to fix.
+            submission.note?.takeIf { it.isNotBlank() }?.let { note ->
+                Spacer(Modifier.height(12.dp))
+                val noteContainer = if (rejected) c.errorContainer else c.surfaceContainerHighest
+                val noteContent = if (rejected) c.onErrorContainer else c.onSurfaceVariant
+                Surface(shape = RoundedCornerShape(16.dp), color = noteContainer, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        Eyebrow(
+                            when (submission.status) {
+                                UiSubmissionStatus.REJECTED -> stringResource(Res.string.you_reason_rejected)
+                                UiSubmissionStatus.CHANGES_REQUESTED -> stringResource(Res.string.you_reason_changes)
+                                else -> stringResource(Res.string.you_reason_note)
+                            },
+                            color = noteContent,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(note, style = MaterialTheme.typography.bodyMedium, color = noteContent)
+                    }
+                }
             }
+            val canWithdraw = submission.status == UiSubmissionStatus.SUBMITTED
             // A decision that asked for something is the one case with an obvious next step, so the step
             // is here rather than three screens away.
-            if (onUpdate != null &&
-                (submission.status == UiSubmissionStatus.REJECTED ||
-                    submission.status == UiSubmissionStatus.CHANGES_REQUESTED)
-            ) {
-                TextButton(onUpdate) { Text(stringResource(Res.string.you_update)) }
-            }
+            val canUpdate = onUpdate != null &&
+                (rejected || submission.status == UiSubmissionStatus.CHANGES_REQUESTED)
             // Only for a refusal. A live version is the listing's history and a pending one is withdrawn
             // first, so offering Delete on either would be offering something the store refuses.
-            if (onDelete != null && submission.status == UiSubmissionStatus.REJECTED) {
-                TextButton(onDelete) {
-                    Text(stringResource(Res.string.you_delete), color = MaterialTheme.colorScheme.error)
+            val canDelete = onDelete != null && rejected
+            if (canWithdraw || canUpdate || canDelete) {
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (canUpdate) {
+                        FilledTonalButton(onUpdate!!) {
+                            Symbol(CaSymbols.upload, contentDescription = null, size = 18.dp)
+                            Spacer(Modifier.size(8.dp))
+                            Text(stringResource(Res.string.you_update))
+                        }
+                    }
+                    if (canWithdraw) {
+                        OutlinedButton(onWithdraw) { Text(stringResource(Res.string.submit_withdraw)) }
+                    }
+                    if (canDelete) {
+                        TextButton(onDelete!!) {
+                            Text(stringResource(Res.string.you_delete), color = c.error)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun statusColors(status: UiSubmissionStatus): Pair<Color, Color> {
+    val c = MaterialTheme.colorScheme
+    return when (status) {
+        UiSubmissionStatus.SUBMITTED, UiSubmissionStatus.BUILDING -> c.secondaryContainer to c.onSecondaryContainer
+        UiSubmissionStatus.CHANGES_REQUESTED -> c.tertiaryContainer to c.onTertiaryContainer
+        UiSubmissionStatus.REJECTED -> c.errorContainer to c.onErrorContainer
+        UiSubmissionStatus.PUBLISHED -> c.primaryContainer to c.onPrimaryContainer
     }
 }
 
 @Composable
 private fun StatusChip(status: UiSubmissionStatus) {
-    val c = MaterialTheme.colorScheme
-    val (label, container, content) = when (status) {
-        UiSubmissionStatus.SUBMITTED ->
-            Triple(stringResource(Res.string.you_status_submitted), c.secondaryContainer, c.onSecondaryContainer)
-        UiSubmissionStatus.BUILDING ->
-            Triple(stringResource(Res.string.you_status_building), c.secondaryContainer, c.onSecondaryContainer)
-        UiSubmissionStatus.CHANGES_REQUESTED ->
-            Triple(stringResource(Res.string.you_status_changes), c.tertiaryContainer, c.onTertiaryContainer)
-        UiSubmissionStatus.REJECTED ->
-            Triple(stringResource(Res.string.you_status_rejected), c.errorContainer, c.onErrorContainer)
-        UiSubmissionStatus.PUBLISHED ->
-            Triple(stringResource(Res.string.you_status_published), c.primaryContainer, c.onPrimaryContainer)
+    val (container, content) = statusColors(status)
+    val label = when (status) {
+        UiSubmissionStatus.SUBMITTED -> stringResource(Res.string.you_status_submitted)
+        UiSubmissionStatus.BUILDING -> stringResource(Res.string.you_status_building)
+        UiSubmissionStatus.CHANGES_REQUESTED -> stringResource(Res.string.you_status_changes)
+        UiSubmissionStatus.REJECTED -> stringResource(Res.string.you_status_rejected)
+        UiSubmissionStatus.PUBLISHED -> stringResource(Res.string.you_status_published)
     }
     Surface(shape = CircleShape, color = container) {
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = content,
+            maxLines = 1,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
         )
     }
 }
 
+/**
+ * One of the account's apps, as a tile in a two-column grid: the icon large, because it is the thing a
+ * publisher recognises their work by, then where it stands.
+ *
+ * A listing whose first version was never accepted is in this grid too, so the status line says so; with
+ * only a version line it would read as published.
+ */
 @Composable
-private fun PublishedRow(backend: IdeBackend, item: UiPublishedItem, onOpen: () -> Unit) {
+private fun AppCard(
+    backend: IdeBackend,
+    item: UiPublishedItem,
+    pendingVersion: String?,
+    releases: Int,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val c = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        ListingIcon(backend, item.iconPath)
-        Column(Modifier.weight(1f)) {
+    val live = item.publishedVersion != null
+    Surface(onClick = onOpen, shape = RoundedCornerShape(24.dp), color = c.surfaceContainer, modifier = modifier) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                ListingIcon(backend, item.iconPath, size = 56.dp)
+                Spacer(Modifier.weight(1f))
+                Symbol(CaSymbols.arrowForward, contentDescription = null, size = 20.dp, tint = c.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(14.dp))
             Text(
                 item.title,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = c.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // A listing whose first version was never accepted is in this list too, and without this it
-            // read as published: no version line and nothing else to go on.
-            val state = item.publishedVersion?.let { stringResource(Res.string.you_version, it) }
-                ?: when (item.status) {
+            if (item.summary.isNotBlank()) {
+                Text(
+                    item.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                    maxLines = 2,
+                    minLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape)
+                        .background(if (live) c.primary else if (item.status == "rejected") c.error else c.outline),
+                )
+                val state = item.publishedVersion?.let { v ->
+                    listOfNotNull(
+                        "v$v",
+                        releases.takeIf { it > 1 }?.let { pluralStringResource(Res.plurals.you_releases, it, it) },
+                    ).joinMeta()
+                } ?: when (item.status) {
                     "rejected" -> stringResource(Res.string.you_status_listing_rejected)
                     "unpublished" -> stringResource(Res.string.you_status_listing_unpublished)
                     else -> stringResource(Res.string.you_status_listing_pending)
                 }
-            Text(state, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+                Text(
+                    state,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (pendingVersion != null && live) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = CircleShape, color = c.secondaryContainer) {
+                    Row(
+                        Modifier.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Symbol(CaSymbols.hourglassTop, contentDescription = null, size = 14.dp, tint = c.onSecondaryContainer)
+                        Text(
+                            listOf("v$pendingVersion", stringResource(Res.string.you_status_submitted)).joinMeta(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = c.onSecondaryContainer,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
         }
-        Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = c.onSurfaceVariant)
     }
 }
+
+/** The last cell of the app grid: an empty slot, dashed, that is the way to fill it. */
+@Composable
+private fun PublishTile(onPublish: () -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    Box(
+        modifier.heightIn(min = 168.dp).clip(RoundedCornerShape(24.dp))
+            .dashedBorder(c.outline, cornerRadius = 24.dp)
+            .clickable(onClick = onPublish),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+            Box(
+                Modifier.size(52.dp).clip(CaShapes.SquareAction).background(c.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.add, contentDescription = null, size = 28.dp, tint = c.onPrimary)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(Res.string.you_publish),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = c.primary,
+            )
+        }
+    }
+}
+
+/** The account's own controls, grouped as one card at the foot of the page. */
+@Composable
+private fun AccountCard(
+    onOpenPublicProfile: () -> Unit,
+    onSignOut: () -> Unit,
+    onDeleteAccount: (() -> Unit)?,
+) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    ) {
+        Column {
+            AccountRow(CaSymbols.visibility, stringResource(Res.string.you_view_public), c.onSurface, onOpenPublicProfile)
+            AccountDivider()
+            AccountRow(CaSymbols.accountCircle, stringResource(Res.string.you_sign_out), c.onSurface, onSignOut, chevron = false)
+            if (onDeleteAccount != null) {
+                AccountDivider()
+                AccountRow(CaSymbols.delete, stringResource(Res.string.you_delete_account), c.error, onDeleteAccount, chevron = false)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountRow(glyph: Char, label: String, tint: Color, onClick: () -> Unit, chevron: Boolean = true) {
+    val c = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Symbol(glyph, contentDescription = null, size = 22.dp, tint = tint)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = tint, modifier = Modifier.weight(1f))
+        if (chevron) Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = c.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AccountDivider() = Box(
+    Modifier.fillMaxWidth().padding(start = 56.dp).height(1.dp)
+        .background(MaterialTheme.colorScheme.outlineVariant),
+)
 
 /**
  * A listing's own app icon, falling back to a glyph tile.
@@ -561,22 +831,22 @@ private fun PublishedRow(backend: IdeBackend, item: UiPublishedItem, onOpen: () 
  * version is still in review has no published icon yet, and neither does one that shipped none.
  */
 @Composable
-private fun ListingIcon(backend: IdeBackend, iconPath: String?) {
+private fun ListingIcon(backend: IdeBackend, iconPath: String?, size: Dp) {
     val c = MaterialTheme.colorScheme
     val file by produceState<String?>(null, iconPath, backend) {
         value = iconPath?.let { runCatching { backend.store.screenshotFile(it) }.getOrNull() }
     }
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(size * 0.28f),
         color = c.primaryContainer,
-        modifier = Modifier.size(40.dp),
+        modifier = Modifier.size(size),
     ) {
         val path = file
         if (path != null) {
             ShotImage(backend, path, ContentScale.Crop, Modifier.fillMaxSize())
         } else {
             Box(contentAlignment = Alignment.Center) {
-                Symbol(CaSymbols.deployedCode, contentDescription = null, size = 20.dp, tint = c.onPrimaryContainer)
+                Symbol(CaSymbols.deployedCode, contentDescription = null, size = size * 0.5f, tint = c.onPrimaryContainer)
             }
         }
     }

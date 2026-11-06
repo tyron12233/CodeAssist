@@ -17,12 +17,27 @@ class LearnContentTest {
     @Test
     fun everyInteractiveSolutionIsAcceptedByItsOwnCheck() {
         forEachStep { lesson, step ->
-            if (step is LearnStepDef.Interactive) {
+            if (step is LearnStepDef.Interactive && step.language.startsWith("ide-")) {
+                // A hands-on CodeAssist step: graded by what happened in the workspace, not by code.
+                assertTrue(step.language in setOf("ide-kotlin", "ide-android"), "${step.id}: unexpected language '${step.language}'")
+                assertTrue(step.check.ide.isNotEmpty(), "${lesson.id}/${step.id}: a hands-on step needs IDE conditions")
+                assertTrue(step.openFile != null, "${lesson.id}/${step.id}: a hands-on step must open a file")
+                assertTrue(step.check.layout == null && step.check.cases.isEmpty(), "${step.id}: mixes check kinds")
+                for (c in step.check.ide) {
+                    val path = (c as? IdeCondition.FileContains)?.path ?: (c as? IdeCondition.FileLacks)?.path ?: continue
+                    assertTrue(path in step.files, "${lesson.id}/${step.id}: checks $path, which the step does not seed")
+                }
+            } else if (step is LearnStepDef.Interactive) {
+                assertTrue(step.check.ide.isEmpty() && step.files.isEmpty(), "${step.id}: IDE checks need an ide-* language")
                 assertTrue(step.starterCode.isNotBlank(), "${step.id}: blank starter code")
                 assertTrue(step.solution.isNotBlank(), "${step.id}: blank solution")
                 assertTrue(
-                    step.language in setOf("kotlin", "kotlin-coroutines", "java"),
+                    step.language in setOf("kotlin", "kotlin-coroutines", "java", "xml-layout"),
                     "${step.id}: unexpected language '${step.language}'",
+                )
+                assertEquals(
+                    step.language == "xml-layout", step.check.layout != null,
+                    "${step.id}: an xml-layout exercise needs a layout check, and only it may have one",
                 )
                 val missing = missingConstructs(step.solution, step.check.requireSource)
                 assertTrue(
@@ -107,6 +122,73 @@ class LearnContentTest {
             assertTrue(block.code.contains("@Preview"), "$stepId: Compose preview has no @Preview entry")
         }
         assertTrue(count > 0, "expected at least one authored ComposePreview block")
+    }
+
+    /** A layout exercise's solution passes its own check through the real renderer, and its starter does not
+     *  (otherwise the learner is told "correct" before doing anything). */
+    @Test
+    fun everyLayoutExerciseAcceptsItsSolutionAndRejectsItsStarter() {
+        val render: (String) -> List<String>? = { xml ->
+            dev.ide.core.renderStandaloneLayout(
+                xml, dev.ide.preview.PreviewRequest(1080, 1920, 2.75f, showChrome = false),
+            )?.problems?.map { "${it.tag}: ${it.message}" }
+        }
+        var count = 0
+        forEachStep { lesson, step ->
+            val layout = (step as? LearnStepDef.Interactive)?.check?.layout ?: return@forEachStep
+            count++
+            val ok = checkLayout(step.solution.trimIndent(), layout, render)
+            assertTrue(ok.passed, "${lesson.id}/${step.id}: solution rejected: ${ok.message}\n${ok.output}\n${ok.diagnostics}")
+            val starter = checkLayout(step.starterCode.trimIndent(), layout, render)
+            assertTrue(!starter.passed, "${lesson.id}/${step.id}: the starter already passes")
+        }
+        assertTrue(count > 0, "expected at least one layout exercise")
+    }
+
+    @Test
+    fun multiCaseExercisesAreWellFormed() {
+        forEachStep { lesson, step ->
+            val check = (step as? LearnStepDef.Interactive)?.check ?: return@forEachStep
+            if (check.cases.isEmpty()) return@forEachStep
+            assertTrue(check.cases.size >= 2, "${lesson.id}/${step.id}: one case is just expectedOutput")
+            assertTrue(check.expectedOutput == null && check.mustContain.isEmpty(), "${lesson.id}/${step.id}: cases replace expectedOutput")
+            for (c in check.cases) {
+                assertTrue(c.expectedOutput != null || c.mustContain.isNotEmpty(), "${lesson.id}/${step.id}: a case checks nothing")
+            }
+        }
+    }
+
+    @Test
+    fun pathsAndPrerequisitesNameRealTracks() {
+        val ids = LearnContent.tracks.map { it.id }.toSet()
+        assertTrue(LearnContent.paths.isNotEmpty())
+        for (p in LearnContent.paths) {
+            assertTrue(p.trackIds.size >= 2, "${p.id}: a path needs at least two tracks")
+            for (t in p.trackIds) assertTrue(t in ids, "${p.id}: unknown track $t")
+        }
+        for (t in LearnContent.tracks) {
+            assertTrue(t.level in setOf("Beginner", "Intermediate", "Advanced"), "${t.id}: level '${t.level}'")
+            for (pre in t.prerequisites) {
+                assertTrue(pre in ids && pre != t.id, "${t.id}: bad prerequisite $pre")
+            }
+        }
+    }
+
+    @Test
+    fun checkpointsAreQuizzesAndCapstonesAreGraded() {
+        for (track in LearnContent.tracks) for (lesson in track.lessons) {
+            assertTrue(lesson.kind in setOf("lesson", "checkpoint", "capstone"), "${lesson.id}: kind '${lesson.kind}'")
+            when (lesson.kind) {
+                "checkpoint" -> assertTrue(
+                    lesson.steps.count { it is LearnStepDef.Quiz } >= 4,
+                    "${lesson.id}: a checkpoint needs at least four quiz questions",
+                )
+                "capstone" -> assertTrue(
+                    lesson.steps.any { it is LearnStepDef.Interactive },
+                    "${lesson.id}: a capstone needs a graded exercise",
+                )
+            }
+        }
     }
 
     private fun forEachStep(body: (LearnLessonDef, LearnStepDef) -> Unit) {

@@ -21,6 +21,7 @@ import dev.ide.ui.RailDestination
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.components.busyRing
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.edbottomnav_source
 import dev.ide.ui.generated.resources.more
@@ -42,6 +43,8 @@ internal fun BottomNav(
     /** The primary RIGHT tool window (the AI chat), the phone's way into the right-hand overlay that the wide
      *  layout reaches from its right stripe. Null when no plugin contributes one. */
     rightTool: RightToolNavItem? = null,
+    /** Unread notifications, shown on More (the phone's way into the Notifications tool window). */
+    moreBadge: Int = 0,
 ) {
     Row(
         Modifier.fillMaxWidth().height(60.dp),
@@ -53,9 +56,9 @@ internal fun BottomNav(
             BottomNavItem(CaIcons.gitBranch, stringResource(Res.string.edbottomnav_source), selected == RailDestination.Source) { onSelect(RailDestination.Source) }
         }
         if (rightTool != null) {
-            BottomNavItem(rightTool.icon, rightTool.label, rightTool.open, onClick = rightTool.onClick)
+            BottomNavItem(rightTool.icon, rightTool.label, rightTool.open, busy = rightTool.busy, onClick = rightTool.onClick)
         }
-        BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More) { onSelect(RailDestination.More) }
+        BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More, badge = moreBadge) { onSelect(RailDestination.More) }
     }
 }
 
@@ -65,6 +68,8 @@ internal class RightToolNavItem(
     val label: String,
     val open: Boolean,
     val onClick: () -> Unit,
+    /** Its work is running (the agent mid-reply): the icon animates. */
+    val busy: Boolean = false,
 )
 
 @Composable
@@ -73,19 +78,13 @@ private fun BottomNavItem(
     label: String,
     active: Boolean,
     badge: Int = 0,
+    busy: Boolean = false,
     onClick: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Box {
-            IconButtonCa(icon, label, onClick, active = active, iconSize = 22, boxSize = 40)
-            if (badge > 0) {
-                Box(
-                    Modifier.align(Alignment.TopEnd)
-                        .height(15.dp).width(15.dp)
-                        .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.pill)),
-                    contentAlignment = Alignment.Center,
-                ) { Text("$badge", color = MaterialTheme.colorScheme.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
-            }
+            IconButtonCa(icon, label, onClick, Modifier.busyRing(busy), active = active, iconSize = 22, boxSize = 40)
+            if (badge > 0) dev.ide.ui.components.CountBadge(badge, Modifier.align(Alignment.TopEnd))
         }
         Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, fontSize = 10.5f.sp)
     }

@@ -9,7 +9,7 @@ entryPoints = ["com.example.hello.HelloPlugin"]
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
 capabilities = [
     "ui.settingsPage", "ui.action", "ui.editorAction", "ui.toolWindow", "ui.editorPreview",
-    "ui.editorLanguage",
+    "ui.editorLanguage", "ui.colorScheme", "ui.appTheme",
     "build.task", "build.sourceGenerator", "build.runTask",
     "interp.run",
 ]

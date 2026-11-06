@@ -195,3 +195,13 @@ fun samLambdaAsItsRealSuperInterface(): String {
     (held as Runnable).run()
     return "$sb:${held is Runnable}"
 }
+
+/** An interpreted enum inside a string template: `StringConcatFactory` must render its name, not the VM's
+ *  internal handle. Found by a Learn capstone that printed "VmObject(Size)". */
+fun tierInTemplate(): String {
+    val tier = listOf(Tier.FREE, Tier.TEAM)[1]
+    return "tier=$tier, first=${Tier.FREE}"
+}
+
+/** A data class inside a string template renders through its generated toString. */
+fun pointInTemplate(x: Int, y: Int): String = "at ${Point(x, y)}!"

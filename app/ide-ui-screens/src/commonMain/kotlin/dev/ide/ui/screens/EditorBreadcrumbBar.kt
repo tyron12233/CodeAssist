@@ -7,15 +7,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
+import dev.ide.ui.platform.excludeSystemGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemGestures
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +40,8 @@ import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.breadcrumb_blocks
 import dev.ide.ui.generated.resources.breadcrumb_code
+import dev.ide.ui.generated.resources.breadcrumb_nav_back
+import dev.ide.ui.generated.resources.breadcrumb_nav_forward
 import dev.ide.ui.generated.resources.breadcrumb_preview
 import dev.ide.ui.generated.resources.breadcrumb_split
 import dev.ide.ui.icons.CaIcons
@@ -90,6 +88,15 @@ internal fun BreadcrumbBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // Back / Forward lead the location line once there is a jump to return from: on a phone with no keyboard
+        // they are the only way back after Go to Declaration.
+        val history = state.navHistory
+        if (history.canGoBack || history.canGoForward) {
+            Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
+                NavArrow(CaIcons.chevronLeft, stringResource(Res.string.breadcrumb_nav_back), history.canGoBack) { state.navigateBack() }
+                NavArrow(CaIcons.chevronRight, stringResource(Res.string.breadcrumb_nav_forward), history.canGoForward) { state.navigateForward() }
+            }
+        }
         // Tapping the location line opens the Structure panel in the left sidebar (IntelliJ-style outline).
         Box(Modifier.weight(1f).clickable { state.selectLeftPanel(LeftPanelId.STRUCTURE) }) { Breadcrumb(crumbs) }
         ViewModeToggle(
@@ -97,7 +104,10 @@ internal fun BreadcrumbBar(
             canPreview = canPreview,
             blocksEnabled = state.blocksEnabled,
             contributed = ViewModeRegistry.forFile(active.path),
-        ) { active.viewMode = it }
+        ) {
+            if (it != active.viewMode) state.countViewMode(active.path, it)
+            active.viewMode = it
+        }
     }
 }
 
@@ -120,10 +130,10 @@ private fun ViewModeToggle(
         Modifier.height(EditorToolbarHeight)
             // Edge-to-edge (enableEdgeToEdge + a safeDrawing root inset, which does NOT cover systemGestures)
             // anchors this control against the right screen edge, where the system back-gesture zone consumes
-            // the down event on the last segment (Split) before its clickable ever sees it — so Split can't be
-            // selected while Preview, one segment further in, still works. Inset the pill clear of the end
-            // gesture inset so every segment stays tappable (empty on desktop / 3-button nav → a no-op there).
-            .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.End))
+            // the down event on the last segment (Split) before its clickable ever sees it. The pill opts out of
+            // the gesture zone rather than being inset clear of it: an inset left an empty strip at the end of
+            // the row. A no-op on desktop and iOS.
+            .excludeSystemGestures()
             .background(
                 Ide.colors.editorBg,
                 androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)
@@ -170,6 +180,24 @@ private fun ViewModeToggle(
                 ) { onSelect(contributedMode) }
             }
         }
+    }
+}
+
+/** One of the Back / Forward arrows: muted and inert when there is nowhere to go that way. */
+@Composable
+private fun NavArrow(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(EditorToolbarHeight)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.xs))
+            .clickable(enabled = enabled, onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(
+            icon,
+            label,
+            Modifier.size(17.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.35f),
+        )
     }
 }
 

@@ -1,5 +1,9 @@
 package dev.ide.ui.components
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -133,6 +137,36 @@ fun Modifier.entranceSlideUp(delayMillis: Int = 0): Modifier {
 }
 
 /**
+ * One-shot entrance for a screen's parts: fade in while rising [rise], each [order] starting
+ * [ENTRANCE_STAGGER_MS] after the one before (capped at [ENTRANCE_MAX_ORDER], so a long list does not keep
+ * the last item waiting). Give a screen's pieces increasing orders, top to bottom, to stagger them.
+ *
+ * The wait is the tween's own `delayMillis`, not a coroutine `delay`, so it runs on the frame clock and
+ * scales with the system's animation speed: with animations turned off (MotionDurationScale 0, Android's
+ * animator scale or iOS Reduce Motion) everything is simply there on the first frame. Read in
+ * `graphicsLayer`, so the animation redraws the layer without recomposing what it wraps. It replays when
+ * the element re-enters composition (a tab revisited), never on recomposition.
+ */
+@Composable
+fun Modifier.entranceReveal(order: Int = 0, rise: Dp = 14.dp): Modifier {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            1f,
+            tween(Motion.BASE, delayMillis = order.coerceIn(0, ENTRANCE_MAX_ORDER) * ENTRANCE_STAGGER_MS, easing = Motion.quiet),
+        )
+    }
+    return graphicsLayer {
+        val p = progress.value
+        alpha = p
+        translationY = (1f - p) * rise.toPx()
+    }
+}
+
+private const val ENTRANCE_STAGGER_MS = 30
+private const val ENTRANCE_MAX_ORDER = 6
+
+/**
  * One-shot pop entrance (`scale(0.96) translateY(5px) → none`, expressive spring). Used for popovers like
  * the completion list.
  */
@@ -244,5 +278,37 @@ fun Chip(
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = textColor, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+/**
+ * While [busy], a gradient arc circles the element (a tool window's icon whose work is still running, like the AI
+ * agent mid-reply), so it reads as "still working" from anywhere in the app, even with its panel closed. Drawn
+ * behind the content, inset to the element's bounds; nothing is drawn or animated when idle.
+ */
+@Composable
+fun Modifier.busyRing(busy: Boolean): Modifier {
+    if (!busy) return this
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "busyRing")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(1200, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "busyRingAngle",
+    )
+    val scheme = MaterialTheme.colorScheme
+    val colors = listOf(Color.Transparent, scheme.tertiary, scheme.primary, Color.Transparent)
+    return this.drawBehind {
+        val stroke = 2.dp.toPx()
+        val radius = size.minDimension / 2f - stroke / 2f
+        rotate(angle) {
+            drawCircle(
+                brush = androidx.compose.ui.graphics.Brush.sweepGradient(colors, center),
+                radius = radius,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+            )
+        }
     }
 }

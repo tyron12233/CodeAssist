@@ -5,6 +5,7 @@ import dev.ide.core.build.BuildFailureKind
 import dev.ide.core.build.BuildRunner
 import dev.ide.core.perf.MemSample
 import dev.ide.core.perf.PerfSampler
+import dev.ide.core.perf.UsageCounter
 import dev.ide.core.plugins.AgentPlugin
 import dev.ide.core.plugins.VcsPlugin
 import dev.ide.core.project.ProjectManager
@@ -254,7 +255,8 @@ class IdeServicesBackend(
             try {
                 return scheduler.background(label = label, block = block)
             } catch (_: EngineCanceledException) {
-                delay(BACKGROUND_RETRY_MS)
+                // Re-queue once the completion that preempted this is done, rather than polling while it runs.
+                scheduler.awaitInteractiveIdle()
             }
         }
     }
@@ -386,7 +388,7 @@ class IdeServicesBackend(
     /** Turns engine ERROR logs (caught failures) into the non-fatal dialog. Registered on [Log] in [init]. */
     private val errorDialogSink = LogSink { record ->
         val t = record.throwable
-        if (record.level == LogLevel.ERROR && t != null) {
+        if (record.level == LogLevel.ERROR && t != null && !PluginSandbox.isRelayed(record)) {
             showError(t.javaClass.simpleName.ifEmpty { "Error" }, record.message, stackTraceString(t))
         }
     }
@@ -432,10 +434,19 @@ class IdeServicesBackend(
      */
     private val userMessageRelay: dev.ide.platform.Disposable? = manager?.userMessages?.onMessage { posted ->
         runCatching {
+            val (title, body) = dev.ide.core.backend.splitMessage(posted.message.text)
             notificationCenter.post(
                 kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
-                title = posted.message.text,
-                body = null,
+                title = title,
+                body = body,
+                // The plugin whose code posted it, so the entry says who is talking.
+                source = runCatching { blamePlugin(posted.origin)?.name }.getOrNull(),
+                foldRepeats = true,
+                level = when (posted.message.severity) {
+                    dev.ide.platform.notify.MessageSeverity.ERROR -> dev.ide.ui.backend.UiNotificationLevel.ERROR
+                    dev.ide.platform.notify.MessageSeverity.WARNING -> dev.ide.ui.backend.UiNotificationLevel.WARNING
+                    else -> dev.ide.ui.backend.UiNotificationLevel.INFO
+                },
             )
         }
     }
@@ -500,7 +511,10 @@ class IdeServicesBackend(
         dev.ide.core.backend.ChallengeBackend(this, dailyChallengeService)
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
-    private val learnBackend = LearnBackend(this)
+    private val learnBackend = LearnBackend(
+        this,
+        manager?.applicationContainer?.getServiceOrNull(LEARN_REMOTE_SERVICE) ?: dev.ide.store.LearnRemoteService.Unsupported,
+    )
     override val learn: LearnService = learnBackend
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
@@ -610,18 +624,31 @@ class IdeServicesBackend(
             compatibility = runCatching { services.isCompatibilityMode() }.getOrDefault(false),
         )
 
-    // ---- Compose preview (LayoutPreviewBackend; aggregator-level, uses the preview lane) ----
+    // ---- Compose preview (LayoutPreviewBackend; aggregator-level) ----
+    // Lowering after an edit uses the preview lane. The small setup reads a first frame waits on (readiness,
+    // libraries, resource roots, sandbox, isolation) use the background lane: each is a few milliseconds, and on
+    // the preview lane every one of them queued behind the editor's whole run of passes on the opened file.
 
-    /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
-     *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
-    suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? {
+    /**
+     * The lowered preview to render. Returns an ide-core type; the preview hosts call this.
+     *
+     * A re-lower after an edit is lowest-priority engine work: preempted by analysis and completion, it retries
+     * until the engine is free, so it never competes with typing. An [urgent] one (the host has nothing on screen
+     * yet: a preview just opened, or the user switched to another) queues with the editor's own passes instead and
+     * is not preempted by them. On a cold open the lowering itself took ~60 ms but waited ~3 s behind the
+     * highlighting and diagnostics of the same file (and a cold first attempt was thrown away when they arrived).
+     */
+    suspend fun lowerComposePreview(
+        path: String, functionName: String, arity: Int, text: String, urgent: Boolean = false,
+    ): LoweredComposePreview? {
         // A live-literal edit patches the last lowering directly: no lane wait behind the editor's analysis. Off the
         // caller's thread all the same (the host asks from the UI thread): the patch diffs the whole buffer.
         withContext(Dispatchers.Default) {
             runCatching { services.liveLiteralPreview(Paths.get(path), text, functionName, arity) }.getOrNull()
         }?.let { return it }
-        return timedPass("lower", path, { it?.program?.size ?: 0 }) {
-            preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+        return timedPass(if (urgent) "lowerFirst" else "lower", path, { it?.program?.size ?: 0 }) {
+            if (urgent) background("lowerPreview") { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+            else preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
         }
     }
 
@@ -634,29 +661,29 @@ class IdeServicesBackend(
      *  The preview host polls this to show a transient "Preparing" state (and retry) instead of latching a
      *  first-run (index still building) failure into a permanent "unresolved call" error. */
     suspend fun composePreviewReady(path: String): Boolean =
-        preview { services.composePreviewReady(Paths.get(path)) }
+        background("previewSetup") { services.composePreviewReady(Paths.get(path)) }
 
     /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
-        preview { services.composePreviewLibs(Paths.get(path)) }
+        background("previewSetup") { services.composePreviewLibs(Paths.get(path)) }
 
     /** The preview-sandbox categories the open project restricts (`SandboxCategory.id` strings from the
      *  project-scoped Compose Preview settings); the preview host builds a `PreviewSandboxPolicy` from them.
      *  A pref read, but routed through the preview lane like its sibling calls so it never races a swap of
      *  the inner services on project switch. */
     suspend fun composePreviewSandbox(): Set<String> =
-        preview { services.composePreviewSandbox() }
+        background("previewSetup") { services.composePreviewSandbox() }
 
     /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF).
      *  The Android host reads this to choose the remote streaming path over the in-process renderer. */
     suspend fun composePreviewIsolated(): Boolean =
-        preview { services.composePreviewIsolated() }
+        background("previewSetup") { services.composePreviewIsolated() }
 
     /** The previewed module's res-dir paths + R namespace, so the `:preview` process can rebuild the resource
      *  repository (it can't receive the in-memory one). Null for a non-Android module / one with no res dirs. */
     suspend fun composePreviewResourceRoots(path: String): ComposePreviewResourceRoots? =
-        preview { services.composePreviewResourceRoots(Paths.get(path)) }
+        background("previewSetup") { services.composePreviewResourceRoots(Paths.get(path)) }
 
     /** The previewed module's resources + R package for interpreter-mediated resource resolution
      *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI
@@ -707,9 +734,32 @@ class IdeServicesBackend(
         else -> null
     }
 
+    /**
+     * Which wording the user's "granted" answered: [ANALYTICS_SCOPE_USAGE] once it named feature usage. A consent
+     * from before that (the sheet then promised "never which features you use") keeps performance data flowing
+     * but counts no usage, and the sheet asks again.
+     */
+    private fun consentCoversUsage(): Boolean =
+        analyticsConsent() == true && manager?.preference(ANALYTICS_SCOPE_PREF) == ANALYTICS_SCOPE_USAGE
+
+    override fun analyticsNeedsAsking(): Boolean =
+        analyticsAvailable() && (analyticsConsent() == null || (analyticsConsent() == true && !consentCoversUsage()))
+
     override fun setAnalyticsConsent(granted: Boolean) {
         manager?.setPreference(ANALYTICS_CONSENT_PREF, if (granted) "granted" else "denied")
+        // The sheet the user just answered is the current wording, so a yes covers usage and a no covers nothing.
+        manager?.setPreference(ANALYTICS_SCOPE_PREF, if (granted) ANALYTICS_SCOPE_USAGE else "")
         analytics.enabled = granted
+        if (!granted) usage.clear()
+    }
+
+    /** Feature-use counts, reported per feature when telemetry is flushed ([flushTelemetry], [close]). */
+    private val usage = UsageCounter { feature, count ->
+        track(dev.ide.analytics.Events.FEATURE_USED, mapOf("feature" to feature, "count" to count.toString()))
+    }
+
+    override fun countFeature(feature: String) {
+        if (consentCoversUsage()) usage.count(feature)
     }
 
     override fun track(event: String, props: Map<String, String>) {
@@ -747,12 +797,33 @@ class IdeServicesBackend(
      * there does not end the process either: main returns, the VM waits forever on the non-daemon threads still
      * running, and the frozen window is reported as an ANR ("Input dispatching timed out") instead of a crash.
      */
-    fun installCrashReporting(isFatal: (Thread) -> Boolean = { false }) {
+    fun installCrashReporting(
+        isFatal: (Thread) -> Boolean = { false },
+        /** How long this process has run, for counting crashes that come right after a launch. */
+        processUptimeMs: () -> Long = { Long.MAX_VALUE },
+        /** Turn an installed plugin off when it crashes the process (see PluginCrashGuard). Off in the plugin
+         *  sandbox, whose whole purpose is running a plugin that may crash. */
+        guardAgainstPluginCrashes: Boolean = true,
+    ) {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, t ->
             val fatal = runCatching { isFatal(thread) }.getOrDefault(false)
+            // Whose code it was. An installed plugin runs in this process, so its throw lands here like ours.
+            val plugin = runCatching { blamePlugin(t.stackTrace.asList(), t) }.getOrNull()
             runCatching { Log.logger("uncaught").warn("Uncaught exception on ${thread.name}", t) } // ring/console only
-            if (!fatal) runCatching { showError("Application error", t.message ?: t.javaClass.simpleName, stackTraceString(t)) }
+            // In the plugin's own log too, which its page in Plugins opens: where its author looks.
+            if (plugin != null) runCatching { Log.logger("CodeAssist", plugin.id).error("Uncaught exception on ${thread.name}", t) }
+            if (!fatal) runCatching {
+                val title = if (plugin != null) "${plugin.name} (plugin) failed" else "Application error"
+                showError(title, t.message ?: t.javaClass.simpleName, stackTraceString(t))
+            }
+            if (fatal && guardAgainstPluginCrashes) runCatching {
+                manager?.pluginCrashGuard?.onFatalCrash(
+                    plugin?.let { dev.ide.core.plugins.PluginCrashGuard.Blamed(it.id, it.version, it.name) },
+                    processUptimeMs(),
+                    manager.disabledPlugins(),
+                )
+            }
             runCatching {
                 analytics.track(
                     dev.ide.analytics.AnalyticsEvent(
@@ -760,7 +831,10 @@ class IdeServicesBackend(
                         dev.ide.analytics.EventCategory.CRASH,
                         // Heap state at the crash: lets OOM-adjacent crashes (the 43 OutOfMemoryErrors, plus
                         // any that fail from memory pressure without saying so) be told apart from logic bugs.
-                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name) + MemSample.now().props(),
+                        // `in_plugin` keeps a plugin's crash out of the IDE's own crash-free rate; the plugin's
+                        // id is not sent (an unpublished plugin's id is its developer's package name).
+                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name) + MemSample.now().props() +
+                            (if (plugin != null) mapOf("in_plugin" to "1") else emptyMap()),
                     )
                 )
                 analytics.flush()
@@ -769,6 +843,131 @@ class IdeServicesBackend(
                 // `track` has already persisted the event to disk, so the next launch sends it if this flush could not.
                 if (previous != null) previous.uncaughtException(thread, t) else kotlin.system.exitProcess(10)
             }
+        }
+    }
+
+    /** An installed plugin a stack was blamed on. */
+    data class BlamedPlugin(val id: String, val name: String, val version: String)
+
+    /** The blame built for one set of plugin loaders; rebuilt when a reload replaces the set (plugin sandbox). */
+    @Volatile
+    private var blameCache: Pair<Map<String, ClassLoader>, dev.ide.core.plugins.PluginBlame?>? = null
+
+    private val pluginBlame: dev.ide.core.plugins.PluginBlame?
+        get() {
+            val loaders = manager?.env?.externalPluginLoaders ?: return null
+            blameCache?.let { (forLoaders, blame) -> if (forLoaders === loaders) return blame }
+            val blame = loaders.takeIf { it.isNotEmpty() }?.let { dev.ide.core.plugins.PluginBlame.ofLoaders(it) }
+            blameCache = loaders to blame
+            return blame
+        }
+
+    /** The installed plugin whose code is topmost in [frames] (or, given [t], anywhere in its cause chain). */
+    fun blamePlugin(frames: List<StackTraceElement>, t: Throwable? = null): BlamedPlugin? {
+        val blame = pluginBlame ?: return null
+        val id = (if (t != null) blame.blame(t) else blame.blame(frames)) ?: return null
+        val manifest = manager?.env?.installedPlugins?.firstOrNull { it.manifest.id == id }?.manifest
+        return BlamedPlugin(id, manifest?.name ?: id, manifest?.version ?: "?")
+    }
+
+    /**
+     * The UI process's half of the plugin crash safety net, called once at startup: settle what the load did
+     * (an update lifted a crash suspension, safe mode ran), post what an earlier launch could not say before
+     * it died, and after [dev.ide.core.plugins.PluginCrashGuard.STABLE_AFTER_MS] count this launch as a good one.
+     */
+    fun startPluginCrashSafety() {
+        val m = manager ?: return
+        val guard = m.pluginCrashGuard
+        runCatching { guard.afterLoad(m.env.liftedCrashSuspensions, m.env.safeModeApplied) }
+        runCatching {
+            guard.takeNotice()?.let { n ->
+                notificationCenter.post(
+                    kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
+                    title = n.title,
+                    body = n.body,
+                    target = dev.ide.ui.backend.UiNotificationTarget.Screen(PLUGINS_ROUTE),
+                    key = "plugin-crash:${n.pluginId ?: "safe-mode"}",
+                )
+            }
+        }
+        analyticsScope.launch {
+            delay(dev.ide.core.plugins.PluginCrashGuard.STABLE_AFTER_MS)
+            runCatching { guard.markStable() }
+        }
+    }
+
+    /**
+     * An installed plugin crashed one of the app's helper processes ([where], e.g. "the build process"), which
+     * died of it and named it on the way down. Turn it off exactly as a crash of this process would (see
+     * [dev.ide.core.plugins.PluginCrashGuard]), and say so now: unlike a crash of this process, the IDE is
+     * still here to tell the user.
+     */
+    fun suspendPluginAfterProcessCrash(blamed: dev.ide.core.plugins.PluginCrashGuard.Blamed, where: String) {
+        val m = manager ?: return
+        if (blamed.id in m.disabledPlugins()) return
+        runCatching {
+            m.pluginCrashGuard.onFatalCrash(blamed, Long.MAX_VALUE, m.disabledPlugins())
+            // Said below, now; the next launch has nothing left to say about it.
+            m.pluginCrashGuard.takeNotice()
+        }
+        runCatching {
+            Log.logger("CodeAssist", blamed.id).error("${blamed.name} ${blamed.version} crashed $where and was turned off")
+        }
+        runCatching {
+            notificationCenter.post(
+                kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
+                title = "${blamed.name} was turned off",
+                body = "It crashed $where. It stays off until a new version is installed, or until you turn it back " +
+                    "on in Plugins.",
+                target = dev.ide.ui.backend.UiNotificationTarget.Screen(PLUGINS_ROUTE),
+                key = "plugin-crash:${blamed.id}",
+            )
+        }
+    }
+
+    /** Per plugin id: how many times this session it stalled the main thread, and the longest stall. */
+    private val pluginStalls = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
+
+    /**
+     * The main thread was blocked for [durationMs] and has recovered; [frames] is its stack sampled while it was
+     * stuck. Sent as [dev.ide.analytics.Events.MAIN_STALL] (scrubbed like a crash), and when an installed plugin's
+     * code was on that stack, said in the plugin's log and in one notification per plugin that keeps count,
+     * so a plugin that freezes the IDE is named rather than leaving the IDE to look slow.
+     */
+    fun reportMainStall(frames: List<StackTraceElement>, durationMs: Long, uptimeMs: Long, foreground: Boolean) {
+        val plugin = runCatching { blamePlugin(frames) }.getOrNull()
+        runCatching {
+            val sample = Throwable("main thread stalled").apply { stackTrace = frames.toTypedArray() }
+            analytics.track(
+                dev.ide.analytics.AnalyticsEvent(
+                    dev.ide.analytics.Events.MAIN_STALL,
+                    dev.ide.analytics.EventCategory.CRASH,
+                    mapOf(
+                        "duration_ms" to durationMs.toString(),
+                        "uptime_ms" to uptimeMs.toString(),
+                        "fg" to if (foreground) "1" else "0",
+                        "frames" to dev.ide.analytics.CrashScrub.ownFrames(sample),
+                    ) + (if (plugin != null) mapOf("in_plugin" to "1") else emptyMap()) + MemSample.now().props(),
+                ),
+            )
+        }
+        if (plugin == null) return
+        runCatching {
+            Log.logger("CodeAssist", plugin.id).warn(
+                "Blocked the main thread for ${durationMs} ms; CodeAssist stopped responding meanwhile. " +
+                    "Move this work off the main thread:\n" + frames.take(25).joinToString("\n") { "    at $it" },
+            )
+        }
+        val (count, longest) = pluginStalls.merge(plugin.id, 1 to durationMs) { a, b -> (a.first + b.first) to maxOf(a.second, b.second) }!!
+        runCatching {
+            notificationCenter.post(
+                kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
+                title = "${plugin.name} is slowing CodeAssist down",
+                body = "It froze the app ${if (count == 1) "once" else "$count times"} this session " +
+                    "(longest ${(longest + 500) / 1000} s). If it keeps happening, turn it off in Plugins.",
+                target = dev.ide.ui.backend.UiNotificationTarget.Screen(PLUGINS_ROUTE),
+                key = "plugin-stall:${plugin.id}",
+            )
         }
     }
 
@@ -800,6 +999,7 @@ class IdeServicesBackend(
             runCatching { perf.flushAll() }
             runCatching { frames.flushAll() }
             runCatching { frameCpu.flushAll() }
+            runCatching { usage.flushAll() }
             runCatching { analytics.flush() }
         }
     }
@@ -811,6 +1011,7 @@ class IdeServicesBackend(
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
         runCatching { frames.flushAll() }
         runCatching { frameCpu.flushAll() }
+        runCatching { usage.flushAll() }
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
         // The version-control backend holds an open repository handle and its own refresh coroutine.
@@ -826,9 +1027,10 @@ class IdeServicesBackend(
 
     private companion object {
         const val ANALYTICS_CONSENT_PREF = "analytics.consent"
-
-        /** How long a preempted background-lane call waits before running again (a completion's typical span). */
-        const val BACKGROUND_RETRY_MS = 30L
+        const val ANALYTICS_SCOPE_PREF = "analytics.consent.scope"
+        const val ANALYTICS_SCOPE_USAGE = "usage"
+        /** The notification route that opens Settings > Plugins on its Installed tab. */
+        const val PLUGINS_ROUTE = "plugins"
     }
 
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */
@@ -880,7 +1082,7 @@ class IdeServicesBackend(
  * handle the tags; unresolved project resources fall back (lesson XML is authored to be self-contained). Never
  * the real-view path (that needs the SDK + a built project). Returns null on any inflation failure.
  */
-private fun renderStandaloneLayout(
+internal fun renderStandaloneLayout(
     xml: String, request: dev.ide.preview.PreviewRequest
 ): dev.ide.preview.LayoutPreviewResult? = runCatching {
     dev.ide.preview.impl.LayoutPreviewService().preview(

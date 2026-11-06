@@ -1,1 +1,1 @@
-CodeAssist
+CodeAssist - Android IDE

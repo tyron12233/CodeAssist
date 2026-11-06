@@ -226,6 +226,16 @@ internal fun KotlinResolver.earlyExitNarrowing(
             }
             continue
         }
+        // `require(x is T)` / `check(x is T)`: the call throws unless its condition holds, so the rest of the
+        // block has it true (the stdlib's `returns() implies value` contract). A lazy message may follow.
+        if (st is KtCallExpression) {
+            val callee = (st.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+            if (callee == "require" || callee == "check") {
+                st.valueArguments.takeIf { it.size <= 2 }?.firstOrNull()?.getArgumentExpression()
+                    ?.let { conditionNarrowing(it, name, whenTrue = true) }?.let { result = it }
+            }
+            continue
+        }
         val guard = st as? KtIfExpression ?: continue
         if (guard.`else` != null) continue                // a fall-through `else` isn't an early exit
         if (!branchAlwaysJumps(guard.then)) continue       // the then must transfer control out

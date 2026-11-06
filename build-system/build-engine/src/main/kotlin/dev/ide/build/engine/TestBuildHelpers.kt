@@ -101,7 +101,7 @@ fun testCompileClasspath(module: Module): List<Path> {
 fun testRuntimeClasspath(module: Module): List<Path> {
     val runtime = module.classpath(DependencyScope.RUNTIME_ONLY).entries.map { Paths.get(it.root.path) }
     val test = module.classpath(DependencyScope.TEST_IMPLEMENTATION).entries.map { Paths.get(it.root.path) }
-    return (testOutputs(module) + classOutputs(module) + resourcesDir(module) + runtime + test + kotlinSiblings(runtime + test))
+    return (testOutputs(module) + classOutputs(module).plusElement(resourcesDir(module)) + runtime + test + kotlinSiblings(runtime + test))
         .filter { Files.isDirectory(it) || Files.isRegularFile(it) }
         .distinct()
 }

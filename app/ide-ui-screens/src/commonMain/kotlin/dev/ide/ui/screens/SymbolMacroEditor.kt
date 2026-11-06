@@ -68,6 +68,8 @@ import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.close
+import dev.ide.ui.generated.resources.symbolbar_bookmark
+import dev.ide.ui.generated.resources.symbolbar_clipboard
 import dev.ide.ui.generated.resources.symbolbar_comment
 import dev.ide.ui.generated.resources.symbolbar_duplicate_line
 import dev.ide.ui.generated.resources.symbolbar_move_line_down
@@ -771,8 +773,9 @@ private fun SymbolRow(
                 style = if (isAction) MaterialTheme.typography.bodyMedium else Ide.type.codeSmall,
                 fontWeight = FontWeight.Medium,
             )
+            // An action key's default label IS its action name; repeating it underneath says nothing.
             val subtitle = when {
-                isAction -> actionLabel(key.action!!)
+                isAction -> actionLabel(key.action!!).takeIf { it != key.label }
                 key.insert != key.label -> key.insert
                 else -> null
             }
@@ -867,6 +870,8 @@ private fun actionLabel(action: String): String = when (action) {
     CustomizationActions.MOVE_LINE_UP -> stringResource(Res.string.symbolbar_move_line_up)
     CustomizationActions.MOVE_LINE_DOWN -> stringResource(Res.string.symbolbar_move_line_down)
     CustomizationActions.DUPLICATE_LINE -> stringResource(Res.string.symbolbar_duplicate_line)
+    CustomizationActions.PASTE_HISTORY -> stringResource(Res.string.symbolbar_clipboard)
+    CustomizationActions.TOGGLE_BOOKMARK -> stringResource(Res.string.symbolbar_bookmark)
     CustomizationActions.NEXT_PROBLEM -> stringResource(Res.string.symbolbar_next_problem)
     else -> action
 }

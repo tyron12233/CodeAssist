@@ -1,5 +1,9 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.generated.resources.storage_cat_plugin_leftovers_desc
+import dev.ide.ui.generated.resources.storage_cat_plugin_leftovers_title
+import dev.ide.ui.generated.resources.storage_clear_plugin_leftovers_body
+import dev.ide.ui.generated.resources.storage_clear_plugin_leftovers_title
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -98,7 +103,13 @@ import org.jetbrains.compose.resources.stringResource
  * action. Clearing caches is silent; the SDK clear, leftover-folder removal and project deletes go through a confirm.
  */
 @Composable
-fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
+fun StorageScreen(
+    backend: IdeBackend,
+    onBack: () -> Unit,
+    /** Whether the loaded project is open in the editor. Only then is its row marked Open and kept from deletion:
+     *  a project closed behind Home stays loaded, and deleting it unloads it first. */
+    projectOpen: Boolean = true,
+) {
     val state = rememberStorageScreenState(backend)
 
     ExpressiveScaffold(title = stringResource(Res.string.settings_storage), onBack = onBack) { innerPadding ->
@@ -118,6 +129,7 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
                     onClearAllCaches = state::clearAllCaches,
                     onRequestConfirmedClear = state::askClear,
                     onRequestDeleteProject = state::askDeleteProject,
+                    openProjectRootPath = r.openProjectRootPath.takeIf { projectOpen },
                 )
             }
             val freed = state.freedBytes
@@ -131,12 +143,21 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
 
     // ---- confirmations ----
     val pending = state.pendingClear
-    val leftovers = pending?.id == "leftovers"
     ConfirmDialog(
         visible = pending != null,
-        title = stringResource(if (leftovers) Res.string.storage_clear_leftovers_title else Res.string.storage_clear_sdk_title),
+        title = stringResource(
+            when (pending?.id) {
+                "leftovers" -> Res.string.storage_clear_leftovers_title
+                "plugin-leftovers" -> Res.string.storage_clear_plugin_leftovers_title
+                else -> Res.string.storage_clear_sdk_title
+            },
+        ),
         body = stringResource(
-            if (leftovers) Res.string.storage_clear_leftovers_body else Res.string.storage_clear_sdk_body,
+            when (pending?.id) {
+                "leftovers" -> Res.string.storage_clear_leftovers_body
+                "plugin-leftovers" -> Res.string.storage_clear_plugin_leftovers_body
+                else -> Res.string.storage_clear_sdk_body
+            },
             pending?.let { formatBytes(it.bytes) } ?: "",
         ),
         confirmLabel = stringResource(Res.string.storage_clear),
@@ -164,6 +185,7 @@ private fun StorageContent(
     onClearAllCaches: () -> Unit,
     onRequestConfirmedClear: (UiStorageCategory) -> Unit,
     onRequestDeleteProject: (UiStorageProject) -> Unit,
+    openProjectRootPath: String?,
 ) {
     val shown = report.categories.filter { it.bytes > 0 }
     val hasClearableCache = report.categories.any { it.clearable && !it.destructive && it.bytes > 0 }
@@ -200,7 +222,7 @@ private fun StorageContent(
                 )
             }
             itemsKeyed(report.projects, key = { it.rootPath }) { p ->
-                ProjectRow(p, isOpen = p.rootPath == report.openProjectRootPath, busy = busy) { onRequestDeleteProject(p) }
+                ProjectRow(p, isOpen = p.rootPath == openProjectRootPath, busy = busy) { onRequestDeleteProject(p) }
             }
         }
     }
@@ -374,17 +396,27 @@ private fun StorageToast(toast: String?, modifier: Modifier, onDone: () -> Unit)
 
 // ---- id → color / label / formatting ---------------------------------------------------------------
 
+/**
+ * Each category's colour on the bar and its legend dot. They must all differ, or two segments read as one: the
+ * theme tokens the ids name are not distinct (`run` and `success` are the same green, `accent` and
+ * `accentStrong` the same primary, `warning` and `gitModified` near-identical yellows), so the categories past the
+ * accent get fixed hues of their own, a lighter shade on a dark background.
+ */
 @Composable
-private fun storageColor(colorId: String): Color = when (colorId) {
-    "accent" -> MaterialTheme.colorScheme.primary
-    "accentStrong" -> MaterialTheme.colorScheme.primary
-    "info" -> Ide.colors.info
-    "run" -> Ide.colors.run
-    "success" -> Ide.colors.success
-    "warning" -> Ide.colors.warning
-    "gitModified" -> Ide.colors.gitModified
-    "error" -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.outline
+private fun storageColor(colorId: String): Color {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    fun hue(onDark: Long, onLight: Long) = Color(if (dark) onDark else onLight)
+    return when (colorId) {
+        "accent" -> MaterialTheme.colorScheme.primary                // dependencies
+        "info" -> Ide.colors.info                                    // indexes
+        "run" -> Ide.colors.run                                      // build output
+        "success" -> hue(0xFFB79CF2, 0xFF7E57C2)                     // previews: violet
+        "gitModified" -> Ide.colors.gitModified                      // language caches
+        "warning" -> hue(0xFF7FA7FF, 0xFF3367D6)                     // SDK: blue
+        "accentStrong" -> hue(0xFFF28DBE, 0xFFC2185B)                // project files: pink
+        "error" -> MaterialTheme.colorScheme.error                   // leftovers
+        else -> MaterialTheme.colorScheme.outline
+    }
 }
 
 @Composable
@@ -397,6 +429,7 @@ private fun categoryTitle(id: String): String = when (id) {
     "sdk" -> stringResource(Res.string.storage_cat_sdk_title)
     "projects" -> stringResource(Res.string.storage_cat_projects_title)
     "leftovers" -> stringResource(Res.string.storage_cat_leftovers_title)
+    "plugin-leftovers" -> stringResource(Res.string.storage_cat_plugin_leftovers_title)
     else -> stringResource(Res.string.storage_cat_other_title)
 }
 
@@ -410,6 +443,7 @@ private fun categoryDescription(id: String): String = when (id) {
     "sdk" -> stringResource(Res.string.storage_cat_sdk_desc)
     "projects" -> stringResource(Res.string.storage_cat_projects_desc)
     "leftovers" -> stringResource(Res.string.storage_cat_leftovers_desc)
+    "plugin-leftovers" -> stringResource(Res.string.storage_cat_plugin_leftovers_desc)
     else -> stringResource(Res.string.storage_cat_other_desc)
 }
 

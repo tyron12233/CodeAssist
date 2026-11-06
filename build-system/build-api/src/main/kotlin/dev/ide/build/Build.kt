@@ -159,7 +159,33 @@ class RunAction(
     val graph: TaskGraph,
     val banner: String? = null,
     val onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null,
-)
+) {
+    /**
+     * Set to run an interactive program in the host's Run console instead of the build log.
+     *
+     * The host opens a console session for the run (the same full-screen terminal, input bar and Stop a
+     * built-in console run gets), fills [RunConsole.io] with it before the graph starts, and closes it when
+     * the run ends. A task in [graph] reads [RunConsole.io] when it executes and streams the program through
+     * it. Null (the default) is a plain build-log run.
+     *
+     * A property rather than a constructor parameter so the constructor plugins already link against keeps
+     * its shape. On a host older than SPI 3.2.0 the setter does not exist; a plugin that catches the
+     * `LinkageError` can fall back to writing the program's output to the build log.
+     */
+    var console: RunConsole? = null
+}
+
+/**
+ * The Run console a contributed [RunAction] asked for, and the way its graph reaches it.
+ *
+ * [title] is what the console shows as the program's name. [io] is null until the host opens the session,
+ * which it does after [RunTaskProvider.actionFor] returns and before any task runs; a task reading null
+ * (a host that ignored the request) should fall back to its build log.
+ */
+class RunConsole(val title: String) {
+    @Volatile
+    var io: ProgramIo? = null
+}
 
 /**
  * Contributes Run-picker options for a module, and executes the ones it owns. [tasksFor] enumerates;

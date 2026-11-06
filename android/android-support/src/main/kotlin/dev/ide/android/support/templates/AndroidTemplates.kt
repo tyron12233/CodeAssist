@@ -355,6 +355,7 @@ object MaterialYouAppTemplate : ProjectTemplate {
             <androidx.coordinatorlayout.widget.CoordinatorLayout
                 xmlns:android="http://schemas.android.com/apk/res/android"
                 xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:id="@+id/main"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
@@ -383,14 +384,25 @@ object MaterialYouAppTemplate : ProjectTemplate {
                 package $pkg
 
                 import android.os.Bundle
+                import androidx.activity.enableEdgeToEdge
                 import androidx.appcompat.app.AppCompatActivity
+                import androidx.core.view.ViewCompat
+                import androidx.core.view.WindowInsetsCompat
                 import com.google.android.material.floatingactionbutton.FloatingActionButton
                 import com.google.android.material.snackbar.Snackbar
 
                 class MainActivity : AppCompatActivity() {
                     override fun onCreate(savedInstanceState: Bundle?) {
                         super.onCreate(savedInstanceState)
+                        // Android 15 and later draw the app under the system bars: this picks status bar icons
+                        // that stay readable, and the padding keeps the button clear of the navigation bar.
+                        enableEdgeToEdge()
                         setContentView(R.layout.activity_main)
+                        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+                            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                            v.setPadding(bars.left, 0, bars.right, bars.bottom) // the action bar takes the top
+                            insets
+                        }
                         findViewById<FloatingActionButton>(R.id.fab).setOnClickListener { view ->
                             Snackbar.make(view, R.string.fab_clicked, Snackbar.LENGTH_SHORT).show()
                         }
@@ -406,7 +418,11 @@ object MaterialYouAppTemplate : ProjectTemplate {
 
                 import android.os.Bundle;
                 import android.view.View;
+                import androidx.activity.EdgeToEdge;
                 import androidx.appcompat.app.AppCompatActivity;
+                import androidx.core.graphics.Insets;
+                import androidx.core.view.ViewCompat;
+                import androidx.core.view.WindowInsetsCompat;
                 import com.google.android.material.floatingactionbutton.FloatingActionButton;
                 import com.google.android.material.snackbar.Snackbar;
 
@@ -414,7 +430,15 @@ object MaterialYouAppTemplate : ProjectTemplate {
                     @Override
                     protected void onCreate(Bundle savedInstanceState) {
                         super.onCreate(savedInstanceState);
+                        // Android 15 and later draw the app under the system bars: this picks status bar icons
+                        // that stay readable, and the padding keeps the button clear of the navigation bar.
+                        EdgeToEdge.enable(this);
                         setContentView(R.layout.activity_main);
+                        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+                            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                            v.setPadding(bars.left, 0, bars.right, bars.bottom); // the action bar takes the top
+                            return insets;
+                        });
                         FloatingActionButton fab = findViewById(R.id.fab);
                         fab.setOnClickListener(new View.OnClickListener() {
                             @Override

@@ -153,6 +153,73 @@ class AndroidLibDependencyRTest {
         }
     }
 
+    /**
+     * A library's own XML referencing a dependency's resources: a theme attribute from an AAR (what
+     * `?attr/colorSurface` from Material is) and a string from another library module. The library's resources
+     * used to be linked against `android.jar` alone, so both failed with "resource ... not found" even though
+     * the dependency was declared. Its R stays non-transitive: only its own resources.
+     */
+    @Test
+    fun androidLibResourcesReferenceDependencyResources() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("android-lib-dep-res") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val aar = buildAar(dir.resolve("aarlib.aar"))
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            val types = ModuleTypeRegistry(platform.extensions)
+            AndroidSupport.register(types, FacetCodecRegistry())
+            val libType = types.resolve("android-lib")
+
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.libraryTable.create("aarlib").apply {
+                kind = LibraryKind.AAR; addClassesRoot(store.vfs.fileFor(aar)); commit()
+            }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("base", libType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(AndroidFacet(namespace = "com.example.base", compileSdk = 34, minSdk = 24, isApplication = false))
+                }
+                addModule("feature", libType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(AndroidFacet(namespace = "com.example.feature", compileSdk = 34, minSdk = 24, isApplication = false))
+                    addDependency(ModuleDependency(ModuleId("base"), DependencyScope.IMPLEMENTATION))
+                    addDependency(LibraryDependency(LibraryRef("aarlib"), DependencyScope.IMPLEMENTATION))
+                }
+                addModule("app", types.resolve("android-app")).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
+                    addDependency(ModuleDependency(ModuleId("feature"), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+
+            dir.writeSource("base/src/main/res/values/strings.xml", BASE_STRINGS)
+            dir.writeSource("feature/src/main/res/values/values.xml", FEATURE_DEP_REFS)
+            dir.writeSource("feature/src/main/res/layout/feature_chart.xml", FEATURE_DEP_LAYOUT)
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_PLAIN_ACTIVITY)
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val graph = AndroidBuildSystem.inProcess(sdk, signing).createBuildGraph(
+                store.workspace.projects.single(),
+                BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.COMPILE_ONLY),
+            )
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build"))).execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "a library's resources could not reference its dependencies' resources:\n$log")
+
+            val symbols = Files.readAllLines(dir.resolve("feature/build/intermediates/r/R.txt")).map { it.split(' ').getOrNull(2) }
+            assertTrue("feature_from_aar" in symbols && "FeatureChart" in symbols && "feature_chart" in symbols, "own symbols: $symbols")
+            for (dep in listOf("barColor", "aar_greeting", "base_greeting")) {
+                assertTrue(dep !in symbols, "the dependency's $dep leaked into the library's own R: $symbols")
+            }
+        }
+    }
+
     @Test
     fun syntheticRCoversDependencyAarPackages() {
         testEnv("android-aar-synthetic-r") { env ->
@@ -259,6 +326,28 @@ class AndroidLibDependencyRTest {
             public class MainActivity extends Activity {
                 public int res() { return AarText.greeting(); }
             }
+        """
+        // An AAR attribute set in a style and read as a theme attribute, plus strings aliasing both dependencies'.
+        val FEATURE_DEP_REFS = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <resources>
+                <string name="feature_from_base">@string/base_greeting</string>
+                <string name="feature_from_aar">@string/aar_greeting</string>
+                <style name="FeatureChart"><item name="barColor">#FF0000</item></style>
+            </resources>
+        """
+        val FEATURE_DEP_LAYOUT = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <View xmlns:android="http://schemas.android.com/apk/res/android"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:background="?attr/barColor"/>
+        """
+        val APP_PLAIN_ACTIVITY = """
+            package com.example.app;
+
+            import android.app.Activity;
+
+            public class MainActivity extends Activity {}
         """
         val BASE_STRINGS = """
             <?xml version="1.0" encoding="utf-8"?>

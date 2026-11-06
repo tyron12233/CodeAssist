@@ -34,6 +34,8 @@ object AppCommands {
     fun goToTab(n: Int) = "app.goToTab$n"
     const val GO_TO_TAB_PREFIX = "app.goToTab"
 
+    const val NAVIGATE_BACK = "app.navigateBack"
+    const val NAVIGATE_FORWARD = "app.navigateForward"
     const val GO_TO_FILE = "app.goToFile"
     const val GO_TO_CLASS = "app.goToClass"
     const val GO_TO_SYMBOL = "app.goToSymbol"
@@ -94,6 +96,9 @@ val APP_KEY_DEFAULTS: List<AppKeyDefault> = buildList {
     for (n in 1..9) add(AppCommands.goToTab(n), if (n == 9) "Go to last tab" else "Go to tab $n", tabs, "primary+$n")
 
     val nav = "Navigation"
+    // IntelliJ's Back/Forward: Ctrl+Alt+Left/Right (Cmd+Alt on a Mac), and its macOS Cmd+[ / Cmd+].
+    add(AppCommands.NAVIGATE_BACK, "Back", nav, "primary+alt+Left", "primary+LeftBracket")
+    add(AppCommands.NAVIGATE_FORWARD, "Forward", nav, "primary+alt+Right", "primary+RightBracket")
     add(AppCommands.SEARCH_EVERYWHERE, "Search everywhere (or press Shift twice)", nav)
     add(AppCommands.GO_TO_FILE, "Go to file", nav, "primary+shift+N")
     add(AppCommands.GO_TO_CLASS, "Go to class", nav, "primary+N")

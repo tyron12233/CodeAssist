@@ -40,6 +40,19 @@ class ComposeTemplateTest {
         }
     }
 
+    /** targetSdk 35+ is edge to edge: the starter screen must keep its content out from under the system bars. */
+    @Test
+    fun theStarterScreenPadsForTheSystemBars() {
+        withScaffold { scaffold, root ->
+            JetpackComposeAppTemplate.generate(scaffold, args())
+            val main = Files.readString(root.resolve("app/src/main/kotlin/com/example/app/MainActivity.kt"))
+            assertTrue("Modifier.safeDrawingPadding()" in main, main)
+            assertTrue("enableEdgeToEdge()" in main && "import androidx.activity.enableEdgeToEdge" in main, "readable bar icons")
+            assertTrue("import androidx.compose.foundation.layout.safeDrawingPadding" in main)
+            assertTrue("import androidx.compose.ui.Modifier" in main)
+        }
+    }
+
     // --- support ---
 
     private fun args(extra: Map<String, String> = emptyMap()) = TemplateArgs(

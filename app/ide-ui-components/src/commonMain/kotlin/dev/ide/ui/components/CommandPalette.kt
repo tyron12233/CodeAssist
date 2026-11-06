@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -512,14 +514,19 @@ private fun folderOf(path: String, root: String): String {
     return rel.substringBeforeLast('/', "")
 }
 
-/** The palette's keys, said once at the bottom instead of a lone "esc" chip in the search field. */
+/**
+ * The palette's keys, said once at the bottom instead of a lone "esc" chip in the search field. A flow, so on a
+ * narrow screen (a phone with a keyboard attached) a hint that does not fit moves to the next line whole; in a
+ * Row the last label was squeezed until it broke mid-word ("clo" over "se").
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KeyHints() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-    Row(
+    FlowRow(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         KeyHint("↑↓", stringResource(Res.string.palette_key_navigate))
         KeyHint("↵", stringResource(Res.string.palette_key_open))
@@ -535,7 +542,7 @@ private fun KeyHint(key: String, label: String) {
             Modifier.clip(RoundedCornerShape(5.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .padding(horizontal = 6.dp, vertical = 1.dp),
         ) { Text(key, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) }
-        Text(label, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+        Text(label, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
     }
 }
 

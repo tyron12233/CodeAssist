@@ -49,4 +49,26 @@ class UiPluginIsolationTest {
         assertNull(UiPluginHost.failures["test.healthy"])
         assertEquals(1, ids().count { it == "test.healthy.window" })
     }
+
+    private fun plugin(id: String, window: String) = object : UiPlugin {
+        override val id = id
+        override fun contributeUi(scope: UiContributionScope) {
+            scope.toolWindow(window(window))
+        }
+    }
+
+    @Test
+    fun replacingAPluginSwapsItsUiLive() {
+        UiPluginHost.ensureLoaded()
+        UiPluginHost.register(plugin("test.reload", "test.reload.v1"))
+        assertTrue(UiPluginHost.contribute(plugin("test.reload", "test.reload.v1")))
+        assertTrue("test.reload.v1" in ids())
+
+        assertTrue(UiPluginHost.replace("test.reload", plugin("test.reload", "test.reload.v2")))
+        assertFalse("test.reload.v1" in ids(), "the old build's window is withdrawn")
+        assertEquals(1, ids().count { it == "test.reload.v2" }, "the new build's window is there once")
+
+        assertTrue(UiPluginHost.replace("test.reload", null))
+        assertFalse("test.reload.v2" in ids(), "replacing with nothing leaves nothing")
+    }
 }

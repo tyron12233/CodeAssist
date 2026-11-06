@@ -242,7 +242,7 @@ class ClasspathReader(
             // Skip library `private`/`internal` callables — never accessible from the user's (other) module,
             // so they must not leak into completion/resolution (mirrors KotlinCallableIndex, the on-device
             // path).
-            decoded.extensions.forEach { s ->
+            decoded.receiverIndexableExtensions.forEach { s ->
                 if (!s.inaccessibleFromAnotherModule()) ext += RawCallableData.from(s, pkg, facade)
             }
             decoded.topLevel.forEach { s ->
@@ -469,7 +469,7 @@ class ClasspathReader(
 
     private companion object {
         const val FORMAT_VERSION =
-            15 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault
+            16 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault; v16: no regular-class member extensions
 
         // Cap on simultaneously-open jar handles (file descriptors). Small: the hot working set during
         // completion is a handful of jars, and reopening an evicted one is cheap behind the decode caches.

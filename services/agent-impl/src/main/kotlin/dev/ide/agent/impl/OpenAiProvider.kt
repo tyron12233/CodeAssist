@@ -26,13 +26,16 @@ import kotlinx.serialization.json.put
  * configurable base URL makes the same adapter serve OpenAI-compatible gateways (OpenRouter, Ollama, LocalAI, and
  * similar) over Chat Completions, which is what they implement, with the `max_tokens` they generally take.
  *
- * [explicitPromptCaching] switches on the breakpoint markers that gateways fronting Anthropic models require:
- * OpenAI caches long prefixes by itself, but a Claude model reached through a gateway caches nothing unless
- * the request carries `cache_control` — see [OpenRouterProvider].
+ * [explicitPromptCaching] switches on the breakpoint markers that gateways fronting Anthropic (and Alibaba Qwen)
+ * models require: OpenAI, DeepSeek, Gemini 2.5+ and most others cache long prefixes by themselves, but a Claude
+ * model reached through a gateway caches nothing unless the request carries `cache_control`. [stickySessions]
+ * sends a per-conversation `session_id`, which OpenRouter uses to keep routing a conversation to the provider
+ * endpoint that holds its cache. Both are OpenRouter's dialect — see [OpenRouterProvider].
  */
 class OpenAiProvider(
     private val transport: LlmTransport,
     private val explicitPromptCaching: Boolean = false,
+    private val stickySessions: Boolean = false,
 ) : LlmProvider {
     override val id: String = "openai"
     override val displayName: String = "OpenAI"
@@ -66,7 +69,7 @@ class OpenAiProvider(
                 val sse = SseRequest(
                     url = "$base/v1/chat/completions",
                     headers = headers,
-                    jsonBody = buildBody(request),
+                    jsonBody = buildBody(request, cacheKey),
                     caCertificatePem = config.caCertificatePem,
                 )
                 stream(sse)
@@ -99,9 +102,17 @@ class OpenAiProvider(
         if (!decoder.completed) decoder.finish(null, null).forEach { emit(it) }
     }.catch { e -> emit(LlmStreamEvent.Failed(e.message ?: "OpenAI stream error", e)) }
 
-    private fun buildBody(request: LlmRequest): String = buildJsonObject {
+    private fun buildBody(request: LlmRequest, sessionKey: String): String = buildJsonObject {
         put("model", request.model)
         put("stream", true)
+        // Without it OpenRouter only turns sticky after it has seen a cache hit, so the second request of a
+        // conversation can land on a different provider endpoint and write the whole prefix again.
+        if (stickySessions) put("session_id", sessionKey)
+        // Claude: a second, automatic breakpoint that OpenRouter puts on the last cacheable block, i.e. the
+        // conversation tail. The system breakpoint alone re-billed every tool result of an agent turn at full
+        // rate on each step; this is the tail breakpoint the native Anthropic provider has always set. It is
+        // the request-level form because the tail is usually a `tool` message, which takes no per-block marker.
+        if (anthropicCaching(request.model)) put("cache_control", buildJsonObject { put("type", "ephemeral") })
         put("max_tokens", request.maxTokens)
         // A reasoning model applies a default reasoning effort even when none is sent; on chat completions
         // that default plus function tools is rejected, so forwarding "none" is how a tool-using agent runs
@@ -122,7 +133,7 @@ class OpenAiProvider(
                 }
             })
         }
-        put("messages", messages(request.system, request.messages, cacheable(request.model)))
+        put("messages", messages(request.system, request.messages, request.model))
     }.toString()
 
     /** Chat completions tops out at "high"; the levels above it are clamped rather than rejected. */
@@ -132,17 +143,25 @@ class OpenAiProvider(
         else -> effort
     }
 
-    /** Whether to emit explicit cache breakpoints for this model (a gateway fronting an Anthropic model). */
-    private fun cacheable(model: String): Boolean =
+    /** A gateway fronting an Anthropic model: explicit breakpoints, a 1-hour system TTL, the automatic tail. */
+    private fun anthropicCaching(model: String): Boolean =
         explicitPromptCaching && ANTHROPIC_MODEL_MARKERS.any { model.contains(it, ignoreCase = true) }
 
-    private fun messages(system: String?, messages: List<LlmMessage>, cacheable: Boolean): JsonArray = buildJsonArray {
+    /** Whether the system prompt gets an explicit breakpoint: Claude, or a Qwen model that only caches on request. */
+    private fun cacheable(model: String): Boolean =
+        anthropicCaching(model) || (explicitPromptCaching && EXPLICIT_CACHE_MODELS.any { model.startsWith(it, ignoreCase = true) })
+
+    private fun messages(system: String?, messages: List<LlmMessage>, model: String): JsonArray = buildJsonArray {
+        val cacheable = cacheable(model)
+        // Claude only: think-time between messages routinely passes 5 minutes, after which the default TTL had
+        // the system prompt and tool set rewritten at full price. Other providers have a fixed TTL.
+        val longTtl = anthropicCaching(model)
         // The system prompt and the tool set are the big shared prefix, so that is where the one breakpoint
         // goes; on this dialect the tools ride alongside it and are covered by the same marker.
         system?.takeIf { it.isNotBlank() }?.let {
             add(buildJsonObject {
                 put("role", "system")
-                if (cacheable) put("content", cachedTextContent(it)) else put("content", it)
+                if (cacheable) put("content", cachedTextContent(it, longTtl)) else put("content", it)
             })
         }
         // A `tool` message is text-only on this dialect, so images a tool produced are held back and sent in a
@@ -221,11 +240,14 @@ class OpenAiProvider(
         parts.filterIsInstance<ContentPart.Text>().joinToString("") { it.text }
 
     /** A single text part carrying a cache breakpoint, the content-array form gateways expect. */
-    private fun cachedTextContent(text: String): JsonArray = buildJsonArray {
+    private fun cachedTextContent(text: String, longTtl: Boolean): JsonArray = buildJsonArray {
         add(buildJsonObject {
             put("type", "text")
             put("text", text)
-            put("cache_control", buildJsonObject { put("type", "ephemeral") })
+            put("cache_control", buildJsonObject {
+                put("type", "ephemeral")
+                if (longTtl) put("ttl", "1h")
+            })
         })
     }
 
@@ -257,6 +279,11 @@ class OpenAiProvider(
 
         /** Model-id fragments that identify an Anthropic model behind an OpenAI-dialect gateway. */
         val ANTHROPIC_MODEL_MARKERS = listOf("anthropic/", "claude")
+
+        /** OpenRouter models served by Alibaba, which caches only behind an explicit `cache_control` marker. */
+        val EXPLICIT_CACHE_MODELS = listOf(
+            "qwen/qwen3-max", "qwen/qwen-plus", "qwen/qwen3.6-plus", "qwen/qwen3-coder-plus", "qwen/qwen3-coder-flash",
+        )
     }
 }
 
@@ -273,6 +300,7 @@ internal class OpenAiStreamDecoder {
     private var inputTokens = 0
     private var outputTokens = 0
     private var cacheReadTokens = 0
+    private var cacheWriteTokens = 0
     private var stopReason: StopReason = StopReason.END_TURN
     var completed: Boolean = false
         private set
@@ -287,7 +315,11 @@ internal class OpenAiStreamDecoder {
             usage["completion_tokens"].asInt()?.let { outputTokens = it }
             // This dialect counts cached tokens INSIDE prompt_tokens; the neutral model keeps the uncached
             // remainder in inputTokens, so subtract the cached share rather than double-counting it.
-            usage["prompt_tokens_details"].asObj()?.get("cached_tokens").asInt()?.let { cacheReadTokens = it }
+            usage["prompt_tokens_details"].asObj()?.let { details ->
+                details["cached_tokens"].asInt()?.let { cacheReadTokens = it }
+                // OpenRouter reports writes for explicitly cached models (Claude); they are inside prompt_tokens too.
+                details["cache_write_tokens"].asInt()?.let { cacheWriteTokens = it }
+            }
         }
 
         val choice = json["choices"].asArr()?.firstOrNull().asObj() ?: return out
@@ -324,7 +356,7 @@ internal class OpenAiStreamDecoder {
             if (c.id.isNotEmpty()) out += LlmStreamEvent.ToolCallCompleted(c.id, c.name, c.args.toString())
         }
         out += LlmStreamEvent.Usage(
-            TokenUsage((inputTokens - cacheReadTokens).coerceAtLeast(0), outputTokens, cacheReadTokens),
+            TokenUsage((inputTokens - cacheReadTokens - cacheWriteTokens).coerceAtLeast(0), outputTokens, cacheReadTokens, cacheWriteTokens),
         )
         out += LlmStreamEvent.Completed(stopReason)
         return out

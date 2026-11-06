@@ -48,7 +48,7 @@ internal class AgentSessionStore(private val root: () -> Path?) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private fun dir(): Path? = root()?.resolve(".platform")?.resolve("agent")?.resolve("sessions")
+    private fun dir(): Path? = root()?.let(::sessionsDir)
 
     fun list(): List<UiAgentSessionSummary> {
         val dir = dir() ?: return emptyList()
@@ -67,24 +67,28 @@ internal class AgentSessionStore(private val root: () -> Path?) {
             .sortedByDescending { it.updatedAtMs }
     }
 
-    fun save(id: String, messages: List<UiAgentMessage>, history: List<LlmMessage>) {
-        val dir = dir() ?: return
-        if (messages.none { it.role == UiAgentRole.USER }) return
+    /** Writes the conversation; returns what was saved (for the cross-project index), or null when nothing was. */
+    fun save(id: String, messages: List<UiAgentMessage>, history: List<LlmMessage>): UiAgentSessionSummary? {
+        val dir = dir() ?: return null
+        if (messages.none { it.role == UiAgentRole.USER }) return null
         val title = messages.firstOrNull { it.role == UiAgentRole.USER }?.text?.lineSequence()?.firstOrNull()
             ?.trim()?.take(TITLE_CHARS).orEmpty()
+        val now = System.currentTimeMillis()
+        val saved = messages.filter { !it.streaming }
         val body = buildJsonObject {
             put("title", title)
-            put("updatedAt", System.currentTimeMillis())
-            put("messages", buildJsonArray { messages.filter { !it.streaming }.forEach { add(encode(it)) } })
+            put("updatedAt", now)
+            put("messages", buildJsonArray { saved.forEach { add(encode(it)) } })
             put("history", json.parseToJsonElement(ConversationCodec.encode(history)))
         }
-        runCatching {
+        return runCatching {
             Files.createDirectories(dir)
             val target = dir.resolve("$id.json")
             val temp = dir.resolve("$id.json.tmp")
             temp.writeText(body.toString())
             Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-        }
+            UiAgentSessionSummary(id, title.ifBlank { "Untitled chat" }, now, saved.size)
+        }.getOrNull()
     }
 
     fun load(id: String): Saved? {
@@ -186,7 +190,10 @@ internal class AgentSessionStore(private val root: () -> Path?) {
     private fun JsonObject.str(key: String): String = (this[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
     private fun JsonObject.int(key: String): Int = (this[key] as? JsonPrimitive)?.intOrNull ?: 0
 
-    private companion object {
+    companion object {
         const val TITLE_CHARS = 80
+
+        /** Where a project's conversations are kept. */
+        fun sessionsDir(projectRoot: Path): Path = projectRoot.resolve(".platform").resolve("agent").resolve("sessions")
     }
 }

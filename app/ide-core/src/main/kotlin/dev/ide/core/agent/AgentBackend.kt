@@ -20,17 +20,20 @@ import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
 import dev.ide.agent.impl.ApiKeyPool
 import dev.ide.agent.impl.CheckpointWorkspace
+import dev.ide.agent.impl.CodeAssistFreeProvider
 import dev.ide.agent.impl.LlmErrorKind
 import dev.ide.agent.impl.RequestPacer
 import dev.ide.agent.impl.HistoryCompactor
 import dev.ide.agent.impl.KeyFailoverClient
 import dev.ide.agent.impl.OkHttpLlmTransport
+import dev.ide.agent.impl.OpenRouterUsage
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
 import dev.ide.agent.mcp.CodeAssistMcpServer
 import dev.ide.agent.mcp.FtpServer
 import dev.ide.agent.mcp.HttpMcpServer
 import dev.ide.agent.toolSchema
+import dev.ide.core.AI_CREDITS_SERVICE
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
 import dev.ide.platform.log.Log
@@ -58,6 +61,11 @@ import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiAgentRole
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
+import dev.ide.ui.backend.UiOpenRouterSignIn
+import dev.ide.ui.backend.UiAgentUsageLimits
+import dev.ide.ui.backend.UiFreeAiState
+import dev.ide.ui.backend.UiUsageMeter
+import dev.ide.ui.backend.UiUsageMeterKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -67,6 +75,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
@@ -88,7 +97,50 @@ import kotlin.io.path.readText
 internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private val transport = OkHttpLlmTransport()
-    private val registry = AgentProviders.registry(transport)
+    /**
+     * CodeAssist Free AI, when the launcher wired it (a Supabase config and sign-in exist). Resolved like the store
+     * ports; absent on desktop builds without Supabase and in tests, where the provider list is BYO-key only.
+     */
+    private val freeAiCredits: dev.ide.store.AiCreditsService =
+        ctx.manager?.applicationContainer?.getServiceOrNull(AI_CREDITS_SERVICE)
+            ?.takeIf { it.available() && it.proxyBaseUrl() != null }
+            ?: dev.ide.store.AiCreditsService.Unsupported
+
+    /**
+     * The built-in providers, with the free tier FIRST when this build has it: with no provider chosen yet the
+     * first entry is the default, so someone who has never pasted a key starts on the one option that needs none.
+     */
+    private val registry: dev.ide.agent.LlmProviderRegistry = run {
+        val free = freeAiCredits.proxyBaseUrl()?.let { base ->
+            CodeAssistFreeProvider(transport, listOfNotNull(base, freeAiCredits.proxyFallbackUrl())) { freeAiCredits.accessToken() }
+        }
+        dev.ide.agent.SimpleLlmProviderRegistry(listOfNotNull(free) + AgentProviders.defaults(transport))
+    }
+
+    init {
+        adoptFreeAiAsDefault()
+    }
+
+    /**
+     * Once per install, move a user whose selected provider cannot work (no key, or a gateway with no URL) onto
+     * CodeAssist Free AI. A user with a working key keeps their provider; a user who never picked one already
+     * lands on the free tier, because it is first in [registry]. Recorded as done whatever the outcome, so a later
+     * deliberate choice of a keyless provider (to paste a key into it) is never undone.
+     */
+    private fun adoptFreeAiAsDefault() {
+        if (registry.provider(FREE_AI) == null) return
+        val manager = ctx.manager ?: return
+        if (pref(FREE_AI_DEFAULT_ADOPTED) == "true") return
+        manager.setPreference("settings.$AI_PAGE.$FREE_AI_DEFAULT_ADOPTED", "true")
+        val selected = pref("provider") ?: return
+        if (selected == FREE_AI) return
+        val usable = if (selected == GATEWAY) {
+            !pref("gatewayBaseUrl").isNullOrBlank()
+        } else {
+            !pref(keyField(selected)).isNullOrBlank() || backupKeys(selected).isNotEmpty()
+        }
+        if (!usable) manager.setPreference("settings.$AI_PAGE.provider", FREE_AI)
+    }
     private val workspace = IdeAgentWorkspace(ctx)
 
     /** The agent's own writes go through this, so each turn's changes can be shown as diffs and reverted. */
@@ -138,12 +190,110 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     )
 
     private val tools = SimpleToolRegistry(builtinTools(checkpoints) + ftpControlTool + zipCliTool)
+    // --- ask_user: the agent's multiple-choice questions, answered in the chat ---
+
+    private val _questionRequest = MutableStateFlow<dev.ide.ui.backend.UiAgentQuestionRequest?>(null)
+    override val questionRequest: StateFlow<dev.ide.ui.backend.UiAgentQuestionRequest?> get() = _questionRequest.asStateFlow()
+
+    @Volatile
+    private var pendingQuestion: CompletableDeferred<List<List<String>>?>? = null
+    private val questionIds = AtomicInteger()
+
+    /** Waits like the permission gate: Stop cancels the turn, and the `finally` takes the card down. */
+    private val askUser = dev.ide.agent.impl.askUserTool { questions ->
+        val deferred = CompletableDeferred<List<List<String>>?>()
+        pendingQuestion = deferred
+        _questionRequest.value = dev.ide.ui.backend.UiAgentQuestionRequest(
+            questionIds.incrementAndGet(),
+            questions.map { q ->
+                dev.ide.ui.backend.UiAgentQuestion(
+                    q.question, q.header,
+                    q.options.map { dev.ide.ui.backend.UiAgentQuestionOption(it.label, it.description) },
+                    q.multiSelect,
+                )
+            },
+        )
+        try {
+            deferred.await()
+        } finally {
+            _questionRequest.value = null
+            pendingQuestion = null
+        }
+    }
+
+    override fun answerQuestion(id: Int, answers: List<List<String>>?) {
+        if (_questionRequest.value?.id == id) pendingQuestion?.complete(answers)
+    }
 
     /** The MCP server's tools write straight to the workspace: an external client's edits are not a chat turn,
      *  and recording them into one would let that turn's Undo revert someone else's work. */
     private val mcpTools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Log.logger("ide.agent")
+
+    /** The MCP servers and skills the user connected (see [AgentConnections]). */
+    private val agentConnections = AgentConnections(ctx, scope)
+
+    // ask_user is the chat's alone: an MCP client has no card to answer it with.
+    private val builtinChatTools: List<AgentTool> = builtinTools(checkpoints) + ftpControlTool + askUser
+
+    /**
+     * The chat's tools: the built-ins, then whatever the connected MCP servers and installed skills add. Read on
+     * every request, so a server that connects mid-conversation is usable from the next step.
+     */
+    /**
+     * A new-app conversation that has not created its project yet ([startNewApp]). While set, the agent sees only
+     * [newAppTools] (and ask_user), whatever project happens to be open behind the AI tab, and nothing is saved.
+     */
+    @Volatile
+    private var creatingApp = false
+
+    private val newAppTools: List<AgentTool> = NewAppTools.tools({ (ctx as? dev.ide.ui.backend.IdeBackend)?.projects }) {
+        creatingApp = false
+        _chatState.update { it.copy(creatingApp = false) }
+        resolveProjectLibraries()
+    } + askUser
+
+    /**
+     * Resolve the open project's declared libraries (a new project's template dependencies), wait for it, and say
+     * how it went. The editor starts this when it opens a project; a project the agent creates from the AI tab is
+     * never shown in the editor, so without this its AndroidX/Compose libraries never reach the classpath.
+     */
+    private suspend fun resolveProjectLibraries(): String? {
+        val deps = ctx.servicesOrNull?.dependencies ?: return null
+        deps.startPendingDependencyResolution()
+        // The resolve runs in the background; wait for it to start, then to finish.
+        val started = kotlinx.coroutines.withTimeoutOrNull(LIBRARIES_START_MS) {
+            deps.depsState.first { it.resolving }
+        } != null
+        val done = if (started) {
+            kotlinx.coroutines.withTimeoutOrNull(LIBRARIES_RESOLVE_MS) { deps.depsState.first { !it.resolving } }
+        } else {
+            deps.depsState.value
+        } ?: return "The project's libraries are still downloading. Builds fail until they finish; check again before building."
+        if (done.unresolved.isEmpty()) return "The project's libraries are resolved and on the classpath."
+        return "These libraries could not be resolved, so code using them will not compile:\n" +
+            done.unresolved.joinToString("\n") { "- ${it.coordinate} (${it.module}): ${it.reason}" } +
+            "\nTell the user; they may need a network connection."
+    }
+
+    /** Conversations across every project, for the AI home tab. */
+    private val recentChatIndex = AgentRecentChats { ctx.manager?.sharedRoot?.resolve("agent")?.resolve("recent-chats.json") }
+
+    private val tools = object : dev.ide.agent.AgentToolRegistry {
+        override val tools: List<AgentTool>
+            get() {
+                if (creatingApp) return newAppTools
+                val extra = agentConnections.tools()
+                if (extra.isEmpty()) return builtinChatTools
+                val builtinNames = builtinChatTools.mapTo(HashSet()) { it.spec.name }
+                return builtinChatTools + extra.filter { it.spec.name !in builtinNames }
+            }
+
+        override fun find(name: String): AgentTool? =
+            if (creatingApp) newAppTools.firstOrNull { it.spec.name == name }
+            else builtinChatTools.firstOrNull { it.spec.name == name } ?: agentConnections.tools().firstOrNull { it.spec.name == name }
+    }
 
     /** The in-app MCP-over-HTTP server, started when the "MCP server" AI setting is on. The server is
      *  opt-in: enabling it is itself the permission to edit the open project, so its tools run under
@@ -288,7 +438,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         return ResolvedConfig(
             selectedId = selected,
             clientProviderId = selected,
-            apiKey = pref(keyField(selected)),
+            // The free tier has no key: the provider fetches the session's token per request. A placeholder stands
+            // in for it while signed in, which is what makes the config "ready" and the key pool non-empty.
+            apiKey = if (selected == FREE_AI) FREE_AI_SESSION_KEY.takeIf { freeAiCredits.signedIn() } else pref(keyField(selected)),
             model = chosenModel(selected) ?: preferredModels[selected] ?: provider?.defaultModel.orEmpty(),
             baseUrl = null,
             backupKeys = backupKeys(selected),
@@ -316,6 +468,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         "gemini" -> model.startsWith("gemini") || model.startsWith("gemma") || model.startsWith("models/")
         "openai" -> !model.startsWith("claude") && !model.startsWith("gemini") && '/' !in model
         "openrouter" -> '/' in model
+        FREE_AI -> model.startsWith("claude-")
         else -> true
     }
 
@@ -380,8 +533,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 p.id, p.displayName,
                 p.models.map { UiAgentModel(it.id, it.displayName) },
                 p.defaultModel,
-                apiKey = pref(keyField(p.id)).orEmpty(),
-                backupKeys = backupKeys(p.id),
+                apiKey = if (p.id == FREE_AI) FREE_AI_SESSION_KEY.takeIf { freeAiCredits.signedIn() }.orEmpty()
+                else pref(keyField(p.id)).orEmpty(),
+                backupKeys = if (p.id == FREE_AI) emptyList() else backupKeys(p.id),
             )
         }
         // A synthetic "Custom gateway" entry (OpenAI-compatible endpoint); its client is the OpenAI provider.
@@ -408,10 +562,29 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     override fun setModel(model: String) {
-        val selected = pref("provider") ?: registry.providers.firstOrNull()?.id ?: "anthropic"
+        val selected = selectedProviderId()
         val field = if (selected == GATEWAY) "gatewayModel" else "model.$selected"
         ctx.manager?.setPreference("settings.$AI_PAGE.$field", model)
+        if (model.isNotBlank()) {
+            val recents = (listOf(model) + recentModels().filter { it != model }).take(MAX_RECENT_MODELS)
+            ctx.manager?.setPreference("settings.$AI_PAGE.recentModels.$selected", recents.joinToString("\n"))
+        }
         resetLoop()
+    }
+
+    private fun selectedProviderId(): String = pref("provider") ?: registry.providers.firstOrNull()?.id ?: "anthropic"
+
+    private fun prefList(key: String): List<String> =
+        pref(key).orEmpty().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+    override fun recentModels(): List<String> = prefList("recentModels.${selectedProviderId()}")
+
+    override fun favoriteModels(): Set<String> = prefList("favoriteModels.${selectedProviderId()}").toSet()
+
+    override fun setModelFavorite(model: String, favorite: Boolean) {
+        val current = favoriteModels()
+        val next = if (favorite) current + model else current - model
+        ctx.manager?.setPreference("settings.$AI_PAGE.favoriteModels.${selectedProviderId()}", next.sorted().joinToString("\n"))
     }
 
     override fun selectProvider(id: String) {
@@ -436,6 +609,132 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayCaCert", caCert)
         resetLoop()
     }
+
+    private val openRouter = OpenRouterSignIn(transport, scope) { key, freeModel ->
+        setProviderKey(OPENROUTER, key)
+        selectProvider(OPENROUTER)
+        if (freeModel != null) setModel(freeModel)
+        refreshModels()
+        refreshUsageLimits()
+    }
+
+    override fun openRouterSignInSupported(): Boolean = true
+
+    override val openRouterSignIn: StateFlow<UiOpenRouterSignIn> get() = openRouter.state
+
+    override fun beginOpenRouterSignIn(): String? = openRouter.begin()
+
+    override fun cancelOpenRouterSignIn() = openRouter.cancel()
+
+    // Signed-in is read from the stored session (no network), so the chat does not flash a sign-in prompt at a
+    // signed-in user before the first wallet read lands.
+    private val _freeAiState = MutableStateFlow(
+        UiFreeAiState(available = freeAiCredits.available(), signedIn = freeAiCredits.signedIn()),
+    )
+    override val freeAi: StateFlow<UiFreeAiState> get() = _freeAiState.asStateFlow()
+    private var freeAiJob: Job? = null
+
+    override fun refreshFreeAi() {
+        if (!freeAiCredits.available()) {
+            _freeAiState.value = UiFreeAiState(available = false)
+            return
+        }
+        if (!freeAiCredits.signedIn()) {
+            _freeAiState.value = UiFreeAiState(available = true, signedIn = false)
+            return
+        }
+        freeAiJob?.cancel()
+        _freeAiState.update { it.copy(available = true, signedIn = true, loading = it.userId == null) }
+        freeAiJob = scope.launch(Dispatchers.IO) {
+            val next = when (val r = freeAiCredits.wallet()) {
+                is dev.ide.store.StoreResult.Ok -> r.value.let { w ->
+                    UiFreeAiState(
+                        available = true, signedIn = true, userId = w.userId, enabled = w.enabled,
+                        points = w.points, freePoints = w.freePoints, earnedPoints = w.earnedPoints,
+                        dailyFreePoints = w.dailyFreePoints, adPoints = w.adPoints,
+                        adsLeftToday = w.adsLeftToday, adDailyCap = w.adDailyCap,
+                        models = w.models.map {
+                            dev.ide.ui.backend.UiFreeAiModel(it.id, it.pointsPerStep, it.minPoints, it.available)
+                        },
+                    )
+                }
+                is dev.ide.store.StoreResult.Failed ->
+                    if (r.status == 401) UiFreeAiState(available = true, signedIn = false)
+                    else _freeAiState.value.copy(loading = false, error = r.message)
+                is dev.ide.store.StoreResult.Unavailable -> _freeAiState.value.copy(loading = false, error = r.reason)
+            }
+            _freeAiState.value = if (next.signedIn) next.copy(usage = next.usage ?: _freeAiState.value.usage) else next
+            // Signing in or out changes whether the free tier is usable; the loop is rebuilt on the next send.
+            resetLoop()
+        }
+    }
+
+    private var freeAiUsageJob: Job? = null
+
+    override fun refreshFreeAiUsage() {
+        if (!freeAiCredits.available() || !freeAiCredits.signedIn()) return
+        freeAiUsageJob?.cancel()
+        freeAiUsageJob = scope.launch(Dispatchers.IO) {
+            when (val r = freeAiCredits.usage()) {
+                is dev.ide.store.StoreResult.Ok -> r.value.let { u ->
+                    val usage = dev.ide.ui.backend.UiFreeAiUsage(
+                        points = u.points, freePointsLeft = u.freePointsLeft, dailyFreePoints = u.dailyFreePoints,
+                        dailyCapPoints = u.dailyCapPoints, resetsAtMs = u.resetsAtMs, adPoints = u.adPoints,
+                        adsToday = u.adsToday, adDailyCap = u.adDailyCap, spentToday = u.spentToday,
+                        stepsToday = u.stepsToday, spentWeek = u.spentWeek, stepsWeek = u.stepsWeek,
+                        byModelWeek = u.byModelWeek.map { Triple(it.model, it.points, it.steps) },
+                        recent = u.recent.map {
+                            dev.ide.ui.backend.UiFreeAiStep(
+                                it.atMs, it.model, it.points, it.input, it.output, it.cacheRead, it.cacheWrite, it.webSearches,
+                            )
+                        },
+                    )
+                    _freeAiState.update { it.copy(usage = usage, error = null) }
+                }
+                is dev.ide.store.StoreResult.Failed -> _freeAiState.update { it.copy(error = r.message) }
+                is dev.ide.store.StoreResult.Unavailable -> _freeAiState.update { it.copy(error = r.reason) }
+            }
+        }
+    }
+
+    private val _usageLimits = MutableStateFlow<UiAgentUsageLimits?>(null)
+    override val usageLimits: StateFlow<UiAgentUsageLimits?> = _usageLimits.asStateFlow()
+    private var usageJob: Job? = null
+
+    override fun refreshUsageLimits() {
+        val cfg = resolveConfig()
+        val name = registry.provider(cfg.selectedId)?.displayName ?: "This provider"
+        val key = cfg.keys.firstOrNull()
+        if (cfg.selectedId != OPENROUTER || key == null) {
+            _usageLimits.value = UiAgentUsageLimits(providerName = name, reported = false)
+            return
+        }
+        val usingFree = cfg.model.endsWith(":free")
+        usageJob?.cancel()
+        usageJob = scope.launch {
+            _usageLimits.value = try {
+                OpenRouterUsage.fetch(transport, key).toUi(name, usingFree)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                (_usageLimits.value?.takeIf { it.reported } ?: UiAgentUsageLimits(name, reported = true))
+                    .copy(error = e.message ?: "OpenRouter did not answer.", usingFreeModel = usingFree)
+            }
+        }
+    }
+
+    private fun OpenRouterUsage.toUi(name: String, usingFree: Boolean): UiAgentUsageLimits {
+        val meters = buildList {
+            freeRequestsLimit?.let { limit ->
+                add(UiUsageMeter(UiUsageMeterKind.FREE_REQUESTS, (freeRequestsUsed ?: 0).toDouble(), limit.toDouble(), freeResetsAtMs))
+            }
+            budgetLimitUsd?.let { limit ->
+                add(UiUsageMeter(UiUsageMeterKind.SPEND, budgetUsedUsd ?: 0.0, limit, budgetResetsAtMs))
+            }
+        }
+        return UiAgentUsageLimits(name, reported = true, meters, spentTodayUsd, spentMonthUsd, usingFree)
+    }
+
 
     override fun refreshModels() {
         val cfg = resolveConfig()
@@ -509,6 +808,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private var pendingHistory: List<LlmMessage>? = null
 
     override fun newSession() {
+        creatingApp = false
         job?.cancel()
         loop?.reset()
         loop = null
@@ -517,6 +817,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         pendingNotes.clear()
         sessionAllowAll = false
         _permissionRequest.value = null
+        _questionRequest.value = null
         _chatState.value = UiAgentChatState()
     }
 
@@ -540,14 +841,19 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
         if (!cfg.ready) {
             appendError(
-                if (cfg.selectedId == GATEWAY) "Add the gateway's base URL to use the agent. Tap the key icon to manage providers."
-                else "Add an API key to use the agent. Tap the key icon to manage providers.",
+                when (cfg.selectedId) {
+                    GATEWAY -> "Add the gateway's base URL to use the agent. Tap the key icon to manage providers."
+                    FREE_AI -> "Sign in to use CodeAssist Free AI. Tap the key icon, then sign in with GitHub or Google."
+                    else -> "Add an API key to use the agent. Tap the key icon to manage providers."
+                },
             )
             return null
         }
         val model = cfg.model.ifBlank { provider.defaultModel }
         val maxIterations = prefInt("maxIterations") ?: DEFAULT_MAX_ITERATIONS
-        val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
+        // The free tier's proxy allows 32K output per step (the Supabase fallback clamps to 16K); writing a file
+        // takes the whole file as one tool call's arguments, which 8K cut off mid-call.
+        val maxTokens = prefInt("maxTokens") ?: if (cfg.selectedId == FREE_AI) FREE_AI_MAX_TOKENS else DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
         val webSearch = prefBool("webSearch", default = true)
         // "default" (or unset) leaves the field off the request, so each provider keeps its own default.
@@ -573,7 +879,15 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             thinkingBudget = thinkingBudget,
             webSearch = webSearch,
             effort = effort,
-            compactor = if (provider.managesContext) HistoryCompactor.serverManaged() else HistoryCompactor(),
+            // The free tier's proxy sees the whole request before Anthropic trims anything, so the conversation is
+            // trimmed here too, and summarized once trimming is not enough.
+            compactor = when {
+                cfg.selectedId == FREE_AI -> HistoryCompactor(triggerChars = FREE_AI_TRIM_CHARS, targetChars = FREE_AI_TRIM_CHARS / 2)
+                provider.managesContext -> HistoryCompactor.serverManaged()
+                else -> HistoryCompactor()
+            },
+            autoCompactChars = if (cfg.selectedId == FREE_AI) FREE_AI_COMPACT_CHARS else null,
+            autoCompactTokens = if (cfg.selectedId == FREE_AI) FREE_AI_COMPACT_TOKENS else null,
             pacer = pacer,
             checkpoints = checkpoints,
         )
@@ -704,6 +1018,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     private fun afterTurn(userId: Long?) {
+        // Each step of the turn was a request against the account's limits; show where they stand now.
+        refreshUsageLimits()
+        if (resolveConfig().selectedId == FREE_AI) refreshFreeAi()
         if (userId != null && checkpoints.hasChanges(userId)) {
             _chatState.update { s ->
                 s.copy(messages = s.messages.map { if (it.id == userId) it.copy(canUndo = true) else it })
@@ -713,11 +1030,35 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     private fun saveSession() {
+        // A new app's conversation has no project to live in until it creates one.
+        if (creatingApp) return
         val state = _chatState.value
         val id = state.sessionId ?: return
         val history = loop?.snapshot() ?: return
-        runCatching { sessionStore.save(id, state.messages, history) }
+        val root = ctx.servicesOrNull?.workspaceRoot ?: return
+        val saved = runCatching { sessionStore.save(id, state.messages, history) }.getOrNull() ?: return
+        runCatching { recentChatIndex.record(root, saved) }
     }
+
+    /**
+     * A tool title with the open project's root taken off its paths: `read app/src/main/…/MainActivity.kt` rather
+     * than the whole `/storage/emulated/0/Android/data/…/projects/<name>/app/…` path, which a phone cuts off long
+     * before the part that says which file it is.
+     */
+    private fun projectRelative(title: String): String {
+        val root = ctx.servicesOrNull?.workspaceRoot?.toString()?.trimEnd('/', '\\') ?: return title
+        if (root.isEmpty()) return title
+        return title.replace("$root/", "").replace("$root\\", "").replace(root, ".")
+    }
+
+    override fun startNewApp() {
+        newSession()
+        creatingApp = true
+        _chatState.value = UiAgentChatState(creatingApp = true)
+    }
+
+    override fun recentChats(): List<dev.ide.ui.backend.UiAgentRecentChat> =
+        runCatching { recentChatIndex.list() }.getOrDefault(emptyList())
 
     private fun applyEvent(assistantId: Long, event: AgentEvent) {
         // Any event after a wait means the wait is over.
@@ -730,7 +1071,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             is AgentEvent.AssistantThinkingDelta -> mutateAssistant(assistantId) { it.withThinking(event.text) }
             is AgentEvent.ToolCallStarted -> mutateAssistant(assistantId) {
                 it.copy(
-                    toolCalls = it.toolCalls + UiAgentToolCall(event.id, event.displaySummary, UiAgentToolStatus.RUNNING),
+                    toolCalls = it.toolCalls + UiAgentToolCall(
+                        event.id, projectRelative(event.displaySummary), UiAgentToolStatus.RUNNING, input = event.input,
+                    ),
                     segments = it.segments.appendTool(event.id),
                 )
             }
@@ -740,6 +1083,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                         it.copy(
                             status = if (event.ok) UiAgentToolStatus.OK else UiAgentToolStatus.ERROR,
                             detail = event.resultSummary,
+                            output = event.output,
+                            images = event.images.map { img -> dev.ide.ui.backend.UiAgentToolImage(img.mediaType, img.data) },
                         )
                     } else {
                         it
@@ -758,6 +1103,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             }
             is AgentEvent.TodosUpdated -> _chatState.update { s ->
                 s.copy(todos = event.todos.map { UiAgentTodo(it.content, todoStatus(it.status)) })
+            }
+            is AgentEvent.Compacted -> _chatState.update { s ->
+                // Ahead of the reply in progress, so the note reads where it happened.
+                val note = UiAgentMessage(msgIds.incrementAndGet(), UiAgentRole.ASSISTANT, text = AUTO_COMPACTED)
+                val at = s.messages.indexOfLast { it.id == assistantId }.takeIf { it >= 0 } ?: s.messages.size
+                s.copy(messages = s.messages.take(at) + note + s.messages.drop(at))
             }
             is AgentEvent.Waiting -> mutateAssistant(assistantId) {
                 it.copy(waitUntilMs = event.untilEpochMs, waitReason = event.reason)
@@ -993,6 +1344,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     override fun deleteSession(id: String) {
         sessionStore.delete(id)
+        ctx.servicesOrNull?.workspaceRoot?.let { root -> runCatching { recentChatIndex.remove(root, id) } }
         if (_chatState.value.sessionId == id) newSession()
     }
 
@@ -1019,7 +1371,46 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     /** The stable half of the prompt: the top-level system prefix, identical for the life of a conversation. */
     private fun systemPrompt(): String =
-        SystemPrompt.grounding(tools.tools.map { it.spec.name }, ctx.servicesOrNull?.let { projectInstructions(it) })
+        if (creatingApp) {
+            SystemPrompt.grounding(tools.tools.map { it.spec.name }, null, listOf(NewAppTools.PROMPT))
+        } else {
+            SystemPrompt.grounding(
+                tools.tools.map { it.spec.name },
+                ctx.servicesOrNull?.let { projectInstructions(it) },
+                agentConnections.promptSections(),
+            )
+        }
+
+    // --- connections: MCP servers and skills ---
+
+    override val connections: StateFlow<dev.ide.ui.backend.UiAgentConnections> get() = agentConnections.state
+
+    override fun refreshConnections() = agentConnections.refresh()
+
+    override fun saveMcpServer(
+        config: dev.ide.ui.backend.UiMcpServerConfig,
+        scope: dev.ide.ui.backend.UiMcpScope,
+        previousName: String?,
+    ): String? = agentConnections.save(config, scope, previousName)
+
+    override fun removeMcpServer(name: String, scope: dev.ide.ui.backend.UiMcpScope) = agentConnections.remove(name, scope)
+
+    override fun setMcpServerEnabled(name: String, scope: dev.ide.ui.backend.UiMcpScope, enabled: Boolean) =
+        agentConnections.setEnabled(name, scope, enabled)
+
+    override fun trustMcpServer(name: String) = agentConnections.trust(name)
+
+    override fun reconnectMcpServer(name: String) = agentConnections.reconnect(name)
+
+    override suspend fun beginMcpSignIn(name: String): String? = agentConnections.beginSignIn(name)
+
+    override fun cancelMcpSignIn() = agentConnections.cancelSignIn()
+
+    override fun signOutMcpServer(name: String) = agentConnections.signOut(name)
+
+    override fun setSkillEnabled(name: String, enabled: Boolean) = agentConnections.setSkillEnabled(name, enabled)
+
+    override fun createSkill(name: String, scope: dev.ide.ui.backend.UiMcpScope): String? = agentConnections.createSkill(name, scope)
 
     /** The last instruction-file read, keyed by path + modification time so the prefix is not re-read from disk
      *  on every request yet still follows an edit to the file. */
@@ -1027,7 +1418,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private var instructionsCache: Pair<String, String?>? = null
 
     /** The volatile half: rides after the history each turn, so refreshing it costs no cached tokens. */
-    private fun sessionContext(): String = SystemPrompt.sessionContext(modePref(), projectContext())
+    private fun sessionContext(): String =
+        SystemPrompt.sessionContext(modePref(), if (creatingApp) "No project is open yet; create one first." else projectContext())
 
     private fun projectContext(): String? {
         val engine = ctx.servicesOrNull ?: return null
@@ -1076,6 +1468,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         private const val COMPACTED = "**Conversation compacted.** "
 
         private val live = CopyOnWriteArrayList<WeakReference<AgentBackend>>()
+        private const val LIBRARIES_START_MS = 5_000L
+        private const val LIBRARIES_RESOLVE_MS = 10 * 60_000L
 
         /** The agent of the project at [root] (the most recently opened one when [root] matches none), for an
          *  editor action that runs outside any one project's backend. */
@@ -1101,6 +1495,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             UiAgentCommand("undo", "Revert the files the agent changed in the last turn"),
             UiAgentCommand("resume", "Open a saved conversation"),
             UiAgentCommand("model", "Choose the model"),
+            UiAgentCommand("mcp", "Manage MCP servers and skills"),
+            UiAgentCommand("skills", "Manage the skills the agent can load"),
         )
 
         private const val INIT_PROMPT = "Explore this project and write an AGENTS.md file at the project root " +
@@ -1112,6 +1508,32 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+        /** CodeAssist Free AI ([CodeAssistFreeProvider]). */
+        const val FREE_AI = CodeAssistFreeProvider.ID
+        /** Stands in for the free tier's key; the provider ignores it and sends the session's access token. */
+        private const val FREE_AI_SESSION_KEY = "codeassist-session"
+        /** Free tier: old tool results are trimmed once the conversation passes this many characters (~50K tokens). */
+        private const val FREE_AI_TRIM_CHARS = 200_000
+        /**
+         * Free tier: the next prompt is expected past this many tokens, it is summarized and carries on. Well under the
+         * proxy's own clearing (90K), which re-writes the cache on every step once it starts, and under the 100K line
+         * past which Haiku 5.5 bills 5x. A step rarely adds more than 20K.
+         */
+        private const val FREE_AI_COMPACT_TOKENS = 70_000
+        /**
+         * Free tier: the same, by characters, before the provider has reported a prompt size (a fresh or restored
+         * conversation). Code runs about 3 characters a token, so this is roughly [FREE_AI_COMPACT_TOKENS].
+         */
+        private const val FREE_AI_COMPACT_CHARS = 210_000
+        private const val AUTO_COMPACTED =
+            "The conversation got long, so its earlier part was summarized to keep going. Details from before may be shorter now."
+
+        /** Output tokens per step on the free tier: the proxy's own cap. */
+        private const val FREE_AI_MAX_TOKENS = 32_000
+        /** Set once [adoptFreeAiAsDefault] has run on this install. */
+        private const val FREE_AI_DEFAULT_ADOPTED = "freeAiDefaultAdopted"
+        private const val OPENROUTER = "openrouter"
+        private const val MAX_RECENT_MODELS = 5
 
         /** The `settings.ai.*` pref backing the FTP asset server toggle (`ftpServer`). */
         const val FTP_PREF = "ftpServer"

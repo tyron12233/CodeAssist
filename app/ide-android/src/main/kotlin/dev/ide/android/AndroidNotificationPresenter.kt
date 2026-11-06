@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.pm.PackageManager
 import androidx.core.app.NotificationManagerCompat
 import dev.ide.core.NotificationPresenter
 import dev.ide.ui.backend.UiNotification
@@ -39,9 +38,16 @@ internal class AndroidNotificationPresenter(private val context: Context) : Noti
                     },
                 )
             }
-            val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
-                PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE)
-            }
+            val tag = notification.key ?: notification.id
+            // Carries what the notification is about, so the tap opens it rather than just the app. One request
+            // code per tray entry, and UPDATE_CURRENT: PendingIntents that differ only in extras are the same
+            // PendingIntent to the system, so a shared code would hand every entry the first one's target.
+            val open = PendingIntent.getActivity(
+                context,
+                tag.hashCode(),
+                NotificationTargets.openIntent(context, notification.target),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
             val built = Notification.Builder(context, CHANNEL_ID)
                 .setContentTitle(notification.title)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
@@ -53,12 +59,12 @@ internal class AndroidNotificationPresenter(private val context: Context) : Noti
                         // line; collapsing them to an ellipsis would hide the actionable part.
                         style = Notification.BigTextStyle().bigText(it)
                     }
-                    open?.let { setContentIntent(it) }
+                    setContentIntent(open)
                 }
                 .build()
             // Keyed notifications replace their tray entry too, for the same reason they replace in the
             // list: it is one fact, not a stream of them.
-            manager.notify(notification.key ?: notification.id, TRAY_ID, built)
+            manager.notify(tag, TRAY_ID, built)
         }
     }
 

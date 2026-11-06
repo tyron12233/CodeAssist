@@ -9,8 +9,10 @@ import dev.codeassist.ndk.jni.jniNavigateAction
 import dev.ide.plugin.editor.EDITOR_DECORATION_EP
 import dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP
 import dev.ide.build.BUILD_PLUGIN_EP
+import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.FileTypeMapping
+import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.LanguageId
 import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
 import dev.ide.lang.completion.CompletionContribution
@@ -59,6 +61,7 @@ class NdkPlugin : Plugin {
         reg.register(ProjectTemplateExtensionPoint, NativeCppTemplate())
         reg.register(ProjectTemplateExtensionPoint, NativeActivityTemplate())
         reg.register(ProjectTemplateExtensionPoint, NativeAppTemplate())
+        reg.register(ProjectTemplateExtensionPoint, NativeConsoleTemplate())
 
         // What a .c, .cpp or .h looks like in the project tree. The UI facet registers the matching art and
         // the same mapping for tabs and breadcrumbs; both read one table ([NdkFileIcons]).
@@ -77,6 +80,13 @@ class NdkPlugin : Plugin {
         // The native half of an ordinary build: one task per module carrying an [ndk] facet, wired ahead of
         // the Android packaging merge so the .so is on disk before it looks for one.
         reg.register(BUILD_PLUGIN_EP, NdkBuildPlugin({ NdkState.toolchain }, reg.logger("NdkBuild")))
+
+        // Semantic colours: a thin C/C++ backend whose highlighter asks the resident clang what each
+        // identifier is (see NdkLanguageBackend). The seam the plugin's own parser will grow into.
+        reg.register(LANGUAGE_BACKEND_EP, NdkLanguageBackend({ NdkState.toolchain }, reg.logger("NdkSemantic")))
+
+        // "Run <module>" for a C/C++ program with a main(): built as an executable and run in the Run console.
+        reg.register(RUN_TASK_PROVIDER_EP, NdkRunTaskProvider({ NdkState.toolchain }, reg.logger("NdkRun")))
 
         // Errors in the editor, from the compiler that builds the file. Registered with the toolchain read
         // lazily, because `register` runs before there is any reason to unpack one.

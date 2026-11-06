@@ -92,9 +92,14 @@ import dev.ide.ui.generated.resources.ads_off_title
 import dev.ide.ui.generated.resources.support_show_interstitials_desc
 import dev.ide.ui.generated.resources.support_show_interstitials
 import dev.ide.ui.generated.resources.support_show_ads_desc
+import dev.ide.ui.generated.resources.ads_off_locked
+import org.jetbrains.compose.resources.pluralStringResource
 import dev.ide.ui.generated.resources.support_ad_privacy
 import dev.ide.ui.generated.resources.support_ad_privacy_desc
 import dev.ide.ui.generated.resources.support_ad_privacy_button
+import dev.ide.ui.generated.resources.ad_inspector
+import dev.ide.ui.generated.resources.ad_inspector_desc
+import dev.ide.ui.generated.resources.ad_inspector_open
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.rememberNotificationPermissionController
@@ -121,6 +126,8 @@ internal const val SHOW_INTERSTITIALS_KEY = "showFullScreenAds"
 /** The "Manage ad consent" action injected onto the Privacy page when the host's UMP flow requires a privacy-
  *  options entry point (EEA/UK). Routed to [dev.ide.ui.ads.AdController.showPrivacyOptions], not the store. */
 private const val AD_PRIVACY_KEY = "adPrivacyOptions"
+/** "Ad Inspector", injected on the Privacy page of developer builds ([dev.ide.ui.ads.AdController.adInspectorAvailable]). */
+private const val AD_INSPECTOR_KEY = "adInspector"
 
 /**
  * The Settings screen. Pages come from [IdeBackend.settingsPages] — built-in categories plus any a plugin
@@ -154,17 +161,24 @@ fun SettingsScreen(
     // writes route to the controller below, not the backend store.
     val ads = LocalAds.current
     val showAdsTitle = stringResource(Res.string.support_show_ads)
-    val showAdsDesc = stringResource(Res.string.support_show_ads_desc)
     val showInterstitialsTitle = stringResource(Res.string.support_show_interstitials)
-    val showInterstitialsDesc = stringResource(Res.string.support_show_interstitials_desc)
+    // Right after an install or update ads can't be turned off yet (AdController.offLockRemainingMs): both
+    // toggles say so in place of their usual description, and say it again if flipped.
+    val offLockHours = ads?.offLockRemainingMs()?.takeIf { it > 0 }?.let(::lockHours)
+    val offLockedDesc = offLockHours?.let { pluralStringResource(Res.plurals.ads_off_locked, it, it) }
+    val showAdsDesc = offLockedDesc ?: stringResource(Res.string.support_show_ads_desc)
+    val showInterstitialsDesc = offLockedDesc ?: stringResource(Res.string.support_show_interstitials_desc)
     val adPrivacyTitle = stringResource(Res.string.support_ad_privacy)
     val adPrivacyDesc = stringResource(Res.string.support_ad_privacy_desc)
     val adPrivacyButton = stringResource(Res.string.support_ad_privacy_button)
+    val adInspectorTitle = stringResource(Res.string.ad_inspector)
+    val adInspectorDesc = stringResource(Res.string.ad_inspector_desc)
+    val adInspectorButton = stringResource(Res.string.ad_inspector_open)
     // `ads?.privacyOptionsRequired` reads the host's observable consent state, so once UMP resolves and a
     // privacy-options entry becomes required, this recomputes and the "Manage ad consent" action appears.
     val privacyOptionsRequired = ads?.privacyOptionsRequired == true
     val state = rememberSettingsScreenState(backend, ads)
-    val pages = remember(view, state.structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, adPrivacyTitle) {
+    val pages = remember(view, state.structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, showInterstitialsDesc, adPrivacyTitle) {
         val base = backend.settings.settingsPages().filter {
             when (view) {
                 SettingsView.All -> true
@@ -181,6 +195,9 @@ fun SettingsScreen(
                     // Only shown where the host's consent flow requires a privacy-options entry point (EEA/UK).
                     if (privacyOptionsRequired) {
                         add(UiSettingControl.Action(AD_PRIVACY_KEY, adPrivacyTitle, adPrivacyDesc, buttonLabel = adPrivacyButton))
+                    }
+                    if (ads.adInspectorAvailable) {
+                        add(UiSettingControl.Action(AD_INSPECTOR_KEY, adInspectorTitle, adInspectorDesc, buttonLabel = adInspectorButton))
                     }
                 }
                 page.copy(controls = injected + page.controls)
@@ -201,6 +218,7 @@ fun SettingsScreen(
         when (action.key) {
             // The injected "Manage ad consent" action: reopen the host's UMP privacy-options form.
             AD_PRIVACY_KEY -> ads?.showPrivacyOptions()
+            AD_INSPECTOR_KEY -> ads?.openAdInspector()
             ACTION_VIEW_LOGS -> onOpenLogs()
             ACTION_BACKUP -> state.backupProjects(fileActions::share)
             // Re-request the notification permission; if the OS won't re-prompt (permanently denied), route to
@@ -236,6 +254,7 @@ fun SettingsScreen(
                 is SettingsToast.Message -> t.text
                 SettingsToast.BackupReady -> stringResource(Res.string.settings_backup_ready)
                 SettingsToast.NotificationsEnabled -> stringResource(Res.string.build_notif_enabled)
+                is SettingsToast.AdsOffLocked -> lockHours(t.remainingMs).let { pluralStringResource(Res.plurals.ads_off_locked, it, it) }
             }
             ToastBar(toastText, Modifier.align(Alignment.BottomCenter))
             if (state.adsOffPrompt) AdsOffPrompt(state)
@@ -582,3 +601,6 @@ private fun AdsOffPrompt(state: SettingsScreenState) {
         },
     )
 }
+
+/** Whole hours left on the ads turn-off lock, rounded up so the last hour still reads "1 hour", not "0". */
+internal fun lockHours(remainingMs: Long): Int = ((remainingMs + 3_599_999L) / 3_600_000L).toInt().coerceAtLeast(1)

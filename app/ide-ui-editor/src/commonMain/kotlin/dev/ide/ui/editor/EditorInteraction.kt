@@ -58,6 +58,10 @@ internal class EditorInteraction(initialRevision: Int) {
     var hoveredLine by mutableIntStateOf(-1)
     var handlesVisible by mutableStateOf(false)
 
+    /** While a selection handle is dragged: the point the loupe magnifies (the dragged edge, at its line's middle,
+     *  in the editor's own coordinates); null otherwise. Read in draw only, so a drag redraws, never recomposes. */
+    var loupeSource by mutableStateOf<Offset?>(null)
+
     // Measured height of the floating touch selection toolbar (px) while it's shown — the lightbulb anchors
     // above the same caret line, so it reads this to stack itself above the toolbar instead of under it.
     var selectionToolbarHeightPx by mutableIntStateOf(0)

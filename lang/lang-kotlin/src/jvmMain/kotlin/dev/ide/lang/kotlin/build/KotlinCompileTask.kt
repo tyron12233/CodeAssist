@@ -10,6 +10,7 @@ import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.depOutputDirs
+import dev.ide.build.engine.info
 import dev.ide.build.engine.kotlinOutputDir
 import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.kotlinSourceFiles
@@ -17,6 +18,7 @@ import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
 import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.sourceFiles
+import dev.ide.build.engine.withHeartbeat
 import dev.ide.build.resolveFor
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
@@ -87,13 +89,16 @@ class KotlinCompileTask(
         if (kt.isEmpty()) return TaskResult.Success
         val classpath = classpath()
         val resolved = plugins.resolveFor(module, classpath + bootClasspath)
-        val r = compiler.compile(
-            kt, sourceFiles(module), classpath, out, levelOf(module.languageLevel),
-            bootClasspath = bootClasspath,
-            compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            commonSources = commonSources(),
-            optIns = optIns(),
-        )
+        val r = ctx.withHeartbeat("Compiling Kotlin") {
+            compiler.compile(
+                kt, sourceFiles(module), classpath, out, levelOf(module.languageLevel),
+                bootClasspath = bootClasspath,
+                compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
+                commonSources = commonSources(),
+                optIns = optIns(),
+                status = { ctx.info(it) },
+            )
+        }
         ctx.reportKotlinProblems(r)
         return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))
     }

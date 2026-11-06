@@ -117,6 +117,24 @@ interface UiRegistration {
      * has no file tree answers.
      */
     fun newFileTemplate(template: NewFileTemplate): UiHandle = UiHandle { }
+
+    /**
+     * List a whole editor color scheme beside the presets. See [ColorScheme]. Declare
+     * `dev.ide.plugin.PluginCapabilities.UI_COLOR_SCHEME`.
+     *
+     * Since SPI 3.4.0. On an older host this throws `AbstractMethodError` or `NoSuchMethodError`; call it inside
+     * `catch (LinkageError)` to support one. The default, a no-op, is what a host with no editor answers.
+     */
+    fun colorScheme(scheme: ColorScheme): UiHandle = UiHandle { }
+
+    /**
+     * Offer a whole app theme under Appearance → Accent. See [AppTheme]. Declare
+     * `dev.ide.plugin.PluginCapabilities.UI_APP_THEME`.
+     *
+     * Since SPI 3.4.0. On an older host this throws `AbstractMethodError` or `NoSuchMethodError`; call it inside
+     * `catch (LinkageError)` to support one. The default, a no-op, is what a host without themes answers.
+     */
+    fun appTheme(theme: AppTheme): UiHandle = UiHandle { }
 }
 
 /** Removes one contribution. */

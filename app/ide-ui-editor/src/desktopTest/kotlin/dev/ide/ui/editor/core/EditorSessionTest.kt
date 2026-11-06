@@ -800,20 +800,30 @@ class EditorSessionTest {
     }
 
     @Test
-    fun autoCloseTypingRestartsTheIme() {
+    fun autoCloseTypingDoesNotRestartTheIme() {
+        // The IME's view before the caret, and the caret, are exact; only the closer after it is extra. A restart
+        // here deactivates the connection the IME is still sending the next keystrokes on, and they are lost.
         val (s, restarts) = countingImeSession("foo", 3)
-        s.commitText("(") // smartInsert auto-closes to "()" — one more char than the IME delivered
+        s.commitText("(") // smartInsert auto-closes to "()"
         assertEquals("foo()", s.doc.text)
-        assertEquals(1, restarts(), "auto-closing a pair shifts the buffer the IME didn't author")
+        assertEquals(TextRange(4), s.selection)
+        assertEquals(0, restarts(), "an auto-closed pair must not restart the IME")
+        s.commitText("\"")
+        s.commitText("S")
+        assertEquals("foo(\"S\")", s.doc.text)
+        assertEquals(0, restarts(), "nor an auto-closed quote")
     }
 
     @Test
-    fun skipOverTypingRestartsTheIme() {
+    fun skipOverTypingDoesNotRestartANonMirroringIme() {
+        // The caret and the text before it are what the IME expects; a restart would drop the keystrokes it is
+        // already sending (`abs(1), 2` typed fast came out as `abs(1)2`). A mirroring IME is still restarted:
+        // see monitoringImeIsRestartedOnSkipOverCloser.
         val (s, restarts) = countingImeSession("foo()", 4)
         s.commitText(")") // skip-over inserts nothing, just hops the caret
         assertEquals("foo()", s.doc.text)
         assertEquals(TextRange(5), s.selection)
-        assertEquals(1, restarts(), "a skip-over inserts fewer chars than the IME delivered")
+        assertEquals(0, restarts(), "a skip-over keeps the IME's caret and prefix exact")
     }
 
     @Test

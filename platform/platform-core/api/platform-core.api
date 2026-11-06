@@ -1,6 +1,54 @@
-# The compiled surface of io.github.tyron12233:platform-core, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:platform-core, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/platform/AnrTrace
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/platform/AnrTrace$ThreadDump;Ldev/ide/platform/AnrTrace$ThreadDump;I)V
+	field static Companion Ldev/ide/platform/AnrTrace$Companion;
+	field static MAX_BYTES I
+	field static MAX_FRAMES I
+	field static MAX_NATIVE_FRAMES I
+	method component1()Ldev/ide/platform/AnrTrace$ThreadDump;
+	method component2()Ldev/ide/platform/AnrTrace$ThreadDump;
+	method component3()I
+	method copy(Ldev/ide/platform/AnrTrace$ThreadDump;Ldev/ide/platform/AnrTrace$ThreadDump;I)Ldev/ide/platform/AnrTrace;
+	method equals(Ljava/lang/Object;)Z
+	method getLockHolder()Ldev/ide/platform/AnrTrace$ThreadDump;
+	method getMain()Ldev/ide/platform/AnrTrace$ThreadDump;
+	method getThreadCount()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/AnrTrace;Ldev/ide/platform/AnrTrace$ThreadDump;Ldev/ide/platform/AnrTrace$ThreadDump;IILjava/lang/Object;)Ldev/ide/platform/AnrTrace;
+	method toString()Ljava/lang/String;
+dev/ide/platform/AnrTrace$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getSAFE_PREFIXES()Ljava/util/List;
+	method isBackground(Ljava/lang/String;)Z
+	method kindOf(Ljava/lang/String;)Ljava/lang/String;
+	method parse(Ljava/io/InputStream;I)Ldev/ide/platform/AnrTrace;
+	method parse(Ljava/lang/String;)Ldev/ide/platform/AnrTrace;
+	method static parse$default(Ldev/ide/platform/AnrTrace$Companion;Ljava/io/InputStream;IILjava/lang/Object;)Ldev/ide/platform/AnrTrace;
+dev/ide/platform/AnrTrace$ThreadDump
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/Integer;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/util/List;
+	method component4()Ljava/util/List;
+	method component5()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/Integer;)Ldev/ide/platform/AnrTrace$ThreadDump;
+	method equals(Ljava/lang/Object;)Z
+	method getFirstOwnFrame()Ljava/lang/String;
+	method getFrames()Ljava/util/List;
+	method getName()Ljava/lang/String;
+	method getNativeFrames()Ljava/util/List;
+	method getState()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/AnrTrace$ThreadDump;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/Integer;ILjava/lang/Object;)Ldev/ide/platform/AnrTrace$ThreadDump;
+	method toString()Ljava/lang/String;
 dev/ide/platform/EngineBreadcrumb
 	kind class
 	super java/lang/Object
@@ -52,7 +100,11 @@ dev/ide/platform/EngineScheduler
 	super java/lang/Object
 	ctor ()V
 	ctor (Lkotlinx/coroutines/CoroutineDispatcher;Ldev/ide/platform/EngineSchedulerObserver;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Lkotlinx/coroutines/CoroutineDispatcher;Ldev/ide/platform/EngineSchedulerObserver;JJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Lkotlinx/coroutines/CoroutineDispatcher;Ldev/ide/platform/EngineSchedulerObserver;JJLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	ctor (Lkotlinx/coroutines/CoroutineDispatcher;Ldev/ide/platform/EngineSchedulerObserver;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method awaitInteractiveIdle(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method awaitQuiet-VtjQ1oo(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method background(Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method getDispatcher()Lkotlinx/coroutines/CoroutineDispatcher;
 	method interactive(Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -134,9 +186,26 @@ dev/ide/platform/ProcessDeath
 	kind class
 	super java/lang/Object
 	field static INSTANCE Ldev/ide/platform/ProcessDeath;
+	field static REASON_ANR I
+	field static REASON_CRASH I
+	field static REASON_CRASH_NATIVE I
+	field static REASON_EXCESSIVE_RESOURCE_USAGE I
+	field static REASON_LOW_MEMORY I
 	field static REASON_SIGNALED I
 	field static SIGKILL I
+	method describeBuildProcessExit(IILjava/lang/String;JJ)Ljava/lang/String;
 	method isSystemKill(IIZ)Z
+dev/ide/platform/ProjectFiles
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/ProjectFiles;
+	method getBUILD_OUTPUT_DIRS()Ljava/util/Set;
+	method getBUILD_PRODUCT_SUFFIXES()Ljava/util/List;
+	method getTOOL_STATE_DIRS()Ljava/util/Set;
+	method inSourceTree(Ljava/lang/String;)Z
+	method isBuildOutput(Ljava/lang/String;ZLjava/util/Set;Z)Z
+	method isToolState(Ljava/lang/String;)Z
+	method static isBuildOutput$default(Ldev/ide/platform/ProjectFiles;Ljava/lang/String;ZLjava/util/Set;ZILjava/lang/Object;)Z
 dev/ide/platform/RuntimeInfo
 	kind class
 	super java/lang/Object
@@ -602,7 +671,9 @@ dev/ide/platform/storage/StorageUsage
 	field static INDEX Ljava/lang/String;
 	field static INSTANCE Ldev/ide/platform/storage/StorageUsage;
 	field static LANGUAGE Ljava/lang/String;
+	field static LEFTOVERS Ljava/lang/String;
 	field static OTHER Ljava/lang/String;
+	field static PLUGIN_LEFTOVERS Ljava/lang/String;
 	field static PREVIEW Ljava/lang/String;
 	field static PROJECTS Ljava/lang/String;
 	field static SDK Ljava/lang/String;
@@ -611,6 +682,9 @@ dev/ide/platform/storage/StorageUsage
 	method getDESTRUCTIVE()Ljava/util/Set;
 	method getORDER()Ljava/util/List;
 	method report(Ljava/nio/file/Path;Ljava/util/List;Ljava/nio/file/Path;)Ldev/ide/platform/storage/StorageUsage$Report;
+	method report(Ljava/nio/file/Path;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;)Ldev/ide/platform/storage/StorageUsage$Report;
+	method report(Ljava/nio/file/Path;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;)Ldev/ide/platform/storage/StorageUsage$Report;
+	method static report$default(Ldev/ide/platform/storage/StorageUsage;Ljava/nio/file/Path;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/platform/storage/StorageUsage$Report;
 dev/ide/platform/storage/StorageUsage$Cat
 	kind class
 	super java/lang/Object

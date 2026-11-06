@@ -171,6 +171,16 @@ internal class WorkspaceEventHub(
         publish(events)
     }
 
+    /** A batch file operation (the tree's move/copy/delete of many items, or its undo): [moved] old -> new,
+     *  [created] files, [deleted] items, published as ONE batch so the reaction runs once for the lot. */
+    fun filesTransferred(moved: Map<Path, Path>, created: List<Path>, deleted: List<Path>) {
+        val events = ArrayList<VfsEvent>(moved.size + created.size + deleted.size)
+        moved.mapTo(events) { (from, to) -> FileMoved(store.vfs.fileFor(to), from.toString(), to.toString()) }
+        created.mapTo(events) { FileCreated(store.vfs.fileFor(it)) }
+        deleted.mapTo(events) { FileDeleted(store.vfs.fileFor(it)) }
+        publish(events)
+    }
+
     fun fileCreated(path: Path) = publish(listOf(FileCreated(store.vfs.fileFor(path))))
 
     /** A batch of created files (a directory copy). One event per real file so remote consumers see the
@@ -331,10 +341,11 @@ internal class WorkspaceEventHub(
             // `invalidate` (analyzer/name-env teardown) is DECOUPLED from `resync` (full library+SDK re-index):
             // a source-set change needs only the former; a full re-sync is reserved for CLASSPATH changes (a
             // jar, a model/settings edit, an ambiguous delete/move — set explicitly by those branches).
-            if (invalidate) {
-                reactions.invalidateAnalyzers()
-                synthetic = true
-            }
+            // Not the synthetic classes with it: R, BuildConfig and ViewBinding come from resources, and a Kotlin
+            // file's light classes were re-read above, file by file. The branches that do change them (a
+            // resource, a created Kotlin file, a delete or a move) say so themselves. Rebuilding them after
+            // every cross-file rename made the first Java lookup that followed rebuild R from scratch.
+            if (invalidate) reactions.invalidateAnalyzers()
             if (synthetic) reactions.invalidateSyntheticClasses()
             if (resync) reactions.resyncIndex(IndexPassTrigger.FILES)
             if (external) reactions.fileSystemChanged()

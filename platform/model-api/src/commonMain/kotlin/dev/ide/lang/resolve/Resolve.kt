@@ -47,8 +47,11 @@ data class StructureItem(
     val depth: Int,
 )
 
-/** The markup dialect of a [QuickDocInfo.doc] body, so the renderer knows how to parse it. */
-enum class DocFormat { JAVADOC, KDOC, PLAIN }
+/**
+ * The markup dialect of a [QuickDocInfo.doc] body, so the renderer knows how to parse it. [MARKDOWN] (since
+ * SPI 3.3.0) is plain CommonMark with no doc-comment tags, which is what a language server's hover answers in.
+ */
+enum class DocFormat { JAVADOC, KDOC, PLAIN, MARKDOWN }
 
 /**
  * Quick documentation for the symbol under the caret: its [signature] (a display string), [name] + [kind],

@@ -1,0 +1,49 @@
+CodeAssist adalah IDE Android untuk ponsel dan tablet Anda. Tulis Kotlin dan Java, lihat pratinjau Jetpack Compose langsung berubah saat Anda mengetik, lalu build, tanda tangani, dan pasang aplikasi Android sungguhan di perangkat itu sendiri. Tanpa PC, tanpa server build cloud, tanpa daemon Gradle.
+
+Ini IDE Android lengkap, bukan sekadar tempat mencoba kode: buka proyek Android multi-modul, tambahkan library dari Maven, dan hasilkan APK atau App Bundle yang bisa dipasang atau dipublikasikan.
+
+<b>Buat aplikasi Android di perangkat Anda</b>
+• Seluruh toolchain berjalan di ponsel: aapt2, compiler Kotlin, compiler Java, dexing D8, packaging, dan penandatanganan APK
+• Build inkremental hanya mengulang bagian yang berubah
+• Pasang dan jalankan aplikasi dengan satu ketukan, lalu pantau outputnya di Logcat
+• Build rilis dengan R8, Android App Bundle (AAB), dan kunci tanda tangan Anda sendiri
+• Proyek multi-modul, varian build, ViewBinding, AIDL, KSP (Room, Hilt), dan google-services.json untuk Firebase
+• Dependensi dari Maven Central dan repositori Maven Google, juga file JAR dan AAR lokal
+• Impor proyek Gradle yang sudah ada, atau ekspor proyek Anda sebagai proyek Gradle untuk dibuka di komputer
+
+<b>Editor kode Kotlin dan Java</b>
+• Pelengkapan kode yang tetap bekerja pada kode yang belum selesai, dengan impor otomatis
+• Error dan peringatan saat mengetik, dengan perbaikan cepat sekali ketuk
+• Buka definisi, implementasi, dan tipe, pencarian simbol, serta kode sumber library yang mudah dibaca
+• Format ulang kode, rapikan impor, lipat kode, dan bungkus baris
+• Pelengkapan XML Android untuk layout, manifest, values, dan drawable
+• Bilah simbol untuk ngoding, cubit untuk zoom, dan skema warna editor
+
+<b>Pratinjau Jetpack Compose dan layout</b>
+• Composable dengan @Preview tampil langsung di samping kode dan berubah saat Anda mengedit
+• Pratinjau layout XML, termasuk view kustom Anda, tanpa menjalankan build
+
+<b>Asisten coding AI</b>
+• Jelaskan perubahan dengan kata-kata biasa. Agen membaca proyek Anda, mengedit kode, menjalankan build, dan menampilkan diff yang bisa dibatalkan
+• Gunakan kunci Anthropic Claude, Google Gemini, OpenAI, atau OpenRouter milik Anda, atau gateway yang kompatibel. Kunci Gemini gratis pun bisa
+• Lampirkan tangkapan layar, sebut file dengan @, dan lanjutkan sesi yang tersimpan
+
+<b>Git dan GitHub</b>
+• Clone, commit, branch, merge, stash, dan push
+• Masuk ke GitHub untuk meng-clone repositori privat dan membuka pull request
+
+<b>Belajar dan berlatih</b>
+• Pelajaran Java dan Kotlin interaktif dengan latihan yang dikompilasi dan dijalankan di perangkat Anda
+• Tantangan coding harian dengan papan peringkat publik
+• Mulai dari template dan contoh aplikasi di Toko Proyek, atau terbitkan milik Anda sendiri
+
+<b>Juga tersedia</b>
+• Editor blok: ubah file Java menjadi blok bergaya Scratch dan kembali lagi tanpa kehilangan satu karakter pun
+• Jalankan program konsol Java dan Kotlin dengan konsol interaktif
+• Sandbox yang bertanya sebelum program Anda memakai jaringan, file, atau proses lain
+• Plugin yang memperluas IDE, termasuk plugin NDK untuk C dan C++
+• Tema terang dan gelap dengan warna Material You
+
+<b>Gratis dan open source</b>
+CodeAssist adalah IDE Android gratis dan open source dengan lisensi GNU General Public License v3.0. Aplikasi ini menampilkan beberapa iklan kecil, dan Anda bisa mematikannya di aplikasi tanpa biaya. Kode sumber, laporan masalah, dan rilis ada di GitHub:
+https://github.com/tyron12233/CodeAssist

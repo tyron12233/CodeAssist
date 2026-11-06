@@ -32,6 +32,7 @@ fun actionIcon(iconId: String?): ImageVector = when (iconId) {
     "pkg", "sdk" -> CaIcons.pkg
     "key", "keystore", "signing" -> CaIcons.key
     "lightbulb", "inspections", "analysis" -> CaIcons.lightbulb
+    "bell", "notifications", "inbox" -> CaIcons.bell
     "git", "branch", "vcs" -> CaIcons.gitBranch
     "commit", "history" -> CaIcons.gitCommit
     "merge" -> CaIcons.gitMerge

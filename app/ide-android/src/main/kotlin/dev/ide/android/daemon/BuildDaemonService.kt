@@ -123,7 +123,7 @@ class BuildDaemonService : Service() {
                     // take a while on a phone, and a silent console reads as a hung build.
                     runCatching { callback?.onLog("Build process: loading project…") }
                     runCatching {
-                        val mgr = manager ?: AndroidIde.createProjectManager(this@BuildDaemonService).also { manager = it }
+                        val mgr = manager ?: newManager().also { manager = it }
                         services?.let { old ->
                             runCatching { old.buildRunner.stopBuild() } // never close an engine mid-build
                             runCatching { old.close() }
@@ -152,7 +152,7 @@ class BuildDaemonService : Service() {
             scope.launch {
                 // The manager is created under the open lock so a Run arriving now never builds a second one.
                 val mgr = openMutex.withLock {
-                    manager ?: AndroidIde.createProjectManager(this@BuildDaemonService).also { manager = it }
+                    manager ?: newManager().also { manager = it }
                 }
                 mgr.warmKotlinCompiler()
                 log.info("daemon(pid=${Process.myPid()}): Kotlin compiler warmed")
@@ -493,11 +493,29 @@ class BuildDaemonService : Service() {
         return words.replaceFirstChar { it.uppercaseChar() }
     }
 
+    /**
+     * This process's project manager. "Run plugin in sandbox" runs here like any build, but the sandbox is an
+     * activity, which only the UI process may start: the sandbox this engine sees forwards the finished build there.
+     */
+    private fun newManager(): dev.ide.core.project.ProjectManager =
+        AndroidIde.createProjectManager(this).also { m ->
+            m.applicationContainer.registerServiceIfAbsent(dev.ide.core.PLUGIN_SANDBOX) {
+                object : dev.ide.core.PluginSandbox {
+                    override fun launch(apk: java.nio.file.Path, log: (String) -> Unit): Boolean {
+                        if (PackageLaunchBridge.forwardSandbox(apk.toString())) return true
+                        log("Could not reach the IDE to start the sandbox. Try Run again.")
+                        return false
+                    }
+                }
+            }
+        }
+
     override fun onCreate() {
         super.onCreate()
         log.info("daemon(pid=${Process.myPid()}): service created in :build process")
         // Leave the error behind if this process dies of one, so the UI can say what it was.
-        DaemonCrashNote.install(this)
+        // And name the installed plugin it died in, when there is one, so the UI can turn that plugin off.
+        DaemonCrashNote.install(this) { t -> manager?.blameCrash(t) }
         // Builds here record the APKs they sign, and the installer here checks them (BuiltApks).
         dev.ide.android.AndroidIde.initBuiltApks(this)
         // The engine's ApkInstaller runs in THIS process; after an install it asks the bridge to launch the
@@ -506,6 +524,11 @@ class BuildDaemonService : Service() {
         PackageLaunchBridge.setForwarder { pkg ->
             val cb = callback ?: return@setForwarder false
             runCatching { cb.onLaunchPackage(pkg); true }.getOrDefault(false)
+        }
+        // "Run plugin in sandbox" built here; the sandbox is an activity, so the UI process starts it.
+        PackageLaunchBridge.setSandboxForwarder { path ->
+            val cb = callback ?: return@setSandboxForwarder false
+            runCatching { cb.onLaunchPluginSandbox(path); true }.getOrDefault(false)
         }
         PackageLaunchBridge.setConfirmForwarder { confirm ->
             val cb = callback ?: return@setConfirmForwarder false

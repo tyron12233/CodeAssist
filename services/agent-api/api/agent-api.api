@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:agent-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:agent-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/agent/AgentEvent
@@ -27,17 +27,63 @@ dev/ide/agent/AgentEvent$AssistantThinkingDelta
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/AgentEvent$AssistantThinkingDelta;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$AssistantThinkingDelta;
 	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$Compacted
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (II)V
+	method component1()I
+	method component2()I
+	method copy(II)Ldev/ide/agent/AgentEvent$Compacted;
+	method equals(Ljava/lang/Object;)Z
+	method getAfterChars()I
+	method getBeforeChars()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$Compacted;IIILjava/lang/Object;)Ldev/ide/agent/AgentEvent$Compacted;
+	method toString()Ljava/lang/String;
 dev/ide/agent/AgentEvent$Error
 	kind class
 	super java/lang/Object
 	implements dev/ide/agent/AgentEvent
 	ctor (Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
 	method copy(Ljava/lang/String;)Ldev/ide/agent/AgentEvent$Error;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/AgentEvent$Error;
 	method equals(Ljava/lang/Object;)Z
+	method getKind()Ljava/lang/String;
 	method getMessage()Ljava/lang/String;
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/AgentEvent$Error;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$Error;
+	method static copy$default(Ldev/ide/agent/AgentEvent$Error;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$Error;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$FilesChanged
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/util/List;)Ldev/ide/agent/AgentEvent$FilesChanged;
+	method equals(Ljava/lang/Object;)Z
+	method getChanges()Ljava/util/List;
+	method getId()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$FilesChanged;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$FilesChanged;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$TodosUpdated
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/util/List;)V
+	method component1()Ljava/util/List;
+	method copy(Ljava/util/List;)Ldev/ide/agent/AgentEvent$TodosUpdated;
+	method equals(Ljava/lang/Object;)Z
+	method getTodos()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$TodosUpdated;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$TodosUpdated;
 	method toString()Ljava/lang/String;
 dev/ide/agent/AgentEvent$ToolCallDenied
 	kind class
@@ -58,32 +104,46 @@ dev/ide/agent/AgentEvent$ToolCallFinished
 	super java/lang/Object
 	implements dev/ide/agent/AgentEvent
 	ctor (Ljava/lang/String;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	ctor (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ljava/lang/String;
 	method component2()Z
 	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ljava/util/List;
 	method copy(Ljava/lang/String;ZLjava/lang/String;)Ldev/ide/agent/AgentEvent$ToolCallFinished;
+	method copy(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;)Ldev/ide/agent/AgentEvent$ToolCallFinished;
 	method equals(Ljava/lang/Object;)Z
 	method getId()Ljava/lang/String;
+	method getImages()Ljava/util/List;
 	method getOk()Z
+	method getOutput()Ljava/lang/String;
 	method getResultSummary()Ljava/lang/String;
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallFinished;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallFinished;
+	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallFinished;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallFinished;
 	method toString()Ljava/lang/String;
 dev/ide/agent/AgentEvent$ToolCallStarted
 	kind class
 	super java/lang/Object
 	implements dev/ide/agent/AgentEvent
 	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ljava/lang/String;
 	method component2()Ljava/lang/String;
 	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
 	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/AgentEvent$ToolCallStarted;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/AgentEvent$ToolCallStarted;
 	method equals(Ljava/lang/Object;)Z
 	method getDisplaySummary()Ljava/lang/String;
 	method getId()Ljava/lang/String;
+	method getInput()Ljava/lang/String;
 	method getName()Ljava/lang/String;
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallStarted;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallStarted;
+	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallStarted;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallStarted;
 	method toString()Ljava/lang/String;
 dev/ide/agent/AgentEvent$TurnCompleted
 	kind class
@@ -111,6 +171,20 @@ dev/ide/agent/AgentEvent$UserMessage
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/AgentEvent$UserMessage;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$UserMessage;
 	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$Waiting
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (JLjava/lang/String;)V
+	method component1()J
+	method component2()Ljava/lang/String;
+	method copy(JLjava/lang/String;)Ldev/ide/agent/AgentEvent$Waiting;
+	method equals(Ljava/lang/Object;)Z
+	method getReason()Ljava/lang/String;
+	method getUntilEpochMs()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$Waiting;JLjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$Waiting;
+	method toString()Ljava/lang/String;
 dev/ide/agent/AgentEventSink
 	kind interface
 	method abstract emit(Ldev/ide/agent/AgentEvent;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -123,11 +197,13 @@ dev/ide/agent/AgentTool
 	method abstract execute(Ldev/ide/agent/ToolArgs;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method abstract getSpec()Ldev/ide/agent/ToolSpec;
 	method getMutating()Z
+	method preview(Ldev/ide/agent/ToolArgs;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method summarize(Ldev/ide/agent/ToolArgs;)Ljava/lang/String;
 dev/ide/agent/AgentTool$DefaultImpls
 	kind class
 	super java/lang/Object
 	method static getMutating(Ldev/ide/agent/AgentTool;)Z
+	method static preview(Ldev/ide/agent/AgentTool;Ldev/ide/agent/ToolArgs;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static summarize(Ldev/ide/agent/AgentTool;Ldev/ide/agent/ToolArgs;)Ljava/lang/String;
 dev/ide/agent/AgentToolRegistry
 	kind interface
@@ -156,6 +232,7 @@ dev/ide/agent/AgentWorkspace
 	method abstract searchText(Ljava/lang/String;ZZILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method abstract writeFile(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method applyQuickFix(Ljava/lang/String;IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method exists(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method fetchUrl(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method findReferences(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method formatFile(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -164,10 +241,13 @@ dev/ide/agent/AgentWorkspace
 	method listTasks(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method organizeImports(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method prepareRename(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method previewScreenshot(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method projectDiagnostics(ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method quickFixes(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method readBytes(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method readMemory(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method renameSymbol(Ljava/lang/String;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method renderPreview(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method runProgram(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method runTask(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method searchDependency(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -184,6 +264,7 @@ dev/ide/agent/AgentWorkspace$DefaultImpls
 	kind class
 	super java/lang/Object
 	method static applyQuickFix(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static exists(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static fetchUrl$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	method static fetchUrl(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static findReferences(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -195,12 +276,15 @@ dev/ide/agent/AgentWorkspace$DefaultImpls
 	method static listTasks(Ldev/ide/agent/AgentWorkspace;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static organizeImports(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static prepareRename(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static previewScreenshot(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static projectDiagnostics$default(Ldev/ide/agent/AgentWorkspace;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	method static projectDiagnostics(Ldev/ide/agent/AgentWorkspace;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static quickFixes(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static readBytes(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static readFile$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	method static readMemory(Ldev/ide/agent/AgentWorkspace;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static renameSymbol(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static renderPreview(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static runProgram$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	method static runProgram(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static runTask(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -235,6 +319,20 @@ dev/ide/agent/ArtifactHit
 	method toString()Ljava/lang/String;
 dev/ide/agent/ContentPart
 	kind interface
+dev/ide/agent/ContentPart$Image
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/ContentPart
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/ContentPart$Image;
+	method equals(Ljava/lang/Object;)Z
+	method getData()Ljava/lang/String;
+	method getMediaType()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ContentPart$Image;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ContentPart$Image;
+	method toString()Ljava/lang/String;
 dev/ide/agent/ContentPart$Text
 	kind class
 	super java/lang/Object
@@ -268,16 +366,22 @@ dev/ide/agent/ContentPart$ToolResultPart
 	implements dev/ide/agent/ContentPart
 	ctor (Ljava/lang/String;Ljava/lang/String;Z)V
 	ctor (Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ljava/lang/String;
 	method component2()Ljava/lang/String;
 	method component3()Z
+	method component4()Ljava/util/List;
 	method copy(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/agent/ContentPart$ToolResultPart;
+	method copy(Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;)Ldev/ide/agent/ContentPart$ToolResultPart;
 	method equals(Ljava/lang/Object;)Z
 	method getContent()Ljava/lang/String;
+	method getImages()Ljava/util/List;
 	method getToolCallId()Ljava/lang/String;
 	method hashCode()I
 	method isError()Z
 	method static copy$default(Ldev/ide/agent/ContentPart$ToolResultPart;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/ContentPart$ToolResultPart;
+	method static copy$default(Ldev/ide/agent/ContentPart$ToolResultPart;Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;ILjava/lang/Object;)Ldev/ide/agent/ContentPart$ToolResultPart;
 	method toString()Ljava/lang/String;
 dev/ide/agent/ContentPart$ToolUse
 	kind class
@@ -324,6 +428,21 @@ dev/ide/agent/DiagnosticSeverity
 	method static getEntries()Lkotlin/enums/EnumEntries;
 	method static valueOf(Ljava/lang/String;)Ldev/ide/agent/DiagnosticSeverity;
 	method static values()[Ldev/ide/agent/DiagnosticSeverity;
+dev/ide/agent/FileChange
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/FileChange;
+	method equals(Ljava/lang/Object;)Z
+	method getAfter()Ljava/lang/String;
+	method getBefore()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/FileChange;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/FileChange;
+	method toString()Ljava/lang/String;
 dev/ide/agent/FileDiagnostic
 	kind class
 	super java/lang/Object
@@ -378,8 +497,11 @@ dev/ide/agent/LlmMessage$Companion
 	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method assistant(Ljava/util/List;)Ldev/ide/agent/LlmMessage;
 	method static toolResult$default(Ldev/ide/agent/LlmMessage$Companion;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/LlmMessage;
+	method static toolResult$default(Ldev/ide/agent/LlmMessage$Companion;Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;ILjava/lang/Object;)Ldev/ide/agent/LlmMessage;
 	method toolResult(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/agent/LlmMessage;
+	method toolResult(Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;)Ldev/ide/agent/LlmMessage;
 	method user(Ljava/lang/String;)Ldev/ide/agent/LlmMessage;
+	method user(Ljava/lang/String;Ljava/util/List;)Ldev/ide/agent/LlmMessage;
 dev/ide/agent/LlmModelInfo
 	kind class
 	super java/lang/Object
@@ -405,11 +527,13 @@ dev/ide/agent/LlmProvider
 	method abstract getModels()Ljava/util/List;
 	method getManagesContext()Z
 	method listModels(Ldev/ide/agent/ProviderConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method preferredModel(Ljava/util/List;)Ljava/lang/String;
 dev/ide/agent/LlmProvider$DefaultImpls
 	kind class
 	super java/lang/Object
 	method static getManagesContext(Ldev/ide/agent/LlmProvider;)Z
 	method static listModels(Ldev/ide/agent/LlmProvider;Ldev/ide/agent/ProviderConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static preferredModel(Ldev/ide/agent/LlmProvider;Ljava/util/List;)Ljava/lang/String;
 dev/ide/agent/LlmProviderRegistry
 	kind interface
 	method abstract getProviders()Ljava/util/List;
@@ -624,6 +748,15 @@ dev/ide/agent/PermissionMode
 	method static getEntries()Lkotlin/enums/EnumEntries;
 	method static valueOf(Ljava/lang/String;)Ldev/ide/agent/PermissionMode;
 	method static values()[Ldev/ide/agent/PermissionMode;
+dev/ide/agent/PreviewImage
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;[BII)V
+	method getHeight()I
+	method getLabel()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method getPng()[B
+	method getWidth()I
 dev/ide/agent/ProjectOverview
 	kind class
 	super java/lang/Object
@@ -699,6 +832,12 @@ dev/ide/agent/RenameTargetInfo
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/RenameTargetInfo;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/RenameTargetInfo;
 	method toString()Ljava/lang/String;
+dev/ide/agent/RenderedPreview
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/agent/PreviewImage;Ljava/util/List;)V
+	method getImage()Ldev/ide/agent/PreviewImage;
+	method getProblems()Ljava/util/List;
 dev/ide/agent/RunResult
 	kind class
 	super java/lang/Object
@@ -826,6 +965,19 @@ dev/ide/agent/TextMatch
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/TextMatch;Ljava/lang/String;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/TextMatch;
 	method toString()Ljava/lang/String;
+dev/ide/agent/TodoItem
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/TodoItem;
+	method equals(Ljava/lang/Object;)Z
+	method getContent()Ljava/lang/String;
+	method getStatus()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/TodoItem;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/TodoItem;
+	method toString()Ljava/lang/String;
 dev/ide/agent/TokenUsage
 	kind class
 	super java/lang/Object
@@ -862,15 +1014,23 @@ dev/ide/agent/ToolExecutionResult
 	super java/lang/Object
 	ctor (Ljava/lang/String;Z)V
 	ctor (Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;ZLjava/util/List;Ldev/ide/agent/AgentEvent;)V
+	ctor (Ljava/lang/String;ZLjava/util/List;Ldev/ide/agent/AgentEvent;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	field static Companion Ldev/ide/agent/ToolExecutionResult$Companion;
 	method component1()Ljava/lang/String;
 	method component2()Z
+	method component3()Ljava/util/List;
+	method component4()Ldev/ide/agent/AgentEvent;
 	method copy(Ljava/lang/String;Z)Ldev/ide/agent/ToolExecutionResult;
+	method copy(Ljava/lang/String;ZLjava/util/List;Ldev/ide/agent/AgentEvent;)Ldev/ide/agent/ToolExecutionResult;
 	method equals(Ljava/lang/Object;)Z
 	method getContent()Ljava/lang/String;
+	method getEvent()Ldev/ide/agent/AgentEvent;
+	method getImages()Ljava/util/List;
 	method hashCode()I
 	method isError()Z
 	method static copy$default(Ldev/ide/agent/ToolExecutionResult;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/ToolExecutionResult;
+	method static copy$default(Ldev/ide/agent/ToolExecutionResult;Ljava/lang/String;ZLjava/util/List;Ldev/ide/agent/AgentEvent;ILjava/lang/Object;)Ldev/ide/agent/ToolExecutionResult;
 	method toString()Ljava/lang/String;
 dev/ide/agent/ToolExecutionResult$Companion
 	kind class
@@ -930,14 +1090,20 @@ dev/ide/agent/WriteRequest
 	super java/lang/Object
 	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ljava/lang/String;
 	method component2()Ljava/lang/String;
 	method component3()Ljava/lang/String;
+	method component4()Ljava/util/List;
 	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/WriteRequest;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Ldev/ide/agent/WriteRequest;
 	method equals(Ljava/lang/Object;)Z
+	method getChanges()Ljava/util/List;
 	method getPath()Ljava/lang/String;
 	method getSummary()Ljava/lang/String;
 	method getTool()Ljava/lang/String;
 	method hashCode()I
 	method static copy$default(Ldev/ide/agent/WriteRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/WriteRequest;
+	method static copy$default(Ldev/ide/agent/WriteRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/WriteRequest;
 	method toString()Ljava/lang/String;

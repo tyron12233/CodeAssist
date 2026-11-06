@@ -20,10 +20,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -39,7 +44,11 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.google.android.gms.ads.rewarded.ServerSideVerificationOptions
 import dev.ide.platform.DeviceMemory
+import dev.ide.platform.MemoryTier
 import dev.ide.platform.log.Log
 import dev.ide.ui.ads.NativeAdPool
 import dev.ide.ui.backend.AdHost
@@ -72,6 +81,10 @@ private val webViewAvailable: Boolean by lazy {
  *
  * There is no purchase flow: ads are removed for free via the in-app toggle.
  *
+ * Banners ([BannerAds]) appear in two places: a native slot whose request filled nothing shows a banner instead
+ * (`AD_BANNER_UNIT_ID`), and the build console's footer shows one while a build runs ([BannerAd],
+ * `AD_BUILD_BANNER_UNIT_ID`). A build without those units (a release before they exist) shows neither.
+ *
  * The one non-native placement is the full-screen interstitial ([preloadInterstitial]/[showInterstitial]):
  * a real AdMob `InterstitialAd` shown occasionally at natural breaks (a long-running build, a finished tutorial
  * lesson), driven by the shared UI controllers and gated by the "show ads" toggle and its own "full-screen
@@ -93,6 +106,21 @@ class AndroidAdHost(
 
     override fun showPrivacyOptions() = onShowPrivacyOptions()
 
+    // Debug builds only. Built with -PREAL_ADS=true they request the REAL units, so the inspector shows the real
+    // mediation groups (Unity, Meta, Pangle, Mintegral); otherwise it shows Google's test units, which have none.
+    override val adInspectorAvailable: Boolean get() = BuildConfig.DEBUG
+
+    override fun openAdInspector() {
+        val activity = activityProvider() ?: return
+        com.google.android.gms.ads.MobileAds.openAdInspector(activity) { error ->
+            // Null on a normal close. Otherwise usually "not a test device" or "SDK not initialized yet".
+            if (error != null) {
+                adLog.warn("ad inspector: code=${error.code} ${error.message}")
+                android.widget.Toast.makeText(activity, "Ad Inspector: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // Full-screen interstitial, shared across trigger points (long build, finished lesson). Preloaded while the
     // IDE is idle and shown if the caller's gate allows. Single-use: cleared once shown; the callers preload the
     // next one when the IDE is idle again, never right after a show (that would load it next to the build the
@@ -101,6 +129,10 @@ class AndroidAdHost(
     @Volatile private var interstitial: InterstitialAd? = null
     @Volatile private var interstitialLoadedAt = 0L
     @Volatile private var loadingInterstitial = false
+    // Why the last load failed (`failed_<code>`), until the next one starts; reported by [interstitialState].
+    @Volatile private var interstitialFailure: String? = null
+    @Volatile private var failureDetail: String? = null
+    override val interstitialFailureDetail: String? get() = failureDetail?.takeIf { interstitialFailure != null }
     // A preload asked for before [start]: carried out by [start].
     private var preloadWanted = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -108,7 +140,10 @@ class AndroidAdHost(
     override var interstitialShowing: Boolean by mutableStateOf(false)
         private set
 
-    override val lowMemoryDevice: Boolean get() = DeviceMemory.isLow
+    // Physical RAM, not the IDE's memory tier: see AndroidMemory.lowPhysicalMemory. A user who forced "Low
+    // memory mode" on is telling us the device struggles, so that still counts.
+    override val lowMemoryDevice: Boolean
+        get() = AndroidMemory.lowPhysicalMemory || (DeviceMemory.isLow && DeviceMemory.detected == MemoryTier.NORMAL)
 
     override fun preloadInterstitial() {
         // AdMob load must run on the main thread; hop there defensively if a caller ever invokes us off it.
@@ -124,6 +159,8 @@ class AndroidAdHost(
             if (!webViewAvailable || interstitial != null || loadingInterstitial) return@post
             val ctx = activityProvider()?.applicationContext ?: return@post
             loadingInterstitial = true
+            interstitialFailure = null
+            failureDetail = null
             runCatching {
                 InterstitialAd.load(
                     ctx,
@@ -143,6 +180,8 @@ class AndroidAdHost(
 
                         override fun onAdFailedToLoad(error: LoadAdError) {
                             loadingInterstitial = false
+                            interstitialFailure = "failed_${error.code}"
+                            failureDetail = failureDetailOf(error)
                             // Code 3 is NO_FILL (expected for a while on a fresh real unit); other codes point at
                             // a config/network problem. Never crash — we just don't show one this time.
                             adLog.warn(
@@ -154,10 +193,21 @@ class AndroidAdHost(
                 )
             }.onFailure { e ->
                 loadingInterstitial = false
+                interstitialFailure = "failed_sdk"
                 adLog.warn("build interstitial load skipped (no WebView / SDK unavailable): ${e.message}")
             }
         }
     }
+
+    override val interstitialState: String
+        get() = when {
+            !started -> "not_started"
+            !webViewAvailable -> "no_webview"
+            interstitial != null ->
+                if (SystemClock.elapsedRealtime() - interstitialLoadedAt > INTERSTITIAL_MAX_AGE_MS) "expired" else "ready"
+            loadingInterstitial -> "loading"
+            else -> interstitialFailure ?: "not_requested"
+        }
 
     override fun showInterstitial(): Boolean {
         // Callers invoke on the Main dispatcher, and AdMob requires show() on the main thread. If somehow
@@ -185,6 +235,116 @@ class AndroidAdHost(
         FullScreenAdGate.adClosed()
     }
 
+    // Rewarded: the one ad the user asks for, in exchange for CodeAssist Free AI points. Loaded on demand (and the
+    // next one right after a view, so a second tap is instant), and never tied to the "show ads" toggle: that
+    // switch is about ads the user did not ask for. Main thread only, like the interstitial.
+    @Volatile private var rewarded: RewardedAd? = null
+    @Volatile private var rewardedLoadedAt = 0L
+    private var loadingRewarded = false
+    private val rewardedWaiters = mutableListOf<(RewardedAd?) -> Unit>()
+
+    override val rewardedAvailable: Boolean
+        get() = started && webViewAvailable && BuildConfig.AD_REWARDED_UNIT_ID.isNotBlank()
+
+    override fun showRewarded(userId: String, onResult: (earned: Boolean) -> Unit) {
+        mainHandler.post {
+            if (!rewardedAvailable || userId.isBlank()) {
+                onResult(false)
+                return@post
+            }
+            val ready = rewarded?.takeIf { SystemClock.elapsedRealtime() - rewardedLoadedAt < INTERSTITIAL_MAX_AGE_MS }
+            rewarded = null
+            if (ready != null) presentRewarded(ready, userId, onResult)
+            else loadRewarded { ad -> if (ad == null) onResult(false) else presentRewarded(ad, userId, onResult) }
+        }
+    }
+
+    private fun loadRewarded(then: (RewardedAd?) -> Unit) {
+        rewardedWaiters += then
+        if (loadingRewarded) return
+        val ctx = activityProvider()?.applicationContext
+        val finish = { ad: RewardedAd? ->
+            loadingRewarded = false
+            val waiting = rewardedWaiters.toList()
+            rewardedWaiters.clear()
+            // One ad serves one view: the first waiter gets it, any other is told no and can tap again.
+            waiting.forEachIndexed { i, w -> w(if (i == 0) ad else null) }
+        }
+        if (ctx == null) {
+            finish(null)
+            return
+        }
+        loadingRewarded = true
+        runCatching {
+            RewardedAd.load(
+                ctx,
+                BuildConfig.AD_REWARDED_UNIT_ID,
+                AdRequest.Builder().build(),
+                object : RewardedAdLoadCallback() {
+                    override fun onAdLoaded(ad: RewardedAd) {
+                        adLog.info("rewarded loaded (unit ${BuildConfig.AD_REWARDED_UNIT_ID})")
+                        finish(ad)
+                    }
+
+                    override fun onAdFailedToLoad(error: LoadAdError) {
+                        adLog.warn(
+                            "rewarded failed (unit ${BuildConfig.AD_REWARDED_UNIT_ID}): " +
+                                "code=${error.code} domain=${error.domain} message=${error.message}"
+                        )
+                        finish(null)
+                    }
+                },
+            )
+        }.onFailure { e ->
+            adLog.warn("rewarded load skipped (no WebView / SDK unavailable): ${e.message}")
+            finish(null)
+        }
+    }
+
+    /** Keep one loaded for the next tap. */
+    private fun preloadRewarded() {
+        if (rewarded != null || loadingRewarded) return
+        loadRewarded { ad ->
+            if (ad != null) {
+                rewarded = ad
+                rewardedLoadedAt = SystemClock.elapsedRealtime()
+            }
+        }
+    }
+
+    private fun presentRewarded(ad: RewardedAd, userId: String, onResult: (Boolean) -> Unit) {
+        val activity = activityProvider()
+        if (activity == null) {
+            onResult(false)
+            return
+        }
+        // Google's signed reward callback carries this id to the `ai-reward` function, which is the only thing
+        // that credits points. The app's own reward listener below only decides whether to re-read the wallet.
+        ad.setServerSideVerificationOptions(ServerSideVerificationOptions.Builder().setUserId(userId).build())
+        var earned = false
+        var done = false
+        val finish = { result: Boolean ->
+            if (!done) {
+                done = true
+                FullScreenAdGate.adClosed()
+                onResult(result)
+            }
+        }
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                finish(earned)
+                preloadRewarded()
+            }
+
+            override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                adLog.warn("rewarded failed to show: code=${error.code} message=${error.message}")
+                finish(false)
+            }
+        }
+        FullScreenAdGate.adShown()
+        runCatching { ad.show(activity) { earned = true } }.onFailure { finish(false) }
+    }
+
     // Native ads outlive the slots that show them (see NativeAdPool): a slot that leaves and comes back, or a
     // second slot of the same placement, reuses an ad that already loaded instead of requesting another.
     private val nativeAds = NativeAdPool<NativeAd>(
@@ -197,7 +357,8 @@ class AndroidAdHost(
     // native request waits here instead of reaching the SDK: the first request stands up AdMob's WebView on
     // the main thread, most of a second of frozen frames while the engine is still opening the project. Main
     // thread only, like the pool.
-    private var started = false
+    // Compose state, so a banner slot composed before launch settled asks for its banner once ads start.
+    private var started by mutableStateOf(false)
     private val held = mutableListOf<Pair<AdPlacement, NativeAdPool.Callbacks<NativeAd>>>()
 
     /**
@@ -223,7 +384,11 @@ class AndroidAdHost(
     fun close() {
         held.clear()
         nativeAds.close()
+        banners.close()
     }
+
+    // Banners: the fallback for a native slot nothing filled, and the build console's footer during a build.
+    private val banners = BannerAds(contextProvider = { activityProvider() })
 
     private fun loadNativeAd(placement: AdPlacement, callbacks: NativeAdPool.Callbacks<NativeAd>): Boolean {
         if (started) return sendNativeAd(placement, callbacks)
@@ -271,19 +436,24 @@ class AndroidAdHost(
     override fun NativeAd(placement: AdPlacement, modifier: Modifier) {
         val lease = remember(placement) { nativeAds.lease(placement) }
         var ad by remember(lease) { mutableStateOf(lease.ad) }
+        var nativeFailed by remember(lease) { mutableStateOf(lease.nativeFailed) }
         // Only a slot that is actually on screen asks for an ad. A lazy list composes (prefetches) the next item
         // before it scrolls into view, and a slot further down a page can be composed but never reached; a
         // request for either loads an ad nobody sees.
         var onScreen by remember(lease) { mutableStateOf(false) }
 
         DisposableEffect(lease) {
-            lease.onChange = { ad = lease.ad }
+            lease.onChange = {
+                ad = lease.ad
+                nativeFailed = lease.nativeFailed
+            }
             onDispose { nativeAds.release(lease) }
         }
         LaunchedEffect(lease, onScreen) {
             if (onScreen) {
                 nativeAds.acquire(lease)
                 ad = lease.ad
+                nativeFailed = lease.nativeFailed
             }
         }
 
@@ -315,6 +485,69 @@ class AndroidAdHost(
                         nativeAds.bound(lease)
                     },
                 )
+            } else if (nativeFailed && banners.hasUnit(BannerKind.NativeFallback)) {
+                // No native ad filled this placement: a banner takes the slot instead (its networks include
+                // ones with no native demand). A native ad that arrives later replaces it.
+                BannerBody(placement, BannerKind.NativeFallback, modifier)
+            }
+        }
+    }
+
+    @Composable
+    override fun BannerAd(placement: AdPlacement, modifier: Modifier) {
+        if (!banners.hasUnit(BannerKind.BuildFooter)) return
+        var onScreen by remember(placement) { mutableStateOf(false) }
+        val markerHeight = with(LocalDensity.current) { 1.toDp() }
+        Column(Modifier.fillMaxWidth()) {
+            // The same on-screen marker as NativeAd: a console that's composed but out of view requests nothing.
+            Box(
+                Modifier.fillMaxWidth().height(markerHeight).onGloballyPositioned { coordinates ->
+                    if (!onScreen && coordinates.isAttached && coordinates.boundsInWindow().height > 0f) onScreen = true
+                }
+            )
+            if (onScreen) BannerBody(placement, BannerKind.BuildFooter, modifier)
+        }
+    }
+
+    /**
+     * A banner in the shared card chrome, with [modifier] on the card. The card is laid out from the start, so the
+     * banner can be sized to the width inside it, but it takes no height and draws nothing until the banner has
+     * loaded: like a native slot, an unfilled banner slot collapses.
+     */
+    @Composable
+    private fun BannerBody(placement: AdPlacement, kind: BannerKind, modifier: Modifier) {
+        var widthPx by remember { mutableStateOf(0) }
+        val widthDp = with(LocalDensity.current) { widthPx.toDp().value.toInt() }
+        var banner by remember { mutableStateOf<Banner?>(null) }
+        DisposableEffect(placement, kind, widthDp, started) {
+            val acquired = if (started && webViewAvailable && widthDp > 0) {
+                banners.acquire(BannerKey(placement, kind, widthDp))
+            } else null
+            banner = acquired
+            onDispose {
+                banner = null
+                acquired?.let(banners::release)
+            }
+        }
+        val shown = banner?.takeIf { it.loaded }
+        Box(
+            Modifier.fillMaxWidth().clipToBounds().layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, if (shown != null) placeable.height else 0) { placeable.place(0, 0) }
+            }
+        ) {
+            NativeAdCard(modifier) {
+                Box(Modifier.fillMaxWidth().onSizeChanged { widthPx = it.width }, contentAlignment = Alignment.Center) {
+                    // Keyed, so a different banner (the slot's width changed) gets its own view holder.
+                    if (shown != null) key(shown) {
+                        AndroidView(
+                            factory = {
+                                (shown.view.parent as? ViewGroup)?.removeView(shown.view)
+                                shown.view
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -494,3 +727,17 @@ private const val ID_MEDIA = 0x7f_00_00_05
 
 /** A loaded interstitial unused for this long is dropped: AdMob asks that one older than an hour isn't shown. */
 private const val INTERSTITIAL_MAX_AGE_MS = 55 * 60_000L
+
+/**
+ * A failed load in a few words for analytics (see [AdHost.interstitialFailureDetail]): `domain: message`, then each
+ * mediation adapter that answered as `Adapter=code`. Capped so one event stays small; no user data in any of it.
+ */
+private fun failureDetailOf(error: LoadAdError): String = runCatching {
+    val adapters = error.responseInfo?.adapterResponses.orEmpty().joinToString(",") { a ->
+        "${a.adapterClassName.substringAfterLast('.')}=${a.adError?.code ?: "ok"}"
+    }
+    buildString {
+        append(error.domain.substringAfterLast('.')).append(": ").append(error.message.take(80))
+        if (adapters.isNotEmpty()) append(" [").append(adapters).append(']')
+    }.take(200)
+}.getOrDefault("code ${error.code}")

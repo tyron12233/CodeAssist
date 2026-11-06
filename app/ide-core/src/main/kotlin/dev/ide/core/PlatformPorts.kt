@@ -68,6 +68,23 @@ val STORE_MODERATION_SERVICE = ServiceKey<dev.ide.store.StoreModerationService>(
  *  reports challenges unavailable, and the tab explains itself rather than failing. */
 val DAILY_CHALLENGE_SERVICE = ServiceKey<dev.ide.store.DailyChallengeService>("platform.dailyChallenges")
 
+/** The "Get plugins" page's list of downloadable plugins (the backend's `plugin_catalog`). Absent (tests,
+ *  unconfigured builds) leaves the page saying the list is unavailable. */
+val PLUGIN_DOWNLOAD_SERVICE = ServiceKey<dev.ide.store.PluginDownloadService>("platform.pluginDownloads")
+
+/** What the host can tell about, and do with, an installed plugin app: its install facts, its system page,
+ *  uninstalling it. Android only; absent elsewhere, where the detail page leaves those rows out. */
+val PLUGIN_PACKAGES = ServiceKey<dev.ide.core.plugins.PluginPackages>("platform.pluginPackages")
+
+/** Learn's online half: the published lesson catalog (later account progress and lesson discussions).
+ *  Registered by the launcher. Absent (tests, unconfigured builds) leaves Learn on its bundled catalog. */
+val LEARN_REMOTE_SERVICE = ServiceKey<dev.ide.store.LearnRemoteService>("platform.learnRemote")
+
+/** CodeAssist Free AI: the points wallet and the proxy's address. Registered by the launcher next to the store
+ *  account service, whose session it borrows. Absent resolves to a service that reports the tier unavailable,
+ *  and the agent offers bring-your-own-key providers only. */
+val AI_CREDITS_SERVICE = ServiceKey<dev.ide.store.AiCreditsService>("platform.aiCredits")
+
 /**
  * A host that can raise an OS-level notification.
  *
@@ -91,6 +108,37 @@ interface NotificationPresenter {
  * offering a button that cannot work.
  */
 val APP_RESTARTER = ServiceKey<AppRestarter>("platform.appRestarter")
+
+/**
+ * A host that can run a second, throwaway copy of the IDE with a plugin under development loaded straight from
+ * its build output: the plugin's "Run". On Android it is the same installed app in its own process, with its own
+ * home (projects, preferences, caches), so the plugin can crash or freeze it without touching the IDE the
+ * developer is working in, and nothing is installed or restarted to try a change. Absent (desktop, tests) means
+ * a plugin project offers only "Install plugin".
+ */
+val PLUGIN_SANDBOX = ServiceKey<PluginSandbox>("platform.pluginSandbox")
+
+/** Implemented by the launcher; see [PLUGIN_SANDBOX]. */
+interface PluginSandbox {
+    /**
+     * Stop any sandbox already running and start a fresh one that loads the plugin in [apk], writing progress
+     * to [log]. Returns false when it could not be started, having said why through [log].
+     */
+    fun launch(apk: java.nio.file.Path, log: (String) -> Unit): Boolean
+
+    companion object {
+        /**
+         * Begins the [dev.ide.platform.log.LogRecord.source] of a record the sandbox's plugin logged, relayed into
+         * the real IDE's log so its developer reads it where they work (`sandbox:<plugin id>`). The real IDE shows
+         * those in its Logs viewer and nothing more: the sandbox already put up its own error dialog, and its
+         * errors are not the real IDE's to report.
+         */
+        const val LOG_SOURCE_PREFIX = "sandbox:"
+
+        /** True for a record relayed from the sandbox; see [LOG_SOURCE_PREFIX]. */
+        fun isRelayed(record: dev.ide.platform.log.LogRecord): Boolean = record.source?.startsWith(LOG_SOURCE_PREFIX) == true
+    }
+}
 
 /** Implemented by the launcher; see [APP_RESTARTER]. */
 interface AppRestarter {

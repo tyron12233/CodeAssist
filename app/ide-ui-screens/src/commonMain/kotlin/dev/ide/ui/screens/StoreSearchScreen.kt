@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.SeasonalEmptyArt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -84,11 +86,26 @@ fun StoreSearchScreen(
     modifier: Modifier = Modifier,
     /** The category to open filtered to, from a "browse by kind" tile. Null opens unfiltered. */
     initialCategory: String? = null,
+    /** A term to open already searched for, from a trending chip. Null opens on an empty field. */
+    initialQuery: String? = null,
 ) {
-    val state = rememberStoreSearchState(backend, initialCategory)
+    // The query and category outlive the screen (the Explore tab keeps an open search while a listing it opened
+    // is shown), and the results are rebuilt from them. So is "already focused": coming back to a search should
+    // not pop the keyboard up over the results the reader was going through.
+    var savedQuery by rememberSaveable { mutableStateOf(initialQuery.orEmpty()) }
+    var savedCategory by rememberSaveable { mutableStateOf(initialCategory) }
+    // Opened on a term, the reader came for its results, and a keyboard would cover half of them.
+    var focusedOnce by rememberSaveable { mutableStateOf(initialQuery != null) }
+    val state = rememberStoreSearchState(backend, savedCategory, savedQuery)
+    LaunchedEffect(state) {
+        snapshotFlow { state.query to state.category }.collect { (q, cat) -> savedQuery = q; savedCategory = cat }
+    }
     val c = MaterialTheme.colorScheme
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(Unit) {
+        if (!focusedOnce) runCatching { focus.requestFocus() }
+        focusedOnce = true
+    }
     // Ahead of the app's own handler, so Back leaves the search rather than the tab it was opened from.
     PlatformBackHandler(enabled = true, onBack = onClose)
 
@@ -168,7 +185,9 @@ fun StoreSearchScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 56.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Symbol(CaSymbols.searchOff, contentDescription = null, size = 44.dp, tint = c.outlineVariant)
+                SeasonalEmptyArt(size = 60.dp) {
+                    Symbol(CaSymbols.searchOff, contentDescription = null, size = 44.dp, tint = c.outlineVariant)
+                }
                 Text(
                     // A blank query that finds nothing is an empty store, not a search that missed.
                     state.error
@@ -237,8 +256,9 @@ internal class StoreSearchState(
     private val backend: IdeBackend,
     private val scope: CoroutineScope,
     initialCategory: String?,
+    initialQuery: String = "",
 ) {
-    var query: String by mutableStateOf("")
+    var query: String by mutableStateOf(initialQuery)
         private set
     var category: String? by mutableStateOf(initialCategory)
         private set
@@ -311,8 +331,9 @@ internal class StoreSearchState(
 internal fun rememberStoreSearchState(
     backend: IdeBackend,
     initialCategory: String? = null,
+    initialQuery: String = "",
     scope: CoroutineScope = rememberCoroutineScope(),
-): StoreSearchState = remember(backend, scope) { StoreSearchState(backend, scope, initialCategory) }
+): StoreSearchState = remember(backend, scope) { StoreSearchState(backend, scope, initialCategory, initialQuery) }
 
 /** How close to the end of the list the next page is asked for, in rows. */
 private const val PREFETCH_ROWS = 6

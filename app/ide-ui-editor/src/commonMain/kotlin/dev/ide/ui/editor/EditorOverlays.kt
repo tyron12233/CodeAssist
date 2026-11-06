@@ -89,14 +89,20 @@ import dev.ide.ui.generated.resources.edoverlay_go_to_line
 import dev.ide.ui.generated.resources.edoverlay_go_to_line_hint
 import dev.ide.ui.generated.resources.edoverlay_no_documentation
 import dev.ide.ui.generated.resources.edoverlay_paste
+import dev.ide.ui.generated.resources.paste_history_title
 import dev.ide.ui.generated.resources.ctxmenu_actions
 import dev.ide.ui.generated.resources.edoverlay_quick_documentation
 import dev.ide.ui.generated.resources.edoverlay_rename_hint
 import dev.ide.ui.generated.resources.edoverlay_rename_kind
 import dev.ide.ui.generated.resources.edoverlay_renaming
+import dev.ide.ui.generated.resources.edoverlay_inline_rename_apply
+import dev.ide.ui.generated.resources.edoverlay_inline_rename_hint
+import dev.ide.ui.generated.resources.edoverlay_renaming_elsewhere
+import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.edoverlay_select_all
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.platform.hasHardwareKeyboard
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -127,7 +133,7 @@ internal fun RenamePopup(
     LaunchedEffect(Unit) { focus.requestFocus() }
     Column(
         modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
@@ -166,6 +172,66 @@ internal fun RenamePopup(
 }
 
 /**
+ * The in-place rename's bar: what Enter and Esc do while the name is typed in the code (with Apply / Cancel
+ * buttons for a touch screen with no such keys), then "renaming in other files" while the rest of the project
+ * follows, and the reason when the rename was refused. [kind] is null once the name is no longer being typed.
+ */
+@Composable
+internal fun InlineRenameBar(
+    kind: String?,
+    busy: Boolean,
+    error: String?,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.padding(horizontal = 12.dp, vertical = 12.dp).widthIn(max = 420.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, if (error != null) MaterialTheme.colorScheme.error else Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val message = when {
+            error != null -> error
+            busy -> stringResource(Res.string.edoverlay_renaming_elsewhere)
+            // The keys are named only where there are keys: a phone has no Escape, and its Enter is the
+            // keyboard's own action key. There the buttons (and system Back, which cancels) are the way out.
+            kind != null && hasHardwareKeyboard() -> stringResource(Res.string.edoverlay_inline_rename_hint, kind)
+            kind != null -> stringResource(Res.string.edoverlay_rename_kind, kind)
+            else -> ""
+        }
+        Text(
+            message,
+            color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (!busy) {
+            Spacer(Modifier.width(8.dp))
+            if (kind != null) {
+                BarButton(stringResource(Res.string.edoverlay_inline_rename_apply), MaterialTheme.colorScheme.primary, onApply)
+            }
+            BarButton(stringResource(Res.string.cancel), MaterialTheme.colorScheme.onSurfaceVariant, onCancel)
+        }
+    }
+}
+
+@Composable
+private fun BarButton(label: String, color: Color, onClick: () -> Unit) {
+    Text(
+        label,
+        color = color,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(Ca.radius.control)).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    )
+}
+
+/**
  * A centered prompt to jump to a line — accepts `line` or `line:column` (both 1-based). Enter navigates,
  * Esc cancels. Auto-focused; only digits and a single `:` are accepted so it can't be mistyped into prose.
  */
@@ -187,7 +253,7 @@ internal fun GoToLinePopup(
     }
     Column(
         modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
@@ -230,7 +296,7 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
     val content = remember(doc, codeStyle) { doc.doc?.takeIf { it.isNotBlank() }?.let { parseQuickDoc(it, codeStyle) } }
     Column(
         modifier.widthIn(max = 440.dp).heightIn(max = 360.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(14.dp),
     ) {
@@ -422,13 +488,14 @@ internal fun SelectionToolbar(
     onSelectAll: () -> Unit,
     onDocs: (() -> Unit)? = null,
     onMenu: (() -> Unit)? = null,
+    onPasteHistory: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(Ca.radius.pill)
     Row(
         Modifier
             .entrancePop()
             .shadow(12.dp, shape, clip = false)
-            .background(Ide.colors.glassThick, shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
             .border(1.dp, Ide.colors.glassEdge, shape)
             .padding(horizontal = 4.dp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
@@ -440,6 +507,9 @@ internal fun SelectionToolbar(
             ToolbarTextItem(stringResource(Res.string.edoverlay_cut), i++, onCut)
         }
         ToolbarTextItem(stringResource(Res.string.edoverlay_paste), i++, onPaste)
+        if (onPasteHistory != null) {
+            ToolbarIconItem(CaIcons.clock, stringResource(Res.string.paste_history_title), i++, MaterialTheme.colorScheme.onSurfaceVariant, onPasteHistory)
+        }
         ToolbarTextItem(stringResource(Res.string.edoverlay_select_all), i++, onSelectAll)
         if (onMenu != null || onDocs != null) ToolbarDivider()
         // Quick documentation for the symbol under the caret (the touch path for Ctrl-Q).
@@ -525,6 +595,10 @@ private fun Modifier.toolbarItemEntrance(index: Int): Modifier {
 /** Floor for the list so it stays usable (≈1.5 rows) even when the caret is near the pane's bottom. */
 internal val MinListHeight = 64.dp
 
+/** Below this much room under the caret line, the completion list goes above the line when there is more room
+ *  there (about three and a half rows). */
+internal val ComfortableListHeight = 160.dp
+
 /** Generous ceiling for the list: it otherwise fills the room below the caret (re-expanding as the user
  *  scrolls), so this only keeps it sane on a tall desktop window. */
 internal val MaxListHeight = 560.dp
@@ -550,6 +624,51 @@ internal class CompletionPopupPositionProvider(
         val y = anchorBounds.top + lineBottom + gapPx
         return IntOffset(x, y)
     }
+}
+
+/**
+ * Places this overlay under a line of the editor pane, its left edge at the anchor's x, in the pane's own window
+ * rather than as a `Popup` (see [aboveLineInPane] for why). Used for the completion list, the overlay that is up
+ * most often: as a popup it kept the main thread waking at the display's frame rate for as long as it showed.
+ *
+ * [anchor] gives the anchor's x and the top of its line in pane coordinates, read in the placement phase so a
+ * scroll moves the list without recomposing it. The left edge is kept at or right of [minX] (the gutter) and
+ * [marginPx] inside the pane. When the list does not fit below the line it goes above it if there is more room
+ * there, and it is always kept inside the pane.
+ */
+internal fun Modifier.belowLineInPane(
+    anchor: () -> Pair<Float, Float>,
+    lineHeightPx: Float,
+    gapPx: Int,
+    marginPx: Int,
+    minX: Int = 0,
+): Modifier = layout { measurable, constraints ->
+    val overlay = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+    layout(overlay.width, overlay.height) {
+        val (x, lineTop) = anchor()
+        val paneWidth = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
+        val paneHeight = if (constraints.hasBoundedHeight) constraints.maxHeight else Int.MAX_VALUE
+        overlay.place(
+            belowLinePlacement(x, lineTop, lineHeightPx, gapPx, marginPx, minX, overlay.width, overlay.height, paneWidth, paneHeight),
+        )
+    }
+}
+
+/** Where [belowLineInPane] puts a [width]x[height] overlay for an anchor at [x] on the line whose top is [lineTop]. */
+internal fun belowLinePlacement(
+    x: Float, lineTop: Float, lineHeightPx: Float, gapPx: Int, marginPx: Int, minX: Int,
+    width: Int, height: Int, paneWidth: Int, paneHeight: Int,
+): IntOffset {
+    val left = x.roundToInt().coerceAtLeast(minX)
+        .coerceIn(marginPx, (paneWidth - width - marginPx).coerceAtLeast(marginPx))
+    val below = (lineTop + lineHeightPx).roundToInt() + gapPx
+    val roomAbove = lineTop.roundToInt() - gapPx
+    val top = when {
+        below + height <= paneHeight -> below
+        roomAbove > paneHeight - below -> roomAbove - height
+        else -> below
+    }
+    return IntOffset(left, top.coerceIn(0, (paneHeight - height).coerceAtLeast(0)))
 }
 
 /**

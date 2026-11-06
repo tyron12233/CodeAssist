@@ -402,6 +402,8 @@ class IconManagerStateTest {
             state.import(replace = true)
             assertTrue(backend.imports.last().overwrite, "the confirmed retry replaces")
             assertNull(state.conflictPath, "the dialog closes")
+            assertEquals("ic_home", state.added, "a successful add is confirmed, by the resource it wrote")
+            assertNull(state.message)
         }
     }
 

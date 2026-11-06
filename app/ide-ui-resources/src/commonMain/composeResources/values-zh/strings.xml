@@ -9,11 +9,11 @@
     <string name="backup_projects">备份工程项目</string>
     <string name="got_it">知道了</string>
     <string name="help_improve_codeassist">帮助我们改进 CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[共享匿名性能运行数据，帮助我们定位卡顿、崩溃问题并针对性修复。
+    <string name="help_improve_codeassist_content"><![CDATA[共享匿名使用与性能数据，帮助我们了解哪里卡顿、哪里出错、大家最常用哪些功能，并针对性改进。
 
-我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况、已清理的崩溃报告，以及广告的展示与关闭情况和您的广告设置变更。
+我们会收集以下信息：您的应用版本和设备型号、构建、索引、代码补全和预览所需时间、构建成功/失败情况、已清理的崩溃报告、各功能的使用次数（例如布局预览或“查找用法”被打开的次数），以及广告的展示与关闭情况和您的广告设置变更。
 
-我们不会收集代码、项目文件、项目名、使用记录以及任何个人身份信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。]]></string>
+我们不会收集代码、文件名、项目名、您输入的内容以及任何个人身份信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。]]></string>
     <string name="learn_more">了解更多</string>
     <string name="allow">允许</string>
     <string name="no_thanks">不需要</string>
@@ -156,6 +156,9 @@
     <string name="support_show_ads_desc">应用内可能会展示广告，但你可以随时关闭</string>
     <string name="support_show_interstitials">全屏广告</string>
     <string name="support_show_interstitials_desc">在长时间构建和完成课程后偶尔显示全屏广告。</string>
+    <plurals name="ads_off_locked">
+        <item quantity="other">安装或更新后，广告会保持开启一天。%1$d 小时后即可关闭。</item>
+    </plurals>
     <string name="ads_off_title">关闭广告？</string>
     <string name="ads_off_body">你可以只关闭全屏广告，保留列表和面板中的小广告。</string>
     <string name="ads_off_all">全部广告</string>
@@ -325,6 +328,36 @@
     <string name="filetree_move">移动</string>
     <string name="filetree_copy">复制</string>
     <string name="filetree_delete">删除</string>
+    <string name="filetree_cut">剪切</string>
+    <string name="filetree_paste">粘贴</string>
+    <string name="filetree_duplicate">创建副本</string>
+    <string name="filetree_copy_path">复制路径</string>
+    <string name="filetree_copy_path_absolute">绝对路径</string>
+    <string name="filetree_copy_path_relative">相对于项目根目录的路径</string>
+    <string name="filetree_copy_name">名称</string>
+    <string name="filetree_copy_paths">复制所选路径</string>
+    <string name="filetree_move_to">移动到…</string>
+    <string name="filetree_copy_to">复制到…</string>
+    <string name="filetree_select_all">全选</string>
+    <string name="filetree_clear_selection">取消选择</string>
+    <string name="filetree_more_selection">所选项的更多操作</string>
+    <string name="filetree_paste_into">粘贴到 %1$s</string>
+    <string name="filetree_clear_clipboard">清空剪贴板</string>
+    <string name="filetree_drop_move">移动到 %1$s</string>
+    <string name="filetree_drop_copy">复制到 %1$s</string>
+    <string name="filetree_drop_nowhere">无法放置到此处</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="other">已选择 %1$d 项</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="other">%1$d 项待移动</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="other">%1$d 项待复制</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="other">%1$d 项</item>
+    </plurals>
     <string name="filetree_java_class">Java 类</string>
     <string name="filetree_kotlin_file">Kotlin 文件</string>
     <string name="filetree_aidl_file">AIDL 文件</string>
@@ -467,6 +500,42 @@
     <string name="breadcrumb_blocks">积木</string>
     <string name="breadcrumb_preview">预览</string>
     <string name="breadcrumb_split">拆分</string>
+    <string name="breadcrumb_nav_back">后退</string>
+    <string name="breadcrumb_nav_forward">前进</string>
+    <string name="symbolbar_more">更多按键</string>
+    <string name="symbolbar_trackpad">拖动以移动光标</string>
+    <string name="conflict_current">当前</string>
+    <string name="conflict_incoming">传入</string>
+    <string name="conflict_both">两者</string>
+    <string name="conflict_current_desc">保留当前一方</string>
+    <string name="conflict_incoming_desc">保留传入一方</string>
+    <string name="conflict_both_desc">保留两者</string>
+    <string name="gesture_nothing_to_undo">没有可撤销的操作</string>
+    <string name="gesture_nothing_to_redo">没有可重做的操作</string>
+    <string name="paste_history_title">从历史记录粘贴</string>
+    <string name="change_revert">还原</string>
+    <string name="change_before">上次提交中的内容</string>
+    <string name="change_added">自上次提交后新增</string>
+    <string name="history_title">本地历史</string>
+    <string name="symbolbar_bookmark">书签</string>
+    <string name="bookmarks_title">书签</string>
+    <string name="bookmarks_empty">还没有书签。用 F11 或符号栏 ⋯ 后面的书签键为光标所在行添加书签。</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">刷新</string>
+    <string name="todo_empty">项目中没有 TODO 或 FIXME 注释。</string>
+    <string name="bookmarks_panel_title">书签与 TODO</string>
+    <string name="history_back">返回</string>
+    <string name="history_restore">恢复</string>
+    <string name="history_empty">尚未保存过。每次保存此文件都会在这里保留一个版本。</string>
+    <string name="history_same">与当前文件相同</string>
+    <string name="edchrome_local_history">本地历史</string>
+    <string name="paste_history_clear">清除</string>
+    <string name="paste_history_empty">你在编辑器中复制或剪切的文本会显示在这里。</string>
+    <string name="symbolbar_clipboard">剪贴板</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d 行</item>
+        <item quantity="other">%1$d 行</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">文件</string>
@@ -560,6 +629,13 @@
     <string name="kotlin_configure">配置 Kotlin</string>
     <string name="kotlin_configuring">正在配置…</string>
     <string name="kotlin_configure_failed">无法配置 Kotlin：%1$s</string>
+    <string name="missing_libraries_notice">此文件使用了尚未添加的库：%1$s</string>
+    <string name="missing_libraries_add_all">全部添加</string>
+    <string name="missing_libraries_adding">正在添加…</string>
+    <string name="missing_library_failed">无法添加库：%1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">查看哪些广告网络已加载，以及失败的原因。仅限测试设备上的开发版本。</string>
+    <string name="ad_inspector_open">打开</string>
     <string name="sources_download">下载</string>
     <string name="sources_downloading">正在下载…</string>
     <string name="sources_download_failed">下载失败：%1$s</string>
@@ -609,6 +685,17 @@
     <string name="home_share">分享</string>
     <string name="home_delete">删除</string>
     <string name="home_dismiss">关闭</string>
+    <string name="halloween_title">万圣节快乐</string>
+    <string name="halloween_offer">为 IDE 换上节日装扮：南瓜主题、诡异的编辑器配色，还有蜡烛样式的光标。</string>
+    <string name="halloween_dress_up">换装</string>
+    <string name="halloween_not_now">以后再说</string>
+    <string name="halloween_applied">装扮完成。可以随时在设置中更改。</string>
+    <string name="halloween_undo">撤销</string>
+    <string name="halloween_over_title">万圣节结束了</string>
+    <string name="halloween_over_body">要把主题、编辑器配色和光标恢复原样吗？</string>
+    <string name="halloween_put_back">恢复原样</string>
+    <string name="halloween_keep">保留</string>
+    <string name="halloween_boo">嘘！</string>
     <string name="home_resume_title">从上次离开的地方继续</string>
     <string name="home_account_title">账号与工具</string>
     <string name="home_settings_tools">设置与工具</string>
@@ -624,6 +711,27 @@
     <string name="store_search_hint">搜索模板和示例</string>
     <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">模板、示例应用、插件</string>
+    <string name="store_trending">热门</string>
+    <string name="store_trending_search">搜索 %1$s</string>
+    <string name="store_translate">翻译</string>
+    <string name="store_translating">正在翻译…</string>
+    <string name="store_translated">自动翻译</string>
+    <string name="store_show_original">查看原文</string>
+    <string name="store_update_to">更新到 v%1$s</string>
+    <string name="store_update_versions">已安装 v%1$s · 可用 v%2$s</string>
+    <string name="store_update_conflict_title">你修改过这个项目</string>
+    <string name="store_update_conflict_body">原地更新会覆盖你对以下文件的修改：</string>
+    <string name="store_update_conflict_more">以及另外 %1$d 个</string>
+    <string name="store_update_conflict_unknown">此项目安装于 CodeAssist 开始记录更改之前，因此无法区分你的修改与原始文件。</string>
+    <string name="store_update_conflict_keep">将新版本安装为单独的项目，你的副本会保持原样。</string>
+    <string name="store_update_as_copy">安装为新副本</string>
+    <string name="home_update_review">查看</string>
+    <string name="store_update_merge">更新并保留我的修改</string>
+    <string name="store_update_changed_files">你在安装后修改过的文件：</string>
+    <string name="store_update_merge_note">你的修改和新版本会逐个文件合并。若你们都改了同样的行，两种版本都会保留，由你选择。</string>
+    <string name="store_merge_done_title">已更新，你的修改已保留</string>
+    <string name="store_merge_conflicts_body">你和发布者修改了这些文件中的相同行。两个版本都在文件里，位于 &lt;&lt;&lt;&lt;&lt;&lt;&lt; 和 &gt;&gt;&gt;&gt;&gt;&gt;&gt; 标记之间，供你选择：</string>
+    <string name="store_merge_open">打开项目</string>
     <string name="store_browse_by_kind">按类型浏览</string>
     <string name="store_see_all">查看全部</string>
     <string name="store_install">安装</string>
@@ -706,6 +814,19 @@
     <string name="submit_send">提交审核</string>
     <string name="submit_sending">正在提交…</string>
     <string name="submit_review_note">每份提交都会经过审核员审核后才会展示。未经批准，任何内容都不会公开。</string>
+    <string name="submit_checks_title">审核员会检查什么</string>
+    <string name="submit_checks_english">标题、简介和描述使用英文。</string>
+    <string name="submit_checks_screenshots">截图展示的是运行中的应用，而不是编辑器。</string>
+    <string name="submit_checks_summary">简介用一句话说明项目的用途。</string>
+    <string name="submit_checks_icon">应用有自己的图标，而不是默认图标。</string>
+    <string name="submit_checks_own">这是你自己的作品，不含密钥或 AI 聊天记录。</string>
+    <string name="submit_warn_english">商店页面必须使用英文，而这段文字看起来是其他语言。请用英文撰写；可以在下方保留译文。</string>
+    <string name="submit_warn_summary">用一句话说明项目的用途。只重复名称的简介是页面被退回的最常见原因。</string>
+    <string name="submit_warn_spam">“download free”或“mod apk”之类的措辞会被视为垃圾内容，含有这类措辞的页面会被退回。</string>
+    <string name="submit_confirm_title">发送之前</string>
+    <string name="submit_confirm_body">审核员很可能会退回：</string>
+    <string name="submit_confirm_fix">去修改</string>
+    <string name="submit_confirm_send">仍然发送</string>
     <string name="submit_required">请填写标题、简介、描述和分类。</string>
     <string name="submit_target">发布为</string>
     <string name="submit_target_new">新上架项目</string>
@@ -770,6 +891,10 @@
     <string name="you_moderation">审核</string>
     <string name="you_moderation_waiting">%1$d 个待审核</string>
     <string name="you_moderation_clear">没有待审核的内容</string>
+    <string name="you_account">账号</string>
+    <plurals name="you_releases">
+        <item quantity="other">%1$d 个版本</item>
+    </plurals>
     <string name="moderation_title">审核</string>
     <string name="moderation_not_allowed">此账号没有商店审核权限。</string>
     <string name="moderation_tab_queue">待审核</string>
@@ -812,6 +937,19 @@
     <string name="notif_clear">清除</string>
     <string name="notif_open">打开</string>
     <string name="notif_dismiss">关闭</string>
+    <string name="notif_section_new">新通知</string>
+    <string name="notif_view">查看</string>
+    <string name="notif_more_row_desc">你工作时发生的事</string>
+    <string name="notif_section_earlier">更早</string>
+    <string name="notif_show_more">显示更多</string>
+    <string name="notif_show_less">收起</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">商店</string>
+    <string name="notif_kind_update">商店更新</string>
+    <string name="notif_kind_build">构建</string>
+    <string name="notif_kind_agent">AI 智能体</string>
+    <string name="notif_kind_learn">学习</string>
+    <string name="notif_kind_system">CodeAssist</string>
     <string name="notif_just_now">刚刚</string>
     <string name="notif_minutes">%1$d 分钟前</string>
     <string name="notif_hours">%1$d 小时前</string>
@@ -871,6 +1009,17 @@
     <string name="notify_launch_failed">刚才未能保存此设置。</string>
     <string name="review_actions">评价管理</string>
     <string name="review_report">举报</string>
+    <string name="review_copy">复制文字</string>
+    <string name="link_open_title">打开此链接？</string>
+    <string name="link_mail_title">给此地址写邮件？</string>
+    <string name="link_from_user">此链接由社区成员添加。CodeAssist 未检查它指向哪里。</string>
+    <string name="link_mail_from_user">此地址由社区成员添加。将打开你的邮件应用并新建一封发往该地址的邮件。</string>
+    <string name="link_warn_http">未加密 (http)：你所在网络中的其他人可以查看或篡改该页面。</string>
+    <string name="link_warn_userinfo">@ 之前的部分并不是网站。此链接实际前往 %1$s。</string>
+    <string name="link_warn_ip">它指向一个裸 IP 地址，而不是有名称的网站。</string>
+    <string name="link_warn_lookalike">该地址使用了可冒充知名网站名称的字符。</string>
+    <string name="link_open">打开</string>
+    <string name="link_copy">复制链接</string>
     <string name="review_reply">回复</string>
     <string name="review_reply_edit">编辑回复</string>
     <string name="review_reply_delete">删除回复</string>
@@ -904,6 +1053,24 @@
     <string name="profile_missing">没有这个名称的发布者</string>
     <string name="profile_unrated">未评分</string>
     <string name="profile_signin_to_follow">登录后关注</string>
+    <string name="profile_highlights">亮点</string>
+    <string name="profile_award_installs">安装最多</string>
+    <string name="profile_award_liked">最受喜爱</string>
+    <string name="profile_award_rated">评分最高</string>
+    <string name="profile_award_newest">最新</string>
+    <string name="profile_sort_popular">热门</string>
+    <string name="profile_group_projects">应用和项目</string>
+    <string name="profile_group_plugins">插件</string>
+    <string name="profile_joined">%1$s加入</string>
+    <plurals name="profile_ratings">
+        <item quantity="other">%1$d 个评分</item>
+    </plurals>
+    <plurals name="profile_age_months">
+        <item quantity="other">%1$d 个月前</item>
+    </plurals>
+    <plurals name="profile_age_years">
+        <item quantity="other">%1$d 年前</item>
+    </plurals>
     <string name="like_action">点赞</string>
     <string name="like_liked">已点赞</string>
     <string name="like_signin">登录后点赞</string>
@@ -931,8 +1098,11 @@
     <string name="learn_continue">继续</string>
     <string name="learn_completed">已完成</string>
     <!-- Learn tab, Material 3 Expressive redesign -->
-    <string name="learn_lessons_done">已完成 %1$d 节课</string>
+    <plurals name="learn_lessons_done">
+        <item quantity="other">已完成 %1$d 节课</item>
+    </plurals>
     <string name="learn_module_meta">%2$d 节课中的第 %1$d 节 · %3$d 分钟</string>
+    <string name="learn_continue_meta">第 %1$d 节，共 %2$d 节 · %3$s</string>
     <string name="learn_resume_lesson">继续第 %1$d 节课</string>
     <string name="learn_minutes">%1$d 分钟</string>
     <string name="learn_lessons_progress">%1$d / %2$d 节课</string>
@@ -1074,6 +1244,10 @@
     <string name="edoverlay_rename_kind">重命名 %1$s</string>
     <string name="edoverlay_renaming">正在重命名…</string>
     <string name="edoverlay_rename_hint">按 Enter 重命名“%1$s”，按 Esc 取消</string>
+    <string name="edoverlay_inline_rename_hint">重命名 %1$s · 按 Enter 应用，按 Esc 取消</string>
+    <string name="edoverlay_inline_rename_apply">应用</string>
+    <string name="edoverlay_renaming_elsewhere">正在其他文件中重命名…</string>
+    <string name="edoverlay_rename_invalid">“%1$s”不是有效的名称</string>
     <string name="edoverlay_go_to_line">转到行</string>
     <string name="edoverlay_go_to_line_hint">第 1–%1$d 行（行号或 行号：列号）</string>
     <string name="edoverlay_no_documentation">没有文档</string>
@@ -1170,6 +1344,44 @@
     <string name="fileop_empty_folder">此文件夹为空。</string>
     <string name="fileop_move_here">移动到此处</string>
     <string name="fileop_copy_here">复制到此处</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="other">将 %1$d 项移动到…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="other">将 %1$d 项复制到…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="other">删除 %1$d 项？</item>
+    </plurals>
+    <string name="fileop_delete_items_body">这会永久删除这些项，文件夹会连同其中所有内容一起删除，无法撤销。</string>
+    <string name="fileop_delete_items_body_undo">文件夹会连同其中所有内容一起删除。删除后可立即撤销。</string>
+    <string name="fileop_delete_dir_body_undo">这会删除该文件夹及其中所有内容。删除后可立即撤销。</string>
+    <string name="fileop_delete_file_body_undo">删除后可立即撤销。</string>
+    <string name="fileop_conflict_title">%2$s 中已存在“%1$s”</string>
+    <string name="fileop_conflict_body">替换已有项、保留两者（此项将重命名），或跳过此项。</string>
+    <string name="fileop_conflict_replace">替换</string>
+    <string name="fileop_conflict_keep_both">保留两者</string>
+    <string name="fileop_conflict_skip">跳过</string>
+    <string name="fileop_conflict_progress">第 %1$d 个冲突，共 %2$d 个</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="other">对其余 %1$d 个冲突执行相同操作</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="other">已将 %1$d 项移动到 %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="other">已将 %1$d 项复制到 %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="other">已为 %1$d 项创建副本</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="other">已删除 %1$d 项</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="other">%1$d 项失败：%2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">已撤销</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">发生意外错误，但应用仍在继续运行。</string>
@@ -1287,6 +1499,17 @@
     <string name="storage_cat_projects_desc">你的源代码和项目设置</string>
     <string name="storage_cat_leftovers_title">残留的项目文件夹</string>
     <string name="storage_cat_leftovers_desc">已删除项目留下的，可以安全删除</string>
+    <string name="plugins_leftovers_title">已移除插件留下的数据</string>
+    <string name="plugins_leftovers_body">卸载插件后，它的数据会留下来。删除可释放空间；如果你打算重新安装，也可以保留。</string>
+    <string name="plugins_leftover_delete">删除</string>
+    <string name="plugins_leftovers_delete_all">全部删除（%1$s）</string>
+    <string name="plugins_leftover_confirm_title">删除 %1$s 的数据？</string>
+    <string name="plugins_leftovers_confirm_all_title">删除所有已移除插件的数据？</string>
+    <string name="plugins_leftover_confirm_body">这将释放 %1$s。之后重新安装的插件会从头开始。</string>
+    <string name="storage_cat_plugin_leftovers_title">已移除插件的数据</string>
+    <string name="storage_cat_plugin_leftovers_desc">由你卸载的插件留下</string>
+    <string name="storage_clear_plugin_leftovers_title">删除已移除插件的数据？</string>
+    <string name="storage_clear_plugin_leftovers_body">这将删除已卸载插件留下的 %1$s。之后重新安装的插件会从头开始。</string>
     <string name="storage_cat_other_title">其他</string>
     <string name="storage_cat_other_desc">密钥库、备份和应用数据</string>
     <string name="plugins_restart_hint">重启后将应用插件更改。</string>
@@ -1315,7 +1538,8 @@
     <string name="keystore_empty">暂无密钥库。创建或导入一个密钥库以签署发布构建。</string>
     <string name="keystore_deleted">已删除 %1$s</string>
     <string name="keystore_row_subtitle">%1$s · 密钥：%2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">复制 %1$s 指纹</string>
+    <string name="keystore_fingerprint_copied">已复制 %1$s</string>
     <string name="keystore_expires">约在 %1$s 过期</string>
     <string name="keystore_cert_unreadable"><![CDATA[无法读取证书（密码可能已变更）。]]></string>
     <string name="keystore_create_title">新建密钥库</string>
@@ -1335,8 +1559,26 @@
     <!-- sdk (SdkManagerScreen) -->
     <string name="sdk_manager_title">SDK 管理器</string>
     <string name="sdk_could_not_load">无法加载软件包。</string>
-    <string name="sdk_sources_documentation">源代码和文档</string>
-    <string name="sdk_sources_documentation_desc">下载 SDK 平台源代码和 JDK 源代码后，编辑器即可显示 Javadoc、参数名称，并跳转到 SDK 源代码。下载会在后台继续，你可以离开此页面继续工作。</string>
+    <string name="sdk_intro">安装模块编译所需的 Android 平台，以及让编辑器显示文档并跳转到 SDK 源代码的源代码包。下载会在后台继续，你可以离开此页面。</string>
+    <string name="sdk_show_all_versions">显示所有版本 (%1$d)</string>
+    <string name="sdk_show_fewer">收起</string>
+    <string name="sdk_tag_latest">最新</string>
+    <string name="sdk_tag_project">你的项目</string>
+    <string name="sdk_fail_offline">无法连接到下载服务器。请检查网络连接后重试。</string>
+    <string name="sdk_fail_storage">可用存储空间不足，无法完成下载。请释放一些空间后重试。</string>
+    <string name="sdk_fail_not_found">下载服务器上已没有此软件包。请刷新列表后重试。</string>
+    <string name="sdk_fail_server_code">下载服务器出现问题 (HTTP %1$d)。通常是暂时的，请稍后重试。</string>
+    <string name="sdk_fail_server">下载服务器出现问题。通常是暂时的，请稍后重试。</string>
+    <string name="sdk_fail_license">安装此软件包前需要先接受其许可协议。</string>
+    <string name="sdk_fail_corrupt">下载的文件已损坏。请重试以下载新的副本。</string>
+    <string name="sdk_fail_cancelled">已取消。已下载的部分会保留，下次将从中断处继续。</string>
+    <string name="sdk_fail_unknown">下载未完成。</string>
+    <string name="sdk_load_failed_title">无法加载软件包列表</string>
+    <string name="sdk_action_free_space">释放空间</string>
+    <string name="sdk_action_refresh">刷新列表</string>
+    <string name="sdk_action_review_license">查看许可协议</string>
+    <string name="sdk_details_show">详细信息</string>
+    <string name="sdk_details_hide">隐藏详细信息</string>
     <string name="sdk_downloads">下载任务</string>
     <string name="sdk_clear_finished">清除已完成任务</string>
     <string name="sdk_jdk">JDK</string>
@@ -1754,6 +1996,11 @@
     <string name="set_editor_two_axis_desc">朝任意方向拖动即可同时在两个轴上滚动（触摸）</string>
     <string name="set_editor_pinch">双指缩放</string>
     <string name="set_editor_pinch_desc">用两指捏合以更改代码字号</string>
+    <string name="set_editor_volume_keys">音量键移动光标</string>
+    <string name="set_editor_volume_keys_desc">在手机上输入时，音量加键将光标左移，音量减键右移，而不是调节音量</string>
+    <string name="set_editor_inline_blame">谁修改了这一行</string>
+    <string name="set_editor_inline_blame_desc">在 Git 项目中，在光标所在行末尾以淡色显示最后修改者、时间和原因</string>
+    <string name="blame_uncommitted">尚未提交</string>
     <string name="set_editor_kbd_suggest">键盘建议</string>
     <string name="set_editor_kbd_suggest_desc">允许软键盘自动纠错、联想和自动加空格（普通键盘）。关闭以进行原始代码输入，这样键入的“.”不会被自动插入空格，但会失去联想候选栏。</string>
     <string name="set_editor_close_unsaved">关闭有未保存更改的标签页</string>
@@ -1809,7 +2056,7 @@
     <string name="set_br_dexfork">最大并发 Dex 进程数</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">分享性能分析数据</string>
-    <string name="set_privacy_analytics_desc">仅共享匿名性能与广告指标，绝不共享你的代码或文件名</string>
+    <string name="set_privacy_analytics_desc">仅共享匿名的功能使用次数、性能与广告指标，绝不共享你的代码或文件名</string>
     <string name="set_privacy_clear">清除缓存</string>
     <string name="set_privacy_clear_desc">释放可再生的依赖 / 语言 / 预览缓存（绝不清除源代码）</string>
     <string name="set_privacy_clear_btn">清除</string>
@@ -1935,6 +2182,7 @@
     <string name="icons_add_as">添加为</string>
     <string name="icons_add_count">将 %1$d 个添加到项目</string>
     <string name="icons_batch_added">已添加 %1$d 个</string>
+    <string name="icons_added">已添加 %1$s</string>
     <string name="icons_batch_existing">%1$d 个已在项目中</string>
     <string name="icons_batch_failed">无法添加 %1$s</string>
     <string name="icons_copy_to">复制到其他文件夹</string>
@@ -2141,4 +2389,31 @@
     <string name="block_lambda_page">Lambda</string>
     <string name="sdk_platform_tools">平台工具</string>
     <string name="sdk_platform_tools_desc">adb：“运行”通过它把应用安装并启动到连接此电脑的手机或模拟器上。</string>
+    <string name="you_delete_account">删除账号</string>
+    <string name="you_delete_account_title">删除你的账号？</string>
+    <string name="you_delete_account_body">这将永久删除你的 CodeAssist 账号及其保存的所有内容：个人资料、已发布的项目、评价、点赞、关注、挑战成绩和 AI 积分。此设备上的项目不受影响。此操作无法撤销。</string>
+    <string name="you_delete_account_deleting">正在删除…</string>
+    <string name="settings_language_servers">语言服务器</string>
+    <string name="settings_language_servers_subtitle">来自你已安装服务器的错误提示、补全和导航</string>
+    <string name="lsp_intro">添加你已安装的语言服务器协议（LSP）服务器。带有其扩展名的文件会获得它提供的错误提示、补全、导航、重命名和格式化。新语言会在你下次打开项目时生效。</string>
+    <string name="lsp_unsupported">此设备上无法使用语言服务器。</string>
+    <string name="lsp_empty">还没有语言服务器。添加一个，或从下面的常用服务器开始。</string>
+    <string name="lsp_add">添加</string>
+    <string name="lsp_presets">常用服务器</string>
+    <string name="lsp_new_title">新建语言服务器</string>
+    <string name="lsp_edit_title">编辑语言服务器</string>
+    <string name="lsp_field_name">名称</string>
+    <string name="lsp_field_command">命令</string>
+    <string name="lsp_field_extensions">文件扩展名</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">语言 ID</string>
+    <string name="lsp_field_options">初始化选项（JSON，可选）</string>
+    <string name="lsp_check">检查命令</string>
+    <string name="lsp_save">保存</string>
+    <string name="lsp_cancel">取消</string>
+    <string name="lsp_delete">删除</string>
+    <string name="lsp_status_running">运行中</string>
+    <string name="lsp_status_starting">正在启动</string>
+    <string name="lsp_status_not_started">未启动</string>
+    <string name="colors_plugin_notice">%1$s 来自插件。你的更改会保存到副本。</string>
 </resources>

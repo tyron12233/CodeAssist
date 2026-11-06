@@ -14,10 +14,13 @@ import dev.ide.agent.ProviderConfig
  *
  * Explicit prompt caching is switched on because OpenRouter's Anthropic models cache nothing on their own: the
  * OpenAI dialect has no automatic prefix cache to inherit, so without `cache_control` markers a Claude model
- * reached this way re-bills the whole system prompt and tool set on every step of a turn.
+ * reached this way re-bills the whole system prompt and tool set on every step of a turn. Claude gets a 1-hour
+ * breakpoint on the system prompt plus OpenRouter's automatic one on the conversation tail; Alibaba's Qwen models
+ * get the system breakpoint; the rest cache by themselves. Each conversation also sends a `session_id`, so
+ * OpenRouter keeps it on the provider endpoint that holds its cache from the first request on.
  */
 class OpenRouterProvider(private val transport: LlmTransport) : LlmProvider {
-    private val openai = OpenAiProvider(transport, explicitPromptCaching = true)
+    private val openai = OpenAiProvider(transport, explicitPromptCaching = true, stickySessions = true)
 
     override val id: String = "openrouter"
     override val displayName: String = "OpenRouter"

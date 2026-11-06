@@ -51,6 +51,7 @@ import dev.ide.ui.generated.resources.colors_background
 import dev.ide.ui.generated.resources.colors_background_none
 import dev.ide.ui.generated.resources.colors_bold
 import dev.ide.ui.generated.resources.colors_builtin_notice
+import dev.ide.ui.generated.resources.colors_plugin_notice
 import dev.ide.ui.generated.resources.colors_clear
 import dev.ide.ui.generated.resources.colors_copied
 import dev.ide.ui.generated.resources.colors_copy
@@ -167,6 +168,9 @@ fun ColorSchemeScreen(
                 val forked = state.forkedInto
                 when {
                     forked != null -> Notice(stringResource(Res.string.colors_editing_copy, forked))
+                    // A plugin's scheme is read-only like a preset, but "built in" would misname where it came from.
+                    state.scheme.builtIn && dev.ide.ui.theme.colors.ContributedColorSchemes.byId(state.scheme.id) != null ->
+                        Notice(stringResource(Res.string.colors_plugin_notice, state.scheme.name))
                     state.scheme.builtIn -> Notice(stringResource(Res.string.colors_builtin_notice, state.scheme.name))
                 }
                 notice?.let { Notice(noticeText(it)) }

@@ -1,5 +1,6 @@
 package dev.ide.core.backend
 
+import dev.ide.android.support.AndroidFacet
 import dev.ide.core.BackendContext
 import dev.ide.ui.backend.SdkService
 import dev.ide.ui.backend.UiAndroidSourcesInfo
@@ -22,6 +23,9 @@ internal class SdkBackend(private val ctx: BackendContext) : SdkService {
 
     override val sdkManagerState: StateFlow<UiSdkManagerState> get() = ctx.sdkManager?.state ?: empty
     override suspend fun sdkPackages(): List<UiSdkPackage> = ctx.sdkManager?.androidPackages() ?: emptyList()
+    override suspend fun sdkProjectPlatformLevels(): Set<Int> =
+        ctx.servicesOrNull?.modules()?.mapNotNullTo(HashSet()) { it.facets.get(AndroidFacet.KEY)?.compileSdk }
+            ?: emptySet()
     override suspend fun installSdkPackage(path: String): String =
         ctx.sdkManager?.installAndroidPackage(path) ?: "No SDK manager available."
     override suspend fun sdkLicenseText(id: String): String? = ctx.sdkManager?.licenseText(id)

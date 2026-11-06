@@ -84,6 +84,12 @@ class BuiltInParityTest {
         val spiWorkspaceAliases = setOf(
             "platform.buildControl", "platform.symbolSearch", "platform.moduleSources",
             "platform.moduleResources",
+            // Not an alias: a read view over the Android facets with no internal counterpart. Workspace-scoped
+            // all the same, like the module model it reads.
+            "platform.androidModules",
+            // An adapter over the engine's dependency service rather than an alias, since that service speaks
+            // the UI's DTOs; it resolves the same instance, so a plugin's add is the screen's add.
+            "platform.moduleDependencies",
         )
         // The plugin-facing interpreter (interp-api) is the one published service at APPLICATION scope: a
         // plugin resolves services through `PluginRegistration.appServices` and holds no project, so it
@@ -93,7 +99,7 @@ class BuiltInParityTest {
             moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
                 spiApplicationServices,
             byId.keys,
-            "exactly the 19 engine services plus the 6 published-SPI keys",
+            "exactly the 19 engine services plus the 8 published-SPI keys",
         )
         spiApplicationServices.forEach {
             assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)

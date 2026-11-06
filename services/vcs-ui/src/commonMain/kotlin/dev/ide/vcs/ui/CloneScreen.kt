@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -134,6 +135,7 @@ internal fun CloneScreen(ctx: ScreenContext) {
         title = stringResource(Res.string.vcs_clone_title),
         onBack = ctx::back,
         large = false,
+        snackbarHost = { FeedbackStrip(feedback, Modifier.navigationBarsPadding()) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Column(
@@ -162,7 +164,6 @@ internal fun CloneScreen(ctx: ScreenContext) {
                     }
                 }
             }
-            FeedbackStrip(feedback)
             if (authFailed) {
                 CloneAuthNotice(
                     signedIn = accounts.isNotEmpty(),

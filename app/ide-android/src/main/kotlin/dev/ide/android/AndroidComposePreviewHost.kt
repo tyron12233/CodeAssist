@@ -28,6 +28,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -54,6 +55,9 @@ import dev.ide.interp.SandboxFinding
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.android.preview.ComposePreviewRemoteClient
+import dev.ide.android.preview.PreviewOpenTimeline
+import dev.ide.android.preview.PreviewFrameCache
+import dev.ide.android.preview.LastFrameOrSpinner
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.preview.PreviewOutcome
@@ -87,6 +91,8 @@ private const val PREVIEW_READY_MAX_ATTEMPTS = 300
 private const val MAX_PREVIEW_PX = 2400
 /** Fall back to the in-process renderer if the `:preview` session streams no frame within this long of opening. */
 private const val REMOTE_FIRST_FRAME_TIMEOUT_MS = 6_000L
+/** How long a preview's frame must stay unchanged before it is saved as its last frame (see PreviewFrameCache). */
+private const val FRAME_SAVE_SETTLE_MS = 800L
 
 private val inProcessLog = Log.logger("AndroidComposePreviewHost")
 private val remoteLog = Log.logger("ComposePreviewRemote")
@@ -101,6 +107,16 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
 
     private val log = Log.logger("AndroidComposePreviewHost")
 
+    // The last answers to the remote render's setup reads, per file. The pane remounts the host on every variant
+    // switch and every index settle, and each read is a trip through the engine queue (130-230 ms before a switch
+    // could even reach for a session). A mount starts from these and refreshes them; a changed answer (a dependency
+    // added) still re-keys the session.
+    private val isolatedMemo = java.util.concurrent.atomic.AtomicReference<Boolean?>(null)
+    private val jarsMemo = java.util.concurrent.ConcurrentHashMap<String, Array<String>>()
+    private val resRootsMemo = java.util.concurrent.ConcurrentHashMap<String, Pair<Array<String>, String>?>()
+    private val resRootsKnown = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val sandboxIdsMemo = java.util.concurrent.atomic.AtomicReference<List<String>?>(null)
+
     @Composable
     override fun Preview(path: String, preview: UiComposePreview, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier) {
         val report by rememberUpdatedState(onProblems)
@@ -112,6 +128,14 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val lastGood = remember(path, preview.variantId) { arrayOfNulls<LoweredComposePreview>(1) }
         // Stand down while the pane's buffer is already outdated (see LocalPreviewBufferStale).
         val stale = LocalPreviewBufferStale.current
+        // Where the time to this mount's first frame goes (logcat + analytics). The pane remounts this host per
+        // variant and per index settle, so each timeline covers one open or switch.
+        val timingContext = LocalContext.current
+        val timeline = remember(path, preview.variantId) {
+            PreviewOpenTimeline(path, preview.variantId, ComposePreviewRemoteClient.get(timingContext).isConnected()) { e, ms, d ->
+                backend.recordPerf(e, ms, d, null)
+            }
+        }
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -124,10 +148,14 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             whileBufferCurrent(stale) {
                 var attempts = 0
                 while (true) {
-                    val lowered = previewAttempt { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }
+                    // Nothing on screen yet (just opened, or switched here): queue with the editor's passes, not behind them.
+                    val lowered = previewAttempt {
+                        backend.lowerComposePreview(path, preview.functionName, preview.arity, text, urgent = lastGood[0] == null)
+                    }
                     if (lowered != null) {
                         ensurePreviewPassCurrent()
                         lastGood[0] = lowered
+                        timeline.mark("lowered")
                         value = PreviewState.Ready(lowered)
                         break
                     }
@@ -144,6 +172,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                                 ?: emptyList()
                         }
                         ensurePreviewPassCurrent()
+                        if (outcome is PreviewOutcome.Unavailable) timeline.finish("notInterpretable")
                         value = when (outcome) {
                             is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
                             is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
@@ -151,6 +180,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                         break
                     }
                     value = PreviewState.Loading
+                    timeline.mark("waitingForIndex")
                     delay(PREVIEW_READY_POLL_MS)
                 }
             }
@@ -168,11 +198,15 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val defaultSandbox = remember(path) { PreviewSandboxPolicy(SandboxCategory.entries.toSet()) }
         // The restricted category IDS, kept alongside the policy: the in-process renderer takes the policy
         // object, but `:preview` can only be handed the ids over AIDL and builds its own policy from them.
-        var sandboxIds by remember(path) { mutableStateOf(SandboxCategory.entries.map { it.id }) }
+        // In the categories' own order, and starting from the last answer: the ids are part of the key a parked
+        // `:preview` session is reused by, so a set read in hash order (or late) kept a switch from reusing one.
+        var sandboxIds by remember(path) { mutableStateOf(sandboxIdsMemo.get() ?: SandboxCategory.entries.map { it.id }) }
         val sandbox by produceState(defaultSandbox, path) {
             val ids = runCatching { backend.composePreviewSandbox() }.getOrNull() ?: return@produceState
             val cats = ids.mapNotNullTo(HashSet()) { SandboxCategory.fromId(it) }
-            sandboxIds = cats.map { it.id }
+            val ordered = SandboxCategory.entries.filter { it in cats }.map { it.id }
+            sandboxIdsMemo.set(ordered)
+            if (ordered != sandboxIds) sandboxIds = ordered
             if (cats != SandboxCategory.entries.toSet()) value = PreviewSandboxPolicy(cats)
         }
         var renderError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
@@ -247,69 +281,94 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                 runCatching { withContext(Dispatchers.IO) { remoteClient.warmUp() } }
             }
         }
-        val remoteJars by produceState(emptyArray<String>(), path) {
-            value = runCatching { backend.composePreviewLibs(path)?.jars?.map { it.toString() }?.toTypedArray() }.getOrNull() ?: emptyArray()
+        // Null until known: a session opened with no jars and then reopened with the real ones paid for two.
+        val remoteJars by produceState<Array<String>?>(jarsMemo[path], path) {
+            val jars = runCatching { backend.composePreviewLibs(path)?.jars?.map { it.toString() }?.toTypedArray() }.getOrNull() ?: emptyArray()
+            jarsMemo[path] = jars
+            if (!jars.contentEquals(value)) value = jars
         }
         // The module's res dirs + R namespace, so :preview rebuilds the resource repository itself (it can't
         // receive the in-memory one) → `stringResource(R.string.x)`/`colorResource`/… resolve remotely too. The
         // `.second` flag makes the remote render WAIT for this (else it opens with no resources and R.* fails).
-        val remoteResLoad by produceState(null as Pair<Array<String>, String>? to false, path) {
+        val remoteResLoad by produceState(resRootsMemo[path] to (path in resRootsKnown), path) {
             val roots = runCatching { backend.composePreviewResourceRoots(path) }.getOrNull()
-            value = roots?.let { it.resDirs.map { d -> d.toString() }.toTypedArray() to it.namespace } to true
+            val loaded = roots?.let { it.resDirs.map { d -> d.toString() }.toTypedArray() to it.namespace }
+            if (loaded == null) resRootsMemo.remove(path) else resRootsMemo[path] = loaded
+            resRootsKnown += path
+            val old = value.first
+            val same = value.second && (old == null && loaded == null ||
+                old != null && loaded != null && old.first.contentEquals(loaded.first) && old.second == loaded.second)
+            if (!same) value = loaded to true
         }
         val remoteRes = remoteResLoad.first
         val remoteResReady = remoteResLoad.second
-        val remoteEligible by produceState(false, path, preview.variantId) {
-            value = runCatching { backend.composePreviewIsolated() }.getOrDefault(false) &&
-                !preview.hasParameter && preview.config.locale == null
+        LaunchedEffect(remoteResReady) { if (remoteResReady) timeline.mark("resRoots") }
+        // Null until the isolation setting is read: rendering in-process meanwhile would start the whole in-process
+        // pipeline (every jar opened, every resource parsed) only to throw it away when the remote one takes over.
+        val eligibleOtherwise = !preview.hasParameter && preview.config.locale == null
+        val remoteEligible by produceState(isolatedMemo.get()?.let { it && eligibleOtherwise }, path, preview.variantId) {
+            val isolated = runCatching { backend.composePreviewIsolated() }.getOrDefault(false)
+            isolatedMemo.set(isolated)
+            value = isolated && eligibleOtherwise
         }
-        var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible) }
+        var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible == true) }
         CompositionLocalProvider(LocalConfiguration provides cfg) {
             Box(modifier, contentAlignment = Alignment.Center) {
-                when (val s = state) {
-                    is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                    is PreviewState.Ready -> if (useRemote) {
+                // The remote session opens as soon as its classpath and resource roots are known, WHILE the preview is
+                // still lowering: starting `:preview`'s executor, resources and surface took ~0.8 s that used to
+                // follow the lowering. The program reaches the session when it is ready (update).
+            // A wrap-to-content preview (no device / widthDp / heightDp / showSystemUi) is rendered
+            // at the device viewport as a MAX bound; the `:preview` measures the composable's
+            // intrinsic size within it and reports it back so the frame is cropped + the card sized
+            // to the content. A fixed-size preview fills the surface (no crop): render at the ACTUAL
+            // device size (via PreviewDevices) so the streamed frame matches the card's aspect — a
+            // fixed default (411×731) letterboxed a taller phone, leaving white bands. For
+            // showSystemUi the render targets the BODY between the mock status + nav bars so the
+            // content fills the chrome's slot (Studio parity: a sizeless one frames DEFAULT_PHONE).
+            val pcfg = preview.config
+            val surfaceDp = PreviewDevices.renderSurfaceDp(pcfg.device, pcfg.widthDp, pcfg.heightDp, pcfg.showSystemUi)
+            val wrapContent = surfaceDp == null
+            val wDp = surfaceDp?.first ?: PreviewDevices.DEFAULT_VIEWPORT_WIDTH_DP
+            val hDp = surfaceDp?.second ?: PreviewDevices.DEFAULT_VIEWPORT_HEIGHT_DP
+            // Clamp UNIFORMLY (both axes by the same factor) so the surface keeps the card's aspect
+            // even when a high-density / tall device would exceed MAX_PREVIEW_PX — a per-axis clamp
+            // skewed the aspect, which re-introduced letterboxing AND offset the forwarded touch
+            // coordinates (the FillWidth frame no longer lined up with the display rect).
+            val rawW = wDp * density
+            val rawH = hDp * density
+            val clamp = minOf(1f, MAX_PREVIEW_PX / rawW, MAX_PREVIEW_PX / rawH)
+            val widthPx = (rawW * clamp).toInt().coerceAtLeast(1)
+            val heightPx = (rawH * clamp).toInt().coerceAtLeast(1)
+            // This preview's last frame, shown in place of a spinner until the live one arrives (see PreviewFrameCache).
+            val frameKey = PreviewFrameCache.key(path, preview.variantId, night, widthPx, heightPx)
+                val remoteNow = remoteEligible == true && useRemote && state !is PreviewState.NotInterpretable
+                if (remoteNow) {
                         // Remote render: wait only for the remote res roots (`:preview` rebuilds its own resources)
                         // — NOT the in-process resource parse, which the isolated path doesn't use.
-                        if (!remoteResReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
-                            // A wrap-to-content preview (no device / widthDp / heightDp / showSystemUi) is rendered
-                            // at the device viewport as a MAX bound; the `:preview` measures the composable's
-                            // intrinsic size within it and reports it back so the frame is cropped + the card sized
-                            // to the content. A fixed-size preview fills the surface (no crop): render at the ACTUAL
-                            // device size (via PreviewDevices) so the streamed frame matches the card's aspect — a
-                            // fixed default (411×731) letterboxed a taller phone, leaving white bands. For
-                            // showSystemUi the render targets the BODY between the mock status + nav bars so the
-                            // content fills the chrome's slot (Studio parity: a sizeless one frames DEFAULT_PHONE).
-                            val cfg = preview.config
-                            val surfaceDp = PreviewDevices.renderSurfaceDp(cfg.device, cfg.widthDp, cfg.heightDp, cfg.showSystemUi)
-                            val wrapContent = surfaceDp == null
-                            val wDp = surfaceDp?.first ?: PreviewDevices.DEFAULT_VIEWPORT_WIDTH_DP
-                            val hDp = surfaceDp?.second ?: PreviewDevices.DEFAULT_VIEWPORT_HEIGHT_DP
-                            // Clamp UNIFORMLY (both axes by the same factor) so the surface keeps the card's aspect
-                            // even when a high-density / tall device would exceed MAX_PREVIEW_PX — a per-axis clamp
-                            // skewed the aspect, which re-introduced letterboxing AND offset the forwarded touch
-                            // coordinates (the FillWidth frame no longer lined up with the display rect).
-                            val rawW = wDp * density
-                            val rawH = hDp * density
-                            val clamp = minOf(1f, MAX_PREVIEW_PX / rawW, MAX_PREVIEW_PX / rawH)
-                            val widthPx = (rawW * clamp).toInt().coerceAtLeast(1)
-                            val heightPx = (rawH * clamp).toInt().coerceAtLeast(1)
+                        val jars = remoteJars
+                        if (!remoteResReady || jars == null) LastFrameOrSpinner(frameKey, Modifier.fillMaxWidth()) { timeline.mark("lastFrame") } else {
                             RemoteComposePreview(
-                                client = remoteClient, lowered = s.lowered, jars = remoteJars,
+                                client = remoteClient, lowered = (state as? PreviewState.Ready)?.lowered, jars = jars,
                                 resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                                 widthPx = widthPx, heightPx = heightPx, density = density, night = night,
-                                wrapContent = wrapContent,
-                                onUnavailable = { useRemote = false },
+                                wrapContent = wrapContent, frameKey = frameKey,
+                                onUnavailable = { timeline.mark("fallback"); useRemote = false },
+                                timeline = timeline,
                                 onPartialError = { remotePartial = it },
                                 sandbox = sandboxIds,
                                 onSandboxFindings = { if (it != sandboxFindings) sandboxFindings = it },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                } else when (val s = state) {
+                    is PreviewState.Loading -> LastFrameOrSpinner(frameKey, Modifier.fillMaxWidth()) { timeline.mark("lastFrame") }
+                    is PreviewState.Ready -> if (remoteEligible == null) {
+                        LastFrameOrSpinner(frameKey, Modifier.fillMaxWidth()) { timeline.mark("lastFrame") }
                     } else {
                         // In-process render (isolation off, or a remote failure fell back here): this composable
                         // builds the VM executor + resource resolver on demand, so that heavy work never runs on
                         // the isolated path. Its render outcomes flow up to the hoisted state → the shared chip.
+                        LaunchedEffect(Unit) { withFrameNanos { }; withFrameNanos { }; timeline.finish("inprocess") }
                         InProcessComposePreview(
                             backend = backend, path = path, lowered = s.lowered, night = night, density = density,
                             sandbox = sandbox, partialKey = partialKey,
@@ -535,7 +594,8 @@ private fun InProcessComposePreview(
 @Composable
 private fun RemoteComposePreview(
     client: ComposePreviewRemoteClient,
-    lowered: LoweredComposePreview,
+    /** Null while the preview is still lowering: the session opens anyway and gets the program when it arrives. */
+    lowered: LoweredComposePreview?,
     jars: Array<String>,
     resRoots: Array<String>,
     namespace: String,
@@ -544,7 +604,10 @@ private fun RemoteComposePreview(
     density: Float,
     night: Boolean,
     wrapContent: Boolean,
+    /** Where this preview's last frame is kept ([PreviewFrameCache]): shown until the first live frame, then updated. */
+    frameKey: String? = null,
     onUnavailable: () -> Unit,
+    timeline: PreviewOpenTimeline? = null,
     onPartialError: (String?) -> Unit,
     sandbox: List<String>,
     onSandboxFindings: (List<SandboxFinding>) -> Unit,
@@ -575,36 +638,47 @@ private fun RemoteComposePreview(
     // classpath / resource change — NOT on a program edit (→ update()) or a size/night change (→ resize()).
     DisposableEffect(client, cpKey, resKey, namespace) {
         var disposed = false
+        // A session that failed is closed; a healthy one is parked for the next preview with the same key, so a
+        // switch to another variant or file (or back) reuses its off-screen display and composition.
+        var broken = false
+        val poolKey = listOf(cpKey, resKey, namespace, wrapContent.toString(), sandbox.joinToString(",")).joinToString("\u0000")
+        fun release(s: ComposePreviewRemoteClient.Session) = if (broken) s.close() else client.park(s, poolKey)
         val sink = object : ComposePreviewRemoteClient.FrameSink {
-            override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
+            override fun onFrame(bitmap: Bitmap, seq: Long) { timeline?.finish("remote"); main.post { frame = bitmap } }
             override fun onError(message: String) {
                 // The fallback is deliberate — a fatal remote failure may be remote-only, and in-process may well
                 // render it fine, so this is a recovery path rather than something to report. But the message
                 // used to vanish entirely, which made an isolated-render failure impossible to diagnose; if the
                 // in-process attempt fails too, IT reports the problem through the usual chip.
                 remoteLog.warn("isolated preview render failed, falling back in-process: $message")
+                broken = true
                 main.post { fallback() }
             }
             override fun onContentSize(widthPx: Int, heightPx: Int) { main.post { contentSize = IntSize(widthPx, heightPx) } }
             override fun onPartialError(message: String?) { main.post { partial(message) } }
             override fun onSandboxFindings(findings2: List<SandboxFinding>) { main.post { findings(findings2) } }
         }
+        timeline?.mark("openStart")
         Thread {
-            val s = client.openSession(
+            val reused = client.takeParked(poolKey, sink)
+            if (reused != null) timeline?.mark("reused")
+            val s = reused ?: client.openSession(
                 openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace,
                 wrapContent = wrapContent, sandbox = sandbox.toTypedArray(),
             )
+            timeline?.mark("openDone")
             main.post {
-                if (disposed) { s?.close() }
+                if (disposed) { s?.let(::release) }
                 else { sessionBox[0] = s; sessionEpoch++; if (s == null) fallback() }
             }
         }.apply { isDaemon = true; name = "compose-preview-open"; start() }
-        onDispose { disposed = true; sessionBox[0]?.close(); sessionBox[0] = null }
+        onDispose { disposed = true; sessionBox[0]?.let(::release); sessionBox[0] = null }
     }
     // Live edit: push the re-lowered program to the running session (off main — update makes a Binder call).
     LaunchedEffect(sessionEpoch, lowered) {
         val s = sessionBox[0] ?: return@LaunchedEffect
-        withContext(Dispatchers.IO) { s.update(lowered) }
+        val program = lowered ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { s.update(program) }
     }
     // Size / night change: re-target the LIVE session instead of re-opening (a night toggle re-renders on the same
     // off-screen surface; a size change recreates it in `:preview`). oneway, so hop off main. Also fires right
@@ -614,8 +688,9 @@ private fun RemoteComposePreview(
         withContext(Dispatchers.IO) { s.resize(widthPx, heightPx, density, night) }
     }
     // First-frame watchdog: no frame within the deadline → fall back in-process.
-    LaunchedEffect(sessionEpoch) {
-        if (sessionBox[0] != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
+    // Counted from when the session has a program: one opened ahead of its lowering has nothing to draw until then.
+    LaunchedEffect(sessionEpoch, lowered != null) {
+        if (sessionBox[0] != null && lowered != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
     }
 
     // A wrap-to-content preview renders into the fixed device-sized surface with the composable measured at its
@@ -686,8 +761,16 @@ private fun RemoteComposePreview(
                     },
             )
         } else {
-            CircularProgressIndicator(Modifier.size(28.dp))
+            LastFrameOrSpinner(frameKey, Modifier.fillMaxWidth()) { timeline?.mark("lastFrame") }
         }
+    }
+    // Keep the frame on screen for the next open, once it has settled (not every frame of an animation).
+    val context = LocalContext.current
+    LaunchedEffect(full, frameKey, crop) {
+        val f = full ?: return@LaunchedEffect
+        val key = frameKey ?: return@LaunchedEffect
+        delay(FRAME_SAVE_SETTLE_MS)
+        PreviewFrameCache.save(context, key, f, crop?.width, crop?.height)
     }
 }
 

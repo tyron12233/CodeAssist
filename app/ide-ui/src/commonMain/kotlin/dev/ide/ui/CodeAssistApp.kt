@@ -1,5 +1,9 @@
 package dev.ide.ui
 
+import dev.ide.ui.components.BuildSuccessBats
+import dev.ide.ui.components.HalloweenBuildFx
+import dev.ide.ui.theme.LocalSeason
+import dev.ide.ui.theme.Season
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.ide.ui.ext.AppKeys
@@ -74,6 +78,13 @@ fun CodeAssistApp(
     /** Called once [openStoreItemId] has been acted on, so the host can clear it. Without that the same
      *  id arriving twice would not re-fire, a link being tapped twice being the ordinary case. */
     onStoreItemIdHandled: () -> Unit = {},
+    /** The target of a tapped tray notification (Android), acted on when it changes to a non-null value. */
+    openNotificationTarget: dev.ide.ui.backend.UiNotificationTarget? = null,
+    /** Called once [openNotificationTarget] has been acted on, so the host can clear it. */
+    onNotificationTargetHandled: () -> Unit = {},
+    /** Told whether the user has a project open ([CodeAssistAppState.projectOpen]), for host features that act
+     *  on it from outside the composition (Android's "Open with" for a source file). */
+    onProjectOpenChange: (Boolean) -> Unit = {},
 ) {
     // Register the UI facets of the enabled plugins, then load once. The backend reports exactly the plugins
     // whose engine half is enabled (see BuiltInPlugins' unified engine+UI declaration), so this shell code names
@@ -83,6 +94,8 @@ fun CodeAssistApp(
     // noinspection RememberReturnType
     remember(Unit) {
         backend.uiPlugins().forEach { UiPluginHost.register(it) }
+        // The shell's own tool window: the notification center, readable from inside a project.
+        UiPluginHost.register(dev.ide.ui.screens.NotificationsUiPlugin)
         UiPluginHost.ensureLoaded()
     }
 
@@ -110,6 +123,11 @@ fun CodeAssistApp(
     LaunchedEffect(openStoreItemId) {
         openStoreItemId?.let { app.openStoreItemById(it); onStoreItemIdHandled() }
     }
+    // A tapped tray notification, the same way: acted on once, then cleared through the host.
+    LaunchedEffect(openNotificationTarget) {
+        openNotificationTarget?.let { app.openNotificationTarget(it); onNotificationTargetHandled() }
+    }
+    LaunchedEffect(app.projectOpen) { onProjectOpenChange(app.projectOpen) }
 
     // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
     // live. "system" follows the OS dark-mode signal.
@@ -139,6 +157,9 @@ fun CodeAssistApp(
         uiFont = uiFont,
         codeFont = resolvedCodeFont,
         editorColorScheme = app.editorColorScheme,
+        // A plugin's app theme, while its plugin is loaded; once it is not, the id resolves to nothing and the
+        // default accent applies, without the user's choice being forgotten.
+        appTheme = app.settings.appTheme?.let { dev.ide.ui.theme.colors.ContributedAppThemes.byId(it) },
     ) {
         // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
         // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
@@ -146,16 +167,21 @@ fun CodeAssistApp(
         PlatformBackHandler(enabled = app.canNavigateBack, onBack = app::navigateBack)
         // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
+        // Read once per composition of the root: a session that crosses midnight into the season picks it up
+        // on the next settings change or launch, which is soon enough for a decoration.
+        val season = if (app.settings.seasonalTouches) Season.current() else null
         CompositionLocalProvider(
+            LocalSeason provides season,
             LocalAds provides app.adController,
             LocalHostFileActions provides fileActions,
             LocalPluginNavigator provides app::openPluginScreen,
+            dev.ide.ui.screens.LocalNotificationOpener provides { n -> app.openNotificationTarget(n) },
             LocalSettingsPageOpener provides { id -> app.openSettingsPageFrom(app.screen, id) },
             // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
-            // user on the editor to see it. Guarded on a project being open (`epoch > 0`), since a tab over
-            // nothing is not a state the shell has.
+            // user on the editor to see it. Guarded on a project being open, since a tab over nothing is not a
+            // state the shell has (and `epoch > 0` would reopen a project the user closed behind Home).
             LocalPluginFileOpener provides { path, offset ->
-                if (app.epoch > 0) {
+                if (app.projectOpen) {
                     state.openAt(path, offset)
                     app.navigateTo(Screen.Editor)
                 }
@@ -185,6 +211,13 @@ fun CodeAssistApp(
                                 dark = dark,
                                 modifier = Modifier.fillMaxSize(),
                             )
+                            // Over everything in the content area, drawing only while a flock is in the air.
+                            BuildSuccessBats(
+                                backend = backend,
+                                enabled = season == Season.Halloween,
+                            )
+                            // Boo on a failed build, candy when a program starts; nothing outside the season.
+                            HalloweenBuildFx(backend = backend)
                         }
                     }
                     AppOverlays(
@@ -205,6 +238,9 @@ fun CodeAssistApp(
                         importError = importErrorMessage,
                         onDismissImportError = app::dismissImportError,
                         importBusy = app.importBusy,
+                        showLearnTourOffer = app.showLearnTourOffer,
+                        onStartLearnTour = app::startLearnTour,
+                        onDismissLearnTour = app::dismissLearnTourOffer,
                     )
                     ImportSourceDialog(
                         visible = app.showImportSourceChoice,

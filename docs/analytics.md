@@ -1,8 +1,8 @@
 # Usage analytics
 
-CodeAssist collects **opt-in, anonymous performance metrics** to see what's slow and what's failing (build,
-indexing, and completion timings; crashes). It is **performance-only** — no feature-usage tracking. It is
-off by default; nothing is collected until the user explicitly taps **Allow** on the first-launch consent
+CodeAssist collects **opt-in, anonymous performance metrics and feature-usage counts** to see what's slow,
+what's failing, and which features people rely on (build, indexing, completion and preview timings; crashes;
+how many times each feature was used). It is off by default; nothing is collected until the user explicitly taps **Allow** on the first-launch consent
 prompt, and it can be turned off again anytime from the project picker.
 
 This document is the source of truth for **what we collect**, **what we never collect**, and the
@@ -21,7 +21,10 @@ analytics-impl DefaultAnalyticsService (durable batch buffer) ──► Supabase
 ```
 
 - **Consent** is a single preference (`analytics.consent` = `granted` / `denied`; absent = undecided →
-  prompt). Persisted in the same `prefs.properties` the onboarding flag uses.
+  prompt). Persisted in the same `prefs.properties` the onboarding flag uses. `analytics.consent.scope` records
+  which wording a yes answered: `usage` once the sheet named feature usage. A consent from before that (the
+  sheet then said "we never collect which features you use") keeps performance data flowing but counts no
+  usage, and `analyticsNeedsAsking()` shows the sheet again until it is answered under the current wording.
 - The **install id** (`analytics.install.id`) is a random UUID generated once. It is **not** tied to any
   account, ad id, or device id. The **session id** is fresh per launch.
 - Collection is **Android only** — the desktop launcher wires the no-op service (the desktop is a
@@ -32,8 +35,9 @@ analytics-impl DefaultAnalyticsService (durable batch buffer) ──► Supabase
 
 ## What we collect
 
-We collect **performance metrics**, plus a few **ad events** on Android (below). There is no feature-usage
-tracking (nothing about which screens, files, or features you open). Every shipped row carries the install
+We collect **performance metrics**, **feature-usage counts** (from consent given under the current wording),
+plus a few **ad events** on Android (below). Usage is counted by feature id, never by file, project or what was
+typed. Every shipped row carries the install
 id, session id, and the device/environment context as columns: app version + build, OS API level, device model + manufacturer, CPU ABI, and locale —
 so a timing can be attributed to an app version / device. Since the release after 3.30.1 it also carries
 which build sent it: `app_id` (the application id) and `signer` (the first 16 hex characters of the
@@ -43,9 +47,15 @@ Events (the `event` column), by category:
 
 | Category      | Events (props in parens) |
 |---------------|--------|
-| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — one row per finished full index pass; **plus** `trigger` (why it ran: `open`/`reindex`/`model`/`libraries`/`variant`/`files`/`module`), `scope_ms` (assembling the scope) and `queued_ms` (waiting for an earlier pass), `lib_changed` (`0` for a quiet pass: the classpath was unchanged, so only the source side was updated and no build was announced), `coalesced` (resync requests that joined this pass), the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the parallelism `par_io`/`par_build`, rebuilt-artifact counts by coarse kind `built.<kind>` and `rekeyed.<kind>` (rebuilt under a new key this session; kinds are `jdk`/`bundled`/`sources`/`jar.project_build`/`jar.project`/`jar.cache`/`jar.other`/`res.project`/`res.cache`/`res.other`, never a name or path), the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name, and the time is summed across the threads that ran it. From the release after 3.26.2 every pass is counted; before, passes that finished between two samples of the status flow were missed), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`, plus the window's peak `heap_used_mb`/`heap_max_mb`/`heap_headroom_mb`), `frame_perf` / `frame_cpu_perf` (same summary shape, plus `over_count`; see below) |
+| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — one row per finished full index pass; **plus** `trigger` (why it ran: `open`/`reindex`/`model`/`libraries`/`variant`/`files`/`module`), `scope_ms` (assembling the scope) and `queued_ms` (waiting for an earlier pass), `lib_changed` (`0` for a quiet pass: the classpath was unchanged, so only the source side was updated and no build was announced), `coalesced` (resync requests that joined this pass), the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the parallelism `par_io`/`par_build`, rebuilt-artifact counts by coarse kind `built.<kind>` and `rekeyed.<kind>` (rebuilt under a new key this session; kinds are `jdk`/`bundled`/`sources`/`jar.project_build`/`jar.project`/`jar.cache`/`jar.other`/`res.project`/`res.cache`/`res.other`, never a name or path), the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name, and the time is summed across the threads that ran it. From the release after 3.26.2 every pass is counted; before, passes that finished between two samples of the status flow were missed), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`, plus the window's peak `heap_used_mb`/`heap_max_mb`/`heap_headroom_mb`), `frame_perf` / `frame_cpu_perf` (same summary shape, plus `over_count`; see below), `preview_perf` (same summary shape, split by `kind` = `compose`/`layout`, `first` = `true` for the first render of a file in a session (which pays for lowering or linking) and `false` for a re-render after an edit, and `ok`; layout rows also carry `renderer` = `real` (the device's own views rendered it) / `owned` (the fallback renderer)) |
+| `usage`       | `feature_used` (`feature`, `count`): how many times a feature was used, counted on the device and sent as one row per feature when telemetry is flushed (the app leaving the screen, or a count reaching 500). Ids are fixed snake_case names from `UiFeatures` (ide-ui-api): `preview_compose`/`preview_layout`/`preview_resource` (the Preview view picked on that kind of file), `view_blocks`, `view_split`, `completion_accept`, `quick_fix`, `rename`, `format`, `quick_doc`, `command_palette`, `ai_message`, `git_commit`, `nav_<kind>` (`nav_declaration`, `nav_implementation`, `nav_type_declaration`, `nav_super`, `nav_usages`, `nav_related`), `screen_<screen>` (a top-level screen opened, e.g. `screen_icon_manager`, `screen_lesson_player`) and `tool_<id>` (a tool window shown, e.g. `tool_git`, `tool_logs`) |
 | `crash`       | `app_crash` (scrubbed — see below; also carries the crash-time `heap_*_mb` and always pins at least one `dev.ide.*` frame, walking the cause chain if the top of the stack is all framework code), `error_logged` (a caught ERROR-level failure, scrubbed + throttled), `app_anr` (a previous process the system killed for not responding; see below) |
-| `ads`         | Android only. `ad_shown` (`trigger` = `build`/`lesson`: a full-screen ad was shown), `ad_closed` (`trigger`, `duration_ms` it was on screen, and for a build `build_done` = `1` when the build finished behind the ad), `ad_skipped` (a build still running at the 5s threshold got no ad; `reason` = `low_memory`/`first_session`/`grace`/`after_failure`/`cooldown`/`not_ready`), `ads_setting` (the user changed an ad setting: `setting` = `all`/`fullscreen`, `on` = `0`/`1`, `via` = `settings`/`prompt`) |
+| `ads`         | Android only. `ad_shown` (`trigger` = `build`/`lesson`: a full-screen ad was shown), `ad_closed` (`trigger`, `duration_ms` it was on screen, and for a build `build_done` = `1` when the build finished behind the ad), `ad_skipped` (a build still running at the 5s threshold got no ad; `reason` = `low_memory`/`first_session`/`grace`/`after_failure`/`cooldown`/`not_ready`/`program_running` (the build is a console run whose program is already executing); for `not_ready`, `state` = where the ad load stood, e.g. `loading`/`failed_3`/`not_requested`), `ads_setting` (the user changed an ad setting: `setting` = `all`/`fullscreen`, `on` = `0`/`1`, `via` = `settings`/`prompt`) |
+
+`feature_used` keeps its per-feature split only in the raw `events` rows (7 days). The daily rollup
+(`events_daily`) groups by event name, so after a week the counts of all features collapse into one
+`feature_used` line; extend `roll_up_events()` with a per-`props->>'feature'` table (summing
+`props->>'count'`) before relying on usage trends longer than that.
 
 `frame_perf` and `frame_cpu_perf` summarize drawn frames, counted only in bursts (a frame drawn within
 100ms of the one before it) so that typing, scrolling and animation are measured and the idle caret blink is

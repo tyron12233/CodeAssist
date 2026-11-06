@@ -3,6 +3,8 @@ package dev.ide.android.preview
 import android.app.Presentation
 import android.content.Context
 import android.graphics.PixelFormat
+import android.graphics.drawable.ColorDrawable
+import android.graphics.Color
 import android.hardware.HardwareBuffer
 import android.hardware.display.DisplayManager
 import android.media.Image
@@ -115,6 +117,10 @@ class OffscreenComposeSurface(
 
     private val latestBytes = AtomicReference<ByteArray?>(null)
     @Volatile private var contentSeen = false
+    /** [System.nanoTime] of the composition's first draw into the window, 0 until then. A frame queued after it
+     *  carries what the composable drew, even when that is a few glyphs on transparent (which [hasContent]'s
+     *  sparse sampling misses: a wrap-content `Text` touches none of its 64 points). */
+    @Volatile private var firstDrawNanos = 0L
     private val frames = AtomicInteger(0)
     private val owner = OffscreenOwner()
     private val virtualDisplay = context.getSystemService(DisplayManager::class.java).createVirtualDisplay(
@@ -137,7 +143,9 @@ class OffscreenComposeSurface(
                 // composition draws — a fully-transparent frame (the "black flash" on open). Once content has been
                 // seen, stop sampling (latch) so the zero-copy path never touches the pixels again.
                 if (!contentSeen) {
-                    if (!hasContent(img)) return@use
+                    val drawn = firstDrawNanos
+                    val afterDraw = drawn != 0L && (img.timestamp == 0L || img.timestamp >= drawn)
+                    if (!afterDraw && !hasContent(img)) return@use
                     contentSeen = true
                 }
                 val hwCb = onHardwareFrame
@@ -174,6 +182,8 @@ class OffscreenComposeSurface(
                 setViewTreeOnBackPressedDispatcherOwner(owner)
                 setContent(content)
             }
+            composeView = view
+            armFirstDraw(view)
             p.setContentView(view)
             // A Presentation is a Dialog: its window defaults to WRAP_CONTENT + centre gravity, so the ComposeView
             // can end up inset/centred within the VirtualDisplay rather than filling it from (0,0). That put a gap
@@ -185,10 +195,43 @@ class OffscreenComposeSurface(
                 setGravity(Gravity.TOP or Gravity.START)
                 clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                 decorView.setPadding(0, 0, 0, 0)
+                // A Dialog's window carries the theme's opaque dialog background, which the frame captured: every
+                // composable that draws no background of its own came out on the dark dialog colour, painting
+                // over the card the IDE draws behind the frame (white, or the @Preview's showBackground colour),
+                // so the starter template's "Hello, Compose!" read as dark text on dark grey. Transparent, the
+                // frame carries only what the composable drew and the card shows through, as in Android Studio.
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             }
             p.show()
             presentation = p
         }
+    }
+
+    @Volatile private var composeView: ComposeView? = null
+
+    /** Mark the composition's next draw: frames rendered from then on are content, whatever they hold. The
+     *  listener is removed on the next loop turn, since a draw listener may not remove itself while dispatched. */
+    private fun armFirstDraw(view: ComposeView) {
+        val firstDraw = object : android.view.ViewTreeObserver.OnDrawListener {
+            override fun onDraw() {
+                if (firstDrawNanos == 0L) {
+                    firstDrawNanos = System.nanoTime()
+                    mainHandler.post { runCatching { view.viewTreeObserver.removeOnDrawListener(this) } }
+                }
+            }
+        }
+        view.viewTreeObserver.addOnDrawListener(firstDraw)
+    }
+
+    /**
+     * Hold frames back again until the composition next draws (main thread). For content that arrives after
+     * [start] (a session opened before its program was ready): what was drawn so far is the empty composition,
+     * which must not reach the IDE as the preview's first frame.
+     */
+    fun rearmContentGate() {
+        contentSeen = false
+        firstDrawNanos = 0L
+        composeView?.let { armFirstDraw(it) }
     }
 
     /**

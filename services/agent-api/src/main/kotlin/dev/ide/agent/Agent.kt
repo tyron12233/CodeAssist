@@ -49,8 +49,41 @@ sealed interface AgentEvent {
     data class UserMessage(val text: String) : AgentEvent
     data class AssistantTextDelta(val text: String) : AgentEvent
     data class AssistantThinkingDelta(val text: String) : AgentEvent
-    data class ToolCallStarted(val id: String, val name: String, val displaySummary: String) : AgentEvent
-    data class ToolCallFinished(val id: String, val ok: Boolean, val resultSummary: String) : AgentEvent
+    /** [input] is the call's arguments as the model sent them (JSON), for a host that shows what was asked. */
+    data class ToolCallStarted(
+        val id: String,
+        val name: String,
+        val displaySummary: String,
+        val input: String = "",
+    ) : AgentEvent {
+        // The pre-[input] signatures, kept in the bytecode for plugins compiled against them.
+        @Deprecated("Binary compatibility with plugins built against SPI 3.36", level = DeprecationLevel.HIDDEN)
+        constructor(id: String, name: String, displaySummary: String) : this(id, name, displaySummary, "")
+
+        @Deprecated("Binary compatibility with plugins built against SPI 3.36", level = DeprecationLevel.HIDDEN)
+        fun copy(id: String = this.id, name: String = this.name, displaySummary: String = this.displaySummary): ToolCallStarted =
+            ToolCallStarted(id, name, displaySummary, input)
+    }
+
+    /**
+     * [output] is the result exactly as the model received it (capped for size), and [images] what it was shown, so
+     * a host can let the user see what the agent saw: a preview screenshot, a viewed image, a file's contents.
+     */
+    data class ToolCallFinished(
+        val id: String,
+        val ok: Boolean,
+        val resultSummary: String,
+        val output: String = "",
+        val images: List<ContentPart.Image> = emptyList(),
+    ) : AgentEvent {
+        // The pre-[output] signatures, kept in the bytecode for plugins compiled against them.
+        @Deprecated("Binary compatibility with plugins built against SPI 3.36", level = DeprecationLevel.HIDDEN)
+        constructor(id: String, ok: Boolean, resultSummary: String) : this(id, ok, resultSummary, "", emptyList())
+
+        @Deprecated("Binary compatibility with plugins built against SPI 3.36", level = DeprecationLevel.HIDDEN)
+        fun copy(id: String = this.id, ok: Boolean = this.ok, resultSummary: String = this.resultSummary): ToolCallFinished =
+            ToolCallFinished(id, ok, resultSummary, output, images)
+    }
     data class ToolCallDenied(val id: String, val reason: String) : AgentEvent
     data class TurnCompleted(val stopReason: StopReason, val usage: TokenUsage?) : AgentEvent
     /** [kind] names the failure category when it was categorized (an `LlmErrorKind` name such as
@@ -70,6 +103,12 @@ sealed interface AgentEvent {
      * means the wait is over. Cancelling the run cancels the wait.
      */
     data class Waiting(val untilEpochMs: Long, val reason: String) : AgentEvent
+
+    /**
+     * The conversation grew past what the provider takes, so the loop replaced its older part with a model-written
+     * summary and carried on. [beforeChars] and [afterChars] are the history's size around it.
+     */
+    data class Compacted(val beforeChars: Int, val afterChars: Int) : AgentEvent
 
     /** Tool call [id] changed these files (recorded so the turn can be reviewed and reverted). */
     data class FilesChanged(val id: String, val changes: List<FileChange>) : AgentEvent

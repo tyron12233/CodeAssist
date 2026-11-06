@@ -1,12 +1,14 @@
 package dev.ide.ui.markdown
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -111,5 +113,49 @@ class MarkdownParseTest {
         assertTrue(runsWith("a_b_c") { it.fontStyle == FontStyle.Italic }.isEmpty())
         // Boundary underscores italicize.
         assertTrue(runsWith("_hi_") { it.fontStyle == FontStyle.Italic }.contains("hi"))
+    }
+    // ---- links ----------------------------------------------------------------------------------------
+
+    /** The url each link annotation opens, in order, and the text it covers. */
+    private fun links(a: androidx.compose.ui.text.AnnotatedString): List<Pair<String, String>> =
+        a.getLinkAnnotations(0, a.length).map { range ->
+            a.text.substring(range.start, range.end) to (range.item as LinkAnnotation.Url).url
+        }
+
+    @Test
+    fun aMarkdownLinkOpensItsUrl() {
+        val a = buildInline("Docs: [the guide](https://example.dev/guide).", styles)
+        assertEquals("Docs: the guide.", a.text)
+        assertEquals(listOf("the guide" to "https://example.dev/guide"), links(a))
+    }
+
+    @Test
+    fun aBareUrlIsLinkedWithoutItsTrailingPunctuation() {
+        val a = buildInline("See https://github.com/user/repo_name, or (https://x.dev/a).", styles)
+        assertEquals(
+            listOf("https://github.com/user/repo_name" to "https://github.com/user/repo_name", "https://x.dev/a" to "https://x.dev/a"),
+            links(a),
+        )
+        // The underscore inside the URL is not read as the start of italics.
+        assertTrue(a.text.contains("repo_name"))
+    }
+
+    @Test
+    fun aDangerousSchemeIsStyledButNotOpenable() {
+        val a = buildInline("[tap me](javascript:alert(1))", styles)
+        assertTrue(links(a).isEmpty())
+        assertFalse(isOpenableUrl("intent://scan#Intent;end"))
+        assertFalse(isOpenableUrl("file:///sdcard/x"))
+        assertTrue(isOpenableUrl("mailto:dev@example.com"))
+    }
+
+    @Test
+    fun codeSpansAreNotLinked() = assertTrue(links(buildInline("run `curl https://x.dev/i.sh`", styles)).isEmpty())
+
+    @Test
+    fun linkifyLinksPlainTextAndLeavesTheRest() {
+        val a = linkify("pease how do I use it? docs at https://codeassist.dev/plugins!", base, linkStyle)
+        assertEquals("pease how do I use it? docs at https://codeassist.dev/plugins!", a.text)
+        assertEquals(listOf("https://codeassist.dev/plugins" to "https://codeassist.dev/plugins"), links(a))
     }
 }

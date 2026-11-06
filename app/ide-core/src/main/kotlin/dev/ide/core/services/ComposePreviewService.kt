@@ -53,7 +53,7 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val entry = previewEntry(program, functionName, 0)
             ?: return PreviewRunResult(false, "`$functionName` not found as a @Composable")
         val refusals = previewRefusals(entry, program, model?.classes ?: emptyList(), text) +
-            errorRefusals(analyzer, vf)
+            errorRefusals(analyzer, vf, functionName)
         if (refusals.isNotEmpty()) {
             return PreviewRunResult(false, "Cannot preview `$functionName`: ${refusals.joinToString("; ")}")
         }
@@ -117,7 +117,7 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
             ?: return listOf("`$functionName` not found as a @Composable (lowered: ${program.keys.joinToString()})")
         // The lowering reasons lead: they name the offending declaration, where an error message only names a
         // symbol. Both are reported, so nothing the gate refused on is invisible.
-        (previewRefusals(entry, program, model?.classes ?: emptyList(), text) + errorRefusals(analyzer, vf))
+        (previewRefusals(entry, program, model?.classes ?: emptyList(), text) + errorRefusals(analyzer, vf, functionName))
             .ifEmpty { listOf("`$functionName` lowered with no diagnostics — it may render; if not, the failure is in the render path") }
     } catch (e: dev.ide.platform.EngineCanceledException) {
         // Preemption is the scheduler's control flow, not a diagnosis: swallowing it here would report
@@ -161,9 +161,12 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
      * See [KotlinDiagnosticCodes.PREVIEW_BLOCKING] for which errors these are and why it is a named set rather
      * than "any error". Reported as its own reasons rather than short-circuiting, so a preview that ALSO has a
      * more specific lowering problem still names it.
+     *
+     * Only declarations of this file the preview [entry] reaches by name are checked, like [previewRefusals]: a
+     * broken class the preview never touches doesn't stop it.
      */
-    private fun errorRefusals(analyzer: KotlinSourceAnalyzer, vf: VirtualFile): List<String> =
-        analyzer.previewBlockingErrors(vf).map { "the file has errors — fix them to preview: $it" }
+    private fun errorRefusals(analyzer: KotlinSourceAnalyzer, vf: VirtualFile, entry: String): List<String> =
+        analyzer.previewBlockingErrors(vf, entry).map { "the file has errors — fix them to preview: $it" }
 
     /**
      * Why the lowered [entry] may not be interpreted, phrased for the panel; empty means it is safe to render.
@@ -230,7 +233,7 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         // Checked BEFORE lowering: refusing here is what keeps the gate cheap on the typing path, since the
         // semantic pass it runs is a fraction of the cross-file lowering it then skips.
         val blocked = dev.ide.lang.kotlin.KotlinPerf.span("gate") {
-            unlowerableReason(analyzer, vf) != null || errorRefusals(analyzer, vf).isNotEmpty()
+            unlowerableReason(analyzer, vf) != null || errorRefusals(analyzer, vf, functionName).isNotEmpty()
         }
         if (blocked) return null
         val model = previewModelFor(module, vf, analyzer) ?: return null

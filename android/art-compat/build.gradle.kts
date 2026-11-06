@@ -86,6 +86,51 @@ val relocateEquinoxCommonForArt = tasks.register<RelocateTypesInJar>("relocateEq
     renames.put("java/lang/StackWalker", "dev/ide/lang/jdt/compat/StackWalker")
 }
 
+// --- bundletool's protobuf, relocated off com.google.protobuf --------------------------------------
+// bundletool (the on-device .aab builder) runs on FULL protobuf (protobuf-java, GeneratedMessageV3), while the
+// ad SDKs (Google Mobile Ads, Unity, Meta, Pangle, Mintegral) are built against protobuf LITE
+// (GeneratedMessageLite). Both live in com.google.protobuf, so only one can be dexed. We used to drop lite and
+// let the ad SDKs run on full protobuf, which mostly worked until Unity Ads: its generated classes fail ART's
+// verifier against the full runtime (`TimestampsOuterClass$Timestamps ... expected GeneratedMessageLite`), so
+// Unity never produced a bidding token and never bid. Now bundletool keeps full protobuf under a package of
+// its own, and com.google.protobuf belongs to lite.
+//
+// The new package has EXACTLY the length of the old one. Generated classes embed their serialized
+// FileDescriptorProto as string constants, and a length-changing rename inside one would corrupt the length
+// prefixes in it. The dotted form is renamed too (reflection by class name), with its trailing dot, so the
+// `java_package = "com.google.protobuf"` option text inside descriptors is left alone.
+//
+// :ide-android removes the four stock jars from its runtime classpath and declares bundletool's remaining
+// runtime dependencies itself. The desktop app is untouched: it has no lite protobuf to collide with.
+val bundletoolUnshaded: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { bundletoolUnshaded(libs.android.bundletool) }
+
+val SHADED_PROTOBUF = mapOf(
+    "com/google/protobuf/" to "dev/ide/shadedproto/",
+    "com.google.protobuf." to "dev.ide.shadedproto.",
+)
+check(SHADED_PROTOBUF.all { (k, v) -> k.length == v.length }) { "the protobuf relocation must keep string lengths" }
+
+fun bundletoolJar(pattern: Regex) =
+    bundletoolUnshaded.elements.map { set -> set.map { it.asFile }.single { pattern.matches(it.name) } }
+
+val shadedBundletoolJars = listOf(
+    "bundletool" to Regex("""bundletool-[\d.]+\.jar"""),
+    "aapt2-proto" to Regex("""aapt2-proto-.+\.jar"""),
+    "protobuf-java" to Regex("""protobuf-java-[\d.]+\.jar"""),
+    "protobuf-java-util" to Regex("""protobuf-java-util-[\d.]+\.jar"""),
+).map { (name, pattern) ->
+    tasks.register<RelocateTypesInJar>("relocateProtobufIn${name.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) }}") {
+        inputJar.fileProvider(bundletoolJar(pattern))
+        outputJar.set(layout.buildDirectory.file("bundletool-shaded/$name-shaded.jar"))
+        renames.putAll(SHADED_PROTOBUF)
+        relocateEntryPaths.set(true)
+    }
+}
+
 // --- javax.xml.stream (StAX API) -----------------------------------------------------------------
 // IntelliJ-core parses its plugin/extension descriptors with StAX, and R8's resource shrinker parses `res/raw`
 // keep files with it. The implementation (aalto + stax2) reaches the app through :kotlin-compiler-deps, but the
@@ -239,6 +284,14 @@ val mergeCompatJars = tasks.register<Jar>("mergeCompatJars") {
     // build rather than resolve silently to whichever jar happened to be listed first.
     duplicatesStrategy = DuplicatesStrategy.FAIL
     exclude(".api_description", ".options", "about.html", "plugin.properties")
+    // The relocated bundletool jars each carry their own license/notice files at the same paths.
+    exclude("NOTICE", "LICENSE", "NOTICE.txt", "LICENSE.txt")
+    // bundletool's pre-dexed "archived app" stubs: unused by the on-device build, and a jar mixing .dex with
+    // .class is one whole-program R8 refuses (the `minified` variant).
+    exclude("com/android/tools/build/bundletool/archive/dex/**")
+    // protobuf's .proto sources (google/protobuf/*.proto): not read at runtime, and protobuf lite ships the
+    // same files, so keeping these is a duplicate-resource failure in :ide-android.
+    exclude("google/protobuf/**")
     // Each source jar's own manifest goes; the Jar task writes one of its own. Signature files go with
     // them: a signature over one of these jars means nothing once its entries live in another.
     exclude("META-INF/MANIFEST.MF", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
@@ -250,6 +303,7 @@ val mergeCompatJars = tasks.register<Jar>("mergeCompatJars") {
     from(relocateEcjForArt.map { zipTree(it.outputJar) })
     from(relocateCoreRuntimeForArt.map { zipTree(it.outputJar) })
     from(relocateEquinoxCommonForArt.map { zipTree(it.outputJar) })
+    shadedBundletoolJars.forEach { task -> from(task.map { zipTree(it.outputJar) }) }
     from(artShimsJar.map { zipTree(it.archiveFile) })
     from(generateStaxApiJar.map { zipTree(it.archiveFile) })
     // A plain `register` task (no typed output property), so reach the jar through the task's declared

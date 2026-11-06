@@ -103,6 +103,7 @@ import dev.ide.ui.generated.resources.buildc_status_idle
 import dev.ide.ui.generated.resources.buildc_status_running
 import dev.ide.ui.generated.resources.buildc_status_succeeded
 import dev.ide.ui.generated.resources.buildc_status_failed
+import dev.ide.ui.generated.resources.run_stopped
 import dev.ide.ui.generated.resources.buildc_copied
 import dev.ide.ui.generated.resources.buildc_copy
 import dev.ide.ui.generated.resources.buildc_working
@@ -258,10 +259,11 @@ fun BuildConsole(
                 BuildTab.Logcat -> LtrContent { LogcatTab(appLog) { backend?.build?.clearAppLog() } }
             }
         }
-        // A compact native ad in the console footer, only while nothing is building — a natural pause, never
-        // over a running build — and only in a console tall enough to spare the room. Renders nothing unless ads
-        // are active.
-        if (!running) FooterAdSlot(AdPlacement.BUILD_CONSOLE, paneHeight)
+        // The console footer's ad: a compact native card while nothing is building (a natural pause), and a
+        // banner a few seconds into a running build, while the log is being watched rather than tapped. Each only
+        // in a console tall enough to spare the room; neither renders unless ads are active.
+        if (running) BuildRunningBannerSlot(paneHeight, Modifier.chromePadding())
+        else FooterAdSlot(AdPlacement.BUILD_CONSOLE, paneHeight)
     }
     }
     }
@@ -328,7 +330,9 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        SeasonalBuildGlyph(state.status, size = 18.dp) {
+            Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text(
             stringResource(Res.string.buildc_build),
             color = MaterialTheme.colorScheme.onSurface,
@@ -365,7 +369,7 @@ private fun Header(
                 softWrap = false
             )
         }
-        StatusPill(state.status)
+        StatusPill(state.status, state.stopped)
         // The window's actions fade when the console is idle and not hovered (see ToolWindowFrame); the
         // build's own status above stays.
         Row(
@@ -412,8 +416,9 @@ private fun MiniCount(icon: ImageVector, count: Int, color: Color) {
 }
 
 @Composable
-private fun StatusPill(status: RunStatus) {
+private fun StatusPill(status: RunStatus, stopped: Boolean = false) {
     val (text, color) = when (status) {
+        RunStatus.Failed if stopped -> stringResource(Res.string.run_stopped) to MaterialTheme.colorScheme.onSurfaceVariant
         RunStatus.Idle -> stringResource(Res.string.buildc_status_idle) to MaterialTheme.colorScheme.onSurfaceVariant
         RunStatus.Running -> stringResource(Res.string.buildc_status_running) to MaterialTheme.colorScheme.primary
         RunStatus.Succeeded -> stringResource(Res.string.buildc_status_succeeded) to Ide.colors.run
@@ -565,12 +570,16 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
             )
             Text("$done/$total", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.fillMaxWidth().height(3.dp),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        )
+        if (isHalloween()) {
+            PumpkinProgress(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp))
+        } else {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            )
+        }
     }
 }
 
@@ -1108,7 +1117,14 @@ private fun LogLineRow(
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.TopStart)
-                    .graphicsLayer { translationX = reveal() - slotPx },
+                    .graphicsLayer {
+                        val r = reveal()
+                        translationX = r - slotPx
+                        // Parked, it sits one slot to the left of the row's start, but the row is padded on
+                        // that side and a label wider than the slot minus the padding showed its last digits
+                        // there at rest ("8 > Task :app:..."). Hidden until a drag brings it in.
+                        alpha = (r / slotPx).coerceIn(0f, 1f)
+                    },
             )
         }
         return

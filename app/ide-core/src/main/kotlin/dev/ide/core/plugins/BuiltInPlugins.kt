@@ -155,6 +155,8 @@ import dev.ide.lang.xml.lint.XmlAnalysisSupport
 import dev.ide.model.FACET_CODEC_EP
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FileIconRegistry
+import dev.ide.model.ANDROID_MODULES
+import dev.ide.model.MODULE_DEPENDENCIES
 import dev.ide.model.MODULE_RESOURCES
 import dev.ide.model.MODULE_SOURCES
 import dev.ide.model.ModuleTypeRegistry
@@ -232,6 +234,7 @@ object BuiltInPlugins {
         BuiltInPlugin(KotlinAnalysisPlugin()),
         BuiltInPlugin(PackageMismatchPlugin()),
         BuiltInPlugin(ManifestPermissionPlugin(env)),
+        BuiltInPlugin(MissingLibraryPlugin(env)),
         BuiltInPlugin(XmlAnalysisPlugin(env)),
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
@@ -794,6 +797,28 @@ private class ManifestPermissionPlugin(private val env: ApplicationEnvironment) 
 }
 
 /**
+ * "Add library …" on an unresolved import, unknown class name or XML view tag (Java, Kotlin, XML): adds the
+ * library that provides it to the module. See [dev.ide.core.analysis.MissingLibraryFixProvider].
+ */
+private class MissingLibraryPlugin(private val env: ApplicationEnvironment) : Plugin {
+    override val manifest = PluginManifest(
+        id = "missing-library-fix",
+        name = "Missing Library Fix",
+        description = "Offers to add the library an unresolved import, class or layout tag comes from.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(
+            QUICK_FIX_PROVIDER_EP,
+            dev.ide.core.analysis.MissingLibraryFixProvider(
+                missing = { env.activeEngine?.dependencies?.missingLibraries },
+                diagnosticsOf = { file -> env.activeEngine?.publishedDiagnostics(file).orEmpty() },
+            ),
+        )
+    }
+}
+
+/**
  * The XML editor diagnostics, wired to the active engine's per-project resource host + Android attribute
  * schema + element catalog (all three resolve `env.activeEngine` lazily). Attributed to
  * `PluginId("xml-analysis")` by the facade.
@@ -935,8 +960,15 @@ private class IdeCoreServicesPlugin : Plugin {
             AndroidResourceService(getService(ENGINE_CONTEXT))
         }
         reg.service(MODULE_RESOURCES, ServiceScopeLevel.WORKSPACE) { getService(ANDROID_RESOURCE_SERVICE) }
+        // Published only, no internal key: nothing in the engine needs this view, it reads the facets directly.
+        reg.service(MODULE_DEPENDENCIES, ServiceScopeLevel.WORKSPACE) {
+            dev.ide.core.services.ModuleDependenciesService(getService(DEPENDENCY_SERVICE))
+        }
+        reg.service(ANDROID_MODULES, ServiceScopeLevel.WORKSPACE) {
+            dev.ide.core.services.AndroidModulesService(getService(ENGINE_CONTEXT))
+        }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
-            RefactorService(getService(ENGINE_CONTEXT))
+            RefactorService(getService(ENGINE_CONTEXT), getService(KOTLIN_EDITOR_SERVICE))
         }
         reg.service(APP_RENAME_SERVICE, ServiceScopeLevel.WORKSPACE) {
             AppRenameService(getService(ENGINE_CONTEXT))

@@ -30,6 +30,10 @@ import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertTrue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.layout.onGloballyPositioned
 
 /**
  * Off-screen PNGs of the chat drawer in both themes, so the Material 3 / Material You restyle can be
@@ -167,11 +171,57 @@ class ChatDrawerSnapshot {
         }
     }
 
+    /**
+     * Opening the model picker from a tool window's header leaves the header a strip and the conversation in place.
+     * The picker's dialog is an in-layout overlay; composed beside the chip it landed in the host header's row,
+     * stretched that row to the drawer's full height and left the conversation none (a phone report, in Arabic,
+     * of the header floating mid-drawer over an empty panel).
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun openingTheModelPickerFromAHostHeaderKeepsTheLayout() {
+        var headerPx = 0
+        var bodyPx = 0
+        // 312dp: the phone drawer's width on a 360dp screen.
+        val scene = ImageComposeScene(width = 624, height = 1600, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                val slots = dev.ide.ui.components.rememberToolWindowHeaderSlots()
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.onGloballyPositioned { headerPx = it.size.height }) {
+                        dev.ide.ui.components.ToolWindowHeader("AI", slots.of("ai"), onHide = {})
+                    }
+                    Box(Modifier.weight(1f).fillMaxSize().onGloballyPositioned { bodyPx = it.size.height }) {
+                        androidx.compose.runtime.CompositionLocalProvider(dev.ide.ui.components.LocalToolWindowHeader provides slots.of("ai")) {
+                            ChatDrawer(backend(UiAgentChatState(messages = emptyList(), busy = false)), onClose = {})
+                        }
+                    }
+                }
+            }
+        }
+        try {
+            for (frame in 0..20) scene.render(frame * 16_666_667L)
+            assertTrue(headerPx in 1..160, "header before opening: $headerPx px")
+            // The model chip sits just after the title, at the start of the header.
+            val chip = Offset(120f, headerPx / 2f)
+            scene.sendPointerEvent(PointerEventType.Press, chip)
+            scene.sendPointerEvent(PointerEventType.Release, chip)
+            for (frame in 21..60) scene.render(frame * 16_666_667L)
+            assertTrue(headerPx in 1..160, "the picker stretched the header to $headerPx px")
+            assertTrue(bodyPx > 1200, "the conversation was squeezed to $bodyPx px")
+        } finally {
+            scene.close()
+        }
+    }
+
     private fun backend(
         state: UiAgentChatState = UiAgentChatState(messages = transcript(), busy = false),
         permission: UiAgentPermissionRequest? = null,
+        usage: dev.ide.ui.backend.UiAgentUsageLimits? = null,
+        openRouter: Boolean = false,
     ): StubBackend = object : StubBackend() {
         override val agent: AgentService = object : AgentService {
+            override val usageLimits: StateFlow<dev.ide.ui.backend.UiAgentUsageLimits?> = MutableStateFlow(usage)
+            override fun openRouterSignInSupported() = openRouter
             override val chatState: StateFlow<UiAgentChatState> = MutableStateFlow(state)
             override val permissionRequest: StateFlow<UiAgentPermissionRequest?> = MutableStateFlow(permission)
             override val models: StateFlow<List<UiAgentModel>> =
@@ -184,8 +234,9 @@ class ChatDrawerSnapshot {
                         listOf(UiAgentModel("claude-opus-5", "Claude Opus 5")), "claude-opus-5", "sk-live",
                         backupKeys = listOf("sk-backup-1", "sk-backup-2"),
                     ),
+                    UiAgentProvider("openrouter", "OpenRouter", emptyList(), "qwen/qwen3-coder:free", ""),
                 ),
-                selectedProvider = "anthropic",
+                selectedProvider = if (openRouter) "openrouter" else "anthropic",
                 model = "claude-opus-5",
                 configured = true,
                 mode = UiAgentPermissionMode.AUTO_ACCEPT,
@@ -255,6 +306,94 @@ class ChatDrawerSnapshot {
     @Test
     fun renderProvidersSheetDark() {
         snapshot("providers-dark.png", dark = true) { Sheet() }
+    }
+
+    /** A free OpenRouter account most of the way through its day, with a spending cap as well. */
+    private val nearLimit = dev.ide.ui.backend.UiAgentUsageLimits(
+        providerName = "OpenRouter",
+        reported = true,
+        meters = listOf(
+            dev.ide.ui.backend.UiUsageMeter(dev.ide.ui.backend.UiUsageMeterKind.FREE_REQUESTS, 43.0, 50.0, System.currentTimeMillis() + 5 * 3_600_000L + 12 * 60_000L),
+            dev.ide.ui.backend.UiUsageMeter(dev.ide.ui.backend.UiUsageMeterKind.SPEND, 1.2, 5.0, System.currentTimeMillis() + 9 * 86_400_000L),
+        ),
+        spentTodayUsd = 0.0,
+        spentMonthUsd = 1.2,
+        usingFreeModel = true,
+    )
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderUsageSheetDark() {
+        snapshot("usage-dark.png", dark = true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) { AgentUsageSheet(backend(usage = nearLimit)) {} }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderUsageSheetLight() {
+        snapshot("usage-light.png", dark = false) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) { AgentUsageSheet(backend(usage = nearLimit)) {} }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderUsageWarningLight() {
+        snapshot("usage-warning-light.png", dark = false) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) { ChatDrawer(backend(usage = nearLimit), onClose = {}) }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderOpenRouterSignInLight() {
+        snapshot("openrouter-signin-light.png", dark = false) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) { AgentProvidersSheet(backend(openRouter = true)) {} }
+        }
+    }
+
+    /** OpenRouter's list is hundreds long; this stands in for it. */
+    private val openRouterModels: List<UiAgentModel> = buildList {
+        val vendors = listOf("anthropic" to "Anthropic", "openai" to "OpenAI", "google" to "Google", "qwen" to "Qwen", "meta-llama" to "Meta", "deepseek" to "DeepSeek", "mistralai" to "Mistral")
+        vendors.forEach { (id, name) ->
+            (1..30).forEach { i -> add(UiAgentModel("$id/model-$i", "$name: Model $i")) }
+            add(UiAgentModel("$id/coder:free", "$name: Coder (free)"))
+        }
+        add(UiAgentModel("anthropic/claude-sonnet-5", "Anthropic: Claude Sonnet 5"))
+        add(UiAgentModel("qwen/qwen3-coder:free", "Qwen: Qwen3 Coder (free)"))
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderModelPickerLight() {
+        snapshot("model-picker-light.png", dark = false) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                ModelPickerDialog(
+                    models = openRouterModels,
+                    current = "qwen/qwen3-coder:free",
+                    favorites = setOf("anthropic/claude-sonnet-5"),
+                    recents = listOf("qwen/qwen3-coder:free", "deepseek/model-3"),
+                    onPick = {}, onToggleFavorite = { _, _ -> }, onDismiss = {},
+                )
+            }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderModelPickerDark() {
+        snapshot("model-picker-dark.png", dark = true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                ModelPickerDialog(
+                    models = openRouterModels,
+                    current = "qwen/qwen3-coder:free",
+                    favorites = setOf("anthropic/claude-sonnet-5"),
+                    recents = listOf("qwen/qwen3-coder:free", "deepseek/model-3"),
+                    onPick = {}, onToggleFavorite = { _, _ -> }, onDismiss = {},
+                )
+            }
+        }
     }
 
     @OptIn(ExperimentalComposeUiApi::class)

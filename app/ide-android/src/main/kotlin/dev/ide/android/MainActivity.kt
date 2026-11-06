@@ -1,5 +1,7 @@
 package dev.ide.android
 
+import dev.ide.core.settings.AppIcons
+import dev.ide.core.settings.BuiltInSettingsPages
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -48,7 +50,7 @@ private const val ADS_STARTUP_DELAY_MS = 5_000L
  * ad init, source-root search) in AndroidHostUi. This activity is just lifecycle + the Compose host + the SAF
  * launchers (which must be remembered in composition). A splash shows while the engine starts.
  */
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
 
     private var session: AndroidIde.Session? = null
 
@@ -60,6 +62,12 @@ class MainActivity : ComponentActivity() {
 
     /** UMP consent flow (gathers ad consent before AdMob init; drives the "Manage ad consent" Settings entry). */
     private val adConsent by lazy { AdConsentManager(this) }
+
+    @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
+    private fun shareResourceContext() = org.jetbrains.compose.resources.setResourceReaderAndroidContext(applicationContext)
+
+    /** True in the plugin sandbox's process: a throwaway IDE for a plugin build, with no ads. */
+    private val inSandbox by lazy { dev.ide.android.plugins.SandboxProcess.isSandbox(this) }
 
     /**
      * A store sign-in redirect that arrived before the engine finished booting.
@@ -78,6 +86,14 @@ class MainActivity : ComponentActivity() {
      */
     private val storeLink = mutableStateOf<String?>(null)
 
+    /** What a tapped tray notification is about, pending the composition that can open it. Held here for the
+     *  same reason [storeLink] is. */
+    private val notificationTarget = mutableStateOf<dev.ide.ui.backend.UiNotificationTarget?>(null)
+
+    /** Whether the user has a project open in the editor, as the shared UI reports it. A source file handed in
+     *  by "Open with" goes into that project, and waits while there is none. */
+    private val projectOpen = mutableStateOf(false)
+
     /** Whether the UMP consent flow has settled (success or failure). Ads wait for it, see [ADS_STARTUP_DELAY_MS]. */
     private val adConsentResolved = mutableStateOf(false)
 
@@ -87,13 +103,23 @@ class MainActivity : ComponentActivity() {
         // `SystemBarStyle.dark` here forced light icons even in light mode.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Compose resources find their Context through a ContentProvider, and providers only start in the app's
+        // main process. The plugin sandbox runs this activity in its own process, where every stringResource()
+        // threw "Android context is not initialized" on the first frame; hand the context over directly.
+        if (inSandbox) shareResourceContext()
+        // Lets Settings offer "App icon"; the engine shared with the desktop has no launcher of its own.
+        AppIcons.host = AndroidAppIcons(applicationContext)
         // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
         // taken for a file to import.
-        if (!takeAuthRedirect(intent) && !takeStoreLink(intent)) inbound.value = extractStream(intent)
+        if (!takeAuthRedirect(intent) && !takeStoreLink(intent) && !takeAgentReturn(intent) && !takeNotificationTap(intent)) {
+            inbound.value = extractStream(intent)
+        }
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement). Failure resolves
         // too, so a consent hiccup never blocks the IDE. The SDK itself starts later, once launch has settled
         // (see the LaunchedEffect below the ad host).
-        adConsent.gather(this) { adConsentResolved.value = true }
+        // The plugin sandbox (this activity's subclass, in its own process) shows no ads, so it asks for no
+        // ad consent either.
+        if (!inSandbox) adConsent.gather(this) { adConsentResolved.value = true }
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
@@ -101,6 +127,9 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                     session = s; backend = s.backend
+                    // Bring the launcher in line with the saved choice. They only disagree after something
+                    // reset one and not the other, such as a backup restored onto a fresh install.
+                    s.backend.settings.preference(BuiltInSettingsPages.APP_ICON_KEY)?.let { AppIcons.host?.apply(it) }
                     AndroidFrameMetrics.register(this@MainActivity, s.backend)
                     // A redirect that landed mid-bootstrap now has somewhere to go.
                     deliverAuthRedirect()
@@ -109,22 +138,34 @@ class MainActivity : ComponentActivity() {
 
             // POST_NOTIFICATIONS (Android 13+/API 33) is asked for at the FIRST build, not here at launch, so the
             // request lands in context — see BuildNotificationGate (:ide-ui). Nothing to request in this activity.
+            // Activity results arrive on the main thread, but reading a picked document is I/O against whatever
+            // provider owns it, and a cloud one (Drive, a slow SD card) can take seconds: importUri on main showed
+            // up in ANR reports. Every content-resolver read or write below runs on IO and calls back on main.
+            val hostScope = rememberCoroutineScope()
             var pendingTarget by remember { mutableStateOf<String?>(null) }
             var pendingCallback by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
             val importLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
                     val b = backend
                     val target = pendingTarget
-                    val created =
-                        if (b != null && target != null) uris.mapNotNull { fileOps.importUri(it, target, b) } else emptyList()
-                    pendingCallback?.invoke(created)
+                    val cb = pendingCallback
                     pendingTarget = null; pendingCallback = null
+                    if (b == null || target == null || uris.isEmpty()) { cb?.invoke(emptyList()); return@rememberLauncherForActivityResult }
+                    hostScope.launch {
+                        val created = withContext(Dispatchers.IO) { uris.mapNotNull { fileOps.importUri(it, target, b) } }
+                        cb?.invoke(created)
+                    }
                 }
             var pendingPick by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             val pickLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    pendingPick?.invoke(uri?.let { fileOps.copyUriToCache(it) })
+                    val cb = pendingPick
                     pendingPick = null
+                    if (uri == null) { cb?.invoke(null); return@rememberLauncherForActivityResult }
+                    hostScope.launch {
+                        val path = withContext(Dispatchers.IO) { fileOps.copyUriToCache(uri) }
+                        cb?.invoke(path)
+                    }
                 }
             // Camera capture for the AI chat: the camera app writes into a FileProvider URI we hand it.
             var pendingPhoto by remember { mutableStateOf<Pair<File, (String?) -> Unit>?>(null) }
@@ -137,7 +178,6 @@ class MainActivity : ComponentActivity() {
                 }
             // Directory picker (Gradle import): SAF hands back a content:// tree, so copy it into local
             // storage off the main thread and return that path — the copy can be large, hence the coroutine.
-            val hostScope = rememberCoroutineScope()
             var pendingPickDir by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             val pickDirLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -156,7 +196,14 @@ class MainActivity : ComponentActivity() {
                 rememberLauncherForActivityResult(ExportDocumentContract()) { uri ->
                     val src = pendingExport
                     pendingExport = null
-                    if (uri != null && src != null) fileOps.exportTo(uri, src)
+                    if (uri != null && src != null) hostScope.launch {
+                        val ok = withContext(Dispatchers.IO) { fileOps.exportTo(uri, src) }
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (ok) "Exported ${File(src).name}" else "Couldn't export file",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 }
             val fileActions = remember {
                 object : FileActions {
@@ -177,10 +224,12 @@ class MainActivity : ComponentActivity() {
                         pendingPick = onPicked
                         // Custom extensions (e.g. .caproj) have no registered MIME, so when any of them lacks one fall
                         // back to */* and let the caller validate the picked file (narrowing to the known ones would
-                        // hide the rest); only all-known extensions narrow the SAF picker.
+                        // hide the rest); only all-known extensions narrow the SAF picker. No extensions means any
+                        // file: an empty MIME list matches nothing, and the picker opens with no items and no roots.
                         val mimes = extensions.mapNotNull { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+                        val any = extensions.isEmpty() || mimes.size < extensions.size
                         try {
-                            pickLauncher.launch(if (mimes.size < extensions.size) arrayOf("*/*") else mimes.toTypedArray())
+                            pickLauncher.launch(if (any) arrayOf("*/*") else mimes.toTypedArray())
                         } catch (e: ActivityNotFoundException) {
                             // Some ROMs ship no SAF/documents provider; don't crash — signal cancel + tell the user.
                             pendingPick = null
@@ -206,7 +255,9 @@ class MainActivity : ComponentActivity() {
                     override val canPasteImage: Boolean = true
                     override fun hasClipboardImage(): Boolean = fileOps.clipboardHasImage()
                     override fun pasteImage(onPasted: (String?) -> Unit) {
-                        onPasted(fileOps.clipboardImageUri()?.let { fileOps.copyUriToCache(it) })
+                        // The clipboard is read here on main; copying the image out of its provider is not.
+                        val uri = fileOps.clipboardImageUri() ?: return onPasted(null)
+                        hostScope.launch { onPasted(withContext(Dispatchers.IO) { fileOps.copyUriToCache(uri) }) }
                     }
 
                     override val canPickDirectory: Boolean = true
@@ -269,7 +320,7 @@ class MainActivity : ComponentActivity() {
             // wait (see AndroidAdHost.start); one that is gone by then never requests.
             val engineUp = backend != null
             LaunchedEffect(engineUp, adConsentResolved.value) {
-                if (!engineUp || !adConsentResolved.value) return@LaunchedEffect
+                if (!engineUp || !adConsentResolved.value || inSandbox) return@LaunchedEffect
                 delay(ADS_STARTUP_DELAY_MS)
                 // Off the main thread, as the SDK asks: initialize() loads WebView classes and builds package
                 // contexts synchronously before its async part, and that stall showed up in ANR reports.
@@ -279,28 +330,44 @@ class MainActivity : ComponentActivity() {
 
             // A `.caproj` package or a `.zip` handed in via "Open with" goes to project import (a package's preview,
             // or the project inside the zip); any other inbound file is copied into the open project's first
-            // source root as before.
+            // source root. With no project open it waits for one (said once): a project closed behind Home is
+            // still loaded, and the file used to be copied into it without a word about where it went.
             var importPackagePath by remember { mutableStateOf<String?>(null) }
-            LaunchedEffect(backend, inbound.value) {
+            var waitingAnnounced by remember { mutableStateOf<Uri?>(null) }
+            val open = projectOpen.value
+            LaunchedEffect(backend, inbound.value, open) {
                 val b = backend
                 val uri = inbound.value
                 if (b != null && uri != null) {
-                    val name = fileOps.queryDisplayName(uri) ?: ""
+                    // Provider queries, the tree walk and the copy are all I/O, so none of them run on main.
+                    val (name, type) = withContext(Dispatchers.IO) {
+                        (fileOps.queryDisplayName(uri) ?: "") to runCatching { contentResolver.getType(uri) }.getOrNull()
+                    }
                     val archive = name.endsWith(".zip", ignoreCase = true) ||
-                        contentResolver.getType(uri) in setOf("application/zip", "application/x-zip-compressed")
+                        type in setOf("application/zip", "application/x-zip-compressed")
                     if (name.endsWith(".${CaprojFormat.EXTENSION}", ignoreCase = true) || archive) {
                         val path = withContext(Dispatchers.IO) { fileOps.copyInboundToCache(uri, name) }
                         if (path != null) importPackagePath = path
                         else Toast.makeText(this@MainActivity, "Couldn't open the project file", Toast.LENGTH_SHORT).show()
+                    } else if (!open) {
+                        if (waitingAnnounced != uri) {
+                            waitingAnnounced = uri
+                            val shown = name.ifBlank { "the file" }
+                            Toast.makeText(this@MainActivity, "Open a project to add $shown to it", Toast.LENGTH_LONG).show()
+                        }
+                        return@LaunchedEffect
                     } else {
-                        val target = firstSourceRoot(b.files.fileTree())
-                        val path = if (target != null) fileOps.importUri(uri, target, b) else null
+                        val projectName = b.project.name
+                        val path = withContext(Dispatchers.IO) {
+                            firstSourceRoot(b.files.fileTree())?.let { target -> fileOps.importUri(uri, target, b) }
+                        }
                         Toast.makeText(
                             this@MainActivity,
-                            if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
+                            if (path != null) "Imported ${File(path).name} into $projectName" else "Couldn't import file",
                             Toast.LENGTH_SHORT,
                         ).show()
                     }
+                    waitingAnnounced = null
                     inbound.value = null
                 }
             }
@@ -317,15 +384,22 @@ class MainActivity : ComponentActivity() {
                 onDispose { registration?.dispose() }
             }
             when {
-                b != null -> CodeAssistApp(
-                    b,
-                    fileActions = fileActions,
-                    adHost = adHost,
-                    composePreviewHost = previewHost,
-                    importPackagePath = importPackagePath,
-                    openStoreItemId = storeLink.value,
-                    onStoreItemIdHandled = { storeLink.value = null },
-                )
+                b != null -> androidx.compose.foundation.layout.Box {
+                    CodeAssistApp(
+                        b,
+                        fileActions = fileActions,
+                        adHost = adHost,
+                        composePreviewHost = previewHost,
+                        importPackagePath = importPackagePath,
+                        openStoreItemId = storeLink.value,
+                        onStoreItemIdHandled = { storeLink.value = null },
+                        openNotificationTarget = notificationTarget.value,
+                        onNotificationTargetHandled = { notificationTarget.value = null },
+                        onProjectOpenChange = { projectOpen.value = it },
+                    )
+                    // The sandbox looks exactly like the IDE it was started from; say which one this is.
+                    if (inSandbox) SandboxBand()
+                }
 
                 error != null -> Splash("Failed to start: $error")
                 else -> Splash("Starting CodeAssist…")
@@ -337,8 +411,21 @@ class MainActivity : ComponentActivity() {
      * An app shortcut pressed while nothing in the Compose content has focus. With a focused node the root
      * listener in [CodeAssistApp] already had it; this only sees a key the content left unconsumed.
      */
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
-        super.dispatchKeyEvent(event) || AppKeys.onKey(androidx.compose.ui.input.key.KeyEvent(event))
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        // Volume keys as cursor keys, when the editor has taken them (opt-in setting, keyboard up). Both the press
+        // (and its auto-repeat) and the release are swallowed, so the volume panel never shows.
+        val caret = dev.ide.ui.platform.VolumeKeyCaret.handler
+        val dir = when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_VOLUME_UP -> -1
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> 1
+            else -> 0
+        }
+        if (caret != null && dir != 0) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) caret(dir)
+            return true
+        }
+        return super.dispatchKeyEvent(event) || AppKeys.onKey(androidx.compose.ui.input.key.KeyEvent(event))
+    }
 
     /** The app's shortcuts in Android's Keyboard Shortcuts list (Meta+/). */
     override fun onProvideKeyboardShortcuts(
@@ -355,6 +442,8 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (takeAuthRedirect(intent)) return
         if (takeStoreLink(intent)) return
+        if (takeAgentReturn(intent)) return
+        if (takeNotificationTap(intent)) return
         extractStream(intent)?.let { inbound.value = it }
     }
 
@@ -371,6 +460,22 @@ class MainActivity : ComponentActivity() {
         if (!dev.ide.store.StoreLink.isStoreLink(url)) return false
         // A bare `codeassist://store` names no item, which the app reads as "the Store tab".
         storeLink.value = dev.ide.store.StoreLink.itemId(url) ?: ""
+        intent.data = null
+        return true
+    }
+
+    /** Claim [intent] if a tray notification was tapped: its target is opened once the UI can act on it. */
+    private fun takeNotificationTap(intent: Intent?): Boolean =
+        NotificationTargets.take(intent) { target -> target?.let { notificationTarget.value = it } }
+
+    /**
+     * Claim [intent] if it is the "Back to CodeAssist" link from the OpenRouter sign-in page. Arriving here already
+     * brought the app forward, which is all it is for; the URI is cleared so it is never read as a file to open.
+     */
+    private fun takeAgentReturn(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_VIEW) return false
+        val data = intent.data ?: return false
+        if (data.scheme != "codeassist" || data.host != "agent") return false
         intent.data = null
         return true
     }

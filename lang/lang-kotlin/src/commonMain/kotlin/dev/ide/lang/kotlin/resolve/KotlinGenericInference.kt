@@ -1,6 +1,9 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
+import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
@@ -144,7 +147,9 @@ internal fun KotlinResolver.inferTypeArguments(
             (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
                 ?: return@forEachIndexed
         if (expr is KtLambdaExpression) bindLambdaReturn(pt, expr, bindings)
-        else inferType(expr)?.let { unify(pt, it, bindings) }
+        // A spread `*arr` fills the vararg with the array's ELEMENTS: `listOf(*arr)` binds T to the element.
+        else inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
+            ?.let { unify(pt, it, bindings) }
     }
     return bindings
 }
@@ -174,6 +179,11 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
     expectedTypeAt(call.textRange.startOffset)?.let { exp ->
         if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
     }
+    // Likewise the RESULT of a lambda whose expected return type is concrete: `transitionSpec = { spring() }`
+    // fills `Segment<S>.() -> FiniteAnimationSpec<Dp>`, which pins `spring`'s T to Dp.
+    lambdaResultSlotType(call)?.let { exp ->
+        if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
+    }
     val bound = inferTypeArguments(sym, call).keys
     val supplied = suppliedValueParameterIndices(sym, call)
     return sym.typeParameters.filter { tp ->
@@ -182,6 +192,16 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
         val mentioning = sym.paramTypes.indices.filter { mentionsTypeParam(sym.paramTypes[it], tp) }
         mentioning.isNotEmpty() && mentioning.none { it in supplied }
     }
+}
+
+/** The return type a lambda expects when [call] (or the qualified expression it ends) is that lambda's LAST
+ *  statement, i.e. its result. Null anywhere else, or when the lambda's expected shape is unknown. */
+private fun KotlinResolver.lambdaResultSlotType(call: KtCallExpression): KotlinType? {
+    val e: KtExpression = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call } ?: call
+    val block = e.parent as? KtBlockExpression ?: return null
+    if (block.statements.lastOrNull() !== e) return null
+    val lambda = (block.parent as? KtFunctionLiteral)?.parent as? KtLambdaExpression ?: return null
+    return expectedLambdaShape(lambda)?.returnType as? KotlinType
 }
 
 /** Whether the type reference [t] is, or nests, the type parameter named [name]. */
@@ -254,13 +274,18 @@ internal fun KotlinResolver.bindingsFromValueArgs(
     sym: KotlinSymbol,
     call: KtCallExpression
 ): Map<String, TypeRef> =
-    bindingsFromArgExprs(sym, call.valueArguments.map { it.getArgumentExpression() })
+    bindingsFromArgExprs(
+        sym, call.valueArguments.map { it.getArgumentExpression() },
+        spread = call.valueArguments.indices.filterTo(HashSet()) { call.valueArguments[it].getSpreadElement() != null },
+    )
 
 /** [bindingsFromValueArgs] over bare argument EXPRESSIONS, for a call site that is not a [KtCallExpression] —
  *  an operator convention (`a[i]`, `a(i)`), whose operands fill the operator's value parameters just the same. */
 internal fun KotlinResolver.bindingsFromArgExprs(
     sym: KotlinSymbol,
-    args: List<KtExpression?>
+    args: List<KtExpression?>,
+    /** Indices of SPREAD arguments (`*arr`), which bind a vararg by their ELEMENT type. */
+    spread: Set<Int> = emptySet(),
 ): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
@@ -275,7 +300,7 @@ internal fun KotlinResolver.bindingsFromArgExprs(
         val paramIndex = if (sym.varargParamIndex in 0..<i) sym.varargParamIndex else i
         val pt = (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
-        inferType(expr)?.let { unify(pt, it, bindings) }
+        inferType(expr)?.let { if (i in spread) spreadElementType(it) else it }?.let { unify(pt, it, bindings) }
     }
     return bindings
 }

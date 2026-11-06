@@ -1,6 +1,75 @@
-# The compiled surface of io.github.tyron12233:project-model-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:project-model-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/model/AndroidBuildFeatures
+	kind interface
+	method abstract getBuildConfig()Z
+	method abstract getCompose()Z
+	method abstract getParcelize()Z
+	method abstract getSerialization()Z
+	method abstract getViewBinding()Z
+dev/ide/model/AndroidBuildType
+	kind interface
+	method abstract getApplicationIdSuffix()Ljava/lang/String;
+	method abstract getDebuggable()Z
+	method abstract getMinifyEnabled()Z
+	method abstract getName()Ljava/lang/String;
+	method abstract getShrinkResources()Z
+	method abstract getVersionNameSuffix()Ljava/lang/String;
+dev/ide/model/AndroidModuleInfo
+	kind interface
+	method abstract getActiveVariant()Ljava/lang/String;
+	method abstract getApplicationId()Ljava/lang/String;
+	method abstract getBuildFeatures()Ldev/ide/model/AndroidBuildFeatures;
+	method abstract getBuildTypes()Ljava/util/List;
+	method abstract getCompileSdk()I
+	method abstract getCoreLibraryDesugaring()Z
+	method abstract getFlavorDimensions()Ljava/util/List;
+	method abstract getManifestPath()Ljava/lang/String;
+	method abstract getManifestPlaceholders()Ljava/util/Map;
+	method abstract getMinSdk()I
+	method abstract getModuleName()Ljava/lang/String;
+	method abstract getNamespace()Ljava/lang/String;
+	method abstract getProductFlavors()Ljava/util/List;
+	method abstract getTargetSdk()I
+	method abstract getVariants()Ljava/util/List;
+	method abstract getVersionCode()Ljava/lang/Integer;
+	method abstract getVersionName()Ljava/lang/String;
+	method abstract isApplication()Z
+dev/ide/model/AndroidModules
+	kind interface
+	method abstract all()Ljava/util/List;
+	method abstract info(Ldev/ide/model/Module;)Ldev/ide/model/AndroidModuleInfo;
+	method abstract info(Ljava/lang/String;)Ldev/ide/model/AndroidModuleInfo;
+dev/ide/model/AndroidModulesKt
+	kind class
+	super java/lang/Object
+	method static getANDROID_MODULES()Ldev/ide/platform/ServiceKey;
+dev/ide/model/AndroidProductFlavor
+	kind interface
+	method abstract getApplicationId()Ljava/lang/String;
+	method abstract getApplicationIdSuffix()Ljava/lang/String;
+	method abstract getDimension()Ljava/lang/String;
+	method abstract getName()Ljava/lang/String;
+	method abstract getVersionName()Ljava/lang/String;
+dev/ide/model/AndroidVariantInfo
+	kind interface
+	method abstract getApplicationId()Ljava/lang/String;
+	method abstract getBuildType()Ljava/lang/String;
+	method abstract getDebuggable()Z
+	method abstract getFlavors()Ljava/util/List;
+	method abstract getMinifyEnabled()Z
+	method abstract getName()Ljava/lang/String;
+dev/ide/model/ArtifactHit
+	kind interface
+	method abstract getCompatible()Z
+	method abstract getCoordinate()Ljava/lang/String;
+	method abstract getIncompatibleReason()Ljava/lang/String;
+	method abstract getPackaging()Ljava/lang/String;
+dev/ide/model/ArtifactSearch
+	kind interface
+	method abstract getHits()Ljava/util/List;
+	method abstract getIndexUnavailable()Z
 dev/ide/model/BuildSystemId
 	kind class
 	super java/lang/Object
@@ -8,12 +77,14 @@ dev/ide/model/BuildSystemId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/BuildSystemId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/BuildSystemId$Companion
 	kind class
 	super java/lang/Object
@@ -40,12 +111,14 @@ dev/ide/model/ClasspathEntryKind
 	method equals(Ljava/lang/Object;)Z
 	method getId()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/ClasspathEntryKind;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/ClasspathEntryKind$Companion
 	kind class
 	super java/lang/Object
@@ -73,12 +146,14 @@ dev/ide/model/ContentRole
 	method equals(Ljava/lang/Object;)Z
 	method getId()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/ContentRole;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/ContentRole$Companion
 	kind class
 	super java/lang/Object
@@ -97,6 +172,10 @@ dev/ide/model/ContentRoot
 	kind interface
 	method abstract getDir()Ldev/ide/vfs/VirtualFile;
 	method abstract getRoles()Ljava/util/Set;
+dev/ide/model/DependencyChange
+	kind interface
+	method abstract getAdded()Z
+	method abstract getMessage()Ljava/lang/String;
 dev/ide/model/DependencyScope
 	kind class
 	super java/lang/Object
@@ -127,6 +206,15 @@ dev/ide/model/DependencyScope$Companion
 	method registered()Ljava/util/List;
 	method valueOf(Ljava/lang/String;)Ldev/ide/model/DependencyScope;
 	method values()Ljava/util/List;
+dev/ide/model/DexCoordinate$FileName
+	kind class
+	super dev/ide/model/DexCoordinate
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+dev/ide/model/DexCoordinate$Maven
+	kind class
+	super dev/ide/model/DexCoordinate
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method getKey()Ljava/lang/String;
 dev/ide/model/Facet
 	kind interface
 	method abstract getKey()Ldev/ide/model/FacetKey;
@@ -297,6 +385,7 @@ dev/ide/model/LanguageLevel
 	method equals(Ljava/lang/Object;)Z
 	method getName()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/LanguageLevel;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
@@ -304,6 +393,7 @@ dev/ide/model/LanguageLevel
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/LanguageLevel$Companion
 	kind class
 	super java/lang/Object
@@ -350,12 +440,14 @@ dev/ide/model/LibraryKind
 	method equals(Ljava/lang/Object;)Z
 	method getName()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/LibraryKind;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/LibraryKind$Companion
 	kind class
 	super java/lang/Object
@@ -371,17 +463,26 @@ dev/ide/model/LibraryRef
 	method equals(Ljava/lang/Object;)Z
 	method getName()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/LibraryRef;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/LibraryTable
 	kind interface
 	method abstract byName(Ljava/lang/String;)Ldev/ide/model/Library;
 	method abstract create(Ljava/lang/String;)Ldev/ide/model/ModifiableLibrary;
 	method abstract getLibraries()Ljava/util/List;
+dev/ide/model/LibraryVariants
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/model/LibraryVariants;
+	method isScoped(Ljava/lang/String;)Z
+	method lookupOrder(Ljava/lang/String;Ljava/lang/String;)Ljava/util/List;
+	method scopedName(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 dev/ide/model/MavenClasspath
 	kind class
 	super java/lang/Object
@@ -399,6 +500,11 @@ dev/ide/model/MavenClasspathKt
 	kind class
 	super java/lang/Object
 	method static dedupeJarsForAndroidDex(Ljava/util/List;)Ljava/util/List;
+dev/ide/model/MavenRepository
+	kind interface
+	method abstract getBuiltIn()Z
+	method abstract getName()Ljava/lang/String;
+	method abstract getUrl()Ljava/lang/String;
 dev/ide/model/ModifiableLibrary
 	kind interface
 	method abstract addClassesRoot(Ldev/ide/vfs/VirtualFile;)V
@@ -445,6 +551,26 @@ dev/ide/model/Module$DefaultImpls
 	method static classpath(Ldev/ide/model/Module;Ldev/ide/model/DependencyScope;ZLjava/util/Set;)Ldev/ide/model/ClasspathSnapshot;
 	method static getOutputDir(Ldev/ide/model/Module;)Ldev/ide/vfs/VirtualFile;
 	method static getSdk-cbQ0_TA(Ldev/ide/model/Module;)Ljava/lang/String;
+dev/ide/model/ModuleDependencies
+	kind interface
+	method abstract add(Ldev/ide/model/Module;Ljava/lang/String;Ldev/ide/model/DependencyScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract addPlatform(Ldev/ide/model/Module;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract addRepository(Ljava/lang/String;Ljava/lang/String;)Z
+	method abstract repositories()Ljava/util/List;
+	method abstract resolved(Ldev/ide/model/Module;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract search(Ljava/lang/String;Ldev/ide/model/Module;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract versions(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static add$default(Ldev/ide/model/ModuleDependencies;Ldev/ide/model/Module;Ljava/lang/String;Ldev/ide/model/DependencyScope;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static search$default(Ldev/ide/model/ModuleDependencies;Ljava/lang/String;Ldev/ide/model/Module;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/model/ModuleDependencies$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static add$default(Ldev/ide/model/ModuleDependencies;Ldev/ide/model/Module;Ljava/lang/String;Ldev/ide/model/DependencyScope;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static search$default(Ldev/ide/model/ModuleDependencies;Ljava/lang/String;Ldev/ide/model/Module;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/model/ModuleDependenciesKt
+	kind class
+	super java/lang/Object
+	method static getMODULE_DEPENDENCIES()Ldev/ide/platform/ServiceKey;
 dev/ide/model/ModuleDependency
 	kind class
 	super java/lang/Object
@@ -470,12 +596,14 @@ dev/ide/model/ModuleId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/ModuleId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/ModuleResources
 	kind interface
 	method abstract createResourceFile(Ldev/ide/model/Module;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/model/ResourceConflict;)Ldev/ide/model/ResourceWrite;
@@ -513,6 +641,11 @@ dev/ide/model/ModuleSources
 	method abstract removeSourceRoot(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 	method abstract sourceSetBaseFor(Ldev/ide/model/Module;Ljava/lang/String;)Ljava/nio/file/Path;
 	method abstract sourceSetNamesOf(Ldev/ide/model/Module;)Ljava/util/List;
+	method setFacetData(Ljava/lang/String;Ldev/ide/model/FacetData;)Z
+dev/ide/model/ModuleSources$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static setFacetData(Ldev/ide/model/ModuleSources;Ljava/lang/String;Ldev/ide/model/FacetData;)Z
 dev/ide/model/ModuleSourcesKt
 	kind class
 	super java/lang/Object
@@ -576,12 +709,14 @@ dev/ide/model/PlatformKind
 	method equals(Ljava/lang/Object;)Z
 	method getName()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/PlatformKind;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/PlatformKind$Companion
 	kind class
 	super java/lang/Object
@@ -591,6 +726,10 @@ dev/ide/model/PlatformKind$Companion
 	method getJVM-9D1Tprg()Ljava/lang/String;
 	method valueOf-DYkJnZc(Ljava/lang/String;)Ljava/lang/String;
 	method values()Ljava/util/List;
+dev/ide/model/PlatformSdkFacet
+	kind interface
+	implements dev/ide/model/Facet
+	method abstract getPreferredSdkName()Ljava/lang/String;
 dev/ide/model/Project
 	kind interface
 	method abstract beginModification()Ldev/ide/model/ProjectModelTransaction;
@@ -608,12 +747,14 @@ dev/ide/model/ProjectId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/ProjectId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/ProjectModelKt
 	kind class
 	super java/lang/Object
@@ -637,6 +778,21 @@ dev/ide/model/ProjectTemplateRegistry
 	method all()Ljava/util/List;
 	method byId-61tHe8o(Ljava/lang/String;)Ldev/ide/model/template/ProjectTemplate;
 	method register-oepbLLw(Ldev/ide/model/template/ProjectTemplate;Ljava/lang/String;)Ldev/ide/platform/Disposable;
+dev/ide/model/ResolvedArtifact
+	kind interface
+	method abstract getCoordinate()Ljava/lang/String;
+	method abstract getDeclared()Z
+	method abstract getDependsOn()Ljava/util/List;
+	method abstract getGroup()Ljava/lang/String;
+	method abstract getName()Ljava/lang/String;
+	method abstract getScope()Ljava/lang/String;
+	method abstract getVersion()Ljava/lang/String;
+dev/ide/model/ResolvedDependencies
+	kind interface
+	method abstract getArtifacts()Ljava/util/List;
+	method abstract getConflicts()Ljava/util/List;
+	method abstract getDeclared()Ljava/util/List;
+	method abstract getUnresolved()Ljava/util/List;
 dev/ide/model/ResourceConflict
 	kind enum
 	super java/lang/Enum
@@ -779,12 +935,14 @@ dev/ide/model/SdkRef
 	method equals(Ljava/lang/Object;)Z
 	method getName()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/SdkRef;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/SdkResolution
 	kind class
 	super java/lang/Object
@@ -842,12 +1000,19 @@ dev/ide/model/VariantId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/VariantId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
+dev/ide/model/VersionConflict
+	kind interface
+	method abstract getArtifact()Ljava/lang/String;
+	method abstract getChosen()Ljava/lang/String;
+	method abstract getRequested()Ljava/util/List;
 dev/ide/model/Workspace
 	kind interface
 	method abstract beginModification()Ldev/ide/model/WorkspaceTransaction;
@@ -1478,12 +1643,14 @@ dev/ide/model/template/TemplateId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/model/template/TemplateId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/model/template/TemplateParameter
 	kind interface
 	method abstract getHelp()Ljava/lang/String;

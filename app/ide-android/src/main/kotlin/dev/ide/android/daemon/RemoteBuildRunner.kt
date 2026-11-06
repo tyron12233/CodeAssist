@@ -59,6 +59,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * stdin, and the run-sandbox [permissionRequest] prompts stream over the same channel (Phase 4).
  */
 class RemoteBuildRunner(context: Context, private val services: IdeServices) : BuildRunner {
+
     private val log = Log.logger("ide.daemon")
     private val appContext = context.applicationContext
     private val workspaceRoot = services.workspaceRoot.toString()
@@ -206,6 +207,17 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
                 dev.ide.android.ApkLauncher.launch(appContext, pkg) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
             }
         },
+        onLaunchPluginSandbox = { path ->
+            // The daemon built the plugin; the sandbox is started from this process, which has the visible activity.
+            val sandbox = dev.ide.android.plugins.AndroidPluginSandbox.current
+            // Off the binder thread: reloading a running sandbox waits on it for seconds, and the daemon's other
+            // callbacks queue behind this one until it returns.
+            if (path.isNotEmpty() && sandbox != null) scope.launch(Dispatchers.IO) {
+                runCatching {
+                    sandbox.launch(java.nio.file.Paths.get(path)) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
+                }
+            }
+        },
         onInstallConfirm = { confirm ->
             dev.ide.android.FullScreenAdGate.runWhenClear {
                 runCatching { appContext.startActivity(confirm.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -225,6 +237,19 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
                 }
             }
             connected = false // the binding auto-restarts the service; onConnected re-drives any pending build
+            // An installed plugin it died in is turned off, or every build would die the same way.
+            DaemonCrashNote.takePluginBlame(appContext)?.let { plugin ->
+                runCatching { pluginCrashHandler?.invoke(plugin) }
+                // The restarted build process reads the disabled set afresh, so the next Run is already without it.
+                if (failedBuild) _buildState.update {
+                    it.copy(
+                        log = it.log + line(
+                            "The build process crashed in the plugin ${plugin.name} ${plugin.version}. It was turned " +
+                                "off; press Run to build without it.",
+                        ),
+                    )
+                }
+            }
             if (failedBuild) explainDeath(pid)
         },
     )
@@ -307,10 +332,13 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // status will ever stream back; resolve the optimistic Running locally so Stop visibly stops and the
         // next Run isn't blocked by the run-conflict gate. A real in-flight build (steps present) terminates
         // through the daemon's own Stopped/Failed delta instead.
+        // Either way it reads as stopped: the daemon's terminal Failed arrives as a copy of this state, flag kept.
         _buildState.update {
-            if (it.status == RunStatus.Running && it.steps.isEmpty()) {
-                it.copy(status = RunStatus.Failed, log = it.log + line("Stopped."))
-            } else it
+            when {
+                it.status != RunStatus.Running -> it
+                it.steps.isEmpty() -> it.copy(status = RunStatus.Failed, stopped = true, log = it.log + line("Stopped."))
+                else -> it.copy(stopped = true)
+            }
         }
     }
 
@@ -357,7 +385,12 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the
         // daemon last opened, this differs and the daemon reloads module.toml before building — otherwise the
         // build would run against the daemon's stale, frozen-at-first-open model.
-        if (connected) runCatching { client.open(workspaceRoot, services.modelGeneration, id) } // → daemon onOpened → runs `pending`
+        // → daemon onOpened → runs `pending`. Off the caller's thread (the Run tap, on main): `open` is oneway, but
+        // a oneway call still blocks while the daemon's async binder buffer is full (Play ANR, 3.38.0).
+        if (connected) {
+            val generation = services.modelGeneration
+            scope.launch(Dispatchers.IO) { runCatching { client.open(workspaceRoot, generation, id) } }
+        }
         armWatchdog()
     }
 
@@ -425,23 +458,27 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         return copy(steps = next)
     }
 
-    private companion object {
-        const val CONSOLE_CHUNK_MAX = 8192
-        const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
+    companion object {
+        /** Set by the UI process: turns off an installed plugin the build process died in. */
+        @Volatile
+        var pluginCrashHandler: ((dev.ide.core.plugins.PluginCrashGuard.Blamed) -> Unit)? = null
+
+        private const val CONSOLE_CHUNK_MAX = 8192
+        private const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
 
         // Handshake watchdog: how often to check, and how long the daemon may stay silent before the first
         // step arrives. Generous — a cold daemon open (model load + engine init, no index) is well under
         // this even on a slow phone, and the daemon logs "loading project…" at open start, resetting the clock.
-        const val WATCHDOG_POLL_MS = 15_000L
-        const val WATCHDOG_SILENCE_MS = 120_000L
+        private const val WATCHDOG_POLL_MS = 15_000L
+        private const val WATCHDOG_SILENCE_MS = 120_000L
 
         // The OS files a dead process's exit record a moment after its binder dies: poll for it this often, this
         // many times (about 3s) before giving up.
-        const val DEATH_RECORD_POLL_MS = 250L
-        const val DEATH_RECORD_POLLS = 12
+        private const val DEATH_RECORD_POLL_MS = 250L
+        private const val DEATH_RECORD_POLLS = 12
 
         // How far before the OS's death timestamp the daemon's own crash note may be written and still belong
         // to that death (the note is written first, and the two clocks are read at different moments).
-        const val CRASH_NOTE_SLACK_MS = 30_000L
+        private const val CRASH_NOTE_SLACK_MS = 30_000L
     }
 }

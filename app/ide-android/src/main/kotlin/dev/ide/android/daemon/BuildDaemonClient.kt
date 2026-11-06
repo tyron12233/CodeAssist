@@ -29,6 +29,8 @@ class BuildDaemonClient(
     private val onPermission: (reqId: Int, category: String, detail: String) -> Unit = { _, _, _ -> },
     /** The daemon installed an android-app APK; launch it here in the UI process (foreground-activity rules). */
     private val onLaunchPackage: (packageName: String) -> Unit = {},
+    /** The daemon built a plugin for "Run plugin in sandbox"; start the sandbox here in the UI process. */
+    private val onLaunchPluginSandbox: (apkPath: String) -> Unit = {},
     /** The daemon's install needs the user to confirm; start the OS confirmation here in the UI process. */
     private val onInstallConfirm: (confirm: android.content.Intent) -> Unit = {},
     /** One forwarded app-log (Logcat) line; [level] is a UiLogLevel ordinal. */
@@ -77,6 +79,7 @@ class BuildDaemonClient(
         }
         override fun onPermission(reqId: Int, category: String?, detail: String?) = onPermission.invoke(reqId, category ?: "", detail ?: "")
         override fun onLaunchPackage(packageName: String?) = onLaunchPackage.invoke(packageName ?: "")
+        override fun onLaunchPluginSandbox(apkPath: String?) = onLaunchPluginSandbox.invoke(apkPath ?: "")
         override fun onInstallConfirm(confirm: android.content.Intent?) {
             onInstallConfirm.invoke(confirm ?: return)
         }

@@ -92,6 +92,73 @@ class ProjectPackagingTest {
         }
     }
 
+    /** A directory the app may not read (left in shared storage by another app) is skipped, not fatal. */
+    @Test
+    fun skipsAnUnreadableDirectoryInsteadOfFailingTheExport() {
+        withTempDir("cm-caproj-denied") { root ->
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            var src = ""
+            var module = ""
+            manager.create("java-console", mapOf("name" to "Denied", "packageName" to "com.acme.d")).use { ide ->
+                src = ide.workspaceRoot.toString()
+                module = ide.moduleNames().first()
+            }
+            val base = Paths.get(src)
+            val locked = base.resolve("$module/locked").also { Files.createDirectories(it) }
+            Files.writeString(locked.resolve("secret.txt"), "x")
+            val lockedFile = locked.toFile()
+            lockedFile.setReadable(false, false); lockedFile.setExecutable(false, false)
+            try {
+                // Running as root (some CI containers) can read it anyway, and then there is nothing to test.
+                if (lockedFile.list() != null) return@withTempDir
+                val meta = ProjectPackaging.ExportMeta(
+                    "Denied", false, null, listOf(ProjectPackaging.ModuleSpec(module, module, "java-lib")),
+                    createdBy = CaprojFormat.APP_NAME, exportedAt = 1L,
+                )
+                val pkg = root.resolve("denied.caproj")
+                ProjectPackaging.export(base, pkg, ProjectPackaging.ExportOptions(false, "", ""), null, meta)
+                val paths = ProjectPackaging.readPreview(pkg)!!.entries.map { it.path }.toSet()
+                assertTrue(paths.any { it.endsWith(".java") }, "the readable sources are still exported: $paths")
+                assertFalse(paths.any { it.contains("/locked/") })
+            } finally {
+                lockedFile.setReadable(true, false); lockedFile.setExecutable(true, false)
+            }
+        }
+    }
+
+    /** A source package named `build` (or `exports`) is the project's; only a module's own output folder is not. */
+    @Test
+    fun keepsSourcePackagesNamedLikeOutputFolders() {
+        withTempDir("cm-caproj-buildpkg") { root ->
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            var src = ""
+            var module = ""
+            manager.create("java-console", mapOf("name" to "Pkg Names", "packageName" to "com.acme.p")).use { ide ->
+                src = ide.workspaceRoot.toString()
+                module = ide.moduleNames().first()
+            }
+            val base = Paths.get(src)
+            fun write(rel: String) = base.resolve(rel).also { Files.createDirectories(it.parent); Files.writeString(it, "x") }
+            write("$module/src/main/java/com/acme/build/Config.java")
+            write("$module/src/main/java/com/acme/exports/Csv.java")
+            write("$module/libs/widget.aar")
+            write("$module/src/main/jniLibs/arm64-v8a/libnative.so")
+            write("$module/build/classes/Out.class")
+            val meta = ProjectPackaging.ExportMeta(
+                "Pkg Names", false, null, listOf(ProjectPackaging.ModuleSpec(module, module, "java-lib")),
+                createdBy = CaprojFormat.APP_NAME, exportedAt = 1L,
+            )
+            val pkg = root.resolve("names.caproj")
+            ProjectPackaging.export(base, pkg, ProjectPackaging.ExportOptions(false, "", ""), null, meta)
+            val paths = ProjectPackaging.readPreview(pkg)!!.entries.map { it.path }.toSet()
+            assertTrue("$module/src/main/java/com/acme/build/Config.java" in paths, "a package named build is source: $paths")
+            assertTrue("$module/src/main/java/com/acme/exports/Csv.java" in paths)
+            assertTrue("$module/libs/widget.aar" in paths)
+            assertTrue("$module/src/main/jniLibs/arm64-v8a/libnative.so" in paths)
+            assertFalse(paths.any { it.startsWith("$module/build/") }, "the module's build output stays out")
+        }
+    }
+
     @Test
     fun roundTripsExploreStoreMetadataAndScreenshots() {
         withTempDir("cm-caproj-store") { root ->

@@ -25,11 +25,38 @@ object StdlibResourceModel : ResourceModel {
     private val ID_BEARING = setOf(ResourceType.LAYOUT, ResourceType.MENU, ResourceType.NAVIGATION, ResourceType.DRAWABLE, ResourceType.XML, ResourceType.TRANSITION)
     private val ID_REF = Regex("""@\+id/([A-Za-z_][\w.]*)""")
 
-    override fun parse(resDirs: List<Path>, textOverride: (Path) -> String?): ResourceRepository {
+    override fun parse(resDirs: List<Path>, textOverride: (Path) -> String?): ResourceRepository =
+        parseWith(resDirs) { kind, file, qualifier -> contribution(kind, file, qualifier, textOverride) }
+
+    /** Which pass reads an XML file: a `values*` file's declarations, or the `@+id/`s in a layout/menu/…. */
+    internal enum class XmlKind { VALUES, IDS }
+
+    /** Parse ONE res XML file on its own: what it adds to a repository, in emission order. */
+    internal fun contribution(kind: XmlKind, file: Path, qualifier: String, textOverride: (Path) -> String?): FileContribution {
+        val c = FileContribution()
+        when (kind) {
+            XmlKind.VALUES -> parseValues(file, qualifier, c.items, c.styleableAttrs, c.styles, c.attrFormats, textOverride)
+            XmlKind.IDS -> scanIds(file, qualifier, c.items, textOverride)
+        }
+        return c
+    }
+
+    /**
+     * Walks [resDirs] in overlay order and assembles the repository, asking [contributionOf] for each XML file's
+     * share. A file's parse reads nothing from the others, so merging per-file contributions in walk order
+     * gives exactly the repository one shared pass would, and a caller may hand back a remembered one.
+     */
+    internal fun parseWith(
+        resDirs: List<Path>,
+        contributionOf: (XmlKind, Path, String) -> FileContribution,
+    ): ResourceRepository {
         val out = ArrayList<ResourceItem>()
         val styleableAttrs = LinkedHashMap<String, List<String>>()
         val styles = LinkedHashMap<String, StyleData>()
         val attrFormats = LinkedHashMap<String, String>()
+        fun merge(c: FileContribution) {
+            out.addAll(c.items); styleableAttrs.putAll(c.styleableAttrs); styles.putAll(c.styles); attrFormats.putAll(c.attrFormats)
+        }
         for (resDir in resDirs) {
             if (!Files.isDirectory(resDir)) continue
             runCatching {
@@ -40,7 +67,7 @@ object StdlibResourceModel : ResourceModel {
                         val base = raw.substringBefore('-')          // strip `-hdpi`, `-night`, `-v21`, …
                         val qualifier = raw.substringAfter('-', "")
                         if (base == "values") {
-                            forEachXml(folder) { parseValues(it, qualifier, out, styleableAttrs, styles, attrFormats, textOverride) }
+                            forEachXml(folder) { merge(contributionOf(XmlKind.VALUES, it, qualifier)) }
                         } else {
                             val type = ResourceType.fromFolder(base) ?: continue
                             Files.newDirectoryStream(folder).use { files ->
@@ -48,13 +75,21 @@ object StdlibResourceModel : ResourceModel {
                                     out += ResourceItem(type, baseName(f.fileName.toString()), source = f, qualifier = qualifier)
                                 }
                             }
-                            if (type in ID_BEARING) forEachXml(folder) { scanIds(it, qualifier, out, textOverride) }
+                            if (type in ID_BEARING) forEachXml(folder) { merge(contributionOf(XmlKind.IDS, it, qualifier)) }
                         }
                     }
                 }
             }
         }
         return ResourceRepository(out, styleableAttrs, styles, attrFormats)
+    }
+
+    /** One file's share of a repository (see [contribution]); kept as-is by [CachingResourceModel]. */
+    internal class FileContribution {
+        val items = ArrayList<ResourceItem>()
+        val styleableAttrs = LinkedHashMap<String, List<String>>()
+        val styles = LinkedHashMap<String, StyleData>()
+        val attrFormats = LinkedHashMap<String, String>()
     }
 
     private fun forEachXml(dir: Path, block: (Path) -> Unit) {

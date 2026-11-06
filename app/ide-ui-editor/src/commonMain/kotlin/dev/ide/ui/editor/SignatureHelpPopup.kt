@@ -101,7 +101,7 @@ fun SignatureHelpPopup(help: UiSignatureHelp, modifier: Modifier = Modifier) {
         modifier
             .widthIn(min = 80.dp, max = maxW)
             .heightIn(max = maxH)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
             .then(gestures)
             .padding(horizontal = 12.dp, vertical = 7.dp)

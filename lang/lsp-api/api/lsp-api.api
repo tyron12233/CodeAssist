@@ -1,0 +1,53 @@
+# The compiled surface of io.github.tyron12233:lsp-api, pinned at SPI 3.4.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/lsp/LanguageServerConnection
+	kind class
+	super java/lang/Object
+	ctor (Ljava/io/InputStream;Ljava/io/OutputStream;)V
+	ctor (Ljava/io/InputStream;Ljava/io/OutputStream;Ljava/io/InputStream;)V
+	ctor (Ljava/io/InputStream;Ljava/io/OutputStream;Ljava/io/InputStream;Ljava/lang/Runnable;)V
+	ctor (Ljava/io/InputStream;Ljava/io/OutputStream;Ljava/io/InputStream;Ljava/lang/Runnable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/lsp/LanguageServerConnection$Companion;
+	method close()V
+	method getErrors()Ljava/io/InputStream;
+	method getInput()Ljava/io/InputStream;
+	method getOutput()Ljava/io/OutputStream;
+	method static process(Ljava/util/List;)Ldev/ide/lsp/LanguageServerConnection;
+	method static process(Ljava/util/List;Ljava/nio/file/Path;)Ldev/ide/lsp/LanguageServerConnection;
+	method static process(Ljava/util/List;Ljava/nio/file/Path;Ljava/util/Map;)Ldev/ide/lsp/LanguageServerConnection;
+dev/ide/lsp/LanguageServerConnection$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method process(Ljava/util/List;)Ldev/ide/lsp/LanguageServerConnection;
+	method process(Ljava/util/List;Ljava/nio/file/Path;)Ldev/ide/lsp/LanguageServerConnection;
+	method process(Ljava/util/List;Ljava/nio/file/Path;Ljava/util/Map;)Ldev/ide/lsp/LanguageServerConnection;
+	method static process$default(Ldev/ide/lsp/LanguageServerConnection$Companion;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/Map;ILjava/lang/Object;)Ldev/ide/lsp/LanguageServerConnection;
+dev/ide/lsp/LanguageServerContext
+	kind interface
+	method abstract getLogger()Ldev/ide/platform/log/Logger;
+	method abstract getProjectRoot()Ljava/nio/file/Path;
+	method abstract getRoot()Ljava/nio/file/Path;
+dev/ide/lsp/LanguageServerDefinition
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract getLanguages()Ljava/util/Set;
+	method abstract start(Ldev/ide/lsp/LanguageServerContext;)Ldev/ide/lsp/LanguageServerConnection;
+	method configuration(Ljava/lang/String;Ldev/ide/lsp/LanguageServerContext;)Ljava/lang/String;
+	method getDisplayName()Ljava/lang/String;
+	method initializationOptions(Ldev/ide/lsp/LanguageServerContext;)Ljava/lang/String;
+	method languageIdFor(Ljava/nio/file/Path;)Ljava/lang/String;
+	method rootFor(Ljava/nio/file/Path;Ldev/ide/lsp/LanguageServerContext;)Ljava/nio/file/Path;
+dev/ide/lsp/LanguageServerDefinition$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static configuration(Ldev/ide/lsp/LanguageServerDefinition;Ljava/lang/String;Ldev/ide/lsp/LanguageServerContext;)Ljava/lang/String;
+	method static getDisplayName(Ldev/ide/lsp/LanguageServerDefinition;)Ljava/lang/String;
+	method static initializationOptions(Ldev/ide/lsp/LanguageServerDefinition;Ldev/ide/lsp/LanguageServerContext;)Ljava/lang/String;
+	method static languageIdFor(Ldev/ide/lsp/LanguageServerDefinition;Ljava/nio/file/Path;)Ljava/lang/String;
+	method static rootFor(Ldev/ide/lsp/LanguageServerDefinition;Ljava/nio/file/Path;Ldev/ide/lsp/LanguageServerContext;)Ljava/nio/file/Path;
+dev/ide/lsp/LanguageServerKt
+	kind class
+	super java/lang/Object
+	method static getLANGUAGE_SERVER_EP()Ldev/ide/platform/ExtensionPoint;

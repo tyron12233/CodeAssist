@@ -6,7 +6,16 @@ import dev.ide.build.BuildContext
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
 import dev.ide.build.RUN_TASK_PROVIDER_EP
+import dev.ide.build.AlwaysRun
 import dev.ide.build.RunAction
+import dev.ide.build.RunConsole
+import dev.ide.build.Task
+import dev.ide.build.TaskContext
+import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
+import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
+import dev.ide.build.TaskResult
 import dev.ide.build.RunTaskProvider
 import dev.ide.build.RunTaskSpec
 import dev.ide.build.TaskDescriptor
@@ -20,6 +29,7 @@ import dev.ide.model.ModuleType
 import dev.ide.model.Project
 import dev.ide.model.UnknownModuleType
 import dev.ide.platform.PluginId
+import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -69,6 +79,72 @@ class BuildSystemExtensionTest {
         }
     }
 
+    /**
+     * A contributed row that asks for the Run console ([RunAction.console]): the host opens the session and
+     * hands the graph its I/O. Stands in for the NDK plugin's native programs, which have no other way to
+     * reach the terminal.
+     */
+    private class ConsoleRunTaskProvider : RunTaskProvider {
+        override fun tasksFor(module: Module) =
+            listOf(RunTaskSpec("greet:${module.name}", "Greet ${module.name}", "run"))
+
+        override fun actionFor(spec: RunTaskSpec, project: Project, module: Module, ctx: BuildContext): RunAction? {
+            if (!spec.id.startsWith("greet:")) return null
+            val console = RunConsole("greeter")
+            val task = object : Task, AlwaysRun {
+                override val name = TaskName(":${module.name}:greet")
+                override val inputs: TaskInputs get() = TaskInputsImpl()
+                override val outputs: TaskOutputs get() = TaskOutputsImpl()
+                override suspend fun execute(ctx: TaskContext): TaskResult {
+                    val io = console.io ?: return TaskResult.Failed("the host opened no console")
+                    io.started()
+                    io.stdout("Name? ")
+                    val line = io.stdin.bufferedReader().readLine()
+                    io.stdout("hello $line\n")
+                    io.exited(0)
+                    return TaskResult.Success
+                }
+            }
+            return RunAction("> greet ${module.name}", SingleGraph(task)).also { it.console = console }
+        }
+    }
+
+    private class SingleGraph(task: Task) : TaskGraph {
+        override val tasks: List<Task> = listOf(task)
+        override fun dependencies(t: Task): List<Task> = emptyList()
+        override fun topologicalLevels(): List<List<Task>> = listOf(tasks)
+    }
+
+    @Test
+    fun contributedRunActionGetsTheRunConsoleWhenItAsks() {
+        withTempDir("run-console-ep") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                ide.platform.extensions.register(RUN_TASK_PROVIDER_EP, ConsoleRunTaskProvider(), PluginId("test-plugin"))
+                val module = ide.modules().first().name
+
+                ide.build.runTask("greet:$module")
+
+                runBlocking {
+                    withTimeout(30_000) {
+                        // The program is waiting at its prompt: the console is open, showing it, and taking input.
+                        ide.build.runConsole.first { rc ->
+                            rc != null && rc.acceptsInput && rc.transcript.joinToString("") { it.text }.contains("Name? ")
+                        }
+                    }
+                }
+                assertEquals("greeter", ide.build.runConsole.value?.mainClass)
+                ide.build.sendRunInput("tyron")
+
+                val finished = runBlocking {
+                    withTimeout(30_000) { ide.build.runConsole.first { it?.phase == RunPhase.Finished } }
+                }!!
+                val transcript = finished.transcript.joinToString("") { it.text }
+                assertTrue("hello tyron" in transcript, "the program read the console's input: $transcript")
+                assertEquals(0, finished.exitCode)
+            }
+        }
+    }
+
     @Test
     fun pluginBuildSystemSelectedForItsTypeButBuiltinsWin() {
         withTempDir("build-system-ep") { dir ->
@@ -104,6 +180,28 @@ class BuildSystemExtensionTest {
             }
             // The built-in enumeration is untouched (a runnable main still yields a run: task).
             assertTrue(after.any { it.id.startsWith("run:") }, "built-in run tasks still present")
+            }
+        }
+    }
+
+    /**
+     * A plugin's module type that no build system builds (a Dart package) offers its rows through its own
+     * provider. The picker used to add a Build row for it too, which could only fail with "No build system
+     * supports module type".
+     */
+    @Test
+    fun aModuleNoBuildSystemBuildsGetsNoBuildRow() {
+        withTempDir("unbuildable-type") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                ide.store.workspace.projects.first().beginModification().apply {
+                    addModule("pkg", UnknownModuleType("custom-bar")).apply { dirRelPath = "pkg" }
+                    commit()
+                }
+                val rows = ide.build.runTasks().map { it.id }
+                assertTrue("build:pkg" !in rows && "run:pkg" !in rows, rows.toString())
+                // A Java module beside it keeps its Build row.
+                val java = ide.modules().first { it.name != "pkg" }.name
+                assertTrue("build:$java" in rows, rows.toString())
             }
         }
     }

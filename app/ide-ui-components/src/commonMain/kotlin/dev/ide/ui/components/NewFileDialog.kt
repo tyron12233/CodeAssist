@@ -179,7 +179,7 @@ private fun NewEntryPanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
@@ -271,7 +271,7 @@ private fun NewFromTemplatePanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
@@ -416,7 +416,7 @@ private fun NewSourcePanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
@@ -557,7 +557,7 @@ private fun NewXmlPanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
@@ -762,7 +762,7 @@ private fun AddSourceRootPanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {

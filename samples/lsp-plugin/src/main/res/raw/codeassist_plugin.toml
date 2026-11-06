@@ -1,0 +1,15 @@
+[plugin]
+id = "dev.codeassist.lspdemo"
+name = "Calc (language server sample)"
+version = "1.0.0"
+apiVersion = 4
+description = "A sample of a language served by a Language Server Protocol server. Calc (.calc files) gets errors, completion, hover, parameter info, go to declaration, find usages, rename, quick fixes, formatting, folding, semantic colours and inlay hints, all answered by a server process the plugin starts. `test` lines run from the gutter, with results in the Tests tab."
+entryPoints = ["dev.codeassist.lspdemo.CalcPlugin"]
+uiEntryPoints = ["dev.codeassist.lspdemo.CalcUiPlugin"]
+capabilities = [
+    "lang.server",
+    "build.runTask",
+    "ui.editorLanguage",
+]
+# Language servers arrived with SPI 3.3.0. No minHostVersion: the first IDE to carry it is not released yet, and
+# an older one fails this plugin's load with the missing class as the reason, which says the same thing.

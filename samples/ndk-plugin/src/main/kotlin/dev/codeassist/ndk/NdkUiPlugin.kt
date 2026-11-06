@@ -1,5 +1,6 @@
 package dev.codeassist.ndk
 
+import dev.ide.plugin.ui.ColorAttribute
 import dev.ide.plugin.ui.EditorLanguage
 import dev.ide.plugin.ui.FileIcon
 import dev.ide.plugin.ui.SyntaxStyle
@@ -21,6 +22,19 @@ class NdkUiPlugin : UiPlugin {
     override val id = "dev.codeassist.ndk"
 
     override fun contribute(ui: UiRegistration) {
+        // Macros get a colour of their own, the one kind of identifier the editor's built-in scheme has no
+        // name for. A child of "constant", so a scheme that never mentions it still draws macros sensibly;
+        // editable in Settings > Editor Colors like any built-in.
+        ui.colorAttribute(
+            ColorAttribute(
+                key = ClangSemanticTokens.MACRO_KIND,
+                title = "Macro",
+                group = "C/C++",
+                parent = "constant",
+                darkColor = 0xFFB389E0,
+                lightColor = 0xFF871094,
+            )
+        )
         ui.editorLanguage(
             EditorLanguage(
                 id = NdkPlugin.C_LANGUAGE,

@@ -38,8 +38,11 @@ class UserMessageCenter : UserMessages {
 
     private val ids = AtomicLong()
 
-    /** A posted [UserMessage] plus the id the shell dismisses it by. */
-    class Posted(val id: Long, val message: UserMessage)
+    /**
+     * A posted [UserMessage] plus the id the shell dismisses it by. [origin] is the poster's stack at the time,
+     * so a durable surface can name the plugin that said it (a listener may run later, on another thread).
+     */
+    class Posted(val id: Long, val message: UserMessage, val origin: List<StackTraceElement> = emptyList())
 
     /** One [startProgress] call as the shell sees it. */
     class Running(val id: Long, val title: String, val detail: String?, val fraction: Float?)
@@ -92,7 +95,7 @@ class UserMessageCenter : UserMessages {
     }
 
     override fun show(message: UserMessage) {
-        val posted = Posted(ids.incrementAndGet(), message)
+        val posted = Posted(ids.incrementAndGet(), message, Throwable().stackTrace.asList())
         synchronized(deliveryLock) { deliver(listOf(posted)) }
         _messages.update { current ->
             // A plugin in a loop (a failing watcher, a per-file warning) must not be able to push the rest of

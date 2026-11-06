@@ -14,6 +14,10 @@ dependencies {
     implementation(project(":agent-impl"))
     implementation(libs.mcp)
     implementation(libs.kotlinx.coroutines.core)
+    // The MCP CLIENT (dev.ide.agent.mcp.client): the agent connecting OUT to servers the user adds. Not the SDK's
+    // client, whose HTTP transports are built on java.net.http, which Android does not have.
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

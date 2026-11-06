@@ -22,7 +22,7 @@ class PluginInfoActivity : Activity() {
                     appendLine("A plugin for CodeAssist, not an app of its own.")
                     appendLine()
                     appendLine("It adds C and C++ support: syntax colouring, errors from the compiler, and")
-                    appendLine("an on-device clang and lld that build native code for arm64.")
+                    appendLine("an on-device clang and lld that build native code for arm64-v8a, armeabi-v7a, x86 and x86_64.")
                     appendLine()
                     appendLine("Open CodeAssist, then Settings and tools > Plugins to allow it to run.")
                 }

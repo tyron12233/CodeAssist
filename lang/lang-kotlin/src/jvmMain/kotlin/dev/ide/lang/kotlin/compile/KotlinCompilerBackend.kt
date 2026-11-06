@@ -97,6 +97,13 @@ interface KotlinCompilerBackend {
     fun compile(request: KotlinCompileRequest): KotlinCompileResult
 
     /**
+     * [compile], telling [status] what the backend is doing when that is more than compiling: waiting for a
+     * busy compiler VM, starting one, falling back in-process. The lines go to the build log, so a compile
+     * that takes minutes on a slow device shows why instead of looking frozen. The default reports nothing.
+     */
+    fun compile(request: KotlinCompileRequest, status: (String) -> Unit): KotlinCompileResult = compile(request)
+
+    /**
      * Pay the compiler's one-time cold-start cost now, off the interaction path, so the user's first real
      * build compile is warm. Idempotent, and failure is not reported: this is an optimization, not a build
      * step. [bootClasspath] should be the platform library the real build uses, so the warm-up exercises the

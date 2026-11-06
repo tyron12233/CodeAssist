@@ -5,7 +5,6 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dev.ide.ui.backend.UiNotification
 import dev.ide.ui.backend.UiNotificationKind
-import dev.ide.ui.backend.UiNotificationTarget
 
 /**
  * Receives push messages.
@@ -30,7 +29,7 @@ internal class CodeAssistMessagingService : FirebaseMessagingService() {
             title = title,
             body = data["body"],
             timestampMs = System.currentTimeMillis(),
-            target = targetOf(data["targetType"], data["targetId"]),
+            target = NotificationTargets.of(data["targetType"], data["targetId"]),
             key = data["dedupeKey"],
         )
         PendingPushes.add(this, notification)
@@ -50,13 +49,6 @@ internal class CodeAssistMessagingService : FirebaseMessagingService() {
     private fun kindOf(name: String?): UiNotificationKind =
         UiNotificationKind.entries.firstOrNull { it.name == name } ?: UiNotificationKind.SYSTEM
 
-    private fun targetOf(type: String?, id: String?): UiNotificationTarget? = when (type) {
-        "storeItem" -> id?.let { UiNotificationTarget.StoreItem(it) }
-        "project" -> id?.let { UiNotificationTarget.Project(it) }
-        "submissions" -> UiNotificationTarget.Submissions
-        "screen" -> id?.let { UiNotificationTarget.Screen(it) }
-        else -> null
-    }
 }
 
 /**
@@ -126,7 +118,7 @@ internal object PendingPushes {
     // separator or a newline because both are stripped on the way in.
     private fun encode(n: UiNotification): String = listOf(
         n.key.orEmpty(), n.kind.name, n.title, n.body.orEmpty(),
-        targetType(n.target).orEmpty(), targetId(n.target).orEmpty(), n.timestampMs.toString(),
+        NotificationTargets.type(n.target).orEmpty(), NotificationTargets.id(n.target).orEmpty(), n.timestampMs.toString(),
     ).joinToString(SEP.toString()) { field ->
         field.replace('\n', ' ').replace(SEP, ' ')
     }
@@ -142,29 +134,8 @@ internal object PendingPushes {
             title = title,
             body = parts[3].takeIf { it.isNotEmpty() },
             timestampMs = parts[6].toLongOrNull() ?: System.currentTimeMillis(),
-            target = when (parts[4]) {
-                "storeItem" -> parts[5].takeIf { it.isNotEmpty() }?.let { UiNotificationTarget.StoreItem(it) }
-                "project" -> parts[5].takeIf { it.isNotEmpty() }?.let { UiNotificationTarget.Project(it) }
-                "submissions" -> UiNotificationTarget.Submissions
-                "screen" -> parts[5].takeIf { it.isNotEmpty() }?.let { UiNotificationTarget.Screen(it) }
-                else -> null
-            },
+            target = NotificationTargets.of(parts[4], parts[5]),
             key = key,
         )
-    }
-
-    private fun targetType(target: UiNotificationTarget?): String? = when (target) {
-        null -> null
-        is UiNotificationTarget.StoreItem -> "storeItem"
-        is UiNotificationTarget.Project -> "project"
-        UiNotificationTarget.Submissions -> "submissions"
-        is UiNotificationTarget.Screen -> "screen"
-    }
-
-    private fun targetId(target: UiNotificationTarget?): String? = when (target) {
-        is UiNotificationTarget.StoreItem -> target.itemId
-        is UiNotificationTarget.Project -> target.rootPath
-        is UiNotificationTarget.Screen -> target.route
-        else -> null
     }
 }

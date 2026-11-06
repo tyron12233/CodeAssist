@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:block-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:block-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/block/BlockEdit
@@ -34,12 +34,14 @@ dev/ide/block/BlockId
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/block/BlockId;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/block/BlockMapping
 	kind interface
 	method abstract getHandles()Ljava/util/Set;
@@ -174,6 +176,38 @@ dev/ide/block/Delete
 	method hashCode()I
 	method static copy$default(Ldev/ide/block/Delete;Ldev/ide/block/BlockRef;ILjava/lang/Object;)Ldev/ide/block/Delete;
 	method toString()Ljava/lang/String;
+dev/ide/block/DeleteRange
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;I)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()I
+	method copy(Ldev/ide/block/BlockRef;I)Ldev/ide/block/DeleteRange;
+	method equals(Ljava/lang/Object;)Z
+	method getCount()I
+	method getFirst()Ldev/ide/block/BlockRef;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/DeleteRange;Ldev/ide/block/BlockRef;IILjava/lang/Object;)Ldev/ide/block/DeleteRange;
+	method toString()Ljava/lang/String;
+dev/ide/block/InsertArgument
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;IILjava/lang/String;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()I
+	method component3()I
+	method component4()Ljava/lang/String;
+	method copy(Ldev/ide/block/BlockRef;IILjava/lang/String;)Ldev/ide/block/InsertArgument;
+	method equals(Ljava/lang/Object;)Z
+	method getCall()Ldev/ide/block/BlockRef;
+	method getIndex()I
+	method getLink()I
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/InsertArgument;Ldev/ide/block/BlockRef;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/block/InsertArgument;
+	method toString()Ljava/lang/String;
 dev/ide/block/InsertTemplate
 	kind class
 	super java/lang/Object
@@ -202,6 +236,22 @@ dev/ide/block/Move
 	method hashCode()I
 	method static copy$default(Ldev/ide/block/Move;Ldev/ide/block/BlockRef;Ldev/ide/block/SlotRef;ILjava/lang/Object;)Ldev/ide/block/Move;
 	method toString()Ljava/lang/String;
+dev/ide/block/MoveRange
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;ILdev/ide/block/SlotRef;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()I
+	method component3()Ldev/ide/block/SlotRef;
+	method copy(Ldev/ide/block/BlockRef;ILdev/ide/block/SlotRef;)Ldev/ide/block/MoveRange;
+	method equals(Ljava/lang/Object;)Z
+	method getCount()I
+	method getFirst()Ldev/ide/block/BlockRef;
+	method getTo()Ldev/ide/block/SlotRef;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/MoveRange;Ldev/ide/block/BlockRef;ILdev/ide/block/SlotRef;ILjava/lang/Object;)Ldev/ide/block/MoveRange;
+	method toString()Ljava/lang/String;
 dev/ide/block/ProjectionContext
 	kind interface
 	method abstract block-bnSY5Jo(Ldev/ide/lang/dom/DomNode;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ldev/ide/block/ValueKind;)Ldev/ide/block/BlockNode;
@@ -220,6 +270,20 @@ dev/ide/block/ProjectionContext$DefaultImpls
 	method static block-bnSY5Jo$default(Ldev/ide/block/ProjectionContext;Ldev/ide/lang/dom/DomNode;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ldev/ide/block/ValueKind;ILjava/lang/Object;)Ldev/ide/block/BlockNode;
 	method static field$default(Ldev/ide/block/ProjectionContext;Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;ILjava/lang/Object;)Ldev/ide/block/BlockField;
 	method static slot$default(Ldev/ide/block/ProjectionContext;Ldev/ide/block/SlotCategory;Ljava/util/List;ZLdev/ide/lang/dom/TextRange;Ldev/ide/block/ValueKind;ILjava/lang/Object;)Ldev/ide/block/BlockSlot;
+dev/ide/block/RemoveArgument
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;I)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()I
+	method copy(Ldev/ide/block/BlockRef;I)Ldev/ide/block/RemoveArgument;
+	method equals(Ljava/lang/Object;)Z
+	method getCall()Ldev/ide/block/BlockRef;
+	method getSlotIndex()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/RemoveArgument;Ldev/ide/block/BlockRef;IILjava/lang/Object;)Ldev/ide/block/RemoveArgument;
+	method toString()Ljava/lang/String;
 dev/ide/block/ReplaceWithText
 	kind class
 	super java/lang/Object
@@ -310,4 +374,20 @@ dev/ide/block/Wrap
 	method getWith()Ldev/ide/block/BlockTemplate;
 	method hashCode()I
 	method static copy$default(Ldev/ide/block/Wrap;Ldev/ide/block/BlockRef;Ldev/ide/block/BlockTemplate;ILjava/lang/Object;)Ldev/ide/block/Wrap;
+	method toString()Ljava/lang/String;
+dev/ide/block/WrapRange
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;ILdev/ide/block/BlockTemplate;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()I
+	method component3()Ldev/ide/block/BlockTemplate;
+	method copy(Ldev/ide/block/BlockRef;ILdev/ide/block/BlockTemplate;)Ldev/ide/block/WrapRange;
+	method equals(Ljava/lang/Object;)Z
+	method getCount()I
+	method getFirst()Ldev/ide/block/BlockRef;
+	method getWith()Ldev/ide/block/BlockTemplate;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/WrapRange;Ldev/ide/block/BlockRef;ILdev/ide/block/BlockTemplate;ILjava/lang/Object;)Ldev/ide/block/WrapRange;
 	method toString()Ljava/lang/String;

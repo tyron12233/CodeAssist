@@ -1,25 +1,24 @@
 package dev.ide.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -27,28 +26,28 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_installs
+import dev.ide.ui.generated.resources.store_trending
+import dev.ide.ui.generated.resources.store_trending_search
 import dev.ide.ui.generated.resources.store_projects
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.CaShapes
@@ -56,6 +55,7 @@ import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Explore tab's card vocabulary.
@@ -136,25 +136,34 @@ fun CodeMotif(
 }
 
 /**
- * Explore's 296 dp featured card.
+ * Explore's featured card: the project's own icon and name on a tonal ground, with two of its real
+ * screenshots fanned in phone frames off the bottom-right corner.
  *
- * The code panel is inset from the left and pulled **past the card's bottom edge**, then the footer sits
- * below it. That overhang is the card's whole silhouette: it is why the card clips its content and why the
- * footer needs the large top gap it has.
+ * The phones bleed past the card's bottom and right edges, and that overhang is the card's silhouette:
+ * it is why the card clips its content. A project that shipped no screenshots gets the abstract code
+ * panel in the same corner instead, so the card keeps its shape either way.
+ *
+ * [shots] are drawn front first. Only the first two are used; a third phone would cover the text column.
  */
 @Composable
 fun FeaturedHeroCard(
     title: String,
-    badge: String,
     subtitle: String,
     pair: TonalPair,
     motif: List<MotifLine>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** A small label above the icon. Null hides it, which is right when it would say the same thing on every card. */
+    badge: String? = null,
+    verified: Boolean = false,
     rating: Float = -1f,
     installs: Int = -1,
-    /** A real screenshot to show in place of the abstract motif. Null ⇒ draw the motif. */
-    preview: (@Composable (Modifier) -> Unit)? = null,
+    /** The glyph drawn when there is no [icon]. */
+    iconId: String = "file",
+    /** The project's own app icon, filling the tile. Null draws the [iconId] glyph. */
+    icon: (@Composable (Modifier) -> Unit)? = null,
+    /** Screenshots, front first. Empty draws the code motif. */
+    shots: List<@Composable (Modifier) -> Unit> = emptyList(),
 ) {
     val interaction = remember { MutableInteractionSource() }
     Surface(
@@ -164,60 +173,241 @@ fun FeaturedHeroCard(
         contentColor = pair.onContainer,
         shadowElevation = 1.dp,
         interactionSource = interaction,
-        modifier = modifier.width(296.dp).pressScale(interaction, pressed = 0.99f),
+        modifier = modifier.width(324.dp).height(236.dp).pressScale(interaction, pressed = 0.99f),
     ) {
-        Column(Modifier.clipToBounds().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 18.dp)) {
-            Surface(shape = RoundedCornerShape(9.dp), color = pair.onContainer, contentColor = pair.container) {
-                Text(
-                    badge.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        Box(Modifier.clipToBounds()) {
+            if (shots.isNotEmpty()) {
+                // The back phone first, so the front one is drawn over it.
+                shots.getOrNull(1)?.let { back ->
+                    PhoneFrame(
+                        back,
+                        Modifier.align(Alignment.BottomEnd).offset(x = 30.dp, y = 30.dp).rotate(9f),
+                    )
+                }
+                PhoneFrame(
+                    shots.first(),
+                    Modifier.align(Alignment.BottomEnd).offset(x = (-22).dp, y = 52.dp).rotate(-5f),
+                )
+            } else {
+                CodeMotif(
+                    lines = motif,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 14.dp, y = 18.dp).width(150.dp),
+                    rotation = -6f,
                 )
             }
-            Text(
-                title,
-                // titleLarge, not headlineSmall: this is a card in a row of cards, not the page's title,
-                // and at 24 sp it wrapped to two lines for most real project names.
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
-                color = pair.onContainer,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 10.dp),
-            )
-            SupportingOnContainer(subtitle, pair.onContainer, Modifier.padding(top = 6.dp), maxLines = 1)
-            // Inset from the left, bleeding 6 dp past the card's right padding, with only a 10 dp gap to
-            // the footer below it. The design gets that tight gap from a negative bottom margin on the
-            // panel; the same result here is just a small top padding on the footer.
-            //
-            // A real screenshot wins over the motif: the motif exists because most catalog items ship no
-            // artwork, not because abstract bars are preferable to a picture of the thing.
-            val panel = Modifier.padding(start = 40.dp, top = 16.dp).offset(x = 6.dp).fillMaxWidth()
-            if (preview != null) {
-                preview(panel.height(104.dp).clip(RoundedCornerShape(16.dp)).rotate(-2.5f))
-            } else {
-                CodeMotif(lines = motif, modifier = panel)
-            }
-            Row(
-                Modifier.padding(top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (rating >= 0f) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Symbol(CaSymbols.star, contentDescription = null, size = 16.dp, filled = true, tint = pair.onContainer)
-                        Text(
-                            formatRating(rating),
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = pair.onContainer,
-                        )
-                    }
+            Column(Modifier.fillMaxHeight().width(184.dp).padding(start = 20.dp, top = 20.dp, bottom = 18.dp)) {
+                if (badge != null) {
+                    Eyebrow(badge, color = pair.onContainer.copy(alpha = 0.75f), modifier = Modifier.padding(bottom = 8.dp))
                 }
-                if (installs >= 0) {
-                    SupportingOnContainer(installLabel(installs), pair.onContainer)
+                if (icon != null) {
+                    icon(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)))
+                } else {
+                    TemplateIcon(
+                        iconId,
+                        TonalPair(pair.onContainer.copy(alpha = 0.12f), pair.onContainer),
+                        RoundedCornerShape(14.dp),
+                        size = 52.dp,
+                    )
                 }
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = pair.onContainer,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                PublisherLine(subtitle, verified, pair.onContainer.copy(alpha = 0.72f), Modifier.padding(top = 2.dp))
+                Spacer(Modifier.weight(1f))
+                StatLine(rating, installs, pair.onContainer)
             }
         }
     }
+}
+
+/**
+ * Editor's Choice: a portrait card that is mostly the project's first screenshot, with its icon, name
+ * and one-line pitch set over a dark scrim at the bottom.
+ *
+ * Deliberately a different object from [FeaturedHeroCard] rather than the same card again: the hero
+ * says "here is a project", this says "here is what it looks like". The text over the scrim is always
+ * light, whatever the theme, because it sits on a darkened photograph and not on a theme surface.
+ *
+ * Without a screenshot it falls back to a tonal ground with the icon large, and the text takes the
+ * ground's `on*` colour instead.
+ */
+@Composable
+fun EditorialCard(
+    title: String,
+    author: String,
+    blurb: String,
+    pair: TonalPair,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    verified: Boolean = false,
+    rating: Float = -1f,
+    installs: Int = -1,
+    iconId: String = "file",
+    icon: (@Composable (Modifier) -> Unit)? = null,
+    /** The screenshot that fills the card. Null draws the tonal fallback. */
+    shot: (@Composable (Modifier) -> Unit)? = null,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val ink = if (shot != null) Color.White else pair.onContainer
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(28.dp),
+        color = if (shot != null) CodeMotifColors.Chrome else pair.container,
+        contentColor = ink,
+        shadowElevation = 1.dp,
+        interactionSource = interaction,
+        modifier = modifier.width(256.dp).height(352.dp).pressScale(interaction, pressed = 0.99f),
+    ) {
+        Box {
+            if (shot != null) {
+                shot(Modifier.fillMaxSize())
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            // Opaque enough under the text that a light, busy screenshot cannot show
+                            // through the title: the text block starts a little above the middle.
+                            0f to Color.Transparent,
+                            0.30f to Color.Transparent,
+                            0.55f to Color.Black.copy(alpha = 0.72f),
+                            0.72f to Color.Black.copy(alpha = 0.90f),
+                            1f to Color.Black.copy(alpha = 0.96f),
+                        ),
+                    ),
+                )
+            } else {
+                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                    if (icon != null) {
+                        icon(Modifier.size(96.dp).clip(RoundedCornerShape(26.dp)))
+                    } else {
+                        TemplateIcon(
+                            iconId,
+                            TonalPair(pair.onContainer.copy(alpha = 0.12f), pair.onContainer),
+                            RoundedCornerShape(26.dp),
+                            size = 96.dp,
+                        )
+                    }
+                }
+            }
+            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (shot != null) {
+                        if (icon != null) {
+                            icon(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)))
+                        } else {
+                            TemplateIcon(iconId, pair, RoundedCornerShape(12.dp), size = 44.dp)
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        PublisherLine(author, verified, ink.copy(alpha = 0.75f))
+                    }
+                }
+                if (blurb.isNotBlank()) {
+                    Text(
+                        blurb,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ink.copy(alpha = 0.85f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+                StatLine(rating, installs, ink, Modifier.padding(top = 10.dp))
+            }
+        }
+    }
+}
+
+/** A screenshot in a thin dark phone bezel, portrait, the shape a phone screenshot was taken in. */
+@Composable
+private fun PhoneFrame(shot: @Composable (Modifier) -> Unit, modifier: Modifier = Modifier) {
+    val outer = RoundedCornerShape(20.dp)
+    Box(
+        modifier.width(104.dp).height(218.dp)
+            .shadow(10.dp, outer)
+            .clip(outer)
+            .background(CodeMotifColors.ChromeBar)
+            .padding(3.dp)
+            .clearAndSetSemantics {},
+    ) {
+        shot(Modifier.fillMaxSize().clip(RoundedCornerShape(17.dp)))
+    }
+}
+
+/** "Aio ✓": the publisher, with the verified mark where they carry one. */
+@Composable
+private fun PublisherLine(name: String, verified: Boolean, color: Color, modifier: Modifier = Modifier) {
+    if (name.isBlank()) return
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (verified) Symbol(CaSymbols.verified, contentDescription = null, size = 15.dp, filled = true, tint = color)
+    }
+}
+
+/** "★ 4.7 · 690 installs". Each half hides on its own when there is nothing true to say. */
+@Composable
+private fun StatLine(rating: Float, installs: Int, color: Color, modifier: Modifier = Modifier) {
+    if (rating < 0f && installs < 0) return
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (rating >= 0f) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Symbol(CaSymbols.star, contentDescription = null, size = 16.dp, filled = true, tint = color)
+                Text(
+                    formatRating(rating),
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = color,
+                )
+            }
+        }
+        if (installs >= 0) SupportingOnContainer(installLabel(installs), color)
+    }
+}
+
+/**
+ * The pitch a card shows for a project, cleaned of what publishers paste into it.
+ *
+ * Descriptions arrive as READMEs: `# Title`, `## Features`, `**bold**`, a first line that repeats the
+ * project's name, "App Name: X / Version: 1.0" headers, a lone "1." left over from a numbered list. On a
+ * two-line card all of that is noise standing where the actual sentence should be. This keeps the prose
+ * and drops the scaffolding; when nothing survives, it falls back to [fallback] rather than to nothing.
+ */
+fun storeBlurb(text: String?, title: String, fallback: String = ""): String {
+    val header = Regex("""^(app\s*name|name|version|ver)\s*[:：].*$""", RegexOption.IGNORE_CASE)
+    val label = Regex("""^[\[【].*[\]】]$""")
+    val numbering = Regex("""^\d+[.)]?$""")
+    val cleaned = (text ?: "").lines().asSequence()
+        .map { line ->
+            line.trim()
+                .replace(Regex("""^#+\s*"""), "")
+                .replace(Regex("""^[-*•]\s+"""), "")
+                .replace("**", "").replace("__", "").replace("`", "")
+                .trim()
+        }
+        .filter { it.isNotEmpty() }
+        .filterNot { it.equals(title.trim(), ignoreCase = true) }
+        .filterNot { header.matches(it) || label.matches(it) || numbering.matches(it) }
+        .joinToString(" ")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+    return cleaned.ifEmpty { fallback.trim() }
 }
 
 /** A 104 dp "browse by kind" tile: a glyph, the name, a count, and an oversized clipped watermark. */
@@ -352,58 +542,53 @@ fun StoreListRow(
 }
 
 /**
- * The trending marquee: a row of tonal chips that scrolls forever.
+ * What people are looking for, as a row of search shortcuts under the search field.
  *
- * Renders the list **twice** and translates by exactly half the total width, so the moment the first copy
- * scrolls out the second is already in position and the loop has no visible seam. Purely decorative, so
- * the whole strip is cleared from the semantics tree — a screen reader should not narrate a moving band of
- * marketing chips.
+ * Replaced a marquee of tonal chips that scrolled forever and did nothing when tapped: it moved while
+ * the reader was trying to read the page under it, it was hidden from screen readers because a moving
+ * band cannot be narrated, and each chip carried the same trending arrow, so the arrow said nothing.
+ * Now it holds still, scrolls under the finger, says "Trending" once, and each term opens the search
+ * with that term already typed.
  */
 @Composable
-fun TrendingTicker(
-    labels: List<String>,
-    pairAt: @Composable (Int) -> TonalPair,
+fun TrendingSearches(
+    terms: List<String>,
+    onTerm: (String) -> Unit,
     modifier: Modifier = Modifier,
-    durationMillis: Int = 26_000,
 ) {
-    if (labels.isEmpty()) return
-    var totalWidth by remember { mutableStateOf(0) }
-    val transition = rememberInfiniteTransition(label = "ticker")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "tickerOffset",
-    )
-    Box(modifier.fillMaxWidth().clipToBounds().clearAndSetSemantics {}) {
-        Row(
-            Modifier
-                .onSizeChanged { totalWidth = it.width }
-                .offset { IntOffset(-(totalWidth / 2f * progress).roundToInt(), 0) },
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Twice through, so the second copy covers the gap the first leaves as it exits.
-            repeat(2) { copy ->
-                labels.forEachIndexed { i, label ->
-                    val pair = pairAt(i)
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = pair.container,
-                        contentColor = pair.onContainer,
-                        modifier = Modifier.height(30.dp),
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Symbol(CaSymbols.trendingUp, contentDescription = null, size = 14.dp)
-                            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
-                    }
+    if (terms.isEmpty()) return
+    val c = MaterialTheme.colorScheme
+    LazyRow(
+        modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        item("label") {
+            Row(
+                Modifier.padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Symbol(CaSymbols.trendingUp, contentDescription = null, size = 18.dp, tint = c.primary)
+                Text(
+                    stringResource(Res.string.store_trending),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = c.primary,
+                )
+            }
+        }
+        items(terms, key = { it }) { term ->
+            val description = stringResource(Res.string.store_trending_search, term)
+            Surface(
+                onClick = { onTerm(term) },
+                shape = CircleShape,
+                color = c.surfaceContainerHigh,
+                contentColor = c.onSurface,
+                modifier = Modifier.height(36.dp).semantics { contentDescription = description },
+            ) {
+                Box(Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                    Text(term, style = MaterialTheme.typography.labelLarge, maxLines = 1)
                 }
             }
         }

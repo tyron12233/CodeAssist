@@ -196,15 +196,18 @@ class LineRenderCache(
         val sem = semantic.spansFor(line)
         val annotated = when {
             pieces.isEmpty() && spans.isEmpty() && sem.isEmpty() -> AnnotatedString(text)
-            pieces.isEmpty() -> AnnotatedString(
-                text,
+            pieces.isEmpty() -> {
                 // Lexical spans first, then semantic on top (later ranges win on overlap), bounded to the line.
-                spanStyles = spans.mapNotNull { sp ->
-                    palette[sp.type.ordinal]?.let { AnnotatedString.Range(it, sp.start, sp.end) }
-                } + sem.mapNotNull { sp ->
-                    clampRange(sp.start, sp.end, text.length)?.let { (s, e) -> AnnotatedString.Range(sp.style, s, e) }
-                },
-            )
+                // One list sized up front: this runs for every line laid out, in the draw on the main thread,
+                // where the field showed it waiting out GCs that per-line throwaway lists help cause.
+                val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>(spans.size + sem.size)
+                for (sp in spans) palette[sp.type.ordinal]?.let { ranges.add(AnnotatedString.Range(it, sp.start, sp.end)) }
+                for (sp in sem) {
+                    val (s, e) = clampRange(sp.start, sp.end, text.length) ?: continue
+                    ranges.add(AnnotatedString.Range(sp.style, s, e))
+                }
+                AnnotatedString(text, spanStyles = ranges)
+            }
             else -> buildInlayAnnotated(text, spans, pieces, sem)
         }
         val layout = if (wrapWidthPx > 0) {

@@ -358,6 +358,7 @@ class IosStoreService(
                     verified = p.verified,
                     followers = p.followers,
                     following = p.following,
+                    joinedAt = p.joinedAt,
                     projectCount = p.projectCount,
                     totalInstalls = p.totalInstalls,
                     totalLikes = p.totalLikes,
@@ -385,6 +386,17 @@ class IosStoreService(
     // ---- reviews and likes ---------------------------------------------------------------------------
 
     override fun reviewsAvailable(): Boolean = reviewState.available()
+
+    override fun translationAvailable(): Boolean = reviewState.translationAvailable()
+
+    override suspend fun translateListing(itemId: String, target: String): dev.ide.ui.backend.UiTranslation =
+        withContext(storeIo) { reviewState.translateListing(itemId, target) }
+
+    override suspend fun translateReview(
+        itemId: String,
+        authorId: String,
+        target: String,
+    ): dev.ide.ui.backend.UiTranslation = withContext(storeIo) { reviewState.translateReview(itemId, authorId, target) }
 
     override suspend fun reviews(
         itemId: String,

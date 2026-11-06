@@ -523,4 +523,46 @@ class InstalledPluginsTest {
             assertEquals(listOf("installed-impl"), env.platform.extensions.extensions(INSTALLED_EP))
         }
     }
+
+    @Test
+    fun `a plugin off for crashing stays off at the same version and says why`() {
+        ApplicationEnvironment(
+            disabledPluginIds = setOf("com.example.crashy"),
+            pluginSources = listOf(FakeSource(listOf(FakePlugin("com.example.crashy")))),
+            consentedPluginIds = setOf("com.example.crashy"),
+            crashSuspended = mapOf("com.example.crashy" to "1.0.0"),
+        ).use { env ->
+            assertTrue(env.platform.extensions.extensions(INSTALLED_EP).isEmpty())
+            assertTrue(env.liftedCrashSuspensions.isEmpty())
+            assertTrue(env.installedPlugins.single().error!!.contains("crashed"))
+        }
+    }
+
+    @Test
+    fun `an update lifts a crash suspension and the plugin loads again`() {
+        ApplicationEnvironment(
+            disabledPluginIds = setOf("com.example.crashy"),
+            pluginSources = listOf(FakeSource(listOf(FakePlugin("com.example.crashy")))),
+            consentedPluginIds = setOf("com.example.crashy"),
+            crashSuspended = mapOf("com.example.crashy" to "0.9.0"),
+        ).use { env ->
+            assertEquals(setOf("com.example.crashy"), env.liftedCrashSuspensions)
+            assertEquals(listOf("installed-impl"), env.platform.extensions.extensions(INSTALLED_EP))
+            assertTrue(env.externalPluginLoaders.containsKey("com.example.crashy"))
+        }
+    }
+
+    @Test
+    fun `safe mode loads the built-ins but no installed plugin`() {
+        ApplicationEnvironment(
+            pluginSources = listOf(FakeSource(listOf(FakePlugin("com.example.ok")))),
+            consentedPluginIds = setOf("com.example.ok"),
+            safeMode = true,
+        ).use { env ->
+            assertTrue(env.safeModeApplied)
+            assertTrue(env.platform.extensions.extensions(INSTALLED_EP).isEmpty())
+            assertTrue(env.installedPlugins.single().error!!.contains("without plugins"))
+            assertTrue(env.pluginCatalog.isEnabled("kotlin-language"))
+        }
+    }
 }

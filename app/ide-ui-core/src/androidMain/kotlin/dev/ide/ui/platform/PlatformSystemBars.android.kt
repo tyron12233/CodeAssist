@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
@@ -25,6 +26,11 @@ actual fun PlatformSystemBars(darkTheme: Boolean) {
     // `isAppearanceLight*Bars = true` asks the system for DARK icons (for a light background). So a LIGHT app
     // theme → light bars (dark icons); a DARK app theme → dark bars (light icons). Re-applied on every [darkTheme]
     // change, since the flag is otherwise sticky from the last time it was set (e.g. by enableEdgeToEdge).
+    // And on every configuration change: the activity handles rotation itself, and the platform re-applies the
+    // edge-to-edge style for the SYSTEM's light/dark mode then, so a dark app theme on a light-mode phone got
+    // dark status icons on its dark bar after a rotation. Reading the configuration recomposes this on one.
+    @Suppress("UNUSED_VARIABLE")
+    val configuration = LocalConfiguration.current
     SideEffect {
         val controller = WindowCompat.getInsetsController(window, view)
         controller.isAppearanceLightStatusBars = !darkTheme

@@ -19,6 +19,22 @@ object RunGutter {
         taskId.takeIf { it.startsWith("run:") }?.removePrefix("run:")?.substringAfter(':', "")?.takeIf { it.isNotEmpty() }
 
     /**
+     * Whether [selected], the remembered Run task, still belongs to this project when the picker's [listed] tasks
+     * do not include it. Listed, it plainly does. Not listed, it is a gutter run (a `main`, a test) of one of the
+     * project's modules, which the picker never lists, or a leftover: a task remembered for an earlier project at
+     * the same path (`androidRun:app:debug` in what is now a Dart project), whose Run would only fail. Every task
+     * id is `<kind>:<module>[:...]`, so the test is whether its module is one the listed tasks are for.
+     */
+    fun stillApplies(selected: RunTaskOption, listed: List<RunTaskOption>): Boolean {
+        if (listed.any { it.id == selected.id }) return true
+        val modules = listed.mapNotNullTo(HashSet()) { moduleOf(it.id) }
+        return moduleOf(selected.id)?.let { it in modules } ?: false
+    }
+
+    private fun moduleOf(taskId: String): String? =
+        taskId.substringAfter(':', "").substringBefore(':').substringBefore('\n').takeIf { it.isNotEmpty() }
+
+    /**
      * The Run row for [taskId] started from a gutter mark (a `main` or a test), when the Run picker does not list
      * it: labelled after what it runs, the way IntelliJ names a temporary configuration (`MainKt`, `FooTest`,
      * `FooTest.bar`).

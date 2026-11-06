@@ -83,6 +83,14 @@ class NativeAdPool<A : Any>(
         var onChange: () -> Unit = {}
         val ad: A? get() = entry?.ad
 
+        /**
+         * True while this slot has no ad because its placement's last native request failed (usually NO_FILL),
+         * including when the pool skipped asking again during [NATIVE_AD_FAILURE_BACKOFF_MS]. The host can fill
+         * the slot with something else meanwhile (a banner). Cleared once a native ad reaches the slot.
+         */
+        var nativeFailed: Boolean = false
+            internal set
+
         internal var entry: Entry<A>? = null
         internal var request: Request? = null
         internal var acquired = false
@@ -155,7 +163,12 @@ class NativeAdPool<A : Any>(
             lease.request = orphan
             return
         }
-        failedAt[lease.placement]?.let { if (now() - it < NATIVE_AD_FAILURE_BACKOFF_MS) return }
+        failedAt[lease.placement]?.let {
+            if (now() - it < NATIVE_AD_FAILURE_BACKOFF_MS) {
+                if (lease.entry == null) lease.nativeFailed = true
+                return
+            }
+        }
         val request = Request(lease.placement, lease)
         requests += request
         lease.request = request
@@ -188,7 +201,13 @@ class NativeAdPool<A : Any>(
     private fun onFailed(request: Request) {
         requests -= request
         failedAt[request.placement] = now()
-        request.owner?.let { if (it.request === request) it.request = null }
+        request.owner?.let { owner ->
+            if (owner.request === request) owner.request = null
+            if (owner.acquired && owner.entry == null) {
+                owner.nativeFailed = true
+                owner.onChange()
+            }
+        }
     }
 
     private fun onCancelled(request: Request) {
@@ -198,6 +217,7 @@ class NativeAdPool<A : Any>(
 
     private fun show(lease: Lease, entry: Entry<A>) {
         lease.entry = entry
+        lease.nativeFailed = false
         lease.onChange()
     }
 

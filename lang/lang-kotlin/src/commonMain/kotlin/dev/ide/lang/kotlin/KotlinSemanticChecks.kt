@@ -100,6 +100,7 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.OptInLevel
 import dev.ide.lang.kotlin.symbols.OptInMarker
+import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
@@ -271,7 +272,7 @@ internal class KotlinSemanticChecks(
                     // The same-file PSI arity check first (precise for a unique same-file function); then the
                     // overload-aware applicability check (wrong-typed / too-many args for an overloaded, library,
                     // or member call); then the missing-required check (which the applicability check defers to).
-                    report(argumentCountMismatch(psi) ?: callNotApplicable(psi, resolver) ?: missingRequiredArgument(psi, resolver))
+                    report(argumentCountMismatch(psi, resolver) ?: callNotApplicable(psi, resolver) ?: missingRequiredArgument(psi, resolver))
                 }
                 KotlinPerf.span("call.ambiguity") { if (resolveReady) report(overloadAmbiguity(psi, resolver)) }
                 KotlinPerf.span("call.typeArgBounds") { if (resolveReady) reportAll(callTypeArgumentBoundViolation(psi, resolver)) }
@@ -618,7 +619,7 @@ internal class KotlinSemanticChecks(
         // qualified `X.Y` can't be shadowed this way.
         if (full === ref) {
             val off = ref.textRange.startOffset
-            if (resolver.localsAt(off).any { it.name == name }) return null
+            if (resolver.localsAt(off, name).isNotEmpty()) return null
             if (resolver.enclosingClassMembersContain(off, name)) return null
             if (resolver.localTypesInScope(off).containsKey(name)) return null
             if (service.topLevelByName(name).any {
@@ -670,7 +671,7 @@ internal class KotlinSemanticChecks(
         // function candidate AND no value candidate — so a bare member/extension function (`setContent` inside a
         // ComponentActivity) IS flagged, while a bare property read (`dp`, a member `val`) is never mis-flagged.
         var function = false
-        for (local in resolver.localsAt(off)) if (local.name == name) {
+        for (local in resolver.localsAt(off, name)) {
             if (local.kind == SymbolKind.METHOD) function = true else return null // a local `fun` vs a `val`/param
         }
         if (resolver.isTypeParameterInScope(name, off)) return null        // a reified `T` in value position
@@ -1463,7 +1464,7 @@ internal class KotlinSemanticChecks(
     /** Stdlib extensions whose declared receiver is NULLABLE, so calling them on a nullable value is legal.
      *  See [unsafeNullableAccess] for why this is a name list and what would replace it. */
     private val NULLABLE_RECEIVER_EXTENSIONS = setOf(
-        "isNullOrBlank", "isNullOrEmpty", "orEmpty", "toString", "toBoolean",
+        "isNullOrBlank", "isNullOrEmpty", "orEmpty", "toString", "toBoolean", "hashCode",
     )
 
     private val UNUSED_PARAM_EXEMPT_MODIFIERS = listOf(
@@ -1906,7 +1907,7 @@ internal class KotlinSemanticChecks(
         )
     }
 
-    private fun argumentCountMismatch(call: KtCallExpression): Diagnostic? {
+    private fun argumentCountMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
         if (call.parent is KtQualifiedExpression && (call.parent as KtQualifiedExpression).selectorExpression === call) return null // member call: receiver unknown
         if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null // named/spread: arity rules differ
@@ -1919,6 +1920,9 @@ internal class KotlinSemanticChecks(
         // resolved-symbol checks instead. Only reached once a same-named top-level function exists, so the
         // scope walk stays off the common path.
         if (localFunctionsInScope(call, call.textRange.startOffset, name).isNotEmpty()) return null
+        // So does a nearer function-typed VALUE (a parameter `f: (T) -> R`, a local, a class property): the call
+        // is its `invoke`, judged by the resolved-symbol checks.
+        if (runCatching { resolver.nearerValueInvokeTargets(call, name) }.getOrNull() != null) return null
         val params = fn.valueParameters
         if (params.any { it.isVarArg }) return null
         val required = params.count { !it.hasDefaultValue() && !it.isVarArg }
@@ -2354,7 +2358,13 @@ internal class KotlinSemanticChecks(
      *  false-positives; the caller already excluded a functional [t]. */
     private fun isConcreteNonFunction(t: KotlinType): Boolean =
         !t.isTypeParameter && t.qualifiedName != "kotlin.Nothing" &&
-            service.isKnownType(canonicalTypeForCheck(t).qualifiedName)
+            !TypeRendering.isFunctionType(t.qualifiedName) &&
+            // A callable reference's `KFunctionN` / `KPropertyN` IS a function type, through a supertype the
+            // model may not carry.
+            !t.qualifiedName.startsWith("kotlin.reflect.") &&
+            service.isKnownType(canonicalTypeForCheck(t).qualifiedName) &&
+            // A class that implements a function type (`class F : (Int) -> Unit`) is one.
+            service.supertypesOf(t.qualifiedName).none { TypeRendering.isFunctionType(it.qualifiedName) }
 
     /**
      * An assignment (`x = expr`) whose right-hand side type isn't assignable to the target's declared type
@@ -2366,10 +2376,11 @@ internal class KotlinSemanticChecks(
     private fun assignmentTypeMismatch(expr: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
         if (expr.operationToken != KtTokens.EQ) return null
         val left = expr.left ?: return null
+        if (left is KtArrayAccessExpression) return indexedAssignmentMismatch(left, expr.right ?: return null, resolver)
         if (left !is KtNameReferenceExpression && left !is KtDotQualifiedExpression) return null
         val right = expr.right ?: return null
         val declared = assignmentTargetType(left, resolver) ?: return null
-        nullForNonNull(declared, right)?.let { return it }
+        if (!isJavaDeclaredProperty(left, resolver)) nullForNonNull(declared, right)?.let { return it }
         val actual = resolver.inferType(right) ?: return null
         if (!isMismatch(declared, actual)) return null
         val r = right.textRange
@@ -2377,25 +2388,70 @@ internal class KotlinSemanticChecks(
     }
 
     /**
-     * The DECLARED type of an assignment target, which is not the same as its type at the assignment.
-     *
-     * `inferType` applies smart casts, and a variable is routinely assigned inside a narrowing of itself:
-     * `var p = e.parent; while (p is Paren) { p = p.parent }` advances the walk by assigning the wider
-     * declared type back, which is legal Kotlin and simply ends the smart cast. Reading the narrowed type as
-     * the target's type made that read "inferred type is KtElement? but KtParenthesizedExpression was
-     * expected" -- a complaint about the only line that could ever terminate the loop.
-     *
-     * A local's declaration type is taken straight from its binding; anything else (a qualified property
-     * target) keeps the inferred type, since Kotlin does not smart-cast a mutable property anyway.
+     * `a[i] = v` is `a.set(i, v)`: the value must fit the `set` operator's last parameter, with the operator's
+     * own type parameters bound from the indices (`prefs[COUNT] = "x"` where `set(key: Key<T>, value: T)` and
+     * `COUNT: Key<Int>`) and the receiver's from its type (`MutableMap<String, Int>`). Reported only when every
+     * `set` of that arity has a known value type and none accepts the value; an unknown receiver, an unbound
+     * type parameter or an untyped value backs off.
      */
-    private fun assignmentTargetType(left: KtExpression, resolver: KotlinResolver): KotlinType? {
-        if (left is KtNameReferenceExpression) {
-            val name = left.getReferencedName()
-            resolver.localsAt(left.textRange.startOffset).firstOrNull { it.name == name }
-                ?.let { return it.type as? KotlinType }
+    private fun indexedAssignmentMismatch(left: KtArrayAccessExpression, right: KtExpression, resolver: KotlinResolver): Diagnostic? {
+        val receiver = left.arrayExpression ?: return null
+        val recvType = resolver.inferType(receiver)?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) } ?: return null
+        if (recvType.isTypeParameter) return null
+        val indices = left.indexExpressions
+        val ctx = resolver.fileContext
+        val setters = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, "set")
+            .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size + 1 && (!it.isExtension || extensionInScope(it, ctx)) }
+        if (setters.isEmpty()) return null
+        val actual = resolver.inferType(right) ?: return null
+        var expected: KotlinType? = null
+        for (setter in setters) {
+            val bindings = resolver.bindingsFromArgExprs(setter, indices)
+            val valueType = service.substitute(setter.paramTypes.last() ?: return null, bindings) as? KotlinType ?: return null
+            if (valueType.isTypeParameter) return null
+            if (setter.typeParameters.any { resolver.mentionsTypeParam(valueType, it) }) return null
+            if (!isMismatch(valueType, actual)) return null
+            expected = expected ?: valueType
         }
-        return resolver.inferType(left)
+        val r = right.textRange
+        return mismatchDiagnostic(r.startOffset, r.endOffset, actual, expected ?: return null)
     }
+
+    /**
+     * Whether the assignment target is a property a JAVA class declares: a bean accessor seen as a property
+     * (`paint.shader`, from `setShader(Shader)`) or a Java field. Its type is a platform type (`Shader!`), and
+     * Kotlin lets `null` through to it. The parse-only model has no platform types, so without this the
+     * accessor's parameter read as plain non-null `Shader` and `paint.shader = null` (the usual way to clear a
+     * gradient) was "Null can not be a value of a non-null type Shader".
+     *
+     * A qualified target asks its receiver's type; a bare name that is not a local asks the enclosing class,
+     * which is how `shader = null` inside a Java subclass resolves.
+     */
+    private fun isJavaDeclaredProperty(left: KtExpression, resolver: KotlinResolver): Boolean {
+        val (ownerType, name) = when (left) {
+            is KtDotQualifiedExpression -> {
+                val selector = left.selectorExpression as? KtNameReferenceExpression ?: return false
+                val recv = resolver.inferType(left.receiverExpression) ?: return false
+                recv to selector.getReferencedName()
+            }
+            is KtNameReferenceExpression -> {
+                val name = left.getReferencedName()
+                if (resolver.localsAt(left.textRange.startOffset, name).isNotEmpty()) return false
+                val cls = enclosingClassFqnOf(left) ?: return false
+                (service.typeByFqn(cls) ?: return false) to name
+            }
+            else -> return false
+        }
+        if (ownerType.isTypeParameter) return false
+        val property = service.membersNamedForCheck(ownerType.qualifiedName, ownerType.typeArguments, name)
+            .firstOrNull { it.kind == SymbolKind.FIELD } ?: return false
+        val declaring = property.declaringClassFqn ?: return false
+        return service.isJavaType(declaring)
+    }
+
+    /** See [KotlinResolver.assignmentTargetDeclaredType]: the target's declared type, never a smart-cast one. */
+    private fun assignmentTargetType(left: KtExpression, resolver: KotlinResolver): KotlinType? =
+        resolver.assignmentTargetDeclaredType(left)
 
     /**
      * A Java bean accessor called explicitly on a Java receiver where Kotlin's synthetic-property syntax reads
@@ -2440,11 +2496,8 @@ internal class KotlinSemanticChecks(
         )
     }
 
-    /** Kotlin's accessor-name decapitalization (`Text` → `text`, `URL` → `URL`). Mirrors
-     *  [KotlinSymbolService.decapitalizeAccessor] (kept local — the analyzer doesn't reach the private one). */
     private fun decapitalizeAccessor(suffix: String): String =
-        if (suffix.length > 1 && suffix[1].isUpperCase()) suffix
-        else suffix.replaceFirstChar { it.lowercaseChar() }
+        dev.ide.lang.kotlin.symbols.decapitalizeJavaAccessor(suffix)
 
     /**
      * A bare `name(...)` call where `name` is not callable — it resolves to a VALUE (a local/parameter/property)
@@ -2473,7 +2526,7 @@ internal class KotlinSemanticChecks(
         // `inferType` typed it from, so `val f = 5; f()` stays flagged.
         val name = callee.getReferencedName()
         val calleeOffset = callee.textRange.startOffset
-        if (resolver.localsAt(calleeOffset).none { it.name == name } &&
+        if (resolver.localsAt(calleeOffset, name).isEmpty() &&
             resolver.implicitReceiverMember(name, calleeOffset)?.kind == SymbolKind.METHOD
         ) return null
         val type = resolver.inferType(callee) ?: return null // unknown → unresolvedBareReference handles it
@@ -2527,8 +2580,19 @@ internal class KotlinSemanticChecks(
         // ALL (null → not a known source sealed type → back off, e.g. a library sealed class).
         val sealedSubs = service.sealedSubclassesOf(type.qualifiedName) ?: return null
         if (sealedSubs.isEmpty()) return null
-        val coveredTypes = coveredTypeNames(expr)
-        val missing = sealedSubs.filter { it.substringAfterLast('.') !in coveredTypes }
+        // An `object` subclass is matched by VALUE as often as by type (`R.Loading ->`, `Loading ->`), and that
+        // covers it just the same; only `is` patterns were counted, so `when (r) { R.Loading -> …; is R.Ok -> … }`
+        // read as missing `Loading`.
+        val coveredTypes = coveredTypeNames(expr) + covered
+        // A subclass that is itself sealed is covered by branches for all of ITS subclasses (`Ev.Ui.Click ->`,
+        // `is Ev.Ui.Scroll ->` cover `Ev.Ui`), as Kotlin's exhaustiveness checker expands it.
+        fun isCovered(fqn: String, depth: Int = 0): Boolean {
+            if (fqn.substringAfterLast('.') in coveredTypes) return true
+            if (depth > 8) return false
+            val subs = service.sealedSubclassesOf(fqn)?.takeIf { it.isNotEmpty() } ?: return false
+            return subs.all { isCovered(it, depth + 1) }
+        }
+        val missing = sealedSubs.filter { !isCovered(it) }
         if (missing.isEmpty()) return null
         return whenDiag(expr, "'when' expression must be exhaustive; add branches for ${missing.joinToString(", ") { it.substringAfterLast('.') }} or an 'else'")
     }
@@ -2614,6 +2678,9 @@ internal class KotlinSemanticChecks(
         // `requireNotNull`/`check` list in the null-flow pass. A user-declared `fun Foo?.bar()` is still
         // flagged -- a known gap, and the one the format change would close.
         if (selectorName(expr) in NULLABLE_RECEIVER_EXTENSIONS) return null
+        // `String?.equals(other: String?, ignoreCase)` is the one stdlib `equals` a nullable receiver may call.
+        if (selectorName(expr) == "equals" && recvType.qualifiedName == "kotlin.String") return null
+        if (callAcceptsNullableReceiver(expr, resolver)) return null
         if (receiver is KtNameReferenceExpression) {
             // Flow is now the authority: `smartCastNonNull` precisely models the direct guards (if/else, early
             // exit, `&&`/`||`, elvis, `!!`, `require`, `is`, and — for a `var` — reassignment). Only forms it does
@@ -2633,6 +2700,31 @@ internal class KotlinSemanticChecks(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "Only safe (?.) or non-null asserted (!!) calls are allowed on a nullable receiver", KotlinDiagnosticCodes.UNSAFE_NULLABLE,
         )
+    }
+
+    /**
+     * Whether the call in [expr]'s selector resolves to an extension DECLARED to accept a nullable receiver:
+     * a source `fun Foo?.bar()`, a receiver that is an unbounded (or nullable-bounded) type parameter
+     * (`fun <T> T?.orDefault(d: T)`, `fun <T> T.twice()`), or a classpath extension on an unbounded type
+     * parameter (`infix fun <A, B> A.to(that: B)`). A SOURCE declaration is read from its PSI, which carries
+     * the `?` the symbol model drops. A classpath `fun <T : Any> T.x()` keys its bound as plain `Any` and is
+     * spared too: under-reporting there is the conservative side.
+     */
+    private fun callAcceptsNullableReceiver(expr: KtDotQualifiedExpression, resolver: KotlinResolver): Boolean {
+        val call = expr.selectorExpression as? KtCallExpression ?: return false
+        val sym = runCatching { resolver.resolveCalleeFunction(call) }.getOrNull() ?: return false
+        if (!sym.isExtension) return false
+        val decl = (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtCallableDeclaration
+        if (decl != null && sym.origin.fromSource) {
+            val recv = decl.receiverTypeReference?.text?.trim() ?: return false
+            if (recv.endsWith("?")) return true
+            val tp = decl.typeParameters.firstOrNull { it.name == recv.substringBefore('<').trim() } ?: return false
+            val bound = tp.extendsBound?.text?.trim() ?: return true // an unbounded `T` admits null
+            return bound.endsWith("?")
+        }
+        val tp = sym.receiverTypeParam ?: return false
+        val bound = sym.typeParameterBounds.getOrNull(sym.typeParameters.indexOf(tp)) as? KotlinType
+        return bound == null || bound.nullable || bound.qualifiedName == "kotlin.Any"
     }
 
     /** Whether the enclosing function guards [name] with a construct the flow analysis does NOT model — a `when`
@@ -2804,10 +2896,18 @@ internal class KotlinSemanticChecks(
         // `isKnownType`), matching the mapping member/supertype lookup already applies (`Builtins.kotlinTypeFor`).
         val d = canonicalTypeForCheck(declared)
         val a = canonicalTypeForCheck(actual)
+        // A function type is synthetic, never a "known type", so the check below always backed off on one.
+        // Judge it the way an argument for a function-type parameter is judged: only a value that can never be
+        // a function (a known, non-function class that implements no function type) is a mismatch.
+        if (isFunctional(d) || TypeRendering.isFunctionType(d.qualifiedName)) {
+            return !isFunctional(a) && isConcreteNonFunction(a)
+        }
         if (!service.isKnownType(d.qualifiedName) || !service.isKnownType(a.qualifiedName)) return false
         // Base types compatible — but a generic TYPE ARGUMENT may still definitely clash (`List<String>` vs
         // `List<Int>`). No variance can bridge two unrelated final argument types, so that is a real mismatch.
-        if (d.isAssignableFrom(a)) return genericArgsMismatch(d, a)
+        // A Java collection (`java.util.List` from `Collectors.toList()`) is the platform type `(Mutable)List`,
+        // so it fills a declared `MutableList` as well as a `List`.
+        if (d.isAssignableFrom(a) || sameClassifier(d, a)) return genericArgsMismatch(d, a)
         return !(d.qualifiedName in NUMERIC && a.qualifiedName in NUMERIC)
     }
 
@@ -2823,20 +2923,42 @@ internal class KotlinSemanticChecks(
      *  into nested arguments. Only unrelated finals count, so covariance/contravariance/invariance is irrelevant
      *  (none can relate two disjoint final types) — no variance model needed and no false positive. */
     private fun genericArgsMismatch(d: KotlinType, a: KotlinType): Boolean {
-        if (d.qualifiedName != a.qualifiedName || d.typeArguments.size != a.typeArguments.size) return false
+        if (!sameClassifier(d, a) || d.typeArguments.size != a.typeArguments.size) return false
+        val variances by lazy { service.classTypeParameterVariance(d.qualifiedName) }
         return d.typeArguments.indices.any { i ->
-            val da = d.typeArguments[i] as? KotlinType ?: return@any false
-            val aa = a.typeArguments[i] as? KotlinType ?: return@any false
+            // A nested argument read from Java bytecode keeps its JVM name (`java.lang.String`), the same class
+            // as the Kotlin one it is compared with.
+            val da = (d.typeArguments[i] as? KotlinType)?.let(::canonicalTypeForCheck) ?: return@any false
+            val aa = (a.typeArguments[i] as? KotlinType)?.let(::canonicalTypeForCheck) ?: return@any false
             when {
+                da.projection == "*" || aa.projection == "*" -> false               // a star accepts any argument
                 da.isTypeParameter || aa.isTypeParameter -> false
+                aa.qualifiedName == "kotlin.Nothing" -> false
                 !service.isKnownType(da.qualifiedName) || !service.isKnownType(aa.qualifiedName) -> false
-                da.qualifiedName == aa.qualifiedName -> genericArgsMismatch(da, aa) // same base → check nested args
+                sameClassifier(da, aa) -> genericArgsMismatch(da, aa)                // same base → check nested args
                 da.isAssignableFrom(aa) || aa.isAssignableFrom(da) -> false          // a subtype relation → variance may allow it
                 da.qualifiedName in NUMERIC && aa.qualifiedName in NUMERIC -> false  // numeric adaptation
-                else -> comparisonFinal(da) && comparisonFinal(aa)                   // two disjoint finals → clash
+                comparisonFinal(da) && comparisonFinal(aa) -> true                   // two disjoint finals → clash
+                // A declared built-in value type in an `out` or invariant position: only that type itself (or
+                // Nothing) can fill it, and the two are unrelated, so `List<String>` against `List<Path>` is a
+                // clash however open `Path` is. The relation was decided on the built-in's own supertype chain,
+                // which the model knows in full. Not the reverse (a built-in INFERRED against an open declared
+                // type: `List<Serializable> = listOf("a")` is valid through a JVM supertype the model may lack),
+                // and not an `in` position, which needs the declared built-in to be a subtype of the inferred one.
+                da.qualifiedName in FINAL_VALUE_TYPES ->
+                    (da.projection.ifEmpty { variances.getOrNull(i).orEmpty() }) != "in"
+                else -> false
             }
         }
     }
+
+    /** Whether [d] and [a] name the same classifier, counting a Java collection as the Kotlin one it is seen
+     *  as: a `java.util.List` from Java code (`stream.collect(Collectors.toList())`) is the platform type
+     *  `(Mutable)List`, so it is compared argument by argument with a declared `List` or `MutableList`. */
+    private fun sameClassifier(d: KotlinType, a: KotlinType): Boolean =
+        d.qualifiedName == a.qualifiedName ||
+            Builtins.javaTypeFor(d.qualifiedName) == a.qualifiedName ||
+            Builtins.javaTypeFor(a.qualifiedName) == d.qualifiedName
 
     /**
      * The `null` literal assigned where a known NON-nullable type is expected — Kotlin's NULL_FOR_NONNULL_TYPE
@@ -3528,6 +3650,9 @@ internal class KotlinSemanticChecks(
         // `class Game { private class Plan }`) resolves by simple name instead of being falsely flagged.
         val resolved = service.resolveTypeName(name, ctx, resolver.enclosingClassFqn(off))
         if (resolved != null && service.isKnownType(resolved)) return null
+        // `Function1<Int, Unit>` is the default-imported `kotlin.Function1`, which is synthetic (the compiler
+        // makes the FunctionN family up) and so never a known type the lookup above can find.
+        if (TypeRendering.isFunctionType("kotlin.$name") && !name.startsWith("Suspend")) return null
         val r = ref.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
     }
@@ -3576,6 +3701,9 @@ internal class KotlinSemanticChecks(
         // `this` here — so it must not be flagged unresolved (the import gate below applies only to top-level
         // extensions). Checked first since these never need an import.
         if (resolver.scopeMemberExtensions(expr.textRange.startOffset, recvType, name).any { it.name == name }) return null
+        // `s.f()` invoking a parameter/local/property of extension function type (`f: String.() -> Int`) with `s`
+        // as its receiver: `f` is a value in scope, not a member of `s`'s type.
+        if (parent is KtCallExpression && resolver.receiverValueInvokeTargets(parent, name, recvType).isNotEmpty()) return null
         // Does the receiver have a member named `name`? Push the NAME into the lookup so only same-named
         // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
         // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)
@@ -3584,8 +3712,7 @@ internal class KotlinSemanticChecks(
         // statics through the Java spelling only — the mapped Kotlin classifier's API omits them, so
         // `membersNamedForCheck` misses them. Mirror the completion gate (spelled as the FQN, a type receiver) so
         // a bare `String.valueOf` stays flagged (Kotlin reports it) while the explicit FQN resolves.
-        val typeStatics = if (resolver.isTypeReceiver(receiver) && receiver.text == recvType.qualifiedName)
-            service.mappedTypeStatics(recvType.qualifiedName).filter { it.name == name } else emptyList()
+        val typeStatics = resolver.mappedJavaStatics(receiver, recvType, name)
         val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
             (if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()) +
             typeStatics

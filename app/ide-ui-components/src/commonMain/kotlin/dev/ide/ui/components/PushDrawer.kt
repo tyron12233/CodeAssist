@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -80,7 +81,9 @@ fun PushDrawer(
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val drawerWidth = if (maxWidth - 56.dp < maxDrawerWidth) maxWidth - 56.dp else maxDrawerWidth
+        // Floored at zero: a window narrower than the 56dp peek (split screen, a zero-width first measure) made
+        // this negative, and Animatable.updateBounds(0, negative) below threw IllegalStateException in the field.
+        val drawerWidth = (if (maxWidth - 56.dp < maxDrawerWidth) maxWidth - 56.dp else maxDrawerWidth).coerceAtLeast(0.dp)
         val maxPx = with(density) { drawerWidth.toPx() }
         val flingPx = with(density) { FlingCommit.toPx() }
         val touchSlop = LocalViewConfiguration.current.touchSlop

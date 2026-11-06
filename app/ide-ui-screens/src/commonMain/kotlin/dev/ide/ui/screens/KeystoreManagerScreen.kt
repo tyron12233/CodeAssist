@@ -21,10 +21,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,10 +76,12 @@ import dev.ide.ui.generated.resources.keystore_password
 import dev.ide.ui.generated.resources.keystore_row_subtitle
 import dev.ide.ui.generated.resources.keystore_section_description
 import dev.ide.ui.generated.resources.keystore_section_title
-import dev.ide.ui.generated.resources.keystore_sha256
+import dev.ide.ui.generated.resources.keystore_copy_fingerprint
+import dev.ide.ui.generated.resources.keystore_fingerprint_copied
 import dev.ide.ui.generated.resources.keystore_validity
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -194,7 +200,7 @@ fun KeystoreImportScreen(backend: IdeBackend, path: String, onBack: () -> Unit, 
 }
 
 @Composable
-private fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
+internal fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
     KsCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(CaIcons.key, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
@@ -208,17 +214,60 @@ private fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
         if (subject != null) {
             Spacer(Modifier.height(6.dp))
             Text(subject, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val shaLabel = ks.sha256?.let { stringResource(Res.string.keystore_sha256, it.replace(":", "").take(16) + "…") }
-            val expiresLabel = ks.validUntilEpochMs?.let { stringResource(Res.string.keystore_expires, approxYear(it).toString()) }
-            val parts = buildList {
-                shaLabel?.let { add(it) }
-                expiresLabel?.let { add(it) }
+            ks.validUntilEpochMs?.let {
+                Text(stringResource(Res.string.keystore_expires, approxYear(it).toString()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             }
-            if (parts.isNotEmpty()) Text(parts.joinToString("   "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            ks.sha256?.let { Spacer(Modifier.height(8.dp)); FingerprintRow("SHA-256", it) }
+            ks.sha1?.let { Spacer(Modifier.height(6.dp)); FingerprintRow("SHA-1", it) }
         } else {
             Spacer(Modifier.height(6.dp))
             Text(stringResource(Res.string.keystore_cert_unreadable), style = MaterialTheme.typography.labelSmall, color = Ide.colors.warning)
         }
+    }
+}
+
+/**
+ * One certificate fingerprint, whole and copyable: it is pasted into Firebase, Google sign-in or an API
+ * console, which want every byte in this colon-separated form, so a shortened one is no use to anyone.
+ * Selectable as well, for copying part of it; the button copies it all and turns into a check briefly.
+ */
+@Composable
+private fun FingerprintRow(algorithm: String, fingerprint: String) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember(fingerprint) { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) { delay(1500); copied = false }
+    }
+    Row(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (copied) stringResource(Res.string.keystore_fingerprint_copied, algorithm) else algorithm,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SelectionContainer {
+                Text(
+                    fingerprint,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = Ca.type.codeFamily),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        IconButtonCa(
+            if (copied) CaIcons.check else CaIcons.copy,
+            stringResource(Res.string.keystore_copy_fingerprint, algorithm),
+            onClick = { clipboard.setText(AnnotatedString(fingerprint)); copied = true },
+            boxSize = 34,
+            iconSize = 16,
+            tint = if (copied) MaterialTheme.colorScheme.primary else null,
+        )
     }
 }
 

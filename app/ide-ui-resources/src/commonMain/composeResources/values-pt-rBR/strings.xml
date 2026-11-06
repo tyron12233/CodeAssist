@@ -9,11 +9,11 @@ Faça um backup dos seus projetos em um arquivo .zip agora, seus arquivos de có
     <string name="backup_projects">Fazer backup dos projetos</string>
     <string name="got_it">Entendi</string>
     <string name="help_improve_codeassist">Ajude a melhorar o CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Compartilhe dados anônimos de desempenho para que possamos ver o que está lento e o que está falhando, e corrigir as coisas certas.
+    <string name="help_improve_codeassist_content"><![CDATA[Compartilhe dados anônimos de uso e desempenho para que possamos ver o que está lento, o que está falhando e quais recursos as pessoas mais usam, e corrigir as coisas certas.
 
-Coletamos: a versão do seu aplicativo e modelo de dispositivo, quanto tempo levam as compilações, a indexação e a conclusão do código, sucesso/falha da compilação, relatórios de erros limpos e quando anúncios são exibidos ou fechados e alterações nas suas configurações de anúncios.
+Coletamos: a versão do app e o modelo do seu dispositivo, quanto tempo levam as compilações, a indexação, o preenchimento de código e as pré-visualizações, o sucesso ou a falha da compilação, relatórios de falhas limpos, com que frequência cada recurso é usado (por exemplo, quantas vezes a pré-visualização de layout ou Localizar usos foi aberta), e quando os anúncios são exibidos ou fechados e as alterações nas suas configurações de anúncios.
 
-Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você usa ou qualquer coisa que o identifique. Você pode alterar isso a qualquer momento em Mais enquanto um projeto estiver aberto.]]></string>
+Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita ou qualquer coisa que identifique você. Você pode alterar isso a qualquer momento em Mais enquanto um projeto estiver aberto.]]></string>
     <string name="learn_more">Saiba mais</string>
     <string name="allow">Permitir</string>
     <string name="no_thanks">Não, obrigado</string>
@@ -93,6 +93,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="support_show_ads_desc">Mostrar anúncios no aplicativo. Você pode desativá-los a qualquer momento.</string>
     <string name="support_show_interstitials">Anúncios em tela cheia</string>
     <string name="support_show_interstitials_desc">Anúncios ocasionais em tela cheia durante compilações longas e ao concluir lições.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="one">Os anúncios ficam ativos por um dia após instalar ou atualizar. Você poderá desativá-los em %1$d hora.</item>
+        <item quantity="many">Os anúncios ficam ativos por um dia após instalar ou atualizar. Você poderá desativá-los em %1$d horas.</item>
+        <item quantity="other">Os anúncios ficam ativos por um dia após instalar ou atualizar. Você poderá desativá-los em %1$d horas.</item>
+    </plurals>
     <string name="ads_off_title">Desativar anúncios?</string>
     <string name="ads_off_body">Você pode desativar apenas os anúncios em tela cheia e manter os anúncios menores em listas e painéis.</string>
     <string name="ads_off_all">Todos</string>
@@ -218,6 +223,40 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="filetree_move">Mover</string>
     <string name="filetree_copy">Copiar</string>
     <string name="filetree_delete">Excluir</string>
+    <string name="filetree_cut">Recortar</string>
+    <string name="filetree_paste">Colar</string>
+    <string name="filetree_duplicate">Duplicar</string>
+    <string name="filetree_copy_path">Copiar caminho</string>
+    <string name="filetree_copy_path_absolute">Caminho absoluto</string>
+    <string name="filetree_copy_path_relative">Caminho a partir da raiz do projeto</string>
+    <string name="filetree_copy_name">Nome</string>
+    <string name="filetree_copy_paths">Copiar caminhos</string>
+    <string name="filetree_move_to">Mover para…</string>
+    <string name="filetree_copy_to">Copiar para…</string>
+    <string name="filetree_select_all">Selecionar tudo</string>
+    <string name="filetree_clear_selection">Limpar seleção</string>
+    <string name="filetree_more_selection">Mais ações para a seleção</string>
+    <string name="filetree_paste_into">Colar em %1$s</string>
+    <string name="filetree_clear_clipboard">Limpar área de transferência</string>
+    <string name="filetree_drop_move">Mover para %1$s</string>
+    <string name="filetree_drop_copy">Copiar para %1$s</string>
+    <string name="filetree_drop_nowhere">Não é possível soltar aqui</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="one">%1$d selecionado</item>
+        <item quantity="other">%1$d selecionados</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="one">%1$d item para mover</item>
+        <item quantity="other">%1$d itens para mover</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="one">%1$d item para copiar</item>
+        <item quantity="other">%1$d itens para copiar</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d itens</item>
+    </plurals>
     <string name="filetree_java_class">Classe Java</string>
     <string name="filetree_kotlin_file">Arquivo Kotlin</string>
     <string name="filetree_resource_file">Arquivo de recurso</string>
@@ -297,6 +336,42 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="breadcrumb_blocks">Blocos</string>
     <string name="breadcrumb_preview">Visualização</string>
     <string name="breadcrumb_split">Dividido</string>
+    <string name="breadcrumb_nav_back">Voltar</string>
+    <string name="breadcrumb_nav_forward">Avançar</string>
+    <string name="symbolbar_more">Mais teclas</string>
+    <string name="symbolbar_trackpad">Arraste para mover o cursor</string>
+    <string name="conflict_current">Atual</string>
+    <string name="conflict_incoming">Recebida</string>
+    <string name="conflict_both">Ambas</string>
+    <string name="conflict_current_desc">Manter o lado atual</string>
+    <string name="conflict_incoming_desc">Manter o lado recebido</string>
+    <string name="conflict_both_desc">Manter os dois lados</string>
+    <string name="gesture_nothing_to_undo">Nada para desfazer</string>
+    <string name="gesture_nothing_to_redo">Nada para refazer</string>
+    <string name="paste_history_title">Colar do histórico</string>
+    <string name="change_revert">Reverter</string>
+    <string name="change_before">No último commit</string>
+    <string name="change_added">Adicionado desde o último commit</string>
+    <string name="history_title">Histórico local</string>
+    <string name="symbolbar_bookmark">Favorito</string>
+    <string name="bookmarks_title">Favoritos</string>
+    <string name="bookmarks_empty">Nenhum favorito ainda. Marque a linha do cursor com F11 ou a tecla Favorito atrás do ⋯ da barra de símbolos.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">Atualizar</string>
+    <string name="todo_empty">Nenhum comentário TODO ou FIXME no projeto.</string>
+    <string name="bookmarks_panel_title">Favoritos e TODO</string>
+    <string name="history_back">Voltar</string>
+    <string name="history_restore">Restaurar</string>
+    <string name="history_empty">Nada salvo ainda. Cada vez que você salva este arquivo, uma versão fica aqui.</string>
+    <string name="history_same">Igual ao arquivo agora</string>
+    <string name="edchrome_local_history">Histórico local</string>
+    <string name="paste_history_clear">Limpar</string>
+    <string name="paste_history_empty">O texto que você copia ou recorta no editor aparece aqui.</string>
+    <string name="symbolbar_clipboard">Área de transferência</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d linha</item>
+        <item quantity="other">%1$d linhas</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Arquivos</string>
@@ -369,6 +444,13 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="kotlin_configure">Configurar Kotlin</string>
     <string name="kotlin_configuring">Configurando…</string>
     <string name="kotlin_configure_failed">Não foi possível configurar o Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">Este arquivo usa bibliotecas que ainda não foram adicionadas: %1$s</string>
+    <string name="missing_libraries_add_all">Adicionar todas</string>
+    <string name="missing_libraries_adding">Adicionando…</string>
+    <string name="missing_library_failed">Não foi possível adicionar a biblioteca: %1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">Veja quais redes de anúncios carregam e por que alguma falha. Só em builds de desenvolvimento em dispositivos de teste.</string>
+    <string name="ad_inspector_open">Abrir</string>
     <string name="sources_download">Baixar</string>
     <string name="sources_downloading">Baixando…</string>
     <string name="sources_download_failed">Falha no download: %1$s</string>
@@ -383,6 +465,40 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="home_store">Explorar</string>
     <string name="home_learn">Aprender</string>
     <string name="store_title">Explorar</string>
+    <string name="submit_checks_title">O que os moderadores verificam</string>
+    <string name="submit_checks_english">O título, o resumo e a descrição estão em inglês.</string>
+    <string name="submit_checks_screenshots">As capturas mostram o app em execução, não o editor.</string>
+    <string name="submit_checks_summary">O resumo diz em uma linha o que o projeto faz.</string>
+    <string name="submit_checks_icon">O app tem um ícone próprio, não o padrão.</string>
+    <string name="submit_checks_own">É um trabalho seu, sem chaves secretas nem histórico de conversa com a IA.</string>
+    <string name="submit_warn_english">Os anúncios da loja precisam estar em inglês, e isto parece outro idioma. Escreva em inglês; você pode manter uma tradução abaixo.</string>
+    <string name="submit_warn_summary">Diga em uma linha o que o projeto faz. Um resumo que só repete o nome é o motivo mais comum para um anúncio ser devolvido.</string>
+    <string name="submit_warn_spam">Termos como “download free” ou “mod apk” parecem spam, e anúncios com eles são devolvidos.</string>
+    <string name="submit_confirm_title">Antes de enviar</string>
+    <string name="submit_confirm_body">É provável que um moderador devolva isto:</string>
+    <string name="submit_confirm_fix">Corrigir</string>
+    <string name="submit_confirm_send">Enviar mesmo assim</string>
+    <string name="store_trending">Em alta</string>
+    <string name="store_trending_search">Pesquisar %1$s</string>
+    <string name="store_translate">Traduzir</string>
+    <string name="store_translating">Traduzindo…</string>
+    <string name="store_translated">Traduzido automaticamente</string>
+    <string name="store_show_original">Ver original</string>
+    <string name="store_update_to">Atualizar para v%1$s</string>
+    <string name="store_update_versions">v%1$s instalada · v%2$s disponível</string>
+    <string name="store_update_conflict_title">Você alterou este projeto</string>
+    <string name="store_update_conflict_body">Atualizar no mesmo lugar substituiria suas alterações em:</string>
+    <string name="store_update_conflict_more">e mais %1$d</string>
+    <string name="store_update_conflict_unknown">Este projeto foi instalado antes de o CodeAssist registrar alterações, então ele não consegue separar suas edições do original.</string>
+    <string name="store_update_conflict_keep">Instalar a nova versão como um projeto separado mantém sua cópia exatamente como está.</string>
+    <string name="store_update_as_copy">Instalar como nova cópia</string>
+    <string name="home_update_review">Revisar</string>
+    <string name="store_update_merge">Atualizar e manter minhas alterações</string>
+    <string name="store_update_changed_files">Arquivos que você alterou desde a instalação:</string>
+    <string name="store_update_merge_note">Suas alterações e a nova versão são combinadas arquivo por arquivo. Onde vocês dois alteraram as mesmas linhas, as duas são mantidas para você escolher.</string>
+    <string name="store_merge_done_title">Atualizado, com suas alterações mantidas</string>
+    <string name="store_merge_conflicts_body">Você e o autor alteraram as mesmas linhas nestes arquivos. As duas versões estão no arquivo, entre os marcadores &lt;&lt;&lt;&lt;&lt;&lt;&lt; e &gt;&gt;&gt;&gt;&gt;&gt;&gt;, para você escolher:</string>
+    <string name="store_merge_open">Abrir projeto</string>
     <string name="store_subtitle">Modelos e projetos de exemplo para começar</string>
     <string name="store_settings_and_tools">Configurações e ferramentas</string>
     <string name="store_search_hint">Pesquisar modelos e exemplos</string>
@@ -561,6 +677,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="edoverlay_rename_kind">Renomear %1$s</string>
     <string name="edoverlay_renaming">Renomeando…</string>
     <string name="edoverlay_rename_hint">Enter para renomear '%1$s', Esc para cancelar</string>
+    <string name="edoverlay_inline_rename_hint">Renomear %1$s · Enter para aplicar, Esc para cancelar</string>
+    <string name="edoverlay_inline_rename_apply">Aplicar</string>
+    <string name="edoverlay_renaming_elsewhere">Renomeando em outros arquivos…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' não é um nome válido</string>
     <string name="edoverlay_go_to_line">Ir para a linha</string>
     <string name="edoverlay_go_to_line_hint">Linha 1–%1$d  (linha ou linha:coluna)</string>
     <string name="edoverlay_no_documentation">Nenhuma documentação</string>
@@ -642,6 +762,53 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="fileop_empty_folder">Esta pasta está vazia.</string>
     <string name="fileop_move_here">Mover para cá</string>
     <string name="fileop_copy_here">Copiar para cá</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="one">Mover %1$d item para…</item>
+        <item quantity="other">Mover %1$d itens para…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="one">Copiar %1$d item para…</item>
+        <item quantity="other">Copiar %1$d itens para…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="one">Excluir %1$d item?</item>
+        <item quantity="other">Excluir %1$d itens?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">Isso os remove permanentemente, e as pastas com tudo o que está dentro delas. Não pode ser desfeito.</string>
+    <string name="fileop_delete_items_body_undo">As pastas são excluídas com tudo o que está dentro delas. Você pode desfazer isso logo em seguida.</string>
+    <string name="fileop_delete_dir_body_undo">Isso exclui a pasta e tudo o que está dentro dela. Você pode desfazer isso logo em seguida.</string>
+    <string name="fileop_delete_file_body_undo">Você pode desfazer isso logo em seguida.</string>
+    <string name="fileop_conflict_title">'%1$s' já existe em %2$s</string>
+    <string name="fileop_conflict_body">Substitua o item que já existe, mantenha ambos (este recebe um novo nome) ou pule-o.</string>
+    <string name="fileop_conflict_replace">Substituir</string>
+    <string name="fileop_conflict_keep_both">Manter ambos</string>
+    <string name="fileop_conflict_skip">Pular</string>
+    <string name="fileop_conflict_progress">Conflito %1$d de %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="one">Fazer o mesmo para o outro conflito</item>
+        <item quantity="other">Fazer o mesmo para os outros %1$d conflitos</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="one">%1$d item movido para %2$s</item>
+        <item quantity="other">%1$d itens movidos para %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="one">%1$d item copiado para %2$s</item>
+        <item quantity="other">%1$d itens copiados para %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="one">%1$d item duplicado</item>
+        <item quantity="other">%1$d itens duplicados</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="one">%1$d item excluído</item>
+        <item quantity="other">%1$d itens excluídos</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="one">%1$d item falhou: %2$s</item>
+        <item quantity="other">%1$d itens falharam: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Desfeito</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">Ocorreu um erro inesperado. O app continuou funcionando.</string>
@@ -741,7 +908,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="keystore_empty">Nenhuma keystore ainda. Crie ou importe uma para assinar compilações de release.</string>
     <string name="keystore_deleted">%1$s excluída</string>
     <string name="keystore_row_subtitle">%1$s · chave: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Copiar impressão digital %1$s</string>
+    <string name="keystore_fingerprint_copied">%1$s copiada</string>
     <string name="keystore_expires">expira ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Não foi possível ler o certificado (a senha pode ter mudado).]]></string>
     <string name="keystore_create_title">Nova keystore</string>
@@ -761,8 +929,26 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <!-- sdk (SdkManagerScreen) -->
     <string name="sdk_manager_title">Gerenciador de SDK</string>
     <string name="sdk_could_not_load">Não foi possível carregar os pacotes.</string>
-    <string name="sdk_sources_documentation">Fontes e documentação</string>
-    <string name="sdk_sources_documentation_desc">Baixe as fontes da plataforma SDK e as fontes do JDK para que o editor possa mostrar javadoc, nomes de parâmetros e ir para a fonte no SDK. Os downloads continuam em segundo plano, então você pode sair desta tela e continuar trabalhando.</string>
+    <string name="sdk_intro">Instale as plataformas Android com as quais seus módulos compilam, e as fontes para o editor mostrar documentação e ir ao código do SDK. Os downloads continuam em segundo plano, então você pode sair desta tela.</string>
+    <string name="sdk_show_all_versions">Mostrar todas as versões (%1$d)</string>
+    <string name="sdk_show_fewer">Mostrar menos</string>
+    <string name="sdk_tag_latest">Mais recente</string>
+    <string name="sdk_tag_project">Seu projeto</string>
+    <string name="sdk_fail_offline">Não foi possível acessar o servidor de downloads. Verifique sua conexão com a internet e tente novamente.</string>
+    <string name="sdk_fail_storage">Não há armazenamento livre suficiente para concluir este download. Libere espaço e tente novamente.</string>
+    <string name="sdk_fail_not_found">O servidor de downloads não tem mais este pacote. Atualize a lista e tente novamente.</string>
+    <string name="sdk_fail_server_code">O servidor de downloads teve um problema (HTTP %1$d). Isso costuma ser temporário, então tente novamente em instantes.</string>
+    <string name="sdk_fail_server">O servidor de downloads teve um problema. Isso costuma ser temporário, então tente novamente em instantes.</string>
+    <string name="sdk_fail_license">A licença deste pacote precisa ser aceita antes da instalação.</string>
+    <string name="sdk_fail_corrupt">O arquivo baixado estava corrompido. Tente novamente para baixar uma cópia nova.</string>
+    <string name="sdk_fail_cancelled">Cancelado. O que já foi baixado é mantido, então continua de onde parou.</string>
+    <string name="sdk_fail_unknown">O download não terminou.</string>
+    <string name="sdk_load_failed_title">Não foi possível carregar a lista de pacotes</string>
+    <string name="sdk_action_free_space">Liberar espaço</string>
+    <string name="sdk_action_refresh">Atualizar lista</string>
+    <string name="sdk_action_review_license">Ver licença</string>
+    <string name="sdk_details_show">Detalhes</string>
+    <string name="sdk_details_hide">Ocultar detalhes</string>
     <string name="sdk_downloads">Downloads</string>
     <string name="sdk_clear_finished">Limpar concluídos</string>
     <string name="sdk_jdk">JDK</string>
@@ -1144,6 +1330,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_editor_two_axis_desc">Arraste em qualquer direção para rolar nos dois eixos ao mesmo tempo (toque)</string>
     <string name="set_editor_pinch">Pinçar para ampliar</string>
     <string name="set_editor_pinch_desc">Pince com dois dedos para alterar o tamanho da fonte do código</string>
+    <string name="set_editor_volume_keys">Teclas de volume movem o cursor</string>
+    <string name="set_editor_volume_keys_desc">Ao digitar no celular, aumentar o volume move o cursor para a esquerda e diminuir para a direita, em vez de mudar o volume</string>
+    <string name="set_editor_inline_blame">Quem alterou esta linha</string>
+    <string name="set_editor_inline_blame_desc">Em um projeto Git, mostra quem alterou por último a linha do cursor, quando e por quê, esmaecido após o fim dela</string>
+    <string name="blame_uncommitted">Ainda sem commit</string>
     <string name="set_editor_kbd_suggest">Sugestões do teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permita que o teclado virtual faça autocorreção, sugestões e espaçamento automático (um teclado normal). Desative para entrada de código bruto, para que um '.' digitado não receba um espaço inserido automaticamente, ao custo da barra de sugestões.</string>
     <string name="set_editor_close_unsaved">Fechar uma aba com alterações não salvas</string>
@@ -1193,7 +1384,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_br_dexbatch_desc">Em um app muito grande, a etapa final de dexing mescla as classes em lotes para não precisar de todas na memória de uma vez. Lotes menores mantêm essa memória baixa (bom para dispositivos com pouca memória), mas deixam o APK um pouco maior (menos compressão compartilhada entre classes); lotes maiores compactam melhor, mas precisam de mais memória por mesclagem. A maioria dos apps nunca chega a isso, só entra em ação a partir de alguns milhares de classes.</string>
     <string name="set_br_dexfork">Máximo de processos de dex simultâneos</string>
     <string name="set_privacy_analytics">Compartilhar análise de desempenho</string>
-    <string name="set_privacy_analytics_desc">Apenas métricas anônimas de desempenho e de anúncios, nunca seu código ou nomes de arquivos</string>
+    <string name="set_privacy_analytics_desc">Apenas contagens de uso e métricas anônimas de desempenho e anúncios, nunca seu código ou nomes de arquivos</string>
     <string name="set_privacy_clear">Limpar caches</string>
     <string name="set_privacy_clear_desc">Liberar caches regeneráveis de dependências / linguagem / visualização (nunca o código-fonte)</string>
     <string name="set_privacy_clear_btn">Limpar</string>
@@ -1280,4 +1471,82 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="close_project_save_and_close">Salvar e fechar</string>
     <string name="sdk_platform_tools">Ferramentas da plataforma</string>
     <string name="sdk_platform_tools_desc">adb, que o Executar usa para instalar e abrir seu app em um celular ou emulador conectado a este computador.</string>
+    <string name="you_delete_account">Excluir conta</string>
+    <string name="you_delete_account_title">Excluir sua conta?</string>
+    <string name="you_delete_account_body">Isso exclui permanentemente sua conta do CodeAssist e tudo o que está salvo nela: seu perfil, projetos publicados, avaliações, curtidas, seguidos, resultados de desafios e pontos de IA. Os projetos neste dispositivo não são afetados. Não é possível desfazer.</string>
+    <string name="you_delete_account_deleting">Excluindo…</string>
+    <string name="you_account">Conta</string>
+    <plurals name="you_releases">
+        <item quantity="one">%1$d versão</item>
+        <item quantity="other">%1$d versões</item>
+    </plurals>
+    <string name="notif_title">Notificações</string>
+    <string name="notif_empty">Nada para conferir.</string>
+    <string name="notif_empty_body">Avaliações, atualizações e compilações concluídas aparecem aqui.</string>
+    <string name="notif_mark_all">Marcar tudo como lido</string>
+    <string name="notif_clear">Limpar</string>
+    <string name="notif_open">Abrir</string>
+    <string name="notif_dismiss">Dispensar</string>
+    <string name="notif_section_new">Novas</string>
+    <string name="notif_view">Ver</string>
+    <string name="notif_more_row_desc">O que aconteceu enquanto você trabalhava</string>
+    <string name="notif_section_earlier">Anteriores</string>
+    <string name="notif_show_more">Mostrar mais</string>
+    <string name="notif_show_less">Mostrar menos</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">Loja</string>
+    <string name="notif_kind_update">Atualização da loja</string>
+    <string name="notif_kind_build">Compilação</string>
+    <string name="notif_kind_agent">Agente de IA</string>
+    <string name="notif_kind_learn">Aprender</string>
+    <string name="notif_kind_system">CodeAssist</string>
+    <string name="notif_just_now">agora mesmo</string>
+    <string name="notif_minutes">há %1$d min</string>
+    <string name="notif_hours">há %1$d h</string>
+    <string name="notif_days">há %1$d d</string>
+    <string name="settings_language_servers">Servidores de linguagem</string>
+    <string name="settings_language_servers_subtitle">Erros, autocompletar e navegação de servidores que você instalou</string>
+    <string name="lsp_intro">Adicione um servidor de Language Server Protocol que você instalou. Arquivos com as extensões dele recebem seus erros, autocompletar, navegação, renomeação e formatação. Uma linguagem nova vale para o próximo projeto que você abrir.</string>
+    <string name="lsp_unsupported">Servidores de linguagem não estão disponíveis neste dispositivo.</string>
+    <string name="lsp_empty">Nenhum servidor de linguagem ainda. Adicione um ou comece por um servidor comum abaixo.</string>
+    <string name="lsp_add">Adicionar</string>
+    <string name="lsp_presets">Servidores comuns</string>
+    <string name="lsp_new_title">Novo servidor de linguagem</string>
+    <string name="lsp_edit_title">Editar servidor de linguagem</string>
+    <string name="lsp_field_name">Nome</string>
+    <string name="lsp_field_command">Comando</string>
+    <string name="lsp_field_extensions">Extensões de arquivo</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Id da linguagem</string>
+    <string name="lsp_field_options">Opções de inicialização (JSON, opcional)</string>
+    <string name="lsp_check">Verificar comando</string>
+    <string name="lsp_save">Salvar</string>
+    <string name="lsp_cancel">Cancelar</string>
+    <string name="lsp_delete">Excluir</string>
+    <string name="lsp_status_running">Em execução</string>
+    <string name="lsp_status_starting">Iniciando</string>
+    <string name="lsp_status_not_started">Não iniciado</string>
+    <string name="review_copy">Copiar texto</string>
+    <string name="link_open_title">Abrir este link?</string>
+    <string name="link_mail_title">Escrever para este endereço?</string>
+    <string name="link_from_user">Alguém da comunidade adicionou este link. O CodeAssist não verificou para onde ele leva.</string>
+    <string name="link_mail_from_user">Alguém da comunidade adicionou este endereço. Seu app de e-mail abre com uma nova mensagem para ele.</string>
+    <string name="link_warn_http">Sem criptografia (http): outras pessoas na sua rede podem ver ou alterar a página.</string>
+    <string name="link_warn_userinfo">A parte antes do @ não é o site. Este link leva a %1$s.</string>
+    <string name="link_warn_ip">Leva a um endereço IP, não a um site com nome.</string>
+    <string name="link_warn_lookalike">O endereço usa caracteres que podem imitar o nome de um site conhecido.</string>
+    <string name="link_open">Abrir</string>
+    <string name="link_copy">Copiar link</string>
+    <string name="plugins_leftovers_title">Restos de plugins removidos</string>
+    <string name="plugins_leftovers_body">Desinstalar um plugin deixa os dados dele para trás. Exclua para liberar espaço ou mantenha caso vá reinstalar.</string>
+    <string name="plugins_leftover_delete">Excluir</string>
+    <string name="plugins_leftovers_delete_all">Excluir tudo (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">Excluir os dados de %1$s?</string>
+    <string name="plugins_leftovers_confirm_all_title">Excluir os dados de todos os plugins removidos?</string>
+    <string name="plugins_leftover_confirm_body">Isso libera %1$s. Um plugin que você reinstalar depois começa do zero.</string>
+    <string name="storage_cat_plugin_leftovers_title">Dados de plugins removidos</string>
+    <string name="storage_cat_plugin_leftovers_desc">Deixados por plugins que você desinstalou</string>
+    <string name="storage_clear_plugin_leftovers_title">Excluir os dados de plugins removidos?</string>
+    <string name="storage_clear_plugin_leftovers_body">Isso exclui %1$s deixados por plugins desinstalados. Um plugin que você reinstalar depois começa do zero.</string>
+    <string name="colors_plugin_notice">%1$s vem com um plugin. Suas alterações são salvas em uma cópia.</string>
 </resources>

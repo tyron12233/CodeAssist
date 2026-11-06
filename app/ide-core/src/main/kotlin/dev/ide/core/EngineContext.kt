@@ -146,6 +146,19 @@ internal interface EngineContext {
     /** Every project `.java` file across all modules' source roots — the rename reference-sweep candidates. */
     fun projectJavaFiles(): List<Path>
 
+    /** Every project `.kt` file across all modules' source roots — the Kotlin usage-sweep candidates. */
+    fun projectKotlinFiles(): List<Path>
+
+    /** Where the reference at [offset] in Java [file] resolves (file, name offset), by Java's go-to-declaration;
+     *  a Kotlin declaration is reached through its light class. Null when nothing in the project. */
+    fun javaDeclarationAt(file: Path, text: String, offset: Int): Pair<Path, Int>?
+
+    /** [javaDeclarationAt] for several [offsets] in one Java file, parsed once; one answer per offset. */
+    fun javaDeclarationsAt(file: Path, text: String, offsets: List<Int>): List<Pair<Path, Int>?>
+
+    /** The analysis target a plugin provider is handed for [file]'s live buffer [text]; null when unanalysable. */
+    fun pluginTarget(file: Path, text: String): dev.ide.analysis.AnalysisTarget?
+
     /** True if [s] is a valid Java identifier (and not a reserved word) — the rename validator. */
     fun isValidJavaIdentifier(s: String): Boolean
 

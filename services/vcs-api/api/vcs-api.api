@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:vcs-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:vcs-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/vcs/AccountStore
@@ -31,11 +31,13 @@ dev/ide/vcs/DeviceAuthPoll$Failed
 	kind class
 	super java/lang/Object
 	implements dev/ide/vcs/DeviceAuthPoll
+	ctor (Ldev/ide/vcs/VcsText;)V
 	ctor (Ljava/lang/String;)V
 	method component1()Ljava/lang/String;
 	method copy(Ljava/lang/String;)Ldev/ide/vcs/DeviceAuthPoll$Failed;
 	method equals(Ljava/lang/Object;)Z
 	method getMessage()Ljava/lang/String;
+	method getText()Ldev/ide/vcs/VcsText;
 	method hashCode()I
 	method static copy$default(Ldev/ide/vcs/DeviceAuthPoll$Failed;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/DeviceAuthPoll$Failed;
 	method toString()Ljava/lang/String;
@@ -93,6 +95,7 @@ dev/ide/vcs/ForgeClient
 	method abstract startDeviceAuth()Ldev/ide/vcs/DeviceAuthorization;
 	method abstract verifyToken(Ljava/lang/String;)Ldev/ide/vcs/VcsAccount;
 	method cloneUrl(Ldev/ide/vcs/ForgeRepo;)Ljava/lang/String;
+	method repository(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/ForgeRepo;
 	method static createRepository$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/vcs/ForgeRepo;
 	method static repositories$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/Object;)Ljava/util/List;
 dev/ide/vcs/ForgeClient$DefaultImpls
@@ -101,6 +104,7 @@ dev/ide/vcs/ForgeClient$DefaultImpls
 	method static cloneUrl(Ldev/ide/vcs/ForgeClient;Ldev/ide/vcs/ForgeRepo;)Ljava/lang/String;
 	method static createRepository$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/vcs/ForgeRepo;
 	method static repositories$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/Object;)Ljava/util/List;
+	method static repository(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/ForgeRepo;
 dev/ide/vcs/ForgePullRequest
 	kind class
 	super java/lang/Object
@@ -206,8 +210,11 @@ dev/ide/vcs/VcsAccount$Kind
 dev/ide/vcs/VcsAuthException
 	kind class
 	super java/lang/Exception
+	ctor (Ldev/ide/vcs/VcsText;Ljava/lang/Throwable;)V
+	ctor (Ldev/ide/vcs/VcsText;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	ctor (Ljava/lang/String;Ljava/lang/Throwable;)V
 	ctor (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getText()Ldev/ide/vcs/VcsText;
 dev/ide/vcs/VcsAuthor
 	kind class
 	super java/lang/Object
@@ -220,6 +227,25 @@ dev/ide/vcs/VcsAuthor
 	method getName()Ljava/lang/String;
 	method hashCode()I
 	method static copy$default(Ldev/ide/vcs/VcsAuthor;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsAuthor;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsBlameLine
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;JLjava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ldev/ide/vcs/VcsAuthor;
+	method component4()J
+	method component5()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;JLjava/lang/String;)Ldev/ide/vcs/VcsBlameLine;
+	method equals(Ljava/lang/Object;)Z
+	method getAuthor()Ldev/ide/vcs/VcsAuthor;
+	method getCommitId()Ljava/lang/String;
+	method getShortId()Ljava/lang/String;
+	method getSummary()Ljava/lang/String;
+	method getTimeMs()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsBlameLine;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;JLjava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsBlameLine;
 	method toString()Ljava/lang/String;
 dev/ide/vcs/VcsBranch
 	kind class
@@ -395,11 +421,15 @@ dev/ide/vcs/VcsDiff
 dev/ide/vcs/VcsException
 	kind class
 	super java/lang/Exception
+	ctor (Ldev/ide/vcs/VcsText;Ljava/lang/Throwable;)V
+	ctor (Ldev/ide/vcs/VcsText;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	ctor (Ljava/lang/String;Ljava/lang/Throwable;)V
 	ctor (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getText()Ldev/ide/vcs/VcsText;
 dev/ide/vcs/VcsMergeResult
 	kind class
 	super java/lang/Object
+	ctor (Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ldev/ide/vcs/VcsText;)V
 	ctor (Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;)V
 	ctor (Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ldev/ide/vcs/VcsMergeResult$Status;
@@ -410,6 +440,7 @@ dev/ide/vcs/VcsMergeResult
 	method getConflicts()Ljava/util/List;
 	method getMessage()Ljava/lang/String;
 	method getStatus()Ldev/ide/vcs/VcsMergeResult$Status;
+	method getText()Ldev/ide/vcs/VcsText;
 	method hashCode()I
 	method static copy$default(Ldev/ide/vcs/VcsMergeResult;Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsMergeResult;
 	method toString()Ljava/lang/String;
@@ -425,6 +456,140 @@ dev/ide/vcs/VcsMergeResult$Status
 	method static getEntries()Lkotlin/enums/EnumEntries;
 	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsMergeResult$Status;
 	method static values()[Ldev/ide/vcs/VcsMergeResult$Status;
+dev/ide/vcs/VcsMessage
+	kind enum
+	super java/lang/Enum
+	field static ABORTED Ldev/ide/vcs/VcsMessage;
+	field static ABORT_FAILED Ldev/ide/vcs/VcsMessage;
+	field static ACTIVITY_CLONING Ldev/ide/vcs/VcsMessage;
+	field static ACTIVITY_FETCHING Ldev/ide/vcs/VcsMessage;
+	field static ACTIVITY_PUBLISHING Ldev/ide/vcs/VcsMessage;
+	field static ACTIVITY_PULLING Ldev/ide/vcs/VcsMessage;
+	field static ACTIVITY_PUSHING Ldev/ide/vcs/VcsMessage;
+	field static ADD_REMOTE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static ALREADY_UP_TO_DATE Ldev/ide/vcs/VcsMessage;
+	field static AND_MORE Ldev/ide/vcs/VcsMessage;
+	field static AUTH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static BLAME_FAILED Ldev/ide/vcs/VcsMessage;
+	field static BLOCKED_BY_LOCAL_EDITS Ldev/ide/vcs/VcsMessage;
+	field static BRANCH_CREATED Ldev/ide/vcs/VcsMessage;
+	field static BRANCH_DELETED Ldev/ide/vcs/VcsMessage;
+	field static BRANCH_NAME_INVALID Ldev/ide/vcs/VcsMessage;
+	field static BRANCH_NAME_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static BRANCH_RENAMED Ldev/ide/vcs/VcsMessage;
+	field static CHECKOUT_FAILED Ldev/ide/vcs/VcsMessage;
+	field static CLONED Ldev/ide/vcs/VcsMessage;
+	field static CLONE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static CLONE_FOLDER_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static COMMITTED Ldev/ide/vcs/VcsMessage;
+	field static COMMIT_FAILED Ldev/ide/vcs/VcsMessage;
+	field static COMMIT_MESSAGE_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static CREATE_BRANCH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static DELETE_BRANCH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static DELETE_CURRENT_BRANCH Ldev/ide/vcs/VcsMessage;
+	field static DIFF_FAILED Ldev/ide/vcs/VcsMessage;
+	field static DISCARD_CONFLICTED Ldev/ide/vcs/VcsMessage;
+	field static DISCARD_FAILED Ldev/ide/vcs/VcsMessage;
+	field static FAST_FORWARDED Ldev/ide/vcs/VcsMessage;
+	field static FETCHED Ldev/ide/vcs/VcsMessage;
+	field static FETCH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static FOLDER_NOT_EMPTY Ldev/ide/vcs/VcsMessage;
+	field static GH_CREDENTIALS_REJECTED Ldev/ide/vcs/VcsMessage;
+	field static GH_HTTP_ERROR Ldev/ide/vcs/VcsMessage;
+	field static GH_NO_DEVICE_CODE Ldev/ide/vcs/VcsMessage;
+	field static GH_TOKEN_REJECTED Ldev/ide/vcs/VcsMessage;
+	field static GH_UNEXPECTED Ldev/ide/vcs/VcsMessage;
+	field static GH_UNEXPECTED_USER Ldev/ide/vcs/VcsMessage;
+	field static GH_UNREACHABLE Ldev/ide/vcs/VcsMessage;
+	field static GH_UNREADABLE Ldev/ide/vcs/VcsMessage;
+	field static GITIGNORE_UPDATED Ldev/ide/vcs/VcsMessage;
+	field static HISTORY_FAILED Ldev/ide/vcs/VcsMessage;
+	field static HOST_CREDENTIALS_REMOVED Ldev/ide/vcs/VcsMessage;
+	field static HOST_CREDENTIALS_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static HOST_CREDENTIALS_SAVED Ldev/ide/vcs/VcsMessage;
+	field static IDENTITY_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static IDENTITY_SAVED Ldev/ide/vcs/VcsMessage;
+	field static IDENTITY_SAVE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static IGNORE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static INIT_FAILED Ldev/ide/vcs/VcsMessage;
+	field static LIST_BRANCHES_FAILED Ldev/ide/vcs/VcsMessage;
+	field static LIST_REMOTES_FAILED Ldev/ide/vcs/VcsMessage;
+	field static LIST_STASHES_FAILED Ldev/ide/vcs/VcsMessage;
+	field static MERGED Ldev/ide/vcs/VcsMessage;
+	field static MERGE_CONFLICTS Ldev/ide/vcs/VcsMessage;
+	field static MERGE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static MERGE_INCOMPLETE Ldev/ide/vcs/VcsMessage;
+	field static NET_CONNECT Ldev/ide/vcs/VcsMessage;
+	field static NET_TIMEOUT Ldev/ide/vcs/VcsMessage;
+	field static NET_TLS Ldev/ide/vcs/VcsMessage;
+	field static NET_UNREACHABLE Ldev/ide/vcs/VcsMessage;
+	field static NOTHING_TO_STASH Ldev/ide/vcs/VcsMessage;
+	field static NOT_A_REPOSITORY Ldev/ide/vcs/VcsMessage;
+	field static NOT_UNDER_VCS Ldev/ide/vcs/VcsMessage;
+	field static NO_ENGINE Ldev/ide/vcs/VcsMessage;
+	field static NO_GITHUB_REMOTE Ldev/ide/vcs/VcsMessage;
+	field static NO_PROJECT Ldev/ide/vcs/VcsMessage;
+	field static NO_REMOTE Ldev/ide/vcs/VcsMessage;
+	field static OPEN_FAILED Ldev/ide/vcs/VcsMessage;
+	field static PR_DETACHED Ldev/ide/vcs/VcsMessage;
+	field static PR_OPENED Ldev/ide/vcs/VcsMessage;
+	field static PR_SAME_BRANCH Ldev/ide/vcs/VcsMessage;
+	field static PR_TITLE_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static PUBLISHED Ldev/ide/vcs/VcsMessage;
+	field static PUBLISH_DETACHED Ldev/ide/vcs/VcsMessage;
+	field static PUBLISH_NEEDS_COMMIT Ldev/ide/vcs/VcsMessage;
+	field static PUBLISH_REMOTE_EXISTS Ldev/ide/vcs/VcsMessage;
+	field static PULLED Ldev/ide/vcs/VcsMessage;
+	field static PULL_FAILED Ldev/ide/vcs/VcsMessage;
+	field static PULL_INCOMPLETE Ldev/ide/vcs/VcsMessage;
+	field static PULL_NOT_COMPLETED Ldev/ide/vcs/VcsMessage;
+	field static PUSHED Ldev/ide/vcs/VcsMessage;
+	field static PUSH_BEHIND Ldev/ide/vcs/VcsMessage;
+	field static PUSH_DETACHED Ldev/ide/vcs/VcsMessage;
+	field static PUSH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static PUSH_NO_DELETE Ldev/ide/vcs/VcsMessage;
+	field static PUSH_REJECTED Ldev/ide/vcs/VcsMessage;
+	field static PUSH_UNBORN Ldev/ide/vcs/VcsMessage;
+	field static READ_COMMIT_FAILED Ldev/ide/vcs/VcsMessage;
+	field static REBASED Ldev/ide/vcs/VcsMessage;
+	field static REBASE_STOPPED Ldev/ide/vcs/VcsMessage;
+	field static REMOTE_ADDED Ldev/ide/vcs/VcsMessage;
+	field static REMOTE_REMOVED Ldev/ide/vcs/VcsMessage;
+	field static REMOVE_REMOTE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static RENAME_BRANCH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static REPO_CREATED Ldev/ide/vcs/VcsMessage;
+	field static REPO_NAME_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static RESOLVE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static SHOW_FAILED Ldev/ide/vcs/VcsMessage;
+	field static SIGNED_IN Ldev/ide/vcs/VcsMessage;
+	field static SIGNED_OUT Ldev/ide/vcs/VcsMessage;
+	field static SIGN_IN_CODE_EXPIRED Ldev/ide/vcs/VcsMessage;
+	field static SIGN_IN_DENIED Ldev/ide/vcs/VcsMessage;
+	field static SIGN_IN_FIRST Ldev/ide/vcs/VcsMessage;
+	field static SOMETHING_WENT_WRONG Ldev/ide/vcs/VcsMessage;
+	field static SOME_FILES Ldev/ide/vcs/VcsMessage;
+	field static STAGE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static STASHED Ldev/ide/vcs/VcsMessage;
+	field static STASH_APPLIED Ldev/ide/vcs/VcsMessage;
+	field static STASH_APPLY_FAILED Ldev/ide/vcs/VcsMessage;
+	field static STASH_DROPPED Ldev/ide/vcs/VcsMessage;
+	field static STASH_DROP_FAILED Ldev/ide/vcs/VcsMessage;
+	field static STASH_FAILED Ldev/ide/vcs/VcsMessage;
+	field static STATUS_FAILED Ldev/ide/vcs/VcsMessage;
+	field static SWITCHED Ldev/ide/vcs/VcsMessage;
+	field static THE_SERVER Ldev/ide/vcs/VcsMessage;
+	field static TOKEN_REQUIRED Ldev/ide/vcs/VcsMessage;
+	field static UNKNOWN_BRANCH Ldev/ide/vcs/VcsMessage;
+	field static UNKNOWN_BRANCH_OR_REVISION Ldev/ide/vcs/VcsMessage;
+	field static UNKNOWN_COMMIT Ldev/ide/vcs/VcsMessage;
+	field static UNKNOWN_REVISION Ldev/ide/vcs/VcsMessage;
+	field static UNSTAGE_FAILED Ldev/ide/vcs/VcsMessage;
+	field static WITH_REASON Ldev/ide/vcs/VcsMessage;
+	method getEnglish()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsMessage;
+	method static values()[Ldev/ide/vcs/VcsMessage;
 dev/ide/vcs/VcsOperation
 	kind enum
 	super java/lang/Enum
@@ -517,6 +682,7 @@ dev/ide/vcs/VcsRepository
 	method abstract stashes()Ljava/util/List;
 	method abstract status()Ldev/ide/vcs/VcsStatus;
 	method abstract unstage(Ljava/util/List;)V
+	method blame(Ljava/lang/String;)Ljava/util/List;
 	method close()V
 	method static branches$default(Ldev/ide/vcs/VcsRepository;ZILjava/lang/Object;)Ljava/util/List;
 	method static commit$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;ZILjava/lang/Object;)Ldev/ide/vcs/VcsCommit;
@@ -537,6 +703,7 @@ dev/ide/vcs/VcsRepository$Companion
 dev/ide/vcs/VcsRepository$DefaultImpls
 	kind class
 	super java/lang/Object
+	method static blame(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;)Ljava/util/List;
 	method static branches$default(Ldev/ide/vcs/VcsRepository;ZILjava/lang/Object;)Ljava/util/List;
 	method static close(Ldev/ide/vcs/VcsRepository;)V
 	method static commit$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;ZILjava/lang/Object;)Ldev/ide/vcs/VcsCommit;
@@ -600,6 +767,8 @@ dev/ide/vcs/VcsStatus
 dev/ide/vcs/VcsSyncResult
 	kind class
 	super java/lang/Object
+	ctor (ZLdev/ide/vcs/VcsText;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;)V
+	ctor (ZLdev/ide/vcs/VcsText;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	ctor (ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;)V
 	ctor (ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Z
@@ -611,10 +780,26 @@ dev/ide/vcs/VcsSyncResult
 	method getMerge()Ldev/ide/vcs/VcsMergeResult;
 	method getMessage()Ljava/lang/String;
 	method getOk()Z
+	method getText()Ldev/ide/vcs/VcsText;
 	method getUpdates()Ljava/util/List;
 	method hashCode()I
 	method static copy$default(Ldev/ide/vcs/VcsSyncResult;ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
 	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsText
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/vcs/VcsMessage;Ljava/util/List;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/vcs/VcsText$Companion;
+	method getArgs()Ljava/util/List;
+	method getEnglish()Ljava/lang/String;
+	method getMessage()Ldev/ide/vcs/VcsMessage;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsText$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method literal(Ljava/lang/String;)Ldev/ide/vcs/VcsText;
+	method of(Ldev/ide/vcs/VcsMessage;[Ljava/lang/Object;)Ldev/ide/vcs/VcsText;
 dev/ide/vcs/VcsTracking
 	kind class
 	super java/lang/Object

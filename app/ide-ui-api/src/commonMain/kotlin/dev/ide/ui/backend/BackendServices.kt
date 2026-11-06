@@ -66,6 +66,66 @@ interface FileService {
     /** Copy a file/dir into [destDir]; returns the new path or null. Bumps [fileSystemEpoch]. */
     fun copyPath(path: String, destDir: String): String? = null
 
+    /**
+     * The [paths] whose names are already taken in [destDir], so the UI can ask what to do before
+     * [transferPaths]. A move into the folder an item is already in is no conflict (it is skipped); a copy there
+     * is (it lands next to itself).
+     */
+    fun conflictsIn(kind: UiTransferKind, paths: List<String>, destDir: String): List<String> {
+        val existing = listDirectory(destDir).map { it.path }.toSet()
+        val names = existing.map(::pathLeafName).toSet()
+        return paths.filter { p ->
+            pathLeafName(p) in names && !(kind == UiTransferKind.Move && p in existing)
+        }
+    }
+
+    /**
+     * Move or copy every item into [destDir] in one call: one reindex, one import sweep for the moved sources,
+     * and one undo step for the lot. Each item's [UiTransferItem.onConflict] says what happens when its name is
+     * taken. Bumps [fileSystemEpoch] once when anything changed.
+     *
+     * The default goes item by item through [movePath]/[copyPath]: Replace deletes the existing item for good,
+     * and Keep both is not available.
+     */
+    fun transferPaths(kind: UiTransferKind, items: List<UiTransferItem>, destDir: String): UiTransferResult {
+        val done = LinkedHashMap<String, String>()
+        val skipped = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        for (item in items) {
+            val existing = listDirectory(destDir).firstOrNull { it.name == pathLeafName(item.path) }
+            if (existing != null && existing.path == item.path && kind == UiTransferKind.Move) {
+                skipped += item.path; continue
+            }
+            if (existing != null) when (item.onConflict) {
+                UiConflictChoice.Skip -> { skipped += item.path; continue }
+                UiConflictChoice.KeepBoth -> { failed[item.path] = "Keep both is not supported here."; continue }
+                UiConflictChoice.Replace -> if (existing.path == item.path || !deletePath(existing.path)) {
+                    failed[item.path] = "Could not replace '${existing.name}'."; continue
+                }
+            }
+            val landed = if (kind == UiTransferKind.Move) movePath(item.path, destDir) else copyPath(item.path, destDir)
+            if (landed != null) done[item.path] = landed else failed[item.path] = "Could not transfer it."
+        }
+        return UiTransferResult(done, skipped, failed)
+    }
+
+    /**
+     * Delete every path, recoverably where the backend can (the result's undo token restores them). Bumps
+     * [fileSystemEpoch] once. The default deletes each one for good through [deletePath].
+     */
+    fun deletePaths(paths: List<String>): UiDeleteResult {
+        val deleted = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        for (p in paths) if (deletePath(p)) deleted += p else failed[p] = "Could not delete it."
+        return UiDeleteResult(deleted, failed)
+    }
+
+    /** True when [deletePaths] keeps what it deletes in a trash, so [undoFileOperation] can bring it back. */
+    val supportsUndo: Boolean get() = false
+
+    /** Reverse the [transferPaths] or [deletePaths] call that returned [token]. A token undoes once. */
+    fun undoFileOperation(token: String): UiUndoResult = UiUndoResult(false, "Undo is not supported here.")
+
     /** Bumps whenever a file is created/imported/removed, so the UI re-reads [fileTree]. */
     val fileSystemEpoch: StateFlow<Int> get() = MutableStateFlow(0)
 
@@ -132,14 +192,35 @@ interface EditorService {
     val diagnosticsInvalidated: kotlinx.coroutines.flow.Flow<Set<String>>
         get() = kotlinx.coroutines.flow.emptyFlow()
 
+    /**
+     * Edits something outside the editor asked to make, by absolute path: a language server's
+     * `workspace/applyEdit` sent on its own. The editor applies each batch like a multi-file quick fix (an open
+     * file through its tab, so the edit is undoable). Empty on a backend with no such source.
+     */
+    val externalEdits: kotlinx.coroutines.flow.Flow<Map<String, List<UiTextEdit>>>
+        get() = kotlinx.coroutines.flow.emptyFlow()
+
     /** Inlay hints for `[startOffset, endOffset)`. May throw [AnalysisPreempted]. */
     suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
 
     /** Parameter-info / signature help for the call surrounding [offset], or null. */
     suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? = null
 
+    /** The saved versions of [path] kept in local history, newest first. */
+    suspend fun localHistory(path: String): List<UiHistoryVersion> = emptyList()
+
+    /** The text of [path]'s local-history version [id], or null when it is gone. */
+    suspend fun localHistoryText(path: String, id: Long): String? = null
+
     /** Type-aware semantic-highlight tokens. May throw [AnalysisPreempted]. */
     suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> = emptyList()
+
+    /**
+     * The names in [path]'s buffer that refer to the symbol under [offset], resolved (so a same-named symbol
+     * elsewhere in the file is left out), for the highlight-usages-at-caret tint. Null when the backend has no
+     * resolved answer here, and the editor falls back to its textual whole-word scan.
+     */
+    suspend fun usageHighlights(path: String, text: String, offset: Int): List<UiUsageHighlight>? = null
 
     /** Foldable regions for the live buffer. May throw [AnalysisPreempted]. */
     suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> = emptyList()
@@ -447,6 +528,14 @@ interface BuildService {
 // Dependencies (Maven + local libraries + repositories)
 // ---------------------------------------------------------------------------
 
+/** A library a file uses that its module has not added ([DependencyService.missingLibraries]). */
+data class UiMissingLibrary(
+    /** `group:name`. */
+    val coordinate: String,
+    /** A display name, e.g. "Gson". */
+    val label: String,
+)
+
 /** Dependency management: declared/resolved graph, add/remove, local libraries, repositories. */
 interface DependencyService {
     /** Live resolution progress (a spinner/message while downloading + walking transitives). */
@@ -503,6 +592,28 @@ interface DependencyService {
 
     /** Published versions of the declared library [coordinate]'s artifact, newest-first (the version picker). */
     suspend fun availableVersions(moduleName: String, coordinate: String): List<String> = emptyList()
+
+    /**
+     * The libraries the open file [path] (live buffer [text]) uses but its module has not added: imports that do
+     * not resolve, classes typed by name, layout tags naming a library view. Read off the file's current
+     * diagnostics, so ask again when they change. Empty when nothing is missing.
+     */
+    suspend fun missingLibraries(path: String, text: String): List<UiMissingLibrary> = emptyList()
+
+    /** Add every library [missingLibraries] lists for [path], each at the newest version its module can build with. */
+    suspend fun addMissingLibraries(path: String, text: String): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
+    /**
+     * How the last library add started from an editor fix ended, so the editor can say when it failed; null
+     * when there is nothing to report. [clearMissingLibraryOutcome] once shown.
+     */
+    val missingLibraryOutcome: StateFlow<UiAddResult?> get() = MutableStateFlow(null)
+
+    fun clearMissingLibraryOutcome() {}
+
+    /** Ticks when an online lookup learns which library an import comes from: a reason to ask [missingLibraries] again. */
+    val missingLibraryLookups: StateFlow<Int> get() = MutableStateFlow(0)
 
     /** Versions of the library [group]:[name] currently downloaded to the shared cache, each with its size
      *  on disk (newest-first) — the Dependencies editor's downloaded-versions cleanup list. */
@@ -1087,6 +1198,15 @@ interface StoreService {
 
     fun signOut() {}
 
+    /** Whether this build can delete the signed-in account (the store sign-in is configured). */
+    fun accountDeletionAvailable(): Boolean = false
+
+    /**
+     * Permanently delete the signed-in account and everything stored with it, then sign out. Null on success,
+     * otherwise a message to show. A network call; the backend runs it off the main thread.
+     */
+    suspend fun deleteAccount(): String? = "Account deletion is not available in this build"
+
     // ---- submitting ----
 
     /**
@@ -1237,6 +1357,48 @@ interface StoreService {
         "Reviews are not available in this build"
 
     suspend fun deleteMyReview(itemId: String): Boolean = false
+
+    /**
+     * The newer version of [itemId], if this device has it installed and the store has moved past it. Null
+     * when it is not installed, is current, or the store cannot be reached.
+     */
+    suspend fun updateFor(itemId: String): UiStoreUpdate? = null
+
+    /** Every installed store project the store has a newer version of: Home's Updates segment. */
+    suspend fun availableUpdates(): List<UiStoreUpdate> = emptyList()
+
+    /** What the user changed in [itemId]'s installed project; null when it is not installed. */
+    suspend fun localChanges(itemId: String): UiLocalChanges? = null
+
+    /**
+     * Update [itemId] to the store's current version. [asCopy] installs it as a separate project beside the
+     * existing one, which is left exactly as it is; otherwise the existing project is updated in place, which
+     * is refused when [localChanges] says it would overwrite the user's work.
+     */
+    suspend fun update(itemId: String, asCopy: Boolean): UiStoreInstallResult =
+        UiStoreInstallResult(false, "Updates are not available in this build")
+
+    /**
+     * Update [itemId] in place while keeping what the user changed: their edits and the new version are
+     * merged file by file. Possible when [UiLocalChanges.canMerge]; overlapping changes come back as
+     * [UiStoreMergeResult.conflicts].
+     */
+    suspend fun mergeUpdate(itemId: String): UiStoreMergeResult =
+        UiStoreMergeResult(false, "Updates are not available in this build")
+
+    /** Whether the Translate buttons can do anything in this build. False hides them. */
+    fun translationAvailable(): Boolean = false
+
+    /**
+     * A listing's summary and description in [target] (a language tag such as "es" or "pt-BR"). Keyed
+     * "summary" and "description"; a field the listing does not have is absent.
+     */
+    suspend fun translateListing(itemId: String, target: String): UiTranslation =
+        UiTranslation(error = "Translation is not available in this build")
+
+    /** One review and the publisher's reply to it in [target], keyed "review" and "reply". */
+    suspend fun translateReview(itemId: String, authorId: String, target: String): UiTranslation =
+        UiTranslation(error = "Translation is not available in this build")
 
     /** Mark a review useful, or take it back. Returns null on success or a message to show. */
     suspend fun voteReview(itemId: String, authorId: String, helpful: Boolean): String? =
@@ -1425,6 +1587,28 @@ interface LearnService {
     suspend fun lesson(id: String): UiLesson? = null
 
     /**
+     * Ask the server for a newer lesson catalog than the one being served. True when one arrived, so the
+     * caller should read [catalog] again; false when already current, offline, or not configured. Cheap to
+     * call: the request names the version already held and the answer is empty when nothing changed.
+     */
+    suspend fun refreshCatalog(): Boolean = false
+
+    /**
+     * Open the real project lesson [lessonId]'s exercises are done in, as the active project, creating it
+     * the first time. One workspace per exercise language, hidden from the project list. False when the
+     * lesson has no exercises or the workspace could not be opened (the caller stays in the lesson player).
+     */
+    suspend fun openWorkspace(lessonId: String): Boolean = false
+
+    /**
+     * Put step [stepId]'s file in place in the open workspace and return its path for the editor to open.
+     * The step's starter code is written when the step is new to the workspace; re-entering it keeps the
+     * learner's edits. [content] replaces the file regardless (Copy solution). Null when the workspace for
+     * that step is not the active project.
+     */
+    suspend fun prepareStep(lessonId: String, stepId: String, content: String? = null): String? = null
+
+    /**
      * Code completion for an interactive exercise's editor: completes [code] at [offset] against the hidden
      * scratch project for [language] (`"kotlin"` | `"java"`), so a lesson buffer gets real member/keyword/
      * stdlib suggestions. Empty when no scratch engine is available.
@@ -1475,6 +1659,75 @@ interface LearnService {
     /** Where "Resume" on the Learn banner should go, or null if nothing has been started. */
     fun resume(): UiResumePoint? = null
 
+    /**
+     * Sync progress with the signed-in account: upload what this device did, merge in what was done
+     * elsewhere. True when the device's progress changed, so the caller should re-read [progress].
+     * A no-op returning false when signed out or offline.
+     */
+    suspend fun syncProgress(): Boolean = false
+
+    /** The learner's account side (streak, badges), or null when this build has no accounts at all. */
+    fun account(): UiLearnAccount? = null
+
+    /** The Learn side of the public profile at [handle], or null when there is nothing to show. */
+    suspend fun publicProfile(handle: String): UiLearnPublicProfile? = null
+
+    // ---- community: lesson discussions and shared solutions ----
+
+    /** Whether discussions and shared solutions are available in this build. */
+    fun communityAvailable(): Boolean = false
+
+    /** Questions asked about lesson [lessonId] (optionally one exercise [stepId]), newest activity first.
+     *  Null when they could not be loaded (offline, not configured). */
+    suspend fun threads(lessonId: String, stepId: String? = null): List<UiLearnThreadSummary>? = null
+
+    /** How many questions lesson [lessonId] has, for the "Discussion (n)" entry. 0 when unknown. */
+    suspend fun threadCount(lessonId: String): Int = 0
+
+    /** One question with its answers, or null when it is gone, hidden or unreachable. */
+    suspend fun thread(threadId: String): UiLearnThread? = null
+
+    /** Ask a question. [code] and [errorText] are the learner's attempt and what went wrong, when attached. */
+    suspend fun askQuestion(
+        lessonId: String,
+        stepId: String?,
+        title: String,
+        body: String,
+        code: String?,
+        errorText: String?,
+    ): UiLearnWrite = UiLearnWrite(error = "Discussions are not available in this build")
+
+    suspend fun answer(threadId: String, body: String, code: String?): UiLearnWrite =
+        UiLearnWrite(error = "Discussions are not available in this build")
+
+    /** Upvote (or take back an upvote on) an answer. Null on success, else why not. */
+    suspend fun vote(answerId: String, up: Boolean): String? = "Not available"
+
+    /** Mark [answerId] as the answer that solved the asker's question (null clears it). Asker only. */
+    suspend fun accept(threadId: String, answerId: String?): String? = "Not available"
+
+    /** Delete the caller's own question, answer or solution ([kind] `thread` | `post` | `solution`). */
+    suspend fun deleteMine(kind: String, id: String): String? = "Not available"
+
+    /** Report a question, answer or solution for a moderator to look at. */
+    suspend fun report(kind: String, id: String, reason: String, detail: String?): String? = "Not available"
+
+    /** Passing solutions to one exercise. Null when they could not be loaded. */
+    suspend fun solutions(lessonId: String, stepId: String, sort: String = "top"): UiLearnSolutionPage? = null
+
+    suspend fun likeSolution(solutionId: String, like: Boolean): String? = "Not available"
+
+    /** Whether this learner's passing solutions are shared with others (on unless they turned it off). */
+    fun shareSolutions(): Boolean = true
+
+    suspend fun setShareSolutions(share: Boolean): String? = "Not available"
+
+    /** Moderators: reported Learn content, oldest first. Null when not a moderator or unreachable. */
+    suspend fun reportQueue(): List<UiLearnReport>? = null
+
+    /** Moderators: hide the reported content, or dismiss the reports and leave it up. */
+    suspend fun resolveReport(reportId: String, hide: Boolean): String? = "Not available"
+
     companion object {
         /** A Learn service with no content — the default for backends that wire none. */
         val Unsupported: LearnService = object : LearnService {}
@@ -1492,6 +1745,10 @@ interface SdkService {
 
     /** The installable Android SDK source packages. */
     suspend fun sdkPackages(): List<UiSdkPackage> = emptyList()
+
+    /** The compileSdk levels of the open project's Android modules (empty with no project open), so the SDK
+     *  Manager can put the platforms the project needs first. */
+    suspend fun sdkProjectPlatformLevels(): Set<Int> = emptySet()
 
     /** Start downloading one Android package by id; returns immediately. */
     suspend fun installSdkPackage(path: String): String = "Not supported."
@@ -1529,6 +1786,9 @@ interface SdkService {
  * One built-in plugin in the Plugins settings screen. [essential] plugins are shown locked (the IDE can't run
  * without them). [enabled] is the user's persisted choice; changes apply on the next launch (restart-apply).
  */
+/** What one uninstalled plugin left behind: [id] is its folder name, [name] its name when it was seen installed. */
+data class UiPluginLeftover(val id: String, val name: String?, val sizeBytes: Long)
+
 data class UiPluginInfo(
     val id: String,
     val name: String,
@@ -1560,6 +1820,55 @@ data class UiPluginInfo(
      * than from anything the plugin declares. Null when it could not be read.
      */
     val signature: String? = null,
+    /** The oldest IDE this plugin loads in, from its manifest. */
+    val minHostVersion: String? = null,
+    /** The plugin API it was built for, from its manifest. */
+    val apiVersion: Int? = null,
+    /** What the package manager says about the installed plugin app, or null for a built-in (or no host support). */
+    val app: UiPluginApp? = null,
+)
+
+/** An installed plugin app's facts, read from the package manager rather than from anything it declares. */
+data class UiPluginApp(
+    val packageName: String,
+    val appVersion: String?,
+    val firstInstalledAt: Long,
+    val lastUpdatedAt: Long,
+    val sizeBytes: Long,
+    /** Signed with the same certificate as this IDE: published by CodeAssist itself. */
+    val signedLikeIde: Boolean,
+    /** Who installed it: a store's package, or null for a direct (browser or adb) install. */
+    val installer: String?,
+    /** The app has a screen of its own to open (its about page and licenses). */
+    val canOpen: Boolean = true,
+)
+
+/** The "Get plugins" page: [plugins], or why there are none ([unavailable]); [cached] when shown from the last fetch. */
+data class UiPluginDownloads(
+    val plugins: List<UiPluginDownload>,
+    val unavailable: String? = null,
+    val cached: Boolean = false,
+)
+
+/** One downloadable plugin, and where this device stands with it. */
+data class UiPluginDownload(
+    val id: String,
+    val name: String,
+    val tagline: String,
+    val description: String,
+    val publisher: String,
+    val version: String,
+    val sizeBytes: Long?,
+    val downloadUrl: String,
+    val pageUrl: String?,
+    val capabilities: List<String>,
+    val languages: String,
+    /** The version installed on this device, or null when it is not. */
+    val installedVersion: String? = null,
+    /** Installed, and older than [version]. */
+    val updateAvailable: Boolean = false,
+    /** The oldest CodeAssist it loads in, when this one is older; null when this IDE is new enough. */
+    val needsHost: String? = null,
 )
 
 /** What happened to a plugin that the IDE running now has not taken up. */
@@ -1646,13 +1955,79 @@ interface SettingsService {
      */
     fun pendingPluginChanges(): List<UiPluginChange> = emptyList()
 
+    /**
+     * The plugins on the "Get plugins" page, each with what this device already has of it. Network-bound (it is
+     * read from the store backend), so call it off the main thread; falls back to the last list fetched.
+     */
+    suspend fun pluginDownloads(): UiPluginDownloads = UiPluginDownloads(emptyList(), unavailable = "Not available in this build")
+
+    /** Open the system page of the installed plugin app [id] (where it is also uninstalled). */
+    fun openPluginAppInfo(id: String): Boolean = false
+
+    /**
+     * The data uninstalled plugins left behind (their data folders, public and private), largest first. Nothing
+     * is deleted unasked: Android uninstalls a plugin from its own settings, so this is where the user decides.
+     * Empty when the IDE could not tell which plugins are installed this launch. Walks the folders: call it off
+     * the main thread.
+     */
+    suspend fun pluginLeftovers(): List<UiPluginLeftover> = emptyList()
+
+    /** Deletes what the uninstalled plugin [id] left (an id from [pluginLeftovers]); true when anything went. */
+    suspend fun deletePluginLeftover(id: String): Boolean = false
+
+    /** Launch installed plugin app [id]'s own screen: what it is, and the licenses of what it carries. */
+    fun openPluginApp(id: String): Boolean = false
+
     /** True when this host can restart itself, so the Plugins screen can offer it as a button. */
     fun canRestartApplication(): Boolean = false
 
     /** Restart the app to apply [pendingPluginChanges]. The caller saves anything unsaved first: on a host
      *  that really restarts, this does not return. */
     fun restartApplication() {}
+
+    /**
+     * Whether this host can run language servers the user configures (Settings > Language Servers): the
+     * desktop. Not Android, where an app may only execute what an installed package ships, so a server the
+     * user installed could never start; there a language server comes with a plugin.
+     */
+    fun languageServersSupported(): Boolean = false
+
+    /** The language servers the user configured, in the order they were added. */
+    fun languageServers(): List<UiLanguageServer> = emptyList()
+
+    /** Ready-made entries for servers people commonly have installed (blank [UiLanguageServer.id]). */
+    fun languageServerPresets(): List<UiLanguageServer> = emptyList()
+
+    /**
+     * Add [server] (blank id) or replace the one with its id. Returns why it was refused, or null once saved.
+     * A server whose command changed is restarted; a new language applies to a project opened afterwards.
+     */
+    fun saveLanguageServer(server: UiLanguageServer): String? = "Language servers are not supported here."
+
+    fun deleteLanguageServer(id: String) {}
+
+    /** Whether [command]'s executable can be found, and a sentence saying where (or why not). */
+    fun checkLanguageServerCommand(command: String): UiCommandCheck = UiCommandCheck(false, "Not supported here.")
 }
+
+/**
+ * A language server the user configured: the [command] that starts it, the file [extensions] it serves
+ * (`.go`), and the protocol's [languageId]. [status] is how it is doing in the open project ("Running",
+ * "Not started", "Stopped: ..."), read when the list is.
+ */
+data class UiLanguageServer(
+    val id: String,
+    val name: String,
+    val command: String,
+    val extensions: List<String>,
+    val languageId: String,
+    val enabled: Boolean = true,
+    val initializationOptions: String = "",
+    val status: String = "",
+)
+
+/** The answer to [SettingsService.checkLanguageServerCommand]. */
+data class UiCommandCheck(val found: Boolean, val message: String)
 
 // ---------------------------------------------------------------------------
 // Editor customizations: the keyboard symbol bar (+ macros, recorded macros)
@@ -1695,7 +2070,11 @@ object CustomizationActions {
     const val MOVE_LINE_DOWN = "moveLineDown"
     const val DUPLICATE_LINE = "duplicateLine"
     const val NEXT_PROBLEM = "nextProblem"
-    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM)
+    /** Opens Paste from History. */
+    const val PASTE_HISTORY = "pasteHistory"
+    /** Bookmarks the caret's line, or removes its bookmark. */
+    const val TOGGLE_BOOKMARK = "toggleBookmark"
+    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM, PASTE_HISTORY, TOGGLE_BOOKMARK)
 }
 
 /**
@@ -1804,8 +2183,21 @@ interface DiagnosticsService {
     /** Record the user's analytics decision. */
     fun setAnalyticsConsent(granted: Boolean) {}
 
+    /**
+     * Whether to show the consent sheet: the user hasn't answered, or agreed to an older wording that didn't
+     * cover everything collected now (feature usage). Answering it again records consent to the current wording.
+     */
+    fun analyticsNeedsAsking(): Boolean = analyticsConsent() == null
+
     /** Record an analytics [event] (performance metrics only; never user content). */
     fun track(event: String, props: Map<String, String> = emptyMap()) {}
+
+    /** Record one [ms] sample of a latency metric ([dev.ide.analytics.Events] `*_perf`), summarized with the
+     *  others in its window. [dims] split the metric; they must come from closed sets, never user content. */
+    fun recordPerf(event: String, ms: Long, dims: Map<String, String> = emptyMap()) {}
+
+    /** Count one use of [feature] (a [dev.ide.analytics.Features] id). Kept only with consent to usage data. */
+    fun countFeature(feature: String) {}
 }
 
 /**
@@ -1820,6 +2212,15 @@ interface AgentService {
     /** A pending write-permission prompt in ASK_EACH mode, or null. */
     val permissionRequest: StateFlow<UiAgentPermissionRequest?>
 
+    /** Multiple-choice questions the agent is waiting on (its `ask_user` tool), or null. */
+    val questionRequest: StateFlow<UiAgentQuestionRequest?> get() = QUESTION_NONE
+
+    /**
+     * Answer the pending [questionRequest]: per question, the chosen option labels plus any text typed for "Other".
+     * Null dismisses the questions; the agent is told and carries on with defaults.
+     */
+    fun answerQuestion(id: Int, answers: List<List<String>>?) {}
+
     /** Providers, the current selection/model, whether a key is configured, and the permission mode. */
     fun config(): UiAgentConfig
 
@@ -1833,6 +2234,15 @@ interface AgentService {
     /** Set the active model (persisted). */
     fun setModel(model: String)
 
+    /** The current provider's starred models, pinned to the top of the model picker. */
+    fun favoriteModels(): Set<String> = emptySet()
+
+    /** Star or unstar [model] for the current provider (persisted). */
+    fun setModelFavorite(model: String, favorite: Boolean) {}
+
+    /** The current provider's most recently chosen models, newest first (recorded by [setModel]). */
+    fun recentModels(): List<String> = emptyList()
+
     /** Choose the active provider (a built-in id, or "gateway" for the custom OpenAI-compatible entry). */
     fun selectProvider(id: String)
 
@@ -1845,6 +2255,81 @@ interface AgentService {
     /** Configure the custom OpenAI-compatible gateway (base URL + model name, and an optional extra CA
      *  certificate PEM to trust for an endpoint behind a private/regional CA — blank = system trust only). */
     fun setGateway(baseUrl: String, model: String, caCert: String)
+
+    /** Whether this backend can run "Sign in with OpenRouter" (a browser sign-in that returns a key). */
+    fun openRouterSignInSupported(): Boolean = false
+
+    /** Where the current OpenRouter sign-in stands. */
+    val openRouterSignIn: StateFlow<UiOpenRouterSignIn> get() = OPEN_ROUTER_SIGN_IN_IDLE
+
+    /**
+     * Start an OpenRouter sign-in and return the URL to open in the browser, or null when it could not start (the
+     * reason is in [openRouterSignIn]). On success the key is saved, OpenRouter is selected, and an account with
+     * no credits is moved onto a free model.
+     */
+    fun beginOpenRouterSignIn(): String? = null
+
+    /** Abandon a pending OpenRouter sign-in. */
+    fun cancelOpenRouterSignIn() {}
+
+    // --- Connections: MCP servers and skills the agent can use ---
+
+    /** The configured MCP servers (app-wide and this project's) with their live state, and the installed skills. */
+    val connections: StateFlow<UiAgentConnections> get() = CONNECTIONS_NONE
+
+    /** Re-read the config files and skill folders (after the user edited them outside the app). */
+    fun refreshConnections() {}
+
+    /**
+     * Add or change an MCP server in [scope]'s config ([previousName] is its old name when it was renamed).
+     * Returns why it could not be saved, or null.
+     */
+    fun saveMcpServer(config: UiMcpServerConfig, scope: UiMcpScope, previousName: String? = null): String? =
+        "MCP servers are not available in this build."
+
+    fun removeMcpServer(name: String, scope: UiMcpScope) {}
+
+    fun setMcpServerEnabled(name: String, scope: UiMcpScope, enabled: Boolean) {}
+
+    /** Approve a server that came from the project's own config file; until then it is not started. */
+    fun trustMcpServer(name: String) {}
+
+    fun reconnectMcpServer(name: String) {}
+
+    /**
+     * Start a browser sign-in for [name] and return the URL to open, or null when it could not start (the server's
+     * row then carries the reason). The server reconnects by itself when the sign-in completes.
+     */
+    suspend fun beginMcpSignIn(name: String): String? = null
+
+    fun cancelMcpSignIn() {}
+
+    /** Forget [name]'s stored sign-in. */
+    fun signOutMcpServer(name: String) {}
+
+    /** Turn an installed skill off (or back on) for the agent. */
+    fun setSkillEnabled(name: String, enabled: Boolean) {}
+
+    /**
+     * Create a new skill folder with a starter SKILL.md in [scope] and return the file's path (to open in the
+     * editor), or null when it could not be created.
+     */
+    fun createSkill(name: String, scope: UiMcpScope): String? = null
+
+    /** The selected provider's usage against its limits, or null before the first read (see [refreshUsageLimits]). */
+    val usageLimits: StateFlow<UiAgentUsageLimits?> get() = USAGE_LIMITS_NONE
+
+    /** Re-read [usageLimits] from the provider. Also done by the backend after every turn. */
+    fun refreshUsageLimits() {}
+
+    /** The CodeAssist Free AI wallet: whether the tier exists in this build, the sign-in, and the points. */
+    val freeAi: StateFlow<UiFreeAiState> get() = FREE_AI_NONE
+
+    /** Re-read [freeAi] from the server. Also done by the backend after every free-tier turn. */
+    fun refreshFreeAi() {}
+
+    /** Read the usage summary into [UiFreeAiState.usage], for the Usage sheet. */
+    fun refreshFreeAiUsage() {}
 
     /** Send a user message; streams the agent's response into [chatState]. Queued
      *  [UiAgentChatState.pendingAttachments] go with it. */
@@ -1873,6 +2358,16 @@ interface AgentService {
 
     /** Delete a saved conversation. */
     fun deleteSession(id: String) {}
+
+    /**
+     * Start a conversation that creates a NEW app. Until the agent creates the project it has only the tools to
+     * choose a template and create it (whatever project is open in the background is left alone); from then on the
+     * same conversation goes on in the new project with every tool.
+     */
+    fun startNewApp() {}
+
+    /** Saved conversations across every project, newest first (for the AI home tab). */
+    fun recentChats(): List<UiAgentRecentChat> = emptyList()
 
     /** Revert the files the agent changed while answering user message [messageId], and every later message. */
     fun undoTurn(messageId: Long) {}
@@ -1928,3 +2423,213 @@ interface AgentService {
         override fun answerPermission(id: Int, decision: UiAgentPermissionDecision) {}
     }
 }
+
+/** The state of "Sign in with OpenRouter" (see [AgentService.beginOpenRouterSignIn]). */
+sealed interface UiOpenRouterSignIn {
+    data object Idle : UiOpenRouterSignIn
+
+    /** The browser is open; waiting for OpenRouter to send the user back. */
+    data object Waiting : UiOpenRouterSignIn
+
+    /** The key is saved. [freeModel] is the free model the account was moved onto, or null if it kept its own. */
+    data class Connected(val freeModel: String?) : UiOpenRouterSignIn
+
+    data class Failed(val message: String) : UiOpenRouterSignIn
+}
+
+private val OPEN_ROUTER_SIGN_IN_IDLE: StateFlow<UiOpenRouterSignIn> = MutableStateFlow(UiOpenRouterSignIn.Idle)
+
+private val CONNECTIONS_NONE: StateFlow<UiAgentConnections> = MutableStateFlow(UiAgentConnections())
+
+/** Where an MCP server or skill is configured: for every project, or for this one only. */
+enum class UiMcpScope { APP, PROJECT }
+
+enum class UiMcpTransport { HTTP, SSE, STDIO }
+
+enum class UiMcpStatus {
+    DISABLED,
+    CONNECTING,
+    CONNECTED,
+
+    /** It wants a sign-in (or a token in its headers). */
+    NEEDS_AUTH,
+    FAILED,
+
+    /** A local (command) server on a platform that cannot run one. */
+    UNSUPPORTED,
+
+    /** From the project's config file and not yet approved by the user, so not started. */
+    UNTRUSTED,
+}
+
+/** A server as the user configures it; mirrors one entry of a `.mcp.json` `mcpServers` object. */
+data class UiMcpServerConfig(
+    val name: String,
+    val transport: UiMcpTransport,
+    val url: String = "",
+    val headers: Map<String, String> = emptyMap(),
+    val command: String = "",
+    val args: List<String> = emptyList(),
+    val env: Map<String, String> = emptyMap(),
+)
+
+data class UiMcpServer(
+    val config: UiMcpServerConfig,
+    val scope: UiMcpScope,
+    val enabled: Boolean,
+    val status: UiMcpStatus,
+    val error: String? = null,
+    /** The tools it offers (its own names), while connected. */
+    val tools: List<String> = emptyList(),
+    val signedIn: Boolean = false,
+    /** A browser sign-in for it is waiting for the redirect. */
+    val signInPending: Boolean = false,
+    /** A project server with the same name hides an app-wide one; the hidden one is listed with this set. */
+    val shadowed: Boolean = false,
+)
+
+data class UiAgentSkill(
+    val name: String,
+    val description: String,
+    val scope: UiMcpScope,
+    /** The skill's SKILL.md. */
+    val path: String,
+    val enabled: Boolean,
+)
+
+data class UiAgentConnections(
+    /** Whether this build can connect to MCP servers at all. */
+    val mcpSupported: Boolean = false,
+    /** Whether local (command) servers can run here: desktop only. */
+    val stdioSupported: Boolean = false,
+    val servers: List<UiMcpServer> = emptyList(),
+    val skills: List<UiAgentSkill> = emptyList(),
+    /** The folders skills are read from, to show the user where to put them. */
+    val appSkillsDir: String? = null,
+    val projectSkillsDir: String? = null,
+    /** The config files servers are kept in. */
+    val appConfigFile: String? = null,
+    val projectConfigFile: String? = null,
+    /** A project is open, so per-project servers and skills can be added. */
+    val projectOpen: Boolean = false,
+)
+
+/**
+ * The selected provider's usage against its limits, like Claude's usage meters. [reported] is false for a
+ * provider that gives apps no way to read them (only OpenRouter does today), in which case [meters] is empty.
+ */
+data class UiAgentUsageLimits(
+    val providerName: String,
+    val reported: Boolean,
+    val meters: List<UiUsageMeter> = emptyList(),
+    val spentTodayUsd: Double? = null,
+    val spentMonthUsd: Double? = null,
+    /** Whether the selected model is a free one, so the free-request meter is the one that matters now. */
+    val usingFreeModel: Boolean = false,
+    /** Why the last read failed, or null. [meters] then hold the previous read, if any. */
+    val error: String? = null,
+)
+
+/** One bar: [used] of [limit] (requests, or US dollars for [UiUsageMeterKind.SPEND]), resetting at [resetsAtMs]. */
+data class UiUsageMeter(val kind: UiUsageMeterKind, val used: Double, val limit: Double, val resetsAtMs: Long?) {
+    val fraction: Float get() = if (limit <= 0) 1f else (used / limit).toFloat().coerceIn(0f, 1f)
+    val remaining: Double get() = (limit - used).coerceAtLeast(0.0)
+}
+
+enum class UiUsageMeterKind {
+    /** Requests to free models today. */
+    FREE_REQUESTS,
+
+    /** Dollars spent against a spending cap. */
+    SPEND,
+}
+
+private val USAGE_LIMITS_NONE: StateFlow<UiAgentUsageLimits?> = MutableStateFlow(null)
+
+private val QUESTION_NONE: StateFlow<UiAgentQuestionRequest?> = MutableStateFlow(null)
+
+/** Questions the agent asked together and is waiting on; answered with [AgentService.answerQuestion]. */
+data class UiAgentQuestionRequest(val id: Int, val questions: List<UiAgentQuestion>)
+
+data class UiAgentQuestion(
+    val question: String,
+    /** A very short label for the question, drawn as a chip. */
+    val header: String,
+    val options: List<UiAgentQuestionOption>,
+    val multiSelect: Boolean,
+)
+
+data class UiAgentQuestionOption(val label: String, val description: String = "")
+
+/**
+ * The CodeAssist Free AI wallet as the chat shows it. One point is $0.001 of model usage. Points are spent from
+ * today's free allowance first ([freePoints], resets at midnight UTC), then from [earnedPoints] (sign-up bonus
+ * and watched ads, kept).
+ */
+data class UiFreeAiState(
+    /** Whether this build can use the free tier at all (a Supabase config and sign-in exist). */
+    val available: Boolean = false,
+    val signedIn: Boolean = false,
+    /** True while a read is in flight and nothing has been read yet. */
+    val loading: Boolean = false,
+    /** The account id; a rewarded ad carries it so the server can credit the right wallet. */
+    val userId: String? = null,
+    /** False when the tier is switched off or this month's budget is spent. */
+    val enabled: Boolean = true,
+    val points: Int = 0,
+    val freePoints: Int = 0,
+    val earnedPoints: Int = 0,
+    val dailyFreePoints: Int = 0,
+    val adPoints: Int = 0,
+    val adsLeftToday: Int = 0,
+    val adDailyCap: Int = 0,
+    /** The last read's failure, for display; null when the last read worked. */
+    val error: String? = null,
+    /** What each model costs, for the model picker. Empty until the first wallet read. */
+    val models: List<UiFreeAiModel> = emptyList(),
+    /** The usage summary for the Usage sheet; null until [AgentService.refreshFreeAiUsage] has read it. */
+    val usage: UiFreeAiUsage? = null,
+)
+
+/** The signed-in user's CodeAssist Free AI usage. Points are to one decimal. */
+data class UiFreeAiUsage(
+    val points: Double,
+    val freePointsLeft: Double,
+    val dailyFreePoints: Int,
+    val dailyCapPoints: Int,
+    val resetsAtMs: Long,
+    val adPoints: Int,
+    val adsToday: Int,
+    val adDailyCap: Int,
+    val spentToday: Double,
+    val stepsToday: Int,
+    val spentWeek: Double,
+    val stepsWeek: Int,
+    /** Last 7 days, most expensive model first: model id, points, steps. */
+    val byModelWeek: List<Triple<String, Double, Int>> = emptyList(),
+    val recent: List<UiFreeAiStep> = emptyList(),
+)
+
+/** One request to the model and what it cost. */
+data class UiFreeAiStep(
+    val atMs: Long,
+    val model: String,
+    val points: Double,
+    val input: Int,
+    val output: Int,
+    val cacheRead: Int,
+    val cacheWrite: Int,
+    val webSearches: Int,
+)
+
+/** One CodeAssist Free AI model's price. [pointsPerStep] is per request to the model; a reply may take several. */
+data class UiFreeAiModel(
+    val id: String,
+    val pointsPerStep: Double,
+    /** The balance a request on this model needs before it may start. */
+    val minPoints: Int,
+    /** False when the budget guard has switched the model off for the rest of the month. */
+    val available: Boolean,
+)
+
+private val FREE_AI_NONE: StateFlow<UiFreeAiState> = MutableStateFlow(UiFreeAiState())

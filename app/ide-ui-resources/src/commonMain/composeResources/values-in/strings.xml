@@ -9,11 +9,11 @@ Cadangkan proyek Anda ke file .zip sekarang, file sumber Anda tetap aman, dan An
     <string name="backup_projects">Cadangkan proyek</string>
     <string name="got_it">Mengerti</string>
     <string name="help_improve_codeassist">Bantu tingkatkan CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Bagikan data performa anonim agar kami dapat melihat apa yang lambat dan gagal, serta memperbaiki hal yang benar.
+    <string name="help_improve_codeassist_content"><![CDATA[Bagikan data penggunaan dan performa anonim agar kami dapat melihat apa yang lambat, apa yang gagal, dan fitur mana yang paling diandalkan, serta memperbaiki hal yang benar.
 
-Kami mengumpulkan: versi aplikasi dan model perangkat Anda, berapa lama waktu build, pengindeksan, dan penyelesaian kode, keberhasilan/kegagalan build, laporan kerusakan yang dibersihkan, serta kapan iklan ditampilkan atau ditutup dan perubahan pengaturan iklan Anda.
+Kami mengumpulkan: versi aplikasi dan model perangkat Anda, berapa lama waktu build, pengindeksan, penyelesaian kode, dan pratinjau, keberhasilan/kegagalan build, laporan kerusakan yang dibersihkan, seberapa sering setiap fitur digunakan (misalnya berapa kali pratinjau tata letak atau Cari Penggunaan dibuka), serta kapan iklan ditampilkan atau ditutup dan perubahan pengaturan iklan Anda.
 
-Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang Anda gunakan, atau apa pun yang mengidentifikasi Anda. Anda dapat mengubah ini kapan saja di bawah Lainnya saat proyek terbuka.]]></string>
+Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik, atau apa pun yang mengidentifikasi Anda. Anda dapat mengubah ini kapan saja di bagian Lainnya saat proyek terbuka.]]></string>
     <string name="learn_more">Pelajari lebih lanjut</string>
     <string name="allow">Izinkan</string>
     <string name="no_thanks">Tidak, terima kasih</string>
@@ -93,6 +93,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="support_show_ads_desc">Tampilkan iklan di aplikasi. Anda dapat mematikannya kapan saja.</string>
     <string name="support_show_interstitials">Iklan layar penuh</string>
     <string name="support_show_interstitials_desc">Sesekali iklan layar penuh saat build lama dan setelah pelajaran selesai.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="other">Iklan tetap aktif selama sehari setelah instal atau pembaruan. Anda dapat menonaktifkannya dalam %1$d jam.</item>
+    </plurals>
     <string name="ads_off_title">Matikan iklan?</string>
     <string name="ads_off_body">Anda dapat mematikan hanya iklan layar penuh dan tetap menampilkan iklan kecil di daftar dan panel.</string>
     <string name="ads_off_all">Semua iklan</string>
@@ -217,6 +220,36 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="filetree_move">Pindahkan</string>
     <string name="filetree_copy">Salin</string>
     <string name="filetree_delete">Hapus</string>
+    <string name="filetree_cut">Potong</string>
+    <string name="filetree_paste">Tempel</string>
+    <string name="filetree_duplicate">Duplikat</string>
+    <string name="filetree_copy_path">Salin path</string>
+    <string name="filetree_copy_path_absolute">Path absolut</string>
+    <string name="filetree_copy_path_relative">Path dari root proyek</string>
+    <string name="filetree_copy_name">Nama</string>
+    <string name="filetree_copy_paths">Salin semua path</string>
+    <string name="filetree_move_to">Pindahkan ke…</string>
+    <string name="filetree_copy_to">Salin ke…</string>
+    <string name="filetree_select_all">Pilih semua</string>
+    <string name="filetree_clear_selection">Hapus pilihan</string>
+    <string name="filetree_more_selection">Tindakan lainnya untuk pilihan</string>
+    <string name="filetree_paste_into">Tempel ke %1$s</string>
+    <string name="filetree_clear_clipboard">Kosongkan papan klip</string>
+    <string name="filetree_drop_move">Pindahkan ke %1$s</string>
+    <string name="filetree_drop_copy">Salin ke %1$s</string>
+    <string name="filetree_drop_nowhere">Tidak dapat dilepas di sini</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="other">%1$d dipilih</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="other">%1$d item akan dipindahkan</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="other">%1$d item akan disalin</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="other">%1$d item</item>
+    </plurals>
     <string name="filetree_java_class">Kelas Java</string>
     <string name="filetree_kotlin_file">File Kotlin</string>
     <string name="filetree_resource_file">File Resource</string>
@@ -292,6 +325,42 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="breadcrumb_blocks">Blok</string>
     <string name="breadcrumb_preview">Pratinjau</string>
     <string name="breadcrumb_split">Terpisah</string>
+    <string name="breadcrumb_nav_back">Kembali</string>
+    <string name="breadcrumb_nav_forward">Maju</string>
+    <string name="symbolbar_more">Tombol lainnya</string>
+    <string name="symbolbar_trackpad">Seret untuk memindahkan kursor</string>
+    <string name="conflict_current">Saat ini</string>
+    <string name="conflict_incoming">Masuk</string>
+    <string name="conflict_both">Keduanya</string>
+    <string name="conflict_current_desc">Pertahankan sisi saat ini</string>
+    <string name="conflict_incoming_desc">Pertahankan sisi masuk</string>
+    <string name="conflict_both_desc">Pertahankan kedua sisi</string>
+    <string name="gesture_nothing_to_undo">Tidak ada yang bisa diurungkan</string>
+    <string name="gesture_nothing_to_redo">Tidak ada yang bisa diulangi</string>
+    <string name="paste_history_title">Tempel dari riwayat</string>
+    <string name="change_revert">Kembalikan</string>
+    <string name="change_before">Di commit terakhir</string>
+    <string name="change_added">Ditambahkan sejak commit terakhir</string>
+    <string name="history_title">Riwayat lokal</string>
+    <string name="symbolbar_bookmark">Penanda</string>
+    <string name="bookmarks_title">Penanda</string>
+    <string name="bookmarks_empty">Belum ada penanda. Tandai baris kursor dengan F11, atau tombol Penanda di balik ⋯ bilah simbol.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">Muat ulang</string>
+    <string name="todo_empty">Tidak ada komentar TODO atau FIXME di proyek.</string>
+    <string name="bookmarks_panel_title">Penanda &amp; TODO</string>
+    <string name="history_back">Kembali</string>
+    <string name="history_restore">Pulihkan</string>
+    <string name="history_empty">Belum ada yang disimpan. Setiap kali file ini disimpan, satu versi disimpan di sini.</string>
+    <string name="history_same">Sama dengan file saat ini</string>
+    <string name="edchrome_local_history">Riwayat lokal</string>
+    <string name="paste_history_clear">Hapus</string>
+    <string name="paste_history_empty">Teks yang Anda salin atau potong di editor muncul di sini.</string>
+    <string name="symbolbar_clipboard">Papan klip</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d baris</item>
+        <item quantity="other">%1$d baris</item>
+    </plurals>
     <string name="edchrome_files">File</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>
@@ -357,6 +426,13 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="kotlin_configure">Konfigurasi Kotlin</string>
     <string name="kotlin_configuring">Mengonfigurasi…</string>
     <string name="kotlin_configure_failed">Tidak dapat mengonfigurasi Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">File ini memakai pustaka yang belum ditambahkan: %1$s</string>
+    <string name="missing_libraries_add_all">Tambahkan semua</string>
+    <string name="missing_libraries_adding">Menambahkan…</string>
+    <string name="missing_library_failed">Tidak dapat menambahkan pustaka: %1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">Periksa jaringan iklan mana yang dimuat dan mengapa ada yang gagal. Hanya build pengembang di perangkat uji.</string>
+    <string name="ad_inspector_open">Buka</string>
     <string name="sources_download">Unduh</string>
     <string name="sources_downloading">Mengunduh…</string>
     <string name="sources_download_failed">Unduhan gagal: %1$s</string>
@@ -369,6 +445,40 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="home_store">Jelajahi</string>
     <string name="home_learn">Belajar</string>
     <string name="store_title">Jelajahi</string>
+    <string name="submit_checks_title">Yang diperiksa moderator</string>
+    <string name="submit_checks_english">Judul, ringkasan, dan deskripsi ditulis dalam bahasa Inggris.</string>
+    <string name="submit_checks_screenshots">Tangkapan layar menampilkan aplikasi yang berjalan, bukan editornya.</string>
+    <string name="submit_checks_summary">Ringkasan menjelaskan dalam satu baris apa fungsi proyek ini.</string>
+    <string name="submit_checks_icon">Aplikasi punya ikon sendiri, bukan ikon bawaan.</string>
+    <string name="submit_checks_own">Ini karya Anda sendiri, tanpa kunci rahasia atau riwayat obrolan AI.</string>
+    <string name="submit_warn_english">Listing toko harus dalam bahasa Inggris, dan teks ini tampaknya dalam bahasa lain. Tulis dalam bahasa Inggris; Anda boleh menyertakan terjemahan di bawahnya.</string>
+    <string name="submit_warn_summary">Jelaskan dalam satu baris apa fungsi proyek ini. Ringkasan yang hanya mengulang nama adalah alasan paling umum listing dikembalikan.</string>
+    <string name="submit_warn_spam">Kata-kata seperti “download free” atau “mod apk” terbaca sebagai spam, dan listing yang memakainya dikembalikan.</string>
+    <string name="submit_confirm_title">Sebelum dikirim</string>
+    <string name="submit_confirm_body">Moderator kemungkinan akan mengembalikan ini:</string>
+    <string name="submit_confirm_fix">Perbaiki</string>
+    <string name="submit_confirm_send">Tetap kirim</string>
+    <string name="store_trending">Sedang tren</string>
+    <string name="store_trending_search">Cari %1$s</string>
+    <string name="store_translate">Terjemahkan</string>
+    <string name="store_translating">Menerjemahkan…</string>
+    <string name="store_translated">Diterjemahkan otomatis</string>
+    <string name="store_show_original">Lihat aslinya</string>
+    <string name="store_update_to">Perbarui ke v%1$s</string>
+    <string name="store_update_versions">v%1$s terpasang · v%2$s tersedia</string>
+    <string name="store_update_conflict_title">Anda telah mengubah proyek ini</string>
+    <string name="store_update_conflict_body">Memperbarui di tempat akan menimpa perubahan Anda pada:</string>
+    <string name="store_update_conflict_more">dan %1$d lainnya</string>
+    <string name="store_update_conflict_unknown">Proyek ini dipasang sebelum CodeAssist mencatat perubahan, jadi ia tidak bisa membedakan suntingan Anda dari aslinya.</string>
+    <string name="store_update_conflict_keep">Memasang versi baru sebagai proyek terpisah membiarkan salinan Anda tetap seperti apa adanya.</string>
+    <string name="store_update_as_copy">Pasang sebagai salinan baru</string>
+    <string name="home_update_review">Tinjau</string>
+    <string name="store_update_merge">Perbarui dan simpan perubahan saya</string>
+    <string name="store_update_changed_files">File yang Anda ubah sejak memasangnya:</string>
+    <string name="store_update_merge_note">Perubahan Anda dan versi baru digabungkan file demi file. Jika kalian berdua mengubah baris yang sama, keduanya disimpan agar Anda bisa memilih.</string>
+    <string name="store_merge_done_title">Diperbarui, perubahan Anda tetap ada</string>
+    <string name="store_merge_conflicts_body">Anda dan penerbit mengubah baris yang sama di file ini. Kedua versi ada di file, di antara penanda &lt;&lt;&lt;&lt;&lt;&lt;&lt; dan &gt;&gt;&gt;&gt;&gt;&gt;&gt;, agar Anda bisa memilih:</string>
+    <string name="store_merge_open">Buka proyek</string>
     <string name="store_subtitle">Template dan contoh proyek untuk memulai</string>
     <string name="store_settings_and_tools">Setelan &amp; alat</string>
     <string name="store_search_hint">Cari template dan contoh</string>
@@ -543,6 +653,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="edoverlay_rename_kind">Ganti nama %1$s</string>
     <string name="edoverlay_renaming">Mengganti nama…</string>
     <string name="edoverlay_rename_hint">Enter untuk mengganti nama '%1$s', Esc untuk batal</string>
+    <string name="edoverlay_inline_rename_hint">Ganti nama %1$s · Enter untuk menerapkan, Esc untuk batal</string>
+    <string name="edoverlay_inline_rename_apply">Terapkan</string>
+    <string name="edoverlay_renaming_elsewhere">Mengganti nama di file lain…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' bukan nama yang valid</string>
     <string name="edoverlay_go_to_line">Ke baris</string>
     <string name="edoverlay_go_to_line_hint">Baris 1-%1$d  (baris atau baris:kolom)</string>
     <string name="edoverlay_no_documentation">Tidak ada dokumentasi</string>
@@ -620,6 +734,44 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="fileop_empty_folder">Folder ini kosong.</string>
     <string name="fileop_move_here">Pindahkan ke sini</string>
     <string name="fileop_copy_here">Salin ke sini</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="other">Pindahkan %1$d item ke…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="other">Salin %1$d item ke…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="other">Hapus %1$d item?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">Ini menghapusnya secara permanen, termasuk folder beserta semua isinya. Tindakan ini tidak dapat dibatalkan.</string>
+    <string name="fileop_delete_items_body_undo">Folder dihapus beserta semua isinya. Anda dapat mengurungkannya segera setelahnya.</string>
+    <string name="fileop_delete_dir_body_undo">Ini menghapus folder dan semua yang ada di dalamnya. Anda dapat mengurungkannya segera setelahnya.</string>
+    <string name="fileop_delete_file_body_undo">Anda dapat mengurungkannya segera setelahnya.</string>
+    <string name="fileop_conflict_title">'%1$s' sudah ada di %2$s</string>
+    <string name="fileop_conflict_body">Ganti item yang sudah ada, simpan keduanya (item ini mendapat nama baru), atau lewati.</string>
+    <string name="fileop_conflict_replace">Ganti</string>
+    <string name="fileop_conflict_keep_both">Simpan keduanya</string>
+    <string name="fileop_conflict_skip">Lewati</string>
+    <string name="fileop_conflict_progress">Konflik %1$d dari %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="other">Lakukan hal yang sama untuk %1$d konflik lainnya</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="other">%1$d item dipindahkan ke %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="other">%1$d item disalin ke %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="other">%1$d item diduplikat</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="other">%1$d item dihapus</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="other">%1$d item gagal: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Diurungkan</string>
     <string name="errdlg_unexpected">Terjadi kesalahan yang tidak terduga. Aplikasi tetap berjalan.</string>
     <string name="errdlg_hide_details">Sembunyikan detail</string>
     <string name="errdlg_show_details">Tampilkan detail</string>
@@ -708,7 +860,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="keystore_empty">Belum ada keystore. Buat atau impor satu untuk menandatangani build rilis.</string>
     <string name="keystore_deleted">Menghapus %1$s</string>
     <string name="keystore_row_subtitle">%1$s · kunci: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Salin sidik jari %1$s</string>
+    <string name="keystore_fingerprint_copied">%1$s disalin</string>
     <string name="keystore_expires">kedaluwarsa ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Tidak dapat membaca sertifikat (kata sandi mungkin telah berubah).]]></string>
     <string name="keystore_create_title">Keystore Baru</string>
@@ -726,8 +879,26 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="keystore_import_key_password">Kata sandi kunci (kosong = kata sandi store)</string>
     <string name="sdk_manager_title">Pengelola SDK</string>
     <string name="sdk_could_not_load">Tidak dapat memuat paket.</string>
-    <string name="sdk_sources_documentation">Sumber &amp; dokumentasi</string>
-    <string name="sdk_sources_documentation_desc">Unduh sumber platform SDK dan sumber JDK agar editor dapat menampilkan javadoc, nama parameter, dan go-to-source ke dalam SDK. Unduhan berlanjut di latar belakang, jadi Anda dapat meninggalkan layar ini dan terus bekerja.</string>
+    <string name="sdk_intro">Pasang platform Android yang dipakai modul Anda untuk kompilasi, serta sumber agar editor dapat menampilkan dokumentasi dan membuka sumber SDK. Unduhan tetap berjalan di latar belakang, jadi Anda dapat meninggalkan layar ini.</string>
+    <string name="sdk_show_all_versions">Tampilkan semua versi (%1$d)</string>
+    <string name="sdk_show_fewer">Tampilkan lebih sedikit</string>
+    <string name="sdk_tag_latest">Terbaru</string>
+    <string name="sdk_tag_project">Proyek Anda</string>
+    <string name="sdk_fail_offline">Tidak dapat menjangkau server unduhan. Periksa koneksi internet Anda, lalu coba lagi.</string>
+    <string name="sdk_fail_storage">Penyimpanan kosong tidak cukup untuk menyelesaikan unduhan ini. Kosongkan ruang, lalu coba lagi.</string>
+    <string name="sdk_fail_not_found">Server unduhan tidak lagi memiliki paket ini. Muat ulang daftar, lalu coba lagi.</string>
+    <string name="sdk_fail_server_code">Server unduhan mengalami masalah (HTTP %1$d). Biasanya hanya sementara, jadi coba lagi sebentar lagi.</string>
+    <string name="sdk_fail_server">Server unduhan mengalami masalah. Biasanya hanya sementara, jadi coba lagi sebentar lagi.</string>
+    <string name="sdk_fail_license">Lisensi paket ini harus diterima sebelum dapat dipasang.</string>
+    <string name="sdk_fail_corrupt">Berkas yang diunduh rusak. Coba lagi untuk mengunduh salinan baru.</string>
+    <string name="sdk_fail_cancelled">Dibatalkan. Bagian yang sudah diunduh disimpan, jadi akan dilanjutkan dari titik terakhir.</string>
+    <string name="sdk_fail_unknown">Unduhan tidak selesai.</string>
+    <string name="sdk_load_failed_title">Tidak dapat memuat daftar paket</string>
+    <string name="sdk_action_free_space">Kosongkan ruang</string>
+    <string name="sdk_action_refresh">Muat ulang daftar</string>
+    <string name="sdk_action_review_license">Tinjau lisensi</string>
+    <string name="sdk_details_show">Detail</string>
+    <string name="sdk_details_hide">Sembunyikan detail</string>
     <string name="sdk_downloads">Unduhan</string>
     <string name="sdk_clear_finished">Bersihkan yang selesai</string>
     <string name="sdk_jdk">JDK</string>
@@ -1094,6 +1265,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="set_editor_two_axis_desc">Seret ke arah mana pun untuk menggulir kedua sumbu sekaligus (sentuh)</string>
     <string name="set_editor_pinch">Cubit untuk zoom</string>
     <string name="set_editor_pinch_desc">Cubit dengan dua jari untuk mengubah ukuran font kode</string>
+    <string name="set_editor_volume_keys">Tombol volume menggerakkan kursor</string>
+    <string name="set_editor_volume_keys_desc">Saat mengetik di ponsel, volume naik menggeser kursor ke kiri dan volume turun ke kanan, bukan mengubah volume</string>
+    <string name="set_editor_inline_blame">Siapa yang mengubah baris ini</string>
+    <string name="set_editor_inline_blame_desc">Di proyek Git, tampilkan siapa yang terakhir mengubah baris kursor, kapan, dan mengapa, samar di ujung baris</string>
+    <string name="blame_uncommitted">Belum di-commit</string>
     <string name="set_editor_kbd_suggest">Saran keyboard</string>
     <string name="set_editor_kbd_suggest_desc">Biarkan keyboard lunak melakukan koreksi otomatis, memberi saran, dan spasi otomatis (keyboard normal). Matikan untuk input kode mentah, agar '.' yang diketik tidak mendapat spasi yang disisipkan otomatis, dengan konsekuensi kehilangan strip saran.</string>
     <string name="set_editor_close_unsaved">Menutup tab dengan perubahan yang belum disimpan</string>
@@ -1143,7 +1319,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="set_br_dexbatch_desc">Pada aplikasi yang sangat besar, langkah dexing terakhir menggabungkan kelas dalam batch agar tidak memerlukan semuanya di memori sekaligus. Batch lebih kecil menjaga memori itu tetap rendah (baik untuk perangkat memori rendah) tetapi membuat APK sedikit lebih besar (kompresi antar kelas lebih sedikit); batch lebih besar mengemas lebih rapat tetapi memerlukan lebih banyak memori per merge. Sebagian besar aplikasi tidak pernah mencapai ini, hanya berlaku setelah beberapa ribu kelas.</string>
     <string name="set_br_dexfork">Maksimum dex fork bersamaan</string>
     <string name="set_privacy_analytics">Bagikan analitik performa</string>
-    <string name="set_privacy_analytics_desc">Hanya metrik performa dan iklan anonim, tidak pernah kode atau nama file Anda</string>
+    <string name="set_privacy_analytics_desc">Hanya jumlah penggunaan fitur serta metrik performa dan iklan anonim, tidak pernah kode atau nama file Anda</string>
     <string name="set_privacy_clear">Bersihkan cache</string>
     <string name="set_privacy_clear_desc">Bebaskan cache dependensi / bahasa / pratinjau yang dapat dibuat ulang (tidak pernah sumber)</string>
     <string name="set_privacy_clear_btn">Bersihkan</string>
@@ -1202,4 +1378,81 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="close_project_save_and_close">Simpan &amp; tutup</string>
     <string name="sdk_platform_tools">Alat platform</string>
     <string name="sdk_platform_tools_desc">adb, yang dipakai Jalankan untuk memasang dan membuka aplikasi Anda di ponsel atau emulator yang terhubung ke komputer ini.</string>
+    <string name="you_delete_account">Hapus akun</string>
+    <string name="you_delete_account_title">Hapus akun Anda?</string>
+    <string name="you_delete_account_body">Ini menghapus akun CodeAssist Anda secara permanen beserta semua yang tersimpan: profil, proyek yang diterbitkan, ulasan, suka, mengikuti, hasil tantangan, dan poin AI. Proyek di perangkat ini tidak terpengaruh. Tindakan ini tidak bisa dibatalkan.</string>
+    <string name="you_delete_account_deleting">Menghapus…</string>
+    <string name="you_account">Akun</string>
+    <plurals name="you_releases">
+        <item quantity="other">%1$d rilis</item>
+    </plurals>
+    <string name="notif_title">Notifikasi</string>
+    <string name="notif_empty">Tidak ada yang perlu dilihat.</string>
+    <string name="notif_empty_body">Ulasan, pembaruan, dan build yang selesai muncul di sini.</string>
+    <string name="notif_mark_all">Tandai semua dibaca</string>
+    <string name="notif_clear">Hapus</string>
+    <string name="notif_open">Buka</string>
+    <string name="notif_dismiss">Tutup</string>
+    <string name="notif_section_new">Baru</string>
+    <string name="notif_view">Lihat</string>
+    <string name="notif_more_row_desc">Yang terjadi saat Anda bekerja</string>
+    <string name="notif_section_earlier">Sebelumnya</string>
+    <string name="notif_show_more">Tampilkan lebih banyak</string>
+    <string name="notif_show_less">Tampilkan lebih sedikit</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">Toko</string>
+    <string name="notif_kind_update">Pembaruan toko</string>
+    <string name="notif_kind_build">Build</string>
+    <string name="notif_kind_agent">Agen AI</string>
+    <string name="notif_kind_learn">Belajar</string>
+    <string name="notif_kind_system">CodeAssist</string>
+    <string name="notif_just_now">baru saja</string>
+    <string name="notif_minutes">%1$d mnt lalu</string>
+    <string name="notif_hours">%1$d jam lalu</string>
+    <string name="notif_days">%1$d hari lalu</string>
+    <string name="settings_language_servers">Server Bahasa</string>
+    <string name="settings_language_servers_subtitle">Galat, pelengkapan, dan navigasi dari server yang sudah Anda pasang</string>
+    <string name="lsp_intro">Tambahkan server Language Server Protocol yang sudah Anda pasang. File dengan ekstensinya mendapatkan galat, pelengkapan, navigasi, ganti nama, dan pemformatan dari server itu. Bahasa baru berlaku pada proyek berikutnya yang Anda buka.</string>
+    <string name="lsp_unsupported">Server bahasa tidak tersedia di perangkat ini.</string>
+    <string name="lsp_empty">Belum ada server bahasa. Tambahkan satu, atau mulai dari server umum di bawah.</string>
+    <string name="lsp_add">Tambah</string>
+    <string name="lsp_presets">Server umum</string>
+    <string name="lsp_new_title">Server bahasa baru</string>
+    <string name="lsp_edit_title">Edit server bahasa</string>
+    <string name="lsp_field_name">Nama</string>
+    <string name="lsp_field_command">Perintah</string>
+    <string name="lsp_field_extensions">Ekstensi file</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Id bahasa</string>
+    <string name="lsp_field_options">Opsi inisialisasi (JSON, opsional)</string>
+    <string name="lsp_check">Periksa perintah</string>
+    <string name="lsp_save">Simpan</string>
+    <string name="lsp_cancel">Batal</string>
+    <string name="lsp_delete">Hapus</string>
+    <string name="lsp_status_running">Berjalan</string>
+    <string name="lsp_status_starting">Memulai</string>
+    <string name="lsp_status_not_started">Belum dimulai</string>
+    <string name="review_copy">Salin teks</string>
+    <string name="link_open_title">Buka tautan ini?</string>
+    <string name="link_mail_title">Tulis ke alamat ini?</string>
+    <string name="link_from_user">Seseorang di komunitas menambahkan tautan ini. CodeAssist belum memeriksa ke mana tujuannya.</string>
+    <string name="link_mail_from_user">Seseorang di komunitas menambahkan alamat ini. Aplikasi email Anda akan terbuka dengan pesan baru untuknya.</string>
+    <string name="link_warn_http">Tidak terenkripsi (http): orang lain di jaringan Anda dapat melihat atau mengubah halaman.</string>
+    <string name="link_warn_userinfo">Bagian sebelum @ bukan situsnya. Tautan ini menuju %1$s.</string>
+    <string name="link_warn_ip">Tautan ini menuju alamat IP, bukan situs bernama.</string>
+    <string name="link_warn_lookalike">Alamat ini memakai karakter yang dapat meniru nama situs terkenal.</string>
+    <string name="link_open">Buka</string>
+    <string name="link_copy">Salin tautan</string>
+    <string name="plugins_leftovers_title">Sisa dari plugin yang dihapus</string>
+    <string name="plugins_leftovers_body">Mencopot plugin meninggalkan datanya. Hapus untuk mengosongkan ruang, atau simpan jika Anda akan memasangnya lagi.</string>
+    <string name="plugins_leftover_delete">Hapus</string>
+    <string name="plugins_leftovers_delete_all">Hapus semua (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">Hapus data %1$s?</string>
+    <string name="plugins_leftovers_confirm_all_title">Hapus data semua plugin yang dihapus?</string>
+    <string name="plugins_leftover_confirm_body">Ini mengosongkan %1$s. Plugin yang Anda pasang lagi nanti akan mulai dari awal.</string>
+    <string name="storage_cat_plugin_leftovers_title">Data plugin yang dihapus</string>
+    <string name="storage_cat_plugin_leftovers_desc">Ditinggalkan oleh plugin yang Anda copot</string>
+    <string name="storage_clear_plugin_leftovers_title">Hapus data plugin yang dihapus?</string>
+    <string name="storage_clear_plugin_leftovers_body">Ini menghapus %1$s yang ditinggalkan plugin yang dicopot. Plugin yang Anda pasang lagi nanti akan mulai dari awal.</string>
+    <string name="colors_plugin_notice">%1$s berasal dari sebuah plugin. Perubahan Anda disimpan ke salinan.</string>
 </resources>

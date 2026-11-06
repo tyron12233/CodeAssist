@@ -114,11 +114,18 @@ internal class EditorRenderState(private val session: EditorSession) {
     fun layoutFor(line: Int): TextLayoutResult =
         renderCache.layoutFor(line, session.doc, session.styles)
 
-    /** Per-number gutter layout, cached by the actual line number so real numbers render (not "0"/"00"/…). */
-    fun numberLayout(n: Int): TextLayoutResult =
-        gutterNumberCache.getOrPut(n) {
-            measurer.measure(AnnotatedString(n.toString()), style = gutterStyle, softWrap = false, maxLines = 1)
-        }
+    /**
+     * Per-number gutter layout, cached by the actual line number so real numbers render (not "0"/"00"/…). Bounded:
+     * it used to keep one layout per line number ever drawn until a zoom or theme change, so scrolling a 20k-line
+     * file held 20k Paragraphs. Past [GUTTER_NUMBER_CACHE_MAX] it starts over, which costs re-shaping the ~60
+     * visible numbers (about a millisecond) once per [GUTTER_NUMBER_CACHE_MAX] new numbers scrolled past.
+     */
+    fun numberLayout(n: Int): TextLayoutResult {
+        gutterNumberCache[n]?.let { return it }
+        if (gutterNumberCache.size >= GUTTER_NUMBER_CACHE_MAX) gutterNumberCache.clear()
+        return measurer.measure(AnnotatedString(n.toString()), style = gutterStyle, softWrap = false, maxLines = 1)
+            .also { gutterNumberCache[n] = it }
+    }
 
     /** A measured composite plus what it was built from, so an entry survives edits to other lines. */
     internal class CompositeEntry(
@@ -293,3 +300,6 @@ internal fun rememberEditorRenderState(
     }
     return state
 }
+
+/** Most gutter line-number layouts [EditorRenderState.numberLayout] keeps (a few screens' worth). */
+internal const val GUTTER_NUMBER_CACHE_MAX = 512

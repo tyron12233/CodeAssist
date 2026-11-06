@@ -56,10 +56,10 @@ class KotlinLazyDslDiagnosticsTest {
     }
 
     /**
-     * Regression for `import icons.automirrored.filled.List` (a Compose icon whose simple name is "List")
-     * shadowing `kotlin.collections.List` in type annotations. Kotlin's built-in types are intrinsic — always
-     * in scope via the implicit kotlin star import — and must not be displaced by an explicit import that
-     * happens to share the same simple name. Simulated here by importing `StickyScope` under the alias `List`.
+     * Regression for `import androidx.compose.material.icons.automirrored.filled.List` (the Compose icon, an
+     * extension PROPERTY whose simple name is "List") shadowing `kotlin.collections.List` in type annotations.
+     * An imported property is no classifier, so the built-in type stays in scope. Simulated with a top-level
+     * property named `List` in another package.
      */
     @Test
     fun kotlinBuiltinListNotShadowedByExplicitImportWithSameName() {
@@ -67,13 +67,31 @@ class KotlinLazyDslDiagnosticsTest {
             "IconList.kt",
             """
             package demo
-            import demo.StickyScope as List
+            import demo.icons.List
             fun screen(items: List<P>): Any = items.filter { it.id.isNotEmpty() }
             """.trimIndent(),
         )
         assertTrue(
             diags.none { it.code == "kt.unresolved" && (it.message.contains("filter") || it.message.contains("id")) },
             "`List<P>` must resolve to kotlin.collections.List even when another type is imported as 'List'; got $diags",
+        )
+    }
+
+    /** An import of a TYPE under the name `List` does shadow the built-in, as Kotlin ranks explicit imports
+     *  above the default ones: `List<P>` is then `StickyScope<P>`, which takes no type arguments. */
+    @Test
+    fun anAliasedTypeImportShadowsTheBuiltin() {
+        val diags = diagnose(
+            "AliasList.kt",
+            """
+            package demo
+            import demo.StickyScope as List
+            fun screen(items: List<P>): Any = items
+            """.trimIndent(),
+        )
+        assertTrue(
+            diags.any { it.code == "kt.typeArgumentCount" },
+            "`List` here is the imported StickyScope, which takes no type arguments; got $diags",
         )
     }
 
@@ -189,6 +207,7 @@ class KotlinLazyDslDiagnosticsTest {
         val srcDir: Path = tempProject(
             mapOf(
                 "Models.kt" to "package demo\ndata class P(val id: String, val progress: Float)\n",
+                "Icons.kt" to "package demo.icons\nval List: Int = 0\n",
                 "Dsl.kt" to "package demo\n" +
                     "import androidx.compose.runtime.Composable\n" +
                     "fun <T> myItems(items: List<T>, key: (T) -> Any) {}\n" +

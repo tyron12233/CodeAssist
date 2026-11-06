@@ -349,15 +349,31 @@ private fun kindWord(item: dev.ide.ui.backend.UiStoreItem): String = stringResou
     },
 )
 
+/**
+ * A count short enough for a stat tile, without losing what it says.
+ *
+ * Exact below ten thousand, because that is where truncating hurts most: "1K" was what both 1,024 and
+ * 1,999 installs read as. Above it, one decimal while it still matters (`12.3K`, `4.5M`) and none once the
+ * figure is large enough that it does not (`123K`). A trailing `.0` is dropped.
+ */
+fun compactNumber(n: Int): String {
+    fun scaled(value: Int, unit: Int, suffix: String): String {
+        if (value >= unit * 100) return "${value / unit}$suffix"
+        val tenths = value / (unit / 10)
+        return if (tenths % 10 == 0) "${tenths / 10}$suffix" else "${tenths / 10}.${tenths % 10}$suffix"
+    }
+    return when {
+        n >= 1_000_000 -> scaled(n, 1_000_000, "M")
+        n >= 10_000 -> scaled(n, 1_000, "K")
+        else -> n.toString()
+    }
+}
+
 /** `48K installs`, and `New` below ten — a real count under ten reads as failure, not novelty. */
 @Composable
 fun installsLabel(installs: Int): String {
     if (installs < 10) return stringResource(Res.string.store_installs_new)
-    val formatted = when {
-        installs >= 1_000_000 -> "${installs / 1_000_000}M"
-        installs >= 1_000 -> "${installs / 1_000}K"
-        else -> installs.toString()
-    }
+    val formatted = compactNumber(installs)
     // The plural follows the real count, not the abbreviation, so `1K` still reads as many.
     return pluralStringResource(Res.plurals.store_installs, installs, formatted)
 }

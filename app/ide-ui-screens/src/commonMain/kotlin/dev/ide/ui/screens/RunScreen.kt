@@ -131,7 +131,8 @@ fun RunScreen(
     Column(modifier.background(MaterialTheme.colorScheme.background)) {
         RunTopBar(
             console = rc,
-            buildFailed = build.status == RunStatus.Failed,
+            buildFailed = build.status == RunStatus.Failed && !build.stopped,
+            stopped = build.stopped,
             onBack = onBack,
             onHide = onHide,
             onStop = { backend.build.stopBuild() },
@@ -202,6 +203,8 @@ fun RunScreen(
 private fun RunTopBar(
     console: RunConsoleUi?,
     buildFailed: Boolean,
+    /** The user stopped this run: it reads "Stopped", whatever exit code the killed program left. */
+    stopped: Boolean = false,
     onBack: () -> Unit,
     onHide: (() -> Unit)?,
     onStop: () -> Unit,
@@ -247,7 +250,7 @@ private fun RunTopBar(
                 mainClass(Modifier)
             }
         }
-        if (console != null) RunStatusPill(console, buildFailed, tests)
+        if (console != null) RunStatusPill(console, buildFailed, tests, stopped)
         if (console != null && shownTranscript.isNotEmpty()) {
             IconButtonCa(
                 CaIcons.copy, stringResource(Res.string.copy),
@@ -263,7 +266,7 @@ private fun RunTopBar(
 }
 
 @Composable
-private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean, tests: UiTestRun?) {
+private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean, tests: UiTestRun?, stopped: Boolean = false) {
     val (text, color) = when (console.phase) {
         RunPhase.Building -> stringResource(Res.string.run_building) to MaterialTheme.colorScheme.primary
         RunPhase.Running -> stringResource(Res.string.run_running) to Ide.colors.run
@@ -273,6 +276,7 @@ private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean, tests: Ui
             tests.noTests -> stringResource(Res.string.tests_none_found) to MaterialTheme.colorScheme.onSurfaceVariant
             else -> stringResource(Res.string.tests_passed, tests.passed) to Ide.colors.run
         }
+        RunPhase.Finished if stopped -> stringResource(Res.string.run_stopped) to MaterialTheme.colorScheme.onSurfaceVariant
         RunPhase.Finished -> when (val c = console.exitCode) {
             0 -> stringResource(Res.string.run_exit_code, 0) to Ide.colors.run
             null -> if (buildFailed) stringResource(Res.string.run_failed) to MaterialTheme.colorScheme.error else stringResource(Res.string.run_stopped) to MaterialTheme.colorScheme.onSurfaceVariant

@@ -23,18 +23,31 @@ object AndroidMemory {
     /** `largeMemoryClass` (the heap a `largeHeap` app gets, in MB) at or below which the device is LOW. */
     private const val LOW_LARGE_MEMORY_CLASS_MB = 256
 
+    /**
+     * The device is short of PHYSICAL memory: the system's low-RAM flag, or under [LOW_TOTAL_MEM_BYTES] of RAM
+     * (a "3 GB" phone or smaller). Narrower than [DeviceMemory.isLow], which also counts a small Java heap
+     * (`largeMemoryClass`) because that is what bounds the IDE's caches.
+     *
+     * What decides whether the system kills an app is physical RAM, not the Java heap cap, and many 4 to 8 GB
+     * phones ship a 256 MB `largeMemoryClass` from their OEM build config. Using the heap rule for ads skipped
+     * the full-screen build ad on those phones: more "low_memory" skips than ads shown on 3.34.1, nearly all
+     * from installs reporting a 256 MB heap.
+     */
+    @Volatile
+    var lowPhysicalMemory: Boolean = false
+        private set
+
     /** Classify this device and publish it as [DeviceMemory.detected]. Cheap; safe in every process. */
     fun detect(context: Context) {
         val am = context.getSystemService(ActivityManager::class.java) ?: return
         val totalMem = runCatching {
             ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem
         }.getOrDefault(0L)
-        val low = am.isLowRamDevice ||
-            am.largeMemoryClass <= LOW_LARGE_MEMORY_CLASS_MB ||
-            (totalMem in 1 until LOW_TOTAL_MEM_BYTES)
+        lowPhysicalMemory = am.isLowRamDevice || (totalMem in 1 until LOW_TOTAL_MEM_BYTES)
+        val low = lowPhysicalMemory || am.largeMemoryClass <= LOW_LARGE_MEMORY_CLASS_MB
         DeviceMemory.detected = if (low) MemoryTier.LOW else MemoryTier.NORMAL
         log.info(
-            "device memory: tier=${DeviceMemory.detected} lowRam=${am.isLowRamDevice} " +
+            "device memory: tier=${DeviceMemory.detected} lowPhysical=$lowPhysicalMemory lowRam=${am.isLowRamDevice} " +
                 "largeMemoryClass=${am.largeMemoryClass}MB totalMem=${totalMem / (1024 * 1024)}MB",
         )
     }

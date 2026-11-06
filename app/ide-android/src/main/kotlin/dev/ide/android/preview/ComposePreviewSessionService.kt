@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.hardware.HardwareBuffer
 import android.os.IBinder
 import android.os.Process
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
@@ -96,20 +97,36 @@ class ComposePreviewSessionService : Service() {
             sandbox: Array<out String>?,
             cb: IComposePreviewCallback?,
         ): Int = runCatching {
+            val t0 = SystemClock.elapsedRealtime()
             val memo = ComposePreviewWireCodec.DecodeMemo()
-            val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes(), memo)
+            val bytes = File(blobFile!!).readBytes()
+            // An empty blob opens the session with nothing to render yet: the IDE starts it while it is still
+            // lowering, so the executor, resources and surface are ready by the time the program arrives (update).
+            val lowered = if (bytes.isEmpty()) null else ComposePreviewWireCodec.decode(bytes, memo)
+            val tDecoded = SystemClock.elapsedRealtime()
+            val executorWasCached = classpath.isNullOrEmpty() || synchronized(cacheLock) { executorCache.containsKey(fingerprint(classpath.filter { it.isNotBlank() }.map { Paths.get(it) })) }
+            val executor = cachedExecutor(classpath)
+            val tExecutor = SystemClock.elapsedRealtime()
             val id = nextId.getAndIncrement()
             val session = Session(
                 id, widthPx, heightPx, density, night, File(frameDir!!).apply { mkdirs() }, cb!!,
-                cachedExecutor(classpath),
+                executor,
                 resDirs = resRoots?.filter { it.isNotBlank() }.orEmpty(),
                 namespace = packageName?.takeIf { it.isNotBlank() },
                 wrapContent = wrapContent,
                 sandbox = sandbox?.toList().orEmpty(),
                 decodeMemo = memo,
             )
+            session.openedAt = t0
             session.start(lowered)
+            val tStarted = SystemClock.elapsedRealtime()
             sessions[id] = session
+            android.util.Log.i(
+                PREVIEW_TIMING_TAG,
+                ":preview open session=$id blob=${bytes.size}B decode=${tDecoded - t0} " +
+                    "executor=${tExecutor - tDecoded}(${if (executorWasCached) "hit" else "miss"}, jars=${classpath?.size ?: 0}) " +
+                    "start=${tStarted - tExecutor}(resources=${session.resourcesMs}) total=${tStarted - t0}",
+            )
             log.info(":preview(pid=${Process.myPid()}): opened compose session $id (${widthPx}x$heightPx)")
             id
         }.getOrElse {
@@ -126,7 +143,9 @@ class ComposePreviewSessionService : Service() {
 
         override fun updateBytes(sessionId: Int, blob: ByteArray?) {
             val session = sessions[sessionId] ?: return
-            runCatching { session.update(session.decode(blob!!)) }
+            // Empty: the IDE parked this session for reuse by another preview; stop drawing until the next program.
+            if (blob == null || blob.isEmpty()) { session.clearProgram(); return }
+            runCatching { session.update(session.decode(blob)) }
                 .onFailure { log.warn("compose session $sessionId updateBytes failed", it) }
         }
 
@@ -292,7 +311,26 @@ class ComposePreviewSessionService : Service() {
 
         private fun newSurface() = OffscreenComposeSurface(applicationContext, width, height, (density * 160f).toInt().coerceAtLeast(1))
 
-        fun start(lowered: LoweredComposePreview) {
+        /** When [open] began (elapsed realtime), for the first-frame timing line; 0 when not opened through it. */
+        @Volatile var openedAt = 0L
+        /** How long [start] spent getting the resource resolver (a parse on a cache miss). */
+        @Volatile var resourcesMs = 0L
+
+        /** Log the first frame's time since [open] began, once. */
+        /** [seq] when the first program arrived in a session opened without one, so its first frame is timed. */
+        @Volatile private var seqAtProgram = 0L
+
+        private fun timeFirstFrame(s: Long) {
+            if (s == seqAtProgram + 1 && openedAt != 0L) {
+                android.util.Log.i(PREVIEW_TIMING_TAG, ":preview first frame session=$id after=${SystemClock.elapsedRealtime() - openedAt}")
+            }
+        }
+
+        /** Whether a program has arrived: a session opened ahead of it streams nothing until then. */
+        @Volatile private var hasProgram = false
+
+        fun start(lowered: LoweredComposePreview?) {
+            hasProgram = lowered != null
             programState.value = lowered
             nightState.value = night
             // A (re)start rebuilds the surface/composition, so re-report the content size on the next measure even
@@ -300,7 +338,9 @@ class ComposePreviewSessionService : Service() {
             lastContentW = -1; lastContentH = -1
             // Project resource resolver (night baked in), served from the process cache on a re-open; mirrors the
             // in-process host.
+            val tRes = SystemClock.elapsedRealtime()
             currentResources = cachedResources(resDirs, namespace, density, night)
+            resourcesMs = SystemClock.elapsedRealtime() - tRes
             // Zero-copy when the platform supports it (API 29+): stream the GPU HardwareBuffer; else the raw bytes.
             if (surface.hardwareAccelerated) {
                 surface.onHardwareFrame = { hb, w, h -> pushHardwareFrame(hb, w, h) }
@@ -315,8 +355,9 @@ class ComposePreviewSessionService : Service() {
                     // key(nightNow): a night toggle cleanly remounts this subtree (fresh renderer + cfg + the
                     // night-matched resources read below) on the SAME surface — no VirtualDisplay/Presentation
                     // teardown. A program edit (same night) does NOT remount, so the renderer stays stable and its
-                    // live-edit identity-diff preserves remembered state.
-                    key(nightNow) {
+                    // live-edit identity-diff preserves remembered state. The entry's name is in the key too, so a
+                    // session reused for ANOTHER preview starts that one from fresh state instead of inheriting slots.
+                    key(nightNow, p.entry.name) {
                         // Force the requested night scheme so a theme reading isSystemInDarkTheme() renders Light
                         // or Dark to match the surface's Night toggle (mirrors AndroidComposePreviewHost).
                         val base = LocalConfiguration.current
@@ -370,10 +411,33 @@ class ComposePreviewSessionService : Service() {
             }
         }
 
+        /** Draw nothing (and stream nothing) until the next [update], which then times its first frame afresh. */
+        fun clearProgram() {
+            surface.postToMain {
+                hasProgram = false
+                programState.value = null
+            }
+        }
+
         fun update(lowered: LoweredComposePreview) {
             // Non-blocking: post the state write, don't wait for the render thread. update() is a oneway AIDL call,
             // but even so, blocking this binder thread on a saturated main thread pins a binder-pool slot.
-            surface.postToMain { programState.value = lowered }
+            surface.postToMain {
+                val previous = programState.value
+                if (previous == null) {
+                    // The session was opened ahead of its program, so the surface has only drawn nothing so far:
+                    // wait for this program's first draw before streaming, and time the first frame from here.
+                    surface.rearmContentGate()
+                    openedAt = SystemClock.elapsedRealtime()
+                    seqAtProgram = seq.get()
+                    hasProgram = true
+                }
+                if (previous == null || previous.entry.name != lowered.entry.name) {
+                    // A different preview in the same session: report its size even if it matches the last one.
+                    lastContentW = -1; lastContentH = -1
+                }
+                programState.value = lowered
+            }
         }
 
         fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
@@ -423,7 +487,9 @@ class ComposePreviewSessionService : Service() {
         }
 
         private fun pushFrame(frame: OffscreenComposeSurface.Frame) {
+            if (!hasProgram) return // an empty session's blank frame is not the preview
             val s = seq.incrementAndGet()
+            timeFirstFrame(s)
             val f = File(frameDir, "frame-$s.px")
             runCatching {
                 // The frame is already the raw RGBA bytes — write them straight out (no ByteBuffer/int conversion).
@@ -435,7 +501,9 @@ class ComposePreviewSessionService : Service() {
         /** Zero-copy: hand the GPU HardwareBuffer straight to the IDE over the oneway callback (which dups the
          *  dmabuf fd during the transaction), so no pixels are read back or written to disk. */
         private fun pushHardwareFrame(hb: HardwareBuffer, w: Int, h: Int) {
+            if (!hasProgram) return // an empty session's blank frame is not the preview
             val s = seq.incrementAndGet()
+            timeFirstFrame(s)
             runCatching { cb.onFrameBuffer(hb, w, h, s) }
                 .onFailure { log.warn("compose session $id hardware frame push failed", it) }
         }

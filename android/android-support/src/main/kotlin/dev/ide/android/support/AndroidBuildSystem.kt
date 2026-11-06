@@ -17,6 +17,7 @@ import dev.ide.android.support.tasks.DexExternalLibsTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateAarRJarTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
+import dev.ide.android.support.tasks.LinkLibraryDependencyResourcesTask
 import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.tasks.GenerateBuildConfigTask
@@ -587,6 +588,7 @@ class AndroidBuildSystem(
                 aapt2,
                 proguardRules = if (minify) layout.aaptProguardRules else null,
                 protoFormat = protoResources,
+                mergedRes = layout.mergedRes,
             )
         }
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
@@ -987,7 +989,7 @@ class AndroidBuildSystem(
             tasks.task(compileTestJava, appCompiles + listOfNotNull(compileTestKotlin.takeIf { kotlin != null })) {
                 TestJavaCompileTask(
                     app, compileTestJava, bootClasspath,
-                    testClasspath = { testClasspath + kotlinOut }, out = javaOut, sources = { androidTestJavaSourceFiles(app) },
+                    testClasspath = { testClasspath.plusElement(kotlinOut) }, out = javaOut, sources = { androidTestJavaSourceFiles(app) },
                 )
             }
             // Resources: the test libraries' own (androidx.test's activity themes), linked under the test package.
@@ -1021,7 +1023,7 @@ class AndroidBuildSystem(
                 Aapt2LinkTask(
                     linkTest, testRoot.resolve("compiled-res"), mergedTestManifest, androidJar, testNamespace,
                     testLibs.aarPackages, facet.minSdk, facet.targetSdk, versionCode, versionName,
-                    testRoot.resolve("gen"), testAp, aapt2,
+                    testRoot.resolve("gen"), testAp, aapt2, mergedRes = testRoot.resolve("merged-res"),
                 )
             }
             val testRJar = testRoot.resolve("R.jar")
@@ -1092,7 +1094,23 @@ class AndroidBuildSystem(
         val rRoot = buildDir.resolve("intermediates").resolve("r")
         val generateR = TaskName(":${m.name}:generateR")
         val compileR = TaskName(":${m.name}:compileR")
-        tasks.task(generateR) {
+        // The resources this library's own XML may reference: its dependency modules' and AARs', in the order
+        // the app merges them. Linked once into a table `generateR` links against, and only relinked when they
+        // change; no task when there are none.
+        val depResDirs = depAndroidLibs.flatMap {
+            contentRoots(it, AndroidVariants.matchLibraryVariant(it, consumerVariant, consumerFacet), ContentRole.ANDROID_RES)
+        } + libs.resDirs
+        val linkDepRes = TaskName(":${m.name}:linkDependencyResources")
+        val depTable = rRoot.resolve("dependencies.ap_")
+        if (depResDirs.isNotEmpty()) {
+            tasks.task(linkDepRes) {
+                LinkLibraryDependencyResourcesTask(
+                    linkDepRes, depResDirs, androidJar, facet.namespace, facet.minSdk,
+                    rRoot.resolve("dependency-res"), rRoot.resolve("dependency-link"), depTable, aapt2,
+                )
+            }
+        }
+        tasks.task(generateR, if (depResDirs.isNotEmpty()) listOf(linkDepRes) else emptyList()) {
             GenerateLibraryRTask(
                 generateR,
                 srcRoots(ContentRole.ANDROID_RES),
@@ -1106,6 +1124,7 @@ class AndroidBuildSystem(
                 rRoot.resolve("AndroidManifest.xml"),
                 aapt2,
                 rTxt = rRoot.resolve("R.txt"),   // the symbol table an AAR ships (assembleAar reads it)
+                dependencyTable = depTable.takeIf { depResDirs.isNotEmpty() },
             )
         }
         // The lib's own (non-final) R as R.jar bytecode — compile-only, kept OUT of the dexed output, so the
@@ -1233,7 +1252,7 @@ class AndroidBuildSystem(
             registerTests(
                 tasks, m, test, step = { TaskName(":${m.name}:$it") }, variantConfigs = configs,
                 mainOutputs = classDirs + buildDir.resolve("resources"), kotlinMain = libKotlin,
-                compileClasspath = classpath.toList() + classesOut, platform = compileBootclasspath, bootClasspath = bootClasspath,
+                compileClasspath = classpath.toList().plusElement(classesOut), platform = compileBootclasspath, bootClasspath = bootClasspath,
                 mainTasks = listOf(classes), testRoot = classesOut.parent, level = level,
             )
         }
@@ -1283,7 +1302,7 @@ class AndroidBuildSystem(
             }
         }
         tasks.task(compileJava, mainTasks + listOfNotNull(compileKotlin.takeIf { kotlin != null })) {
-            TestJavaCompileTask(m, compileJava, bootClasspath, testClasspath = { testClasspath + kotlinOut }, out = javaOut)
+            TestJavaCompileTask(m, compileJava, bootClasspath, testClasspath = { testClasspath.plusElement(kotlinOut) }, out = javaOut)
         }
         val platformSet = platform.map { it.toAbsolutePath().normalize() }.toSet()
         val hostHasAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess

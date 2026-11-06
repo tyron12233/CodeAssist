@@ -819,6 +819,47 @@ layer, and a `LanguageBackend` reaches the same attribute by emitting a highligh
 before being dropped, so the two halves need nothing wired between them. See
 [editor-color-schemes.md](editor-color-schemes.md) for the model.
 
+#### A whole color scheme
+
+A theme plugin ships complete schemes instead (since SPI 3.4.0). Design the scheme in the IDE itself
+(Settings → Editor Colors), export it, put the file in your plugin, and hand its text over:
+
+```kotlin
+override fun contribute(ui: UiRegistration) {
+    val json = javaClass.getResourceAsStream("/schemes/midnight.json")!!.reader().readText()
+    ui.colorScheme(ColorScheme(id = "midnight", name = "Midnight", json = json))
+}
+```
+
+Declare `PluginCapabilities.UI_COLOR_SCHEME`. The scheme is listed beside the presets and is read-only like
+them: picking it applies it, editing it gives the user a copy of their own. It is only there while your
+plugin is loaded, so a user who had it active goes back to the default when the plugin is turned off or
+uninstalled; a copy they made stays. `id` is what the user's choice is remembered by, so keep it stable. A
+document the IDE cannot read is skipped and logged rather than failing your plugin's UI.
+
+The document is sparse, the same as a user's scheme: it names what it overrides, and everything else,
+including entries the IDE adds later and other plugins' attributes, falls back through the usual chain. On a
+host older than 3.4.0 `colorScheme` throws `NoSuchMethodError`; call it inside `catch (e: LinkageError)` if
+you support one.
+
+#### A whole app theme
+
+The editor scheme colors code; an app theme colors everything around it: the Material roles of every screen,
+dark and light (since SPI 3.4.0). Design it in Material Theme Builder (m3.material.io/theme-builder), export
+"Material Theme (JSON)", and ship `material-theme.json` as it comes:
+
+```kotlin
+val json = javaClass.getResourceAsStream("/themes/dune.json")!!.reader().readText()
+ui.appTheme(AppTheme(id = "dune", name = "Dune", json = json))
+```
+
+Declare `PluginCapabilities.UI_APP_THEME`. The theme is offered under Settings → Appearance → Accent, after the
+IDE's own accents, and applies only when the user picks it. The builder's `schemes.light` and `schemes.dark`
+are what apply (its contrast variants are ignored), every role it names replaces the IDE's, and its `seed`
+generates any role it leaves out. A theme written by hand may name only a few roles, or only
+`{ "seed": "#RRGGBB" }`. Turned off or uninstalled, your plugin takes the theme with it and the IDE falls back to
+its default accent; the user's choice is kept, so the theme comes back with the plugin.
+
 ---
 
 ### Mark up the editor without owning a language
@@ -896,6 +937,181 @@ reg.register(DECLARATION_PROVIDER_EP, object : DeclarationProvider {
 the built-in navigation found nothing, so a plugin cannot shadow a declaration a backend knows; the Go-to
 menu lists both. For a plugin that must also run on an older IDE, register it from a class of its own after
 checking the host has SPI 3.1.0, so the older host never loads a type it does not have.
+
+### Teach the IDE a language through a language server
+
+If a Language Server Protocol server exists for your language (the Dart analysis server, gopls,
+rust-analyzer, clangd, pyright), you do not have to write a backend. Since SPI 3.3.0 a plugin declares the
+server on `LANGUAGE_SERVER_EP` (in the `lsp-api` artifact) and the IDE's own LSP client does the rest:
+
+```kotlin
+class DartPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "dart-support", name = "Dart",
+        capabilities = listOf(PluginCapabilities.LANG_SERVER),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".dart"), LanguageId("dart")))
+        reg.register(LANGUAGE_SERVER_EP, object : LanguageServerDefinition {
+            override val id = "dart"
+            override val displayName = "Dart analysis server"
+            override val languages = setOf(LanguageId("dart"))
+
+            override fun start(context: LanguageServerContext): LanguageServerConnection? {
+                // On Android the executable must be in your APK's native library directory.
+                val dart = reg.nativeLibrary("dart") ?: return null   // libdart.so; null: not available here
+                return LanguageServerConnection.process(listOf(dart.toString(), "language-server"), context.root)
+            }
+
+            // The workspace root, when it is not the project root: the nearest pubspec.yaml.
+            override fun rootFor(file: Path, context: LanguageServerContext): Path? =
+                generateSequence(file.parent) { it.parent }
+                    .takeWhile { it.startsWith(context.projectRoot) }
+                    .firstOrNull { Files.exists(it.resolve("pubspec.yaml")) }
+        })
+    }
+}
+```
+
+That is the whole language integration. The host starts the server the first time a `.dart` file of an open
+project is analysed (off the engine thread), keeps the server's copy of every open buffer in sync, and turns
+each capability the server advertises into the editor feature that matches it:
+
+| The server's answer | What the editor shows |
+| --- | --- |
+| `publishDiagnostics` or `textDocument/diagnostic` | Squiggles, gutter marks and inline error chips |
+| `codeAction` (with `codeAction/resolve` and `workspace/executeCommand`) | Quick fixes and refactorings at the caret; the `workspace/applyEdit` a command sends back becomes the action's edit, applied like any quick fix |
+| `completion` | Completion, with snippets (`$1`, `${1:name}`) and auto-import edits |
+| `signatureHelp`, `hover`, `inlayHint` | Parameter info, Quick Documentation (Markdown), inlay hints |
+| `definition`, `implementation`, `typeDefinition` | Go to Declaration, Implementation and Type Declaration |
+| `references`, `documentHighlight`, `prepareRename` + `rename` | Find Usages, highlight usages at the caret, Rename across the project |
+| `semanticTokens/full`, `foldingRange`, `documentSymbol`, `formatting` | Semantic colouring, folding, the structure view and breadcrumbs, Reformat Code (and Optimize Imports through `source.organizeImports`) |
+
+Three things are still yours to register, because the protocol does not cover them: the file-type mapping, the
+editor's **lexical** colouring (`ui.editorLanguage`, which shows before the server has answered and wherever
+it is unavailable), and the project model if your language has one (a module type, an importer for
+`pubspec.yaml`, templates). A served file is analysed wherever it is in the project, but the model is what makes
+it look like your language's project: declare its directories as content roots under a `ContentRole` of your
+own and the Project view shows them (a plugin's roles are surfaced there like the built-in code roots), and
+a module type no build system builds offers its own Run rows rather than a Build row that cannot work. The
+Dart plugin (`samples/dart-plugin`) is a complete example.
+
+How it behaves, so you can plan around it:
+
+- **One server per (definition, workspace root).** `rootFor` decides the root; files that answer the same
+  root share a server. Servers shut down (`shutdown` + `exit`) when their project closes.
+- **Every request has a budget** (1.5 s for the first handshake wait, 2.5 s for diagnostics, 3 s for
+  completion, longer for references and rename) and the engine's cancel token is polled while it waits, so a
+  slow server degrades to "no answer" rather than freezing the editor. A file analysed while the server was
+  still starting is analysed again once it is ready.
+- **The server's work never holds the engine thread.** The editor does each pass's round trip (diagnostics,
+  completion, semantic colours, folding, inlay hints, hover, signature help, the structure view) off the
+  IDE's single analysis thread first, and the engine's own call then finds the answer cached for that version
+  of the document. A slow server delays its own language's results, not Java's or Kotlin's.
+- **A server that exits is restarted** on the next request. Only a crash loop (more than three failures within
+  three minutes) leaves it down until the project is reopened, which the user is told once. A server Android
+  killed in the background (Android 12 and later stop an app's child processes there) comes back every time.
+  `start` returning null (no toolchain yet) is asked again after 30 seconds.
+- **Every request is timed.** A request slower than 1.5 s or an answer over about 1 MB is always logged
+  (`lsp-perf ... (slow or large)`), with the time the client spent parsing it. With Settings > Analysis >
+  Advanced > "Log analysis timings" on, every request is, and a per-method summary is logged when the server
+  shuts down. Read them in Settings > Privacy > View logs.
+- **A served file needs no source root.** A file of your language anywhere in the project is analysed, even
+  outside every module's source roots (a Dart package beside the app, a script folder). Features keyed to a
+  module (a test provider's marks, say) see the deepest module whose directory holds the file, else the
+  project's first module; contribute source roots through a module type when your language has a real one.
+- **Identical requests are shared.** Two parts of the editor asking the same thing about the same version of a
+  document (the breadcrumb and the structure view both want the outline) send one request.
+- **Completion keeps the server's ranking**, by `sortText`. Among items the server ranked equal, an exact match
+  of what was typed comes first, then case-sensitive prefix matches, shorter labels before longer.
+- **`initializationOptions` and `workspace/configuration`** are answered from `initializationOptions(context)`
+  and `configuration(section, context)`, as JSON text.
+- **A backend of your own wins.** If the plugin also registers a `LanguageBackend` for the language, the server
+  only serves what the engine asks separately (diagnostics, completion, code actions, navigation, usages,
+  rename), and your backend keeps the rest.
+
+On Android the usual rule for native programs applies: an app may only execute files inside an installed
+package's native library directory, so ship the server's executable in `jniLibs` with
+`packaging { jniLibs.useLegacyPackaging = true }` and find it with `PluginRegistration.nativeLibrary`.
+
+### Find Usages, Rename and Go to Implementation for your language
+
+The language-server client is built on three extension points any plugin can use directly, for a language
+whose intelligence is not a server (since SPI 3.3.0, in `analysis-api`):
+
+- `REFERENCE_PROVIDER_EP` (`ReferenceProvider`): Find Usages and Find References, plus highlight usages at
+  the caret (`highlights`; null keeps the editor's whole-word scan).
+- `RENAME_PROVIDER_EP` (`RenameProvider`): `prepare` names what is under the caret, `rename` returns a
+  `RenameResult` holding a `WorkspaceEdit` the host applies to disk and every open editor, or a message.
+- `NAVIGATION_PROVIDER_EP` (`NavigationProvider`): Go to Implementation and Go to Type Declaration.
+
+They are asked only for files of the languages they name, and never for `.java` or Kotlin files, which the
+built-in backends answer.
+
+### Members a Kotlin compiler plugin generates
+
+The Kotlin editor builds its symbols from source without running compiler plugins, so a member a compiler
+plugin generates (`Foo.serializer()`, `Foo.CREATOR`, a builder your plugin adds) is unknown to it: uses of it are
+flagged unresolved and it never completes. If your plugin ships or supports a compiler plugin, register its
+editor half on `KOTLIN_GENERATED_MEMBER_EP` (`language-api`, since SPI 3.4.0):
+
+```kotlin
+object AutoCreateMembers : KotlinGeneratedMemberProvider {
+    override val id = "com.example.autocreate"
+
+    override fun staticMembers(cls: KotlinSourceClass, ctx: KotlinGeneratedMemberContext) =
+        if ("AutoCreate" in cls.annotations && ctx.hasType("com.example.autocreate.AutoCreate"))
+            listOf(KotlinGeneratedMember.function("create", cls.constructorParameters.map { (n, t) -> n to t!! }, cls.fqName))
+        else emptyList()
+}
+reg.register(KOTLIN_GENERATED_MEMBER_EP, AutoCreateMembers)
+```
+
+It is asked about every project-source class the editor enumerates, so gate it on your annotation and on your
+runtime being on the classpath, and return an empty list otherwise. Types are Kotlin type text, fully qualified
+where the user's file would not import them. Library classes are not asked: they were compiled with the plugin
+and their real members are in the bytecode. A provider that throws contributes nothing for that class.
+
+### Run your language's tests
+
+`TEST_PROVIDER_EP` (`TestProvider`, in `build-api`, since SPI 3.3.0) gives a plugin language what JUnit has:
+a run mark beside every test, a "<name> · <module>" row in the Run picker, and the Run screen's Tests tab
+with re-run and re-run failed.
+
+```kotlin
+reg.register(TEST_PROVIDER_EP, object : TestProvider {
+    override val id = "dartTest"                       // also the run's kind: tasks are dartTest:<module>[:targets]
+    override val displayName = "Dart tests"
+    override val languages = setOf(LanguageId("dart"))
+    override fun appliesTo(module: Module) = File(module.dir.path, "test").isDirectory
+    override fun tests(module: Module, path: String, text: String) =
+        Regex("(?m)^\\s*test\\('([^']+)'").findAll(text)
+            .map { TestDeclaration(it.groupValues[1], it.range.first, "$path#${it.groupValues[1]}") }.toList()
+    override fun run(module: Module, targets: List<String>, project: Project, ctx: BuildContext): RunAction =
+        dartTestRun(module, targets)                   // a RunAction with a RunConsole, see below
+})
+```
+
+The run reports through the console: print `TestReport.run(id)` first (it is what makes a re-run come back to
+your provider), then `queued` / `started` / `passed` / `failed` / `skipped` per test and `finished()` at the
+end, to the console's `ProgramIo.stdout`. Everything else the run prints stays in the console as output. A
+re-run hands `run` the targets as `suite#test` (or a bare suite), in the names your records used. The Calc
+sample (`samples/lsp-plugin`, `CalcTestProvider`) is a complete one; the Dart plugin's `DartTestProvider`
+(`samples/dart-plugin`) is one for a real test framework.
+
+### Language servers without a plugin
+
+On the desktop, users can also add a language server themselves, in **Settings > Language Servers** (Code
+Intelligence):
+a name, the command, the file extensions and the protocol's language id, with presets for gopls,
+rust-analyzer, Pyright, typescript-language-server, clangd, Dart, Lua, zls and bash-language-server. They are
+stored in `language-servers.json` in the IDE's home folder and registered exactly like a plugin's definition,
+so everything above applies to them. The command is looked up on PATH and in the folders toolchains install
+into (`~/go/bin`, `~/.cargo/bin`, `/opt/homebrew/bin`, ...), since an app started from the Dock or Start menu
+does not see the terminal's PATH. The page is not offered on Android: an app there may only execute what an
+installed package ships, so a server the user installed could never start. On Android a language server comes
+with a plugin, as above.
 
 ### Put composables and pixels in the editor
 
@@ -1133,10 +1349,17 @@ selection as plain strings and offsets, with no model object, so it can resolve 
 services fits better on `ACTION_PROVIDER_EP`, which is given an `AnalysisTarget`.
 
 **From the registrar**, for an APPLICATION-scoped service with no scope object in sight.
-`reg.dataDir` is a directory this plugin owns, created on first read and removed when the plugin is
-uninstalled: for a cache, a downloaded index, a small database, anything that is state rather than a setting.
-It is application-scoped, so it survives a project switch; per-project content belongs in the project, through
-`MODULE_RESOURCES` or the file system.
+`reg.dataDir` is a directory this plugin owns, created on first read: for a cache, a downloaded index, a small
+database, anything that is state rather than a setting. It is application-scoped, so it survives a project
+switch; per-project content belongs in the project, through `MODULE_RESOURCES` or the file system.
+
+On a device `dataDir` is on shared storage, which cannot hold a symbolic link and which a file manager can
+read. `reg.privateDataDir` (SPI 3.4.0) is its counterpart on the IDE's private internal storage: use it for an
+unpacked toolchain that links into your native library directory, a package cache with links, or anything no
+other app should see. Do not pick a path of your own under the app's data instead; the IDE does not know it is
+yours. When your plugin is uninstalled, the IDE lists what it left in both directories (on the Plugins screen
+and under Storage) and deletes it when the user asks, never on its own, so a reinstall finds its data again.
+On an older host, reading `privateDataDir` throws `NoSuchMethodError`, which you can catch to fall back.
 
 `reg.nativeLibraryDir` and `reg.nativeLibrary(name)` find the native libraries your plugin **packaged**, which
 the installer unpacked when the plugin app was installed. Package one the way an Android app does, as
@@ -1192,12 +1415,14 @@ A key is usable only if you can name its type, and that differs by tier:
 Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
 `Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Seven engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+Nine engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
 Five are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`,
 `MODULE_RESOURCES`), each declared in the api module whose types it already speaks, and each typed to a
 *narrowed* interface rather than to the engine class behind it. The seventh is `CODE_INTERPRETER`
 (`interp-api`), the only one at APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
-than being scoped to one (see section 14b). `:ide-core` registers the narrow key
+than being scoped to one (see section 14b). The eighth, `ANDROID_MODULES` (`project-model-api`), is a
+read-only view over the Android module settings with no engine service behind it (section 14d), and the ninth,
+`MODULE_DEPENDENCIES`, an adapter over the engine's dependency service, which speaks the UI's types (section 14e). `:ide-core` registers the narrow key
 alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
 index, and the same module model.
 
@@ -2553,6 +2778,59 @@ file rather than through it. When the target is a file the user is looking at, u
 an `ActionEffect.ApplyWorkspaceEdit` from a `UI_ACTION_EP` action, or a `WorkspaceEdit` from a `QuickFix`,
 both of which go through the editor's own text path and land in the same undo step as typing.
 
+## 14d. Read an Android module's settings
+
+`ANDROID_MODULES` (`dev.ide.model.AndroidModules`, WORKSPACE, since SPI 3.4.0) is the read half of each
+module's `android { … }` block: what a lint rule needs to know the API level, what a manifest tool needs to
+know the application id, what a Compose-only feature checks before it offers itself.
+
+```kotlin
+val android = workspace.service(ANDROID_MODULES)
+val app = android.info(module) ?: return            // null: not an Android module
+if (app.minSdk < 26 && usesJavaTime && !app.coreLibraryDesugaring) warn("java.time needs API 26 or desugaring")
+val id = app.variants.first { it.name == app.activeVariant }.applicationId   // e.g. com.example.app.debug
+if (app.buildFeatures.compose) offerComposePreview()
+```
+
+The values are the ones the build uses, not the raw DSL. `applicationId` is the namespace when the build file
+sets none; each variant's `applicationId` already has its flavor's id and the flavor and build-type suffixes
+applied; a `versionCode` or `versionName` left at AGP's default reads as null, since the manifest's value then
+wins. `activeVariant` is the variant the editor analyses the module as, the one the user picked under Build
+Variants. A library module has no application id, so it and its variants answer null there.
+
+Every call reads the model as it stands, so the answer follows a settings edit or a sync; there is nothing to
+subscribe to. The view is read-only: the configuration is the user's, edited in the module settings or by the
+Gradle importer. The types are interfaces the IDE implements, so a fact added later is a new member rather
+than a change your compiled plugin would trip on.
+
+## 14e. Find and add Maven dependencies
+
+`MODULE_DEPENDENCIES` (`dev.ide.model.ModuleDependencies`, WORKSPACE, since SPI 3.4.0) is what the
+Dependencies screen does, for a plugin: search, list versions, read a module's resolved graph, and add a
+library, a BOM or a repository. It is what an "add the library for this" quick fix needs: check that the
+coordinate exists and which version is current before offering, instead of writing a guess into the build file.
+
+```kotlin
+val deps = workspace.service(MODULE_DEPENDENCIES)
+val latest = deps.versions("com.squareup.retrofit2:retrofit").firstOrNull() ?: return   // empty: could not tell
+val change = deps.add(module, "com.squareup.retrofit2:retrofit:$latest")
+if (!change.added) reportToUser(change.message)
+
+val graph = deps.resolved(module)
+graph?.conflicts?.forEach { log("${it.artifact}: asked for ${it.requested}, using ${it.chosen}") }
+```
+
+Everything that reaches a repository suspends; call it off the main thread. An unreachable repository answers
+empty or with a failed change rather than throwing, so treat "no versions" as "could not tell", and
+`ArtifactSearch.indexUnavailable` as "could not search". `add` takes the same path as the screen: it resolves
+first, refuses what the module cannot take (an `.aar` on a plain Java module), writes the build file and
+re-indexes, and the user sees the progress. A coordinate without a version is fine when a BOM pins it, and
+`resolved` then reports the version the BOM chose. Only Maven artifacts are listed; module dependencies, the
+SDK and local jars are in the model already.
+
+Declare `PluginCapabilities.MODEL_DEPENDENCIES` (`model.dependencies`) if you add anything: it changes the
+user's build files and what their code compiles against, and the consent screen says so.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -2584,6 +2862,45 @@ exactly as written, and so is one whose facet the plugin does not declare (`ui.t
 **Watching your plugin run.** Anything your plugin logs through `reg.logger(...)` is attributed to its plugin
 id, and **Settings > Plugins** offers **Logs** on an installed plugin's row, which opens the Logs viewer
 filtered to that plugin. That is the difference between reading your own output and reading the whole IDE's.
+
+**Trying a build in the plugin sandbox.** A plugin project's Run picker offers **Run plugin in sandbox** first
+(on device). It builds the APK and opens a second copy of CodeAssist, in its own process and with its own
+projects and settings, that loads this build straight from the output: nothing is installed, nothing asks for
+consent, and the IDE you are working in is untouched. The sandbox's status bar is amber and names the plugin, so
+the two windows are never confused.
+
+Run again while the sandbox is open and the new build is swapped into it in place, usually in well under a
+second: the old build is unloaded (its contributions withdrawn and its `dispose` called), the new one registers,
+and the sandbox comes to the front on the project and screen it was showing. Two things do not carry over, so
+close the sandbox from Recents for a fresh start when they matter: work the old build started and did not stop
+in `dispose` (a thread, a posted callback) keeps running the old code, and what an open project took from the
+plugin when it opened stays as it was until that project is opened again. A build that cannot be swapped in
+(it fails to load, or it now depends on another plugin) starts a fresh sandbox instead.
+
+What makes it worth using is what happens when the plugin misbehaves there:
+
+- A throw on the sandbox's main thread ends the sandbox, and the stack trace appears in the IDE you ran it from
+  ("Plugin crashed the sandbox").
+- A main thread blocked for about 3.5 seconds ends the sandbox too, with where it was stuck ("Plugin froze the
+  sandbox"). That is the same work that would make the real IDE stop responding, so move it off the main thread.
+- A shorter freeze (from about 2.5 seconds) is reported inside the sandbox, as a notification naming the plugin.
+
+What the plugin logs in the sandbox through `reg.logger(...)` also shows in the Logs viewer of the IDE you ran it
+from, under the source `sandbox:<plugin id>`, so you can read it without switching windows. A crash report from
+the sandbox ends with the plugin's last few log lines.
+
+The sandbox ends itself before Android records either one, so testing a broken build never counts against the
+IDE's crash or ANR rate on Google Play. A native crash in your plugin's own `.so` is the exception: it goes
+straight to the system.
+
+**What happens to an installed plugin that crashes the IDE.** CodeAssist names a crash after the topmost frame
+whose class came from a plugin's own APK. A crash that takes the IDE down turns that plugin off for the next
+launch, and the user is told which plugin it was and why. It turns back on when a new version is installed
+(any reinstall while the IDE runs counts, so your next build is tried again), or when the user switches it back
+on. The same goes for a crash in the build process, which loads installed plugins too: the plugin is turned
+off, the user is told right away, and the build log says which plugin it was. A plugin that keeps the main
+thread blocked for seconds is named in a notification, and its log gets the stack. If the IDE dies right after starting twice in a row and no plugin can be blamed, the next launch starts
+without any installed plugin and says so; the one after that tries them again.
 
 Three things go into the plugin app, and a fourth if it has UI.
 
@@ -2867,10 +3184,16 @@ Every published extension point, its id, the type it carries, and what contribut
 | `dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP` | `platform.diagnosticProvider` | `DiagnosticProvider` | A diagnostic source |
 | `dev.ide.analysis.QUICK_FIX_PROVIDER_EP` | `platform.quickFixProvider` | `QuickFixProvider` | A fix for a diagnostic |
 | `dev.ide.analysis.ACTION_PROVIDER_EP` | `platform.actionProvider` | `ActionProvider` | A caret intention |
+| `dev.ide.analysis.DECLARATION_PROVIDER_EP` | `platform.declarationProvider` | `DeclarationProvider` | Go to Declaration targets the backends do not know |
+| `dev.ide.analysis.NAVIGATION_PROVIDER_EP` | `platform.navigationProvider` | `NavigationProvider` | Go to Implementation / Type Declaration for a language |
+| `dev.ide.analysis.REFERENCE_PROVIDER_EP` | `platform.referenceProvider` | `ReferenceProvider` | Find Usages and highlight usages for a language |
+| `dev.ide.analysis.RENAME_PROVIDER_EP` | `platform.renameProvider` | `RenameProvider` | Rename for a language |
+| `dev.ide.lsp.LANGUAGE_SERVER_EP` | `platform.languageServer` | `LanguageServerDefinition` | A whole language, served by a Language Server Protocol server |
 | `dev.ide.plugin.editor.EDITOR_DECORATION_EP` | `platform.editorDecoration` | `EditorDecorationProvider` | Tinted ranges, gutter glyphs and inlays on any file |
 | `dev.ide.plugin.keymap.KEY_BINDING_EP` | `platform.keyBinding` | `KeyBinding` | A keyboard shortcut for an action |
 | `dev.ide.block.BLOCK_MAPPING_EP` | `platform.blockMapping` | `BlockMapping` | Block-editor projection for a language |
 | `dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP` | `platform.kotlinCompilerPlugin` | `KotlinCompilerPlugin` | A Kotlin compiler plugin |
+| `dev.ide.lang.KOTLIN_GENERATED_MEMBER_EP` | `platform.kotlinGeneratedMembers` | `KotlinGeneratedMemberProvider` | **Published (3.4.0).** The editor half of a compiler plugin: the members it generates |
 | `dev.ide.lang.kotlin.symbols.KOTLIN_SYNTHETIC_MEMBER_EP` | `platform.kotlinSyntheticMember` | `KotlinSyntheticMemberProvider` | Editor visibility of compiler-generated members |
 
 ### Build
@@ -2883,6 +3206,7 @@ Step-by-step guide: [custom-build-plugins.md](custom-build-plugins.md).
 | `dev.ide.build.BUILD_PLUGIN_EP` | `platform.buildPlugin` | `BuildPlugin` | Tasks applied to every build graph |
 | `dev.ide.build.RUN_TASK_PROVIDER_EP` | `platform.runTaskProvider` | `RunTaskProvider` | Entries in the Run picker |
 | `dev.ide.build.SOURCE_GENERATOR_EP` | `platform.sourceGenerator` | `SourceGenerator` | Generated sources before compilation |
+| `dev.ide.build.TEST_PROVIDER_EP` | `platform.testProvider` | `TestProvider` | Tests for a language: gutter marks, a Run row, the Tests tab |
 
 ### Actions, VCS, Android
 
@@ -3034,6 +3358,8 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.build.BUILD_CONTROL` | WORKSPACE | `BuildControl` | Start or stop the build; compile and run a module's `main` and capture its output |
 | `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
 | `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
+| `dev.ide.model.MODULE_DEPENDENCIES` | WORKSPACE | `ModuleDependencies` | Maven dependencies as the Dependencies screen sees them: search, versions, a module's resolved graph with conflicts, and adding a library, a BOM or a repository (section 14e) |
+| `dev.ide.model.ANDROID_MODULES` | WORKSPACE | `AndroidModules` | Each Android module's configuration as the build resolves it: SDK levels, namespace and application id, build features, build types, flavors, variants with their application ids, and the active variant (section 14d) |
 | `dev.ide.model.MODULE_RESOURCES` | WORKSPACE | `ModuleResources` | A module's resources: generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model (query `@type/name`, write `res/values` entries and file resources) |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
 | `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |

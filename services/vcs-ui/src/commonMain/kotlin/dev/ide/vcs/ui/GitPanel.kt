@@ -88,6 +88,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_title
 import dev.ide.vcs.ui.generated.resources.vcs_add_ignores
 import dev.ide.vcs.ui.generated.resources.vcs_amend
 import dev.ide.vcs.ui.generated.resources.vcs_branch
+import dev.ide.vcs.ui.generated.resources.vcs_no_repo_branch
 import dev.ide.vcs.ui.generated.resources.vcs_cancel
 import dev.ide.vcs.ui.generated.resources.vcs_clean_body
 import dev.ide.vcs.ui.generated.resources.vcs_clean_title
@@ -148,7 +149,9 @@ internal fun GitPanel(ctx: ToolWindowContext) {
         scope.launch {
             val result = block()
             feedback.show(result)
-            if (result.authRequired) ctx.openScreen(VcsService.SCREEN_ACCOUNTS)
+            // Both are fixed on the accounts screen: sign-in, and the name and email a commit is signed with. The
+            // identity refusal said "in Settings", which sent people looking for a page that does not have it.
+            if (result.authRequired || needsIdentity(result)) ctx.openScreen(VcsService.SCREEN_ACCOUNTS)
         }
     }
 
@@ -195,6 +198,10 @@ internal fun GitPanel(ctx: ToolWindowContext) {
         }
     }
 }
+
+/** Whether [result] is a commit refused for want of a name and email (the backend's `IDENTITY_REQUIRED`). */
+internal fun needsIdentity(result: UiVcsResult): Boolean =
+    !result.ok && result.text?.key == "vcs_msg_identity_required"
 
 // ---- header ------------------------------------------------------------------------------------
 
@@ -293,7 +300,9 @@ private fun PanelHeader(
 private fun BranchChip(status: UiVcsStatus, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val label = when {
-        !status.present -> stringResource(Res.string.vcs_branch)
+        // Not a repository yet: there is no branch, and repeating the "Branch" caption as the value read as a
+        // placeholder that never got filled in ("Branch / Branch").
+        !status.present -> stringResource(Res.string.vcs_no_repo_branch)
         status.detached -> stringResource(Res.string.vcs_detached)
         status.branch.isNotBlank() -> status.branch
         status.unborn -> stringResource(Res.string.vcs_no_commits)

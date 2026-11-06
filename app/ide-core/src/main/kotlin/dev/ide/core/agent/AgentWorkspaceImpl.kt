@@ -220,9 +220,12 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
     }
 
     override suspend fun addDependency(module: String, coordinate: String): String {
-        ctx.background { engine().dependencies.addDependency(module, coordinate, "implementation") }
+        val result = ctx.background { engine().dependencies.addDependency(module, coordinate, "implementation") }
         ctx.bumpFileSystemEpoch()
-        return "Added $coordinate to $module."
+        // The resolve can fail (offline, a wrong coordinate, an artifact the module cannot use). Saying "added"
+        // then sends the agent off to fix compile errors that are really a missing library.
+        if (!result.success) throw IllegalStateException("Could not add $coordinate to $module: ${result.message}")
+        return result.message.ifBlank { "Added $coordinate to $module." }
     }
 
     override suspend fun runProgram(module: String?, stdin: String): RunResult {

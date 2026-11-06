@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The Flutter player's Dart VM service is a socket on localhost, which needs it. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:label="@string/app_name"
+        android:hasCode="true">
+
+        <!-- The marker CodeAssist discovers plugin apps by, and this app's own screen. -->
+        <activity
+            android:name=".PluginInfoActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+
+            <intent-filter>
+                <action android:name="dev.ide.codeassist.action.PLUGIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <meta-data
+                android:name="dev.ide.codeassist.plugin.manifest"
+                android:resource="@raw/codeassist_plugin" />
+        </activity>
+
+        <!--
+            The Flutter player: runs the Flutter app CodeAssist compiles, in this plugin's own process, and takes
+            its hot reloads through the Dart VM service. Not exported: its VM service runs whatever it is sent, so
+            the only way in is FlutterPlayerLauncher, which starts it for CodeAssist alone.
+        -->
+        <activity
+            android:name=".FlutterPlayerLauncher"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+        <activity
+            android:name=".FlutterPlayerActivity"
+            android:exported="false"
+            android:label="Flutter app"
+            android:launchMode="singleTask"
+            android:taskAffinity="dev.codeassist.dart.player"
+            android:theme="@android:style/Theme.Black.NoTitleBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!--
+            The editor's Flutter preview: engines drawn into CodeAssist's preview pane (SurfaceControlViewHost).
+            Exported for CodeAssist to bind; it checks every message's sender uid and serves CodeAssist alone. Its
+            own process, so an engine exiting cannot end the Run's player, nor the player the pane.
+        -->
+        <service
+            android:name=".FlutterPreviewService"
+            android:exported="true"
+            android:process=":preview" />
+    </application>
+
+</manifest>

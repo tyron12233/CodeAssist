@@ -1,6 +1,8 @@
 package dev.ide.lang.java.rename
 
 import com.intellij.psi.JavaRecursiveElementVisitor
+import com.intellij.psi.JavaTokenType
+import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiField
@@ -12,9 +14,13 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.PsiParameter
+import com.intellij.psi.PsiParenthesizedExpression
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiTypeParameter
+import com.intellij.psi.PsiUnaryExpression
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.highlight.UsageAccess
+import dev.ide.lang.highlight.UsageHighlight
 
 /**
  * The symbol a rename is about, distilled into a stable [identityKey] that matches across separately-parsed
@@ -100,6 +106,59 @@ object JavaRename {
             }
         })
         return out.distinctBy { it.start }.sortedBy { it.start }
+    }
+
+    /**
+     * The names in [psi] that refer to the symbol under [offset], each marked a read, a write or the
+     * declaration, for the editor's highlight-usages-at-caret. Null when the caret is not on a resolvable symbol.
+     */
+    fun usageHighlightsAt(psi: PsiJavaFile, offset: Int): List<UsageHighlight>? {
+        val target = targetAt(psi, offset) ?: return null
+        val out = ArrayList<UsageHighlight>()
+        fun consider(token: PsiElement?, resolved: PsiElement?, access: UsageAccess) {
+            if (token == null || resolved == null || token.text != target.oldName) return
+            if (identityKey(resolved) != target.identityKey) return
+            out += UsageHighlight(TextRange(token.textRange.startOffset, token.textRange.endOffset), access)
+        }
+        psi.accept(object : JavaRecursiveElementVisitor() {
+            override fun visitReferenceElement(reference: PsiJavaCodeReferenceElement) {
+                consider(reference.referenceNameElement, reference.resolve(), UsageAccess.READ)
+                super.visitReferenceElement(reference)
+            }
+
+            override fun visitReferenceExpression(expression: PsiReferenceExpression) {
+                val access = if (isWritten(expression)) UsageAccess.WRITE else UsageAccess.READ
+                consider(expression.referenceNameElement, expression.resolve(), access)
+                super.visitReferenceExpression(expression)
+            }
+
+            override fun visitClass(aClass: PsiClass) {
+                consider(aClass.nameIdentifier, aClass, UsageAccess.DECLARATION)
+                super.visitClass(aClass)
+            }
+
+            override fun visitMethod(method: PsiMethod) {
+                consider(method.nameIdentifier, method, UsageAccess.DECLARATION)
+                super.visitMethod(method)
+            }
+
+            override fun visitVariable(variable: com.intellij.psi.PsiVariable) {
+                consider(variable.nameIdentifier, variable, UsageAccess.DECLARATION)
+                super.visitVariable(variable)
+            }
+        })
+        return out.distinctBy { it.range.start }.sortedBy { it.range.start }
+    }
+
+    /** Whether [ref] is assigned: the left side of `=`/`+=`/…, or the operand of `++`/`--`. */
+    private fun isWritten(ref: PsiReferenceExpression): Boolean {
+        var e: PsiElement = ref
+        while (e.parent is PsiParenthesizedExpression) e = e.parent
+        return when (val p = e.parent) {
+            is PsiAssignmentExpression -> p.lExpression === e
+            is PsiUnaryExpression -> p.operationTokenType == JavaTokenType.PLUSPLUS || p.operationTokenType == JavaTokenType.MINUSMINUS
+            else -> false
+        }
     }
 
     /** A cross-file-stable identity for [e], or null if it isn't a renameable declaration. */

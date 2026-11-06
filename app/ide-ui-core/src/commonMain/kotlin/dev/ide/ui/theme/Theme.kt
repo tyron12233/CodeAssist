@@ -42,7 +42,7 @@ import dev.ide.ui.theme.colors.SchemeDefaults
  * The preset accent palettes. [Lime] is the default and the one the app's identity is built on: unlike
  * the other three it brings its own warm neutral ramp rather than tinting the shared one.
  */
-enum class CaAccent { Lime, Violet, Teal, Orange }
+enum class CaAccent { Lime, Violet, Teal, Orange, Pumpkin }
 
 @Immutable
 data class SyntaxColors(
@@ -293,6 +293,9 @@ fun caColors(dark: Boolean, accent: CaAccent): CodeAssistColors = when {
     dark && accent == CaAccent.Orange -> darkColors(Color(0xFFD98A3D), Color(0xFFCC7832))
     !dark && accent == CaAccent.Violet -> lightColors(Color(0xFF8B5CF6), Color(0xFF7C3AED))
     !dark && accent == CaAccent.Orange -> lightColors(Color(0xFFC16A1C), Color(0xFFA85614))
+    // Pumpkin: a lit-jack-o'-lantern orange on the plum night, a burnt orange on the light paper.
+    dark && accent == CaAccent.Pumpkin -> darkColors(Color(0xFFFF9A3C), Color(0xFFF07F1A))
+    !dark && accent == CaAccent.Pumpkin -> lightColors(Color(0xFFB85A0A), Color(0xFF964900))
     else -> lightColors(Color(0xFF1C9BBD), Color(0xFF137E9C))
 }
 
@@ -408,6 +411,7 @@ private fun CodeAssistColors.schemeDefaults(): SchemeDefaults = SchemeDefaults(
         put(ColorKeys.EDITOR_FIND_MATCH, AttributeStyle.bg(warning.copy(alpha = 0.28f)))
         put(ColorKeys.EDITOR_FIND_CURRENT, AttributeStyle.bg(accent.copy(alpha = 0.5f)))
         put(ColorKeys.EDITOR_OCCURRENCE, AttributeStyle.bg(textSecondary.copy(alpha = 0.18f)))
+        put(ColorKeys.EDITOR_OCCURRENCE_WRITE, AttributeStyle.bg(syntax.keyword.copy(alpha = if (isDark) 0.34f else 0.22f)))
         put(ColorKeys.EDITOR_TEMPLATE_FIELD, AttributeStyle.bg(accent.copy(alpha = 0.16f)))
         put(ColorKeys.EDITOR_COMPOSING, AttributeStyle.fg(textSecondary))
         put(ColorKeys.EDITOR_INLAY_HINT, AttributeStyle.fg(textTertiary))
@@ -445,6 +449,8 @@ fun CodeAssistTheme(
     codeFont: FontFamily = FontFamily.Monospace,
     /** The user's editor color scheme. The shipped default overrides nothing, so it renders as the theme. */
     editorColorScheme: EditorColorScheme = BuiltInColorSchemes.DEFAULT,
+    /** An app theme a plugin ships, when the user picked one: its Material roles win over everything else. */
+    appTheme: dev.ide.ui.theme.colors.ContributedAppTheme? = null,
     content: @Composable () -> Unit,
 ) {
     // Precedence: an explicit custom seed wins; else wallpaper dynamic color IF the user opted into it; else
@@ -452,7 +458,8 @@ fun CodeAssistTheme(
     val wallpaper = dynamicColorSchemeOrNull(dark)
     val fromSeed = remember(seedColor, dark) { seedColor?.let { expressiveColorSchemeFromSeed(it, dark) } }
     val fallback = remember(dark, accent) { expressiveColorScheme(accent, dark) }
-    val scheme = fromSeed ?: (if (useDynamic) wallpaper else null) ?: fallback
+    val fromPlugin = remember(appTheme, dark) { appTheme?.let { appThemeColorScheme(it, dark) } }
+    val scheme = fromPlugin ?: fromSeed ?: (if (useDynamic) wallpaper else null) ?: fallback
 
     val base = remember(dark, accent) { caColors(dark, accent) }
     val bridgedBase = remember(base, scheme) { base.bridgedTo(scheme) }

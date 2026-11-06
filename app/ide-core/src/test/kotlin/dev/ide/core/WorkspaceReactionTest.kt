@@ -81,6 +81,8 @@ class WorkspaceReactionTest {
         assertEquals(2, r.reindexed.size, "each edited file reindexed per-file")
         assertEquals(1, r.analyzerInvalidations, "a cross-file rename rebuilds name environments")
         assertEquals(0, r.resyncs, "no full re-sync: classpath unchanged, files already reindexed")
+        assertEquals(0, r.syntheticInvalidations, "R and the other resource classes do not change with source")
+        assertEquals(listOf<Path>(Path.of("/proj/src/A.kt"), Path.of("/proj/src/B.kt")), r.kotlinChanges)
     }
 
     @Test

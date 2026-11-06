@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -304,7 +305,51 @@ fun SquareToneButton(
 }
 
 /** One destination in [AppNavBar]. */
-data class NavDestination(val id: String, val label: String, val glyph: Char)
+data class NavDestination(
+    val id: String,
+    val label: String,
+    val glyph: Char,
+    /**
+     * A vector drawn instead of [glyph], for a destination whose icon is not in the bundled Material Symbols subset.
+     */
+    val icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    /** The bar's hero action (the AI tab): a filled, raised circle instead of the selection pill. */
+    val highlight: Boolean = false,
+)
+
+/**
+ * The [NavDestination.highlight] item of a bottom bar: a filled circle in the primary colour, lifted a little out
+ * of the row, with the label under it like every other item. Selected, its ring shows.
+ */
+@Composable
+fun HighlightNavItem(d: NavDestination, selected: Boolean, modifier: Modifier = Modifier, onSelect: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Column(
+        modifier.selectable(selected = selected, onClick = onSelect, role = Role.Tab).padding(top = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            Modifier.size(48.dp)
+                .border(if (selected) 3.dp else 0.dp, if (selected) c.primaryContainer else Color.Transparent, CircleShape)
+                .padding(if (selected) 3.dp else 0.dp)
+                .clip(CircleShape)
+                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(c.primary, c.tertiary))),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (d.icon != null) {
+                androidx.compose.material3.Icon(d.icon, contentDescription = null, tint = c.onPrimary, modifier = Modifier.size(24.dp))
+            } else {
+                Symbol(glyph = d.glyph, contentDescription = null, size = 24.dp, filled = true, tint = c.onPrimary)
+            }
+        }
+        Text(
+            text = d.label,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            color = if (selected) c.primary else c.onSurface,
+        )
+    }
+}
 
 /**
  * The 82 dp bottom navigation.
@@ -329,6 +374,10 @@ fun AppNavBar(
         ) {
             destinations.forEach { d ->
                 val selected = d.id == selectedId
+                if (d.highlight) {
+                    HighlightNavItem(d, selected, Modifier.weight(1f)) { onSelect(d.id) }
+                    return@forEach
+                }
                 val pillWidth by animateDpAsState(
                     targetValue = if (selected) 76.dp else 52.dp,
                     animationSpec = CaMotion.defaultSpatial(),
@@ -351,13 +400,20 @@ fun AppNavBar(
                             .background(if (selected) c.primaryContainer else Color.Transparent),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Symbol(
-                            glyph = d.glyph,
-                            contentDescription = null,
-                            size = 24.dp,
-                            filled = selected,
-                            tint = if (selected) c.onPrimaryContainer else c.onSurfaceVariant,
-                        )
+                        if (d.icon != null) {
+                            androidx.compose.material3.Icon(
+                                d.icon, contentDescription = null, modifier = Modifier.size(24.dp),
+                                tint = if (selected) c.onPrimaryContainer else c.onSurfaceVariant,
+                            )
+                        } else {
+                            Symbol(
+                                glyph = d.glyph,
+                                contentDescription = null,
+                                size = 24.dp,
+                                filled = selected,
+                                tint = if (selected) c.onPrimaryContainer else c.onSurfaceVariant,
+                            )
+                        }
                     }
                     Text(
                         text = d.label,

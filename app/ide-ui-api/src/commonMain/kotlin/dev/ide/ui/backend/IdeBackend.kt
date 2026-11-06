@@ -305,11 +305,30 @@ data class UiStoreInstallResult(val success: Boolean, val message: String, val r
 // ---- Learn DTOs ----
 
 /**
- * The Learn landing payload: the ordered lesson [tracks] (e.g. "Kotlin Basics", "Java Basics"). Neutral to
- * where the content came from (bundled today, a remote catalog later). The heavy per-lesson step content is
+ * The Learn landing payload: the ordered lesson [tracks] (e.g. "Kotlin Basics", "Java Basics") and the
+ * [paths] that string tracks together into a longer goal. Neutral to where the content came from (the
+ * bundled catalog, or a newer one downloaded from the server). [version] identifies that content, so the
+ * screen can tell a refreshed catalog from the one it already shows. The heavy per-lesson step content is
  * loaded lazily through [LearnService.lesson]; a track here only carries its lesson summaries.
  */
-data class UiLearnCatalog(val tracks: List<UiLearnTrack> = emptyList())
+data class UiLearnCatalog(
+    val tracks: List<UiLearnTrack> = emptyList(),
+    val paths: List<UiLearnPath> = emptyList(),
+    val version: Long = 0L,
+)
+
+/**
+ * A learning path: an ordered sequence of tracks toward one goal ("Android developer"). [trackIds] name
+ * tracks in the same catalog; an id the catalog does not carry is skipped when shown.
+ */
+data class UiLearnPath(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val iconId: String = "school",
+    val accentColor: Long? = null,
+    val trackIds: List<String> = emptyList(),
+)
 
 /**
  * A learning track: a themed sequence of lessons. [language] is `"kotlin"` | `"java"` | `"none"` (a
@@ -325,6 +344,10 @@ data class UiLearnTrack(
     val language: String = "none",
     val category: String = "General",
     val lessons: List<UiLessonSummary> = emptyList(),
+    /** `"Beginner"` | `"Intermediate"` | `"Advanced"`, or blank when the track does not say. */
+    val level: String = "",
+    /** Track ids recommended before this one. Advisory only: nothing is locked behind them. */
+    val prerequisites: List<String> = emptyList(),
 )
 
 /** One lesson as shown in a track list — light metadata; the steps load on open. */
@@ -335,7 +358,17 @@ data class UiLessonSummary(
     val iconId: String = "docText",
     val estMinutes: Int = 5,
     val stepCount: Int = 1,
+    /** `"lesson"`, `"checkpoint"` (a scored review quiz at the end of a track) or `"capstone"` (a larger
+     *  graded project that pulls the track together). */
+    val kind: String = UiLessonKind.LESSON,
 )
+
+/** The values of [UiLessonSummary.kind] and [UiLesson.kind]. */
+object UiLessonKind {
+    const val LESSON = "lesson"
+    const val CHECKPOINT = "checkpoint"
+    const val CAPSTONE = "capstone"
+}
 
 /** A fully-loaded lesson: its ordered [steps]. [language] mirrors the track's for the interactive editor. */
 data class UiLesson(
@@ -345,6 +378,8 @@ data class UiLesson(
     val summary: String,
     val language: String = "none",
     val steps: List<UiLessonStep> = emptyList(),
+    /** See [UiLessonSummary.kind]. A checkpoint's player scores the quizzes answered right first time. */
+    val kind: String = UiLessonKind.LESSON,
 )
 
 /**
@@ -368,7 +403,8 @@ sealed interface UiLessonStep {
         val blocks: List<UiContentBlock> = emptyList(),
         /** The pre-filled buffer the learner edits (a complete, compilable file). */
         val starterCode: String,
-        /** `"kotlin"` | `"java"` — drives the embedded editor's highlighting. */
+        /** `"kotlin"` | `"kotlin-coroutines"` | `"java"` (compiled and run), or `"xml-layout"` (an Android
+         *  layout, checked against its structure and shown in a live preview instead of run). */
         val language: String,
         /** Progressive hints, revealed one at a time. */
         val hints: List<String> = emptyList(),
@@ -444,6 +480,38 @@ data class UiExerciseResult(
 
 /** Local learning progress: for each lesson id, the set of completed step ids. */
 data class UiLearnProgress(val completedByLesson: Map<String, Set<String>> = emptyMap())
+
+/**
+ * The signed-in learner's account side. [available] is whether this build has accounts at all (false hides
+ * every account surface); [signedIn] false with [available] true is the cue to offer sign-in. [streak] counts
+ * consecutive days with a completed step, in the learner's own time zone; [activeToday] says today already
+ * counts. [badges] are finished tracks.
+ */
+data class UiLearnAccount(
+    val signedIn: Boolean,
+    val available: Boolean = true,
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
+    val activeToday: Boolean = false,
+    val badges: List<UiLearnBadge> = emptyList(),
+)
+
+/** A finished track, shown as a badge. [earnedAt] is ISO-8601, or blank when not yet confirmed by the server. */
+data class UiLearnBadge(
+    val trackId: String,
+    val title: String,
+    val iconId: String,
+    val accentColor: Long? = null,
+    val earnedAt: String = "",
+)
+
+/** What a public profile shows about someone's learning. */
+data class UiLearnPublicProfile(
+    val badges: List<UiLearnBadge> = emptyList(),
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
+    val lessonsStarted: Int = 0,
+)
 
 /** Where to send "Resume" on the Learn banner: the last-visited lesson + step, with display labels + fraction. */
 data class UiResumePoint(
@@ -709,6 +777,11 @@ data class BuildState(
     val elapsedMs: Long = 0,
     /** An informational notice shown above the step graph (e.g. the first-build dex-cache warning). */
     val banner: String? = null,
+    /**
+     * The user stopped this build or run. Its [status] still ends as [RunStatus.Failed], which everything that
+     * waits for a build to finish relies on; this only changes how it reads ("Stopped", not "Failed").
+     */
+    val stopped: Boolean = false,
 )
 
 /**
@@ -754,7 +827,16 @@ data class UiAgentToolCall(
     val status: UiAgentToolStatus,
     val detail: String = "",
     val changes: List<UiAgentFileChange> = emptyList(),
+    /** What the agent asked the tool for: the call's arguments as sent (JSON). */
+    val input: String = "",
+    /** What the tool gave back, as the agent read it (capped for size). */
+    val output: String = "",
+    /** What the agent was shown: a preview screenshot, an image it opened. */
+    val images: List<UiAgentToolImage> = emptyList(),
 )
+
+/** An image a tool showed the agent, base64-encoded. */
+data class UiAgentToolImage(val mediaType: String, val base64: String)
 
 /**
  * One file's change, before and after (null = the file did not exist on that side). The UI renders the diff
@@ -793,6 +875,15 @@ data class UiAgentTodo(val content: String, val status: UiAgentTodoStatus)
 
 /** A saved conversation, for the history list. */
 data class UiAgentSessionSummary(val id: String, val title: String, val updatedAtMs: Long, val messageCount: Int)
+
+/** A saved conversation in any project, for the AI tab's recent chats. */
+data class UiAgentRecentChat(
+    val projectRoot: String,
+    val sessionId: String,
+    val title: String,
+    val updatedAtMs: Long,
+    val messageCount: Int,
+)
 
 /**
  * What one turn cost. [input] is the prompt tokens the provider billed at full rate; [cacheRead] is the part it
@@ -861,6 +952,11 @@ data class UiAgentChatState(
     val todos: List<UiAgentTodo> = emptyList(),
     /** The saved conversation this transcript belongs to, or null before the first message. */
     val sessionId: String? = null,
+    /**
+     * A new-app conversation that has not created its project yet (see [AgentService.startNewApp]): the agent can
+     * only choose a template and create the project, and nothing is saved until it has.
+     */
+    val creatingApp: Boolean = false,
 )
 
 data class UiAgentModel(val id: String, val displayName: String)
@@ -1237,6 +1333,8 @@ data class UiKeystore(
     val certSubject: String?,
     val sha256: String?,
     val validUntilEpochMs: Long?,
+    /** The key certificate's SHA-1, colon-separated like [sha256]: Firebase and Google sign-in ask for both. */
+    val sha1: String? = null,
 )
 
 /** One certificate inside a keystore (owner/issuer, validity window, fingerprints). */
@@ -1494,7 +1592,9 @@ data class TreeNode(
     /**
      * For a (possibly compacted) `Package` node, one entry per package level — its dotted package name and
      * directory — so a New-Class action can target any intermediate level (e.g. `com.tyron` inside a
-     * collapsed `com.tyron.codeassist`). Empty for non-package nodes.
+     * collapsed `com.tyron.codeassist`). A compacted `Folder` in the All-Files view (`src/main/java`, a chain
+     * of single-child directories shown as one row) carries one entry per level the same way, with a
+     * `/`-joined cumulative label (`src`, `src/main`, `src/main/java`). Empty otherwise.
      */
     val packageSegments: List<PackageSegment> = emptyList(),
     /**
@@ -1853,6 +1953,13 @@ data class UiSemanticToken(
     val modifiers: Set<UiHighlightModifier> = emptySet(),
 )
 
+/** One saved version of a file in local history: [id] is its time (epoch millis). */
+data class UiHistoryVersion(val id: Long, val timeMs: Long, val sizeChars: Long)
+
+/** One name that refers to the symbol under the caret: `[startOffset, endOffset)`, and whether it is assigned
+ *  there ([write]: an assignment target, `++`/`--`, or the symbol's declaration), which is tinted apart. */
+data class UiUsageHighlight(val startOffset: Int, val endOffset: Int, val write: Boolean)
+
 /** Orthogonal facts a [UiSemanticToken] can carry — the editor layers these over the base kind color. */
 enum class UiHighlightModifier {
     Declaration, Static, Abstract, Deprecated, Readonly, Mutable, Extension, Composable, Suspend,
@@ -2043,13 +2150,15 @@ data class UiSdkManagerState(
 )
 
 /** One queued/in-flight/finished download. [id] is the package path or `jdk-<feature>`;
- *  [status] ∈ {DOWNLOADING, EXTRACTING, INSTALLING, DONE, FAILED}; [fraction] < 0 ⇒ indeterminate. */
+ *  [status] ∈ {DOWNLOADING, EXTRACTING, INSTALLING, DONE, FAILED}; [fraction] < 0 ⇒ indeterminate. A FAILED
+ *  entry carries the raw error text in [detail] and its classification in [failure]. */
 data class UiSdkDownload(
     val id: String,
     val label: String,
     val status: String,
     val fraction: Double = -1.0,
     val detail: String = "",
+    val failure: UiSdkFailure? = null,
 )
 
 /** An installable Android SDK package. [category] is SOURCES or PLATFORMS. [incomplete] ⇒ a previous install
@@ -2086,10 +2195,14 @@ data class UiSettings(
     val accent: UiAccent = UiAccent.Lime,
     /** The seed color for [UiAccent.Custom], as an `0xAARRGGBB` ARGB long. Ignored unless accent is Custom. */
     val customAccentColor: Long = 0xFF8B5CF6L,
+    /** The id of the plugin app theme the accent setting names (`ContributedAppThemes`), else null. */
+    val appTheme: String? = null,
     /** Keep tool window header actions always visible (off = only while the tool window is hovered or active). */
     val alwaysShowToolWindowActions: Boolean = false,
     /** Open a run's terminal full screen instead of docking it in the wide layout. */
     val runFullScreen: Boolean = false,
+    /** Date-windowed seasonal touches (Halloween's bats and Home card); off turns every season off. */
+    val seasonalTouches: Boolean = true,
     val editorFontScale: Float = 1f,
     /** "jetbrains" (bundled JetBrains Mono) | "monospace" (system monospace). */
     val codeFont: String = "jetbrains",
@@ -2111,10 +2224,16 @@ data class UiSettings(
     val wrapIndent: Boolean = true,
     /** Draggable bar along the editor's bottom edge while a line runs past the view; none when [wordWrap]. */
     val horizontalScrollbar: Boolean = true,
+    /** "line" | "block" | "underline" | "candle" (the editor's `CaretStyle` ids). */
+    val caretStyle: String = "line",
     /** Free (two-axis) touch scrolling: a single drag pans both axes (off = orientation-locked). */
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font. */
     val pinchZoom: Boolean = true,
+    /** While typing on a phone, volume up / down move the caret left / right. */
+    val volumeKeysMoveCaret: Boolean = false,
+    /** Show who last changed the caret's line after its end. */
+    val inlineBlame: Boolean = true,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     val softKeyboardSuggestions: Boolean = true,
     /** Reformat the active file when it is saved (the editor's save handler reads this). */
@@ -2137,7 +2256,7 @@ data class UiSettings(
  * [Dynamic] follows the device wallpaper (Material You, Android 12+; falls back to Violet elsewhere). A
  * preset / Custom always overrides wallpaper dynamic color.
  */
-enum class UiAccent { Dynamic, Lime, Violet, Teal, Orange, Custom }
+enum class UiAccent { Dynamic, Lime, Violet, Teal, Orange, Pumpkin, Custom }
 
 /**
  * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,

@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -82,6 +83,8 @@ internal fun Modifier.editorInput(
     onFocusedChange: (Boolean) -> Unit,
     onDismissQuickDoc: () -> Unit,
     onPreviewKey: (KeyEvent) -> Boolean,
+    /** Keys taken before the soft keyboard sees them (Escape/Back closing the completion list). */
+    onPreImeKey: (KeyEvent) -> Boolean,
     onKey: (KeyEvent) -> Boolean,
     /** Mouse rest/link tracking for hover popups and Ctrl/⌘-click (see [EditorHoverState]). */
     hover: EditorHoverState,
@@ -97,6 +100,7 @@ internal fun Modifier.editorInput(
     .focusRequester(focus)
     .onFocusChanged { onFocusedChange(it.isFocused) }
     .focusable()
+    .onInterceptKeyBeforeSoftKeyboard(onPreImeKey)
     .onPreviewKeyEvent(onPreviewKey)
     .onKeyEvent(onKey)
     // pinch-to-zoom: a 2-finger gesture scales the editor font. Watched on the Initial pass (outer→inner) so a
@@ -419,6 +423,9 @@ internal fun Modifier.editorInput(
             interaction.lastInputWasTouch = true
             interaction.longPressed = false
             val handleRadius = 14.dp.toPx()
+            // The grab area is wider than the drawn 6dp dot: about Android's 48dp touch target, since a finger
+            // covers the dot it is aiming at (14dp was easy to miss, and the miss scrolled the code instead).
+            val grabRadius = 22.dp.toPx()
             // A handle grab must land ON the handle glyph, which is drawn BELOW its anchor line — so require the
             // touch to be at/below that line's bottom. Without this the grab circle reaches a few dp up into the
             // text, and a horizontal scroll swipe over the text would drag the caret/selection instead of
@@ -427,7 +434,7 @@ internal fun Modifier.editorInput(
                 val (_, x, top) = geometry.caretGeometry(offset)
                 val lineBottom = top + metrics.lineHeight
                 val center = Offset(x, lineBottom + handleRadius * 0.6f)
-                return down.position.y >= lineBottom && (down.position - center).getDistance() < handleRadius
+                return down.position.y >= lineBottom && (down.position - center).getDistance() < grabRadius
             }
 
             val sel = session.selection
@@ -442,14 +449,27 @@ internal fun Modifier.editorInput(
                 // The handle sits ~a line below its anchor, so the finger covers the row below. Lift the
                 // hit-point back up to the anchored line so dragging tracks what you see.
                 val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
-                drag(down.id) { change ->
-                    val off = geometry.offsetAt(change.position.copy(y = change.position.y - lift))
-                    when (hit) {
-                        'a' -> session.setSelectionRange(session.selection.max, off)
-                        'b' -> session.setSelectionRange(session.selection.min, off)
-                        else -> session.setCaret(off)
+                // The loupe shows the edge being dragged, which the finger and the handle both cover.
+                fun showLoupeAt(offset: Int) {
+                    val (_, x, top) = geometry.caretGeometry(offset)
+                    interaction.loupeSource = Offset(x, top + metrics.lineHeight / 2f)
+                }
+                try {
+                    var moved = false
+                    drag(down.id) { change ->
+                        val off = geometry.offsetAt(change.position.copy(y = change.position.y - lift))
+                        when (hit) {
+                            'a' -> session.setSelectionRange(session.selection.max, off)
+                            'b' -> session.setSelectionRange(session.selection.min, off)
+                            else -> session.setCaret(off)
+                        }
+                        // Not on the grab itself: a tap on a handle should not flash a loupe.
+                        if (!moved && (change.position - down.position).getDistance() > viewConfiguration.touchSlop / 2) moved = true
+                        if (moved) showLoupeAt(off)
+                        change.consume()
                     }
-                    change.consume()
+                } finally {
+                    interaction.loupeSource = null
                 }
                 return@awaitEachGesture
             }

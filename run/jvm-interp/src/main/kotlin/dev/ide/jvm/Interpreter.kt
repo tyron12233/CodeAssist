@@ -1590,7 +1590,38 @@ internal class Interpreter(private val vm: Vm) {
     private fun format(value: Any?, type: Type): String = when (type.descriptor) {
         "C" -> (value as Int).toChar().toString()
         "Z" -> ((value as Int) != 0).toString()
-        else -> value?.toString() ?: "null"
+        else -> when (value) {
+            null -> "null"
+            is VmObject -> formatInterpreted(value)
+            else -> value.toString()
+        }
+    }
+
+    /**
+     * An interpreted object in a string concatenation, as the real `StringConcatFactory` renders it: its own
+     * `toString`. The host-side `toString` of a [VmObject] is the VM's debug label, which is what
+     * `"$enumValue"` printed ("VmObject(Size)").
+     *
+     * Deliberately narrow. Only a class in the object's interpreted chain that DECLARES `toString` is
+     * dispatched to (a data class, a hand-written override), and an enum renders its name off the real enum
+     * peer every constant already has. Anything else keeps the old rendering: dispatching `toString` on an
+     * arbitrary interpreted object (Compose library internals concatenated into keys and debug strings) hung
+     * the Compose preview, which interprets library bytecode through this VM.
+     */
+    private fun formatInterpreted(obj: VmObject): String {
+        var c: VmClass? = obj.vmClass
+        while (c != null) {
+            val m = c.declaredMethod("toString", "()Ljava/lang/String;")
+            if (m != null && m.access and ACC_ABSTRACT == 0) {
+                return deref(dispatchVirtual("toString", "()Ljava/lang/String;", obj, emptyList()))?.toString() ?: "null"
+            }
+            if (c.access and ACC_ENUM != 0 && c.superName == "java/lang/Enum") {
+                (obj.peer as? Enum<*>)?.let { return it.name }
+                break
+            }
+            c = c.superName?.let { vm.resolve(it) }
+        }
+        return obj.toString()
     }
 
     /** Invoke the target of a method handle with the full argument list (captured values then call values). A

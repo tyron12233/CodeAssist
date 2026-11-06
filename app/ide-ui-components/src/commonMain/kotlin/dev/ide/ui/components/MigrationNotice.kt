@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -58,7 +60,10 @@ fun MigrationNotice(visible: Boolean, onBackup: suspend () -> Unit, onDismiss: (
             NoticeBody(
                 onBackup = onBackup,
                 onDismiss = onDismiss,
+                // Scrolls: the sheet is a fixed share of the screen, and on a small phone (720x1280) the text
+                // alone filled it, leaving "Got it" below the edge where nothing could reach it.
                 modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 8.dp),
             )
         }
@@ -70,7 +75,7 @@ fun MigrationNotice(visible: Boolean, onBackup: suspend () -> Unit, onDismiss: (
                 onDismiss = onDismiss,
                 modifier = Modifier
                     .width(460.dp)
-                    .background(Ide.colors.glassThick, shape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
                     .border(1.dp, Ide.colors.glassEdge, shape)
                     .padding(28.dp),
             )

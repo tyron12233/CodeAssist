@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiJdkInfo
+import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkManagerState
 import dev.ide.ui.backend.UiSdkPackage
 import kotlinx.coroutines.CoroutineScope
@@ -55,15 +56,29 @@ internal class SdkManagerState(
     var licensePrompt: LicensePrompt? by mutableStateOf(null)
         private set
 
+    /** The compileSdk levels of the open project's Android modules: their platforms and sources are listed
+     *  up front. Empty with no project open. */
+    var neededLevels: Set<Int> by mutableStateOf(emptySet())
+        private set
+
+    /** Package categories whose "Show all versions" expander is open. */
+    var expanded: Set<String> by mutableStateOf(emptySet())
+        private set
+
     /** The packages with a download in flight, so their rows show progress instead of an Install action. */
     val activeIds: Set<String>
         get() = progress.downloads.filter { it.status != "DONE" && it.status != "FAILED" }.map { it.id }.toSet()
+
+    /** The packages whose last download failed, kept in view so their row is easy to find again. */
+    val failedIds: Set<String>
+        get() = progress.downloads.filter { it.status == "FAILED" }.map { it.id }.toSet()
 
     val hasFinishedDownloads: Boolean
         get() = progress.downloads.any { it.status == "DONE" || it.status == "FAILED" }
 
     init {
         reload()
+        scope.launch { neededLevels = runCatching { backend.sdk.sdkProjectPlatformLevels() }.getOrDefault(emptySet()) }
         scope.launch { backend.sdk.sdkManagerState.collect { progress = it } }
         // Refresh the installed/incomplete flags whenever a download finishes (it ran in the background).
         scope.launch {
@@ -85,7 +100,31 @@ internal class SdkManagerState(
             scope.launch { licensePrompt = LicensePrompt(pkg, license, runCatching { backend.sdk.sdkLicenseText(license) }.getOrNull()) }
             return
         }
-        scope.launch { status = SdkStatus.Message(backend.sdk.installSdkPackage(pkg.path)) }
+        scope.launch { start(pkg.path) { backend.sdk.installSdkPackage(pkg.path) } }
+    }
+
+    /** Start [failed] again: a package goes back through [install] (which asks for its license if needed), JDK
+     *  sources re-download. The partial file a failed or cancelled download left is resumed. */
+    fun retry(failed: UiSdkDownload) {
+        val feature = failed.id.removePrefix("jdk-").takeIf { failed.id.startsWith("jdk-") }?.toIntOrNull()
+        if (feature != null) return downloadJdkSources(feature)
+        val pkg = packages.firstOrNull { it.path == failed.id }
+        if (pkg != null) install(pkg) else scope.launch { start(failed.id) { backend.sdk.installSdkPackage(failed.id) } }
+    }
+
+    fun toggleExpanded(category: String) {
+        expanded = if (category in expanded) expanded - category else expanded + category
+    }
+
+    /**
+     * Run a start action whose reply is a status line. A download that started shows up in the queue, which
+     * tracks it from there, so its "Downloading…" reply is not kept: a line that outlived the download is how
+     * the screen once read "Downloading" above the very row that said it failed. Only a refusal is shown.
+     */
+    private suspend fun start(id: String, action: suspend () -> String) {
+        val reply = action()
+        val queued = backend.sdk.sdkManagerState.value.downloads.any { it.id == id && it.status != "DONE" && it.status != "FAILED" }
+        status = if (queued) null else SdkStatus.Message(reply)
     }
 
     /** Accept the prompted license and start the install that was waiting on it. */
@@ -94,9 +133,8 @@ internal class SdkManagerState(
         licensePrompt = null
         scope.launch {
             backend.sdk.acceptSdkLicense(prompt.license)
-            val started = backend.sdk.installSdkPackage(prompt.pkg.path)
-            reloadNow() // the row's license state changed; the reload clears the status line, so set it after
-            status = SdkStatus.Message(started)
+            reloadNow() // the row's license state changed
+            start(prompt.pkg.path) { backend.sdk.installSdkPackage(prompt.pkg.path) }
         }
     }
 
@@ -105,7 +143,7 @@ internal class SdkManagerState(
     }
 
     fun downloadJdkSources(feature: Int) {
-        scope.launch { status = SdkStatus.Message(backend.sdk.downloadJdkSources(feature)) }
+        scope.launch { start("jdk-$feature") { backend.sdk.downloadJdkSources(feature) } }
     }
 
     fun cancel(id: String) = backend.sdk.cancelSdkDownload(id)

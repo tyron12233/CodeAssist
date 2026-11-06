@@ -598,12 +598,43 @@ class MavenDependencyResolver(
     suspend fun searchWithStatus(query: String, limit: Int = 25): ArtifactSearch {
         val q = query.trim()
         if (q.isBlank()) return ArtifactSearch(emptyList())
-        val (central, centralRead) = searchCentral(q, limit)
-        val (google, googleRead) = searchGoogle(q, limit)
+        // A bare name ("gson", "retrofit") also asks Central for the artifacts named exactly that: its full-text
+        // relevance buries the canonical library under forks that mention the word (com.google.code.gson:gson
+        // came 8th for "gson", com.squareup.retrofit2:retrofit past the 50th for "retrofit").
+        val bareName = BARE_ARTIFACT_NAME.matches(q)
+        val (byName, central, google) = coroutineScope {
+            val byName = async { if (bareName) searchCentral("a:$q", EXACT_NAME_ROWS) else emptyList<RankedHit>() to false }
+            val central = async { searchCentral(q, limit) }
+            val google = async { searchGoogle(q, limit) }
+            Triple(byName.await(), central.await(), google.await())
+        }
         val seen = HashSet<GA>()
-        val hits = (central + google).filter { seen.add(it.coordinate.ga) }.take(limit)
-        return ArtifactSearch(hits, indexUnavailable = hits.isEmpty() && !centralRead && !googleRead)
+        val merged = (byName.first + central.first + google.first.map { RankedHit(it, 0L) })
+            .filter { seen.add(it.candidate.coordinate.ga) }
+        val hits = rankSearchHits(q, merged).take(limit)
+        return ArtifactSearch(hits, indexUnavailable = hits.isEmpty() && !byName.second && !central.second && !google.second)
     }
+
+    /**
+     * The artifacts on Maven Central that contain the class [fqn] (Solr's `fc:` full-class-name field), for an
+     * editor fix that offers the library behind an unresolved import. Null when no search host answered, so
+     * the caller can tell "nothing contains it" from "could not ask". Central only: Google Maven has no class
+     * index, which is why the editor keeps a bundled table for AndroidX.
+     */
+    suspend fun searchByClass(fqn: String, limit: Int = 20): List<ArtifactCandidate>? {
+        if (fqn.isBlank()) return emptyList()
+        val (hits, answered) = searchCentral("fc:\"$fqn\"", limit)
+        return if (answered) hits.map { it.candidate } else null
+    }
+
+    /**
+     * Download [coord]'s `.aar` into the shared cache (or find it there) and return its path, so a caller can
+     * read the archive's manifest and `aar-metadata.properties` BEFORE adding it, to pick a version the module
+     * can build with. Null when no repository has an `.aar` for it (a plain jar library) or it is unreachable.
+     * The file stays cached, so adding that version afterwards does not download it again.
+     */
+    suspend fun fetchAar(coord: Coordinate, repos: List<Repository>): String? =
+        withContext(ioDispatcher) { runCatching { fetchArtifact(coord, "aar", repos)?.path }.getOrNull() }
 
     /**
      * Maven Central's Solr search (full-text over group/artifact), from the first host that answers.
@@ -614,7 +645,7 @@ class MavenDependencyResolver(
      * sized for downloading artifacts — a hung search host would otherwise hold the picker for 30 seconds
      * before it even tried the next one.
      */
-    private suspend fun searchCentral(query: String, limit: Int): Pair<List<ArtifactCandidate>, Boolean> {
+    private suspend fun searchCentral(query: String, limit: Int): Pair<List<RankedHit>, Boolean> {
         val encoded = percentEncode(query)
         for (endpoint in searchEndpoints) {
             val url = "$endpoint?q=$encoded&rows=$limit&wt=json"
@@ -629,10 +660,11 @@ class MavenDependencyResolver(
                 val g = d["g"] as? String ?: return@mapNotNull null
                 val a = d["a"] as? String ?: return@mapNotNull null
                 val v = (d["latestVersion"] ?: d["v"]) as? String ?: return@mapNotNull null
-                ArtifactCandidate(Coordinate(g, a, v), (d["p"] as? String) ?: "jar")
+                val published = (d["timestamp"] as? Number)?.toLong() ?: 0L
+                RankedHit(ArtifactCandidate(Coordinate(g, a, v), (d["p"] as? String) ?: "jar"), published)
             } to true
         }
-        return emptyList<ArtifactCandidate>() to false
+        return emptyList<RankedHit>() to false
     }
 
     /**
@@ -1291,6 +1323,68 @@ const val AAR_EXPLODE_VERSION = "5"
  * stops resolving as `compile` onto the classpath.
  */
 const val RESOLVER_GRAPH_VERSION = "2"
+
+/** A search hit with what ranking needs beyond the coordinate: when it was last published (0 when unknown). */
+internal data class RankedHit(val candidate: ArtifactCandidate, val publishedAt: Long)
+
+/** A query that could be an artifact id on its own (no group, no version): what gets the exact-name search. */
+private val BARE_ARTIFACT_NAME = Regex("[A-Za-z0-9][A-Za-z0-9_-]+")
+
+/** Rows asked for in the exact-name search; a common name has dozens of same-named forks to rank among. */
+private const val EXACT_NAME_ROWS = 100
+
+/**
+ * Publishers whose artifact is the one people mean when they type its name: a same-named artifact from one of
+ * these outranks forks and repackagings. Kept to long-standing, widely used publishers; a group matches an
+ * entry equal to it or under it.
+ */
+private val WELL_KNOWN_PUBLISHERS = listOf(
+    "androidx", "com.android", "com.google", "org.jetbrains", "io.ktor", "app.cash", "com.squareup",
+    "com.jakewharton", "com.github.bumptech", "io.coil-kt", "com.airbnb", "io.insert-koin", "io.reactivex",
+    "junit", "org.junit", "org.mockito", "io.mockk", "org.robolectric", "org.hamcrest", "org.assertj",
+    "io.kotest", "org.apache", "commons-io", "commons-codec", "commons-lang", "com.fasterxml", "org.slf4j",
+    "ch.qos", "org.jsoup", "org.json", "org.greenrobot", "com.facebook", "io.realm", "io.grpc", "io.netty",
+    "org.projectlombok", "org.xerial", "org.yaml", "org.bouncycastle", "io.jsonwebtoken", "com.auth0",
+    "com.github.ben-manes", "com.github.PhilJay", "com.patrykandpatrick", "org.lwjgl", "com.badlogicgames",
+    "io.sentry", "com.microsoft", "software.amazon", "com.amazonaws", "org.springframework", "org.hibernate",
+    "org.postgresql", "com.mysql", "com.h2database", "com.journeyapps", "org.ow2", "io.arrow-kt",
+)
+
+private fun isWellKnownPublisher(group: String): Boolean =
+    WELL_KNOWN_PUBLISHERS.any { group == it || group.startsWith("$it.") }
+
+/**
+ * Orders search hits so the library a person means comes first. By how well the name matches [query] (the
+ * artifact id equal to it AND a group segment starting with it, as in `com.google.code.gson:gson`; then the id
+ * alone; then an id starting with it under such a group; an id starting with it; a group segment alone), with a
+ * [WELL_KNOWN_PUBLISHERS] match on name or group lifted above everything else, then the most recently
+ * published first (`com.squareup.okhttp3` over the abandoned `com.squareup.okhttp`). Ties keep the indexes'
+ * own order. Not a bare name (`group:name`, a dotted group), the indexes' order already answers it.
+ */
+internal fun rankSearchHits(query: String, hits: List<RankedHit>): List<ArtifactCandidate> {
+    val q = query.trim().lowercase()
+    if (!BARE_ARTIFACT_NAME.matches(q)) return hits.map { it.candidate }
+    fun matchClass(h: RankedHit): Int {
+        val name = h.candidate.coordinate.name.lowercase()
+        val segment = h.candidate.coordinate.group.lowercase().split('.', '-').any { it.startsWith(q) }
+        return when {
+            name == q && segment -> 0
+            name == q -> 1
+            segment && name.startsWith(q) -> 2
+            name.startsWith(q) -> 3
+            segment -> 4
+            else -> 5
+        }
+    }
+    return hits.withIndex().sortedWith(
+        compareBy<IndexedValue<RankedHit>>(
+            { if (matchClass(it.value) < 5 && isWellKnownPublisher(it.value.candidate.coordinate.group)) 0 else 1 },
+            { matchClass(it.value) },
+            { -it.value.publishedAt },
+            { it.index },
+        ),
+    ).map { it.value.candidate }
+}
 
 /**
  * Maven Central's search hosts, in the order [MavenDependencyResolver] tries them.

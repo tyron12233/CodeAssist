@@ -253,7 +253,13 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.TopStart)
                     .padding(top = 7.dp, start = 6.dp)
-                    .graphicsLayer { translationX = reveal() - slotPx },
+                    .graphicsLayer {
+                        val r = reveal()
+                        translationX = r - slotPx
+                        // Parked one slot left of the row, a label wider than the slot showed its last digits
+                        // in the margin at rest (a stray "4" beside every row). Hidden until a drag brings it in.
+                        alpha = (r / slotPx).coerceIn(0f, 1f)
+                    },
             )
         }
     }

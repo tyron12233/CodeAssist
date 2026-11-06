@@ -1,0 +1,8 @@
+name: codeassist_player
+description: The program the Dart plugin's Flutter player starts with. Built by fetch-flutter.sh.
+publish_to: none
+environment:
+  sdk: ^3.9.0
+dependencies:
+  flutter:
+    sdk: flutter

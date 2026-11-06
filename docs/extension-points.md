@@ -30,6 +30,10 @@ interface ExtensionRegistry {
 | `platform.analyzer` | File/project analyzers (`Analyzer`). | Built-in Java analyzers. |
 | `platform.quickFixProvider` | Quick-fix providers (`QuickFixProvider`), keyed by diagnostic code. | Java and XML fixes. |
 | `platform.diagnosticProvider` | Diagnostic providers (`DiagnosticProvider`) — the compiler is unified as one. | The JDT compiler. |
+| `platform.languageServer` | Language Server Protocol servers (`LanguageServerDefinition`, `lsp-api`). The host's client (`:lsp-client`) registers each as a backend plus the providers below, under the contributing plugin. | (none built in; a plugin's server) |
+| `platform.declarationProvider` / `platform.navigationProvider` | Go to Declaration targets (`DeclarationProvider`) and Go to Implementation / Type Declaration (`NavigationProvider`) for a plugin's language. | The NDK plugin's JNI navigation; every language server. |
+| `platform.testProvider` | Test runners for a plugin language (`TestProvider`, `build-api`): gutter run marks, a Run-picker row, runs reporting through `TestReport` into the Tests tab. | The Calc sample's `CalcTestProvider`. |
+| `platform.referenceProvider` / `platform.renameProvider` | Find Usages + highlight usages (`ReferenceProvider`) and Rename (`RenameProvider`) for languages other than Java and Kotlin. | Every language server. |
 | `platform.fileIcon` | Project-tree icon providers (`FileIconProvider`) → string icon ids. | `DefaultFileIconProvider`, `AndroidFileIconProvider`. |
 | `platform.projectTemplate` | Create-Project templates (`ProjectTemplate`) with data-driven parameters. | `java-console`, `java-library`, `android-app`, `android-library`. |
 | `platform.blockMapping` | Block mappings (`BlockMapping`) for the projectional editor. | The Java block mapping. |

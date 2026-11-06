@@ -159,6 +159,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
      */
     private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>, webSearch: Boolean): JsonArray {
         val blocks = ArrayList<JsonObject>(tools.size + 1)
+        val strict = strictToolNames(tools)
         tools.forEach { spec ->
             blocks += buildJsonObject {
                 put("name", spec.name)
@@ -166,8 +167,8 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
                 put("input_schema", AgentJson.parseToJsonElement(spec.parameters))
                 // ToolSchemaBuilder already emits additionalProperties:false plus a required list, which is
                 // what strict mode needs. It guarantees the arguments validate, so a malformed call can no
-                // longer cost a whole extra round trip to discover and correct.
-                put("strict", true)
+                // longer cost a whole extra round trip to discover and correct. Capped: see [strictToolNames].
+                if (spec.name in strict) put("strict", true)
             }
         }
         if (webSearch) {
@@ -189,14 +190,25 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
      * request that changes every turn — putting the breakpoint before it keeps the cached prefix stable.
      */
     private fun cacheLastBlock(messages: JsonArray): JsonArray {
-        val index = messages.indexOfLast { (it as? JsonObject)?.get("role").asStr() != "system" }
-        if (index < 0) return messages
-        val msg = messages[index] as? JsonObject ?: return messages
-        val content = msg["content"] as? JsonArray ?: return messages
-        val lastBlock = content.lastOrNull() as? JsonObject ?: return messages
-        val newContent = JsonArray(content.dropLast(1) + JsonObject(lastBlock + ("cache_control" to ephemeral())))
-        return JsonArray(messages.mapIndexed { i, m -> if (i == index) JsonObject(msg + ("content" to newContent)) else m })
+        // The newest block that is not per-step operator state: not a system message, and not a folded
+        // `<system-reminder>` (the fallback form of one). The reminder moves to the newest user turn on every step,
+        // so a breakpoint on it would cache a prefix the next step no longer has, and every step would re-write
+        // the whole conversation to the cache instead of reading it back.
+        for (index in messages.indices.reversed()) {
+            val msg = messages[index] as? JsonObject ?: continue
+            if (msg["role"].asStr() == "system") continue
+            val content = msg["content"] as? JsonArray ?: continue
+            val target = content.indexOfLast { block -> !isReminder(block) }
+            if (target < 0) continue
+            val block = content[target] as? JsonObject ?: return messages
+            val newContent = JsonArray(content.mapIndexed { i, b -> if (i == target) JsonObject(block + ("cache_control" to ephemeral())) else b })
+            return JsonArray(messages.mapIndexed { i, m -> if (i == index) JsonObject(msg + ("content" to newContent)) else m })
+        }
+        return messages
     }
+
+    private fun isReminder(block: kotlinx.serialization.json.JsonElement): Boolean =
+        (block as? JsonObject)?.get("text").asStr()?.startsWith(REMINDER_OPEN) == true
 
     /**
      * A cache breakpoint. The default 5-minute TTL is right for the conversation tail, which is re-sent within
@@ -242,7 +254,12 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
             val m = messages[i]
             when (m.role) {
                 LlmRole.SYSTEM -> {
-                    addSystemMessage(out, plainText(m.content), model)
+                    // The API takes a mid-conversation system message only as the last entry or before the
+                    // model's turn. One left before a user message (its turn failed) is folded into the user
+                    // turn ahead of it instead, which renders the same way on every request.
+                    val next = messages.getOrNull(i + 1)?.role
+                    val standalone = next == null || next == LlmRole.ASSISTANT
+                    addSystemMessage(out, plainText(m.content), model, standalone)
                     i++
                 }
                 LlmRole.USER -> {
@@ -293,15 +310,15 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
      * into the preceding user turn as a `<system-reminder>` text block, which occupies the same position in
      * the prompt and so caches the same way.
      */
-    private fun addSystemMessage(out: MutableList<JsonObject>, text: String, model: String) {
+    private fun addSystemMessage(out: MutableList<JsonObject>, text: String, model: String, standalone: Boolean = true) {
         if (text.isBlank()) return
-        if (modelSupportsSystemMessages(model)) {
+        if (standalone && modelSupportsSystemMessages(model)) {
             out += buildJsonObject { put("role", "system"); put("content", text) }
             return
         }
         val reminder = buildJsonObject {
             put("type", "text")
-            put("text", "<system-reminder>\n$text\n</system-reminder>")
+            put("text", "$REMINDER_OPEN\n$text\n</system-reminder>")
         }
         val last = out.lastOrNull()
         val lastContent = last?.get("content") as? JsonArray
@@ -361,6 +378,46 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
 
     companion object {
         const val DEFAULT_BASE = "https://api.anthropic.com"
+
+        /** The opening tag of a folded operator instruction (see [addSystemMessage]). */
+        private const val REMINDER_OPEN = "<system-reminder>"
+
+        /** The API refuses a request with more strict tools than this ("Too many strict tools"). */
+        const val MAX_STRICT_TOOLS = 20
+
+        /**
+         * The tools to mark strict when there are more than [MAX_STRICT_TOOLS]: the ones taking the most arguments,
+         * where a malformed call is most likely and costs a whole round trip to correct. A tool with no arguments
+         * gains nothing from strict mode. Ties keep their order, so the choice (and the cached tool prefix) is the
+         * same on every request.
+         */
+        internal fun strictToolNames(tools: List<dev.ide.agent.ToolSpec>): Set<String> =
+            tools.withIndex()
+                // Only schemas written for strict mode (every object closed with additionalProperties:false, as
+                // ToolSchemaBuilder emits). A third-party schema (an MCP server's) that is not would fail the request.
+                .filter { strictCompatible(it.value) }
+                .sortedWith(compareByDescending<IndexedValue<dev.ide.agent.ToolSpec>> { argumentCount(it.value) }.thenBy { it.index })
+                .take(MAX_STRICT_TOOLS)
+                .map { it.value.name }
+                .toSet()
+
+        private fun strictCompatible(spec: dev.ide.agent.ToolSpec): Boolean = runCatching {
+            closedObjects(AgentJson.parseToJsonElement(spec.parameters))
+        }.getOrDefault(false)
+
+        private fun closedObjects(el: kotlinx.serialization.json.JsonElement): Boolean = when (el) {
+            is JsonObject -> {
+                val isObject = "properties" in el || (el["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "object"
+                val closed = !isObject || (el["additionalProperties"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "false"
+                closed && el.values.all(::closedObjects)
+            }
+            is JsonArray -> el.all(::closedObjects)
+            else -> true
+        }
+
+        private fun argumentCount(spec: dev.ide.agent.ToolSpec): Int = runCatching {
+            AgentJson.parseToJsonElement(spec.parameters).asObj()?.get("properties").asObj()?.size ?: 0
+        }.getOrDefault(0)
         const val ANTHROPIC_VERSION = "2023-06-01"
         const val INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14"
 
@@ -382,7 +439,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         const val LONG_TTL = "1h"
 
         /** Model-id fragments whose models accept a `role: "system"` message inside `messages`. */
-        val SYSTEM_MESSAGE_MODELS = listOf("opus-5", "opus-4-8", "fable-5", "mythos-5")
+        val SYSTEM_MESSAGE_MODELS = listOf("opus-5", "opus-4-8", "fable-5", "mythos-5", "sonnet-5-5", "haiku-5-5")
 
         /** Anthropic's server-side web-search tool (GA; no beta header required). */
         const val WEB_SEARCH_TOOL = "web_search_20250305"

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -13,6 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,8 +44,23 @@ import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.PrimaryActionButton
-import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.editor.preview.ProjectIconRaster
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.submit_add_screenshot
+import dev.ide.ui.generated.resources.submit_category_current
+import dev.ide.ui.generated.resources.submit_category_loading
+import dev.ide.ui.generated.resources.submit_category_retry
+import dev.ide.ui.generated.resources.submit_category_unavailable
+import dev.ide.ui.generated.resources.submit_checks_english
+import dev.ide.ui.generated.resources.submit_checks_icon
+import dev.ide.ui.generated.resources.submit_checks_own
+import dev.ide.ui.generated.resources.submit_checks_screenshots
+import dev.ide.ui.generated.resources.submit_checks_summary
+import dev.ide.ui.generated.resources.submit_checks_title
+import dev.ide.ui.generated.resources.submit_confirm_body
+import dev.ide.ui.generated.resources.submit_confirm_fix
+import dev.ide.ui.generated.resources.submit_confirm_send
+import dev.ide.ui.generated.resources.submit_confirm_title
 import dev.ide.ui.generated.resources.submit_excluded_none
 import dev.ide.ui.generated.resources.submit_excluded_title
 import dev.ide.ui.generated.resources.submit_excluded_why
@@ -51,49 +71,45 @@ import dev.ide.ui.generated.resources.submit_field_summary
 import dev.ide.ui.generated.resources.submit_field_tags
 import dev.ide.ui.generated.resources.submit_field_title
 import dev.ide.ui.generated.resources.submit_field_version
+import dev.ide.ui.generated.resources.submit_included
 import dev.ide.ui.generated.resources.submit_markdown_hide
 import dev.ide.ui.generated.resources.submit_markdown_hint
 import dev.ide.ui.generated.resources.submit_markdown_preview
-import dev.ide.ui.generated.resources.submit_included
 import dev.ide.ui.generated.resources.submit_no_projects
 import dev.ide.ui.generated.resources.submit_packaging
 import dev.ide.ui.generated.resources.submit_pick_project
 import dev.ide.ui.generated.resources.submit_required
 import dev.ide.ui.generated.resources.submit_required_screenshot
 import dev.ide.ui.generated.resources.submit_required_version
-import dev.ide.ui.generated.resources.submit_target
-import dev.ide.ui.generated.resources.submit_target_new
-import dev.ide.ui.generated.resources.submit_target_update
-import dev.ide.ui.generated.resources.submit_update_live
-import dev.ide.ui.generated.resources.submit_update_note
-import dev.ide.ui.generated.resources.submit_update_unreviewed
 import dev.ide.ui.generated.resources.submit_review_note
-import dev.ide.ui.generated.resources.submit_send
-import dev.ide.ui.generated.resources.submit_sending
-import dev.ide.ui.generated.resources.submit_title
-import dev.ide.ui.editor.preview.ProjectIconRaster
-import dev.ide.ui.icons.CaSymbols
-import dev.ide.ui.itemsKeyed
-import dev.ide.ui.platform.NotificationPermissionStatus
-import dev.ide.ui.platform.rememberNotificationPermissionController
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.runtime.mutableStateListOf
-import dev.ide.ui.generated.resources.submit_add_screenshot
-import dev.ide.ui.generated.resources.submit_category_loading
-import dev.ide.ui.generated.resources.submit_category_current
-import dev.ide.ui.generated.resources.submit_category_retry
-import dev.ide.ui.generated.resources.submit_category_unavailable
 import dev.ide.ui.generated.resources.submit_screenshots
 import dev.ide.ui.generated.resources.submit_screenshots_desc
 import dev.ide.ui.generated.resources.submit_screenshots_kept
 import dev.ide.ui.generated.resources.submit_screenshots_offline
 import dev.ide.ui.generated.resources.submit_screenshots_unavailable
+import dev.ide.ui.generated.resources.submit_send
+import dev.ide.ui.generated.resources.submit_sending
+import dev.ide.ui.generated.resources.submit_target
+import dev.ide.ui.generated.resources.submit_target_new
+import dev.ide.ui.generated.resources.submit_target_update
+import dev.ide.ui.generated.resources.submit_title
+import dev.ide.ui.generated.resources.submit_update_live
+import dev.ide.ui.generated.resources.submit_update_note
+import dev.ide.ui.generated.resources.submit_update_unreviewed
+import dev.ide.ui.generated.resources.submit_warn_english
+import dev.ide.ui.generated.resources.submit_warn_spam
+import dev.ide.ui.generated.resources.submit_warn_summary
+import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
+import dev.ide.ui.platform.NotificationPermissionStatus
+import dev.ide.ui.platform.rememberNotificationPermissionController
+import dev.ide.ui.theme.Symbol
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -146,6 +162,12 @@ fun SubmitProjectScreen(
     var icon by remember(chosen?.rootPath) { mutableStateOf<ByteArray?>(null) }
     var sending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    // What went wrong with the SEND, shown next to the button that was pressed. It used to share [message],
+    // which is drawn at the top of the form: a publisher at the bottom tapping Submit saw nothing happen,
+    // because the reason was a screen and a half above them.
+    var formError by remember { mutableStateOf<String?>(null) }
+    // The review warnings still standing when Submit was pressed. Non-null shows the last-chance dialog.
+    var confirmIssues by remember { mutableStateOf<List<ListingIssue>?>(null) }
     // Whether the description is being previewed rather than edited. Off by default: the field is where
     // the work happens, and a preview that opened itself would push the rest of the form down a screen.
     var previewDescription by remember { mutableStateOf(false) }
@@ -371,11 +393,16 @@ fun SubmitProjectScreen(
                             Body(stringResource(Res.string.submit_update_note))
                             Spacer(Modifier.height(16.dp))
                         }
+                        ReviewerChecklist()
+                        Spacer(Modifier.height(16.dp))
                         Field(stringResource(Res.string.submit_field_title), draft.title) {
                             draft = draft.copy(title = it)
                         }
                         Field(stringResource(Res.string.submit_field_summary), draft.summary) {
                             draft = draft.copy(summary = it)
+                        }
+                        if (isWeakSummary(draft.title, draft.summary)) {
+                            ListingWarning(stringResource(Res.string.submit_warn_summary))
                         }
                         Field(
                             stringResource(Res.string.submit_field_description),
@@ -387,6 +414,15 @@ fun SubmitProjectScreen(
                             preview = previewDescription,
                             onTogglePreview = { previewDescription = !previewDescription },
                         )
+                        // Under the description rather than the title: the description is where most of the
+                        // words are, so it is where a listing in another language is written and fixed.
+                        val issues = listingIssues(draft.title, draft.summary, draft.description)
+                        if (ListingIssue.NotEnglish in issues) {
+                            ListingWarning(stringResource(Res.string.submit_warn_english))
+                        }
+                        if (ListingIssue.Spammy in issues) {
+                            ListingWarning(stringResource(Res.string.submit_warn_spam))
+                        }
                         Field(stringResource(Res.string.submit_field_version), draft.version) {
                             draft = draft.copy(version = it)
                         }
@@ -507,6 +543,14 @@ fun SubmitProjectScreen(
                         val fieldsDone = draft.title.isNotBlank() && draft.summary.isNotBlank() &&
                             draft.description.isNotBlank() && draft.category.isNotBlank()
                         val complete = versionOk && fieldsDone && !needsScreenshot
+                        formError?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                            )
+                        }
                         PrimaryActionButton(
                             label = if (sending) {
                                 stringResource(Res.string.submit_sending)
@@ -516,13 +560,17 @@ fun SubmitProjectScreen(
                             glyph = CaSymbols.upload,
                             onClick = {
                                 if (!complete) {
-                                    message = when {
+                                    formError = when {
                                         !versionOk -> versionText
                                         !fieldsDone -> requiredText
                                         else -> screenshotText
                                     }
                                 } else if (!sending) {
-                                    sending = true
+                                    formError = null
+                                    // The warnings were on screen all along; this is the last chance to act on
+                                    // them, not a gate. A guess about the language must not refuse a listing.
+                                    val standing = listingIssues(draft.title, draft.summary, draft.description)
+                                    if (standing.isEmpty()) sending = true else confirmIssues = standing
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -534,6 +582,17 @@ fun SubmitProjectScreen(
         }
     }
 
+    confirmIssues?.let { issues ->
+        ReviewWarningsDialog(
+            issues = issues,
+            onFix = { confirmIssues = null },
+            onSendAnyway = {
+                confirmIssues = null
+                sending = true
+            },
+        )
+    }
+
     // The upload itself, kept out of the click handler so leaving the button does not cancel it.
     LaunchedEffect(sending) {
         if (!sending) return@LaunchedEffect
@@ -543,8 +602,11 @@ fun SubmitProjectScreen(
         val request = draft.copy(screenshotPaths = screenshots.toList(), iconBytes = icon)
         val result = runCatching { backend.store.submit(request, archive) }.getOrNull()
         sending = false
-        message = result?.message
-        if (result?.success != true) return@LaunchedEffect
+        if (result?.success != true) {
+            formError = result?.message
+            return@LaunchedEffect
+        }
+        message = result.message
         // The decision arrives days later, with the app closed, as a notification. Until now the only
         // thing that ever asked for the permission was the first build, so a publisher who had never
         // built could not be told the answer to the one question they were waiting on. Asked here
@@ -602,6 +664,85 @@ private fun ProjectRow(project: ProjectInfo, onClick: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * What a moderator rejects for, said before the form instead of in a rejection days later. The order is
+ * the order these reasons are used: a listing in another language is the one sent back most.
+ */
+@Composable
+private fun ReviewerChecklist() {
+    val c = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(20.dp), color = c.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(Res.string.submit_checks_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = c.onSurface,
+            )
+            listOf(
+                Res.string.submit_checks_english,
+                Res.string.submit_checks_screenshots,
+                Res.string.submit_checks_summary,
+                Res.string.submit_checks_icon,
+                Res.string.submit_checks_own,
+            ).forEach { line ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Symbol(CaSymbols.checkCircle, contentDescription = null, size = 18.dp, tint = c.primary)
+                    Text(stringResource(line), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** A review warning under the field it is about: the reason a moderator would give, said while it can be fixed. */
+@Composable
+private fun ListingWarning(text: String) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = c.tertiaryContainer,
+        contentColor = c.onTertiaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
+    ) {
+        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Symbol(CaSymbols.warning, contentDescription = null, size = 18.dp, tint = c.onTertiaryContainer)
+            Text(text, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** The warnings still standing when Submit is pressed, with the way back to fix them first. */
+@Composable
+private fun ReviewWarningsDialog(issues: List<ListingIssue>, onFix: () -> Unit, onSendAnyway: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onFix,
+        icon = { Symbol(CaSymbols.warning, contentDescription = null, size = 24.dp) },
+        title = { Text(stringResource(Res.string.submit_confirm_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(Res.string.submit_confirm_body))
+                issues.forEach { issue ->
+                    Text(
+                        stringResource(
+                            when (issue) {
+                                ListingIssue.NotEnglish -> Res.string.submit_warn_english
+                                ListingIssue.WeakSummary -> Res.string.submit_warn_summary
+                                ListingIssue.Spammy -> Res.string.submit_warn_spam
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        },
+        // Fixing is the confirm action: it is what the dialog recommends.
+        confirmButton = { TextButton(onClick = onFix) { Text(stringResource(Res.string.submit_confirm_fix)) } },
+        dismissButton = {
+            TextButton(onClick = onSendAnyway) { Text(stringResource(Res.string.submit_confirm_send)) }
+        },
+    )
 }
 
 @Composable

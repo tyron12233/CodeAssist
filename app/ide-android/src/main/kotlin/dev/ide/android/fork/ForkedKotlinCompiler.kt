@@ -80,11 +80,23 @@ class ForkedKotlinCompiler(
     @Volatile
     private var forkUnusable: String? = null
 
-    override fun compile(request: KotlinCompileRequest): KotlinCompileResult {
-        if (unusableReason() != null) return fallback.compile(request)
+    /** Warm-ups holding a worker right now, so a compile that waits for one can say what it waits on. */
+    private val warmingUp = AtomicInteger()
+
+    override fun compile(request: KotlinCompileRequest): KotlinCompileResult = compile(request) {}
+
+    override fun compile(request: KotlinCompileRequest, status: (String) -> Unit): KotlinCompileResult {
+        unusableReason()?.let {
+            status("Compiling Kotlin in-process ($it)")
+            return fallback.compile(request, status)
+        }
         return withWorker(
-            onUnavailable = { fallback.compile(request) },
-            body = { worker -> worker.compile(request) },
+            status = status,
+            onUnavailable = { fallback.compile(request, status) },
+            body = { worker ->
+                status("Compiling in the Kotlin compiler VM (${worker.xmxMb} MB heap)")
+                worker.compile(request)
+            },
         )
     }
 
@@ -97,7 +109,14 @@ class ForkedKotlinCompiler(
         }
         // Starting the worker IS most of the warm-up (the VM boot and the compiler class-load); the `W`
         // command then pays the environment stand-up inside it, exactly as the in-process warm-up does.
-        withWorker(onUnavailable = { fallback.warmUp(bootClasspath) }) { worker -> worker.warmUp(bootClasspath) }
+        warmingUp.incrementAndGet()
+        try {
+            withWorker(status = {}, onUnavailable = { fallback.warmUp(bootClasspath) }) { worker ->
+                worker.warmUp(bootClasspath)
+            }
+        } finally {
+            warmingUp.decrementAndGet()
+        }
     }
 
     override fun close() {
@@ -128,17 +147,22 @@ class ForkedKotlinCompiler(
      * request, and a fresh worker would only spend that long again before the in-process fallback runs it a
      * third time.
      */
-    private fun <T> withWorker(onUnavailable: () -> T, body: (Worker) -> T): T {
-        if (!slots.tryAcquire(SLOT_WAIT_SEC, TimeUnit.SECONDS)) {
-            log.warn("forked-kotlinc: no worker slot after ${SLOT_WAIT_SEC}s; compiling in-process")
-            return onUnavailable()
+    private fun <T> withWorker(status: (String) -> Unit, onUnavailable: () -> T, body: (Worker) -> T): T {
+        if (!slots.tryAcquire()) {
+            val busyWith = if (warmingUp.get() > 0) "it is still warming up" else "another module is compiling"
+            status("Waiting for the Kotlin compiler VM: $busyWith")
+            if (!slots.tryAcquire(SLOT_WAIT_SEC, TimeUnit.SECONDS)) {
+                log.warn("forked-kotlinc: no worker slot after ${SLOT_WAIT_SEC}s; compiling in-process")
+                status("The Kotlin compiler VM stayed busy for ${SLOT_WAIT_SEC / 60} min; compiling in-process")
+                return onUnavailable()
+            }
         }
         try {
             var lastFailure: Throwable? = null
             for (attempt in 0 until ATTEMPTS) {
                 // Only the first attempt may reuse a pooled worker; a retry always starts a fresh VM, since
                 // the pooled one is exactly what just failed.
-                val worker = (if (attempt == 0) takeIdle() else null) ?: startWorker() ?: break
+                val worker = (if (attempt == 0) takeIdle() else null) ?: startWorker(status) ?: break
                 try {
                     val result = body(worker)
                     synchronized(idle) { idle.addLast(worker) }   // healthy: back in the pool
@@ -149,10 +173,16 @@ class ForkedKotlinCompiler(
                     if (t is WorkerTimeout) break
                     if (attempt < ATTEMPTS - 1 && forkUnusable == null) {
                         log.info("forked-kotlinc: worker lost (${t.message}); retrying on a fresh one")
+                        status("The Kotlin compiler VM stopped; retrying on a fresh one")
                     }
                 }
             }
             lastFailure?.let { noteFailure(it.message ?: it.javaClass.name) }
+            status(
+                "Compiling Kotlin in-process: " +
+                    (forkUnusable ?: lastFailure?.let { if (it is WorkerTimeout) "the compiler VM stopped answering" else "the compiler VM failed" }
+                        ?: "no compiler VM could start"),
+            )
             return onUnavailable()
         } finally {
             slots.release()
@@ -168,7 +198,7 @@ class ForkedKotlinCompiler(
     }
 
     /** Start a worker at the largest heap this device can back, stepping down the ladder. Null if none start. */
-    private fun startWorker(): Worker? {
+    private fun startWorker(status: (String) -> Unit): Worker? {
         val launcher = R8ForkSupport.launcher() ?: run { disable("no forked-VM launcher on this device"); return null }
         val requested = (maxHeapMbProvider() ?: DEFAULT_XMX_MB).coerceAtLeast(MIN_XMX_MB)
         // Drop the heaps this device's RAM visibly cannot back before trying any: a VM that cannot reserve its
@@ -180,6 +210,7 @@ class ForkedKotlinCompiler(
             disable("${R8ForkSupport.totalMemMb(appContext)}MB of device RAM can't back a Kotlin compiler VM")
             return null
         }
+        status("Starting the Kotlin compiler VM")
         for (xmx in candidates) {
             val worker = runCatching { Worker.start(launcher, xmx, workRoot, forkClasspath, log) }
                 .getOrElse {
@@ -230,6 +261,8 @@ class ForkedKotlinCompiler(
      */
     private class Worker(
         private val process: Process,
+        /** The heap this VM was started with. */
+        val xmxMb: Int,
         private val replies: LinkedBlockingQueue<String>,
         private val stderr: StderrTail,
         private val workRoot: Path,
@@ -253,7 +286,7 @@ class ForkedKotlinCompiler(
         }
 
         fun warmUp(bootClasspath: List<Path>) {
-            send("${KotlincWorkerMain.WARM_UP} ${bootClasspath.joinToString(":")}", COMPILE_TIMEOUT_SEC)
+            send("${KotlincWorkerMain.WARM_UP} ${bootClasspath.joinToString(":")}", WARM_UP_TIMEOUT_SEC)
         }
 
         /**
@@ -327,7 +360,7 @@ class ForkedKotlinCompiler(
                     stderr.stop()
                     return null
                 }
-                return Worker(process, replies, stderr, workRoot)
+                return Worker(process, xmxMb, replies, stderr, workRoot)
             }
 
             private fun drain(reader: BufferedReader, into: LinkedBlockingQueue<String>) {
@@ -397,6 +430,13 @@ class ForkedKotlinCompiler(
          * it must sit well above a legitimately slow full compile of a large module on a low-end phone.
          */
         const val COMPILE_TIMEOUT_SEC = 3600L
+
+        /**
+         * A ceiling on the warm-up, a throwaway compile of one trivial file measured at ~2s. It holds the only
+         * worker, so a build started meanwhile waits on it: a wedged warm-up must free the worker within
+         * minutes, not after [COMPILE_TIMEOUT_SEC].
+         */
+        const val WARM_UP_TIMEOUT_SEC = 180L
 
         /** How long a compile waits for a busy pool before giving up and going in-process. */
         const val SLOT_WAIT_SEC = 900L

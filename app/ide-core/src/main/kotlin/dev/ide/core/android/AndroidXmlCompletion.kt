@@ -102,6 +102,22 @@ class AndroidXmlContributor(
         }
     }
 
+    /**
+     * Some candidates only come once their prefix is typed in full: `xmlns:` declarations and `tools:` attributes
+     * for a name, framework `@android:` / `?android:` references for a value. Until then the result is
+     * incomplete, so the editor asks again rather than narrowing a set without them (`@and` → `@android:co`
+     * kept showing `@color/androidx_core_…` and never a framework colour).
+     */
+    override fun isIncomplete(position: XmlCompletionPosition): Boolean {
+        val typed = position.prefix.lowercase()
+        fun gatedBy(word: String) = typed.length < word.length && word.startsWith(typed)
+        return when (position.kind) {
+            XmlCompletionKind.ATTRIBUTE_NAME -> gatedBy("xmlns") || gatedBy("tools")
+            XmlCompletionKind.ATTRIBUTE_VALUE -> gatedBy("@android") || gatedBy("?android")
+            else -> false
+        }
+    }
+
     private enum class Flavor { MANIFEST, DRAWABLE, LAYOUT }
 
     private fun drawableTagItems(pos: XmlCompletionPosition): List<CompletionItem> =

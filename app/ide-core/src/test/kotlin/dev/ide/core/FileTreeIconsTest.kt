@@ -105,4 +105,41 @@ class FileTreeIconsTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    /**
+     * The All-Files view folds chains of single-child directories into one row (VS Code's compact folders), so a
+     * deep tree does not spend a phone drawer's width on indent. A directory with its own icon (a source root)
+     * starts a new row instead of disappearing into the chain.
+     */
+    @Test
+    fun allFilesViewCompactsSingleChildFolderChains() {
+        withTempDir("ide-tree-compact") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                Files.createDirectories(dir.resolve("docs/guides/intro"))
+                dir.resolve("docs/guides/intro/start.md").toFile().writeText("# Start\n")
+                // A directory that holds a file stops the chain, even with a single subdirectory.
+                Files.createDirectories(dir.resolve("notes/drafts"))
+                dir.resolve("notes/todo.txt").toFile().writeText("x\n")
+                dir.resolve("notes/drafts/a.txt").toFile().writeText("x\n")
+
+                val nodes = flatten(IdeServicesBackend(ide).files.fileTree(dev.ide.ui.backend.TreeViewMode.AllFiles))
+
+                val docs = nodes.first { it.kind == NodeKind.Folder && it.name == "docs/guides/intro" }
+                assertEquals(dir.resolve("docs/guides/intro").toString(), docs.dirPath, "the row is the deepest dir")
+                assertEquals("dir:${dir.resolve("docs/guides/intro")}", docs.id)
+                assertEquals(listOf("docs", "docs/guides", "docs/guides/intro"), docs.packageSegments.map { it.packageName })
+                assertEquals(dir.resolve("docs/guides").toString(), docs.packageSegments[1].dirPath)
+                assertEquals(listOf("start.md"), docs.children.map { it.name })
+
+                assertTrue(nodes.any { it.kind == NodeKind.Folder && it.name == "notes" }, "a dir with a file is not merged")
+                assertTrue(nodes.any { it.kind == NodeKind.Folder && it.name == "drafts" && it.packageSegments.isEmpty() })
+
+                // The java source root keeps its own row (and icon) rather than being folded into `src/main`.
+                val javaRoot = nodes.first { it.kind == NodeKind.Folder && it.iconId == "sourceset.java" }
+                assertTrue(javaRoot.name == "java" || javaRoot.name.startsWith("java/"), "got ${javaRoot.name}")
+                assertTrue(nodes.none { it.kind == NodeKind.Folder && it.name.contains("/java") && it.iconId != "sourceset.java" })
+            }
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

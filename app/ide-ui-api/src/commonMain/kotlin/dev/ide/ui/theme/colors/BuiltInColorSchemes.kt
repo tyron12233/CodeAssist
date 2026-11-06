@@ -119,7 +119,60 @@ object BuiltInColorSchemes {
         ),
     )
 
-    val all: List<EditorColorScheme> = listOf(DEFAULT, DARCULA, ONE, SOLARIZED, GITHUB)
+    // The two Halloween palettes are our own rather than ports. Each still pins its paper, for the same reason:
+    // a pumpkin orange on someone else's grey background is just an orange.
+
+    /** Jack-o'-lantern keywords, slime-green strings and witch's-hat purple numbers on a plum night. */
+    val PUMPKIN = EditorColorScheme(
+        id = "pumpkin", name = "Pumpkin Patch", builtIn = true,
+        dark = variant(
+            background = 0xFF1A1418, caret = 0xFFFF8C1A, selection = 0xFF4A2E52, currentLine = 0xFF231B22,
+            gutter = 0xFF6B5A66, gutterCurrent = 0xFFE8B98A, gutterBorder = 0xFF2A2129,
+            text = 0xFFE8DCCF, keyword = 0xFFFF8C1A, keywordBold = true, string = 0xFFA8D86A,
+            number = 0xFFC792EA, comment = 0xFF7D6E79, annotation = 0xFFFFCB6B, function = 0xFFFFB86C,
+            type = 0xFFD7A8FF, property = 0xFFF2A97E, variable = 0xFFE8DCCF, constant = 0xFFC792EA,
+            punctuation = 0xFFB8A9B3, label = 0xFFFFCB6B,
+            composable = 0xFFA8D86A, extension = 0xFFFFB86C, suspendFn = 0xFFD7A8FF, mutableVar = 0xFFE8DCCF,
+            control = 0xFFFF5F45, docComment = 0xFF9A8794,
+        ),
+        light = variant(
+            background = 0xFFFFF7EE, caret = 0xFFD35F00, selection = 0xFFF3D9C2, currentLine = 0xFFFCEFE2,
+            gutter = 0xFFB0A090, gutterCurrent = 0xFF5A3A28, gutterBorder = 0xFFF0E2D3,
+            text = 0xFF2E2226, keyword = 0xFFC45200, keywordBold = true, string = 0xFF4E7A12,
+            number = 0xFF7B3FB0, comment = 0xFF9C8C82, annotation = 0xFFA06A00, function = 0xFFB34700,
+            type = 0xFF6A35A0, property = 0xFFA0462E, variable = 0xFF2E2226, constant = 0xFF7B3FB0,
+            punctuation = 0xFF5E4E52, label = 0xFFA06A00,
+            composable = 0xFF4E7A12, extension = 0xFFB34700, suspendFn = 0xFF6A35A0, mutableVar = 0xFF2E2226,
+            control = 0xFFB3261E, docComment = 0xFF8A7A70,
+        ),
+    )
+
+    /** Moonlit fog: ghost-green keywords, parchment strings and faded-red numbers on a cold green-black. */
+    val GRAVEYARD = EditorColorScheme(
+        id = "graveyard", name = "Graveyard", builtIn = true,
+        dark = variant(
+            background = 0xFF121614, caret = 0xFFB8F2C8, selection = 0xFF2C3A33, currentLine = 0xFF18201C,
+            gutter = 0xFF4E5C55, gutterCurrent = 0xFFB9C9C0, gutterBorder = 0xFF1E2622,
+            text = 0xFFC9D3CD, keyword = 0xFF8FD6A6, string = 0xFFD9C38C, number = 0xFFE0A0A0,
+            comment = 0xFF5F6E66, annotation = 0xFFA7B8E8, function = 0xFFE9F0EC, type = 0xFFA7B8E8,
+            property = 0xFF9CC9C0, variable = 0xFFC9D3CD, constant = 0xFFE0A0A0, punctuation = 0xFF8A9890,
+            label = 0xFFA7B8E8,
+            composable = 0xFF8FD6A6, extension = 0xFFE9F0EC, suspendFn = 0xFFB9A7E8, mutableVar = 0xFFC9D3CD,
+            docComment = 0xFF718078,
+        ),
+        light = variant(
+            background = 0xFFF3F5F2, caret = 0xFF2F6B4A, selection = 0xFFD3E0D8, currentLine = 0xFFE9EEEA,
+            gutter = 0xFF9AA59F, gutterCurrent = 0xFF3A4540, gutterBorder = 0xFFE0E6E2,
+            text = 0xFF26302B, keyword = 0xFF2F6B4A, string = 0xFF7A5A12, number = 0xFF9A3B3B,
+            comment = 0xFF8A968F, annotation = 0xFF3E55A0, function = 0xFF1B2420, type = 0xFF3E55A0,
+            property = 0xFF2C6B66, variable = 0xFF26302B, constant = 0xFF9A3B3B, punctuation = 0xFF5A6560,
+            label = 0xFF3E55A0,
+            composable = 0xFF2F6B4A, extension = 0xFF1B2420, suspendFn = 0xFF5E48A0, mutableVar = 0xFF26302B,
+            docComment = 0xFF77837C,
+        ),
+    )
+
+    val all: List<EditorColorScheme> = listOf(DEFAULT, DARCULA, ONE, SOLARIZED, GITHUB, PUMPKIN, GRAVEYARD)
 
     fun byId(id: String): EditorColorScheme? = all.firstOrNull { it.id == id }
 

@@ -182,7 +182,9 @@ private val STEPS: List<OnboardingStep> = listOf(
 @Composable
 fun OnboardingSheet(visible: Boolean, onGetStarted: () -> Unit, onFinish: () -> Unit) {
     if (isMobilePlatform) {
-        BottomSheet(visible = visible, onDismiss = onFinish, heightFraction = 0.74f) {
+        // At least tall enough for a step's 250dp illustration, its copy and the footer, so a small phone
+        // (640dp tall) shows the whole step instead of the illustration alone.
+        BottomSheet(visible = visible, onDismiss = onFinish, heightFraction = 0.74f, minRestingHeight = 560.dp) {
             MarqueeBody(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 fillPager = true,
@@ -244,11 +246,12 @@ private fun MarqueeBody(
         HorizontalPager(state = pager, modifier = pagerMod, verticalAlignment = Alignment.Top) { i ->
             val s = STEPS[i]
             val active = i == page
-            Column(Modifier.fillMaxSize()) {
+            // The whole page scrolls, not just the copy under the hero: on a small phone (720x1280) the hero
+            // alone filled the pager, and a weighted copy column below it got no height at all, so every step's
+            // title and text were invisible.
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 Hero(kicker = stringResource(s.kicker), icon = s.icon, active = active, content = s.hero)
-                Column(
-                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                ) { StepCopy(title = stringResource(s.title), body = stringResource(s.body), active = active) }
+                StepCopy(title = stringResource(s.title), body = stringResource(s.body), active = active)
             }
         }
 

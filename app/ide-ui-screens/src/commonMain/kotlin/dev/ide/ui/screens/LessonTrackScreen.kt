@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLearnTrack
+import dev.ide.ui.backend.UiLessonKind
 import dev.ide.ui.backend.UiLessonSummary
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.IconButtonCa
@@ -42,6 +43,11 @@ import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.learn_completed
+import dev.ide.ui.generated.resources.learn_kind_capstone
+import dev.ide.ui.generated.resources.learn_kind_checkpoint
+import dev.ide.ui.generated.resources.learn_prereq_notice
+import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.theme.Symbol
 import dev.ide.ui.generated.resources.learn_lessons_progress
 import dev.ide.ui.generated.resources.learn_minutes
 import dev.ide.ui.icons.CaIcons
@@ -62,9 +68,10 @@ fun LessonTrackScreen(
     modifier: Modifier = Modifier,
     epoch: Int = 0,
 ) {
-    val track by produceState<UiLearnTrack?>(null, backend, trackId, epoch) {
-        value = runCatching { backend.learn.catalog().tracks.firstOrNull { it.id == trackId } }.getOrNull()
+    val catalog by produceState<dev.ide.ui.backend.UiLearnCatalog?>(null, backend, trackId, epoch) {
+        value = runCatching { backend.learn.catalog() }.getOrNull()
     }
+    val track = catalog?.tracks?.firstOrNull { it.id == trackId }
     val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
 
     ExpressiveScaffold(title = track?.title.orEmpty(), onBack = onBack) { innerPadding ->
@@ -76,12 +83,16 @@ fun LessonTrackScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 TrackHero(t, completedLessons)
+                val prerequisite = catalog?.let { unfinishedPrerequisite(t, it, progress) }
+                if (prerequisite != null && completedLessons == 0) PrerequisiteNotice(prerequisite)
                 Spacer(Modifier.height(2.dp))
                 t.lessons.forEachIndexed { i, lesson ->
                     LessonRow(
                         index = i + 1,
                         lesson = lesson,
                         accent = t.accentColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary,
+                        // Checkpoints and capstones are not numbered lessons; numbering counts lessons only.
+                        number = t.lessons.take(i + 1).count { it.kind == UiLessonKind.LESSON },
                         done = completed(progress, lesson),
                         delayMillis = i * 40,
                         onClick = { onOpenLesson(lesson.id) },
@@ -96,6 +107,24 @@ fun LessonTrackScreen(
 private fun completed(progress: dev.ide.ui.backend.UiLearnProgress?, lesson: UiLessonSummary): Boolean {
     val done = progress?.completedByLesson?.get(lesson.id)?.size ?: 0
     return lesson.stepCount > 0 && done >= lesson.stepCount
+}
+
+/** Shown before the learner starts a track whose prerequisite they have not finished. Advice, not a lock. */
+@Composable
+private fun PrerequisiteNotice(prerequisite: String) {
+    val shape = RoundedCornerShape(Ca.radius.md)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            stringResource(Res.string.learn_prereq_notice, prerequisite),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
 }
 
 @Composable
@@ -113,16 +142,19 @@ private fun TrackHero(track: UiLearnTrack, completedLessons: Int) {
 }
 
 @Composable
-private fun LessonRow(index: Int, lesson: UiLessonSummary, accent: Color, done: Boolean, delayMillis: Int, onClick: () -> Unit) {
+private fun LessonRow(index: Int, number: Int, lesson: UiLessonSummary, accent: Color, done: Boolean, delayMillis: Int, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(Ca.radius.lg)
+    val special = lesson.kind != UiLessonKind.LESSON
     Row(
         Modifier
             .entranceSlideUp(delayMillis)
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(MaterialTheme.colorScheme.surface, shape)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            // A checkpoint or capstone sits on a tinted card with an accent border, so the end of a track
+            // reads as a milestone rather than one more lesson.
+            .background(if (special) accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface, shape)
+            .border(1.dp, if (special) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -134,14 +166,26 @@ private fun LessonRow(index: Int, lesson: UiLessonSummary, accent: Color, done: 
                 .background(if (done) accent else MaterialTheme.colorScheme.surfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
-            if (done) Icon(CaIcons.check, null, Modifier.size(18.dp), tint = Color.White)
-            else Text(index.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            when {
+                done -> Icon(CaIcons.check, null, Modifier.size(18.dp), tint = Color.White)
+                special -> Symbol(
+                    if (lesson.kind == UiLessonKind.CHECKPOINT) CaSymbols.verified else CaSymbols.workspacePremium,
+                    contentDescription = null, size = 18.dp, tint = accent,
+                )
+                else -> Text(number.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (special) {
+                Text(
+                    stringResource(if (lesson.kind == UiLessonKind.CHECKPOINT) Res.string.learn_kind_checkpoint else Res.string.learn_kind_capstone),
+                    color = accent, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                )
+            }
             Text(lesson.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(lesson.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // A dot SEPARATES the parts; leading with one ("· 4 min") read as a bullet on its own.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = MaterialTheme.colorScheme.outline)
                 Text(stringResource(Res.string.learn_minutes, lesson.estMinutes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 if (done) {
                     Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = MaterialTheme.colorScheme.outline)

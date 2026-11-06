@@ -55,6 +55,11 @@ dependencyResolutionManagement {
         maven("https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea") {
             content { includeGroupByRegex("com\\.mbridge\\..*") }
         }
+        // The Flutter engine's Java embedding (:samples:dart-plugin's Flutter player only). Published by
+        // Google to its own bucket, not Maven Central or Google Maven; scoped by group.
+        maven("https://storage.googleapis.com/download.flutter.io") {
+            content { includeGroup("io.flutter") }
+        }
     }
 }
 
@@ -96,6 +101,8 @@ include(
     ":lang-jdt",
     ":lang-java", // IntelliJ-PSI Java LanguageBackend: IntelliJ Java parser + native resolution/inference (replaces lang-jdt in the editor)
     ":lang-xml",
+    ":lsp-api", // the SPI a plugin declares a Language Server Protocol server through (published)
+    ":lsp-client", // the host's LSP client: turns each declared server into the IDE's own language features
     ":lang-kotlin-index", // pure, compiler-free Kotlin symbol/index layer shared by the Kotlin editor backend
     ":kotlin-compiler-deps", // the ONE unshaded Kotlin compiler + IntelliJ platform dependency set (no embeddable)
     ":intellij-psi-host", // the ONE shared IntelliJ platform env both lang-kotlin + lang-xml parse against
@@ -205,6 +212,8 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         // A plugin packaged as its own app, built here so it cannot drift from the SPI it compiles against.
         ":samples:hello-plugin",
         ":samples:ndk-plugin",
+        ":samples:lsp-plugin",
+        ":samples:dart-plugin",
     )
 }
 
@@ -229,7 +238,7 @@ val layers = mapOf(
     "lang" to listOf(
         "kotlin-classfile",
         "language-api", "index-api", "index-impl", "analysis-api", "analysis-impl",
-        "lang-jdt", "lang-java", "lang-kotlin", "lang-kotlin-index", "lang-ksp", "lang-xml",
+        "lang-jdt", "lang-java", "lang-kotlin", "lang-kotlin-index", "lang-ksp", "lang-xml", "lsp-api", "lsp-client",
         "kotlin-compiler-deps", "intellij-psi-host", "decompiler", "block-api", "block-impl",
     ),
     // The build system. Named `build-system` rather than `build` because `build/` is the root

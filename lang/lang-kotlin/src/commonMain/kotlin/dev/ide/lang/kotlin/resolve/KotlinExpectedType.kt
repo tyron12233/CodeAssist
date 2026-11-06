@@ -5,8 +5,10 @@ import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
+import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
@@ -70,14 +72,43 @@ fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
             is KtPrefixExpression ->
                 if (node.operationToken == KtTokens.EXCL) return service.typeByFqn("kotlin.Boolean")
 
-            is KtBinaryExpression ->
-                if (node.operationToken == KtTokens.ANDAND || node.operationToken == KtTokens.OROR)
+            is KtBinaryExpression -> when {
+                node.operationToken == KtTokens.ANDAND || node.operationToken == KtTokens.OROR ->
                     return service.typeByFqn("kotlin.Boolean")
+                // The right side of a plain assignment expects the TARGET's type, exactly as a typed initializer
+                // does. Without this, `gv = findViewById(R.id.game)` (a `lateinit var gv: GameView`) left
+                // `<T : View>` with nothing but its bound, read as View, and flagged "inferred type is View but
+                // GameView was expected" on every view lookup in an Activity, while `val gv: GameView =
+                // findViewById(...)` was fine. Augmented assignments (`+=`) are operator calls, not this.
+                node.operationToken == KtTokens.EQ && child != null && child === node.right ->
+                    return node.left?.let { assignmentTargetDeclaredType(it) }
+            }
         }
         child = node
         node = node.parent
     }
     return null
+}
+
+/**
+ * The DECLARED type of an assignment target, which is not the same as its type at the assignment.
+ *
+ * `inferType` applies smart casts, and a variable is routinely assigned inside a narrowing of itself:
+ * `var p = e.parent; while (p is Paren) { p = p.parent }` advances the walk by assigning the wider declared
+ * type back, which is legal Kotlin and simply ends the smart cast. Reading the narrowed type as the target's
+ * type made that read "inferred type is KtElement? but KtParenthesizedExpression was expected" -- a complaint
+ * about the only line that could ever terminate the loop.
+ *
+ * A local's declaration type is taken straight from its binding; anything else (a property, a qualified
+ * target) keeps the inferred type, since Kotlin does not smart-cast a mutable property anyway.
+ */
+internal fun KotlinResolver.assignmentTargetDeclaredType(left: KtExpression): KotlinType? {
+    if (left is KtNameReferenceExpression) {
+        val name = left.getReferencedName()
+        localsAt(left.textRange.startOffset, name).firstOrNull()
+            ?.let { return it.type as? KotlinType }
+    }
+    return inferType(left)
 }
 
 internal fun KotlinResolver.enclosingFunctionReturnType(from: KtElement): KotlinType? {
@@ -109,7 +140,11 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
         return p?.type
     }
     val call = argList.parent as? KtCallExpression ?: return null
-    val targets = callTargets(call)
+    // Overloads that can take this many arguments come first. Without that the first overload wins, whatever
+    // its arity: `stream.collect(Collectors.toList())` read its argument against the three-argument
+    // `collect(Supplier<R>, …)`, so `toList()` got no `T` from the parameter it really fills and typed as
+    // `Collector<Object, …>`, and the whole chain off `collect` became `List<Object>`.
+    val targets = callTargets(call).sortedBy { if (acceptsArgCount(it, call.valueArguments.size)) 0 else 1 }
     if (targets.isEmpty()) return null
     val argName = arg.getArgumentName()?.asName?.identifier
     if (argName != null) {
@@ -126,4 +161,14 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
         (s.paramTypes.getOrNull(paramIndex) as? KotlinType)?.let { return it }
     }
     return null
+}
+
+/** Whether [sym] can be called with [count] arguments: every parameter filled, or the missing ones have
+ *  defaults, or the extras go to its vararg. */
+private fun acceptsArgCount(sym: dev.ide.lang.kotlin.symbols.KotlinSymbol, count: Int): Boolean {
+    val n = sym.paramTypes.size
+    if (count == n) return true
+    if (sym.varargParamIndex >= 0) return count >= n - 1
+    if (count > n) return false
+    return (count until n).all { sym.paramHasDefault.getOrNull(it) == true }
 }

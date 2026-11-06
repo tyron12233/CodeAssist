@@ -128,6 +128,7 @@ class StoreFeedCache(
                     sizeBytes = item.sizeBytes,
                     title = item.title,
                     version = item.version,
+                    versionCode = item.versionCode,
                 )
             }
         }

@@ -3,13 +3,17 @@ package dev.ide.lang.kotlin.resolve
 import dev.ide.kotlin.syntax.psi.KtAnnotationEntry
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
 import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtEnumEntry
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
 import dev.ide.kotlin.syntax.psi.KtTokens
@@ -124,7 +128,14 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
             service.companionMembersFor(receiverType.qualifiedName, name)
                 .filter { it.name == name && it.kind == SymbolKind.METHOD }
         else emptyList()
-        members + scopeExts + companionMethods
+        // A Java class Kotlin maps to a built-in, written in its Java spelling (`Integer.parseInt`,
+        // `Character.isDigit`, `java.lang.Long.toBinaryString`): the classifier is a TYPE, not a value, so its
+        // JVM statics are the only candidates. The mapped built-in's extensions (`Int.toHexString(HexFormat)`,
+        // `Char.isDigit()`) need an instance and never apply.
+        val javaStatics = q?.let { mappedJavaStatics(it.receiverExpression, receiverType, name) }.orEmpty()
+            .filter { it.kind == SymbolKind.METHOD }
+        if (javaStatics.isNotEmpty()) javaStatics + companionMethods
+        else (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
     } else if (q != null && q.selectorExpression === call) {
         // An EXPLICIT receiver whose type is unknown (`unresolved?.let { }`). Only a package-qualified call
         // (`kotlinx.coroutines.delay(…)`) can still resolve, to a plain top-level function. The scope walk below
@@ -132,6 +143,13 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // implicit receiver, so `x?.let { it }` inside `Column { }` typed `it` as `ColumnScope`.
         service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension }
     } else {
+        // A nearer VALUE with an `invoke` (a function-typed property or local) shadows every top-level function
+        // of that name ([nearerValueInvokeTargets]), so no FUNCTION is the callee: the call is the value's
+        // invocation, which [typeOfCall] types through [invokeReturnType] and the highlighter colors as the
+        // value. Null from the helper means "not that case": go on.
+        if (nearerValueInvokeTargets(call, name) != null) return null
+        val typeInScope = name.firstOrNull()?.isUpperCase() == true &&
+            service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
         // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
         // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
         // (`itemsIndexed(...)` inside `LazyColumn { }`, on the implicit `LazyListScope`) so its `itemContent`
@@ -147,7 +165,15 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
             // experimental-API misuse -- instead of the default-imported `kotlin.synchronized`. This only
             // REORDERS: when nothing is in scope the whole list is kept, so the leniency a bare `Text` /
             // `Column` relies on is untouched, which is what filtering outright broke.
-            .let { cands -> cands.filter { topLevelInScope(it, fileContext) }.ifEmpty { cands } }
+            .let { cands ->
+                cands.filter { topLevelInScope(it, fileContext) }.ifEmpty {
+                    // None in scope, but the name IS a type in scope (`import android.widget.Button` and then
+                    // `Button(ctx)`): that class's constructor is the call. An unimported function of the same name
+                    // (Material3's `Button`) is invisible to Kotlin, and keeping it made a View constructor read as
+                    // a @Composable invocation.
+                    if (typeInScope) emptyList() else cands
+                }
+            }
             .let {
                 // A local function, and equally a MEMBER of the enclosing class, SHADOWS a same-named
                 // top-level one. This lookup runs BEFORE the scope walk that knows about members, so a
@@ -171,6 +197,12 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                     name,
                     exactName = true
                 ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+                    // The scope walk lists every top-level function too; with a type of this name in scope, an
+                    // out-of-scope one is still invisible (see above).
+                    .let { found ->
+                        if (!typeInScope) found
+                        else found.filter { f -> f.packageName == null || f.isExtension || topLevelInScope(f, fileContext) }
+                    }
             }
     }
     // Prefer exact arity; then functions with MORE params than supplied args (defaulted params the caller
@@ -260,12 +292,34 @@ internal fun KotlinResolver.bestOverload(
         if (key.first > bestKey.first ||
             (key.first == bestKey.first && key.second > bestKey.second) ||
             (key.first == bestKey.first && key.second == bestKey.second && key.third > bestKey.third) ||
-            (key == bestKey && paramMoreSpecific(c, best))
+            (key == bestKey && paramMoreSpecific(c, best)) ||
+            (key == bestKey && overridesWithNarrowerReturn(c, best))
         ) {
             best = c; bestKey = key
         }
     }
     return best
+}
+
+/**
+ * Whether [a] is an override of [b] with a narrower return type: the same parameter list, and a return type
+ * that is a strict subtype of [b]'s. Both arrive as candidates because a member is collected once per supertype
+ * that declares it, in lookup order, and the narrowest override is the one the call actually binds to.
+ * `MutableList<T>.iterator()` reaches `Collection.iterator(): Iterator<T>` through `List` before
+ * `MutableCollection.iterator(): MutableIterator<T>`, and taking the first made `it.remove()` on a list's
+ * iterator "Unresolved reference: remove".
+ */
+private fun overridesWithNarrowerReturn(a: KotlinSymbol, b: KotlinSymbol): Boolean {
+    if (a.paramTypes.size != b.paramTypes.size) return false
+    for (i in a.paramTypes.indices) {
+        val ap = a.paramTypes[i] ?: return false
+        val bp = b.paramTypes[i] ?: return false
+        if (ap.qualifiedName != bp.qualifiedName) return false
+    }
+    val ar = a.type as? KotlinType ?: return false
+    val br = b.type as? KotlinType ?: return false
+    if (ar.isTypeParameter || br.isTypeParameter || ar.qualifiedName == br.qualifiedName) return false
+    return br.isAssignableFrom(ar)
 }
 
 /** The most-specific ranking key for [sym] at [call] (higher is more specific): function-type parameter over
@@ -333,6 +387,13 @@ internal fun KotlinResolver.isApplicable(
     call: KtCallExpression,
     receiverType: KotlinType?
 ): Boolean {
+    if (receiverType != null && receiverArgsContradict(sym, receiverType)) return false
+    // A SPREAD argument can only fill a vararg: `listOf(*arr)` is never `listOf(element: T)`, which otherwise
+    // won with `T = Array<…>`. Kotlin metadata, Java bytecode (ACC_VARARGS) and source all record the vararg
+    // index; a candidate with no parameter info at all is left alone.
+    if (sym.paramTypes.isNotEmpty()) call.valueArguments.forEachIndexed { i, arg ->
+        if (arg.getSpreadElement() != null && argParamIndex(arg, i, sym) != sym.varargParamIndex) return false
+    }
     if (sym.typeParameters.isEmpty() && call.typeArgumentList == null) {
         // Non-generic candidate: no type variables, so applicability is just per-argument concrete subtyping.
         val cs = KotlinConstraintSystem(service)
@@ -343,6 +404,33 @@ internal fun KotlinResolver.isApplicable(
     addArgumentConstraints(sym, call, cs)
     return !cs.hasContradiction
 }
+
+/**
+ * Whether [sym], an extension declared on a CONCRETE instantiation of its receiver (`Iterable<Double>.max()`),
+ * cannot take [receiverType] because the receiver's own type arguments contradict it (a `List<String>`). Only
+ * the arguments decided overloads, so `listOf("a").max()` bound to the `Double` overload and typed `Double?`.
+ * Receiver arguments that are or mention a type parameter (`Iterable<T>`) never contradict, and the
+ * constraint system only reports a confident concrete mismatch.
+ */
+private fun KotlinResolver.receiverArgsContradict(sym: KotlinSymbol, receiverType: KotlinType): Boolean {
+    if (!sym.isExtension || sym.receiverTypeArgs.isEmpty()) return false
+    val extRecv = sym.receiverTypeFqn?.let { Builtins.kotlinTypeFor(it) ?: it } ?: return false
+    val actualFqn = Builtins.kotlinTypeFor(receiverType.qualifiedName) ?: receiverType.qualifiedName
+    val actualArgs = if (extRecv == actualFqn) receiverType.typeArguments
+    else service.receiverSupertypeArgs(actualFqn, receiverType.typeArguments, extRecv) ?: return false
+    val cs = KotlinConstraintSystem(service)
+    sym.receiverTypeArgs.forEachIndexed { i, ra ->
+        val declared = ra as? KotlinType ?: return@forEachIndexed
+        if (mentionsTypeParameter(declared)) return@forEachIndexed
+        val actual = actualArgs.getOrNull(i) as? KotlinType ?: return@forEachIndexed
+        if (mentionsTypeParameter(actual)) return@forEachIndexed
+        cs.addSubtypeConstraint(actual, declared)
+    }
+    return cs.hasContradiction
+}
+
+private fun mentionsTypeParameter(t: KotlinType): Boolean =
+    t.isTypeParameter || t.typeArguments.any { (it as? KotlinType)?.let(::mentionsTypeParameter) ?: true }
 
 /** Add each argument's `argType <: paramType` constraint to [cs] (a lambda's body result to the parameter's
  *  functional return, typed top-down). Shared by applicability and (via the driver) type-argument inference. */
@@ -366,10 +454,21 @@ private fun KotlinResolver.addArgumentConstraints(
             val bodyResult =
                 withLambdaShape(lambda, shape) { inferLambdaResult(lambda) as? KotlinType }
             if (bodyResult != null) cs.addSubtypeConstraint(bodyResult, shape.returnType)
+        } else if (expr is KtCallableReferenceExpression) {
+            // A callable reference fills a function-typed parameter like a lambda: its target's RESULT must fit
+            // the parameter's functional return, which is what rules out `sumOf`'s `(T) -> BigDecimal` for
+            // `P::age`. An unresolved target constrains nothing.
+            val pt = sym.paramTypes.getOrNull(argParamIndex(arg, i, sym)) as? KotlinType
+                ?: return@forEachIndexed
+            val shape = service.functionalShape(pt) ?: return@forEachIndexed
+            if (coercesResultToUnit(shape.returnType)) return@forEachIndexed
+            callableReferenceResultType(expr)?.let { cs.addSubtypeConstraint(it, shape.returnType) }
         } else {
             val pt = sym.paramTypes.getOrNull(argParamIndex(arg, i, sym)) as? KotlinType
                 ?: return@forEachIndexed
-            inferType(expr)?.takeIf { !it.isTypeParameter }?.let { cs.addSubtypeConstraint(it, pt) }
+            inferType(expr)?.takeIf { !it.isTypeParameter }
+                ?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
+                ?.let { cs.addSubtypeConstraint(it, pt) }
         }
     }
 }
@@ -410,14 +509,18 @@ internal fun KotlinResolver.lambdaReturnSpecificity(
 ): Int {
     var score = 0
     call.valueArguments.forEachIndexed { i, arg ->
-        val expr = arg.getArgumentExpression() as? KtLambdaExpression ?: return@forEachIndexed
+        val argExpr = arg.getArgumentExpression()
+        val ref = argExpr as? KtCallableReferenceExpression
+        val expr = argExpr as? KtLambdaExpression
+        if (expr == null && ref == null) return@forEachIndexed
         val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType
             ?: return@forEachIndexed
         val shape = service.functionalShape(pt) ?: return@forEachIndexed
         val ret = shape.returnType as? KotlinType ?: return@forEachIndexed
         if (ret.isTypeParameter || ret.qualifiedName == "kotlin.Unit" || !service.isKnownType(ret.qualifiedName)) return@forEachIndexed
-        val body = withLambdaShape(expr, shape) { inferLambdaResult(expr) as? KotlinType }
-            ?: return@forEachIndexed
+        // A callable reference (`sumOf(P::age)`) ranks by its target's result exactly as a lambda's body does.
+        val body = (if (expr != null) withLambdaShape(expr, shape) { inferLambdaResult(expr) as? KotlinType }
+        else callableReferenceResultType(ref!!)) ?: return@forEachIndexed
         if (body.isTypeParameter) return@forEachIndexed
         score += when {
             body.qualifiedName == ret.qualifiedName -> 2
@@ -497,6 +600,11 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
             service.companionMembersFor(receiverType.qualifiedName, name)
                 .filter { it.name == name && it.kind == SymbolKind.METHOD }
         else emptyList()
+        // A Java class's statics through its Java spelling (`Integer.toHexString`), the only candidates there;
+        // see the matching case in [computeCallee].
+        q?.let { mappedJavaStatics(it.receiverExpression, receiverType, name) }.orEmpty()
+            .filter { it.kind == SymbolKind.METHOD }
+            .takeIf { it.isNotEmpty() }?.let { return it + companionMethods }
         // The nested type of an OBJECT receiver, when nothing named it is a member: `Codec.Writer(1)` where
         // `object Codec { class Writer }` constructs the nested class. See the matching case in [typeOfCall].
         if (members.isEmpty() && scopeExts.isEmpty() && companionMethods.isEmpty() &&
@@ -508,8 +616,11 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
                     service.sourceClass(nested)?.constructors.orEmpty().map { sourceCtorSymbol(it, nested) }
             }
         }
-        return members + scopeExts + companionMethods
+        return (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
     }
+    // A nearer function-typed value: the call's targets are its `invoke`, not the top-level functions it
+    // shadows ([nearerValueInvokeTargets]).
+    if (q == null || q.selectorExpression !== call) nearerValueInvokeTargets(call, name)?.let { return it }
     val out = ArrayList<KotlinSymbol>()
     // The callee name is known, so push it down as the prefix (it filters to names starting with it, the
     // exact match included) — avoids scanning the whole top-level universe just to keep one name.
@@ -536,7 +647,7 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
     // yields its constructors (`Level(21, "x")` inside `object Api { data class Level(…) }`).
     if (name.firstOrNull()?.isUpperCase() == true) {
         // A project `typealias` constructed by its own name (`DiskFile(path)`).
-        service.typeAliasTargetFqn(name)?.let { fqn ->
+        service.typeAliasTargetFqn(name, fileContext)?.let { fqn ->
             out += service.constructorsOf(fqn)
             service.sourceClass(fqn)?.constructors?.forEach { rc -> out += sourceCtorSymbol(rc, fqn) }
         }
@@ -715,4 +826,141 @@ fun KotlinResolver.annotationParameters(entry: KtAnnotationEntry): List<ParamInf
         }
     }
     return out.values.toList()
+}
+
+/**
+ * The `invoke` a bare call `name(…)` binds to when [name] is a VALUE declared nearer than any top-level
+ * function: a local or parameter, or a property of an enclosing class (a constructor `val` included). Kotlin
+ * resolves a call scope by scope from the innermost, and at each scope a value with an `invoke` is a candidate
+ * like a function, so `class C(private val log: (String) -> Unit) { fun f() = log("x") }` calls the
+ * property's `invoke(String)`. The editor only collected FUNCTIONS for a bare call, so the property was never a
+ * candidate and the call bound to `kotlin.math.log(Double, Double)` instead, reporting "inferred type is
+ * String but Double was expected" on a valid call.
+ *
+ * Null when no such value is nearer, or a FUNCTION of that name is declared in the same scope (a function
+ * beats a property there), or the value has no `invoke` (the compiler then keeps looking further out), so the
+ * caller resolves as before. An empty list when the value's type is unknown: the value still shadows the outer
+ * functions, so binding to one of them would be a guess, and resolving to nothing is the conservative answer.
+ */
+internal fun KotlinResolver.nearerValueInvokeTargets(call: KtCallExpression, name: String): List<KotlinSymbol>? {
+    val offset = call.textRange.startOffset
+    val local = localsAt(offset, name).firstOrNull()
+    val isValue = when {
+        local != null -> local.kind != SymbolKind.METHOD // the nearest local decides: a local fun is a function
+        else -> innermostClassDeclaresValue(offset, name) ?: return null
+    }
+    if (!isValue) return null
+    val type = typeOfName(name, offset) ?: return emptyList()
+    if (type.isTypeParameter) return emptyList()
+    service.membersNamed(type.qualifiedName, type.typeArguments, "invoke")
+        .filter { it.kind == SymbolKind.METHOD }
+        .takeIf { it.isNotEmpty() }
+        ?.let { return it }
+    // A function type the member lookup can't enumerate: its shape is the `invoke` signature. An extension
+    // function type (`String.() -> Unit`) takes its receiver as the first argument of a plain call.
+    val shape = service.functionalShape(type) ?: return null
+    fun invoke(params: List<dev.ide.lang.resolve.TypeRef?>) = KotlinSymbol(
+        "invoke", SymbolKind.METHOD, type = shape.returnType,
+        paramTypes = params,
+        paramHasDefault = List(params.size) { false },
+    )
+    if (!shape.isExtension) return listOf(invoke(shape.parameterTypes))
+    // An extension function type takes its receiver as the first argument of a plain call (`f(x)`), or from an
+    // implicit `this` in scope (`fun go(b: W.() -> Unit) { b() }` inside `W`, `fun <T> T.twice(f: T.() -> T) =
+    // f()`), so both shapes are candidates whenever some implicit receiver exists.
+    val explicit = invoke(listOf(shape.receiverType) + shape.parameterTypes)
+    return if (implicitReceiversAt(offset).isEmpty()) listOf(explicit) else listOf(explicit, invoke(shape.parameterTypes))
+}
+
+/**
+ * A receiver call's candidates: the receiver type's members and receiver-keyed extensions, then the member
+ * extensions an implicit receiver brings into scope ([scopeExts]: `RowScope`'s `Modifier.alignByBaseline()`
+ * inside `Row { }`). The classpath index ALSO keys a class's member extensions by receiver, so the same
+ * signature declared in `ContextualFlowRowOverflowScopeImpl`, an experimental class, came first and reported
+ * an opt-in error on a plain `Row`. An extension the scope redeclares with the identical signature is that
+ * duplicate, so the scope's own declaration replaces it. Anything else keeps its place (a scope's `T.let`
+ * bound to `ColumnScope` must not displace the receiver's own `let`).
+ */
+private fun kotlinCandidateOrder(members: List<KotlinSymbol>, scopeExts: List<KotlinSymbol>): List<KotlinSymbol> {
+    if (scopeExts.isEmpty()) return members
+    fun sig(s: KotlinSymbol) = s.receiverTypeFqn + "(" + s.paramTypes.joinToString(",") { it?.qualifiedName.orEmpty() } + ")"
+    val scoped = scopeExts.mapTo(HashSet()) { sig(it) }
+    return members.filterNot { it.isExtension && it.typeParameters.isEmpty() && sig(it) in scoped } + scopeExts
+}
+
+/**
+ * `s.f()` where `f` is a parameter, local or enclosing-class property of EXTENSION function type
+ * (`f: String.() -> Int`, a builder's `block: S.() -> S`): the value is invoked with `s` as its receiver, so the
+ * call's target is its `invoke` with the remaining parameters. Consulted only once the receiver has no member or
+ * extension of that name, which is the order Kotlin resolves them in. Empty when [name] is not such a value.
+ */
+internal fun KotlinResolver.receiverValueInvokeTargets(
+    call: KtCallExpression,
+    name: String,
+    receiverType: KotlinType?,
+): List<KotlinSymbol> {
+    val offset = call.textRange.startOffset
+    val local = localsAt(offset, name).firstOrNull()
+    val isValue = if (local != null) local.kind != SymbolKind.METHOD else innermostClassDeclaresValue(offset, name) == true
+    if (!isValue) return emptyList()
+    val type = typeOfName(name, offset) ?: return emptyList()
+    val shape = service.functionalShape(type)?.takeIf { it.isExtension } ?: return emptyList()
+    // The value's receiver must accept the explicit one (`s.f()` with `f: Int.() -> Unit` stays an error). A
+    // type-parameter receiver on either side (`f: S.() -> S` on an `s: S`) is left to the checker's own leniency.
+    val wanted = shape.receiverType as? KotlinType
+    if (wanted != null && receiverType != null && !wanted.isTypeParameter && !receiverType.isTypeParameter &&
+        !isTypeParameterInScope(wanted.qualifiedName, offset) &&
+        !wanted.isAssignableFrom(receiverType.withNullable(false))
+    ) return emptyList()
+    return listOf(
+        KotlinSymbol(
+            "invoke", SymbolKind.METHOD, type = shape.returnType,
+            paramTypes = shape.parameterTypes,
+            paramHasDefault = List(shape.parameterTypes.size) { false },
+        )
+    )
+}
+
+/** For the innermost enclosing class that declares a member named [name] (a function, a property, a
+ *  constructor `val`/`var`, or an enum entry): true when that member is a VALUE and no same-named FUNCTION
+ *  sits beside it, false when a function does. Null when no enclosing class declares the name. */
+private fun KotlinResolver.innermostClassDeclaresValue(offset: Int, name: String): Boolean? {
+    var node: KtElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtClassOrObject) {
+            val hasFunction = node.declarations.any { it is KtNamedFunction && it.name == name }
+            val hasValue = node.declarations.any {
+                (it is KtProperty && it.name == name) || (it is KtEnumEntry && it.name == name)
+            } || node.primaryConstructorParameters.any { it.hasValOrVar() && it.name == name }
+            if (hasFunction) return false
+            if (hasValue) return true
+        }
+        node = node.parent
+    }
+    return null
+}
+
+/**
+ * The JVM statics named [name] that a TYPE receiver written in its Java spelling reaches on a class Kotlin maps
+ * to a built-in: `java.lang.Integer.parseInt`, and also the bare `Integer.parseInt` / `Character.isDigit`,
+ * whose simple names exist only as the Java classes (`Integer` is never `kotlin.Int`). A receiver spelled with
+ * the Kotlin name (`String.valueOf`, `Long.parseLong`) names the built-in, which has no such statics, so it
+ * stays empty and is reported as Kotlin reports it.
+ */
+internal fun KotlinResolver.mappedJavaStatics(receiver: KtExpression, receiverType: KotlinType, name: String): List<KotlinSymbol> {
+    if (!isTypeReceiver(receiver)) return emptyList()
+    val kotlinName = Builtins.kotlinTypeFor(receiverType.qualifiedName) ?: return emptyList()
+    val written = receiver.text.trim()
+    val javaSpelling = written == receiverType.qualifiedName ||
+        written.substringAfterLast('.') != kotlinName.substringAfterLast('.')
+    if (!javaSpelling) return emptyList()
+    return service.mappedTypeStatics(receiverType.qualifiedName).filter { it.name == name }
+}
+
+/** The value a callable reference's target produces: a property's type (`P::age`) or a function's return type
+ *  (`::len`, `String::length`). Null when the target or its type is unknown, or generic. */
+internal fun KotlinResolver.callableReferenceResultType(ref: KtCallableReferenceExpression): KotlinType? {
+    val target = runCatching { callableReferenceTarget(ref) }.getOrNull() ?: return null
+    if (target.typeParameters.isNotEmpty()) return null
+    return (target.type as? KotlinType)?.takeIf { !it.isTypeParameter }
 }

@@ -162,6 +162,30 @@ class SupabaseAccountService(
         if (configured && token != null) runCatching { post("/auth/v1/logout", "{}", token) }
     }
 
+    override fun deleteAccount(): StoreResult<Unit> {
+        if (!configured) return StoreResult.Unavailable("Sign-in is not configured in this build")
+        val token = bearer() ?: return StoreResult.Failed("Sign in again to delete your account.", 401)
+        var r = callDeleteAccount(token)
+        if (r.status == 401) r = reauthorize(token)?.let { callDeleteAccount(it) } ?: r
+        if (r.error != null) return StoreResult.Unavailable(r.error)
+        if (r.status !in 200..299) {
+            // The function explains itself in words meant for a person; show them as sent.
+            val message = JsonReader.str(JsonReader.parseOrNull(r.body), "error")
+                ?: "Your account could not be deleted right now. Try again later."
+            return StoreResult.Failed(message, r.status)
+        }
+        // The account is gone server-side, and its refresh token with it; nothing left to revoke.
+        sessionLock.withLock { forgetSession() }
+        return StoreResult.Ok(Unit)
+    }
+
+    private fun callDeleteAccount(token: String) = http.request(
+        "POST",
+        "$base/functions/v1/delete-account",
+        mapOf("apikey" to apiKey, "Authorization" to "Bearer $token", "Content-Type" to "application/json"),
+        "{}",
+    )
+
     /** Exchange a stored refresh token for a live session. */
     private fun refreshSession(refresh: String): StoreResult<StoreAccount> =
         when (val r = post("/auth/v1/token?grant_type=refresh_token", """{"refresh_token":${SupabaseStoreSource.jsonStr(refresh)}}""")) {

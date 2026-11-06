@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.platform.excludeSystemGestures
 import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.LocalPluginFileOpener
@@ -19,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -46,12 +48,7 @@ import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.zen_exit
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.touchInput
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemGestures
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
@@ -61,6 +58,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.editor.BlockEditor
+import dev.ide.ui.editor.CaretStyle
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.engine.DaemonPass
 import dev.ide.ui.editor.core.isLarge
@@ -94,6 +92,9 @@ import kotlinx.coroutines.withContext
  * layouts. The wide layout frames everything below the bar with its stripes and panes (see [frame]). When no file is open it shows a placeholder; otherwise it runs the per-file analysis + breadcrumb
  * effects and renders the active [EditorViewMode] (code / blocks / preview / split).
  */
+/** The Learn task banner while a lesson runs in this project, provided by [EditorScreen]; null otherwise. */
+internal val LocalLessonBanner = androidx.compose.runtime.staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
+
 @Composable
 internal fun EditorCenter(
     state: IdeUiState,
@@ -110,6 +111,16 @@ internal fun EditorCenter(
     frame: (@Composable (editorBody: @Composable () -> Unit) -> Unit)? = null,
 ) {
     val project = state.backend.project
+    // A language server's own edits (workspace/applyEdit outside a command): applied like a multi-file fix.
+    LaunchedEffect(state.backend) {
+        state.backend.editor.externalEdits.collect { edits -> state.applyWorkspaceEdits(edits) }
+    }
+    // Local history for the active tab, opened from the top bar's ⋯ menu.
+    if (state.localHistoryOpen) {
+        val file = state.active
+        if (file == null) state.localHistoryOpen = false
+        else LocalHistorySheet(state, file, onDismiss = { state.localHistoryOpen = false })
+    }
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
     val pluginNavigator = LocalPluginNavigator.current
@@ -172,10 +183,18 @@ internal fun EditorCenter(
     // (derived from the run-task ids), so a non-Android project leaves it null and the chip is hidden. A
     // `variantEpoch` bump recomputes the label + re-analyzes open files after a switch.
     var variantEpoch by remember { mutableStateOf(0) }
-    val variantModule = remember(project.name, variantEpoch) {
-        state.backend.build.runTasks().firstNotNullOfOrNull { t ->
-            listOf("androidRun:", "assemble:", "bundle:").firstOrNull { t.id.startsWith(it) }
-                ?.let { p -> t.id.removePrefix(p).substringBefore(":") }
+    // Off the main thread: runTasks() looks for runnable mains, and while the index is still building (exactly
+    // when the editor first opens) that is a direct scan of every source file that also waits on the Kotlin
+    // parser lock the indexer holds. Read in composition it froze the UI: a Play ANR on 3.39.0
+    // (KotlinMainScan.parse under EditorCenter). The chip appears once the answer lands.
+    val variantModule by produceState<String?>(null, project.name, variantEpoch) {
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                state.backend.build.runTasks().firstNotNullOfOrNull { t ->
+                    listOf("androidRun:", "assemble:", "bundle:").firstOrNull { t.id.startsWith(it) }
+                        ?.let { p -> t.id.removePrefix(p).substringBefore(":") }
+                }
+            }.getOrNull()
         }
     }
     val activeVariant = remember(project.name, variantEpoch, variantModule) {
@@ -223,10 +242,12 @@ internal fun EditorCenter(
                 onFind = { if (active != null) findEpoch++ },
                 onReformat = { if (active != null) formatEpoch++ },
                 onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
+                onLocalHistory = if (active != null && !active.readOnly) ({ state.localHistoryOpen = true }) else null,
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
                 rightToolIconId = rightPrimary?.iconId,
                 rightToolTitle = rightPrimary?.title ?: "",
+                rightToolBusy = rightPrimary?.busy?.invoke(state.backend) == true,
                 rightToolOpen = state.selectedRightPanel != null,
                 onToggleRightTool = { rightPrimary?.let { state.toggleRightPanel(it.id) } },
                 rightToolInBar = !state.rightStripeVisible,
@@ -258,6 +279,8 @@ internal fun EditorCenter(
             // stripes and panes (via [frame]) so the bar spans the whole window above them, IntelliJ-style.
             val editorBody: @Composable () -> Unit = {
                 Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+                    // A running lesson's task banner: under the top bar, above the notices and the file tabs.
+                    LocalLessonBanner.current?.invoke()
                     DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
                     // Hoisted so the notice strip can report the count and the banner can render the cards from the
                     // same state; two holders would disagree about which warnings had been dismissed.
@@ -310,6 +333,7 @@ internal fun EditorCenter(
                         active?.let { file ->
                             staleOnDiskNotice(state, file)?.let(::add)
                             kotlinNotConfiguredNotice(state, file)?.let(::add)
+                            missingLibrariesNotice(state, file)?.let(::add)
                             readOnlyNotice(state, file)?.let(::add)
                             largeFileNotice(file)?.let(::add)
                         }
@@ -354,7 +378,7 @@ internal fun EditorCenter(
                     TabsStrip(
                         openFiles = state.openFiles,
                         activeIndex = state.activeIndex,
-                        onSelect = { state.activeIndex = it },
+                        onSelect = { state.selectTab(it) },
                         onClose = { state.close(it) },
                         onCloseOthers = { state.closeOthers(it) },
                         onCloseToRight = { state.closeToRight(it) },
@@ -399,12 +423,15 @@ internal fun EditorCenter(
                                 wordWrap = state.wordWrapEnabled,
                                 wrapIndent = state.wrapIndentEnabled,
                                 horizontalScrollbar = state.horizontalScrollbarEnabled,
+                                inlineBlame = state.inlineBlameEnabled,
                                 fontLigatures = state.fontLigaturesEnabled,
+                                caretStyle = CaretStyle.fromId(state.caretStyle),
                                 // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
                                 // specific composable. The editor tools (incl. the Code/Blocks/Preview switch) are pinned
                                 // to the breadcrumb row, so they're already visible — making the view change easy to undo.
                                 onPreview = { fn ->
                                     active.previewTarget = fn
+                                    if (active.viewMode != EditorViewMode.Preview) state.countViewMode(active.path, EditorViewMode.Preview)
                                     active.viewMode = EditorViewMode.Preview
                                 },
                                 // A plugin editor action goes through the same dispatcher as the toolbar's, so its
@@ -554,8 +581,8 @@ internal fun EditorCenter(
     }
 }
 
-/** Zen mode's way out, at the end of the tabs strip: clear of the screen edge's back-gesture zone, which would
- *  otherwise take the tap once the system bars are hidden. */
+/** Zen mode's way out, at the end of the tabs strip. It opts out of the screen edge's back-gesture zone, which
+ *  would otherwise take the tap once the system bars are hidden, instead of being inset clear of it (an empty strip). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ZenExitButton(onExit: () -> Unit) {
@@ -565,7 +592,7 @@ private fun ZenExitButton(onExit: () -> Unit) {
         tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
         state = rememberTooltipState(),
         enableUserInput = !touchInput,
-        modifier = Modifier.windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.End)).padding(end = 6.dp),
+        modifier = Modifier.excludeSystemGestures().padding(end = 6.dp),
     ) {
         IconButtonCa(CaIcons.collapse, label, onExit, boxSize = 30, iconSize = 16)
     }
@@ -660,12 +687,14 @@ private fun EditorDaemonEffect(
     daemon.onDecorations = { active.session.applyDecorations(it.ranges, it.gutter, it.inlays) }
     daemon.appliesTo = { pass ->
         when (pass) {
-            // Semantic coloring + folding are Java/Kotlin; @Preview markers are Kotlin-only; diagnostics + inlay
-            // apply to every backend (they no-op for languages that don't provide them).
-            DaemonPass.SEMANTIC, DaemonPass.FOLDS ->
-                active.path.endsWith(".java") || active.path.endsWith(".kt") || active.path.endsWith(
-                    ".kts"
-                )
+            // Semantic coloring is asked of every file's backend: Java and Kotlin have highlighters, and so do XML
+            // and a plugin's language (the NDK plugin's C/C++), which this gate used to shut out by extension. A
+            // backend with no highlighter answers empty at once, so the pass costs nothing for plain text.
+            DaemonPass.SEMANTIC -> true
+            // Folding likewise: XML and a plugin's language (a language server's folding ranges) have folds of
+            // their own, and a backend without a folding service answers empty at once. @Preview markers are
+            // Kotlin-only; diagnostics + inlay apply to every backend (they no-op where not provided).
+            DaemonPass.FOLDS -> true
 
             DaemonPass.PREVIEWS -> active.path.endsWith(".kt") || active.path.endsWith(".kts")
             else -> true
@@ -675,8 +704,14 @@ private fun EditorDaemonEffect(
     LaunchedEffect(
         active.path, active.session.textRevision,
         state.inlayHintsEnabled, state.semanticHighlightingEnabled, state.codeFoldingEnabled,
-        state.analyzeOnTheFly, state.reparseDelayMs, state.analysisEpoch,
+        state.analyzeOnTheFly, state.reparseDelayMs, state.analysisEpoch, active.session.engineSyncHeld,
     ) {
+        // An in-place rename holds the engine's view of this buffer at its pre-rename text (see
+        // EditorSession.engineSyncHeld): stop any run that would push it, and run again once released.
+        if (active.session.engineSyncHeld) {
+            daemon.close()
+            return@LaunchedEffect
+        }
         // Apply the user's editor/analysis prefs (Settings) to the daemon before each run. Above the large-file
         // threshold the four heavy passes are forced off regardless of the prefs: parsing + resolving a very
         // large file builds an AST and symbol index many times the source size, which OOMs a low-heap device
@@ -690,7 +725,7 @@ private fun EditorDaemonEffect(
         daemon.autoReparseDelayMs = state.reparseDelayMs
         // The document is an immutable snapshot; its text is materialized only if this run survives the delay.
         val doc = active.session.doc
-        daemon.restart { doc.text }
+        daemon.restart { doc.awaitText() }
     }
     // Re-run the daemon when the workspace index finishes building. A file opened (e.g. a restored tab) while
     // the index is still building is analyzed against an incomplete classpath/symbol index and can show stale
@@ -702,9 +737,9 @@ private fun EditorDaemonEffect(
     // was edited and may report on any other, so nothing else would bring its results into an open tab.
     LaunchedEffect(daemon) {
         state.backend.editor.diagnosticsInvalidated.collect { paths ->
-            if (active.path in paths) {
+            if (active.path in paths && !active.session.engineSyncHeld) {
                 val doc = active.session.doc
-                daemon.restart { doc.text }
+                daemon.restart { doc.awaitText() }
             }
         }
     }
@@ -712,9 +747,9 @@ private fun EditorDaemonEffect(
     LaunchedEffect(active.path, indexStatus.building) {
         val prev = wasIndexing
         wasIndexing = indexStatus.building
-        if (prev == true && !indexStatus.building) {
+        if (prev == true && !indexStatus.building && !active.session.engineSyncHeld) {
             val doc = active.session.doc
-            daemon.restart { doc.text }
+            daemon.restart { doc.awaitText() }
         }
     }
 }

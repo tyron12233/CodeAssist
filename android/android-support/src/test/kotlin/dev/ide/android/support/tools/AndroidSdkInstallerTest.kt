@@ -78,6 +78,47 @@ class AndroidSdkInstallerTest {
     }
 
     @Test
+    fun anHttpErrorStatusReachesTheInstallMessage() {
+        // A real server answering 404: the HTTP fetcher used to swallow this into a bare "Download failed.".
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { ex -> ex.sendResponseHeaders(404, -1); ex.close() }
+        server.start()
+        try {
+            withTempDir("sdk404") { tmp ->
+                val pkg = AndroidSdkInstaller.RepoPackage(
+                    "sources;android-34", "Sources for Android 34", "1", AndroidSdkInstaller.Category.SOURCES,
+                    "http://127.0.0.1:${server.address.port}/sources-34_r01.zip", 20,
+                )
+                val message = AndroidSdkInstaller.install(pkg, tmp.resolve("sdk"), tmp.resolve("dl"))
+                assertTrue(message != null && "HTTP 404" in message, message)
+            }
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun aThrownNetworkErrorKeepsItsType() {
+        withTempDir("sdkoffline") { tmp ->
+            val pkg = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }
+            val fetcher = object : SdkNetFetcher {
+                override fun fetchText(url: String): String = xml
+                override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean =
+                    throw java.net.UnknownHostException("dl.google.com")
+            }
+            val message = AndroidSdkInstaller.install(pkg, tmp.resolve("sdk"), tmp.resolve("dl"), fetcher)
+            assertEquals("Install failed: UnknownHostException: dl.google.com", message)
+        }
+    }
+
+    @Test
+    fun describeFailureNamesTheRootCause() {
+        val e = java.io.IOException("write failed", java.io.IOException("No space left on device"))
+        assertEquals("IOException: write failed (caused by IOException: No space left on device)", describeFailure(e))
+        assertEquals("NullPointerException", describeFailure(NullPointerException()))
+    }
+
+    @Test
     fun installDirMapsIdToPath() {
         val dir = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }.installDir(Path.of("/sdk"))
         assertEquals(Path.of("/sdk", "sources", "android-34"), dir)

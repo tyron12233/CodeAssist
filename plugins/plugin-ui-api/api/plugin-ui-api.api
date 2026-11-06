@@ -1,6 +1,13 @@
-# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/plugin/ui/AppTheme
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method getId()Ljava/lang/String;
+	method getJson()Ljava/lang/String;
+	method getName()Ljava/lang/String;
 dev/ide/plugin/ui/ColorAttribute
 	kind class
 	super java/lang/Object
@@ -35,6 +42,13 @@ dev/ide/plugin/ui/ColorAttributeKeys
 	field static TEXT Ljava/lang/String;
 	field static TYPE Ljava/lang/String;
 	field static VARIABLE Ljava/lang/String;
+dev/ide/plugin/ui/ColorScheme
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method getId()Ljava/lang/String;
+	method getJson()Ljava/lang/String;
+	method getName()Ljava/lang/String;
 dev/ide/plugin/ui/EditorAnchor
 	kind interface
 dev/ide/plugin/ui/EditorAnchor$AboveLine
@@ -179,6 +193,23 @@ dev/ide/plugin/ui/FileIcon
 	method getColor()J
 	method getId()Ljava/lang/String;
 	method getSuffixes()Ljava/util/List;
+dev/ide/plugin/ui/NewFileContent
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method getRelativePath()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+dev/ide/plugin/ui/NewFileTemplate
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getAppliesTo()Lkotlin/jvm/functions/Function1;
+	method getFiles()Lkotlin/jvm/functions/Function2;
+	method getIconId()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getNameLabel()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
 dev/ide/plugin/ui/Overlay
 	kind class
 	super java/lang/Object
@@ -279,3 +310,12 @@ dev/ide/plugin/ui/UiRegistration
 	method abstract screen(Ldev/ide/plugin/ui/Screen;)Ldev/ide/plugin/ui/UiHandle;
 	method abstract toolWindow(Ldev/ide/plugin/ui/ToolWindow;)Ldev/ide/plugin/ui/UiHandle;
 	method abstract viewMode(Ldev/ide/plugin/ui/EditorViewMode;)Ldev/ide/plugin/ui/UiHandle;
+	method appTheme(Ldev/ide/plugin/ui/AppTheme;)Ldev/ide/plugin/ui/UiHandle;
+	method colorScheme(Ldev/ide/plugin/ui/ColorScheme;)Ldev/ide/plugin/ui/UiHandle;
+	method newFileTemplate(Ldev/ide/plugin/ui/NewFileTemplate;)Ldev/ide/plugin/ui/UiHandle;
+dev/ide/plugin/ui/UiRegistration$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static appTheme(Ldev/ide/plugin/ui/UiRegistration;Ldev/ide/plugin/ui/AppTheme;)Ldev/ide/plugin/ui/UiHandle;
+	method static colorScheme(Ldev/ide/plugin/ui/UiRegistration;Ldev/ide/plugin/ui/ColorScheme;)Ldev/ide/plugin/ui/UiHandle;
+	method static newFileTemplate(Ldev/ide/plugin/ui/UiRegistration;Ldev/ide/plugin/ui/NewFileTemplate;)Ldev/ide/plugin/ui/UiHandle;

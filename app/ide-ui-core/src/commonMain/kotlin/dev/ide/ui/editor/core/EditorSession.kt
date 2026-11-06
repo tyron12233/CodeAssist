@@ -59,6 +59,14 @@ class EditorSession(
         private set
 
     /**
+     * A refactoring is editing this buffer ahead of the engine (an in-place rename: the name changes here as it
+     * is typed, and the project-wide rename that follows resolves the symbol from the text as it was). While set,
+     * the analysis daemon must not hand this buffer to the engine, or the engine would see the declaration
+     * already renamed and find no references to the old name anywhere else.
+     */
+    var engineSyncHeld by mutableStateOf(false)
+
+    /**
      * The first visible document line (0-based) — a lightweight scroll anchor persisted per tab so a reopened
      * tab scrolls back to roughly where the user left it (see `UiOpenTab.scrollLine`). The editor seeds its
      * scroll from this on first layout and keeps it updated (debounced) as the user scrolls; the host reads it
@@ -400,6 +408,16 @@ class EditorSession(
         if (textDecorations.isNotEmpty()) textDecorations = shiftTextDecorations(textDecorations, edit, doc.length)
         if (pluginInlays.isNotEmpty()) pluginInlays = shiftInlayHints(pluginInlays, edit, doc.length)
         if (gutterMarks.isNotEmpty()) gutterMarks = shiftGutterMarks(gutterMarks, edit, doc)
+        if (bookmarks.isNotEmpty() && inserted != removed) {
+            val delta = inserted - removed
+            bookmarks = bookmarks.mapTo(HashSet()) { l ->
+                when {
+                    l <= firstLine -> l
+                    l <= lastLine -> firstLine // its line was merged into the edit's first line
+                    else -> l + delta
+                }
+            }
+        }
         if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
@@ -854,8 +872,23 @@ class EditorSession(
             // different amount than the IME delivered, so its model is now stale. Forced when the edit changed
             // no text (skip-over closer): no extracted-text push follows, so even a monitoring IME needs the
             // restart — its mirror already holds the char it committed and nothing else will evict it.
-            if (edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1) {
-                resyncIme(force = edit.start == edit.end && edit.text.isEmpty())
+            //
+            // An auto-closed pair and a skipped-over closer are the exceptions: the text before the caret and the
+            // caret itself are exactly what the IME committed, only the text after the caret differs. The
+            // selection push already tells the IME where the caret is, and a restart here costs typed
+            // characters: the keystrokes the IME already sent land on the old, now inactive connection and are
+            // dropped (`"Sys` typed fast came out as `""`, `abs(1), 2` as `abs(1)2`). A mirroring IME gets an
+            // auto-closed closer through the extracted-text push; a skip-over pushes no text, so only that IME
+            // is still restarted, to evict the closer its mirror holds.
+            val collapsed = selMin == selMax
+            val closedPair = edit.start == selMin && edit.end == selMax && edit.caret == selMin + 1 &&
+                edit.text.length > 1 && edit.text.startsWith(text)
+            val skippedOver = collapsed && edit.start == edit.end && edit.text.isEmpty() && edit.caret == selMin + 1
+            when {
+                closedPair -> Unit
+                skippedOver -> if (imeListener?.isSyncingExtractedText() == true) resyncIme(force = true)
+                edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1 ->
+                    resyncIme(force = edit.start == edit.end && edit.text.isEmpty())
             }
         } else {
             // The IME's own commit of a composed word lands here too — it matches the buffer, so no resync.
@@ -1040,6 +1073,64 @@ class EditorSession(
 
     fun setCaret(offset: Int) {
         updateSelectionAndComposing(TextRange(offset.coerceIn(0, doc.length)), null)
+    }
+
+    /** Bookmarked lines (0-based). They move with edits like diagnostics do: a line added above shifts them down,
+     *  and a bookmarked line merged into the one above it by a delete lands on that line. */
+    var bookmarks by mutableStateOf<Set<Int>>(emptySet())
+
+    /** Bookmark [line], or remove its bookmark. */
+    fun toggleBookmark(line: Int = doc.lineForOffset(selection.start.coerceIn(0, doc.length))) {
+        bookmarks = if (line in bookmarks) bookmarks - line else bookmarks + line
+    }
+
+    /** Bumped to open Paste from History from outside the editor (the symbol bar's Clipboard key). */
+    var pasteHistoryRequests by mutableIntStateOf(0)
+        private set
+
+    fun requestPasteHistory() {
+        pasteHistoryRequests++
+    }
+
+    // ---- the floating cursor (the symbol bar's hold-and-drag trackpad) ----
+
+    /**
+     * Where the trackpad's free cursor is, in fractional document [line]s and [column]s, while one is being
+     * dragged; null otherwise. It goes wherever the finger takes it, past a line's end or between lines, and the
+     * real caret snaps to the text position nearest it, as iOS's floating cursor does: so dragging right past
+     * the end of a line holds the caret at that end instead of wrapping it onto the next line, and dragging down
+     * keeps the column the cursor is at rather than the one a short line clamped the caret to.
+     */
+    var floatingCaret by mutableStateOf<FloatingCaret?>(null)
+        private set
+
+    /** Start a floating cursor at the caret. */
+    fun beginFloatingCaret() {
+        val at = selection.end.coerceIn(0, doc.length)
+        val line = doc.lineForOffset(at)
+        floatingCaret = FloatingCaret(line.toFloat(), (at - doc.lineStart(line)).toFloat())
+    }
+
+    /** Move the floating cursor by [dColumns] and [dLines], and snap the caret to the text under it. */
+    fun moveFloatingCaret(dColumns: Float, dLines: Float) {
+        val from = floatingCaret ?: return
+        val line = (from.line + dLines).coerceIn(0f, (doc.lineCount - 1).toFloat())
+        val snappedLine = kotlin.math.round(line).toInt()
+        // It may float past the end of the line it is on, but not off into nowhere: no further than the longest
+        // line around it, so dragging back reaches text again without a long dead zone.
+        var widest = 0
+        for (l in (snappedLine - FLOAT_NEIGHBOURHOOD).coerceAtLeast(0)..(snappedLine + FLOAT_NEIGHBOURHOOD).coerceAtMost(doc.lineCount - 1)) {
+            widest = maxOf(widest, doc.lineLength(l))
+        }
+        val column = (from.column + dColumns).coerceIn(0f, (widest + 1).toFloat())
+        floatingCaret = FloatingCaret(line, column)
+        val snappedColumn = kotlin.math.round(column).toInt().coerceIn(0, doc.lineLength(snappedLine))
+        setCaret(doc.lineStart(snappedLine) + snappedColumn)
+    }
+
+    /** Let go of the floating cursor; the caret stays where it snapped. */
+    fun endFloatingCaret() {
+        floatingCaret = null
     }
 
     /** Drag-selection: keep the current anchor ([TextRange.start]), move the live end. */
@@ -1574,3 +1665,9 @@ private fun prevCharBoundary(text: CharSequence, i: Int): Int = when {
     text[i - 1].isLowSurrogate() && i >= 2 && text[i - 2].isHighSurrogate() -> i - 2
     else -> i - 1
 }
+
+/** The trackpad's free cursor: a fractional document [line] and [column] (see [EditorSession.floatingCaret]). */
+data class FloatingCaret(val line: Float, val column: Float)
+
+/** How many lines either side bound how far past a line's end the floating cursor may go. */
+private const val FLOAT_NEIGHBOURHOOD = 12

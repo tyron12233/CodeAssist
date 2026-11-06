@@ -9,11 +9,11 @@
     <string name="backup_projects">نسخ المشاريع احتياطيًا</string>
     <string name="got_it">حسناً</string>
     <string name="help_improve_codeassist">المساعدة في تحسين CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[شارِك بيانات الأداء مجهولة الهوية حتى نتمكن من معرفة ما هو بطيء وما يفشل، وإصلاح الأشياء الصحيحة.
+    <string name="help_improve_codeassist_content"><![CDATA[شارِك بيانات الاستخدام والأداء مجهولة الهوية حتى نتمكن من معرفة ما هو بطيء وما يفشل وما الميزات التي يعتمد عليها الناس، وإصلاح الأشياء الصحيحة.
 
-نجمع: إصدار التطبيق ونموذج الجهاز، والوقت الذي تستغرقه عمليات البناء والفهرسة وإكمال الكود، ونجاح/فشل البناء، وتقارير العطل المنظفة، ومتى تُعرض الإعلانات أو تُغلق والتغييرات على إعدادات الإعلانات لديك.
+نجمع: إصدار التطبيق ونموذج الجهاز، والوقت الذي تستغرقه عمليات البناء والفهرسة وإكمال الكود والمعاينات، ونجاح/فشل البناء، وتقارير العطل المنظفة، وعدد مرات استخدام كل ميزة (مثلًا كم مرة فُتحت معاينة التخطيط أو البحث عن الاستخدامات)، ومتى تُعرض الإعلانات أو تُغلق والتغييرات على إعدادات الإعلانات لديك.
 
-لا نجمع مطلقًا الكود أو أسماء الملفات أو المشاريع الخاصة بك، أو الميزات التي تستخدمها، أو أي شيء يحدد هويتك. يمكنك تغيير هذا في أي وقت تحت "المزيد" أثناء فتح المشروع.]]></string>
+لا نجمع مطلقًا الكود أو أسماء الملفات أو المشاريع الخاصة بك، أو ما تكتبه، أو أي شيء يحدد هويتك. يمكنك تغيير هذا في أي وقت تحت "المزيد" أثناء فتح المشروع.]]></string>
     <string name="learn_more">معرفة المزيد</string>
     <string name="allow">سماح</string>
     <string name="no_thanks">لا شكراً</string>
@@ -159,6 +159,14 @@
     <string name="support_show_ads_desc">إظهار الإعلانات في التطبيق. يمكنك إيقاف تشغيلها في أي وقت.</string>
     <string name="support_show_interstitials">إعلانات ملء الشاشة</string>
     <string name="support_show_interstitials_desc">إعلانات ملء الشاشة من حين لآخر أثناء عمليات البناء الطويلة وبعد إنهاء الدروس.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="zero">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعة.</item>
+        <item quantity="one">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد ساعة واحدة.</item>
+        <item quantity="two">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد ساعتين.</item>
+        <item quantity="few">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعات.</item>
+        <item quantity="many">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعة.</item>
+        <item quantity="other">تبقى الإعلانات مفعّلة لمدة يوم بعد التثبيت أو التحديث. يمكنك إيقافها بعد %1$d ساعة.</item>
+    </plurals>
     <string name="ads_off_title">إيقاف الإعلانات؟</string>
     <string name="ads_off_body">يمكنك إيقاف إعلانات ملء الشاشة فقط والإبقاء على الإعلانات الأصغر في القوائم واللوحات.</string>
     <string name="ads_off_all">كل الإعلانات</string>
@@ -366,6 +374,56 @@
     <string name="filetree_move">نقل</string>
     <string name="filetree_copy">نسخ</string>
     <string name="filetree_delete">حذف</string>
+    <string name="filetree_cut">قص</string>
+    <string name="filetree_paste">لصق</string>
+    <string name="filetree_duplicate">تكرار</string>
+    <string name="filetree_copy_path">نسخ المسار</string>
+    <string name="filetree_copy_path_absolute">المسار المطلق</string>
+    <string name="filetree_copy_path_relative">المسار من جذر المشروع</string>
+    <string name="filetree_copy_name">الاسم</string>
+    <string name="filetree_copy_paths">نسخ المسارات</string>
+    <string name="filetree_move_to">نقل إلى…</string>
+    <string name="filetree_copy_to">نسخ إلى…</string>
+    <string name="filetree_select_all">تحديد الكل</string>
+    <string name="filetree_clear_selection">مسح التحديد</string>
+    <string name="filetree_more_selection">المزيد من الإجراءات للعناصر المحددة</string>
+    <string name="filetree_paste_into">لصق في %1$s</string>
+    <string name="filetree_clear_clipboard">مسح الحافظة</string>
+    <string name="filetree_drop_move">نقل إلى %1$s</string>
+    <string name="filetree_drop_copy">نسخ إلى %1$s</string>
+    <string name="filetree_drop_nowhere">لا يمكن الإفلات هنا</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="zero">المحدد: %1$d</item>
+        <item quantity="one">المحدد: %1$d</item>
+        <item quantity="two">المحدد: %1$d</item>
+        <item quantity="few">المحدد: %1$d</item>
+        <item quantity="many">المحدد: %1$d</item>
+        <item quantity="other">المحدد: %1$d</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="zero">%1$d عنصر للنقل</item>
+        <item quantity="one">عنصر واحد للنقل</item>
+        <item quantity="two">عنصران للنقل</item>
+        <item quantity="few">%1$d عناصر للنقل</item>
+        <item quantity="many">%1$d عنصرًا للنقل</item>
+        <item quantity="other">%1$d عنصر للنقل</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="zero">%1$d عنصر للنسخ</item>
+        <item quantity="one">عنصر واحد للنسخ</item>
+        <item quantity="two">عنصران للنسخ</item>
+        <item quantity="few">%1$d عناصر للنسخ</item>
+        <item quantity="many">%1$d عنصرًا للنسخ</item>
+        <item quantity="other">%1$d عنصر للنسخ</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="zero">%1$d عنصر</item>
+        <item quantity="one">عنصر واحد</item>
+        <item quantity="two">عنصران</item>
+        <item quantity="few">%1$d عناصر</item>
+        <item quantity="many">%1$d عنصرًا</item>
+        <item quantity="other">%1$d عنصر</item>
+    </plurals>
     <string name="filetree_java_class">صنف Java</string>
     <string name="filetree_kotlin_file">ملف Kotlin</string>
     <string name="filetree_aidl_file">ملف AIDL</string>
@@ -511,6 +569,40 @@
     <string name="breadcrumb_blocks">الكتل</string>
     <string name="breadcrumb_preview">المعاينة</string>
     <string name="breadcrumb_split">مقسّم</string>
+    <string name="breadcrumb_nav_back">رجوع</string>
+    <string name="breadcrumb_nav_forward">للأمام</string>
+    <string name="conflict_current">الحالي</string>
+    <string name="conflict_incoming">الوارد</string>
+    <string name="conflict_both">كلاهما</string>
+    <string name="conflict_current_desc">الإبقاء على الجانب الحالي</string>
+    <string name="conflict_incoming_desc">الإبقاء على الجانب الوارد</string>
+    <string name="conflict_both_desc">الإبقاء على الجانبين</string>
+    <string name="gesture_nothing_to_undo">لا شيء للتراجع عنه</string>
+    <string name="gesture_nothing_to_redo">لا شيء لإعادته</string>
+    <string name="paste_history_title">لصق من السجل</string>
+    <string name="change_revert">تراجع</string>
+    <string name="change_before">في آخر إيداع</string>
+    <string name="change_added">أُضيف منذ آخر إيداع</string>
+    <string name="history_title">السجل المحلي</string>
+    <string name="symbolbar_bookmark">إشارة مرجعية</string>
+    <string name="bookmarks_title">الإشارات المرجعية</string>
+    <string name="bookmarks_empty">لا توجد إشارات مرجعية بعد. ضع إشارة على سطر المؤشر بـ F11 أو بمفتاح الإشارة خلف ⋯ في شريط الرموز.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">تحديث</string>
+    <string name="todo_empty">لا توجد تعليقات TODO أو FIXME في المشروع.</string>
+    <string name="bookmarks_panel_title">الإشارات و TODO</string>
+    <string name="history_back">رجوع</string>
+    <string name="history_restore">استعادة</string>
+    <string name="history_empty">لم يُحفظ شيء بعد. كل حفظ لهذا الملف يحتفظ بنسخة هنا.</string>
+    <string name="history_same">مطابق للملف الآن</string>
+    <string name="edchrome_local_history">السجل المحلي</string>
+    <string name="paste_history_clear">مسح</string>
+    <string name="paste_history_empty">يظهر هنا النص الذي تنسخه أو تقصّه في المحرر.</string>
+    <string name="symbolbar_clipboard">الحافظة</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d سطر</item>
+        <item quantity="other">%1$d أسطر</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>
@@ -611,6 +703,13 @@
     <string name="kotlin_configure">إعداد Kotlin</string>
     <string name="kotlin_configuring">جارٍ الإعداد…</string>
     <string name="kotlin_configure_failed">تعذّر إعداد Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">يستخدم هذا الملف مكتبات لم تُضف بعد: %1$s</string>
+    <string name="missing_libraries_add_all">إضافة الكل</string>
+    <string name="missing_libraries_adding">جارٍ الإضافة…</string>
+    <string name="missing_library_failed">تعذّرت إضافة المكتبة: %1$s</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">تحقّق من شبكات الإعلانات التي يتم تحميلها وسبب فشل أيٍّ منها. لإصدارات المطوّرين على أجهزة الاختبار فقط.</string>
+    <string name="ad_inspector_open">فتح</string>
     <string name="sources_download">تنزيل</string>
     <string name="sources_downloading">جاري التنزيل…</string>
     <string name="sources_download_failed">فشل التنزيل: %1$s</string>
@@ -660,6 +759,17 @@
     <string name="home_share">مشاركة</string>
     <string name="home_delete">حذف</string>
     <string name="home_dismiss">تجاهل</string>
+    <string name="halloween_title">هالوين سعيد</string>
+    <string name="halloween_offer">ألبِس بيئة التطوير زيّ الموسم: سمة اليقطين، وألوان محرر مخيفة، وشمعة بدلًا من المؤشر.</string>
+    <string name="halloween_dress_up">تزيين</string>
+    <string name="halloween_not_now">ليس الآن</string>
+    <string name="halloween_applied">اكتمل التزيين. يمكنك تغيير أي شيء من الإعدادات.</string>
+    <string name="halloween_undo">تراجع</string>
+    <string name="halloween_over_title">انتهى الهالوين</string>
+    <string name="halloween_over_body">هل تريد إعادة السمة وألوان المحرر والمؤشر كما كانت؟</string>
+    <string name="halloween_put_back">إعادتها</string>
+    <string name="halloween_keep">الإبقاء عليها</string>
+    <string name="halloween_boo">بوو!</string>
     <string name="home_resume_title">تابع من حيث توقفت</string>
     <string name="home_account_title">الحساب والأدوات</string>
     <string name="home_settings_tools">الإعدادات والأدوات</string>
@@ -675,6 +785,27 @@
     <string name="store_search_hint">ابحث في القوالب والنماذج</string>
     <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">قوالب وتطبيقات نموذجية وإضافات</string>
+    <string name="store_trending">رائج</string>
+    <string name="store_trending_search">ابحث عن %1$s</string>
+    <string name="store_translate">ترجمة</string>
+    <string name="store_translating">جارٍ الترجمة…</string>
+    <string name="store_translated">مترجم تلقائيًا</string>
+    <string name="store_show_original">عرض الأصل</string>
+    <string name="store_update_to">التحديث إلى v%1$s</string>
+    <string name="store_update_versions">v%1$s مثبّتة · v%2$s متاحة</string>
+    <string name="store_update_conflict_title">لقد غيّرت هذا المشروع</string>
+    <string name="store_update_conflict_body">التحديث في المكان نفسه سيستبدل تغييراتك على:</string>
+    <string name="store_update_conflict_more">و%1$d أخرى</string>
+    <string name="store_update_conflict_unknown">ثُبّت هذا المشروع قبل أن يبدأ CodeAssist بتتبع التغييرات، لذا لا يمكنه التمييز بين تعديلاتك والأصل.</string>
+    <string name="store_update_conflict_keep">تثبيت الإصدار الجديد كمشروع منفصل يترك نسختك كما هي تمامًا.</string>
+    <string name="store_update_as_copy">التثبيت كنسخة جديدة</string>
+    <string name="home_update_review">مراجعة</string>
+    <string name="store_update_merge">التحديث مع الاحتفاظ بتغييراتي</string>
+    <string name="store_update_changed_files">الملفات التي غيّرتها منذ تثبيته:</string>
+    <string name="store_update_merge_note">تُدمج تغييراتك والإصدار الجديد ملفًا ملفًا. وحيث غيّر كلاكما الأسطر نفسها، يُحتفظ بالنسختين لتختار بينهما.</string>
+    <string name="store_merge_done_title">تم التحديث مع الاحتفاظ بتغييراتك</string>
+    <string name="store_merge_conflicts_body">غيّرت أنت والناشر الأسطر نفسها في هذه الملفات. النسختان موجودتان في الملف بين علامتي &lt;&lt;&lt;&lt;&lt;&lt;&lt; و&gt;&gt;&gt;&gt;&gt;&gt;&gt; لتختار بينهما:</string>
+    <string name="store_merge_open">فتح المشروع</string>
     <string name="store_browse_by_kind">التصفح حسب النوع</string>
     <string name="store_see_all">عرض الكل</string>
     <string name="store_install">تثبيت</string>
@@ -756,6 +887,19 @@
     <string name="submit_send">إرسال للمراجعة</string>
     <string name="submit_sending">جاري الإرسال…</string>
     <string name="submit_review_note">يراجع مشرف كل إرسال قبل ظهوره. لا شيء يصبح علنيًا قبل الموافقة عليه.</string>
+    <string name="submit_checks_title">ما يتحقق منه المراجعون</string>
+    <string name="submit_checks_english">العنوان والملخص والوصف مكتوبة بالإنجليزية.</string>
+    <string name="submit_checks_screenshots">تعرض لقطات الشاشة التطبيق وهو يعمل، لا المحرر.</string>
+    <string name="submit_checks_summary">يوضح الملخص في سطر واحد ما يفعله المشروع.</string>
+    <string name="submit_checks_icon">للتطبيق أيقونته الخاصة، لا الأيقونة الافتراضية.</string>
+    <string name="submit_checks_own">إنه عملك أنت، ولا يحتوي على مفاتيح سرية أو سجل محادثات مع الذكاء الاصطناعي.</string>
+    <string name="submit_warn_english">يجب أن تكون صفحات المتجر بالإنجليزية، ويبدو أن هذا النص بلغة أخرى. اكتبه بالإنجليزية؛ ويمكنك إبقاء ترجمة أسفله.</string>
+    <string name="submit_warn_summary">اذكر في سطر واحد ما يفعله المشروع. الملخص الذي يكرر الاسم فقط هو أكثر سبب شائع لإعادة الصفحة.</string>
+    <string name="submit_warn_spam">عبارات مثل “download free” أو “mod apk” تبدو رسائل مزعجة، وتُعاد الصفحات التي تحتوي عليها.</string>
+    <string name="submit_confirm_title">قبل الإرسال</string>
+    <string name="submit_confirm_body">من المرجح أن يعيد المراجع هذا:</string>
+    <string name="submit_confirm_fix">إصلاح</string>
+    <string name="submit_confirm_send">إرسال على أي حال</string>
     <string name="submit_required">املأ العنوان والملخص والوصف والفئة.</string>
     <string name="submit_target">النشر بصفة</string>
     <string name="submit_target_new">بطاقة متجر جديدة</string>
@@ -820,6 +964,15 @@
     <string name="you_moderation">الإشراف</string>
     <string name="you_moderation_waiting">‏%1$d في انتظار المراجعة</string>
     <string name="you_moderation_clear">لا شيء ينتظر المراجعة</string>
+    <string name="you_account">الحساب</string>
+    <plurals name="you_releases">
+        <item quantity="zero">لا إصدارات</item>
+        <item quantity="one">إصدار واحد</item>
+        <item quantity="two">إصداران</item>
+        <item quantity="few">%1$d إصدارات</item>
+        <item quantity="many">%1$d إصدارًا</item>
+        <item quantity="other">%1$d إصدار</item>
+    </plurals>
     <string name="moderation_title">الإشراف</string>
     <string name="moderation_not_allowed">هذا الحساب لا يشرف على المتجر.</string>
     <string name="moderation_tab_queue">قائمة الانتظار</string>
@@ -862,6 +1015,19 @@
     <string name="notif_clear">مسح</string>
     <string name="notif_open">فتح</string>
     <string name="notif_dismiss">تجاهل</string>
+    <string name="notif_section_new">الجديدة</string>
+    <string name="notif_view">عرض</string>
+    <string name="notif_more_row_desc">ما حدث أثناء عملك</string>
+    <string name="notif_section_earlier">السابقة</string>
+    <string name="notif_show_more">عرض المزيد</string>
+    <string name="notif_show_less">عرض أقل</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">المتجر</string>
+    <string name="notif_kind_update">تحديث من المتجر</string>
+    <string name="notif_kind_build">البناء</string>
+    <string name="notif_kind_agent">وكيل الذكاء الاصطناعي</string>
+    <string name="notif_kind_learn">تعلّم</string>
+    <string name="notif_kind_system">CodeAssist</string>
     <string name="notif_just_now">قبل قليل</string>
     <string name="notif_minutes">قبل %1$d د</string>
     <string name="notif_hours">قبل %1$d س</string>
@@ -919,6 +1085,17 @@
     <string name="notify_launch_failed">تعذّر حفظ ذلك الآن.</string>
     <string name="review_actions">إجراءات المراجعة</string>
     <string name="review_report">إبلاغ</string>
+    <string name="review_copy">نسخ النص</string>
+    <string name="link_open_title">فتح هذا الرابط؟</string>
+    <string name="link_mail_title">مراسلة هذا العنوان؟</string>
+    <string name="link_from_user">أضاف أحد أفراد المجتمع هذا الرابط. لم يتحقق CodeAssist من وجهته.</string>
+    <string name="link_mail_from_user">أضاف أحد أفراد المجتمع هذا العنوان. سيفتح تطبيق البريد برسالة جديدة إليه.</string>
+    <string name="link_warn_http">غير مشفّر (http): يمكن للآخرين على شبكتك رؤية الصفحة أو تغييرها.</string>
+    <string name="link_warn_userinfo">الجزء الذي قبل @ ليس هو الموقع. هذا الرابط يذهب إلى %1$s.</string>
+    <string name="link_warn_ip">يذهب إلى عنوان IP مجرد، لا إلى موقع باسم.</string>
+    <string name="link_warn_lookalike">يستخدم العنوان أحرفًا قد تقلّد اسم موقع معروف.</string>
+    <string name="link_open">فتح</string>
+    <string name="link_copy">نسخ الرابط</string>
     <string name="review_reply">رد</string>
     <string name="review_reply_edit">تحرير الرد</string>
     <string name="review_reply_delete">حذف الرد</string>
@@ -952,6 +1129,39 @@
     <string name="profile_missing">لا يوجد ناشر بهذا الاسم</string>
     <string name="profile_unrated">بلا تقييم</string>
     <string name="profile_signin_to_follow">سجّل الدخول للمتابعة</string>
+    <string name="profile_highlights">أبرز المشاريع</string>
+    <string name="profile_award_installs">الأكثر تثبيتًا</string>
+    <string name="profile_award_liked">الأكثر إعجابًا</string>
+    <string name="profile_award_rated">الأعلى تقييمًا</string>
+    <string name="profile_award_newest">الأحدث</string>
+    <string name="profile_sort_popular">الأكثر شيوعًا</string>
+    <string name="profile_group_projects">التطبيقات والمشاريع</string>
+    <string name="profile_group_plugins">الإضافات</string>
+    <string name="profile_joined">انضم %1$s</string>
+    <plurals name="profile_ratings">
+        <item quantity="zero">لا تقييمات</item>
+        <item quantity="one">تقييم واحد</item>
+        <item quantity="two">تقييمان</item>
+        <item quantity="few">%1$d تقييمات</item>
+        <item quantity="many">%1$d تقييمًا</item>
+        <item quantity="other">%1$d تقييم</item>
+    </plurals>
+    <plurals name="profile_age_months">
+        <item quantity="zero">منذ أقل من شهر</item>
+        <item quantity="one">منذ شهر</item>
+        <item quantity="two">منذ شهرين</item>
+        <item quantity="few">منذ %1$d أشهر</item>
+        <item quantity="many">منذ %1$d شهرًا</item>
+        <item quantity="other">منذ %1$d شهر</item>
+    </plurals>
+    <plurals name="profile_age_years">
+        <item quantity="zero">منذ أقل من سنة</item>
+        <item quantity="one">منذ سنة</item>
+        <item quantity="two">منذ سنتين</item>
+        <item quantity="few">منذ %1$d سنوات</item>
+        <item quantity="many">منذ %1$d سنة</item>
+        <item quantity="other">منذ %1$d سنة</item>
+    </plurals>
     <string name="like_action">إعجاب</string>
     <string name="like_liked">أعجبك</string>
     <string name="like_signin">سجّل الدخول للإعجاب</string>
@@ -979,8 +1189,11 @@
     <string name="learn_continue">متابعة</string>
     <string name="learn_completed">مكتمل</string>
     <!-- Learn tab, Material 3 Expressive redesign -->
-    <string name="learn_lessons_done">‏%1$d درس مكتمل</string>
+    <plurals name="learn_lessons_done">
+        <item quantity="other">‏%1$d درس مكتمل</item>
+    </plurals>
     <string name="learn_module_meta">‏%1$d من %2$d درس · %3$d دقيقة</string>
+    <string name="learn_continue_meta">‏الدرس %1$d من %2$d · %3$s</string>
     <string name="learn_resume_lesson">متابعة الدرس %1$d</string>
     <string name="learn_minutes">%1$d دقيقة</string>
     <string name="learn_lessons_progress">%1$d / %2$d دروس</string>
@@ -1128,6 +1341,10 @@
     <string name="edoverlay_rename_kind">إعادة تسمية %1$s</string>
     <string name="edoverlay_renaming">جاري إعادة التسمية…</string>
     <string name="edoverlay_rename_hint">اضغط Enter لإعادة تسمية "%1$s"، وEsc للإلغاء</string>
+    <string name="edoverlay_inline_rename_hint">إعادة تسمية %1$s · Enter للتطبيق، Esc للإلغاء</string>
+    <string name="edoverlay_inline_rename_apply">تطبيق</string>
+    <string name="edoverlay_renaming_elsewhere">جارٍ إعادة التسمية في الملفات الأخرى…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' ليس اسمًا صالحًا</string>
     <string name="edoverlay_go_to_line">الانتقال إلى سطر</string>
     <string name="edoverlay_go_to_line_hint">السطر 1–%1$d  (سطر أو سطر:عمود)</string>
     <string name="edoverlay_no_documentation">لا يوجد توثيق</string>
@@ -1224,6 +1441,89 @@
     <string name="fileop_empty_folder">هذا المجلد فارغ.</string>
     <string name="fileop_move_here">النقل هنا</string>
     <string name="fileop_copy_here">النسخ هنا</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="zero">نقل %1$d عنصر إلى…</item>
+        <item quantity="one">نقل عنصر واحد إلى…</item>
+        <item quantity="two">نقل عنصرين إلى…</item>
+        <item quantity="few">نقل %1$d عناصر إلى…</item>
+        <item quantity="many">نقل %1$d عنصرًا إلى…</item>
+        <item quantity="other">نقل %1$d عنصر إلى…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="zero">نسخ %1$d عنصر إلى…</item>
+        <item quantity="one">نسخ عنصر واحد إلى…</item>
+        <item quantity="two">نسخ عنصرين إلى…</item>
+        <item quantity="few">نسخ %1$d عناصر إلى…</item>
+        <item quantity="many">نسخ %1$d عنصرًا إلى…</item>
+        <item quantity="other">نسخ %1$d عنصر إلى…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="zero">حذف %1$d عنصر؟</item>
+        <item quantity="one">حذف عنصر واحد؟</item>
+        <item quantity="two">حذف عنصرين؟</item>
+        <item quantity="few">حذف %1$d عناصر؟</item>
+        <item quantity="many">حذف %1$d عنصرًا؟</item>
+        <item quantity="other">حذف %1$d عنصر؟</item>
+    </plurals>
+    <string name="fileop_delete_items_body">يؤدي هذا إلى إزالتها نهائيًا، وإزالة المجلدات مع كل ما بداخلها. لا يمكن التراجع عن هذا.</string>
+    <string name="fileop_delete_items_body_undo">تُحذف المجلدات مع كل ما بداخلها. يمكنك التراجع عن هذا بعد ذلك مباشرةً.</string>
+    <string name="fileop_delete_dir_body_undo">يؤدي هذا إلى حذف المجلد وكل ما بداخله. يمكنك التراجع عن هذا بعد ذلك مباشرةً.</string>
+    <string name="fileop_delete_file_body_undo">يمكنك التراجع عن هذا بعد ذلك مباشرةً.</string>
+    <string name="fileop_conflict_title">"%1$s" موجود بالفعل في %2$s</string>
+    <string name="fileop_conflict_body">استبدل العنصر الموجود، أو احتفظ بكليهما (يحصل هذا العنصر على اسم جديد)، أو تخطَّه.</string>
+    <string name="fileop_conflict_replace">استبدال</string>
+    <string name="fileop_conflict_keep_both">الاحتفاظ بكليهما</string>
+    <string name="fileop_conflict_skip">تخطي</string>
+    <string name="fileop_conflict_progress">التعارض %1$d من %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="zero">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+        <item quantity="one">تطبيق الإجراء نفسه على التعارض الآخر</item>
+        <item quantity="two">تطبيق الإجراء نفسه على التعارضين الآخرين</item>
+        <item quantity="few">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+        <item quantity="many">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+        <item quantity="other">تطبيق الإجراء نفسه على التعارضات الأخرى (%1$d)</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="zero">تم نقل %1$d عنصر إلى %2$s</item>
+        <item quantity="one">تم نقل عنصر واحد إلى %2$s</item>
+        <item quantity="two">تم نقل عنصرين إلى %2$s</item>
+        <item quantity="few">تم نقل %1$d عناصر إلى %2$s</item>
+        <item quantity="many">تم نقل %1$d عنصرًا إلى %2$s</item>
+        <item quantity="other">تم نقل %1$d عنصر إلى %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="zero">تم نسخ %1$d عنصر إلى %2$s</item>
+        <item quantity="one">تم نسخ عنصر واحد إلى %2$s</item>
+        <item quantity="two">تم نسخ عنصرين إلى %2$s</item>
+        <item quantity="few">تم نسخ %1$d عناصر إلى %2$s</item>
+        <item quantity="many">تم نسخ %1$d عنصرًا إلى %2$s</item>
+        <item quantity="other">تم نسخ %1$d عنصر إلى %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="zero">تم تكرار %1$d عنصر</item>
+        <item quantity="one">تم تكرار عنصر واحد</item>
+        <item quantity="two">تم تكرار عنصرين</item>
+        <item quantity="few">تم تكرار %1$d عناصر</item>
+        <item quantity="many">تم تكرار %1$d عنصرًا</item>
+        <item quantity="other">تم تكرار %1$d عنصر</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="zero">تم حذف %1$d عنصر</item>
+        <item quantity="one">تم حذف عنصر واحد</item>
+        <item quantity="two">تم حذف عنصرين</item>
+        <item quantity="few">تم حذف %1$d عناصر</item>
+        <item quantity="many">تم حذف %1$d عنصرًا</item>
+        <item quantity="other">تم حذف %1$d عنصر</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="zero">فشل %1$d عنصر: %2$s</item>
+        <item quantity="one">فشل عنصر واحد: %2$s</item>
+        <item quantity="two">فشل عنصران: %2$s</item>
+        <item quantity="few">فشلت %1$d عناصر: %2$s</item>
+        <item quantity="many">فشل %1$d عنصرًا: %2$s</item>
+        <item quantity="other">فشل %1$d عنصر: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">تم التراجع</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">حدث خطأ غير متوقع. ظل التطبيق يعمل.</string>
@@ -1346,6 +1646,17 @@
     <string name="storage_cat_projects_desc">شفرتك المصدرية وإعدادات مشاريعك</string>
     <string name="storage_cat_leftovers_title">مجلدات مشاريع متبقية</string>
     <string name="storage_cat_leftovers_desc">تركتها المشاريع المحذوفة، ويمكن إزالتها بأمان</string>
+    <string name="plugins_leftovers_title">بقايا الإضافات المحذوفة</string>
+    <string name="plugins_leftovers_body">إلغاء تثبيت إضافة يترك بياناتها خلفه. احذفها لتحرير المساحة، أو احتفظ بها إن كنت ستعيد تثبيتها.</string>
+    <string name="plugins_leftover_delete">حذف</string>
+    <string name="plugins_leftovers_delete_all">حذف الكل (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">حذف بيانات %1$s؟</string>
+    <string name="plugins_leftovers_confirm_all_title">حذف بيانات كل الإضافات المحذوفة؟</string>
+    <string name="plugins_leftover_confirm_body">سيحرر هذا %1$s. الإضافة التي تعيد تثبيتها لاحقًا تبدأ من جديد.</string>
+    <string name="storage_cat_plugin_leftovers_title">بيانات الإضافات المحذوفة</string>
+    <string name="storage_cat_plugin_leftovers_desc">تركتها إضافات ألغيت تثبيتها</string>
+    <string name="storage_clear_plugin_leftovers_title">حذف بيانات الإضافات المحذوفة؟</string>
+    <string name="storage_clear_plugin_leftovers_body">سيحذف هذا %1$s تركتها إضافات ألغي تثبيتها. الإضافة التي تعيد تثبيتها لاحقًا تبدأ من جديد.</string>
     <string name="storage_cat_other_title">أخرى</string>
     <string name="storage_cat_other_desc">ملفات المفاتيح والنسخ الاحتياطية وبيانات التطبيق</string>
     <string name="plugins_restart_hint">أعد التشغيل لتطبيق تغييرات الإضافات.</string>
@@ -1374,7 +1685,8 @@
     <string name="keystore_empty">لا توجد مخازن مفاتيح بعد. أنشئ أو استورد واحدًا لتوقيع إصدارات النشر.</string>
     <string name="keystore_deleted">تم حذف %1$s</string>
     <string name="keystore_row_subtitle">%1$s · المفتاح: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">نسخ بصمة %1$s</string>
+    <string name="keystore_fingerprint_copied">تم نسخ %1$s</string>
     <string name="keystore_expires">تنتهي الصلاحية ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[تعذّر قراءة الشهادة (ربما تغيّرت كلمة المرور).]]></string>
     <string name="keystore_create_title">مخزن مفاتيح جديد</string>
@@ -1394,8 +1706,26 @@
     <!-- sdk (SdkManagerScreen) -->
     <string name="sdk_manager_title">مدير SDK</string>
     <string name="sdk_could_not_load">تعذّر تحميل الحزم.</string>
-    <string name="sdk_sources_documentation">المصادر والتوثيق</string>
-    <string name="sdk_sources_documentation_desc">نزّل مصادر منصة SDK ومصادر JDK حتى يتمكن المحرر من عرض توثيق javadoc وأسماء المعاملات والانتقال إلى المصدر داخل SDK. تستمر التنزيلات في الخلفية، بحيث يمكنك مغادرة هذه الشاشة ومواصلة العمل.</string>
+    <string name="sdk_intro">ثبّت منصات Android التي تُترجَم وحداتك مقابلها، والمصادر حتى يعرض المحرر التوثيق وينتقل إلى مصدر SDK. تستمر التنزيلات في الخلفية، لذا يمكنك مغادرة هذه الشاشة.</string>
+    <string name="sdk_show_all_versions">عرض كل الإصدارات (%1$d)</string>
+    <string name="sdk_show_fewer">عرض أقل</string>
+    <string name="sdk_tag_latest">الأحدث</string>
+    <string name="sdk_tag_project">مشروعك</string>
+    <string name="sdk_fail_offline">تعذّر الوصول إلى خادم التنزيل. تحقّق من اتصالك بالإنترنت، ثم أعد المحاولة.</string>
+    <string name="sdk_fail_storage">لا توجد مساحة تخزين كافية لإكمال هذا التنزيل. أفرغ بعض المساحة، ثم أعد المحاولة.</string>
+    <string name="sdk_fail_not_found">لم تعد هذه الحزمة متوفرة على خادم التنزيل. حدّث القائمة، ثم أعد المحاولة.</string>
+    <string name="sdk_fail_server_code">حدثت مشكلة في خادم التنزيل (HTTP %1$d). عادةً ما تكون مؤقتة، فأعد المحاولة بعد قليل.</string>
+    <string name="sdk_fail_server">حدثت مشكلة في خادم التنزيل. عادةً ما تكون مؤقتة، فأعد المحاولة بعد قليل.</string>
+    <string name="sdk_fail_license">يجب قبول ترخيص هذه الحزمة قبل تثبيتها.</string>
+    <string name="sdk_fail_corrupt">الملف الذي تم تنزيله تالف. أعد المحاولة لتنزيل نسخة جديدة.</string>
+    <string name="sdk_fail_cancelled">أُلغي. يُحتفَظ بما تم تنزيله، لذا سيُستأنف من حيث توقف.</string>
+    <string name="sdk_fail_unknown">لم يكتمل التنزيل.</string>
+    <string name="sdk_load_failed_title">تعذّر تحميل قائمة الحزم</string>
+    <string name="sdk_action_free_space">إفراغ مساحة</string>
+    <string name="sdk_action_refresh">تحديث القائمة</string>
+    <string name="sdk_action_review_license">مراجعة الترخيص</string>
+    <string name="sdk_details_show">التفاصيل</string>
+    <string name="sdk_details_hide">إخفاء التفاصيل</string>
     <string name="sdk_downloads">التنزيلات</string>
     <string name="sdk_clear_finished">مسح المكتملة</string>
     <string name="sdk_jdk">JDK</string>
@@ -1822,6 +2152,11 @@
     <string name="set_editor_two_axis_desc">اسحب في أي اتجاه للتمرير على المحورين معًا (باللمس)</string>
     <string name="set_editor_pinch">القرص للتكبير</string>
     <string name="set_editor_pinch_desc">اقرص بإصبعين لتغيير حجم خط الكود</string>
+    <string name="set_editor_volume_keys">مفاتيح الصوت تحرّك المؤشر</string>
+    <string name="set_editor_volume_keys_desc">أثناء الكتابة على الهاتف، يحرّك رفع الصوت المؤشر يسارًا وخفضه يمينًا بدل تغيير مستوى الصوت</string>
+    <string name="set_editor_inline_blame">من غيّر هذا السطر</string>
+    <string name="set_editor_inline_blame_desc">في مشروع Git، اعرض من غيّر سطر المؤشر آخر مرة ومتى ولماذا، بلون خافت بعد نهايته</string>
+    <string name="blame_uncommitted">لم يُودَع بعد</string>
     <string name="set_editor_kbd_suggest">اقتراحات لوحة المفاتيح</string>
     <string name="set_editor_kbd_suggest_desc">اسمح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفه لإدخال الكود الخام، بحيث لا تحصل النقطة "." المكتوبة على مسافة مُدرَجة تلقائيًا، مقابل فقدان شريط الاقتراحات.</string>
     <string name="set_editor_close_unsaved">إغلاق علامة تبويب بها تغييرات غير محفوظة</string>
@@ -1877,7 +2212,7 @@
     <string name="set_br_dexfork">الحد الأقصى لعمليات dex المتزامنة المنفصلة</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">مشاركة تحليلات الأداء</string>
-    <string name="set_privacy_analytics_desc">مقاييس أداء وإعلانات مجهولة الهوية فقط، ولا يشمل ذلك كودك أو أسماء ملفاتك أبدًا</string>
+    <string name="set_privacy_analytics_desc">عدد مرات الاستخدام ومقاييس الأداء والإعلانات مجهولة الهوية فقط، ولا يشمل ذلك كودك أو أسماء ملفاتك أبدًا</string>
     <string name="set_privacy_clear">مسح الذاكرة المؤقتة</string>
     <string name="set_privacy_clear_desc">تحرير ذواكر التبعيات / اللغة / المعاينة القابلة لإعادة التوليد (لا يشمل المصدر أبدًا)</string>
     <string name="set_privacy_clear_btn">مسح</string>
@@ -2003,6 +2338,7 @@
     <string name="icons_add_as">الإضافة باسم</string>
     <string name="icons_add_count">إضافة %1$d إلى المشروع</string>
     <string name="icons_batch_added">أُضيفت %1$d</string>
+    <string name="icons_added">أُضيف %1$s</string>
     <string name="icons_batch_existing">%1$d موجودة في المشروع مسبقًا</string>
     <string name="icons_batch_failed">تعذّرت إضافة %1$s</string>
     <string name="icons_copy_to">نسخ إلى مجلد آخر</string>
@@ -2213,6 +2549,8 @@
     <string name="block_lambda_page">لامدا</string>
     <string name="color_opacity">العتامة</string>
     <string name="symbolbar_hide_keyboard">إخفاء لوحة المفاتيح</string>
+    <string name="symbolbar_more">مفاتيح أخرى</string>
+    <string name="symbolbar_trackpad">اسحب لتحريك المؤشر</string>
     <string name="store_search_all">لم يُنشر أي شيء في المتجر بعد.</string>
     <string name="reviews_show_more">عرض المزيد من المراجعات</string>
     <string name="reviews_loading_more">جاري التحميل…</string>
@@ -2240,6 +2578,7 @@
     <string name="colors_preview">معاينة</string>
     <string name="colors_preview_hint">اضغط على أي جزء في المثال للانتقال إلى الإدخال الذي يلوّنه.</string>
     <string name="colors_builtin_notice">%1$s مدمج. تُحفظ تغييراتك في نسخة منه.</string>
+    <string name="colors_plugin_notice">%1$s يأتي مع إضافة. تُحفظ تغييراتك في نسخة منه.</string>
     <string name="colors_editing_copy">تعديل نسخة: %1$s</string>
     <string name="colors_duplicate">تكرار</string>
     <string name="colors_rename">إعادة تسمية</string>
@@ -2349,10 +2688,14 @@
     <string name="plugin_consent_cap_ui_editor_painter">الرسم داخل المحرر</string>
     <string name="plugin_consent_cap_ui_editor_language">تلوين لغة في المحرر وتحديد صيغة تعليقاتها، بما في ذلك اللغات التي تعرفها بيئة التطوير مسبقًا</string>
     <string name="plugin_consent_cap_ui_color_attribute">إضافة إدخالات إلى النظام اللوني للمحرر، وتغيير مظهر الإدخالات المدمجة</string>
+    <string name="plugin_consent_cap_ui_color_scheme">إضافة أنظمة ألوان يمكنك اختيارها للمحرر</string>
+    <string name="plugin_consent_cap_ui_app_theme">إضافة سمات للتطبيق يمكنك اختيارها من المظهر</string>
     <string name="plugin_consent_cap_ui_new_file_template">إضافة أنواع ملفات إلى قائمة «جديد»</string>
     <string name="plugin_consent_cap_lang_backend">تعليم المحرر لغةً: التحليل والإكمال والأخطاء</string>
+    <string name="plugin_consent_cap_lang_server">تشغيل خادم لغة: برنامج منفصل يفحص لغةً ويكملها ويتنقل فيها</string>
     <string name="plugin_consent_cap_model_module_type">إضافة نوع من الوحدات، وقوالب لإنشائه</string>
     <string name="plugin_consent_cap_model_facet">حفظ إعدادات خاصة بها في وحداتك</string>
+    <string name="plugin_consent_cap_model_dependencies">إضافة مكتبات ومستودعات Maven إلى مشاريعك</string>
     <string name="plugin_consent_cap_interp_run">تشغيل كود مشروعك داخل بيئة التطوير لمعاينته أو تشغيله</string>
     <string name="plugin_consent_cap_build_task">إضافة خطوات إلى عمليات البناء</string>
     <string name="plugin_consent_cap_build_source_generator">توليد كود مصدري داخل وحداتك</string>
@@ -2457,4 +2800,30 @@
     <string name="challenge_legend_reference">المرجع</string>
     <string name="sdk_platform_tools">أدوات المنصة</string>
     <string name="sdk_platform_tools_desc">adb، الذي يستخدمه «تشغيل» لتثبيت تطبيقك وتشغيله على هاتف أو محاكي متصل بهذا الحاسوب.</string>
+    <string name="you_delete_account">حذف الحساب</string>
+    <string name="you_delete_account_title">حذف حسابك؟</string>
+    <string name="you_delete_account_body">سيؤدي هذا إلى حذف حسابك في CodeAssist نهائيًا مع كل ما هو محفوظ معه: ملفك الشخصي، والمشاريع المنشورة، والمراجعات، والإعجابات، والمتابعات، ونتائج التحديات، ونقاط الذكاء الاصطناعي. لن تتأثر المشاريع الموجودة على هذا الجهاز. لا يمكن التراجع عن ذلك.</string>
+    <string name="you_delete_account_deleting">جارٍ الحذف…</string>
+    <string name="settings_language_servers">خوادم اللغات</string>
+    <string name="settings_language_servers_subtitle">الأخطاء والإكمال والتنقل من خوادم مثبتة لديك</string>
+    <string name="lsp_intro">أضف خادم بروتوكول خادم اللغة (LSP) مثبتًا لديك. الملفات ذات امتداداته تحصل على أخطائه وإكماله وتنقله وإعادة التسمية والتنسيق. تُطبَّق اللغة الجديدة على المشروع التالي الذي تفتحه.</string>
+    <string name="lsp_unsupported">خوادم اللغات غير متاحة على هذا الجهاز.</string>
+    <string name="lsp_empty">لا توجد خوادم لغات بعد. أضف واحدًا، أو ابدأ من خادم شائع أدناه.</string>
+    <string name="lsp_add">إضافة</string>
+    <string name="lsp_presets">خوادم شائعة</string>
+    <string name="lsp_new_title">خادم لغة جديد</string>
+    <string name="lsp_edit_title">تعديل خادم اللغة</string>
+    <string name="lsp_field_name">الاسم</string>
+    <string name="lsp_field_command">الأمر</string>
+    <string name="lsp_field_extensions">امتدادات الملفات</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">معرّف اللغة</string>
+    <string name="lsp_field_options">خيارات التهيئة (JSON، اختياري)</string>
+    <string name="lsp_check">فحص الأمر</string>
+    <string name="lsp_save">حفظ</string>
+    <string name="lsp_cancel">إلغاء</string>
+    <string name="lsp_delete">حذف</string>
+    <string name="lsp_status_running">يعمل</string>
+    <string name="lsp_status_starting">قيد التشغيل</string>
+    <string name="lsp_status_not_started">لم يبدأ</string>
 </resources>

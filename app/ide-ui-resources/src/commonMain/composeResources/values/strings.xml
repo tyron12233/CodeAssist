@@ -9,11 +9,11 @@ Back up your projects to a .zip now, your source files stay safe, and you can re
     <string name="backup_projects">Back up projects</string>
     <string name="got_it">Got it</string>
     <string name="help_improve_codeassist">Help improve CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing, and fix the right things.
+    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous usage and performance data so we can see what's slow, what's failing, and which features people rely on, and fix the right things.
 
-We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, scrubbed crash reports, and when ads are shown or closed and changes to your ad settings.
+We collect: your app version and device model, how long builds, indexing, code completion, and previews take, build success/failure, scrubbed crash reports, how often each feature is used (for example, how many times the layout preview or Find Usages was opened), and when ads are shown or closed and changes to your ad settings.
 
-We never collect your code, file or project names, which features you use, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
+We never collect your code, file or project names, what you type, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
     <string name="learn_more">Learn more</string>
     <string name="allow">Allow</string>
     <string name="no_thanks">No thanks</string>
@@ -156,6 +156,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_show_ads_desc">Show ads in the app. You can turn them off at any time.</string>
     <string name="support_show_interstitials">Full-screen ads</string>
     <string name="support_show_interstitials_desc">Occasional full-screen ads during long builds and after finished lessons.</string>
+    <plurals name="ads_off_locked">
+        <item quantity="one">Ads stay on for a day after an install or update. You can turn them off in %1$d hour.</item>
+        <item quantity="other">Ads stay on for a day after an install or update. You can turn them off in %1$d hours.</item>
+    </plurals>
     <string name="ads_off_title">Turn off ads?</string>
     <string name="ads_off_body">You can turn off only the full-screen ads and keep the smaller ads in lists and panels.</string>
     <string name="ads_off_all">All ads</string>
@@ -163,6 +167,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_ad_privacy">Manage ad consent</string>
     <string name="support_ad_privacy_desc">Review or change your ad privacy choices.</string>
     <string name="support_ad_privacy_button">Manage</string>
+    <string name="ad_inspector">Ad Inspector</string>
+    <string name="ad_inspector_desc">Check which ad networks load and why one fails. Developer builds on test devices only.</string>
+    <string name="ad_inspector_open">Open</string>
     <string name="ad_label">Ad</string>
     <string name="no_project_yet">No projects yet. Create one to get started.</string>
     <string name="your_projects">Your projects</string>
@@ -329,6 +336,40 @@ We never collect your code, file or project names, which features you use, or an
     <string name="filetree_move">Move</string>
     <string name="filetree_copy">Copy</string>
     <string name="filetree_delete">Delete</string>
+    <string name="filetree_cut">Cut</string>
+    <string name="filetree_paste">Paste</string>
+    <string name="filetree_duplicate">Duplicate</string>
+    <string name="filetree_copy_path">Copy Path</string>
+    <string name="filetree_copy_path_absolute">Absolute Path</string>
+    <string name="filetree_copy_path_relative">Path From Project Root</string>
+    <string name="filetree_copy_name">Name</string>
+    <string name="filetree_copy_paths">Copy Paths</string>
+    <string name="filetree_move_to">Move To…</string>
+    <string name="filetree_copy_to">Copy To…</string>
+    <string name="filetree_select_all">Select All</string>
+    <string name="filetree_clear_selection">Clear selection</string>
+    <string name="filetree_more_selection">More actions for the selection</string>
+    <string name="filetree_paste_into">Paste into %1$s</string>
+    <string name="filetree_clear_clipboard">Clear clipboard</string>
+    <string name="filetree_drop_move">Move to %1$s</string>
+    <string name="filetree_drop_copy">Copy to %1$s</string>
+    <string name="filetree_drop_nowhere">Can't drop here</string>
+    <plurals name="filetree_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="filetree_clip_cut">
+        <item quantity="one">%1$d item to move</item>
+        <item quantity="other">%1$d items to move</item>
+    </plurals>
+    <plurals name="filetree_clip_copy">
+        <item quantity="one">%1$d item to copy</item>
+        <item quantity="other">%1$d items to copy</item>
+    </plurals>
+    <plurals name="filetree_drag_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
     <string name="filetree_java_class">Java Class</string>
     <string name="filetree_kotlin_file">Kotlin File</string>
     <string name="filetree_aidl_file">AIDL File</string>
@@ -417,6 +458,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="symbolbar_next_problem">Next problem</string>
     <string name="symbolbar_customize">Customize symbols</string>
     <string name="symbolbar_hide_keyboard">Hide keyboard</string>
+    <string name="symbolbar_more">More keys</string>
+    <string name="symbolbar_trackpad">Drag to move the cursor</string>
     <string name="symbolbar_comment">Line comment</string>
     <string name="symed_pin">Pin to the fixed row</string>
     <string name="symed_unpin">Unpin</string>
@@ -472,6 +515,40 @@ We never collect your code, file or project names, which features you use, or an
     <string name="breadcrumb_blocks">Blocks</string>
     <string name="breadcrumb_preview">Preview</string>
     <string name="breadcrumb_split">Split</string>
+    <string name="breadcrumb_nav_back">Back</string>
+    <string name="breadcrumb_nav_forward">Forward</string>
+    <string name="conflict_current">Current</string>
+    <string name="conflict_incoming">Incoming</string>
+    <string name="conflict_both">Both</string>
+    <string name="conflict_current_desc">Keep the current side</string>
+    <string name="conflict_incoming_desc">Keep the incoming side</string>
+    <string name="conflict_both_desc">Keep both sides</string>
+    <string name="gesture_nothing_to_undo">Nothing to undo</string>
+    <string name="gesture_nothing_to_redo">Nothing to redo</string>
+    <string name="paste_history_title">Paste from history</string>
+    <string name="change_revert">Revert</string>
+    <string name="change_before">In the last commit</string>
+    <string name="change_added">Added since the last commit</string>
+    <string name="history_title">Local history</string>
+    <string name="symbolbar_bookmark">Bookmark</string>
+    <string name="bookmarks_title">Bookmarks</string>
+    <string name="bookmarks_empty">No bookmarks yet. Bookmark the caret line with F11, or the Bookmark key behind the symbol bar's ⋯.</string>
+    <string name="todo_title">TODO</string>
+    <string name="todo_refresh">Refresh</string>
+    <string name="todo_empty">No TODO or FIXME comments in the project.</string>
+    <string name="bookmarks_panel_title">Bookmarks &amp; TODO</string>
+    <string name="history_back">Back</string>
+    <string name="history_restore">Restore</string>
+    <string name="history_empty">Nothing saved yet. Each save of this file keeps a version here.</string>
+    <string name="history_same">Same as the file now</string>
+    <string name="edchrome_local_history">Local history</string>
+    <string name="paste_history_clear">Clear</string>
+    <string name="paste_history_empty">Text you copy or cut in the editor shows up here.</string>
+    <string name="symbolbar_clipboard">Clipboard</string>
+    <plurals name="paste_history_lines">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>
@@ -565,6 +642,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="kotlin_configure">Configure Kotlin</string>
     <string name="kotlin_configuring">Configuring…</string>
     <string name="kotlin_configure_failed">Couldn't configure Kotlin: %1$s</string>
+    <string name="missing_libraries_notice">This file uses libraries that aren't added yet: %1$s</string>
+    <string name="missing_libraries_add_all">Add all</string>
+    <string name="missing_libraries_adding">Adding…</string>
+    <string name="missing_library_failed">Couldn't add the library: %1$s</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
     <string name="sources_download_failed">Download failed: %1$s</string>
@@ -614,6 +695,17 @@ We never collect your code, file or project names, which features you use, or an
     <string name="home_share">Share</string>
     <string name="home_delete">Delete</string>
     <string name="home_dismiss">Dismiss</string>
+    <string name="halloween_title">Happy Halloween</string>
+    <string name="halloween_offer">Dress the IDE up for the season: a pumpkin theme, spooky editor colors and a candle for a caret.</string>
+    <string name="halloween_dress_up">Dress up</string>
+    <string name="halloween_not_now">Not now</string>
+    <string name="halloween_applied">All dressed up. You can change any of it in Settings.</string>
+    <string name="halloween_undo">Undo</string>
+    <string name="halloween_over_title">Halloween is over</string>
+    <string name="halloween_over_body">Put your theme, editor colors and caret back the way they were?</string>
+    <string name="halloween_put_back">Put it back</string>
+    <string name="halloween_keep">Keep it</string>
+    <string name="halloween_boo">Boo!</string>
     <string name="home_resume_title">Pick up where you left off</string>
     <string name="home_account_title">Account and tools</string>
     <string name="home_settings_tools">Settings and tools</string>
@@ -629,6 +721,27 @@ We never collect your code, file or project names, which features you use, or an
     <string name="store_search_hint">Search templates and samples</string>
     <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">Templates, sample apps, plugins</string>
+    <string name="store_trending">Trending</string>
+    <string name="store_trending_search">Search for %1$s</string>
+    <string name="store_translate">Translate</string>
+    <string name="store_translating">Translating…</string>
+    <string name="store_translated">Translated automatically</string>
+    <string name="store_show_original">Show original</string>
+    <string name="store_update_to">Update to v%1$s</string>
+    <string name="store_update_versions">v%1$s installed · v%2$s available</string>
+    <string name="store_update_conflict_title">You've changed this project</string>
+    <string name="store_update_conflict_body">Updating it in place would overwrite your changes to:</string>
+    <string name="store_update_conflict_more">and %1$d more</string>
+    <string name="store_update_conflict_unknown">This project was installed before CodeAssist kept track of changes, so it can't tell your edits apart from the original.</string>
+    <string name="store_update_conflict_keep">Installing the new version as a separate project leaves your copy exactly as it is.</string>
+    <string name="store_update_as_copy">Install as a new copy</string>
+    <string name="home_update_review">Review</string>
+    <string name="store_update_merge">Update and keep my changes</string>
+    <string name="store_update_changed_files">Files you changed since installing it:</string>
+    <string name="store_update_merge_note">Your changes and the new version are combined file by file. Where you both changed the same lines, both are kept for you to choose between.</string>
+    <string name="store_merge_done_title">Updated, with your changes kept</string>
+    <string name="store_merge_conflicts_body">You and the publisher changed the same lines in these files. Both versions are in the file, between &lt;&lt;&lt;&lt;&lt;&lt;&lt; and &gt;&gt;&gt;&gt;&gt;&gt;&gt; markers, for you to choose between:</string>
+    <string name="store_merge_open">Open project</string>
     <string name="store_browse_by_kind">Browse by kind</string>
     <string name="store_see_all">See all</string>
     <string name="store_install">Install</string>
@@ -711,6 +824,19 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_send">Submit for review</string>
     <string name="submit_sending">Submitting…</string>
     <string name="submit_review_note">A moderator reviews every submission before it appears. Nothing is public until it is approved.</string>
+    <string name="submit_checks_title">What reviewers check</string>
+    <string name="submit_checks_english">The title, summary and description are in English.</string>
+    <string name="submit_checks_screenshots">Screenshots show the app running, not the editor.</string>
+    <string name="submit_checks_summary">The summary says in one line what the project does.</string>
+    <string name="submit_checks_icon">The app has its own icon, not the default one.</string>
+    <string name="submit_checks_own">It is your own work, with no secret keys or AI chat history in it.</string>
+    <string name="submit_warn_english">Store listings must be in English, and this reads like another language. Write it in English; you can keep a translation below it.</string>
+    <string name="submit_warn_summary">Say in one line what the project does. A summary that only repeats the name is the most common reason a listing is sent back.</string>
+    <string name="submit_warn_spam">Wording like “download free” or “mod apk” reads as spam, and listings with it are sent back.</string>
+    <string name="submit_confirm_title">Before you send it</string>
+    <string name="submit_confirm_body">A moderator is likely to send this back:</string>
+    <string name="submit_confirm_fix">Fix it</string>
+    <string name="submit_confirm_send">Send anyway</string>
     <string name="submit_required">Fill in the title, summary, description and category.</string>
     <string name="submit_target">Publishing as</string>
     <string name="submit_target_new">A new listing</string>
@@ -775,6 +901,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="you_moderation">Moderation</string>
     <string name="you_moderation_waiting">%1$d waiting for review</string>
     <string name="you_moderation_clear">Nothing is waiting for review</string>
+    <string name="you_account">Account</string>
+    <plurals name="you_releases">
+        <item quantity="one">%1$d release</item>
+        <item quantity="other">%1$d releases</item>
+    </plurals>
     <string name="moderation_title">Moderation</string>
     <string name="moderation_not_allowed">This account does not moderate the store.</string>
     <string name="moderation_tab_queue">Queue</string>
@@ -817,6 +948,19 @@ We never collect your code, file or project names, which features you use, or an
     <string name="notif_clear">Clear</string>
     <string name="notif_open">Open</string>
     <string name="notif_dismiss">Dismiss</string>
+    <string name="notif_section_new">New</string>
+    <string name="notif_view">View</string>
+    <string name="notif_more_row_desc">What happened while you worked</string>
+    <string name="notif_section_earlier">Earlier</string>
+    <string name="notif_show_more">Show more</string>
+    <string name="notif_show_less">Show less</string>
+    <string name="notif_repeat_count">×%1$d</string>
+    <string name="notif_kind_store">Store</string>
+    <string name="notif_kind_update">Store update</string>
+    <string name="notif_kind_build">Build</string>
+    <string name="notif_kind_agent">AI agent</string>
+    <string name="notif_kind_learn">Learn</string>
+    <string name="notif_kind_system">CodeAssist</string>
     <string name="notif_just_now">just now</string>
     <string name="notif_minutes">%1$d min ago</string>
     <string name="notif_hours">%1$d h ago</string>
@@ -876,6 +1020,17 @@ We never collect your code, file or project names, which features you use, or an
     <string name="notify_launch_failed">Could not save that just now.</string>
     <string name="review_actions">Review actions</string>
     <string name="review_report">Report</string>
+    <string name="review_copy">Copy text</string>
+    <string name="link_open_title">Open this link?</string>
+    <string name="link_mail_title">Write to this address?</string>
+    <string name="link_from_user">Someone in the community added this link. CodeAssist hasn't checked where it goes.</string>
+    <string name="link_mail_from_user">Someone in the community added this address. Your email app opens with a new message to it.</string>
+    <string name="link_warn_http">Not encrypted (http): others on your network can see or change the page.</string>
+    <string name="link_warn_userinfo">The part before the @ is not the site. This link goes to %1$s.</string>
+    <string name="link_warn_ip">It goes to a bare IP address, not a named site.</string>
+    <string name="link_warn_lookalike">The address uses characters that can imitate a well-known site's name.</string>
+    <string name="link_open">Open</string>
+    <string name="link_copy">Copy link</string>
     <string name="review_reply">Reply</string>
     <string name="review_reply_edit">Edit reply</string>
     <string name="review_reply_delete">Delete reply</string>
@@ -909,6 +1064,27 @@ We never collect your code, file or project names, which features you use, or an
     <string name="profile_missing">No publisher with that name</string>
     <string name="profile_unrated">Unrated</string>
     <string name="profile_signin_to_follow">Sign in to follow</string>
+    <string name="profile_highlights">Highlights</string>
+    <string name="profile_award_installs">Most installed</string>
+    <string name="profile_award_liked">Most liked</string>
+    <string name="profile_award_rated">Top rated</string>
+    <string name="profile_award_newest">Newest</string>
+    <string name="profile_sort_popular">Popular</string>
+    <string name="profile_group_projects">Apps and projects</string>
+    <string name="profile_group_plugins">Plugins</string>
+    <string name="profile_joined">Joined %1$s</string>
+    <plurals name="profile_ratings">
+        <item quantity="one">%1$d rating</item>
+        <item quantity="other">%1$d ratings</item>
+    </plurals>
+    <plurals name="profile_age_months">
+        <item quantity="one">%1$d month ago</item>
+        <item quantity="other">%1$d months ago</item>
+    </plurals>
+    <plurals name="profile_age_years">
+        <item quantity="one">%1$d year ago</item>
+        <item quantity="other">%1$d years ago</item>
+    </plurals>
     <string name="like_action">Like</string>
     <string name="like_liked">Liked</string>
     <string name="like_signin">Sign in to like</string>
@@ -936,8 +1112,12 @@ We never collect your code, file or project names, which features you use, or an
     <string name="learn_continue">Continue</string>
     <string name="learn_completed">Completed</string>
     <!-- Learn tab, Material 3 Expressive redesign -->
-    <string name="learn_lessons_done">%1$d lessons done</string>
+    <plurals name="learn_lessons_done">
+        <item quantity="one">%1$d lesson done</item>
+        <item quantity="other">%1$d lessons done</item>
+    </plurals>
     <string name="learn_module_meta">%1$d of %2$d lessons · %3$d min</string>
+    <string name="learn_continue_meta">Lesson %1$d of %2$d · %3$s</string>
     <string name="learn_resume_lesson">Resume lesson %1$d</string>
     <string name="learn_minutes">%1$d min</string>
     <string name="learn_lessons_progress">%1$d / %2$d lessons</string>
@@ -1085,6 +1265,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edoverlay_rename_kind">Rename %1$s</string>
     <string name="edoverlay_renaming">Renaming…</string>
     <string name="edoverlay_rename_hint">Enter to rename '%1$s', Esc to cancel</string>
+    <string name="edoverlay_inline_rename_hint">Rename %1$s · Enter to apply, Esc to cancel</string>
+    <string name="edoverlay_inline_rename_apply">Apply</string>
+    <string name="edoverlay_renaming_elsewhere">Renaming in other files…</string>
+    <string name="edoverlay_rename_invalid">'%1$s' is not a valid name</string>
     <string name="edoverlay_go_to_line">Go to line</string>
     <string name="edoverlay_go_to_line_hint">Line 1–%1$d  (line or line:column)</string>
     <string name="edoverlay_no_documentation">No documentation</string>
@@ -1181,6 +1365,53 @@ We never collect your code, file or project names, which features you use, or an
     <string name="fileop_empty_folder">This folder is empty.</string>
     <string name="fileop_move_here">Move here</string>
     <string name="fileop_copy_here">Copy here</string>
+    <plurals name="fileop_move_items_title">
+        <item quantity="one">Move %1$d item to…</item>
+        <item quantity="other">Move %1$d items to…</item>
+    </plurals>
+    <plurals name="fileop_copy_items_title">
+        <item quantity="one">Copy %1$d item to…</item>
+        <item quantity="other">Copy %1$d items to…</item>
+    </plurals>
+    <plurals name="fileop_delete_items_title">
+        <item quantity="one">Delete %1$d item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <string name="fileop_delete_items_body">This permanently removes them, and folders with everything inside them. This can't be undone.</string>
+    <string name="fileop_delete_items_body_undo">Folders are deleted with everything inside them. You can undo this right after.</string>
+    <string name="fileop_delete_dir_body_undo">This deletes the folder and everything inside it. You can undo this right after.</string>
+    <string name="fileop_delete_file_body_undo">You can undo this right after.</string>
+    <string name="fileop_conflict_title">'%1$s' already exists in %2$s</string>
+    <string name="fileop_conflict_body">Replace the item that is there, keep both (this one gets a new name), or skip it.</string>
+    <string name="fileop_conflict_replace">Replace</string>
+    <string name="fileop_conflict_keep_both">Keep Both</string>
+    <string name="fileop_conflict_skip">Skip</string>
+    <string name="fileop_conflict_progress">Conflict %1$d of %2$d</string>
+    <plurals name="fileop_conflict_apply_all">
+        <item quantity="one">Do the same for the other conflict</item>
+        <item quantity="other">Do the same for the other %1$d conflicts</item>
+    </plurals>
+    <plurals name="fileop_notice_moved">
+        <item quantity="one">Moved %1$d item to %2$s</item>
+        <item quantity="other">Moved %1$d items to %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_copied">
+        <item quantity="one">Copied %1$d item to %2$s</item>
+        <item quantity="other">Copied %1$d items to %2$s</item>
+    </plurals>
+    <plurals name="fileop_notice_duplicated">
+        <item quantity="one">Duplicated %1$d item</item>
+        <item quantity="other">Duplicated %1$d items</item>
+    </plurals>
+    <plurals name="fileop_notice_deleted">
+        <item quantity="one">Deleted %1$d item</item>
+        <item quantity="other">Deleted %1$d items</item>
+    </plurals>
+    <plurals name="fileop_notice_failed">
+        <item quantity="one">%1$d item failed: %2$s</item>
+        <item quantity="other">%1$d items failed: %2$s</item>
+    </plurals>
+    <string name="fileop_notice_undone">Undone</string>
 
     <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">An unexpected error occurred. The app has kept running.</string>
@@ -1299,6 +1530,17 @@ We never collect your code, file or project names, which features you use, or an
     <string name="storage_cat_projects_desc">Your source code and project settings</string>
     <string name="storage_cat_leftovers_title">Leftover project folders</string>
     <string name="storage_cat_leftovers_desc">Left behind by deleted projects, safe to remove</string>
+    <string name="plugins_leftovers_title">Left by removed plugins</string>
+    <string name="plugins_leftovers_body">Uninstalling a plugin leaves its data behind. Delete it to free the space, or keep it in case you reinstall.</string>
+    <string name="plugins_leftover_delete">Delete</string>
+    <string name="plugins_leftovers_delete_all">Delete all (%1$s)</string>
+    <string name="plugins_leftover_confirm_title">Delete %1$s's data?</string>
+    <string name="plugins_leftovers_confirm_all_title">Delete all removed plugins' data?</string>
+    <string name="plugins_leftover_confirm_body">This frees %1$s. A plugin you reinstall later starts fresh.</string>
+    <string name="storage_cat_plugin_leftovers_title">Removed plugins' data</string>
+    <string name="storage_cat_plugin_leftovers_desc">Left by plugins you uninstalled</string>
+    <string name="storage_clear_plugin_leftovers_title">Delete removed plugins' data?</string>
+    <string name="storage_clear_plugin_leftovers_body">This deletes %1$s that uninstalled plugins left behind. A plugin you reinstall later starts fresh.</string>
     <string name="storage_cat_other_title">Other</string>
     <string name="storage_cat_other_desc">Keystores, backups, and app data</string>
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
@@ -1318,6 +1560,65 @@ We never collect your code, file or project names, which features you use, or an
     <string name="plugins_tab_installed">Installed</string>
     <string name="plugins_installed_empty">Nothing installed yet. A CodeAssist plugin you install from your app store appears here.</string>
     <string name="plugins_failed">Did not load: %1$s</string>
+    <string name="plugins_tab_get">Get plugins</string>
+    <string name="plugins_search">Search plugins</string>
+    <string name="plugins_search_none">No plugin matches “%1$s”.</string>
+    <string name="plugins_status_on">On</string>
+    <string name="plugins_status_off">Off</string>
+    <string name="plugins_status_review">Needs review</string>
+    <string name="plugins_status_failed">Didn’t load</string>
+    <string name="plugins_not_running">Not running yet. Review what it can do before allowing it.</string>
+    <string name="plugins_by_codeassist">By CodeAssist</string>
+    <string name="plugins_signed_like_ide">Signed by CodeAssist</string>
+    <string name="plugins_open_details">Details for %1$s</string>
+    <string name="plugins_detail_enabled">Enabled</string>
+    <string name="plugins_detail_enabled_hint">Takes effect when CodeAssist restarts.</string>
+    <string name="plugins_detail_builtin">Ships inside CodeAssist.</string>
+    <string name="plugins_detail_adds">What it adds</string>
+    <string name="plugins_detail_adds_none">It declares nothing it adds.</string>
+    <string name="plugins_detail_details">Details</string>
+    <string name="plugins_detail_id">ID</string>
+    <string name="plugins_detail_version">Version</string>
+    <string name="plugins_detail_app_version">App version</string>
+    <string name="plugins_detail_package">Package</string>
+    <string name="plugins_detail_api">Plugin API</string>
+    <string name="plugins_detail_min_host">Needs CodeAssist</string>
+    <string name="plugins_detail_min_host_value">%1$s or newer</string>
+    <string name="plugins_detail_depends">Depends on</string>
+    <string name="plugins_detail_installed">Installed</string>
+    <string name="plugins_detail_updated">Updated</string>
+    <string name="plugins_detail_size">Size</string>
+    <string name="plugins_detail_installer">Installed from</string>
+    <string name="plugins_detail_installer_direct">A direct download</string>
+    <string name="plugins_detail_signature">Signing certificate</string>
+    <string name="plugins_detail_signature_none">Could not be read</string>
+    <string name="plugins_detail_app_info">App info</string>
+    <string name="plugins_detail_open_app">About and licenses</string>
+    <string name="plugins_detail_problem">It did not load</string>
+    <string name="plugins_detail_copied">Copied</string>
+    <string name="plugins_get_intro">Plugins add languages and tools to CodeAssist. Each one is an app of its own: it downloads in your browser, Android asks you to install it, and it then appears under Installed for you to allow.</string>
+    <string name="plugins_get_download">Download</string>
+    <string name="plugins_get_update">Update to %1$s</string>
+    <string name="plugins_get_installed">Installed</string>
+    <string name="plugins_get_needs_host">Needs CodeAssist %1$s or newer</string>
+    <string name="plugins_get_release_notes">Release notes</string>
+    <string name="plugins_get_offline">Offline: showing the list from your last visit.</string>
+    <string name="plugins_get_retry">Try again</string>
+    <string name="plugins_get_empty">No plugins to download right now.</string>
+    <string name="plugins_get_loading">Loading plugins…</string>
+    <string name="plugins_get_installed_version">Installed: %1$s</string>
+    <string name="home_get_plugins">Get plugins</string>
+    <string name="home_get_plugins_content">Add C/C++, Dart, Flutter and more to CodeAssist.</string>
+    <string name="plugin_cap_group_editor">In the editor</string>
+    <string name="plugin_cap_group_ui">Screens and commands</string>
+    <string name="plugin_cap_group_languages">Languages</string>
+    <string name="plugin_cap_group_projects">Projects and builds</string>
+    <string name="plugin_cap_group_access">Your files and the network</string>
+    <string name="plugin_cap_group_other">Other</string>
+    <string name="plugin_cap_sensitive">Sensitive</string>
+    <string name="plugin_consent_subtitle">Version %1$s</string>
+    <string name="plugin_consent_full_access">Runs with full access</string>
+    <string name="plugin_consent_publisher_ide">Published by CodeAssist: signed with the same certificate as this app.</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">Keystore Manager</string>
@@ -1327,7 +1628,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="keystore_empty">No keystores yet. Create or import one to sign release builds.</string>
     <string name="keystore_deleted">Deleted %1$s</string>
     <string name="keystore_row_subtitle">%1$s · key: %2$s</string>
-    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_copy_fingerprint">Copy %1$s fingerprint</string>
+    <string name="keystore_fingerprint_copied">%1$s copied</string>
     <string name="keystore_expires">expires ~%1$s</string>
     <string name="keystore_cert_unreadable"><![CDATA[Couldn't read the certificate (password may have changed).]]></string>
     <string name="keystore_create_title">New Keystore</string>
@@ -1347,8 +1649,26 @@ We never collect your code, file or project names, which features you use, or an
     <!-- sdk (SdkManagerScreen) -->
     <string name="sdk_manager_title">SDK Manager</string>
     <string name="sdk_could_not_load">Could not load packages.</string>
-    <string name="sdk_sources_documentation">Sources &amp; documentation</string>
-    <string name="sdk_sources_documentation_desc">Download SDK platform sources and JDK sources so the editor can show javadoc, parameter names, and go-to-source into the SDK. Downloads continue in the background, so you can leave this screen and keep working.</string>
+    <string name="sdk_intro">Install the Android platforms your modules compile against, and sources so the editor can show docs and go to SDK source. Downloads keep going in the background, so you can leave this screen.</string>
+    <string name="sdk_show_all_versions">Show all versions (%1$d)</string>
+    <string name="sdk_show_fewer">Show fewer</string>
+    <string name="sdk_tag_latest">Latest</string>
+    <string name="sdk_tag_project">Your project</string>
+    <string name="sdk_fail_offline">Couldn't reach the download server. Check your internet connection, then try again.</string>
+    <string name="sdk_fail_storage">There isn't enough free storage to finish this download. Free up some space, then try again.</string>
+    <string name="sdk_fail_not_found">The download server no longer has this package. Refresh the list, then try again.</string>
+    <string name="sdk_fail_server_code">The download server had a problem (HTTP %1$d). This is usually temporary, so try again in a moment.</string>
+    <string name="sdk_fail_server">The download server had a problem. This is usually temporary, so try again in a moment.</string>
+    <string name="sdk_fail_license">This package's license needs to be accepted before it can install.</string>
+    <string name="sdk_fail_corrupt">The downloaded file was damaged. Try again to download a fresh copy.</string>
+    <string name="sdk_fail_cancelled">Cancelled. What was already downloaded is kept, so it picks up where it stopped.</string>
+    <string name="sdk_fail_unknown">The download didn't finish.</string>
+    <string name="sdk_load_failed_title">Couldn't load the package list</string>
+    <string name="sdk_action_free_space">Free up space</string>
+    <string name="sdk_action_refresh">Refresh list</string>
+    <string name="sdk_action_review_license">Review license</string>
+    <string name="sdk_details_show">Details</string>
+    <string name="sdk_details_hide">Hide details</string>
     <string name="sdk_downloads">Downloads</string>
     <string name="sdk_clear_finished">Clear finished</string>
     <string name="sdk_jdk">JDK</string>
@@ -1775,6 +2095,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_editor_two_axis_desc">Drag in any direction to scroll both axes at once (touch)</string>
     <string name="set_editor_pinch">Pinch to zoom</string>
     <string name="set_editor_pinch_desc">Pinch with two fingers to change the code font size</string>
+    <string name="set_editor_volume_keys">Volume keys move the cursor</string>
+    <string name="set_editor_volume_keys_desc">While typing on a phone, volume up moves the cursor left and volume down moves it right, instead of changing the volume</string>
+    <string name="set_editor_inline_blame">Who changed this line</string>
+    <string name="set_editor_inline_blame_desc">In a Git project, show who last changed the caret's line, when, and why, faded after its end</string>
+    <string name="blame_uncommitted">Not committed yet</string>
     <string name="set_editor_kbd_suggest">Keyboard suggestions</string>
     <string name="set_editor_kbd_suggest_desc">Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.</string>
     <string name="set_editor_close_unsaved">Closing a tab with unsaved changes</string>
@@ -1830,7 +2155,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_br_dexfork">Max concurrent dex forks</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">Share performance analytics</string>
-    <string name="set_privacy_analytics_desc">Anonymous performance and ad metrics only, never your code or file names</string>
+    <string name="set_privacy_analytics_desc">Anonymous usage counts, performance and ad metrics, never your code or file names</string>
     <string name="set_privacy_clear">Clear caches</string>
     <string name="set_privacy_clear_desc">Free regenerable dependency / language / preview caches (never source)</string>
     <string name="set_privacy_clear_btn">Clear</string>
@@ -1852,6 +2177,114 @@ We never collect your code, file or project names, which features you use, or an
     <!-- Editor fallbacks -->
     <string name="rename_failed">Rename failed</string>
     <string name="learn_check_failed">Check failed</string>
+    <string name="learn_paths">Paths</string>
+    <string name="learn_path_meta">%1$d of %2$d tracks</string>
+    <string name="learn_path_next">Next: %1$s</string>
+    <string name="learn_path_complete">Path complete</string>
+    <string name="learn_path_you_are_here">You are here</string>
+    <string name="learn_level_beginner">Beginner</string>
+    <string name="learn_level_intermediate">Intermediate</string>
+    <string name="learn_level_advanced">Advanced</string>
+    <string name="learn_recommended_after">Recommended after %1$s</string>
+    <string name="learn_prereq_notice">This track builds on %1$s. You can start it anyway.</string>
+    <string name="learn_kind_checkpoint">Checkpoint</string>
+    <string name="learn_kind_capstone">Capstone</string>
+    <string name="learn_check_layout">Check layout</string>
+    <string name="learn_checking">Checking…</string>
+    <string name="learn_layout_preview">Preview</string>
+    <string name="learn_checkpoint_title">Checkpoint complete</string>
+    <string name="learn_checkpoint_score">%1$d of %2$d right first time</string>
+    <string name="learn_checkpoint_perfect">A perfect score. You are ready for what comes next.</string>
+    <string name="learn_checkpoint_good">Solid. Revisit the lessons behind the ones you missed whenever you like.</string>
+    <string name="learn_checkpoint_retry">Worth another look. Go back over the track, then take the checkpoint again.</string>
+    <string name="learn_done">Done</string>
+    <string name="learn_check">Check</string>
+    <string name="learn_tour_title">Learn CodeAssist in a few minutes</string>
+    <string name="learn_tour_body">Short hands-on lessons right in the editor: quick fixes, adding libraries, running your code and Git. Each step checks that you did it.</string>
+    <string name="learn_tour_start">Start the tour</string>
+    <string name="learn_tour_later">Not now</string>
+    <string name="learn_task_more">More</string>
+    <string name="learn_task_less">Less</string>
+    <string name="learn_more_actions">More actions</string>
+    <string name="learn_menu_stuck">Stuck?</string>
+    <string name="learn_menu_community">Learn together</string>
+    <string name="learn_hint_progress">Hint %1$d of %2$d</string>
+    <string name="learn_solution_sub">Reveals the full answer</string>
+    <string name="learn_ask_sub">Post your code and the error for other learners</string>
+    <string name="learn_discussion_sub">Questions other learners asked here</string>
+    <string name="learn_solutions_sub">How others solved it</string>
+    <string name="learn_check_again">Check again</string>
+    <string name="learn_previous_step">Previous step</string>
+    <string name="learn_collapse_sub">Give the code more room</string>
+    <string name="learn_discussion">Discussion</string>
+    <string name="learn_discussion_count">Discussion (%1$d)</string>
+    <string name="learn_ask_question">Ask a question</string>
+    <string name="learn_ask_for_help">Ask for help</string>
+    <string name="learn_no_questions">No questions yet. Stuck? Ask, and other learners can help.</string>
+    <string name="learn_this_exercise">This exercise</string>
+    <string name="learn_whole_lesson">Whole lesson</string>
+    <plurals name="learn_answers_n">
+        <item quantity="one">%1$d answer</item>
+        <item quantity="other">%1$d answers</item>
+    </plurals>
+    <string name="learn_solved">Solved</string>
+    <string name="learn_couldnt_load">Couldn't load this. Check your connection and try again.</string>
+    <string name="learn_try_again">Try again</string>
+    <string name="learn_question_title_label">Title</string>
+    <string name="learn_question_title_hint">What are you stuck on?</string>
+    <string name="learn_question_body_label">Details</string>
+    <string name="learn_question_body_hint">What did you try, and what happened?</string>
+    <string name="learn_attach_code">Attach my code</string>
+    <string name="learn_attach_error">Attach the error</string>
+    <string name="learn_post">Post</string>
+    <string name="learn_posting">Posting…</string>
+    <string name="learn_your_answer">Your answer</string>
+    <string name="learn_answer_hint">Point the way to the fix rather than pasting the whole solution.</string>
+    <string name="learn_add_code">Add code</string>
+    <string name="learn_show_code">Show code</string>
+    <string name="learn_code_hidden">Code is hidden so it doesn't spoil the exercise</string>
+    <string name="learn_mark_solved">Mark as solved</string>
+    <string name="learn_unmark_solved">Unmark as solved</string>
+    <string name="learn_report">Report</string>
+    <string name="learn_delete">Delete</string>
+    <string name="learn_report_title">Why are you reporting this?</string>
+    <string name="learn_reason_spam">Spam</string>
+    <string name="learn_reason_abuse">Abusive or rude</string>
+    <string name="learn_reason_spoiler">Gives away the answer</string>
+    <string name="learn_reason_wrong">Wrong or misleading</string>
+    <string name="learn_reason_other">Something else</string>
+    <string name="learn_report_sent">Thanks. A moderator will take a look.</string>
+    <string name="learn_sign_in_to_post">Sign in to ask and answer questions</string>
+    <string name="learn_solutions">Solutions</string>
+    <string name="learn_see_solutions">See solutions</string>
+    <string name="learn_solutions_locked">Pass this exercise to see how other learners solved it.</string>
+    <string name="learn_solutions_empty">No shared solutions yet. Yours will appear here when you pass.</string>
+    <string name="learn_share_solutions">Share my solutions</string>
+    <string name="learn_share_solutions_sub">When you pass an exercise, learners who passed it too can see your code.</string>
+    <string name="learn_sort_top">Top</string>
+    <string name="learn_sort_new">New</string>
+    <string name="learn_you">You</string>
+    <string name="learn_error_label">What went wrong</string>
+    <string name="learn_their_code">Their code</string>
+    <string name="learn_about_step">About: %1$s</string>
+    <string name="learn_reports_title">Learn reports</string>
+    <string name="learn_reports_n">%1$d reports</string>
+    <string name="learn_hide">Hide</string>
+    <string name="learn_keep">Keep</string>
+    <string name="learn_hidden_label">Hidden</string>
+    <string name="learn_cancel">Cancel</string>
+    <string name="learn_step_short">%1$d/%2$d</string>
+    <string name="learn_collapse_task">Collapse the task</string>
+    <string name="learn_expand_task">Show the task</string>
+    <string name="learn_streak_chip">%1$d-day streak</string>
+    <string name="learn_streak_label">Day streak</string>
+    <string name="learn_best_streak">Best: %1$d days</string>
+    <string name="learn_lessons_label">Lessons started</string>
+    <string name="learn_badges_none">Finish a track to earn its badge.</string>
+    <string name="learn_section_title">Learning</string>
+    <string name="learn_sync_title">Keep your progress everywhere</string>
+    <string name="learn_sync_body">Sign in to save your lessons to your account, pick up on any device, and keep a daily streak.</string>
+    <string name="learn_sign_in">Sign in</string>
     <!-- Command palette result-section headers ("Go to"; the rest reuse the filter-tab labels) -->
     <string name="palette_section_goto">Go to</string>
     <!-- Quick-doc section headers -->
@@ -1956,6 +2389,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="icons_add_as">Add as</string>
     <string name="icons_add_count">Add %1$d to project</string>
     <string name="icons_batch_added">Added %1$d</string>
+    <string name="icons_added">Added %1$s</string>
     <string name="icons_batch_existing">%1$d already in the project</string>
     <string name="icons_batch_failed">Couldn't add %1$s</string>
     <string name="icons_copy_to">Copy to another folder</string>
@@ -2084,6 +2518,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="colors_preview">Preview</string>
     <string name="colors_preview_hint">Tap anything in the sample to jump to the entry that colors it.</string>
     <string name="colors_builtin_notice">%1$s is built in. Your changes are saved to a copy.</string>
+    <string name="colors_plugin_notice">%1$s comes with a plugin. Your changes are saved to a copy.</string>
     <string name="colors_editing_copy">Editing a copy: %1$s</string>
     <string name="colors_duplicate">Duplicate</string>
     <string name="colors_rename">Rename</string>
@@ -2258,10 +2693,14 @@ We never collect your code, file or project names, which features you use, or an
     <string name="plugin_consent_cap_ui_editor_painter">Draw into the editor</string>
     <string name="plugin_consent_cap_ui_editor_language">Color and comment a language in the editor, including ones the IDE already knows</string>
     <string name="plugin_consent_cap_ui_color_attribute">Add entries to your editor color scheme, and change what the built-in ones look like</string>
+    <string name="plugin_consent_cap_ui_color_scheme">Add color schemes you can pick for the editor</string>
+    <string name="plugin_consent_cap_ui_app_theme">Add app themes you can pick under Appearance</string>
     <string name="plugin_consent_cap_ui_new_file_template">Add kinds of file to the New menu</string>
     <string name="plugin_consent_cap_lang_backend">Teach the editor a language: parsing, completion and errors</string>
+    <string name="plugin_consent_cap_lang_server">Run a language server: a separate program that checks, completes and navigates a language</string>
     <string name="plugin_consent_cap_model_module_type">Add a kind of module, and templates that create one</string>
     <string name="plugin_consent_cap_model_facet">Keep configuration of its own in your modules</string>
+    <string name="plugin_consent_cap_model_dependencies">Add libraries and Maven repositories to your projects</string>
     <string name="plugin_consent_cap_interp_run">Run your project's code inside the IDE, to preview or run it</string>
     <string name="plugin_consent_cap_build_task">Add steps to your builds</string>
     <string name="plugin_consent_cap_build_source_generator">Generate source code into your modules</string>
@@ -2360,4 +2799,30 @@ We never collect your code, file or project names, which features you use, or an
     <string name="challenge_exponent">exponent %1$s</string>
     <string name="challenge_legend_yours">yours</string>
     <string name="challenge_legend_reference">reference</string>
+    <string name="you_delete_account">Delete account</string>
+    <string name="you_delete_account_title">Delete your account?</string>
+    <string name="you_delete_account_body">This permanently deletes your CodeAssist account and everything stored with it: your profile, published projects, reviews, likes, follows, challenge results, and AI points. Projects on this device are not affected. This can't be undone.</string>
+    <string name="you_delete_account_deleting">Deleting…</string>
+    <string name="settings_language_servers">Language Servers</string>
+    <string name="settings_language_servers_subtitle">Errors, completion and navigation from servers you have installed</string>
+    <string name="lsp_intro">Add a Language Server Protocol server you have installed. Files with its extensions get its errors, completion, navigation, rename and formatting. A new language applies to the next project you open.</string>
+    <string name="lsp_unsupported">Language servers are not available on this device.</string>
+    <string name="lsp_empty">No language servers yet. Add one, or start from a common server below.</string>
+    <string name="lsp_add">Add</string>
+    <string name="lsp_presets">Common servers</string>
+    <string name="lsp_new_title">New language server</string>
+    <string name="lsp_edit_title">Edit language server</string>
+    <string name="lsp_field_name">Name</string>
+    <string name="lsp_field_command">Command</string>
+    <string name="lsp_field_extensions">File extensions</string>
+    <string name="lsp_field_extensions_hint">.go, .mod</string>
+    <string name="lsp_field_language">Language id</string>
+    <string name="lsp_field_options">Initialization options (JSON, optional)</string>
+    <string name="lsp_check">Check command</string>
+    <string name="lsp_save">Save</string>
+    <string name="lsp_cancel">Cancel</string>
+    <string name="lsp_delete">Delete</string>
+    <string name="lsp_status_running">Running</string>
+    <string name="lsp_status_starting">Starting</string>
+    <string name="lsp_status_not_started">Not started</string>
 </resources>

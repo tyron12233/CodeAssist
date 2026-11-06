@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import kotlin.time.TimeSource
+import dev.ide.ui.backend.UiFeatures
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -65,6 +67,9 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
 private const val PREVIEW_DEBOUNCE_MS = 400L
+
+/** How often the pane re-asks whether a preview can be lowered while nothing is indexing but it still can't. */
+private const val PREVIEW_READY_RECHECK_MS = 600L
 
 /**
  * The Compose `@Preview` pane. Shares the exact [PreviewSurface] chrome with the layout-XML preview —
@@ -132,18 +137,29 @@ fun ComposePreviewPane(
     var ready by remember(path) { mutableStateOf(true) }
     LaunchedEffect(path, host) {
         if (host == null) { ready = true; return@LaunchedEffect }
-        ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
-        var building = backend.search.indexStatus.value.building
+        // Judge every state the flow delivers, the current one included. Asking for readiness first and reading
+        // the build state after left a gap: a build that settled in between was never seen (the "not ready" answer
+        // predated it and no later edge came), so the pane sat on Preparing until the file was reopened.
+        var building: Boolean? = null
         backend.search.indexStatus.collect { status ->
             if (status.building == building) return@collect
+            val settled = building == true
             building = status.building
-            if (building) {
+            if (status.building) {
                 ready = false // a (re)build started — hold the preview until it settles
-            } else {
-                // A build just settled: re-check readiness and re-lower against the now-current classpath.
+                return@collect
+            }
+            // Not building: check readiness, and re-lower when a build just settled so it runs against the
+            // now-current classpath. Readiness can still trail the index (a scratch module's Compose runtime
+            // attaching), so keep asking while nothing is building rather than wait for an edge that may not come.
+            ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
+            if (ready && settled) nonce++
+            while (!ready && !backend.search.indexStatus.value.building) {
+                delay(PREVIEW_READY_RECHECK_MS.milliseconds)
                 ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
                 if (ready) nonce++
             }
+            if (ready) PreviewOpenClock.mark(path, "indexReady")
         }
     }
     // The engine is "working" either while the host is actively lowering/interpreting the rendered buffer
@@ -152,9 +168,30 @@ fun ComposePreviewPane(
     var busy by remember(path) { mutableStateOf(false) }
     val loading = host != null && (busy || (live && renderText != text))
 
+    // Preview render time for analytics: from the host going busy (lowering + interpreting) to it settling. The
+    // first render of a file pays for lowering everything; later ones are re-renders after an edit, so they are
+    // reported apart (`first`). Whether it worked is read a beat after it settles, because the host reports its
+    // problems in the same frame but after the busy flag.
+    val renderStart = remember(path) { arrayOfNulls<TimeSource.Monotonic.ValueTimeMark>(1) }
+    val rendered = remember(path) { booleanArrayOf(false) }
+    LaunchedEffect(busy) {
+        if (busy) return@LaunchedEffect
+        val start = renderStart[0] ?: return@LaunchedEffect
+        renderStart[0] = null
+        val ms = start.elapsedNow().inWholeMilliseconds
+        delay(250)
+        val ok = problems.none { it.level == PreviewIssueLevel.ERROR }
+        backend.diagnostics.recordPerf(
+            UiFeatures.PREVIEW_PERF_EVENT, ms,
+            mapOf("kind" to "compose", "first" to (!rendered[0]).toString(), "ok" to ok.toString()),
+        )
+        rendered[0] = true
+    }
+
     // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
     var detected by remember(path) { mutableStateOf(false) }
+    remember(path) { PreviewOpenClock.paneOpened(path) }
     LaunchedEffect(path, renderText) {
         previews = runCatching {
             backend.preview.composePreviews(
@@ -162,6 +199,7 @@ fun ComposePreviewPane(
             )
         }.getOrDefault(emptyList())
         detected = true
+        PreviewOpenClock.mark(path, "detected")
     }
     // Variant selection: the editor gutter picks one (via [selected]); the in-pane selector can override it
     // (cleared whenever the gutter selection changes so a fresh gutter tap wins).
@@ -364,7 +402,10 @@ fun ComposePreviewPane(
                                 renderText,
                                 state.night,
                                 { problems = it },
-                                { busy = it },
+                                { b ->
+                                    if (b && !busy) renderStart[0] = TimeSource.Monotonic.markNow()
+                                    busy = b
+                                },
                                 contentMod
                             )
                         }

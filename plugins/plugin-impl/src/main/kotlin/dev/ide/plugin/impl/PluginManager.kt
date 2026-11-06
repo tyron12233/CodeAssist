@@ -43,6 +43,9 @@ class PluginManager(
      * in a standalone test, and a plugin missing from it is simply handed no directory.
      */
     private val nativeLibraryDirs: Map<String, Path> = emptyMap(),
+    /** Where each plugin's [PluginRegistration.privateDataDir] is created, as [dataRoot] is for `dataDir`: the
+     *  host's private storage. Null in a standalone test, which gets a per-process temporary root. */
+    private val privateDataRoot: Path? = null,
 ) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
@@ -90,7 +93,14 @@ class PluginManager(
      * plugin managed to contribute first is unregistered before the throw propagates, so a half-registered
      * plugin never survives as an untracked contribution on the registry.
      */
-    fun load(plugin: Plugin) {
+    fun load(plugin: Plugin) = load(plugin, nativeLibraryDirs[plugin.manifest.pluginId.value])
+
+    /**
+     * [load], handing the plugin [nativeLibraryDir] as where its packaged native libraries were unpacked. For a
+     * plugin loaded after the manager was built (a new build of it replacing the old one), whose libraries are
+     * somewhere the constructor's map could not know.
+     */
+    fun load(plugin: Plugin, nativeLibraryDir: Path?) {
         val id = plugin.manifest.pluginId
         // A built-in that forgot to override `manifest` would otherwise register everything it contributes
         // under the empty id, which unload cannot find again and the Plugins screen cannot show. An
@@ -108,7 +118,8 @@ class PluginManager(
                 PluginRegistrationImpl(
                     id, registry, teardown, bus, hostVersion, appServices,
                     dataRoot ?: defaultDataRoot(),
-                    nativeLibraryDirs[id.value],
+                    nativeLibraryDir,
+                    privateDataRoot ?: defaultPrivateDataRoot(),
                 )
             )
         } catch (t: Throwable) {

@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.resolve
 import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.TypeRef
 
 /**
@@ -120,6 +121,17 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         }
         // B is a supertype of A by classifier (args unknown / raw) → satisfiable, no arg constraints.
         if (isClassifierSubtype(a.qualifiedName, b.qualifiedName)) return
+        // A function type (`kotlin.FunctionN`) is synthetic, never an indexed "known type", so the check below
+        // could never reject one: a `Char` argument stayed applicable to `trimEnd(predicate: (Char) -> Boolean)`,
+        // which then won the function-type tiebreak over `trimEnd(vararg chars: Char)`. A known classifier that
+        // is not itself a function type and doesn't extend this one (checked just above, so a
+        // `class F : (Int) -> Unit` still passes) cannot be one. `kotlin.reflect` is spared: a function
+        // reference's `KFunctionN` IS a function type, through a supertype the model may not carry.
+        if (TypeRendering.isFunctionType(b.qualifiedName) && !TypeRendering.isFunctionType(a.qualifiedName) &&
+            !a.qualifiedName.startsWith("kotlin.reflect.") && service.isKnownType(a.qualifiedName)
+        ) {
+            hasContradiction = true; return
+        }
         // Neither classifier-related nor projectable, and both are genuine known types → A is NOT a subtype of B.
         if (service.isKnownType(a.qualifiedName) && service.isKnownType(b.qualifiedName)) hasContradiction =
             true
@@ -136,27 +148,39 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         val variances = service.classTypeParameterVariance(fqn)
         val n = minOf(subArgs.size, supArgs.size)
         for (i in 0 until n) {
-            val sub = subArgs[i]
+            // The projection only decides the DIRECTION of the constraint below. Once read, it's dropped from
+            // both arguments: a variable's value is a type, never a projection. Keeping it bound
+            // `Collectors.toList<T>()` against `Collector<in Path, …>` to `T = in Path`, and that leaked into
+            // everything off the call (`List<in Path>`, a lambda parameter shown as `it: in Path`). A star is
+            // kept: it stands for an unknown argument and has no type to strip down to.
+            val sub = unprojected(subArgs[i])
             val sup = supArgs[i]
             val effective = when (val useSite = (sup as? KotlinType)?.projection ?: "") {
                 "*" -> continue                          // star: accepts anything → no constraint
                 "out", "in" -> useSite                   // a use-site projection overrides declaration variance
                 else -> variances.getOrNull(i)
             }
+            val target = unprojected(sup)
             when (effective) {
                 "in" -> addSubtypeConstraint(
-                    sup,
+                    target,
                     sub
                 )                                     // contravariant
                 "" -> {
-                    addSubtypeConstraint(sub, sup); addSubtypeConstraint(sup, sub)
+                    addSubtypeConstraint(sub, target); addSubtypeConstraint(target, sub)
                 }   // invariant: equality
                 else -> addSubtypeConstraint(
                     sub,
-                    sup
+                    target
                 )                                     // covariant / unknown
             }
         }
+    }
+
+    /** [t] without an `in`/`out` use-site projection; a star projection, or a non-[KotlinType], as is. */
+    private fun unprojected(t: TypeRef): TypeRef {
+        val k = t as? KotlinType ?: return t
+        return if (k.projection == "in" || k.projection == "out") k.withProjection("") else k
     }
 
     /** Whether [subFqn]'s classifier is [superFqn] or a (Kotlin-mapped) supertype of it — args ignored. */

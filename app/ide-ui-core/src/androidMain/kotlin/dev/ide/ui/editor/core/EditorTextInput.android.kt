@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Matrix
+import android.os.SystemClock
 import android.provider.Settings
 import android.text.InputType
 import android.util.Log
@@ -148,6 +149,7 @@ private class EditorTextInputNode(
                 try {
                     startInputMethod(EditorImeRequest(s, view, bridge) { options })
                 } finally {
+                    bridge.cancelPendingRestart()
                     if (s.imeListener === bridge) s.imeListener = null
                 }
             }
@@ -238,6 +240,11 @@ private class EditorImeRequest(
 private const val MAX_EXTRACT_CHARS = 100_000
 private const val NO_MONITOR = -1
 
+/** How long the IME must stay quiet before a pending resync restart fires ([EditorImeBridge.onRestartInput]). */
+private const val RESTART_QUIET_MS = 120L
+/** The longest a resync restart waits on a keyboard that keeps typing, or a word still being composed. */
+private const val RESTART_MAX_DELAY_MS = 1_000L
+
 /**
  * Soft keyboards that keep their suggestion strip and autocorrect despite TYPE_TEXT_FLAG_NO_SUGGESTIONS
  * and full context starvation (they predict from their own model of what they typed). Raw mode adds
@@ -305,6 +312,61 @@ private class EditorImeBridge(
         monitorToken = NO_MONITOR
         cursorUpdateMode = 0
         mirrorWindowed = false
+        // The IME re-reads everything for a new connection, which is all a pending restart was for.
+        cancelPendingRestart()
+    }
+
+    /** When the pending restart was first asked for ([SystemClock.uptimeMillis]), or 0 when none is pending. */
+    private var restartRequestedAt = 0L
+    private val restartRunnable = Runnable {
+        val now = SystemClock.uptimeMillis()
+        // Mid-word, a restart would finish the IME's composition early; wait for the word to end, up to the cap.
+        if (session.composing != null && now < restartRequestedAt + RESTART_MAX_DELAY_MS) {
+            scheduleRestart()
+            return@Runnable
+        }
+        restartRequestedAt = 0L
+        if (view.isAttachedToWindow) imm.restartInput(view)
+    }
+
+    /**
+     * Restarts the IME once it has gone quiet, not at once. A keyboard sends keystrokes ahead of hearing back
+     * from us, and a restart deactivates the connection those are addressed to: the framework drops every
+     * one that lands after it ("commitText on inactive InputConnection"), so typing fast after a smart Enter
+     * lost the next character every time. Each input the IME sends while a restart is pending pushes it back
+     * ([onImeInput]), so it fires in the first pause, and never more than [RESTART_MAX_DELAY_MS] late. With no
+     * input in flight it restarts at once.
+     */
+    override fun onRestartInput() {
+        val now = SystemClock.uptimeMillis()
+        if (restartRequestedAt == 0L && now - lastImeInputAt >= RESTART_QUIET_MS) {
+            // Nothing in flight (a completion accepted by tap, a buffer replaced): restart now, as always.
+            if (view.isAttachedToWindow) imm.restartInput(view)
+            return
+        }
+        if (restartRequestedAt == 0L) restartRequestedAt = now
+        scheduleRestart()
+    }
+
+    /** When the IME last sent input on the live connection. */
+    private var lastImeInputAt = 0L
+
+    /** The IME just sent input on the live connection; keep a pending restart from cutting off what follows. */
+    fun onImeInput() {
+        lastImeInputAt = SystemClock.uptimeMillis()
+        if (restartRequestedAt != 0L) scheduleRestart()
+    }
+
+    fun cancelPendingRestart() {
+        restartRequestedAt = 0L
+        view.removeCallbacks(restartRunnable)
+    }
+
+    private fun scheduleRestart() {
+        view.removeCallbacks(restartRunnable)
+        val now = SystemClock.uptimeMillis()
+        val at = minOf(now + RESTART_QUIET_MS, restartRequestedAt + RESTART_MAX_DELAY_MS)
+        view.postDelayed(restartRunnable, (at - now).coerceAtLeast(0L))
     }
 
     override fun onStateChanged() {
@@ -331,10 +393,6 @@ private class EditorImeBridge(
         val et = fullExtractedText(session)
         mirrorWindowed = et.startOffset != 0
         return et
-    }
-
-    override fun onRestartInput() {
-        imm.restartInput(view)
     }
 
     override fun isSyncingExtractedText(): Boolean = monitorToken != NO_MONITOR
@@ -435,6 +493,7 @@ private class EditorInputConnection(
     }
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        bridge.onImeInput()
         imeLog { "commitText \"$text\" ncp=$newCursorPosition sel=${session.selection} comp=${session.composing}" }
         // A soft keyboard that commits a bare newline for Enter (rather than a KEYCODE_ENTER key event) still
         // steps a live template instead of splitting the line — the key handler never sees this path.
@@ -444,6 +503,7 @@ private class EditorInputConnection(
     }
 
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        bridge.onImeInput()
         imeLog { "setComposingText \"$text\" ncp=$newCursorPosition sel=${session.selection} comp=${session.composing}" }
         val s = text?.toString() ?: ""
         // Composing text never spans a line break; refuse one and let the IME fall back to committing the text,
@@ -468,12 +528,14 @@ private class EditorInputConnection(
     }
 
     override fun finishComposingText(): Boolean {
+        bridge.onImeInput()
         imeLog { "finishComposingText comp=${session.composing}" }
         session.imeFinishComposing()
         return true
     }
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+        bridge.onImeInput()
         imeLog { "deleteSurroundingText before=$beforeLength after=$afterLength sel=${session.selection} comp=${session.composing}" }
         if (beforeLength < 0 || afterLength < 0) return false
         session.imeDeleteSurrounding(beforeLength, afterLength)
@@ -570,6 +632,7 @@ private class EditorInputConnection(
     override fun getCursorCapsMode(reqModes: Int): Int = 0
 
     override fun sendKeyEvent(event: AndroidKeyEvent?): Boolean {
+        bridge.onImeInput()
         imeLog { "sendKeyEvent $event" }
         return super.sendKeyEvent(event)
     }

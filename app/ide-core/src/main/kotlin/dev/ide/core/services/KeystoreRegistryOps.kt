@@ -69,6 +69,7 @@ internal object KeystoreRegistryOps {
             certSubject = cert?.subject,
             sha256 = cert?.sha256,
             validUntilEpochMs = cert?.validUntilEpochMs,
+            sha1 = cert?.sha1,
         )
     }
 

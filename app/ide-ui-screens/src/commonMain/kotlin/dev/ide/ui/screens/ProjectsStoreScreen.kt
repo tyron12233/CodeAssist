@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +49,7 @@ import dev.ide.ui.components.FeaturedHeroCard
 import dev.ide.ui.components.StoreListRow
 import dev.ide.ui.components.formatRating
 import dev.ide.ui.components.formatSizeShort
-import dev.ide.ui.components.TrendingTicker
+import dev.ide.ui.components.TrendingSearches
 import dev.ide.ui.components.motifFor
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_browse_by_kind
@@ -98,8 +99,9 @@ fun ProjectsStoreScreen(
     }
 
     val state = rememberProjectsStoreState(backend)
-    var searching by remember { mutableStateOf(false) }
-    var searchCategory by remember { mutableStateOf<String?>(null) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var searchCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Box(Modifier.widthIn(max = 820.dp).fillMaxSize()) {
@@ -110,6 +112,7 @@ fun ProjectsStoreScreen(
                     onOpenItem = onOpenItem,
                     onClose = { searching = false },
                     initialCategory = searchCategory,
+                    initialQuery = searchQuery,
                 )
             } else {
                 StoreBrowse(
@@ -117,6 +120,12 @@ fun ProjectsStoreScreen(
                     onOpenItem = onOpenItem,
                     onOpenSearch = { category ->
                         searchCategory = category
+                        searchQuery = null
+                        searching = true
+                    },
+                    onSearchTerm = { term ->
+                        searchCategory = null
+                        searchQuery = term
                         searching = true
                     },
                 )
@@ -130,6 +139,7 @@ private fun StoreBrowse(
     state: ProjectsStoreState,
     onOpenItem: (UiStoreItem) -> Unit,
     onOpenSearch: (String?) -> Unit,
+    onSearchTerm: (String) -> Unit,
 ) {
     val catalog = state.catalog
     val allItems = remember(catalog) { catalog.sections.flatMap { it.items } }
@@ -152,9 +162,9 @@ private fun StoreBrowse(
 
         if (ticker.isNotEmpty()) {
             item("ticker") {
-                TrendingTicker(
-                    labels = ticker,
-                    pairAt = { tonalPair(it) },
+                TrendingSearches(
+                    terms = ticker,
+                    onTerm = onSearchTerm,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
             }
@@ -179,9 +189,10 @@ private fun StoreBrowse(
                             motif = remember(item.id) { motifFor(item.id) },
                             rating = item.rating,
                             installs = item.installs,
-                            preview = if (hasSamplePreview(item.previewKey)) {
-                                { m -> SamplePreview(item.previewKey!!, m) }
-                            } else null,
+                            iconId = item.iconId,
+                            shots = if (hasSamplePreview(item.previewKey)) {
+                                listOf { m -> SamplePreview(item.previewKey!!, m) }
+                            } else emptyList(),
                             onClick = { onOpenItem(item) },
                         )
                     }
@@ -262,13 +273,20 @@ internal fun StoreItemRow(
     progress: dev.ide.ui.backend.UiInstallProgress? = null,
     /** Where a published app icon is fetched from. Null (the bundled catalogue) keeps the glyph tile. */
     backend: dev.ide.ui.backend.IdeBackend? = null,
+    /**
+     * Replaces the publisher line. A publisher's own page passes the project's blurb, since naming the
+     * publisher under every row of their own page says nothing.
+     */
+    subtitle: String? = null,
+    /** Replaces the stat line, for a page that ranks by different figures than the store's shelves. */
+    meta: String? = null,
 ) {
     val message = progress?.message
     StoreListRow(
         title = item.title,
         // A failure replaces the publisher line: the row is where the tap happened, so it is where the
         // reason belongs.
-        subtitle = message ?: item.author.orEmpty().ifBlank { item.category },
+        subtitle = message ?: subtitle ?: item.author.orEmpty().ifBlank { item.category },
         iconId = item.iconId,
         pair = tonalPair(index),
         tileShape = tileShape(index),
@@ -276,7 +294,7 @@ internal fun StoreItemRow(
         actionLabel = installActionLabel(item, progress),
         actionFilled = item.available,
         // Suppressed while a failure is showing: the row is already saying something more important.
-        meta = if (message != null) "" else storeItemMeta(item),
+        meta = if (message != null) "" else meta ?: storeItemMeta(item),
         onOpen = { onOpenItem(item) },
         onAction = { if (!progress.inFlight) (onAction ?: onOpenItem)(item) },
         icon = rememberItemIcon(backend, item),

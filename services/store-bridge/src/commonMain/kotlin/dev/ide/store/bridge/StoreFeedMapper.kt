@@ -208,7 +208,9 @@ object StoreFeedMapper {
             description = description,
             blurb = blurb,
             category = category,
-            iconId = icon ?: local?.iconId ?: "file",
+            // A plugin with no glyph of its own draws the puzzle piece where a glyph is still used (the
+            // detail page's watermark), not the generic file every remote item used to get.
+            iconId = icon ?: local?.iconId ?: if (category.equals("build", ignoreCase = true)) "extension" else "file",
             tags = tags,
             author = author,
             authorHandle = authorHandle,

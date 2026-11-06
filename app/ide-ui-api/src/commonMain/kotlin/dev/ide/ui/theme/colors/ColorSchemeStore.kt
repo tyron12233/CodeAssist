@@ -32,11 +32,11 @@ class ColorSchemeStore(
         get(defKey(id))?.takeIf { it.isNotBlank() }?.let { ColorSchemeJson.decode(it, fallbackId = id) }
     }
 
-    /** Presets first, then the user's — the order the picker shows. */
-    fun all(): List<EditorColorScheme> = BuiltInColorSchemes.all + userSchemes()
+    /** Presets first, then the ones plugins ship, then the user's — the order the picker shows. */
+    fun all(): List<EditorColorScheme> = BuiltInColorSchemes.all + ContributedColorSchemes.all + userSchemes()
 
     fun byId(id: String): EditorColorScheme? =
-        BuiltInColorSchemes.byId(id) ?: get(defKey(id))
+        BuiltInColorSchemes.byId(id) ?: ContributedColorSchemes.byId(id) ?: get(defKey(id))
             ?.takeIf { it.isNotBlank() }
             ?.let { ColorSchemeJson.decode(it, fallbackId = id) }
 
@@ -45,7 +45,7 @@ class ColorSchemeStore(
      * the presets are the one thing a user can always get back to.
      */
     fun save(scheme: EditorColorScheme) {
-        if (BuiltInColorSchemes.byId(scheme.id) != null) return
+        if (isReadOnly(scheme.id)) return
         set(defKey(scheme.id), ColorSchemeJson.encode(scheme, pretty = false))
         val ids = ids()
         if (scheme.id !in ids) set(IDS_KEY, (ids + scheme.id).joinToString(","))
@@ -57,7 +57,7 @@ class ColorSchemeStore(
      * the moment an id was reused.
      */
     fun delete(id: String) {
-        if (BuiltInColorSchemes.byId(id) != null) return
+        if (isReadOnly(id)) return
         set(defKey(id), "")
         set(IDS_KEY, ids().filter { it != id }.joinToString(","))
         if (activeId() == id) setActiveId(BuiltInColorSchemes.DEFAULT_ID)
@@ -90,7 +90,7 @@ class ColorSchemeStore(
     }
 
     private fun uniqueId(base: String): String {
-        val taken = (ids() + BuiltInColorSchemes.all.map { it.id }).toSet()
+        val taken = (ids() + BuiltInColorSchemes.all.map { it.id } + ContributedColorSchemes.all.map { it.id }).toSet()
         if (base !in taken) return base
         var n = 2
         while ("$base-$n" in taken) n++
@@ -104,6 +104,10 @@ class ColorSchemeStore(
         while ("$base ($n)" in taken) n++
         return "$base ($n)"
     }
+
+    /** A preset or a plugin's scheme: listed, never stored, never deleted. */
+    private fun isReadOnly(id: String): Boolean =
+        BuiltInColorSchemes.byId(id) != null || ContributedColorSchemes.byId(id) != null
 
     private fun ids(): List<String> =
         get(IDS_KEY)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()

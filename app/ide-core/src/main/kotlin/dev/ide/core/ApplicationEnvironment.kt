@@ -1,5 +1,8 @@
 package dev.ide.core
 
+import dev.ide.model.template.ProjectTemplateExtensionPoint
+import dev.ide.platform.PluginId
+import dev.ide.core.lsp.LanguageServerBridge
 import dev.ide.core.notify.UserMessageCenter
 import dev.ide.core.plugins.BuiltInPlugins
 import dev.ide.core.plugins.ExternalUiFacets
@@ -76,10 +79,15 @@ class ApplicationEnvironment(
     val hostVersion: String? = null,
     /**
      * Where each plugin's `PluginRegistration.dataDir` is created, one subdirectory per plugin id. The host
-     * passes a directory under its own app storage so a plugin's files are backed up and removed with the
-     * app; null (desktop bootstraps, tests) falls back to a per-process temporary root.
+     * passes a directory under its own app storage, removed with the app; null (desktop bootstraps, tests) falls
+     * back to a per-process temporary root.
      */
     val pluginDataRoot: Path? = null,
+    /**
+     * Where each plugin's `PluginRegistration.privateDataDir` is created: the host's PRIVATE storage (on a
+     * device, the app's internal files). Null falls back to a per-process temporary root, as [pluginDataRoot].
+     */
+    val pluginPrivateDataRoot: Path? = null,
     /**
      * Reads an app-global preference, for the built-ins that need one at load. The keymap is the reason it
      * exists: a user's rebinding has to be in force from the first key press, and the preference store lives
@@ -87,6 +95,17 @@ class ApplicationEnvironment(
      * before it. Defaults to nothing stored, which is correct for a test or a standalone bootstrap.
      */
     val preferences: (String) -> String? = { null },
+    /**
+     * Installed plugins turned off because they crashed the IDE, by id, with the version that crashed. Each is
+     * also in [disabledPluginIds]; this says why, for its row. One whose installed version is now different
+     * (it was updated) loads again and is listed in [liftedCrashSuspensions] so the host can forget it.
+     */
+    crashSuspended: Map<String, String> = emptyMap(),
+    /**
+     * Start without any installed plugin: the host saw the IDE crash repeatedly right after launch and could
+     * not tell which code did it. Built-ins load as usual; each installed plugin's row says why it did not.
+     */
+    safeMode: Boolean = false,
 ) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
@@ -112,6 +131,13 @@ class ApplicationEnvironment(
      *  template registries). The android built-in plugin registers the AndroidFacet codec through it; every
      *  opened project reuses it to decode `module.toml`. */
     val codecs: FacetCodecRegistry = FacetCodecRegistry(platform.extensions)
+
+    /**
+     * The plugins' Language Server Protocol servers ([dev.ide.lsp.LANGUAGE_SERVER_EP]) as the IDE's own language
+     * features, and the sessions running them. Registered at the end of the plugin load below, so every
+     * definition and every competing language backend is known by then.
+     */
+    val languageServers: LanguageServerBridge = LanguageServerBridge(this)
 
     /** The currently-open project's engine, or null. Set by the backend on project swap; read by app-level
      *  extension callbacks (e.g. command actions) that fire outside any project's service scope. */
@@ -141,7 +167,9 @@ class ApplicationEnvironment(
      * lists these under Installed, separately from the built-ins, and shows [InstalledPlugin.error] against
      * one that did not load.
      */
-    val installedPlugins: List<InstalledPlugin>
+    @Volatile
+    var installedPlugins: List<InstalledPlugin>
+        private set
 
     /**
      * Plugin packages a [PluginSource] found this launch but could not offer for loading: a missing or
@@ -151,6 +179,15 @@ class ApplicationEnvironment(
      * looking like one the IDE never saw.
      */
     val rejectedPlugins: List<RejectedPlugin>
+
+    /**
+     * False when a [PluginSource] failed to enumerate this launch, so [installedPlugins] may be missing plugins
+     * that ARE installed. Nothing is then offered as left behind by an uninstalled plugin: its data would be
+     * that of a plugin the IDE merely failed to see.
+     */
+    @Volatile
+    var pluginDiscoveryComplete: Boolean = true
+        private set
 
     /**
      * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED plugins, in load order: the built-ins
@@ -163,7 +200,26 @@ class ApplicationEnvironment(
      * Installed plugins come last so one can override a built-in registration that is last-writer-wins (a
      * file-tree icon), rather than being overridden by it.
      */
-    val enabledUiPlugins: List<UiPlugin>
+    @Volatile
+    var enabledUiPlugins: List<UiPlugin>
+        private set
+
+    /**
+     * Each installed plugin that loaded this launch, by id, with the classloader its code came off: what a
+     * crash or a stalled main thread is blamed by (see [dev.ide.core.plugins.PluginBlame]).
+     */
+    @Volatile
+    var externalPluginLoaders: Map<String, ClassLoader>
+        private set
+
+    /** Loads an installed plugin's code; kept for [reloadInstalledPlugin]. */
+    private val externalLoader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
+
+    /** Crash-suspended plugins that load again this launch because their installed version changed. */
+    val liftedCrashSuspensions: Set<String>
+
+    /** True when [safeMode] was asked for AND there were installed plugins it kept from loading. */
+    val safeModeApplied: Boolean
 
     init {
         // Before any plugin loads, so a plugin's `register` can resolve it. This is the one service a plugin
@@ -186,22 +242,42 @@ class ApplicationEnvironment(
         val discovered = scan.usable
         rejectedPlugins = scan.rejected
         val failures = LinkedHashMap<String, String>()
+        // A plugin turned off for crashing gets another chance once it is a different version: an update is the
+        // fix its author shipped, and it should not stay off until someone thinks to look for it.
+        liftedCrashSuspensions = discovered.filter { d ->
+            crashSuspended[d.manifest.id]?.let { it != d.manifest.version } == true
+        }.mapTo(HashSet()) { it.manifest.id }
+        for (d in discovered) {
+            val crashedVersion = crashSuspended[d.manifest.id] ?: continue
+            if (d.manifest.id in liftedCrashSuspensions || d.manifest.id !in disabledPluginIds) continue
+            // Shown after "Did not load:" on the plugin's page, so it reads as the rest of that sentence.
+            failures[d.manifest.id] = "it was turned off after it crashed CodeAssist (version $crashedVersion). " +
+                "It turns back on when a new version is installed, or turn it on here to try again."
+        }
         pluginCatalog = PluginCatalog(
             all = builtIns.map { it.engine.manifest } + discovered.map { it.manifest },
-            disabledIds = disabledPluginIds,
+            disabledIds = disabledPluginIds - liftedCrashSuspensions,
             externalIds = discovered.mapTo(HashSet()) { it.manifest.id },
             consentedIds = consentedPluginIds,
         )
 
         val enabledBuiltIns = builtIns.filter { pluginCatalog.isEnabled(it.engine.manifest.id) }
         val builtInLoadIds = enabledBuiltIns.mapTo(HashSet()) { it.engine.manifest.id }
-        val loader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
+        val loader = externalLoader
         val external = LinkedHashMap<String, Plugin>()
         // Each load's result, kept for its entry-point instances: a plugin's UI facets come off the SAME
         // loader its engine facet came from, and a class named in both of the manifest's lists is the SAME
         // object, which is what makes the two halves one program (see ExternalUiFacets).
         val loaded = LinkedHashMap<String, ExternalPluginLoader.Result.Loaded>()
-        for (d in discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }) {
+        val wouldLoad = discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }
+        safeModeApplied = safeMode && wouldLoad.isNotEmpty()
+        if (safeModeApplied) {
+            for (d in wouldLoad) {
+                failures[d.manifest.id] = "CodeAssist started without plugins this time, after closing " +
+                    "unexpectedly several times in a row. It loads again on the next start."
+            }
+        }
+        for (d in if (safeModeApplied) emptyList() else wouldLoad) {
             when (val r = loader.load(d)) {
                 is ExternalPluginLoader.Result.Loaded -> {
                     external[r.manifest.id] = r.plugin
@@ -234,6 +310,7 @@ class ApplicationEnvironment(
             .toMap()
         pluginManager = PluginManager(
             platform.extensions, platform.messageBus, hostVersion, container, pluginDataRoot, nativeLibraryDirs,
+            pluginPrivateDataRoot,
         )
 
         // One ordered load over both tiers, so an installed plugin's dependency on a built-in is a real edge.
@@ -245,6 +322,13 @@ class ApplicationEnvironment(
             failures[id] = error.message ?: error.toString()
             log.warn("installed plugin '$id' failed to load", error)
         }
+
+        // A project template or module type whose id an earlier plugin already holds is left out of every list
+        // (the registries keep the first). Said in the log of the plugin that lost it, which its page opens: a
+        // developer whose own template quietly never appears has nowhere else to find out why. Not as a load
+        // failure, which would mark a plugin that loaded and works "Didn't load".
+        reportShadowedIds(ProjectTemplateExtensionPoint, "project template") { it.id.value }
+        reportShadowedIds(dev.ide.model.ModuleTypeExtensionPoint, "module type") { it.id }
 
         // UI facets come after the ordered engine load, so a plugin whose engine facet was pruned or threw
         // contributes no UI: its panels would be reading services that never registered.
@@ -260,8 +344,93 @@ class ApplicationEnvironment(
         installedPlugins = discovered.map {
             InstalledPlugin(it.manifest, it.origin, error = failures[it.manifest.id])
         }
+        // Every plugin that got a classloader: even one whose register() threw may have left code behind (a
+        // thread, a listener) that runs later, and its frames should still be named for what they are.
+        externalPluginLoaders = loaded.mapValues { it.value.classLoader }
         enabledUiPlugins = enabledBuiltIns.mapNotNull { it.ui } + externalUi
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
+        // After every plugin: a definition's adapters must know which languages already have a backend.
+        runCatching { languageServers.registerAll() }.onFailure { log.warn("could not register the language servers", it) }
+    }
+
+    /** What [reloadInstalledPlugin] did. */
+    sealed interface PluginReload {
+        /** The new build is loaded. [ui] is its UI facet, for the caller to swap in on the UI thread. */
+        data class Reloaded(val manifest: PluginManifest, val ui: UiPlugin?) : PluginReload
+
+        /**
+         * It could not be swapped in this process; [reason] says why. When [unloaded], the old build is already
+         * gone too, so the only way back to a working plugin is a fresh start.
+         */
+        data class Failed(val reason: String, val unloaded: Boolean = false) : PluginReload
+    }
+
+    /**
+     * Replace the installed plugin [replacement] is a new build of, in this running app: the old build's engine
+     * facet is unloaded (its contributions withdrawn, its `dispose` called) and [replacement] is loaded and
+     * registered in its place, through the same checks a launch applies. Its UI facet comes back in the result
+     * for the caller to swap into the UI registries ([dev.ide.ui.ext.UiPluginHost.replace]) on the UI thread.
+     *
+     * This is the plugin sandbox's hot reload. It covers what the plugin contributes to the app; anything the
+     * old build left running that `dispose` did not stop keeps running the old code, and what an open project
+     * took from the plugin when it opened stays as it was until the project is opened again.
+     *
+     * Not thread-safe against another reload; the sandbox runs one at a time.
+     */
+    fun reloadInstalledPlugin(replacement: DiscoveredPlugin): PluginReload {
+        val manifest = replacement.manifest
+        val id = manifest.id
+        if (id !in externalPluginLoaders) return PluginReload.Failed("'$id' is not the plugin loaded here")
+        val dependents = installedPlugins.filter { it.manifest.id != id && id in it.manifest.dependsOn }
+        if (dependents.isNotEmpty()) {
+            return PluginReload.Failed("${dependents.joinToString { it.manifest.id }} depends on it")
+        }
+        val loadedIds = pluginManager.loadedIds.mapTo(HashSet()) { it.value }
+        manifest.dependsOn.firstOrNull { it !in loadedIds }?.let {
+            return PluginReload.Failed("it now requires plugin '$it', which is not loaded")
+        }
+        val loaded = when (val r = externalLoader.load(replacement)) {
+            is ExternalPluginLoader.Result.Failed -> return PluginReload.Failed(r.reason)
+            is ExternalPluginLoader.Result.Loaded -> r
+        }
+
+        pluginManager.unload(PluginId(id))
+        // From here the plugin is the new build's, whatever happens next: blame its frames by its new loader.
+        externalPluginLoaders = externalPluginLoaders + (id to loaded.classLoader)
+        val failure = try {
+            pluginManager.load(loaded.plugin, replacement.nativeLibraryDir)
+            null
+        } catch (t: Throwable) {
+            log.warn("installed plugin '$id' failed to load", t)
+            t.message ?: t.toString()
+        }
+        var uiFailure: String? = null
+        val ui = if (failure != null) null else ExternalUiFacets.load(manifest, loaded.instances, uiServices) { reason ->
+            uiFailure = listOfNotNull(uiFailure, reason).joinToString("; ")
+        }
+        installedPlugins = installedPlugins.map {
+            if (it.manifest.id != id) it else InstalledPlugin(manifest, replacement.origin, error = failure ?: uiFailure)
+        }
+        enabledUiPlugins = enabledUiPlugins.filter { it.id != id } + listOfNotNull(ui)
+        return if (failure != null) PluginReload.Failed(failure, unloaded = true) else PluginReload.Reloaded(manifest, ui)
+    }
+
+    /** Warn, in the plugin's own log, about each contribution to [ep] whose id an earlier registration holds. */
+    private fun <T : Any> reportShadowedIds(
+        ep: dev.ide.platform.ExtensionPoint<T>,
+        kind: String,
+        idOf: (T) -> String,
+    ) {
+        val owners = HashMap<String, PluginId>()
+        for (c in platform.extensions.contributions(ep)) {
+            val id = runCatching { idOf(c.impl) }.getOrNull() ?: continue
+            val owner = owners.putIfAbsent(id, c.plugin) ?: continue
+            if (owner == c.plugin) continue
+            Log.logger("CodeAssist", c.plugin.value).warn(
+                "The $kind '$id' is not shown: plugin '${owner.value}' already provides one with that id. " +
+                    "Give it an id of its own.",
+            )
+        }
     }
 
     /** One discovery pass: the plugins the host can go on to load, and the ones it cannot. */
@@ -286,6 +455,7 @@ class ApplicationEnvironment(
                 source.discover()
             } catch (t: Throwable) {
                 log.warn("plugin source '${source.id}' failed to enumerate installed plugins", t)
+                pluginDiscoveryComplete = false
                 continue
             }
             for (candidate in found) {
@@ -315,6 +485,7 @@ class ApplicationEnvironment(
     }
 
     override fun close() {
+        runCatching { languageServers.close() }
         runCatching { pluginManager.unloadAll() }
         runCatching { container.dispose() }
         runCatching { platform.dispose() }

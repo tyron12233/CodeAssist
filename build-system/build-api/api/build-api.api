@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:build-api, pinned at SPI 3.0.0.
+# The compiled surface of io.github.tyron12233:build-api, pinned at SPI 3.4.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/build/AlwaysRun
@@ -8,13 +8,17 @@ dev/ide/build/BuildConfiguration
 	method abstract getProject()Ldev/ide/model/Project;
 	method abstract getRequest()Ldev/ide/build/BuildRequest;
 	method abstract getTasks()Ldev/ide/build/TaskContainer;
+	method addNativeLibraries-aA_KukA(Ldev/ide/model/Module;Ljava/nio/file/Path;Ljava/lang/String;)V
 	method getBuildSystemId--V1bbYQ()Ljava/lang/String;
 	method getEnv()Ldev/ide/build/BuildEnv;
+	method nativeLibraries(Ldev/ide/model/Module;)Ljava/util/List;
 dev/ide/build/BuildConfiguration$DefaultImpls
 	kind class
 	super java/lang/Object
+	method static addNativeLibraries-aA_KukA(Ldev/ide/build/BuildConfiguration;Ldev/ide/model/Module;Ljava/nio/file/Path;Ljava/lang/String;)V
 	method static getBuildSystemId--V1bbYQ(Ldev/ide/build/BuildConfiguration;)Ljava/lang/String;
 	method static getEnv(Ldev/ide/build/BuildConfiguration;)Ldev/ide/build/BuildEnv;
+	method static nativeLibraries(Ldev/ide/build/BuildConfiguration;Ldev/ide/model/Module;)Ljava/util/List;
 dev/ide/build/BuildContext
 	kind class
 	super java/lang/Object
@@ -294,12 +298,14 @@ dev/ide/build/DiagnosticKind
 	method equals(Ljava/lang/Object;)Z
 	method getId()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/build/DiagnosticKind;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/build/DiagnosticKind$Companion
 	kind class
 	super java/lang/Object
@@ -355,9 +361,12 @@ dev/ide/build/InterpretRunRequest
 	super java/lang/Object
 	ctor (Ljava/util/List;Ljava/lang/String;ZLjava/util/List;)V
 	ctor (Ljava/util/List;Ljava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;)V
+	ctor (Ljava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method getArgs()Ljava/util/List;
 	method getClasspath()Ljava/util/List;
 	method getInstanceMain()Z
+	method getInterpretPrefixes()Ljava/util/List;
 	method getMainClass()Ljava/lang/String;
 dev/ide/build/KotlinCompilerPlugin
 	kind interface
@@ -396,10 +405,15 @@ dev/ide/build/Lifecycle
 	method classes-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 	method compileJava-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 	method compileKotlin-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method compileTestJava-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method compileTestKotlin-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 	method generateSources-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 	method jar-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 	method processResources-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method processTestResources-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 	method static assemble-oZchZD8$default(Ldev/ide/build/Lifecycle;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+	method test-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method testClasses-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
 dev/ide/build/LoggingProgramIo
 	kind class
 	super java/lang/Object
@@ -408,6 +422,15 @@ dev/ide/build/LoggingProgramIo
 	method exited(I)V
 	method getStdin()Ljava/io/InputStream;
 	method stdout(Ljava/lang/String;)V
+dev/ide/build/NativeLibraryOutput
+	kind class
+	super java/lang/Object
+	ctor (Ljava/nio/file/Path;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method equals(Ljava/lang/Object;)Z
+	method getDir()Ljava/nio/file/Path;
+	method getProducedBy-xgv66CM()Ljava/lang/String;
+	method hashCode()I
+	method toString()Ljava/lang/String;
 dev/ide/build/Plugin
 	kind interface
 	method abstract apply(Ldev/ide/build/BuildConfiguration;)V
@@ -461,9 +484,11 @@ dev/ide/build/RunAction
 	ctor (Ljava/lang/String;Ldev/ide/build/TaskGraph;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)V
 	ctor (Ljava/lang/String;Ldev/ide/build/TaskGraph;Ljava/lang/String;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method getBanner()Ljava/lang/String;
+	method getConsole()Ldev/ide/build/RunConsole;
 	method getGraph()Ldev/ide/build/TaskGraph;
 	method getHeader()Ljava/lang/String;
 	method getOnSuccess()Lkotlin/jvm/functions/Function2;
+	method setConsole(Ldev/ide/build/RunConsole;)V
 dev/ide/build/RunCapture
 	kind class
 	super java/lang/Object
@@ -483,6 +508,13 @@ dev/ide/build/RunCapture
 	method hashCode()I
 	method static copy$default(Ldev/ide/build/RunCapture;ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/build/RunCapture;
 	method toString()Ljava/lang/String;
+dev/ide/build/RunConsole
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;)V
+	method getIo()Ldev/ide/build/ProgramIo;
+	method getTitle()Ljava/lang/String;
+	method setIo(Ldev/ide/build/ProgramIo;)V
 dev/ide/build/RunEvent
 	kind interface
 dev/ide/build/RunEvent$Finished
@@ -711,12 +743,14 @@ dev/ide/build/TaskName
 	method equals(Ljava/lang/Object;)Z
 	method getValue()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/build/TaskName;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;
 dev/ide/build/TaskOutputs
 	kind interface
 	method abstract dir(Ljava/lang/String;Ldev/ide/vfs/VirtualFile;)V
@@ -775,15 +809,62 @@ dev/ide/build/TaskSpec
 	method abstract getName-xgv66CM()Ljava/lang/String;
 	method abstract mustRunAfter([Ljava/lang/Object;)V
 	method abstract mustRunBefore([Ljava/lang/Object;)V
+dev/ide/build/TestDeclaration
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ILjava/lang/String;)V
+	ctor (Ljava/lang/String;ILjava/lang/String;Z)V
+	ctor (Ljava/lang/String;ILjava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getGroup()Z
+	method getName()Ljava/lang/String;
+	method getOffset()I
+	method getTarget()Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/build/TestProvider
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract getLanguages()Ljava/util/Set;
+	method abstract run(Ldev/ide/model/Module;Ljava/util/List;Ldev/ide/model/Project;Ldev/ide/build/BuildContext;)Ldev/ide/build/RunAction;
+	method abstract tests(Ldev/ide/model/Module;Ljava/lang/String;Ljava/lang/String;)Ljava/util/List;
+	method appliesTo(Ldev/ide/model/Module;)Z
+	method getDisplayName()Ljava/lang/String;
+dev/ide/build/TestProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static appliesTo(Ldev/ide/build/TestProvider;Ldev/ide/model/Module;)Z
+	method static getDisplayName(Ldev/ide/build/TestProvider;)Ljava/lang/String;
+dev/ide/build/TestReport
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/build/TestReport;
+	field static MARK Ljava/lang/String;
+	method static failed(Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;)Ljava/lang/String;
+	method static finished$default(ZILjava/lang/Object;)Ljava/lang/String;
+	method static finished()Ljava/lang/String;
+	method static finished(Z)Ljava/lang/String;
+	method static passed(Ljava/lang/String;Ljava/lang/String;J)Ljava/lang/String;
+	method static queued(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method static run(Ljava/lang/String;)Ljava/lang/String;
+	method static skipped$default(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+	method static skipped(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method static skipped(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method static started(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method static suiteFailed(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/build/TestsKt
+	kind class
+	super java/lang/Object
+	method static getTEST_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
 dev/ide/build/VariantSelector
 	kind class
 	super java/lang/Object
 	method equals(Ljava/lang/Object;)Z
 	method getName()Ljava/lang/String;
 	method hashCode()I
+	method static box-impl(Ljava/lang/String;)Ldev/ide/build/VariantSelector;
 	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
 	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
 	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
 	method static hashCode-impl(Ljava/lang/String;)I
 	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
 	method toString()Ljava/lang/String;
+	method unbox-impl()Ljava/lang/String;

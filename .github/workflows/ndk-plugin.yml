@@ -1,0 +1,167 @@
+name: NDK plugin release
+
+# Builds the NDK plugin (samples/ndk-plugin) as one release-signed APK per ABI and attaches them to a CodeAssist
+# release as CodeAssist-NDK-Plugin-<version>-<abi>.apk.
+#
+# The compiler inside it is not built here: it comes from the `ndk-toolchain-<key>` prerelease the NDK toolchain
+# workflow published for this commit's toolchain sources (tools/ndk-toolchain/toolchain-key.sh). With no such
+# prerelease the job stops and says so; run the NDK toolchain workflow, then this one by hand for the tag.
+#
+# Runs when a release is published (tags v*), and by hand: with a tag it attaches to that release, without one
+# it only builds, and the APKs are this run's artifacts.
+#
+# Signing uses the IDE's upload key, from the repository secrets RELEASE_KEYSTORE_BASE64, RELEASE_STORE_PASSWORD,
+# RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD. This workflow never runs for a pull request.
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the APKs to (e.g. v3.41.0); empty to only build
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ndk-plugin-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: "25"
+  ABIS: "arm64-v8a armeabi-v7a x86 x86_64"
+
+jobs:
+  plugin:
+    name: Release APKs
+    # An app release only: the toolchain's own prereleases are created by a workflow and are not app versions.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The release's own commit, so the plugin matches the app it ships with.
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+
+      - name: Fetch the toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          key="$(tools/ndk-toolchain/toolchain-key.sh)"
+          if ! gh release download "ndk-toolchain-$key" -p 'ndk-toolchain-*.tar.gz' -D "$RUNNER_TEMP/toolchain"; then
+            {
+              echo "No toolchain for key $key (prerelease ndk-toolchain-$key)."
+              echo "Run the NDK toolchain workflow on this commit, then this workflow again for ${TAG:-this ref}."
+            } | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            exit 1
+          fi
+          out=tools/ndk-toolchain/build/out
+          mkdir -p "$out/assets"
+          tar -C "$out/assets" -xzf "$RUNNER_TEMP/toolchain/ndk-toolchain-assets.tar.gz"
+          for abi in $ABIS; do
+            mkdir -p "$out/jniLibs/$abi"
+            tar -C "$out/jniLibs/$abi" -xzf "$RUNNER_TEMP/toolchain/ndk-toolchain-$abi.tar.gz"
+            for lib in libllvmtools.so libndkclangd.so libndkrun.so; do
+              test -f "$out/jniLibs/$abi/$lib" || { echo "the toolchain has no $lib for $abi" >&2; exit 1; }
+            done
+          done
+          echo "Toolchain: ndk-toolchain-$key" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Run the plugin's unit tests
+        run: ./gradlew :samples:ndk-plugin:testDebugUnitTest --console=plain --stacktrace
+
+      # The keystore is written outside the checkout and only for the build step's lifetime.
+      - name: Build the release APKs
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          [[ -n "$RELEASE_KEYSTORE_BASE64" ]] || { echo "RELEASE_KEYSTORE_BASE64 is not set: the APKs would be unsigned" >&2; exit 1; }
+          export RELEASE_STORE_FILE="$RUNNER_TEMP/upload.jks"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
+          trap 'rm -f "$RELEASE_STORE_FILE"' EXIT
+          ./gradlew :samples:ndk-plugin:assembleRelease --console=plain --stacktrace
+
+      - name: Check and name the APKs
+        id: apks
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' samples/ndk-plugin/src/main/res/raw/codeassist_plugin.toml | head -1)"
+          [[ -n "$version" ]] || { echo "no version in codeassist_plugin.toml" >&2; exit 1; }
+          mkdir -p dist
+          for abi in $ABIS; do
+            apk="samples/ndk-plugin/build/outputs/apk/release/ndk-plugin-$abi-release.apk"
+            test -f "$apk" || { echo "no release APK for $abi" >&2; ls samples/ndk-plugin/build/outputs/apk/release >&2; exit 1; }
+            "$apksigner" verify "$apk"
+            cp "$apk" "dist/CodeAssist-NDK-Plugin-$version-$abi.apk"
+          done
+          "$apksigner" verify --print-certs "dist/CodeAssist-NDK-Plugin-$version-arm64-v8a.apk" | grep -m1 SHA-256
+          ls -la dist
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ndk-plugin-release
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to ${{ env.TAG }}
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.apks.outputs.version }}
+        run: |
+          gh release upload "$TAG" dist/*.apk --clobber
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG"
+          # The catalog row the Get plugins page reads (Supabase public.plugin_catalog): every ABI's build, and
+          # the plain link (what older apps read) on arm64.
+          json="{"
+          for abi in $ABIS; do
+            f="dist/CodeAssist-NDK-Plugin-$VERSION-$abi.apk"
+            json="$json\"$abi\": {\"url\": \"$base/$(basename "$f")\", \"size\": $(stat -c %s "$f")},"
+          done
+          json="${json%,}}"
+          arm64="dist/CodeAssist-NDK-Plugin-$VERSION-arm64-v8a.apk"
+          {
+            echo "Attached to [$TAG](https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG)."
+            echo
+            echo "Catalog update (Supabase SQL editor):"
+            echo
+            echo '```sql'
+            echo "update public.plugin_catalog set"
+            echo "  version = '$VERSION',"
+            echo "  download_url = '$base/$(basename "$arm64")',"
+            echo "  size_bytes = $(stat -c %s "$arm64"),"
+            echo "  page_url = 'https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG',"
+            echo "  abi_downloads = '$json'::jsonb,"
+            echo "  updated_at = now()"
+            echo "where id = 'dev.codeassist.ndk';"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

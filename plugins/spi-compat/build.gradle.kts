@@ -38,6 +38,7 @@ dependencies {
     testImplementation(project(":analysis-api"))
     testImplementation(project(":build-api"))
     testImplementation(project(":block-api"))
+    testImplementation(project(":lsp-api"))
     testImplementation(project(":interp-api"))
     testImplementation(project(":vcs-api"))
     testImplementation(project(":agent-api"))

@@ -282,7 +282,12 @@ internal object KotlinCompletionItems {
         return last.takeIf { TypeRendering.isFunctionType(it.qualifiedName) }
     }
 
-    /** Extract the parameter list `(message: String)` from a `(message: String): Unit` signature. */
+    /**
+     * Extract the parameter list `(message: String)` from a `(message: String): Unit` signature, with every
+     * parameter type in Kotlin terms. A Java method's signature is decoded from bytecode with Java's names
+     * (`(index: int, items: String[])`), which a label must not show and an override stub must not write:
+     * `override fun test(value: int)` does not compile.
+     */
     private fun paramListOf(sig: String?, varargIndex: Int = -1): String {
         if (sig.isNullOrEmpty()) return "()"
         val i = sig.lastIndexOf("): ")
@@ -291,18 +296,51 @@ internal object KotlinCompletionItems {
             sig.startsWith("(") -> sig // a constructor's "(params)" with no return
             else -> "()"
         }
-        if (varargIndex < 0 || !list.startsWith("(") || !list.endsWith(")")) return list
-        // A `vararg` parameter is rendered with its ELEMENT type on both paths (the source model keeps the
-        // declared text; the `@Metadata` decode reads `varargElementType`), so the keyword is the only thing
-        // missing, and without it the stub takes an `Int` where the supertype takes `vararg Int`, which
-        // overrides nothing.
+        if (!list.startsWith("(") || !list.endsWith(")")) return list
         val parts = splitParams(list.substring(1, list.length - 1))
-        if (varargIndex >= parts.size) return list
+        // A `vararg` parameter is rendered with its ELEMENT type (the source model keeps the declared text; the
+        // `@Metadata` decode reads `varargElementType`; a Java `String[]` loses its `[]` here), so the keyword is
+        // the only thing missing, and without it the stub takes an `Int` where the supertype takes `vararg Int`,
+        // which overrides nothing.
         return parts.mapIndexed { idx, part ->
-            if (idx != varargIndex) part
-            else part.takeWhile { it.isWhitespace() } + "vararg " + part.trimStart()
+            val vararg = idx == varargIndex
+            val kotlin = kotlinParam(part, vararg)
+            if (!vararg) kotlin else kotlin.takeWhile { it.isWhitespace() } + "vararg " + kotlin.trimStart()
         }.joinToString(",", prefix = "(", postfix = ")")
     }
+
+    /** `name: Type` with Type in Kotlin's spelling; [vararg] drops the one array level the keyword stands for. */
+    private fun kotlinParam(part: String, vararg: Boolean): String {
+        val colon = part.indexOf(':')
+        if (colon < 0) return part
+        val type = part.substring(colon + 1).trim()
+        val element = if (vararg && type.endsWith("[]")) type.removeSuffix("[]").trim() else type
+        return part.substring(0, colon + 1) + " " + javaTypeTextToKotlin(element)
+    }
+
+    /**
+     * A Java type as Kotlin writes it: `int` -> `Int`, `Object` -> `Any`, `int[]` -> `IntArray`, `String[][]` ->
+     * `Array<Array<String>>`. Kotlin type text passes through unchanged (it never has `[]` or a lowercase
+     * primitive name).
+     */
+    internal fun javaTypeTextToKotlin(type: String): String {
+        if (type.endsWith("[]")) {
+            val element = type.removeSuffix("[]").trim()
+            if (!element.endsWith("[]")) JAVA_PRIMITIVE_ARRAYS[element]?.let { return it }
+            return "Array<${javaTypeTextToKotlin(element)}>"
+        }
+        return JAVA_TO_KOTLIN_NAMES[type] ?: type
+    }
+
+    private val JAVA_TO_KOTLIN_NAMES = mapOf(
+        "int" to "Int", "long" to "Long", "short" to "Short", "byte" to "Byte", "boolean" to "Boolean",
+        "char" to "Char", "float" to "Float", "double" to "Double", "void" to "Unit", "Object" to "Any",
+    )
+
+    private val JAVA_PRIMITIVE_ARRAYS = mapOf(
+        "int" to "IntArray", "long" to "LongArray", "short" to "ShortArray", "byte" to "ByteArray",
+        "boolean" to "BooleanArray", "char" to "CharArray", "float" to "FloatArray", "double" to "DoubleArray",
+    )
 
     /** Split a rendered parameter list on the commas that SEPARATE parameters, so a comma nested in a generic
      *  argument list or a function type stays put (`a: Map<String, Int>, b: (Int, Int) -> Unit` is two

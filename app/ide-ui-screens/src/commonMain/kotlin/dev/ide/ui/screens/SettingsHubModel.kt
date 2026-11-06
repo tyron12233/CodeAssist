@@ -31,6 +31,8 @@ import dev.ide.ui.generated.resources.settings_sdk_manager
 import dev.ide.ui.generated.resources.settings_sdk_manager_subtitle
 import dev.ide.ui.generated.resources.settings_storage
 import dev.ide.ui.generated.resources.settings_storage_subtitle
+import dev.ide.ui.generated.resources.settings_language_servers
+import dev.ide.ui.generated.resources.settings_language_servers_subtitle
 import dev.ide.ui.generated.resources.settings_symbols
 import dev.ide.ui.generated.resources.settings_symbols_subtitle
 import dev.ide.ui.icons.CaIcons
@@ -38,7 +40,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** A destination of the Settings hub that is its own screen rather than a page of generated controls. */
-enum class HubTool { Colors, CodeStyle, Symbols, SdkManager, Keystore, Plugins, Storage }
+enum class HubTool { Colors, CodeStyle, Symbols, LanguageServers, SdkManager, Keystore, Plugins, Storage }
 
 /** What one hub entry opens: a settings page (built-in or plugin-contributed) by id, or a [HubTool]. */
 sealed interface HubTarget {
@@ -73,6 +75,7 @@ private val HubSlots: List<Pair<HubGroup, List<HubTarget>>> = listOf(
     HubGroup.Code to listOf(
         HubTarget.Page("completion"),
         HubTarget.Page("analysis"),
+        HubTarget.Tool(HubTool.LanguageServers),
     ),
     HubGroup.Build to listOf(
         HubTarget.Page("build"),
@@ -93,14 +96,23 @@ private val HubSlots: List<Pair<HubGroup, List<HubTarget>>> = listOf(
 /**
  * Places [pageIds] (in the backend's order) into [HubSlots]. A page with no slot, which is any page a plugin
  * contributes, goes to [HubGroup.Extensions] after Plugins, so a newly installed plugin's settings land next
- * to the screen that manages the plugin. Slotted pages the backend did not offer are dropped.
+ * to the screen that manages the plugin. Slotted pages the backend did not offer are dropped, and so are the
+ * [hiddenTools] this host cannot use (Language Servers where no installed server can be executed).
  */
-internal fun hubPlacement(pageIds: List<String>): List<Pair<HubGroup, List<HubTarget>>> {
+internal fun hubPlacement(
+    pageIds: List<String>,
+    hiddenTools: Set<HubTool> = emptySet(),
+): List<Pair<HubGroup, List<HubTarget>>> {
     val offered = pageIds.toSet()
     val slotted = HubSlots.flatMap { it.second }.filterIsInstance<HubTarget.Page>().map { it.id }.toSet()
     val unslotted = pageIds.filter { it !in slotted }.map { HubTarget.Page(it) }
     return HubSlots.map { (group, targets) ->
-        val present = targets.filter { it !is HubTarget.Page || it.id in offered }
+        val present = targets.filter { t ->
+            when (t) {
+                is HubTarget.Page -> t.id in offered
+                is HubTarget.Tool -> t.tool !in hiddenTools
+            }
+        }
         group to if (group == HubGroup.Extensions) present + unslotted else present
     }.filter { it.second.isNotEmpty() }
 }
@@ -135,10 +147,10 @@ class HubSection(val group: HubGroup, val title: String, val entries: List<HubEn
 
 /** The hub's sections for [pages], with titles, icons and subtitles resolved for display. */
 @Composable
-fun hubSections(pages: List<UiSettingsPage>): List<HubSection> {
+fun hubSections(pages: List<UiSettingsPage>, hiddenTools: Set<HubTool> = emptySet()): List<HubSection> {
     val byId = pages.associateBy { it.id }
     val projectLabel = stringResource(Res.string.settings_scope_project)
-    return hubPlacement(pages.map { it.id }).map { (group, targets) ->
+    return hubPlacement(pages.map { it.id }, hiddenTools).map { (group, targets) ->
         HubSection(
             group = group,
             title = stringResource(group.label),
@@ -173,6 +185,7 @@ private fun toolEntry(target: HubTarget.Tool): HubEntry {
         HubTool.SdkManager -> Triple(CaIcons.pkg, Res.string.settings_sdk_manager, Res.string.settings_sdk_manager_subtitle)
         HubTool.Keystore -> Triple(CaIcons.key, Res.string.settings_keystore_manager, Res.string.settings_keystore_manager_subtitle)
         HubTool.Plugins -> Triple(CaIcons.box, Res.string.settings_plugins, Res.string.settings_plugins_subtitle)
+        HubTool.LanguageServers -> Triple(CaIcons.code, Res.string.settings_language_servers, Res.string.settings_language_servers_subtitle)
         HubTool.Storage -> Triple(CaIcons.layers, Res.string.settings_storage, Res.string.settings_storage_subtitle)
     }
     return HubEntry(target, icon, stringResource(title), stringResource(subtitle), scopeLabel = null, keywords = emptyList())

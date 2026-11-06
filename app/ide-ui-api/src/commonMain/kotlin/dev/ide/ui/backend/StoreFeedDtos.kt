@@ -573,6 +573,60 @@ data class UiStoreReview(
 )
 
 /**
+ * A newer version of a project installed from the store.
+ *
+ * [installedVersion] is what this device installed; [item] is the listing as the store has it now, carrying
+ * [availableVersion]. [rootPath] is the folder the install lives in.
+ */
+data class UiStoreUpdate(
+    val item: UiStoreItem,
+    val installedVersion: String?,
+    val availableVersion: String?,
+    val rootPath: String,
+)
+
+/**
+ * What the user changed in an installed store project since it was installed, by project-relative path.
+ *
+ * [modified] and [deleted] are files the store installed; an in-place update would undo those. [added] are
+ * the user's own new files, which an update leaves alone. [known] is false for an install made before the
+ * app kept a baseline: its changes cannot be told apart from the version itself, so it is never updated in
+ * place.
+ */
+data class UiLocalChanges(
+    val modified: List<String> = emptyList(),
+    val deleted: List<String> = emptyList(),
+    val added: List<String> = emptyList(),
+    val known: Boolean = true,
+    /** Whether the installed version's files are on this device, so the user's edits can be merged. */
+    val canMerge: Boolean = false,
+) {
+    /** Whether an in-place update would overwrite anything the user did. */
+    val blocksInPlace: Boolean get() = !known || modified.isNotEmpty() || deleted.isNotEmpty()
+}
+
+/**
+ * What merging an update into an edited project did. [conflicts] are files the user has to look at: they
+ * carry conflict markers where both sides changed the same lines (or, for a binary, the new version was
+ * written beside theirs as `<name>.new`).
+ */
+data class UiStoreMergeResult(
+    val success: Boolean,
+    val message: String,
+    val conflicts: List<String> = emptyList(),
+    val rootPath: String? = null,
+)
+
+/**
+ * The result of a Translate tap: the translated fields by name, or why there are none. A failure is a value
+ * rather than an exception because the button has to say something either way.
+ */
+data class UiTranslation(
+    val fields: Map<String, String> = emptyMap(),
+    val error: String? = null,
+)
+
+/**
  * Everything the reviews panel draws.
  *
  * [average] and [count] come from the reviews themselves, so the headline agrees with the list beneath it;
@@ -627,6 +681,8 @@ data class UiPublisherProfile(
     val verified: Boolean = false,
     val followers: Int = 0,
     val following: Boolean = false,
+    /** When the publisher's account was created, ISO 8601. Null hides the "Joined" chip. */
+    val joinedAt: String? = null,
     val projectCount: Int = 0,
     val totalInstalls: Int = 0,
     val totalLikes: Int = 0,

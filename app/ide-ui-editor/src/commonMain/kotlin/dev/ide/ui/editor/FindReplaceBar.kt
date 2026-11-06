@@ -7,8 +7,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -84,14 +87,43 @@ fun FindReplaceBar(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val shape = RoundedCornerShape(bottomStart = Ca.radius.md, bottomEnd = Ca.radius.md)
-    Column(
+    // Opaque on purpose: the bar sits over code, and a translucent one let the lines underneath show through
+    // the query field and the buttons, which made both hard to read.
+    BoxWithConstraints(
         modifier
             .fillMaxWidth()
-            .background(Ide.colors.glassThick, shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer, shape)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+    // Every control beside the field is fixed width (about 300dp of them), so on a phone one row left the field
+    // a sliver and the placeholder wrapped letter by letter. Below this width the options and match navigation
+    // move to a second row and the field gets the whole first one.
+    val stacked = maxWidth < STACK_BELOW
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val countText = when {
+            query.isEmpty() -> ""
+            matchCount == 0 -> "0/0"
+            else -> "${currentIndex + 1}/$matchCount"
+        }
+        val count: @Composable () -> Unit = {
+            Text(
+                countText,
+                color = if (matchCount == 0 && query.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.widthIn(min = 34.dp),
+            )
+        }
+        val optionsAndNavigation: @Composable RowScope.() -> Unit = {
+            OptionChip(stringResource(Res.string.find_case_sensitive), options.caseSensitive) { onOptionsChange(options.copy(caseSensitive = !options.caseSensitive)) }
+            OptionChip(stringResource(Res.string.find_whole_word), options.wholeWord) { onOptionsChange(options.copy(wholeWord = !options.wholeWord)) }
+            OptionChip(stringResource(Res.string.find_regex), options.regex) { onOptionsChange(options.copy(regex = !options.regex)) }
+            if (stacked) Spacer(Modifier.weight(1f))
+            IconButtonCa(CaIcons.chevronUp, stringResource(Res.string.find_previous_match), onClick = onPrev, iconSize = 16, boxSize = 30)
+            IconButtonCa(CaIcons.chevronDown, stringResource(Res.string.find_next_match), onClick = onNext, iconSize = 16, boxSize = 30)
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButtonCa(
                 if (replaceMode) CaIcons.chevronDown else CaIcons.chevronRight,
@@ -108,23 +140,15 @@ fun FindReplaceBar(
                     onEscape = onClose,
                 )
             }
-            val countText = when {
-                query.isEmpty() -> ""
-                matchCount == 0 -> "0/0"
-                else -> "${currentIndex + 1}/$matchCount"
-            }
-            Text(
-                countText,
-                color = if (matchCount == 0 && query.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.widthIn(min = 34.dp),
-            )
-            OptionChip(stringResource(Res.string.find_case_sensitive), options.caseSensitive) { onOptionsChange(options.copy(caseSensitive = !options.caseSensitive)) }
-            OptionChip(stringResource(Res.string.find_whole_word), options.wholeWord) { onOptionsChange(options.copy(wholeWord = !options.wholeWord)) }
-            OptionChip(stringResource(Res.string.find_regex), options.regex) { onOptionsChange(options.copy(regex = !options.regex)) }
-            IconButtonCa(CaIcons.chevronUp, stringResource(Res.string.find_previous_match), onClick = onPrev, iconSize = 16, boxSize = 30)
-            IconButtonCa(CaIcons.chevronDown, stringResource(Res.string.find_next_match), onClick = onNext, iconSize = 16, boxSize = 30)
+            count()
+            if (!stacked) optionsAndNavigation()
             IconButtonCa(CaIcons.close, stringResource(Res.string.close), onClick = onClose, iconSize = 16, boxSize = 30)
+        }
+        if (stacked) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(30.dp)) {} // align under the chevron
+                optionsAndNavigation()
+            }
         }
         if (replaceMode) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -137,7 +161,11 @@ fun FindReplaceBar(
             }
         }
     }
+    }
 }
+
+/** Narrower than this, the find bar stacks into two rows (see [FindReplaceBar]). */
+private val STACK_BELOW = 520.dp
 
 @Composable
 private fun FieldBox(
@@ -160,7 +188,7 @@ private fun FieldBox(
             .border(1.dp, if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
-        if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = Ide.type.code)
+        if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = Ide.type.code, maxLines = 1, softWrap = false)
         BasicTextField(
             value = field,
             onValueChange = { field = it; onChange(it.text) },
@@ -204,6 +232,6 @@ private fun PillButton(label: String, enabled: Boolean, onClick: () -> Unit) {
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
-        Text(label, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+        Text(label, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
     }
 }

@@ -228,7 +228,7 @@ private fun AttachmentChip(attachment: UiAgentAttachment, onRemove: (() -> Unit)
 }
 
 @OptIn(ExperimentalEncodingApi::class)
-private fun decodeBase64Image(data: String): ImageBitmap? =
+internal fun decodeBase64Image(data: String): ImageBitmap? =
     runCatching { decodeImageBytes(Base64.Default.decode(data)) }.getOrNull()
 
 /** The long edge an attached image is scaled down to: what the providers resize to anyway, so more is waste. */

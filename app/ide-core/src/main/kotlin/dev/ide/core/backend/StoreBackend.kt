@@ -15,6 +15,10 @@ import dev.ide.store.bridge.StoreReviews
 import dev.ide.store.bridge.StoreSearchPaging
 import dev.ide.store.bridge.StoreSubmissions
 import dev.ide.store.bridge.storeIo
+import kotlinx.coroutines.async
+import dev.ide.store.bridge.StoreUpdates
+import dev.ide.store.bridge.StoreUpdater
+import dev.ide.store.bridge.StoreBaselines
 import dev.ide.ui.backend.StoreService
 import dev.ide.ui.backend.UiStoreCatalog
 import dev.ide.ui.backend.UiStoreInstallResult
@@ -272,6 +276,7 @@ internal class StoreBackend(
                         verified = p.verified,
                         followers = p.followers,
                         following = p.following,
+                        joinedAt = p.joinedAt,
                         projectCount = p.projectCount,
                         totalInstalls = p.totalInstalls,
                         totalLikes = p.totalLikes,
@@ -330,6 +335,17 @@ internal class StoreBackend(
     private val reviewState = StoreReviews(reviewService)
 
     override fun reviewsAvailable(): Boolean = reviewState.available()
+
+    override fun translationAvailable(): Boolean = reviewState.translationAvailable()
+
+    override suspend fun translateListing(itemId: String, target: String): dev.ide.ui.backend.UiTranslation =
+        withContext(storeIo) { reviewState.translateListing(itemId, target) }
+
+    override suspend fun translateReview(
+        itemId: String,
+        authorId: String,
+        target: String,
+    ): dev.ide.ui.backend.UiTranslation = withContext(storeIo) { reviewState.translateReview(itemId, authorId, target) }
 
     override suspend fun reviews(
         itemId: String,
@@ -447,6 +463,10 @@ internal class StoreBackend(
     override fun completeSignIn(redirect: String) = accountState.completeSignIn(redirect)
 
     override fun signOut() = accountState.signOut()
+
+    override fun accountDeletionAvailable(): Boolean = accounts.authAvailable()
+
+    override suspend fun deleteAccount(): String? = withContext(storeIo) { accountState.deleteAccount() }
 
     // ---- submitting ----
 
@@ -710,8 +730,17 @@ internal class StoreBackend(
      * the trending chart ranks on, with the items that fail to install ranking highest.
      */
     override suspend fun install(id: String, args: Map<String, String>): UiStoreInstallResult {
+        // The feed's coordinates when this item was on it; otherwise the store's own row for the slug, so a
+        // project opened from a search or a profile installs as well as one opened from Explore.
         val payload = feedCache.payload(id)
+            ?: withContext(storeIo) { storeUpdates.current(id)?.let(StoreInstaller.Payload::of) }
             ?: return UiStoreInstallResult(false, "That project has nothing to download yet")
+        return installPayload(payload)
+    }
+
+    /** Unpack [payload] into a new project folder, and remember it (and its baseline) as this item's install. */
+    private suspend fun installPayload(payload: StoreInstaller.Payload): UiStoreInstallResult {
+        val id = payload.itemId
         val projectsRoot = ctx.manager?.projectsRoot?.toFile()
             ?: return UiStoreInstallResult(false, "There is no projects folder to install into")
 
@@ -733,15 +762,160 @@ internal class StoreBackend(
                     if (ok) null else "That download isn't a project CodeAssist can open"
                 },
                 onProgress = { p -> progressState.value = progressState.value + (p.itemId to p) },
+                // The archive is the base a later update merges the user's edits against.
+                keepArchiveAt = storeUpdates.archivePath(id),
             )
             // Remembered with the directory it landed in, so the next launch still knows this item is on
             // the device and where. That is what turns its button into an Open that has something to open.
             if (result.success) {
                 history.remember(id, result.rootPath)
                 recordInstall(id)
+                // What this install put on disk, so a later version can be recognised and, if the copy is left
+                // untouched, applied in place. A failure only costs that: the install itself stands.
+                result.rootPath?.let { root -> runCatching { storeUpdates.recordInstall(payload, root) } }
+                cachedUpdates = null
             }
             result
         }
+    }
+
+    // ---- updates to installed projects ----
+
+    private val baselines = StoreBaselines {
+        ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/baselines").absolutePath }
+    }
+
+    private val storeUpdates by lazy {
+        StoreUpdates(
+            source = source,
+            baselines = baselines,
+            updater = StoreUpdater(source),
+            appBuild = { source.appBuild ?: 0 },
+            toUi = { StoreFeedMapper.itemToUi(it, bundledBySlug()) },
+        )
+    }
+
+    /** The last answer to [availableUpdates] and when it was taken: Home asks every time it is shown. */
+    @Volatile private var cachedUpdates: Pair<Long, List<dev.ide.ui.backend.UiStoreUpdate>>? = null
+
+    /** Where [itemId] is installed on this device, or null. */
+    private fun installedRoot(itemId: String): String? =
+        progressState.value[itemId]?.takeIf { it.state == UiInstallState.INSTALLED }?.rootPath?.takeIf(::isProject)
+
+    override suspend fun updateFor(itemId: String): dev.ide.ui.backend.UiStoreUpdate? {
+        val root = installedRoot(itemId) ?: return null
+        return withContext(storeIo) { runCatching { storeUpdates.check(itemId, root) }.getOrNull() }
+    }
+
+    override suspend fun availableUpdates(): List<dev.ide.ui.backend.UiStoreUpdate> {
+        cachedUpdates?.let { (at, list) -> if (System.currentTimeMillis() - at < UPDATES_MEMO_MS) return list }
+        val installed = progressState.value.values
+            .filter { it.state == UiInstallState.INSTALLED && it.rootPath != null }
+            .map { it.itemId to it.rootPath!! }
+        val found = withContext(storeIo) {
+            kotlinx.coroutines.coroutineScope {
+                installed.map { (id, root) ->
+                    async { runCatching { storeUpdates.check(id, root) }.getOrNull() }
+                }.mapNotNull { it.await() }
+            }
+        }
+        cachedUpdates = System.currentTimeMillis() to found
+        return found
+    }
+
+    override suspend fun mergeUpdate(itemId: String): dev.ide.ui.backend.UiStoreMergeResult {
+        val root = installedRoot(itemId)
+            ?: return dev.ide.ui.backend.UiStoreMergeResult(false, "That project isn't installed on this device")
+        releaseIfLoaded(root)
+        val result = withContext(storeIo) {
+            storeUpdates.merge(itemId, root) { p -> progressState.value = progressState.value + (p.itemId to p) }
+        }
+        progressState.value = progressState.value +
+            (itemId to UiInstallProgress(itemId, UiInstallState.INSTALLED, 1f, rootPath = root))
+        if (result.success) cachedUpdates = null
+        if (result.success && result.conflicts.isNotEmpty()) {
+            withContext(storeIo) { runCatching { openConflictsFirst(root, result.conflicts) } }
+        }
+        return result
+    }
+
+    /**
+     * Put the files a merge left conflicts in at the front of the project's saved tabs, caret on the first
+     * marker, so opening the project lands on what needs deciding instead of an empty editor. The user's own
+     * tabs stay, after them. Same `#v2` format the editor's session is saved in (see ProjectBackend).
+     */
+    private fun openConflictsFirst(root: String, conflicts: List<String>) {
+        val file = java.io.File(root, ".platform/open-tabs.txt")
+        val existing = if (file.isFile) file.readText().split('\n') else emptyList()
+        val oldTabs = if (existing.firstOrNull()?.trim() == "#v2") existing.drop(2).filter { it.isNotBlank() } else emptyList()
+        val fronts = conflicts.take(5).mapNotNull { rel ->
+            val f = java.io.File(root, rel)
+            if (!f.isFile) return@mapNotNull null
+            val caret = f.readText().indexOf("<<<<<<<").coerceAtLeast(0)
+            "${f.absolutePath}\t$caret\t0\ttext"
+        }
+        if (fronts.isEmpty()) return
+        val frontPaths = fronts.map { it.substringBefore('\t') }.toSet()
+        val kept = oldTabs.filter { it.substringBefore('\t') !in frontPaths }
+        file.parentFile?.mkdirs()
+        file.writeText(buildString {
+            append("#v2\n0\n")
+            (fronts + kept).forEach { append(it).append('\n') }
+        })
+    }
+
+    /**
+     * Let go of [root] if it is the project still loaded behind the picker, before an update writes into it.
+     *
+     * Leaving the editor does not unload a project: its engine stays, with its open buffers, and the IDE does
+     * not see writes made underneath it, so its next save or build would put the old text back. Refusing
+     * ("close it first") was what the first version did, and a user who had just closed it could not get
+     * past it. So, as a delete does: anything typed but not yet saved is written first (the update then
+     * counts it as the user's own edit, which the merge keeps), and the engine is closed. The store screen
+     * is not the editor, so nothing on screen is using it.
+     */
+    private suspend fun releaseIfLoaded(root: String) {
+        val loaded = ctx.servicesOrNull ?: return
+        val same = runCatching {
+            loaded.workspaceRoot.toFile().canonicalPath == java.io.File(root).canonicalPath
+        }.getOrDefault(false)
+        if (!same) return
+        withContext(storeIo) {
+            runCatching { loaded.flushOpenDocuments() }
+            ctx.closeEngine()
+        }
+    }
+
+    override suspend fun localChanges(itemId: String): dev.ide.ui.backend.UiLocalChanges? {
+        val root = installedRoot(itemId) ?: return null
+        return withContext(storeIo) {
+            // Typed but not yet saved counts as changed: written out first, or the answer would miss it.
+            ctx.servicesOrNull?.takeIf {
+                runCatching { it.workspaceRoot.toFile().canonicalPath == java.io.File(root).canonicalPath }.getOrDefault(false)
+            }?.let { runCatching { it.flushOpenDocuments() } }
+            storeUpdates.localChanges(itemId, root)
+        }
+    }
+
+    override suspend fun update(itemId: String, asCopy: Boolean): UiStoreInstallResult {
+        val root = installedRoot(itemId)
+            ?: return UiStoreInstallResult(false, "That project isn't installed on this device")
+        if (asCopy) {
+            val payload = withContext(storeIo) { storeUpdates.current(itemId)?.let(StoreInstaller.Payload::of) }
+                ?: return UiStoreInstallResult(false, "The store can't be reached right now")
+            // The new copy becomes the install this listing tracks; the old one stays a project of its own.
+            return installPayload(payload)
+        }
+        releaseIfLoaded(root)
+        val result = withContext(storeIo) {
+            storeUpdates.applyInPlace(itemId, root) { p -> progressState.value = progressState.value + (p.itemId to p) }
+        }
+        // Back to Installed at the same folder whatever happened, so the button is Open again rather than stuck
+        // on a progress state from the attempt.
+        progressState.value = progressState.value +
+            (itemId to UiInstallProgress(itemId, UiInstallState.INSTALLED, 1f, rootPath = root))
+        if (result.success) cachedUpdates = null
+        return result
     }
 
     override fun installProgress(): kotlinx.coroutines.flow.StateFlow<Map<String, UiInstallProgress>> =
@@ -835,6 +1009,9 @@ internal class StoreBackend(
     )
 
     private companion object {
+        /** How long Home's list of updates is reused. Each check is one search per installed project. */
+        const val UPDATES_MEMO_MS = 10L * 60 * 1000
+
         const val CATEGORY_COMMUNITY = "Community"
 
         /** The anonymous install id the analytics service already generates; reused for install dedupe. */

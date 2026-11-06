@@ -74,10 +74,9 @@
                 android:launchMode="singleTop"
                 android:windowSoftInputMode="adjustResize"
                 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|density|fontScale|smallestScreenSize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- MAIN/LAUNCHER lives on the two activity-aliases below, not here: the launcher icon is chosen
+                 by which alias is enabled (Settings > Appearance > App icon). Everything else (open-with,
+                 share, the OAuth and store links, explicit starts by class) still targets this activity. -->
             <!-- "Open with CodeAssist": another app hands us a single file to import into the project. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -153,7 +152,50 @@
                         android:host="store"
                         android:scheme="codeassist" />
             </intent-filter>
+            <!-- `codeassist://agent`: the "Back to CodeAssist" button on the page the browser shows after
+                 "Sign in with OpenRouter" (dev.ide.core.agent.OpenRouterSignIn.RETURN_LINK). It carries no data;
+                 the key has already reached the app over the loopback redirect. MainActivity only brings the
+                 app forward for it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                        android:host="agent"
+                        android:scheme="codeassist" />
+            </intent-filter>
         </activity>
+
+        <!-- The launcher entries. Exactly one is enabled at a time (AndroidAppIcons switches them, enabling
+             the new one before disabling the old so the app is never without a launcher entry); both start
+             MainActivity. The default one carries the original icon and is the one enabled on install, so a
+             fresh install, getLaunchIntentForPackage and the store's "Open" all resolve as before. Renaming
+             either alias would orphan users' home screen shortcuts, so the names are permanent. -->
+        <activity-alias
+                android:name=".LauncherDefault"
+                android:targetActivity=".MainActivity"
+                android:enabled="true"
+                android:exported="true"
+                android:icon="@mipmap/ic_launcher"
+                android:roundIcon="@mipmap/ic_launcher_round">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+                android:name=".LauncherPumpkin"
+                android:targetActivity=".MainActivity"
+                android:enabled="false"
+                android:exported="true"
+                android:icon="@mipmap/ic_launcher_pumpkin"
+                android:roundIcon="@mipmap/ic_launcher_pumpkin">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Applies a plugin change by restarting the app (Settings > Plugins). It runs in its own
              ":restart" process so it outlives the processes it kills, and starts MainActivity from a
@@ -166,6 +208,20 @@
                 android:excludeFromRecents="true"
                 android:taskAffinity=""
                 android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- The plugin sandbox: this same IDE in a ":sandbox" process with its own home, loading a plugin build
+             straight from the developer's project (a plugin project's "Run plugin in sandbox"). Its own task, so it
+             sits beside the real IDE in Recents; a plugin that crashes or freezes it takes only this process down.
+             No intent filters: only the IDE starts it. See dev.ide.android.plugins.SandboxProcess. -->
+        <activity
+                android:name=".SandboxActivity"
+                android:process=":sandbox"
+                android:exported="false"
+                android:label="Plugin sandbox"
+                android:taskAffinity="${applicationId}.sandbox"
+                android:launchMode="singleTask"
+                android:windowSoftInputMode="adjustResize"
+                android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|density|fontScale|smallestScreenSize" />
 
         <!-- Push notifications. The messages are data-only, so the app builds the tray entry itself and the
              in-app notification center stays the record of what the user was shown. Dormant in a checkout

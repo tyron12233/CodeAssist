@@ -87,6 +87,25 @@ class ProjectArchivesTest {
         assertTrue(root.resolve("p/libs/lib.jar").exists(), "a local library jar is part of the project")
     }
 
+    /** A package named `build` and a library under a source tree are the project's own, not build output. */
+    @Test
+    fun sourcePackagesNamedLikeBuildFoldersAndNativeLibsComeThrough() {
+        val contents = extract(zip(
+            "p/settings.gradle" to "",
+            "p/app/src/main/java/com/example/build/Config.java" to "class Config {}",
+            "p/app/src/main/jniLibs/arm64-v8a/libnative.so" to "x",
+            "p/app/src/main/assets/installer.apk" to "x",
+            "p/app/libs/widget.aar" to "x",
+            "p/app/build/intermediates/x.so" to "x",
+        ))!!
+        val root = contents.root
+        assertTrue(root.resolve("p/app/src/main/java/com/example/build/Config.java").exists())
+        assertTrue(root.resolve("p/app/src/main/jniLibs/arm64-v8a/libnative.so").exists())
+        assertTrue(root.resolve("p/app/src/main/assets/installer.apk").exists())
+        assertTrue(root.resolve("p/app/libs/widget.aar").exists())
+        assertFalse(root.resolve("p/app/build").exists())
+    }
+
     @Test
     fun anEntryEscapingTheFolderFailsTheArchive() {
         assertFailsWith<IOException> { extract(zip("p/settings.gradle" to "", "../evil.txt" to "x")) }

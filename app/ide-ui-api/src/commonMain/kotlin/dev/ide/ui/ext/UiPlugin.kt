@@ -66,6 +66,15 @@ interface UiContributionScope {
 
     /** Add a kind of file to the file tree's New menu ([NewFileTemplateContribution]). */
     fun newFileTemplate(template: NewFileTemplateContribution): Registration = Registration { }
+
+    /** List a whole editor color scheme beside the presets ([dev.ide.ui.theme.colors.ContributedColorSchemes]). */
+    fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme): Registration = Registration { }
+
+    /** Offer a whole app theme as an Accent choice ([dev.ide.ui.theme.colors.ContributedAppThemes]). */
+    fun appTheme(theme: dev.ide.ui.theme.colors.ContributedAppTheme): Registration = Registration { }
+
+    /** Fill a slot of the home screen's tabs ([HomeTabContribution]). */
+    fun homeTab(tab: HomeTabContribution): Registration = Registration { }
 }
 
 /**
@@ -128,12 +137,32 @@ object UiPluginHost {
         return try {
             plugin.contributeUi(scope)
             failed.remove(plugin.id)
+            scopes[plugin.id] = scope
             true
         } catch (t: Throwable) {
             scope.withdraw()
             failed[plugin.id] = t
             false
         }
+    }
+
+    /** What each plugin that contributed cleanly registered, so it can be withdrawn again ([replace]). */
+    private val scopes = HashMap<String, Scope>()
+
+    /**
+     * Swap plugin [pluginId]'s UI for [replacement]'s, live: everything the old facet registered is withdrawn,
+     * and [replacement] (null for none) contributes in its place when the UI has already loaded. For the plugin
+     * sandbox's hot reload, where a new build of a plugin replaces the old one without restarting the app.
+     * Call on the UI thread, like everything that touches the registries. Returns whether [replacement]
+     * contributed cleanly (true when there is none).
+     */
+    fun replace(pluginId: String, replacement: UiPlugin?): Boolean {
+        scopes.remove(pluginId)?.withdraw()
+        plugins.removeAll { it.id == pluginId }
+        failed.remove(pluginId)
+        if (replacement == null) return true
+        plugins.add(replacement)
+        return if (loaded) contribute(replacement) else true
     }
 
     /** The UI plugins whose `contributeUi` threw during [ensureLoaded], by plugin id, with what they threw. */
@@ -169,6 +198,12 @@ object UiPluginHost {
         override fun colorAttribute(attribute: ColorAttribute): Registration =
             track(ColorAttributes.register(attribute))
 
+        override fun colorScheme(scheme: dev.ide.ui.theme.colors.EditorColorScheme): Registration =
+            track(dev.ide.ui.theme.colors.ContributedColorSchemes.register(scheme))
+
+        override fun appTheme(theme: dev.ide.ui.theme.colors.ContributedAppTheme): Registration =
+            track(dev.ide.ui.theme.colors.ContributedAppThemes.register(theme))
+
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)
             // Only the name mapping is undone: TreeIcons is a persistent lookup with nothing to unregister,
@@ -187,5 +222,7 @@ object UiPluginHost {
 
         override fun newFileTemplate(template: NewFileTemplateContribution): Registration =
             track(NewFileTemplateRegistry.register(template))
+
+        override fun homeTab(tab: HomeTabContribution): Registration = track(HomeTabRegistry.register(tab))
     }
 }

@@ -77,7 +77,7 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             is KtLambdaExpression -> lambdaReceiverType(node)?.let(out::add)
 
             is KtNamedFunction -> node.receiverTypeReference?.text
-                ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
+                ?.let { boundedTypeParameterReceiver(node, it) ?: service.typeFromText(it, fileContext) }?.let(out::add)
             // An extension PROPERTY's receiver is the implicit `this` of its accessors
             // (`val ColorScheme.codeBlockBackground get() = onSurface.copy(alpha = .15f)`): the same rule as an
             // extension function. A local/plain property has no receiver type and adds nothing.
@@ -110,6 +110,16 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
         node = node.parent
     }
     return out
+}
+
+/** The implicit `this` of `fun <T : CharSequence> T.len() = length`: a receiver that is the function's own
+ *  type parameter with an explicit upper bound has that bound's members, so `length` resolves. Null for a
+ *  concrete receiver or an unbounded parameter (the caller keeps its plain text lookup). */
+private fun KotlinResolver.boundedTypeParameterReceiver(fn: KtNamedFunction, receiverText: String): KotlinType? {
+    val bare = receiverText.substringBefore('<').removeSuffix("?").trim()
+    val tp = fn.typeParameters.firstOrNull { it.name == bare } ?: return null
+    val bound = tp.extendsBound?.text ?: return null
+    return service.typeFromText(bound, fileContext)
 }
 
 /** The member named [name] on the nearest implicit receiver in scope at [offset] — the `this` of an
@@ -196,9 +206,18 @@ internal fun KotlinResolver.sameFileTypeMember(typeFqn: String, name: String): K
     return null
 }
 
-/** Locals + parameters in scope at [offset] (declared before it). */
-fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
+/**
+ * Locals + parameters in scope at [offset] (declared before it), or with [name], only those called that.
+ *
+ * Every caller but completion wants one name, and typing a local means inferring its initializer, so with
+ * [name] a declaration is skipped on its name BEFORE it is typed: the same answer as filtering the full list,
+ * without typing every other local in scope. (Find Usages resolves one reference per file across the project;
+ * typing all the locals around each one was most of its time on a phone.)
+ */
+fun KotlinResolver.localsAt(offset: Int, name: String? = null): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
+    fun wanted(n: String?): Boolean = name == null || n == name
+    fun wantedAny(names: List<String?>): Boolean = name == null || names.any { it == name }
     var node: KtElement? = elementAt(offset)
     while (node != null) {
         when (node) {
@@ -208,18 +227,17 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
                 // An EXTENSION local (`fun String.twice()`) is not callable by bare name — it surfaces on a
                 // matching receiver through [scopeMemberExtensions], mirroring [sameFileScopeSymbols].
                 if (st is KtNamedFunction) {
-                    if (st.receiverTypeReference == null && localFunctionVisibleAt(st, offset)) {
+                    if (st.receiverTypeReference == null && wanted(st.name) && localFunctionVisibleAt(st, offset)) {
                         out += localFunction(st)
                     }
                     return@forEach
                 }
                 if (st.textRange.endOffset > offset) return@forEach
                 when (st) {
-                    is KtProperty -> out += localVar(st)
-                    is KtDestructuringDeclaration -> out += destructuringLocals(
-                        st,
-                        inferType(st.initializer)
-                    )
+                    is KtProperty -> if (wanted(st.name)) out += localVar(st)
+                    is KtDestructuringDeclaration -> if (wantedAny(st.entries.map { it.name })) {
+                        out += destructuringLocals(st, inferType(st.initializer))
+                    }
 
                     else -> {}
                 }
@@ -229,14 +247,15 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
             // here — it IS a KtFunction, and adding its params via param() (type-from-text only) would
             // shadow the typed copy with an untyped one (`{ inner -> }`'s `inner` becomes null-typed first).
             is KtFunctionLiteral -> {}
-            is KtFunction -> node.valueParameters.forEach { out += param(it) }
+            is KtFunction -> node.valueParameters.forEach { if (wanted(it.name)) out += param(it) }
             is KtForExpression -> node.loopParameter?.let { lp ->
                 // The loop variable is in scope only in the BODY (not the `in` clause). Gating on that both
                 // matches Kotlin scoping AND breaks a recursion: inferring the loop range's type queries
                 // locals at the range's own position (in the `in` clause), which then must NOT re-enter this
                 // branch — else `for (x in m)` would infer `m` → look up locals → re-infer `m` forever.
                 val body = node.body
-                if (body != null && offset >= body.textRange.startOffset) {
+                val names = lp.destructuringDeclaration?.entries?.map { it.name } ?: listOf(lp.name)
+                if (body != null && offset >= body.textRange.startOffset && wantedAny(names)) {
                     // The loop variable's type is the iteration element type (`for (x in list)` → x is the
                     // element); a destructuring loop var (`for ((k, v) in map)`) splits it by componentN.
                     val element = iterationElementType(inferType(node.loopRange))
@@ -246,15 +265,20 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
                 }
             }
 
-            is KtCatchClause -> node.catchParameter?.let { out += param(it) }
-            is KtWhenExpression -> node.subjectVariable?.let { out += localVar(it) }
-            is KtLambdaExpression -> {
+            is KtCatchClause -> node.catchParameter?.let { if (wanted(it.name)) out += param(it) }
+            is KtWhenExpression -> node.subjectVariable?.let { if (wanted(it.name)) out += localVar(it) }
+            is KtLambdaExpression -> run lambda@{
                 // Type the lambda's `it` / named params from the functional parameter it fills, so
                 // completion inside `"".let { it.<caret> }` knows `it` is String and `stream().map { it }`
                 // knows `it` is the element type. A RECEIVER lambda (`T.() -> R`) has its receiver dropped
                 // (an implicit `this`, handled by implicitReceiversAt), so it contributes no value param.
-                val inputs = expectedLambdaShape(node)?.parameterTypes.orEmpty()
                 val params = node.valueParameters
+                // The expected shape costs a resolution of the call the lambda is passed to: skip it when this
+                // lambda declares nothing called [name].
+                val declared = if (params.isEmpty()) listOf("it")
+                else params.flatMap { p -> p.destructuringDeclaration?.entries?.map { it.name } ?: listOf(p.name) }
+                if (!wantedAny(declared)) return@lambda
+                val inputs = expectedLambdaShape(node)?.parameterTypes.orEmpty()
                 if (params.isEmpty()) {
                     // The implicit `it` exists only for a single-value-parameter functional type.
                     if (inputs.size == 1) {
@@ -294,8 +318,8 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
     out += accessorScopeLocals(offset)
     // Non-property primary-constructor parameters, visible only in constructor scope (an `init { }` block, a
     // member property's initializer/delegate, or the superclass delegation call) — see [constructorScopeParams].
-    constructorScopeParams(offset).forEach { out += param(it) }
-    return out
+    constructorScopeParams(offset).forEach { if (wanted(it.name)) out += param(it) }
+    return if (name == null) out else out.filter { it.name == name }
 }
 
 /**
@@ -434,6 +458,8 @@ internal fun KotlinResolver.constructorScopeParams(offset: Int): List<KtParamete
                 return classCtorParams(node)
             // The superclass delegation call `: Base(arg)` — its arguments run in the primary constructor.
             is KtSuperTypeCallEntry -> return classCtorParams(node)
+            // Interface delegation `: Base by b` — its expression is evaluated by the primary constructor too.
+            is dev.ide.kotlin.syntax.psi.KtDelegatedSuperTypeEntry -> return classCtorParams(node)
             // Reached the class without passing through a constructor-scope context (a bare declaration slot).
             is KtClassOrObject -> return emptyList()
         }
@@ -475,7 +501,7 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
         val name = expr.getReferencedName()
         when {
             name.firstOrNull()?.isUpperCase() != true -> null // type names are capitalized
-            localsAt(expr.textRange.startOffset).any { it.name == name } -> null // a value shadows the type
+            localsAt(expr.textRange.startOffset, name).isNotEmpty() -> null // a value shadows the type
             // An `object` singleton (`CardDefaults`, `MaterialTheme`, a local `object`) is an INSTANCE, not a
             // type — its members are reached like an instance's, so it is NOT a type/static receiver. A local
             // `class Foo` in scope resolves by its synthetic FQN first (it isn't a resolvable type name).
@@ -525,7 +551,7 @@ private fun KotlinResolver.objectQualifierFqn(expr: KtExpression): String? = whe
     is KtNameReferenceExpression -> {
         val name = expr.getReferencedName()
         val offset = expr.textRange.startOffset
-        if (localsAt(offset).any { it.name == name }) null // a value of that name shadows the object
+        if (localsAt(offset, name).isNotEmpty()) null // a value of that name shadows the object
         else (localTypesInScope(offset)[name]
             ?: service.resolveTypeName(name, fileContext, enclosingClassFqn(offset)))
             ?.takeIf { service.isSingletonObject(it) }
@@ -551,7 +577,7 @@ private fun KotlinResolver.objectQualifierFqn(expr: KtExpression): String? = whe
  */
 fun KotlinResolver.objectDenotationFqn(name: String, offset: Int): String? {
     if (name.isEmpty()) return null
-    if (localsAt(offset).any { it.name == name }) return null // a value of that name shadows the object
+    if (localsAt(offset, name).isNotEmpty()) return null // a value of that name shadows the object
     localTypesInScope(offset)[name]?.let { return it.takeIf { fqn -> service.isObject(fqn) } }
     return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
         ?.takeIf { service.isObject(it) }
@@ -638,7 +664,7 @@ internal fun KotlinResolver.enclosingClassOrObject(offset: Int): KtClassOrObject
 /** Whether a bare [name] resolves to anything in scope (local, implicit-receiver member, top-level,
  *  import, or a known type). Used by the unresolved-reference diagnostic. */
 fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
-    if (localsAt(offset).any { it.name == name }) return true
+    if (localsAt(offset, name).isNotEmpty()) return true
     // A reified type parameter used in expression position (`T::class`) is in scope, not unresolved.
     if (isTypeParameterInScope(name, offset)) return true
     // A named LOCAL class/object in scope (`class Foo` / `object O` declared in this or an enclosing block):
@@ -872,7 +898,7 @@ internal fun KotlinResolver.enclosingCompanionMembers(offset: Int): List<KotlinS
  *  constructor-argument validation. */
 fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     if (name.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) return null
-    if ('.' !in name && localsAt(offset).any { it.name == name }) return null
+    if ('.' !in name && localsAt(offset, name).isNotEmpty()) return null
     if ('.' !in name) localTypesInScope(offset)[name]?.let { return it } // a local `class Foo` in scope
     // A different-package project type isn't a resolvable bare constructor call until imported, so `Foo()` for
     // such a type is flagged unresolved (and arg-validation backs off) rather than silently resolving.
@@ -884,7 +910,7 @@ fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
         ?.takeIf { service.isKnownType(it) }?.let { return it }
     // A project `typealias` constructed by its own name (`DiskFile(path)`). See [typeAliasTargetFqn].
-    return service.typeAliasTargetFqn(name)
+    return service.typeAliasTargetFqn(name, fileContext)
 }
 
 fun KotlinResolver.enclosingClassFqn(offset: Int): String? = elementAt(offset)?.let { enclosingClassFqnOf(it) }
@@ -912,12 +938,13 @@ fun KotlinResolver.scopeSymbolsAt(
     exactName: Boolean = false
 ): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
-    out += localsAt(offset)
+    // The resolution probe wants one name, and only completion needs every local typed.
+    out += localsAt(offset, if (exactName && namePrefix.isNotEmpty()) namePrefix else null)
     // Same-file declarations from the LIVE buffer — a just-typed `fun helper()` / `val x` / `class Foo`.
     // The symbol service indexes DISK and is not refreshed mid-session, so these would otherwise not
     // complete until the file is saved AND the analyzer rebuilt. Mirrors the live-buffer resolution in
     // [bareNameResolves] so a reference that ISN'T flagged unresolved also COMPLETES.
-    out += sameFileScopeSymbols(offset)
+    out += sameFileScopeSymbols(offset, if (exactName && namePrefix.isNotEmpty()) namePrefix else null)
     // Members of every implicit `this` (apply/with/run block, extension fn, enclosing class).
     implicitReceiversAt(offset).forEach { recv ->
         out += service.membersOf(recv.qualifiedName, recv.typeArguments, null)
@@ -961,12 +988,15 @@ fun KotlinResolver.scopeSymbolsAt(
  * class. Extensions are excluded (not callable by bare name). Signatures match [KotlinSymbolService]'s
  * `toSymbol` so the completion de-dup folds a live symbol together with its already-indexed disk twin.
  */
-internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol> {
+internal fun KotlinResolver.sameFileScopeSymbols(offset: Int, name: String? = null): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
+    // With [name] (a resolution probe), a declaration of another name is skipped before it is typed: typing a
+    // property infers its initializer, and a probe wants one name.
+    fun wanted(n: String?): Boolean = name == null || n == name
     for (d in ktFile.declarations) when (d) {
-        is KtNamedFunction -> if (d.receiverTypeReference == null) out += cachedSameFileSymbol(d, null) { sameFileFunction(d, null) }
-        is KtProperty -> if (d.receiverTypeReference == null) out += cachedSameFileSymbol(d, null) { sameFileProperty(d, null) }
-        is KtClassOrObject -> out += cachedSameFileSymbol(d, null) { sameFileType(d) }
+        is KtNamedFunction -> if (d.receiverTypeReference == null && wanted(d.name)) out += cachedSameFileSymbol(d, null) { sameFileFunction(d, null) }
+        is KtProperty -> if (d.receiverTypeReference == null && wanted(d.name)) out += cachedSameFileSymbol(d, null) { sameFileProperty(d, null) }
+        is KtClassOrObject -> if (d.name == null || wanted(d.name)) out += cachedSameFileSymbol(d, null) { sameFileType(d) }
         else -> {}
     }
     var node: KtElement? = elementAt(offset)
@@ -974,17 +1004,17 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol
         if (node is KtClassOrObject) {
             val ownerFqn = node.fqName?.asString()
             for (d in node.declarations) when (d) {
-                is KtNamedFunction -> if (d.receiverTypeReference == null) {
+                is KtNamedFunction -> if (d.receiverTypeReference == null && wanted(d.name)) {
                     out += cachedSameFileSymbol(d, ownerFqn) { sameFileFunction(d, ownerFqn) }
                 }
 
-                is KtProperty -> if (d.receiverTypeReference == null) {
+                is KtProperty -> if (d.receiverTypeReference == null && wanted(d.name)) {
                     out += cachedSameFileSymbol(d, ownerFqn) { sameFileProperty(d, ownerFqn) }
                 }
 
                 else -> {}
             }
-            node.primaryConstructorParameters.filter { it.hasValOrVar() }.forEach { p ->
+            node.primaryConstructorParameters.filter { it.hasValOrVar() && wanted(it.name) }.forEach { p ->
                 out += KotlinSymbol(
                     p.name ?: "_", SymbolKind.FIELD,
                     type = paramType(p), origin = SOURCE,

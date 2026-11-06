@@ -694,8 +694,8 @@ class KotlinSemanticHighlighter(
         // The implicit lambda parameter `it` (`x.let { it }`, `x.also { it }`) is synthetic — no `KtParameter`,
         // so the PSI scan above misses it. The resolver synthesizes it ONLY when an enclosing no-arg lambda fills
         // a single-value-parameter functional type, so gating on that is sound (it's never a stray `it`). Immutable.
-        if (name == "it" && resolver.localsAt(offset)
-                .any { it.name == "it" && it.kind == SymbolKind.PARAMETER }
+        if (name == "it" && resolver.localsAt(offset, "it")
+                .any { it.kind == SymbolKind.PARAMETER }
         ) {
             emit(ref.textRange, HighlightKind.PARAMETER, setOf(HighlightModifier.READONLY)); return true
         }

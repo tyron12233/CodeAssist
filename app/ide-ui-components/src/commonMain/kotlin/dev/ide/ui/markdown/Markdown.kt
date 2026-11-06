@@ -1,7 +1,6 @@
 package dev.ide.ui.markdown
 
 import dev.ide.ui.theme.Ide
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -24,12 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.theme.Ca
@@ -332,6 +335,10 @@ private fun listItemOf(line: String): MdListItem? {
  * `*italic*`/`_italic_`, `***bold italic***`, `~~strikethrough~~`, `[text](url)` links, and `![alt](url)`
  * images (rendered as their alt text, link-styled). Emphasis nests. Unbalanced markers degrade to literal
  * text. Pure (styles passed in via [styles]) so it's unit-testable.
+ *
+ * Links are real links: a `[text](url)` and a bare `https://...` both carry a [LinkAnnotation.Url], which
+ * `Text` opens through the platform's URI handler on tap. Only [isOpenableUrl] targets get one, so a
+ * listing cannot hand a reader a `javascript:` or `intent:` link; anything else stays styled text.
  */
 fun buildInline(md: String, styles: MdStyles): AnnotatedString = buildAnnotatedString {
     appendInline(md, styles.base, styles)
@@ -353,6 +360,12 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.appendInline(
         val c = s[i]
         when {
             c == '\\' && i + 1 < s.length -> { plain.append(s[i + 1]); i += 2 }
+
+            // A bare URL, matched before the emphasis rules so an `_` or `*` inside one is not read as markup.
+            boundaryBefore(s, i) && bareUrlAt(s, i) > i -> {
+                val end = bareUrlAt(s, i)
+                flush(); appendLink(s.substring(i, end), s.substring(i, end), st); i = end
+            }
 
             c == '`' -> {
                 val end = s.indexOf('`', i + 1)
@@ -415,14 +428,14 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.appendInline(
             c == '!' && i + 1 < s.length && s[i + 1] == '[' -> {
                 val link = linkAt(s, i + 1)
                 if (link == null) { plain.append(c); i++ } else {
-                    flush(); pushStyle(st.link); append(link.text); pop(); i = link.end
+                    flush(); appendLink(link.text, link.url, st); i = link.end
                 }
             }
 
             c == '[' -> {
                 val link = linkAt(s, i)
                 if (link == null) { plain.append(c); i++ } else {
-                    flush(); pushStyle(st.link); append(link.text); pop(); i = link.end
+                    flush(); appendLink(link.text, link.url, st); i = link.end
                 }
             }
 
@@ -445,14 +458,78 @@ private fun closingUnderscore(s: String, from: Int): Int {
     return -1
 }
 
-private class InlineLink(val text: String, val end: Int)
+private class InlineLink(val text: String, val url: String, val end: Int)
 
-/** Parse a `[text](url)` link whose `[` is at [start]; returns the display text + index past the `)`. */
+/** Parse a `[text](url)` link whose `[` is at [start]; returns the display text, the url and the index past the `)`. */
 private fun linkAt(s: String, start: Int): InlineLink? {
     val close = s.indexOf(']', start + 1)
     if (close < 0 || close + 1 >= s.length || s[close + 1] != '(') return null
     val paren = s.indexOf(')', close + 2)
     if (paren < 0) return null
     val text = s.substring(start + 1, close)
-    return InlineLink(text.ifEmpty { s.substring(close + 2, paren) }, paren + 1)
+    val url = s.substring(close + 2, paren).trim()
+    return InlineLink(text.ifEmpty { url }, url, paren + 1)
+}
+
+/** [text] styled as a link, and tappable when [url] is one a reader can safely be sent to. */
+private fun androidx.compose.ui.text.AnnotatedString.Builder.appendLink(text: String, url: String, st: MdStyles) {
+    if (isOpenableUrl(url)) {
+        withLink(LinkAnnotation.Url(url, TextLinkStyles(style = st.link))) { append(text) }
+    } else {
+        pushStyle(st.link); append(text); pop()
+    }
+}
+
+/**
+ * Whether a link may be opened: web and mail only. Text here is written by strangers (store listings,
+ * reviews, model output), and `javascript:`, `intent:`, `file:` or a custom scheme would hand them a
+ * way to act on the reader's device with one tap.
+ */
+fun isOpenableUrl(url: String): Boolean {
+    val lower = url.trim().lowercase()
+    return (lower.startsWith("https://") || lower.startsWith("http://")) && lower.length > lower.indexOf("//") + 3 ||
+        lower.startsWith("mailto:") && lower.length > 7
+}
+
+/**
+ * The end of a bare `http(s)://` URL starting at [start], or [start] when there is none.
+ *
+ * Trailing punctuation is left out ("see https://x.dev." links `https://x.dev`), and so is a closing `)`
+ * the URL never opened, which is how a URL in parentheses is written in prose.
+ */
+internal fun bareUrlAt(s: String, start: Int): Int {
+    val scheme = when {
+        s.startsWith("https://", start, ignoreCase = true) -> 8
+        s.startsWith("http://", start, ignoreCase = true) -> 7
+        else -> return start
+    }
+    var end = start + scheme
+    while (end < s.length && !s[end].isWhitespace() && s[end] !in "<>\"`") end++
+    while (end > start + scheme) {
+        val last = s[end - 1]
+        val unbalancedParen = last == ')' && s.substring(start, end).count { it == '(' } < s.substring(start, end).count { it == ')' }
+        if (last in ".,;:!?'*_~]" || unbalancedParen) end-- else break
+    }
+    return if (end > start + scheme) end else start
+}
+
+/**
+ * Plain text with its bare URLs made into links: for text that is not Markdown (a review, a reply) but
+ * whose links should still open. Everything else is appended exactly as written.
+ */
+fun linkify(text: String, base: SpanStyle, link: SpanStyle): AnnotatedString = buildAnnotatedString {
+    val st = MdStyles(base = base, code = base, link = link)
+    var i = 0
+    val plain = StringBuilder()
+    while (i < text.length) {
+        val end = if (boundaryBefore(text, i)) bareUrlAt(text, i) else i
+        if (end > i) {
+            if (plain.isNotEmpty()) { pushStyle(base); append(plain.toString()); pop(); plain.clear() }
+            appendLink(text.substring(i, end), text.substring(i, end), st)
+            i = end
+        } else {
+            plain.append(text[i]); i++
+        }
+    }
+    if (plain.isNotEmpty()) { pushStyle(base); append(plain.toString()); pop() }
 }

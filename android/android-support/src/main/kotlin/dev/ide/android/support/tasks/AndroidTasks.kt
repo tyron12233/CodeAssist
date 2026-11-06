@@ -14,6 +14,7 @@ import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.ShrinkRequest
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.android.support.tools.ToolResult
 import dev.ide.android.support.viewbinding.LayoutBindingModel
 import dev.ide.android.support.viewbinding.ViewBindingJavaSource
 import dev.ide.build.BuildDiagnostic
@@ -29,9 +30,11 @@ import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.debug
+import dev.ide.build.engine.info
 import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.toolOutput
 import dev.ide.build.engine.warn
+import dev.ide.build.engine.withHeartbeat
 import dev.ide.build.resolveFor
 import dev.ide.lang.jdt.build.javaFailureSummary
 import dev.ide.lang.jdt.build.reportJavaProblems
@@ -45,6 +48,7 @@ import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
@@ -93,11 +97,16 @@ internal class MergeResourcesTask(
     private val outDir: Path,
 ) : Task {
     override val inputs: TaskInputs get() = TaskInputsImpl().apply { dirPaths("res", resDirs) }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("merged", outDir) }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
+        dirPath("merged", outDir)
+        filePath("map", ResourceMergeMap.fileFor(outDir))
+    }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        mergeResourceDirs(resDirs, outDir)
+        // Kept beside the merged dir (never inside it, where aapt2 would compile it) for the aapt2 steps, which
+        // report an error in a merged file against the user's own file instead.
+        mergeResourceDirs(resDirs, outDir).save(ResourceMergeMap.fileFor(outDir))
         ctx.debug("mergeResources -> ${outDir.fileName}")
         return TaskResult.Success
     }
@@ -168,6 +177,29 @@ internal class ResourceMergeMap(copies: Map<Path, Path>, values: Map<Path, List<
     private val copies = copies.mapKeys { norm(it.key) }
     private val values = values.mapKeys { norm(it.key) }
 
+    /** Write this map to [file], one tab-separated line per copy or values entry, for [load]. */
+    fun save(file: Path) {
+        file.parent?.let { Files.createDirectories(it) }
+        val lines = copies.map { (merged, source) -> "c\t$merged\t$source" } +
+            values.flatMap { (merged, entries) ->
+                entries.map { "v\t$merged\t${it.startLine}\t${it.endLine}\t${it.tag}\t${it.name}\t${it.source}" }
+            }
+        Files.write(file, lines)
+    }
+
+    /**
+     * [log] with every aapt2 line that names a merged file (`<path>[:line]: error|warning: …`) rewritten to name
+     * the user's file and line behind it, so the Problems list opens the file to fix, not the merge's copy of it.
+     * Any other line is left as it is.
+     */
+    fun remap(log: List<String>): List<String> = log.map { raw ->
+        val m = LOCATED.matchEntire(raw.trim()) ?: return@map raw
+        val merged = runCatching { Paths.get(m.groupValues[1]) }.getOrNull() ?: return@map raw
+        val line = m.groupValues[2].toIntOrNull()
+        val (source, sourceLine) = sourceOf(merged, line) ?: return@map raw
+        "$source${sourceLine?.let { ":$it" } ?: ""}: ${m.groupValues[3]}"
+    }
+
     private fun norm(p: Path): Path = p.toAbsolutePath().normalize()
 
     /** The user's file and 1-based line behind [line] of the merged file [merged], or null when [merged] is
@@ -182,6 +214,35 @@ internal class ResourceMergeMap(copies: Map<Path, Path>, values: Map<Path, List<
             ?: return entry.source to null
         val declLine = 1 + text.substring(0, decl.range.first).count { it == '\n' }
         return entry.source to declLine + (line - entry.startLine)
+    }
+
+    companion object {
+        private val LOCATED = Regex("""^(.+?)(?::(\d+))?: ((?:error|warn(?:ing)?): .+)$""", RegexOption.IGNORE_CASE)
+
+        /** Where [MergeResourcesTask] keeps the map of the merge into [mergedDir]. */
+        fun fileFor(mergedDir: Path): Path = mergedDir.resolveSibling("${mergedDir.fileName}.map")
+
+        /** The map [save]d to [file], or null when there is none (or it can't be read). */
+        fun load(file: Path): ResourceMergeMap? {
+            if (!Files.isRegularFile(file)) return null
+            val copies = HashMap<Path, Path>()
+            val values = HashMap<Path, MutableList<MergedValuesEntry>>()
+            runCatching {
+                for (line in Files.readAllLines(file)) {
+                    val f = line.split('\t')
+                    when {
+                        f.size == 3 && f[0] == "c" -> copies[Paths.get(f[1])] = Paths.get(f[2])
+                        f.size == 7 && f[0] == "v" -> values.getOrPut(Paths.get(f[1])) { ArrayList() }
+                            .add(MergedValuesEntry(f[2].toInt(), f[3].toInt(), f[4], f[5], Paths.get(f[6])))
+                    }
+                }
+            }.onFailure { return null }
+            return ResourceMergeMap(copies, values)
+        }
+
+        /** [result] with its log [remap]ped through the merge maps of [mergedDirs], if any were saved. */
+        fun remapped(result: ToolResult, mergedDirs: List<Path>): ToolResult =
+            mergedDirs.mapNotNull { load(fileFor(it)) }.fold(result) { r, map -> r.copy(log = map.remap(r.log)) }
     }
 }
 
@@ -361,13 +422,21 @@ internal class GenerateLibraryRTask(
     private val aapt2: Aapt2,
     /** When set, aapt2 also writes the R symbol table (`R.txt`) here — the AAR ships it for consumers. */
     private val rTxt: Path? = null,
+    /**
+     * The library's dependencies' resources, linked by [LinkLibraryDependencyResourcesTask]: references into
+     * them resolve, while the R still holds only this library's own resources. Skipped when absent.
+     */
+    private val dependencyTable: Path? = null,
 ) : Task {
+    private fun table(): Path? = dependencyTable?.takeIf { Files.isRegularFile(it) }
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             dirPaths("res", resDirs)
             if (Files.isRegularFile(manifest)) filePaths("manifest", listOf(manifest))
             property("package", packageName)
             property("androidJar", androidJar.toString())
+            table()?.let { filePaths("dependencyTable", listOf(it)) }
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
         dirPath("R", genDir)
@@ -392,6 +461,7 @@ internal class GenerateLibraryRTask(
             throwawayAp,
             nonFinalIds = true,
             rTxt = rTxt,
+            includes = listOfNotNull(table()),
         )
         ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link (library R) failed")
@@ -420,6 +490,74 @@ internal class GenerateLibraryRTask(
     }
 }
 
+/**
+ * `linkDependencyResources`: link the resources an `android-lib` depends on (its dependency library modules'
+ * and AARs') into one throwaway table for [GenerateLibraryRTask] to link the library's own resources against.
+ * A library's own XML may use them like any app does (`?attr/colorSurface` from Material in a theme,
+ * `@string/x` from a dependency module), but its own link sees only its own resources, so without this every
+ * such reference fails "resource ... not found".
+ *
+ * The table is linked under the LIBRARY's package name, since aapt2 resolves an unqualified reference by the
+ * compiling package's name, and at package id 0x7e, because the library's own link takes 0x7f and an included
+ * table can't share it. Ids are throwaway either way: the app assigns the real ones when it links.
+ *
+ * [resDirs] go lowest priority first, each later one an overlay over the earlier (as the app's merge orders
+ * them). A failed link is not the library's error: it warns and drops the table, leaving `generateR` to link as
+ * before, which still succeeds for a library that references nothing outside itself.
+ */
+internal class LinkLibraryDependencyResourcesTask(
+    override val name: TaskName,
+    private val resDirs: List<Path>,
+    private val androidJar: Path,
+    private val packageName: String,
+    private val minSdk: Int,
+    private val compiledDir: Path,
+    private val scratchDir: Path,
+    private val table: Path,
+    private val aapt2: Aapt2,
+) : Task {
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("res", resDirs)
+            property("package", packageName)
+            property("androidJar", androidJar.toString())
+        }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("table", table) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        Files.deleteIfExists(table)
+        val compile = aapt2.compile(resDirs, compiledDir)
+        val archives = compile.archives
+        if (!compile.result.success || archives.isEmpty()) {
+            if (!compile.result.success) ctx.warn("Could not compile the dependencies' resources; ${name.value} skipped")
+            return TaskResult.Success
+        }
+        val manifest = scratchDir.resolve("AndroidManifest.xml")
+        Files.createDirectories(scratchDir)
+        manifest.writeText(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n"
+        )
+        val r = aapt2.link(
+            archives.take(1), manifest, androidJar, packageName, emptyList(), minSdk, minSdk,
+            scratchDir.resolve("gen"), table,
+            overlays = archives.drop(1),
+            packageId = DEPENDENCY_PACKAGE_ID,
+        )
+        if (!r.success) {
+            Files.deleteIfExists(table)
+            ctx.warn("Could not link the dependencies' resources; ${name.value} skipped")
+            ctx.debug(r.log.joinToString("\n"))
+        }
+        return TaskResult.Success
+    }
+
+    private companion object {
+        const val DEPENDENCY_PACKAGE_ID = 0x7e
+    }
+}
+
 /** `aapt2 compile`: compile each `res/` dir into a flat-file archive under [outDir]. */
 internal class Aapt2CompileTask(
     override val name: TaskName,
@@ -439,7 +577,7 @@ internal class Aapt2CompileTask(
         ctx.checkCanceled()
         Files.createDirectories(outDir)
         val r = aapt2.compile(resDirs, outDir)
-        ctx.reportTool("aapt2", r.result, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", ResourceMergeMap.remapped(r.result, resDirs), DiagnosticKind.RESOURCE)
         return if (r.result.success) TaskResult.Success else TaskResult.Failed("aapt2 compile failed")
     }
 }
@@ -463,6 +601,8 @@ internal class Aapt2LinkTask(
     private val proguardRules: Path? = null,
     /** When true, link to proto resources (the input form R8's resource shrinker reads). */
     private val protoFormat: Boolean = false,
+    /** The merged res dir [compiledDir] was compiled from, so an error in it names the user's file instead. */
+    private val mergedRes: Path? = null,
 ) : Task {
     private fun archives(): List<Path> =
         if (Files.isDirectory(compiledDir)) Files.list(compiledDir).use { s ->
@@ -508,7 +648,7 @@ internal class Aapt2LinkTask(
             proguardRules = proguardRules,
             protoFormat = protoFormat,
         )
-        ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", ResourceMergeMap.remapped(r, listOfNotNull(mergedRes)), DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
 }
@@ -788,13 +928,16 @@ internal class AndroidKotlinCompileTask(
         if (kt.isEmpty()) return TaskResult.Success
         // Apply the compiler plugins that match the module (e.g. Compose when the runtime is on the classpath).
         val resolved = plugins.resolveFor(module, classpath + bootClasspath)
-        val r = compiler.compile(
-            kt, javaSources(), classpath, outClasses, level,
-            bootClasspath = bootClasspath,
-            compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
-            commonSources = commonSources(kt),
-            optIns = optIns(),
-        )
+        val r = ctx.withHeartbeat("Compiling Kotlin") {
+            compiler.compile(
+                kt, javaSources(), classpath, outClasses, level,
+                bootClasspath = bootClasspath,
+                compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
+                commonSources = commonSources(kt),
+                optIns = optIns(),
+                status = { ctx.info(it) },
+            )
+        }
         ctx.reportKotlinProblems(r)
         return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))
     }

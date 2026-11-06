@@ -17,6 +17,11 @@ data class ClangCompletion(
     val isPattern: Boolean,
     /** True when the candidate takes a parameter list, which is what distinguishes a call from a value. */
     val isCallable: Boolean,
+    /**
+     * libclang's cursor kind (`FieldDecl`, `CXXMethod`, `macrodefinition`, ...) when the answer came from the
+     * resident daemon; null from the command line, whose format carries no kind.
+     */
+    val kind: String? = null,
 )
 
 /**
@@ -31,14 +36,17 @@ data class ClangCompletion(
  * COMPLETION: value_type
  * ```
  *
- * with four chunk markers carrying the structure: `[#type#]` is the result type, `<#placeholder#>` a
+ * The resident daemon prints the same lines with the cursor kind after the prefix,
+ * `COMPLETION(CXXMethod): size : [#size_type#]size()`, which the command line never could.
+ *
+ * Four chunk markers carry the structure: `[#type#]` is the result type, `<#placeholder#>` a
  * parameter, `{#text#}` informative text the user does not type, and `(#…#)` an optional parameter group.
  * Everything else is literal. The markers have to be stripped rather than shown, because a popup row reading
  * `[#void#]push_back(<#const value_type &__x#>)` is worse than no detail at all.
  */
 object ClangCompletions {
 
-    private val LINE = Regex("""^COMPLETION:\s+(?<name>[^:]+?)(?:\s+:\s+(?<chunks>.*))?$""")
+    private val LINE = Regex("""^COMPLETION(?:\((?<kind>[A-Za-z]+)\))?:\s+(?<name>[^:]+?)(?:\s+:\s+(?<chunks>.*))?$""")
 
     // Every `}` and `]` below is escaped even though a bare one is legal on the desktop JVM. **Android's
     // ICU regex engine rejects them**: an unescaped `}` throws PatternSyntaxException, and because these are
@@ -59,7 +67,7 @@ object ClangCompletions {
 
         for (raw in output.lineSequence()) {
             val line = raw.trim()
-            if (!line.startsWith("COMPLETION:")) continue
+            if (!line.startsWith("COMPLETION")) continue
             val match = LINE.matchEntire(line) ?: continue
             val name = match.groups["name"]!!.value.trim()
             if (name.isEmpty()) continue
@@ -85,18 +93,28 @@ object ClangCompletions {
                     resultType = resultType,
                     isPattern = isPattern,
                     isCallable = chunks?.contains('(') == true,
+                    kind = match.groups["kind"]?.value,
                 ),
             )
         }
         return seen.values.toList()
     }
 
-    /** Strip the chunk markers, keeping the text inside them: what a person would read as the signature. */
+    /**
+     * Strip the chunk markers, keeping the text inside them: what a person would read as the signature.
+     *
+     * Repeated until nothing changes, because optional groups nest (`substr({#<#pos#>{#, <#n#>#}#})`): one
+     * pass only unwraps the innermost, and the popup used to show `substr({#size_type pos = 0, ...`.
+     */
     private fun readable(chunks: String): String {
         var s = RESULT_TYPE.replace(chunks, "")
-        s = PLACEHOLDER.replace(s) { it.groupValues[1] }
-        s = INFORMATIVE.replace(s) { it.groupValues[1] }
-        s = OPTIONAL.replace(s) { it.groupValues[1] }
+        while (true) {
+            var next = PLACEHOLDER.replace(s) { it.groupValues[1] }
+            next = INFORMATIVE.replace(next) { it.groupValues[1] }
+            next = OPTIONAL.replace(next) { it.groupValues[1] }
+            if (next == s) break
+            s = next
+        }
         return s.trim()
     }
 }

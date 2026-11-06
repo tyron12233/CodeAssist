@@ -1,7 +1,9 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.editor.core.MergeConflict
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -51,6 +53,12 @@ internal class EditorDrawColors(
     val findMatch: Color,
     val findCurrent: Color,
     val occurrence: Color,
+    /** Occurrence tint for a name the symbol is assigned or declared at (IntelliJ's "under caret (write)"). */
+    val occurrenceWrite: Color,
+    /** Merge-conflict sides: the current one (`<<<<<<<` to `=======`) and the incoming one, as opaque roles the
+     *  renderer tints down (bands lightly, the marker lines more). */
+    val conflictCurrent: Color,
+    val conflictIncoming: Color,
     /** Background box for a live template (snippet) field while stepping through tab stops. */
     val templateField: Color,
 )
@@ -118,6 +126,11 @@ internal fun DrawScope.drawEditor(
     findMatches: List<Match>,
     currentMatch: Int,
     occurrences: List<Match>,
+    /** The occurrences that write the symbol (assignment targets, `++`/`--`, its declaration), tinted apart.
+     *  Sorted and non-overlapping like [occurrences], and disjoint from it. */
+    occurrenceWrites: List<Match>,
+    /** Merge-conflict blocks, banded by side under everything else in the text area. */
+    conflicts: List<MergeConflict>,
     /** Live template (snippet) field ranges to box while stepping through tab stops; empty when not in a template. */
     templateFields: List<IntRange>,
     /** A plugin's geometric decorations binned per document line, already resolved to theme colors. */
@@ -137,6 +150,8 @@ internal fun DrawScope.drawEditor(
      *  the interpolated span of an in-progress expand animation. The logical selection is already the final
      *  range (caret/handles reflect it); this only grows the highlight. */
     animatedSelection: Pair<Int, Int>? = null,
+    /** Halloween: hang slime drips under error squiggles (static, see [slimeDrips]). */
+    spookyErrors: Boolean = false,
 ): Float {
     val doc = session.doc
     val sel = session.selection
@@ -237,6 +252,26 @@ internal fun DrawScope.drawEditor(
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+        // Merge-conflict bands, lowest of all: each side of a block tinted by its own color across the text area,
+        // the marker lines stronger so the block's edges read at a glance, a diff3 base section left plain.
+        for (c in conflicts) {
+            if (c.endLine < firstVisible || c.startLine > lastVisible) continue
+            for (line in max(c.startLine, firstVisible)..min(c.endLine, lastVisible)) {
+                if (foldModel.isHidden(line)) continue
+                val base = c.baseLine
+                val inBase = base != null && line > base && line < c.separatorLine
+                val color = when {
+                    line == c.startLine || line == base -> colors.conflictCurrent.copy(alpha = 0.30f)
+                    line == c.separatorLine -> colors.muted.copy(alpha = 0.22f)
+                    line == c.endLine -> colors.conflictIncoming.copy(alpha = 0.30f)
+                    inBase -> continue
+                    line < c.separatorLine -> colors.conflictCurrent.copy(alpha = 0.12f)
+                    else -> colors.conflictIncoming.copy(alpha = 0.12f)
+                }
+                val rows = if (wrap) vlayout.rowsOf(line).coerceAtLeast(1) else 1
+                drawRect(color, Offset(gutterWidth, lineTop(line)), Size(size.width - gutterWidth, rows * lineH))
+            }
+        }
         // Plugin background decorations, BELOW every other fill: a coverage tint or a diff band is a property
         // of the text, so the selection, the find highlights and a template field all have to read as being
         // on top of it. Tinted down to the alpha the editor's other whole-range fills use, because the theme
@@ -286,14 +321,16 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // occurrence highlights (lowest layer): every textual use of the identifier under the caret, tinted
-        // subtly. The selection / find layers paint over the current one.
-        // Both match lists are sorted and non-overlapping, so only the visible slice is walked, not the file's.
+        // occurrence highlights (lowest layer): every use of the symbol under the caret (resolved where the
+        // language can, else textual), tinted subtly, writes in their own tint. The selection / find layers
+        // paint over the current one.
+        // The match lists are sorted and non-overlapping, so only the visible slice is walked, not the file's.
         val visibleFrom = doc.lineStart(firstVisible)
         val visibleTo = doc.lineEnd(lastVisible)
-        if (occurrences.isNotEmpty()) {
-            for (idx in visibleMatchIndices(occurrences, visibleFrom, visibleTo)) {
-                val m = occurrences[idx]
+        for ((list, tint) in arrayOf(occurrences to colors.occurrence, occurrenceWrites to colors.occurrenceWrite)) {
+            if (list.isEmpty()) continue
+            for (idx in visibleMatchIndices(list, visibleFrom, visibleTo)) {
+                val m = list[idx]
                 val sLine = doc.lineForOffset(m.start)
                 val eLine = doc.lineForOffset(m.end)
                 if (eLine < firstVisible || sLine > lastVisible) continue
@@ -301,7 +338,7 @@ internal fun DrawScope.drawEditor(
                     if (foldModel.isHidden(line)) continue
                     val vStart = if (line == sLine) rawToVisual(line, m.start - doc.lineStart(line)) else 0
                     val vEnd = if (line == eLine) rawToVisual(line, m.end - doc.lineStart(line)) else -1
-                    fillRange(line, vStart, vEnd, colors.occurrence, trailingMarker = false)
+                    fillRange(line, vStart, vEnd, tint, trailingMarker = false)
                 }
             }
         }
@@ -401,12 +438,19 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // diagnostic squiggles
+        // diagnostic squiggles. Every getHorizontalPosition re-measures the line from its start, so on a long line
+        // full of errors this loop cost (segments x line length) per frame: a Play ANR on 3.37-3.38 (drawEditor).
+        // Long unwrapped lines visit their segments left to right and stop at the first one starting past the
+        // viewport (positions only grow along LTR text, so the rest are off-screen too), and every squiggle path
+        // is clipped to the viewport instead of being built across the whole off-screen width.
+        val clipLeft = gutterWidth
+        val clipRight = size.width
         for (line in visibleLines) {
             val segs = diagByLine[line] ?: continue
             val layout = layoutFor(line)
             val maxCol = doc.lineLength(line)
-            for (seg in segs) {
+            val longLine = !wrap && maxCol > LONG_LINE_COLS
+            for (seg in if (longLine) segs.sortedBy { it.startCol } else segs) {
                 val color = when (seg.severity) {
                     UiSeverity.Error -> colors.error
                     UiSeverity.Warning -> if (seg.unused) colors.muted else colors.warning
@@ -418,10 +462,14 @@ internal fun DrawScope.drawEditor(
                 if (c1 <= c0) continue
                 val v0 = rawToVisual(line, c0)
                 val v1 = rawToVisual(line, c1)
+                val drips = spookyErrors && seg.severity == UiSeverity.Error
                 if (!wrap) {
                     val x0 = textLeft + layout.getHorizontalPosition(v0, usePrimaryDirection = true)
+                    if (longLine && x0 > clipRight) break
                     val x1 = textLeft + layout.getHorizontalPosition(v1, usePrimaryDirection = true)
-                    wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f)
+                    if (x1 < clipLeft || x0 > clipRight) continue
+                    wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f, clipLeft, clipRight)
+                    if (drips) slimeDrips(slimeColor(color), max(x0, clipLeft), min(x1, clipRight), lineTop(line) + lineH - 1f, lineH, line * 31 + c0)
                 } else {
                     val firstSub = layout.getLineForOffset(v0)
                     val lastSub = layout.getLineForOffset(v1)
@@ -429,6 +477,7 @@ internal fun DrawScope.drawEditor(
                         val x0 = textLeft + (if (s == firstSub) layout.getHorizontalPosition(v0, usePrimaryDirection = true) else layout.getLineLeft(s))
                         val x1 = textLeft + (if (s == lastSub) layout.getHorizontalPosition(v1, usePrimaryDirection = true) else layout.getLineRight(s))
                         wavyUnderline(color, x0, x1, lineTop(line) + s * lineH + lineH - 2f)
+                        if (drips) slimeDrips(slimeColor(color), x0, x1, lineTop(line) + s * lineH + lineH - 1f, lineH, line * 31 + c0 + s)
                     }
                 }
             }
@@ -605,13 +654,69 @@ internal fun DrawScope.drawCaret(
     codeTop: Float,
     lineHeight: Float,
     color: Color,
+    style: CaretStyle = CaretStyle.Line,
+    /** One monospace cell, which [CaretStyle.Block] and [CaretStyle.Underline] cover. */
+    charWidth: Float = 0f,
+    /** Seconds on a running clock, for [CaretStyle.Candle]'s flicker; ignored by the other styles. */
+    flameTime: Float = 0f,
 ) {
     val cx = caretContent.x - hOff
     val cy = caretContent.y - vOff
-    if (cy + lineHeight <= codeTop || cy >= size.height) return
+    // The candle's flame rises above its own line, so its row can still show while the line itself is under
+    // the sticky headers' bottom edge; the clip below is what keeps it off the headers.
+    val rise = if (style == CaretStyle.Candle) lineHeight * 0.5f else 0f
+    if (cy + lineHeight <= codeTop - rise || cy >= size.height) return
     clipRect(left = gutterWidth, top = codeTop, right = size.width, bottom = size.height) {
-        drawRect(color, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineHeight))
+        val cell = if (charWidth > 0f) charWidth else lineHeight * 0.6f
+        when (style) {
+            CaretStyle.Line -> drawRect(color, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineHeight))
+            // Translucent, so the character under it stays readable without redrawing the text inverted.
+            CaretStyle.Block -> drawRect(color.copy(alpha = color.alpha * 0.45f), Offset(cx, cy), Size(cell, lineHeight))
+            CaretStyle.Underline -> {
+                val h = 2.dp.toPx()
+                drawRect(color, Offset(cx, cy + lineHeight - h), Size(cell, h))
+            }
+            CaretStyle.Candle -> drawCandle(cx, cy, lineHeight, color, flameTime)
+        }
     }
+}
+
+/**
+ * A wax candle in the caret's place: the stick spans the lower part of the line, in the caret color so it
+ * still follows the scheme, and a two-tone flame sits on the wick. The flame's height and lean are a sum of
+ * unrelated sines, so the flicker never visibly repeats.
+ */
+private fun DrawScope.drawCandle(cx: Float, cy: Float, lineHeight: Float, color: Color, t: Float) {
+    val stickW = 3.dp.toPx()
+    val stickTop = cy + lineHeight * 0.28f
+    drawRect(color, Offset(cx - stickW / 2f, stickTop), Size(stickW, cy + lineHeight - stickTop))
+    // A darker wick, so the flame reads as sitting on something rather than floating.
+    val wickH = 1.5.dp.toPx()
+    drawRect(Color(0xFF3A2A1E), Offset(cx - 0.5.dp.toPx(), stickTop - wickH), Size(1.dp.toPx(), wickH))
+
+    val flicker = 1f + 0.09f * kotlin.math.sin(t * 11f) + 0.05f * kotlin.math.sin(t * 17.3f + 1f)
+    val lean = 0.7.dp.toPx() * kotlin.math.sin(t * 7.1f)
+    val base = stickTop - wickH * 0.4f
+    val h = lineHeight * 0.48f * flicker
+    val w = 4.2.dp.toPx()
+
+    // A soft halo that fades to nothing, so it lights the text around the flame instead of sitting on it.
+    val glowCenter = Offset(cx + lean * 0.5f, base - h * 0.45f)
+    drawCircle(
+        Brush.radialGradient(listOf(Color(0xFFFF9A2E).copy(alpha = 0.28f), Color.Transparent), glowCenter, h * 0.95f),
+        radius = h * 0.95f,
+        center = glowCenter,
+    )
+    drawPath(flamePath(cx, base, w, h, lean), Color(0xFFFF8A1F))
+    drawPath(flamePath(cx, base, w * 0.5f, h * 0.6f, lean * 0.6f), Color(0xFFFFE27A))
+}
+
+/** A teardrop standing on ([cx], [base]): round at the bottom, its tip [h] above and [lean] to the side. */
+private fun flamePath(cx: Float, base: Float, w: Float, h: Float, lean: Float) = Path().apply {
+    moveTo(cx, base)
+    cubicTo(cx - w, base, cx - w * 0.7f, base - h * 0.55f, cx + lean, base - h)
+    cubicTo(cx + w * 0.7f, base - h * 0.55f, cx + w, base, cx, base)
+    close()
 }
 
 /** Cap on pinned sticky-header rows (deeper nesting drops the outermost), so they never eat the viewport. */
@@ -715,16 +820,28 @@ private fun DrawScope.dottedUnderline(color: Color, x1: Float, x2: Float, y: Flo
     }
 }
 
-private fun DrawScope.wavyUnderline(color: Color, x1: Float, x2: Float, y: Float) {
-    if (x2 <= x1) return
+/** Squiggles longer than the long-line threshold take the bounded path in the diagnostic loop. */
+private const val LONG_LINE_COLS = 1000
+
+/**
+ * A wavy underline from [x1] to [x2], drawn only inside [[clipLeft], [clipRight]]. Clipping starts on a whole
+ * wave (an even number of steps past [x1]), so the pattern stays put under the text while scrolling sideways.
+ */
+private fun DrawScope.wavyUnderline(
+    color: Color, x1: Float, x2: Float, y: Float,
+    clipLeft: Float = Float.NEGATIVE_INFINITY, clipRight: Float = Float.POSITIVE_INFINITY,
+) {
     val amplitude = 1.6f
     val step = 2.2f
+    val start = if (x1 < clipLeft) x1 + floor((clipLeft - x1) / (2 * step)) * (2 * step) else x1
+    val end = min(x2, clipRight)
+    if (end <= start) return
     val path = Path().apply {
-        moveTo(x1, y)
-        var x = x1
+        moveTo(start, y)
+        var x = start
         var up = true
-        while (x < x2) {
-            val nx = (x + step).coerceAtMost(x2)
+        while (x < end) {
+            val nx = (x + step).coerceAtMost(end)
             lineTo(nx, if (up) y - amplitude else y + amplitude)
             x = nx
             up = !up

@@ -21,6 +21,7 @@
     <string name="vcs_branch">Branch</string>
     <string name="vcs_detached">Detached HEAD</string>
     <string name="vcs_no_commits">No commits yet</string>
+    <string name="vcs_no_repo_branch">No repository</string>
     <string name="vcs_up_to_date">Up to date</string>
     <string name="vcs_not_pushed_yet">Not pushed yet</string>
     <string name="vcs_fetch">Fetch</string>
@@ -77,6 +78,7 @@
     <string name="vcs_branches_none">No branches match.</string>
     <string name="vcs_new_branch">New branch</string>
     <string name="vcs_new_branch_hint">Branch name</string>
+    <string name="vcs_new_branch_from">Starts from %1$s</string>
     <string name="vcs_create">Create</string>
     <string name="vcs_current_branch">Current</string>
     <string name="vcs_merge_into">Merge into %1$s</string>
@@ -251,6 +253,7 @@
     <string name="vcs_msg_unknown_commit">Unknown commit %1$s</string>
     <string name="vcs_msg_diff_failed">Could not diff %1$s</string>
     <string name="vcs_msg_show_failed">Could not read %1$s at %2$s</string>
+    <string name="vcs_msg_blame_failed">Could not tell who changed %1$s</string>
     <string name="vcs_msg_list_stashes_failed">Could not list stashes</string>
     <string name="vcs_msg_stage_failed">Could not stage the selected files</string>
     <string name="vcs_msg_unstage_failed">Could not unstage the selected files</string>
@@ -258,7 +261,7 @@
     <string name="vcs_msg_discard_conflicted">%1$s has a merge conflict. Resolve it, or abort the merge to undo everything.</string>
     <string name="vcs_msg_resolve_failed">Could not mark the conflicts resolved</string>
     <string name="vcs_msg_commit_message_required">Enter a commit message</string>
-    <string name="vcs_msg_identity_required">Set your name and email in Settings before committing</string>
+    <string name="vcs_msg_identity_required">Set the name and email your commits are signed with</string>
     <string name="vcs_msg_commit_failed">Could not create the commit</string>
     <string name="vcs_msg_create_branch_failed">Could not create branch %1$s</string>
     <string name="vcs_msg_checkout_failed">Could not switch to %1$s</string>

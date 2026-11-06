@@ -17,7 +17,7 @@ data class IdeSettings(
     // ---- appearance ----
     /** [THEME_LIGHT], [THEME_DARK], or [THEME_SYSTEM] (follow the OS). */
     val themeMode: String = THEME_DARK,
-    /** [ACCENT_LIME] (the default), [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], or [ACCENT_CUSTOM]. */
+    /** [ACCENT_LIME] (the default), [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], [ACCENT_PUMPKIN], or [ACCENT_CUSTOM]. */
     val accent: String = ACCENT_LIME,
     /** Seed for [ACCENT_CUSTOM] — an `0xAARRGGBB` ARGB long. Ignored unless [accent] is custom. */
     val accentColor: Long = 0xFF8B5CF6L,
@@ -30,6 +30,9 @@ data class IdeSettings(
     /** Open a program's Run terminal full screen, as on a phone, instead of docking it beside the editor on a
      *  wide window (a tablet, a phone in landscape, the desktop). */
     val runFullScreen: Boolean = false,
+    /** Date-windowed seasonal touches (Halloween's bats and Home card). Each season turns itself off when it
+     *  ends; this is the one switch for someone who wants none of them. */
+    val seasonalTouches: Boolean = true,
 
     // ---- editor ----
     /** Code-font zoom, 1.0 = the theme's default size (also driven live by pinch / Ctrl-+ / Ctrl--). */
@@ -48,10 +51,16 @@ data class IdeSettings(
     val wrapIndent: Boolean = true,
     /** Draggable bar along the editor's bottom edge while a line runs past the view; none when [wordWrap]. */
     val horizontalScrollbar: Boolean = true,
+    /** [CARET_LINE] (the default), [CARET_BLOCK], [CARET_UNDERLINE], or [CARET_CANDLE]. */
+    val caretStyle: String = CARET_LINE,
     /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     val pinchZoom: Boolean = true,
+    /** While typing in the editor on a phone, volume up / down move the caret left / right instead of the volume. */
+    val volumeKeysMoveCaret: Boolean = false,
+    /** Show who last changed the caret's line (author, when, commit summary) faded after its end. */
+    val inlineBlame: Boolean = true,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space. **On by default** — a normal
      *  keyboard. Turning it OFF marks the field as raw code (a `visible-password` input type) so a typed `.`
      *  doesn't get an auto-inserted space and identifiers aren't "corrected", at the cost of the suggestion
@@ -95,9 +104,18 @@ data class IdeSettings(
         const val ACCENT_VIOLET = "violet"
         const val ACCENT_TEAL = "teal"
         const val ACCENT_ORANGE = "orange"
+        const val ACCENT_PUMPKIN = "pumpkin"
         const val ACCENT_CUSTOM = "custom"
+
+        /** An accent value naming an app theme a plugin ships: `theme:<id>` (see `ContributedAppThemes`). */
+        const val ACCENT_THEME_PREFIX = "theme:"
         const val CODE_FONT_JETBRAINS = "jetbrains"
         const val CODE_FONT_MONOSPACE = "monospace"
+        // The editor's `CaretStyle` ids; the store accepts only these.
+        const val CARET_LINE = "line"
+        const val CARET_BLOCK = "block"
+        const val CARET_UNDERLINE = "underline"
+        const val CARET_CANDLE = "candle"
 
         // Bounds the UI sliders enforce and the store clamps to (a hand-edited prefs file can't push the
         // editor into an unusable state).

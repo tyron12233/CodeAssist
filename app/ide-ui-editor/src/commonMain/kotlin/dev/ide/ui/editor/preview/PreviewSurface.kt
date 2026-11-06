@@ -263,6 +263,10 @@ fun PreviewSurface(
                 .pointerInput(Unit) { detectTapGestures(onTap = { tapHandler.value?.invoke() }) },
             contentAlignment = Alignment.Center,
         ) {
+            // A device-sized card gets the rounded corners of a phone. A wrap-to-content card is only as big as the
+            // composable, often one line of text, and those 18dp corners cut its first and last letters off
+            // ("ello, Compose" in the Compose template's preview), so it is barely rounded.
+            val cardShape = RoundedCornerShape(if (wrap) 2.dp else Ca.radius.lg)
             Box(
                 Modifier
                     .graphicsLayer {
@@ -276,10 +280,10 @@ fun PreviewSurface(
                         if (wrap) Modifier.wrapContentSize().widthIn(max = devWdp.dp).heightIn(max = devHdp.dp)
                         else Modifier.requiredSize(devWdp.dp, devHdp.dp),
                     )
-                    .shadow(if (blueprint) 0.dp else 16.dp, RoundedCornerShape(Ca.radius.lg))
-                    .clip(RoundedCornerShape(Ca.radius.lg))
+                    .shadow(if (blueprint) 0.dp else 16.dp, cardShape)
+                    .clip(cardShape)
                     .background(cardColor)
-                    .border(1.dp, cardBorderColor, RoundedCornerShape(Ca.radius.lg)),
+                    .border(1.dp, cardBorderColor, cardShape),
             ) {
                 card(widthPx, heightPx, device.density)
             }

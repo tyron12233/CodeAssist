@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +63,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_delete_branch_title
 import dev.ide.vcs.ui.generated.resources.vcs_force_delete
 import dev.ide.vcs.ui.generated.resources.vcs_merge_into
 import dev.ide.vcs.ui.generated.resources.vcs_new_branch
+import dev.ide.vcs.ui.generated.resources.vcs_new_branch_from
 import dev.ide.vcs.ui.generated.resources.vcs_new_branch_hint
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -108,6 +110,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
             VcsIconButton(CaIcons.plus, stringResource(Res.string.vcs_new_branch), { creating = true })
         },
         large = false,
+        snackbarHost = { FeedbackStrip(feedback, Modifier.navigationBarsPadding()) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             VcsField(
@@ -117,7 +120,6 @@ internal fun BranchesScreen(ctx: ScreenContext) {
                 leading = CaIcons.search,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            FeedbackStrip(feedback)
             if (filtered.isEmpty()) {
                 VcsEmptyState(
                     icon = CaIcons.gitBranch,
@@ -290,7 +292,7 @@ private fun NewBranchCard(
             leading = CaIcons.gitBranch,
         )
         if (startPoint.isNotBlank()) {
-            Text(startPoint, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
+            Text(stringResource(Res.string.vcs_new_branch_from, startPoint), style = MaterialTheme.typography.labelSmall, color = scheme.outline)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Spacer(Modifier.weight(1f))

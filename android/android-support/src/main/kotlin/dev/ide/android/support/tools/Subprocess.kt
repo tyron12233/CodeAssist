@@ -22,8 +22,19 @@ internal object Subprocess {
         // bundled aapt2/zipalign prebuilt usually means an ABI/page-size/kernel mismatch on this device.
         val signal = signalName(code)
         val detail = signal?.let { "$it (code $code), the native binary crashed" } ?: "code $code"
-        return ToolResult(false, out + "$tool exited with $detail", processFailed = signal != null)
+        return ToolResult(false, out + "$tool exited with $detail", processFailed = signal != null || mainClassNotLoaded(out))
     }
+
+    /**
+     * Whether a VM launch failed before the tool ran at all, because its main class could not be loaded:
+     * ART's `Unable to locate class '…'` and the JVM's `Could not find or load main class …`. That is a broken
+     * launch (a tool classpath that went missing under the process), not a verdict about the inputs, so like a
+     * signal death it lets the caller run the same work another way. Reported by a user as
+     * `ClassNotFoundException: com.android.tools.r8.D8` failing dexExtLibs outright, where an in-process dex
+     * would have succeeded.
+     */
+    internal fun mainClassNotLoaded(out: List<String>): Boolean =
+        out.any { it.startsWith("Unable to locate class '") || it.startsWith("Error: Could not find or load main class") }
 
     /** Map a 128+N shell exit status to its POSIX signal name, or null if [code] is not a signal death. */
     private fun signalName(code: Int): String? = when (code - 128) {

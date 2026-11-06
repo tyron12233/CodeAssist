@@ -39,6 +39,8 @@ internal class PluginRegistrationImpl(
     /** Where the installer unpacked this plugin's packaged native libraries, when it unpacked any. Supplied
      *  by the host per plugin (see [PluginManager]); null for a built-in and in a standalone test. */
     override val nativeLibraryDir: Path? = null,
+    /** Where this plugin's [privateDataDir] goes; see [PluginManager]. */
+    private val privateDataRoot: Path = defaultPrivateDataRoot(),
 ) : PluginRegistration {
 
     override val messageBus: MessageBus get() = bus
@@ -49,11 +51,12 @@ internal class PluginRegistrationImpl(
      * leave an empty directory behind, and every plugin's `register` would otherwise make one.
      */
     override val dataDir: Path by lazy {
-        // A plugin id is an identifier in practice, but it arrives from a manifest an author wrote, so it is
-        // reduced to path-safe characters rather than trusted: `..` or a separator here would escape the root.
-        val safe = pluginId.value.map { if (it.isLetterOrDigit() || it in "-_.") it else '_' }
-            .joinToString("").trim('.').ifEmpty { "plugin" }
-        dataRoot.resolve(safe).also { runCatching { Files.createDirectories(it) } }
+        dataRoot.resolve(pluginDataDirName(pluginId.value)).also { runCatching { Files.createDirectories(it) } }
+    }
+
+    /** As [dataDir], under the private root. */
+    override val privateDataDir: Path by lazy {
+        privateDataRoot.resolve(pluginDataDirName(pluginId.value)).also { runCatching { Files.createDirectories(it) } }
     }
 
     override fun <T : Any> register(ep: ExtensionPoint<T>, impl: T): Disposable =
@@ -98,6 +101,20 @@ internal class PluginRegistrationImpl(
  * under test that writes a file should still work rather than throw on a path that does not exist. Nothing
  * written there is expected to survive the process.
  */
+/**
+ * The directory name a plugin's [PluginRegistration.dataDir] and [PluginRegistration.privateDataDir] get under
+ * their roots. A plugin id is an identifier in practice, but it arrives from a manifest an author wrote, so it
+ * is reduced to path-safe characters rather than trusted: `..` or a separator here would escape the root.
+ * Public so the host can tell which plugin a directory under the roots belongs to.
+ */
+fun pluginDataDirName(pluginId: String): String =
+    pluginId.map { if (it.isLetterOrDigit() || it in "-_.") it else '_' }
+        .joinToString("").trim('.').ifEmpty { "plugin" }
+
+/** [defaultDataRoot]'s private counterpart, for a standalone caller. */
+internal fun defaultPrivateDataRoot(): Path =
+    Paths.get(System.getProperty("java.io.tmpdir"), "codeassist-plugin-private")
+
 internal fun defaultDataRoot(): Path =
     // Paths.get, never Path.of: this ships to ART, where Path.of is API 34 and a call below that throws
     // NoSuchMethodError (D8 outlines it, so it dexes clean and fails only when a plugin asks for its dataDir).

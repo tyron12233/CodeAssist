@@ -1,5 +1,6 @@
 package dev.ide.core.gradle
 
+import dev.ide.platform.ProjectFiles
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.BuildType
@@ -995,7 +996,9 @@ object GradleProjectExport {
     private fun isExcluded(rel: String): Boolean {
         if (rel == "module.toml" || rel.endsWith("/module.toml")) return true
         if (rel.endsWith(".iml")) return true
-        return rel.split('/').any { it == "build" || it == ".gradle" || it == ".platform" || it == ".git" || it == ".idea" || it == "exports" }
+        if (rel.split('/').any { it == ".gradle" || it == ".platform" || it == ".git" || it == ".idea" }) return true
+        // Output only outside a source tree: a package named `build` or `exports` is source.
+        return ProjectFiles.isBuildOutput(rel, isDirectory = false, outputDirs = setOf("build", "exports"), products = false)
     }
 
     // ---------------------------------------------------------------------------------------------

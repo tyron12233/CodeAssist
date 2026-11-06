@@ -590,7 +590,13 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             // Reflect the persisted library state immediately (so a project opened with a missing closure
             // shows the error banner at once), then heal/refine in the background.
             publishDependencyHealth()
-            startDependencyReconciliation(); return
+            // Heal local libraries first, so the reconcile's "any library file missing?" check doesn't see a
+            // stale local entry and re-walk the whole Maven closure on every open.
+            if (localHealStarted.compareAndSet(false, true)) depsScope.launch {
+                if (runCatching { healLocalLibraries() }.getOrDefault(false)) publishDependencyHealth()
+                startDependencyReconciliation()
+            } else startDependencyReconciliation()
+            return
         }
         if (!pendingStarted.compareAndSet(false, true)) return
         pendingDeps = emptyList()
@@ -663,6 +669,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // used to clear only the on-disk 404s, leaving the resolvers' in-memory "no POM" memos to keep the
         // retry off the network for the rest of the session.
         forgetNegativeResolutionCaches()
+        runCatching { healLocalLibraries() }
         val mods = mavenDepModules()
         depsLog.info("retryDependencyResolution: ${mods.size} module(s) with Maven deps")
         if (mods.isEmpty()) {
@@ -1531,6 +1538,39 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             .getOrDefault(emptyList())
     }
 
+    /** Published versions of `group:name`, newest first; empty offline. For [MissingLibraries]. */
+    internal suspend fun publishedVersions(group: String, name: String): List<String> =
+        runCatching { depsResolver.availableVersions(group, name, currentRepositories()) }.getOrDefault(emptyList())
+
+    /** The Maven Central artifacts containing class [fqn]; null when no search host answered. */
+    internal suspend fun artifactsWithClass(fqn: String): List<Coordinate>? =
+        depsResolver.searchByClass(fqn)?.map { it.coordinate }
+
+    /** [coordinate]'s `.aar`, downloaded into the shared cache (or found there); null for a jar library or offline. */
+    internal suspend fun fetchAar(coordinate: Coordinate): Path? =
+        depsResolver.fetchAar(coordinate, currentRepositories())?.let { Paths.get(it) }
+
+    internal fun moduleNamed(name: String): Module? = ctx.modules().firstOrNull { it.name == name }
+
+    /** Whether [module] builds against Android (takes `.aar`s). */
+    internal fun isAndroidModule(module: Module): Boolean = acceptsAar(module)
+
+    /** The editor's "add the missing library" fixes and banner. */
+    internal val missingLibraries: MissingLibraries by lazy {
+        val service = this
+        MissingLibraries(object : MissingLibraries.Host {
+            override suspend fun publishedVersions(group: String, name: String) = service.publishedVersions(group, name)
+            override suspend fun artifactsWithClass(fqn: String) = service.artifactsWithClass(fqn)
+            override suspend fun fetchAar(coordinate: Coordinate) = service.fetchAar(coordinate)
+            override fun moduleNamed(name: String) = service.moduleNamed(name)
+            override fun isAndroidModule(module: Module) = service.isAndroidModule(module)
+            override fun declaredUnresolved(module: Module) = service.declaredUnresolved(module)
+            override suspend fun addDependency(moduleName: String, coordinate: String, scope: String) =
+                service.addDependency(moduleName, coordinate, scope)
+            override suspend fun retryDependencyResolution() = service.retryDependencyResolution()
+        }, depsScope)
+    }
+
     /**
      * Versions of the library `group:name` currently downloaded to the shared cache, each with the disk space
      * it occupies (newest-first) — for the Dependencies screen's downloaded-versions cleanup list. Disk-only
@@ -1701,26 +1741,15 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // The files this library's classes roots will be. A workspace library is identified by its NAME, and
         // `create` replaces a same-named one, so a second `core.aar` from another folder must not reuse the
         // name: it would repoint every module already depending on the first `core.aar` at this file.
-        val roots = runCatching {
-            if (isAar) AarExtractor.explode(
-                src, ctx.store.rootPath.resolve(".platform/libs").resolve(AarExtractor.explodeDirName(src))
-            ).classesJars
-            else listOf(src)
-        }
+        val roots = runCatching { localLibraryRoots(src, isAar) }
         roots.exceptionOrNull()?.let { return UiAddResult(false, "Couldn't read ${src.fileName}: ${it.message}") }
-        val rootFiles = roots.getOrThrow().map { ctx.store.vfs.fileFor(it) }
+        val rootFiles = roots.getOrThrow()
         val libName = localLibraryName(src.fileName.toString(), rootFiles.map { it.path })
         if (module.dependencies.any { it is LibraryDependency && it.library.name == libName }) return UiAddResult(
             false, "$libName is already a dependency of '$moduleName'."
         )
 
-        val registered = runCatching {
-            ctx.store.workspace.libraryTable.create(libName).apply {
-                kind = if (isAar) LibraryKind.AAR else LibraryKind.JAR
-                rootFiles.forEach { addClassesRoot(it) }
-                commit()
-            }
-        }
+        val registered = runCatching { registerLocalLibrary(libName, isAar, rootFiles) }
         registered.exceptionOrNull()
             ?.let { return UiAddResult(false, "Couldn't read ${src.fileName}: ${it.message}") }
 
@@ -1735,6 +1764,97 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // The commit above published DependenciesChanged; the hub's reaction already invalidated + re-synced.
         ctx.store.save()
         return UiAddResult(true, "Added $libName", 1)
+    }
+
+    /** The classes roots a local library at [src] contributes: the jar itself, or an AAR's exploded jars
+     *  (classes.jar + libs/) under `.platform/libs`, beside the res/ and manifest the Android build reads. */
+    private fun localLibraryRoots(src: Path, isAar: Boolean): List<VirtualFile> =
+        (if (isAar) AarExtractor.explode(
+            src, ctx.store.rootPath.resolve(".platform/libs").resolve(AarExtractor.explodeDirName(src))
+        ).classesJars else listOf(src)).map { ctx.store.vfs.fileFor(it) }
+
+    private fun registerLocalLibrary(libName: String, isAar: Boolean, roots: List<VirtualFile>) {
+        ctx.store.workspace.libraryTable.create(libName).apply {
+            kind = if (isAar) LibraryKind.AAR else LibraryKind.JAR
+            roots.forEach { addClassesRoot(it) }
+            commit()
+        }
+    }
+
+    private val localHealStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Re-register every declared local `.jar`/`.aar` library whose workspace entry is missing, empty, of the
+     * wrong kind, or points at files that no longer exist, from the file of that name in the project.
+     *
+     * A local library is the one dependency the model cannot rebuild by itself. A Maven coordinate re-resolves
+     * from its name; a local library's name is only a file name, and where that file is lives solely in
+     * `libraries.json`. That file does not travel with a Projects Store download (it is the submitter's
+     * resolved state, see ProjectPackager), and in a backup or zip restored under a different path its roots
+     * are absolute paths into the old location. Either way the module kept `SpoilerCardView.aar` as a
+     * dependency with nothing behind it: listed as a "local jar" (the kind defaults to JAR when no library is
+     * found), contributing no classes, so every view it provides went unresolved.
+     *
+     * The dependency keeps its name, so nothing that refers to it changes. Returns whether anything was healed.
+     */
+    fun healLocalLibraries(): Boolean {
+        var healed = 0
+        for (module in ctx.modules()) {
+            for (entry in module.dependencies.filterIsInstance<LibraryDependency>()) {
+                val name = entry.library.name
+                val low = name.lowercase()
+                val isAar = low.endsWith(".aar")
+                if (!isAar && !low.endsWith(".jar")) continue
+                if (parseCoordinate(name) != null) continue
+                val lib = findLibrary(module, name)
+                val healthy = lib != null && lib.classesRoots.isNotEmpty() &&
+                    (lib.kind == LibraryKind.AAR) == isAar &&
+                    lib.classesRoots.all { runCatching { Files.exists(Paths.get(it.path)) }.getOrDefault(false) }
+                if (healthy) continue
+                val src = locateLocalLibrary(module, name)
+                if (src == null) {
+                    depsLog.warn("local library $name of ${module.name}: no file of that name in the project")
+                    continue
+                }
+                runCatching { registerLocalLibrary(name, isAar, localLibraryRoots(src, isAar)) }
+                    .onSuccess { healed++; depsLog.info("local library $name of ${module.name} → $src") }
+                    .onFailure { depsLog.warn("local library $name of ${module.name}: couldn't read $src: ${it.message}") }
+            }
+        }
+        if (healed > 0) {
+            ctx.store.save(); ctx.events.librariesChanged()
+        }
+        return healed > 0
+    }
+
+    /**
+     * The project file a local library called [name] was added from. [localLibraryName] gives a second file
+     * with the same name `name (2).ext`, so that suffix also matches the plain file name. Looked for in the
+     * module's `libs/` first (where an imported file is copied), then anywhere in the module, then anywhere
+     * in the project; never in `.platform`, a build directory or `.git`.
+     */
+    internal fun locateLocalLibrary(module: Module, name: String): Path? {
+        val plain = Regex("""^(.*) \(\d+\)(\.[^.]+)$""").matchEntire(name)
+            ?.let { it.groupValues[1] + it.groupValues[2] }
+        val names = listOfNotNull(name, plain)
+        val moduleDir = ctx.moduleRoot(module)
+        moduleDir?.resolve("libs")?.let { libs ->
+            names.map { libs.resolve(it) }.firstOrNull { Files.isRegularFile(it) }?.let { return it }
+        }
+        fun search(base: Path?): Path? {
+            if (base == null || !Files.isDirectory(base)) return null
+            val skip = setOf(".platform", "build", ".git", ".gradle", ".idea")
+            return runCatching {
+                Files.walk(base).use { s ->
+                    s.filter { Files.isRegularFile(it) && it.fileName.toString() in names }
+                        .filter { p -> base.relativize(p).none { it.toString() in skip } }
+                        .collect(java.util.stream.Collectors.toList())
+                }
+            }.getOrDefault(emptyList())
+                // The exact name first, then the shallowest file, then by path so the pick is stable.
+                .minWithOrNull(compareBy<Path>({ names.indexOf(it.fileName.toString()) }, { it.nameCount }, { it.toString() }))
+        }
+        return search(moduleDir) ?: search(ctx.store.rootPath)
     }
 
     // ---- repositories (where libraries resolve from) ----

@@ -47,3 +47,9 @@ expect fun nowMillis(): Long
  * and that is exactly the part `commonMain` cannot see.
  */
 expect fun localHourOfDay(): Int
+
+/**
+ * Today's local date as `month * 100 + day` (October 31 is 1031), for date-windowed touches like the seasonal
+ * ones. Local for the same reason as [localHourOfDay]: Halloween starts at the user's midnight, not UTC's.
+ */
+expect fun localMonthDay(): Int

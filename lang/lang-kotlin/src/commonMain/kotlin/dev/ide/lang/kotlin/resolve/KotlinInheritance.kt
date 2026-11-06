@@ -65,9 +65,9 @@ internal fun KotlinResolver.resolvedSupertypeMembers(cls: KtClassOrObject): List
     val fqns =
         entries.map { it.typeReference?.text?.let { t -> service.resolveTypeName(t, fileContext) } }
     if (fqns.any { it == null }) return null // an unresolved supertype → we can't see the whole picture
-    return fqns.filterNotNull().distinct()
-        .flatMap { service.membersOf(it, emptyList(), null).filterIsInstance<KotlinSymbol>() }
-        .filter { !it.isExtension }
+    // Own + inherited members only: a supertype's MEMBER extensions (`RowScope`'s `fun Modifier.weight()`) are
+    // members to override like any other, while the receiver's top-level extensions are not members at all.
+    return fqns.filterNotNull().distinct().flatMap { service.ownAndInheritedMembers(it) }
 }
 
 /** The inheritance problems found on one class — consumed by the diagnostics layer. [missing] is populated

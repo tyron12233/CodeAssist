@@ -60,6 +60,7 @@ class ProjectPackagerTest {
         write(".platform/.deps-unresolved", "androidx.foo:bar=Not resolved.")
         write(".platform/settings.properties", "tree.expanded.Project=/Users/someone/projects/x")
         write(".platform/open-tabs.txt", "#v2\n0\n/Users/someone/projects/x/app/A.kt\t0\t0\ttext")
+        write(".platform/libs/widget-1a2b3c4d/classes.jar", "EXPLODED-AAR")
         write(".platform/debug.ks", "BINARY-KEYSTORE")
         // A source folder that happens to be named `caches` is not the same thing.
         write("app/src/main/resources/caches/data.txt", "keep me")
@@ -97,6 +98,8 @@ class ProjectPackagerTest {
             assertFalse(rel in packed.zipEntries, "$rel must not be packaged: ${packed.zipEntries}")
             assertContains(packed.excluded, rel)
         }
+        // Exploded local AARs are rebuilt from the project's own .aar on the recipient's open.
+        assertTrue(packed.zipEntries.none { it.startsWith(".platform/libs/") }, "exploded AARs were packaged: ${packed.zipEntries}")
         // The model itself still travels, or the install is a folder rather than a project.
         assertTrue(".platform/workspace.json" in packed.zipEntries, "the model must travel")
     }
@@ -175,6 +178,44 @@ class ProjectPackagerTest {
         assertFalse(r.zipEntries.any { it.startsWith(".idea/") })
         assertFalse(r.zipEntries.any { it.endsWith(".iml") })
         assertFalse(r.zipEntries.any { it.endsWith(".apk") })
+    }
+
+    /**
+     * The project's own binaries travel. Every `.so`, `.aar` and `.jar` used to be dropped by extension, so a
+     * project shipped without its `libs/` and `jniLibs/` and did not build once installed. A source package
+     * named like a build folder (`build`, `out`, `bin`, `keystore`) was dropped by name the same way.
+     */
+    @Test
+    fun theProjectsOwnLibrariesAndSourcePackagesArePackaged() {
+        val root = project()
+        fun write(path: String) = File(root, path).apply { parentFile.mkdirs(); writeText("x") }
+        val kept = listOf(
+            "app/libs/widget.aar",
+            "app/libs/helper.jar",
+            "app/src/main/jniLibs/arm64-v8a/libnative.so",
+            "app/src/main/resources/lib/x86_64/libbridge.so",
+            "gradle/wrapper/gradle-wrapper.jar",
+            "app/src/main/java/com/example/build/Config.java",
+            "app/src/main/java/com/example/out/Printer.java",
+            "app/src/main/java/com/example/bin/Codec.java",
+            "app/src/main/java/com/example/keystore/Vault.java",
+            "app/src/main/assets/logs/sample.log",
+        )
+        val dropped = listOf(
+            "app/build/intermediates/merged_native_libs/libnative.so",
+            "app/build/outputs/aar/app-release.aar",
+            "app/release/app-release.apk",
+            "app/.cxx/Debug/libnative.so",
+            "classes.dex",
+            "keystore/upload.txt",
+        )
+        (kept + dropped).forEach(::write)
+        val r = pack(root)
+        kept.forEach { assertContains(r.zipEntries, it) }
+        dropped.forEach { path -> assertFalse(path in r.zipEntries, "$path is build output or a key folder: ${r.zipEntries}") }
+        // Signing material stays out even inside a source tree.
+        write("app/src/main/assets/release.jks")
+        assertFalse("app/src/main/assets/release.jks" in pack(root).zipEntries)
     }
 
     /** Exclusions are reported so the submit screen can prove the keystore was left out. */

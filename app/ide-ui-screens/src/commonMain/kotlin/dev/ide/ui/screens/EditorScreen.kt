@@ -28,6 +28,10 @@ import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
 import dev.ide.ui.components.FileOpKind
 import dev.ide.ui.components.FileOpRequest
+import dev.ide.ui.components.FileOpSnackbar
+import dev.ide.ui.components.TransferConflictDialog
+import dev.ide.ui.backend.UiTransferKind
+import dev.ide.ui.backend.pathLeafName
 import dev.ide.ui.components.FileOperationDialog
 import dev.ide.ui.components.fileOpPath
 import dev.ide.ui.components.IndexStatusDialog
@@ -51,6 +55,13 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
+import dev.ide.ui.generated.resources.fileop_notice_moved
+import dev.ide.ui.generated.resources.fileop_notice_copied
+import dev.ide.ui.generated.resources.fileop_notice_duplicated
+import dev.ide.ui.generated.resources.fileop_notice_deleted
+import dev.ide.ui.generated.resources.fileop_notice_failed
+import dev.ide.ui.generated.resources.fileop_notice_undone
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** Width at/below which the UI reflows to the compact (phone) layout. */
@@ -84,6 +95,8 @@ fun EditorScreen(
     /** Told whether the wide layout is on screen, so a run docks in its bottom pane instead of opening full screen. */
     onRunDockedChange: (Boolean) -> Unit = {},
     fileActions: FileActions = FileActions.None,
+    /** Shown above the whole editor while a lesson runs in this project (the Learn task banner). */
+    topBanner: (@Composable () -> Unit)? = null,
 ) {
     // Everything in the editor that leaves the project (the top bar's arrow, the palette) asks first.
     val requestCloseProject = { onCloseProjectConfirmChange(true) }
@@ -122,8 +135,8 @@ fun EditorScreen(
     val newImageAsset: (TreeNode) -> Unit = { node -> node.resDirPath?.let(onNewImageAsset) }
     val onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit =
         { dir, lang, segs -> newSource = NewSourceRequest(dir, lang, dirLabel(dir), segs) }
-    val onFileOp: (TreeNode, FileOpKind) -> Unit =
-        { node, kind -> fileOp = FileOpRequest(node, kind) }
+    val onFileOp: (FileOpRequest) -> Unit =
+        { req -> fileOp = req }
 
     // Back closes an open editor overlay (dialog, palette, or — on mobile — a navigator/console/search/more
     // sheet) before the app-level handler pops the screen (#997). Desktop has no system back, so this is inert
@@ -162,6 +175,9 @@ fun EditorScreen(
         // keyboard is up, and on a phone near the breakpoint in landscape the lost width flipped the layout as the
         // keyboard opened; the editor was rebuilt, which closed the keyboard and hid the bar again.
         val hiddenBars = hiddenSystemBarsWidth()
+        // The lesson banner is drawn inside the editor column, under the top bar and above the file tabs
+        // (where AIDE puts its trainer header), so both layouts pick it up without threading it through.
+        androidx.compose.runtime.CompositionLocalProvider(LocalLessonBanner provides topBanner) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth - hiddenBars >= COMPACT_BREAKPOINT
             LaunchedEffect(wide, state.runFullScreen) {
@@ -205,6 +221,7 @@ fun EditorScreen(
                 fileActions,
                 onOpenRun,
             )
+        }
         }
         NewEntryDialog(
             request = newEntry,
@@ -253,10 +270,36 @@ fun EditorScreen(
             onRename = { node, newName ->
                 node.fileOpPath()?.let { p -> scope.launch { state.renamePath(p, newName) } }
             },
-            onMove = { node, dest -> node.fileOpPath()?.let { state.movePath(it, dest) } },
-            onCopy = { node, dest -> node.fileOpPath()?.let { state.copyPath(it, dest) } },
-            onDelete = { node -> node.fileOpPath()?.let { state.deletePath(it) } },
+            onMove = { nodes, dest -> state.requestTransfer(UiTransferKind.Move, nodes.mapNotNull { it.fileOpPath() }, dest) },
+            onCopy = { nodes, dest -> state.requestTransfer(UiTransferKind.Copy, nodes.mapNotNull { it.fileOpPath() }, dest) },
+            onDelete = { nodes -> state.deletePaths(nodes.mapNotNull { it.fileOpPath() }) },
             onDismiss = { fileOp = null },
+            undoableDelete = state.backend.files.supportsUndo,
+        )
+        // A paste, drop or move onto names that are taken asks first; the snackbar reports the result.
+        val pending = state.pendingTransfer
+        TransferConflictDialog(
+            conflicts = pending?.conflicts,
+            destName = pending?.destDir?.let(::pathLeafName).orEmpty(),
+            onResolve = state::resolveTransfer,
+            onCancel = state::cancelTransfer,
+        )
+        // A notification that arrives mid-session shows briefly at the top, with View into the tool window.
+        NotificationHeadsUp(
+            backend = state.backend,
+            suppressed = state.isToolWindowShown(NOTIFICATIONS_TOOL_WINDOW),
+            onView = { state.showToolWindow(NOTIFICATIONS_TOOL_WINDOW) },
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp),
+        )
+        val notice = state.fileOpNotice
+        FileOpSnackbar(
+            text = notice?.let { fileOpNoticeText(it) },
+            error = notice != null && notice.count == 0 && notice.failures.isNotEmpty(),
+            canUndo = notice?.undoTokens?.isNotEmpty() == true,
+            key = notice?.id ?: 0L,
+            onUndo = { notice?.let { state.undoFileOps(it.undoTokens) } },
+            onDismiss = state::dismissFileOpNotice,
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
         // The Symbols & Macros editor, opened from the keyboard symbol bar's gear key. Overlays both layouts.
         SymbolMacroEditor(state)
@@ -324,3 +367,21 @@ private fun SyncWithDiskOnReturnEffect(state: IdeUiState) {
 }
 
 private val RETURN_SYNC_MIN_AWAY = 2.seconds
+
+/** The snackbar line for a finished file operation: what happened to how many items, then any failures. */
+@Composable
+private fun fileOpNoticeText(n: IdeUiState.FileOpNotice): String? {
+    val what = when {
+        n.count == 0 -> null
+        n.kind == IdeUiState.FileOpKind.Moved -> pluralStringResource(Res.plurals.fileop_notice_moved, n.count, n.count, n.target.orEmpty())
+        n.kind == IdeUiState.FileOpKind.Copied && n.target != null ->
+            pluralStringResource(Res.plurals.fileop_notice_copied, n.count, n.count, n.target.orEmpty())
+        n.kind == IdeUiState.FileOpKind.Copied -> pluralStringResource(Res.plurals.fileop_notice_duplicated, n.count, n.count)
+        n.kind == IdeUiState.FileOpKind.Deleted -> pluralStringResource(Res.plurals.fileop_notice_deleted, n.count, n.count)
+        else -> stringResource(Res.string.fileop_notice_undone)
+    }
+    val failed = n.failures.takeIf { it.isNotEmpty() }?.let {
+        pluralStringResource(Res.plurals.fileop_notice_failed, it.size, it.size, it.values.first())
+    }
+    return listOfNotNull(what, failed, n.message.takeIf { it.isNotBlank() }).joinToString(" · ").ifEmpty { null }
+}

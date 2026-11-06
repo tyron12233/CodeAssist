@@ -1,0 +1,159 @@
+name: NDK toolchain
+
+# Builds the NDK plugin's on-device compiler (clang + lld + the resident daemon and Run launcher, see
+# tools/ndk-toolchain) for each HOST ABI, and publishes it as the prerelease `ndk-toolchain-<key>`, where <key> is
+# tools/ndk-toolchain/toolchain-key.sh's hash of the build's sources. The NDK plugin release workflow packages
+# that prerelease into the plugin, so a release takes minutes instead of rebuilding LLVM four times.
+#
+# Each host is a full LLVM build, one to two hours on a hosted runner, so this runs only when the toolchain's
+# sources change on main, or by hand. A key that already has a complete build is not built again unless forced.
+#
+# Assets of the prerelease:
+#   ndk-toolchain-<abi>.tar.gz   the executables for a device of that ABI (jniLibs/<abi>/), one per host ABI
+#   ndk-toolchain-assets.tar.gz  headers, runtime archives and link libraries for all four targets (assets/),
+#                                the same whichever host built them
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - tools/ndk-toolchain/build-llvm-android.sh
+      - tools/ndk-toolchain/daemon/**
+      - tools/ndk-toolchain/toolchain-key.sh
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if this key already has a complete toolchain
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# One at a time, and never cancelled: a half-published toolchain is the one outcome to avoid.
+concurrency:
+  group: ndk-toolchain
+  cancel-in-progress: false
+
+env:
+  HOST_ABIS: "arm64-v8a armeabi-v7a x86 x86_64"
+
+jobs:
+  key:
+    name: Toolchain key
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      build: ${{ steps.key.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          key="$(tools/ndk-toolchain/toolchain-key.sh)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          have="$(gh release view "ndk-toolchain-$key" --json assets --jq '[.assets[].name] | join(" ")' 2>/dev/null || true)"
+          missing=""
+          for abi in $HOST_ABIS assets; do
+            [[ " $have " == *" ndk-toolchain-$abi.tar.gz "* ]] || missing="$missing $abi"
+          done
+          if [[ -z "$missing" && "$FORCE" != "true" ]]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "ndk-toolchain-$key is complete; nothing to build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "Building ndk-toolchain-$key (missing:${missing:- none, forced})." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build:
+    name: LLVM host ${{ matrix.abi }}
+    needs: key
+    if: needs.key.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: true
+      matrix:
+        abi: [ arm64-v8a, armeabi-v7a, x86, x86_64 ]
+    steps:
+      - uses: actions/checkout@v4
+
+      # A hosted runner has about 14 GB free and the LLVM tree plus two build directories want about 13.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Install the build tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build
+
+      - name: Cache downloads (LLVM source, NDK)
+        uses: actions/cache@v4
+        with:
+          path: tools/ndk-toolchain/build/dl
+          key: ndk-toolchain-dl-${{ hashFiles('tools/ndk-toolchain/build-llvm-android.sh') }}
+
+      # `daemon` builds the resident clang (completion, errors, semantic colours) and the Run launcher, a few
+      # seconds of C against the libclang that `package` staged.
+      - name: Build LLVM for a ${{ matrix.abi }} host
+        working-directory: tools/ndk-toolchain
+        env:
+          HOST_ABI: ${{ matrix.abi }}
+        run: ./build-llvm-android.sh deps native cross package daemon
+
+      - name: Check what was built
+        working-directory: tools/ndk-toolchain/build/out
+        run: |
+          for lib in libllvmtools.so libld-gnu-lld.so libLLVM.so libclang.so libc++_shared.so libndkclangd.so libndkrun.so; do
+            test -f "jniLibs/${{ matrix.abi }}/$lib" || { echo "no $lib for ${{ matrix.abi }}"; exit 1; }
+          done
+          test -f assets/toolchain/sysroot/usr/lib/aarch64-linux-android/26/libc.so
+          du -sh jniLibs/${{ matrix.abi }} assets
+
+      - name: Pack
+        working-directory: tools/ndk-toolchain/build/out
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          tar -C "jniLibs/${{ matrix.abi }}" -czf "$RUNNER_TEMP/pack/ndk-toolchain-${{ matrix.abi }}.tar.gz" .
+          if [[ "${{ matrix.abi }}" == arm64-v8a ]]; then
+            tar -C assets -czf "$RUNNER_TEMP/pack/ndk-toolchain-assets.tar.gz" .
+          fi
+          ls -la "$RUNNER_TEMP/pack"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ndk-toolchain-${{ matrix.abi }}
+          path: ${{ runner.temp }}/pack/*.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish ndk-toolchain-${{ needs.key.outputs.key }}
+    needs: [ key, build ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ndk-toolchain-*
+          merge-multiple: true
+          path: pack
+
+      - name: Publish the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ndk-toolchain-${{ needs.key.outputs.key }}
+        run: |
+          ls -la pack
+          for abi in $HOST_ABIS assets; do test -f "pack/ndk-toolchain-$abi.tar.gz" || { echo "no $abi"; exit 1; }; done
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            # A prerelease, and never "latest": the app's update check and the README read the latest release.
+            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "NDK toolchain ${{ needs.key.outputs.key }}" \
+              --notes "The NDK plugin's on-device compiler, built by the NDK toolchain workflow from $GITHUB_SHA (key ${{ needs.key.outputs.key }}). Not an app release: the NDK plugin release workflow packages these into the plugin."
+          fi
+          gh release upload "$TAG" pack/*.tar.gz --clobber
+          echo "Published $TAG." >> "$GITHUB_STEP_SUMMARY"

@@ -26,6 +26,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +73,7 @@ import dev.ide.ui.components.SubmissionStatusCard
 import dev.ide.ui.components.defaultPublishSteps
 import dev.ide.ui.components.emptyGhostNote
 import dev.ide.ui.components.Eyebrow
+import dev.ide.ui.components.EditorialCard
 import dev.ide.ui.components.FeaturedHeroCard
 import dev.ide.ui.components.GhostShelfCard
 import dev.ide.ui.components.LiveDot
@@ -79,9 +81,10 @@ import dev.ide.ui.components.PosterCard
 import dev.ide.ui.components.PublishPitchBand
 import dev.ide.ui.components.SpotlightCard
 import dev.ide.ui.components.StoreCountBadge
-import dev.ide.ui.components.TrendingTicker
+import dev.ide.ui.components.TrendingSearches
 import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
+import dev.ide.ui.components.storeBlurb
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.joinMeta
 import org.jetbrains.compose.resources.pluralStringResource
@@ -111,6 +114,8 @@ fun ExploreFeed(
     onOpenItem: (UiStoreItem) -> Unit,
     onInstallItem: (UiStoreItem) -> Unit,
     onOpenSearch: (String?) -> Unit,
+    /** Opens the search with a term already typed, from a trending chip. Null leaves the chips inert. */
+    onSearchTerm: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     onOpenCollection: (UiStoreCollection) -> Unit = {},
     onOpenPublisher: (UiStorePublisher) -> Unit = {},
@@ -192,9 +197,9 @@ fun ExploreFeed(
             feed.sections.forEachIndexed { index, section ->
                 when (section) {
                     is UiFeedSection.Ticker -> item(section.id) {
-                        TrendingTicker(
-                            labels = section.terms,
-                            pairAt = { tonalPair(it) },
+                        TrendingSearches(
+                            terms = section.terms,
+                            onTerm = { term -> onSearchTerm?.invoke(term) ?: onOpenSearch(null) },
                             modifier = Modifier.padding(bottom = 6.dp),
                         )
                     }
@@ -390,24 +395,31 @@ private fun FeaturedRow(
     onOpenItem: (UiStoreItem) -> Unit,
 ) {
     val state = rememberLazyListState()
-    LazyRow(
-        state = state,
-        flingBehavior = rememberSnapFlingBehavior(state),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        itemsIndexedKeyed(items, key = { _, it -> it.id }) { i, item ->
-            FeaturedHeroCard(
-                title = item.title,
-                badge = item.kind.name,
-                subtitle = listOfNotNull(item.author, item.language).joinMeta().ifBlank { item.category },
-                pair = tonalPair(i),
-                motif = remember(item.id) { motifFor(item.id) },
-                rating = item.rating,
-                installs = item.installs,
-                preview = rememberItemPreview(backend, item),
-                onClick = { onOpenItem(item) },
-            )
+    // The one run on this page that keeps the tonal colours. Everywhere else the cards are neutral so
+    // the content carries the colour; the featured row IS the colour, and a neutral hero in front of a
+    // neutral page is the "same grey card twice" the store looked like before.
+    CompositionLocalProvider(LocalTonalCardFills provides true) {
+        LazyRow(
+            state = state,
+            flingBehavior = rememberSnapFlingBehavior(state),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            itemsIndexedKeyed(items, key = { _, it -> it.id }) { i, item ->
+                FeaturedHeroCard(
+                    title = item.title,
+                    subtitle = listOfNotNull(item.author, item.language).joinMeta().ifBlank { item.category },
+                    pair = tonalPair(i),
+                    motif = remember(item.id) { motifFor(item.id) },
+                    verified = item.verified,
+                    rating = item.rating,
+                    installs = item.installs,
+                    iconId = item.iconId,
+                    icon = rememberItemIconSlot(backend, item),
+                    shots = rememberItemShots(backend, item),
+                    onClick = { onOpenItem(item) },
+                )
+            }
         }
     }
 }
@@ -427,7 +439,7 @@ private fun ChartsSection(
     /** Where a published app icon is fetched from. Null (the snapshot tests) keeps the glyph tiles. */
     backend: dev.ide.ui.backend.IdeBackend? = null,
 ) {
-    var selected by remember(section.id) { mutableStateOf(section.tabs.firstOrNull()?.key.orEmpty()) }
+    var selected by rememberSaveable(section.id) { mutableStateOf(section.tabs.firstOrNull()?.key.orEmpty()) }
     val tab = section.tabs.firstOrNull { it.key == selected } ?: section.tabs.firstOrNull() ?: return
     Column {
         Row(
@@ -570,17 +582,22 @@ private fun LazyListScope.shelfSection(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                // Not the featured hero again: a poster shelf shows what a project LOOKS like, so its
+                // card is the screenshot, with the name set over it.
                 itemsIndexedKeyed(section.items, key = { _, it -> it.id }) { i, item ->
-                    FeaturedHeroCard(
+                    EditorialCard(
                         title = item.title,
-                        badge = item.kind.name,
-                        subtitle = listOfNotNull(item.author, item.language)
-                            .joinMeta().ifBlank { item.category },
+                        author = item.author.orEmpty(),
+                        blurb = remember(item.id, item.blurb, item.summary) {
+                            storeBlurb(item.blurb ?: item.description, item.title, fallback = item.summary)
+                        },
                         pair = tonalPair(i),
-                        motif = remember(item.id) { motifFor(item.id) },
+                        verified = item.verified,
                         rating = item.rating,
                         installs = item.installs,
-                        preview = rememberItemPreview(backend, item),
+                        iconId = item.iconId,
+                        icon = rememberItemIconSlot(backend, item),
+                        shot = rememberItemShots(backend, item, max = 1).firstOrNull(),
                         onClick = { onOpenItem(item) },
                     )
                 }

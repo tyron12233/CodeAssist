@@ -60,6 +60,12 @@ object PluginCapabilities {
     const val LANG_BACKEND = "lang.backend"
 
     /**
+     * Runs a Language Server Protocol server (`platform.languageServer`): a separate program the IDE starts
+     * and talks to for a language's errors, completion, navigation and rename. Engine facet. Since SPI 3.3.0.
+     */
+    const val LANG_SERVER = "lang.server"
+
+    /**
      * Contributes a kind of module: a `ModuleType`, its default source-set layout, and the project templates
      * that scaffold one. This is what a plugin for a language whose projects are not laid out like a JVM
      * module declares. Engine facet.
@@ -71,6 +77,12 @@ object PluginCapabilities {
      * as a `module.toml` table. Engine facet.
      */
     const val MODEL_FACET = "model.facet"
+
+    /**
+     * Adds libraries, BOMs and Maven repositories to the user's modules (`dev.ide.model.ModuleDependencies`),
+     * which changes their build files and what their code compiles against. Engine facet. Since SPI 3.4.0.
+     */
+    const val MODEL_DEPENDENCIES = "model.dependencies"
 
     /** Reads the files in the user's projects. */
     const val FS_READ = "fs.read"
@@ -126,6 +138,18 @@ object PluginCapabilities {
     const val UI_COLOR_ATTRIBUTE = "ui.colorAttribute"
 
     /**
+     * Ships whole editor color schemes (`dev.ide.plugin.ui.ColorScheme`), listed beside the presets. Read-only
+     * and applied only when the user picks one, so it changes nothing by itself. UI facet. Since SPI 3.4.0.
+     */
+    const val UI_COLOR_SCHEME = "ui.colorScheme"
+
+    /**
+     * Ships whole app themes (`dev.ide.plugin.ui.AppTheme`), the Material colors of the IDE's interface,
+     * offered as Accent choices. Applied only when the user picks one. UI facet. Since SPI 3.4.0.
+     */
+    const val UI_APP_THEME = "ui.appTheme"
+
+    /**
      * Adds kinds of file to the file tree's New menu (`dev.ide.plugin.ui.NewFileTemplate`), whose content the
      * plugin writes. UI facet. Since SPI 3.1.0.
      */
@@ -148,7 +172,7 @@ object PluginCapabilities {
         UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY, UI_EDITOR_PREVIEW, UI_EDITOR_DECORATION,
         UI_EDITOR_LAYER, UI_EDITOR_PAINTER, UI_EDITOR_LANGUAGE, UI_COLOR_ATTRIBUTE, UI_NEW_FILE_TEMPLATE,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
-        LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
+        LANG_BACKEND, LANG_SERVER, MODEL_MODULE_TYPE, MODEL_FACET,
         INTERP_RUN,
         FS_READ, FS_WRITE, NET,
     )
@@ -169,7 +193,7 @@ object PluginCapabilities {
     val NEEDS_ENGINE_FACET: Set<String> = linkedSetOf(
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION, UI_EDITOR_DECORATION, UI_KEY_BINDING,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
-        LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
+        LANG_BACKEND, LANG_SERVER, MODEL_MODULE_TYPE, MODEL_FACET,
         // The interpreter is resolved through `PluginRegistration.appServices`, which only an engine facet
         // has. A UI facet reaches it the way it reaches everything else: through its own engine facet.
         INTERP_RUN,

@@ -508,6 +508,14 @@ class SingleTaskGraph(private val task: Task) : TaskGraph {
 In-tree, `TaskGraphImpl` and `DefaultTaskContainer` from `build-engine` build a real graph instead, with edge
 inference and cycle detection.
 
+**An interactive program: `RunAction.console` (SPI 3.2.0).** A row that runs a program the user talks to sets
+`action.console = RunConsole("title")`. The host then opens the same Run console a built-in console run gets
+(the terminal, the input bar, Stop) and fills `console.io` with its `ProgramIo` before the graph starts; the
+task that runs the program reads `console.io` and streams through it (`stdout`, `stdin`, `started`, `exited`).
+It is a property, not a constructor parameter, so `RunAction`'s constructor is unchanged; on an older host the
+setter throws a `LinkageError` and the plugin can fall back to its build log. The NDK plugin's C/C++ Run
+(`samples/ndk-plugin`, `NdkRun.kt`) is the worked example.
+
 A `BuildSystem` bound to a project offers the same pair through `runTasks(project)` and
 `actionFor(spec, project, ctx)`, for targets that belong to the pipeline rather than to a module.
 

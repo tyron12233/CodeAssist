@@ -75,7 +75,7 @@ private fun PermissionCard(req: UiPermissionRequest, answer: (UiPermissionDecisi
             .widthIn(max = 420.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {

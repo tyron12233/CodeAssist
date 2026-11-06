@@ -228,6 +228,10 @@ class JavaSourceAnalyzer private constructor(
     ): List<dev.ide.lang.dom.TextRange> =
         IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target) }
 
+    /** Highlight-usages-at-caret over [file]'s live [text]; see [dev.ide.lang.java.rename.JavaRename.usageHighlightsAt]. */
+    fun usageHighlightsAt(file: VirtualFile, text: CharSequence, offset: Int): List<dev.ide.lang.highlight.UsageHighlight>? =
+        IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.usageHighlightsAt(psiOf(file, text), offset) }
+
     private val navigation by lazy {
         JavaNavigation(env.facade) { fqn -> subtypeIndexQuery(fqn).map { it.fqn } }
     }
@@ -240,9 +244,19 @@ class JavaSourceAnalyzer private constructor(
     fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: JavaNavKind): List<JavaNavTarget> =
         IntellijPsiHost.withParseLock { navigation.targets(psiOf(file, text), offset, kind) }
 
+    /**
+     * [navigationTargets] for several [offsets] in one file, over ONE parse of [text]. A project-wide sweep resolves
+     * every occurrence of a name, and each single call parses the whole file again.
+     */
+    fun navigationTargetsAt(file: VirtualFile, text: CharSequence, offsets: List<Int>, kind: JavaNavKind): List<List<JavaNavTarget>> =
+        IntellijPsiHost.withParseLock {
+            val psi = psiOf(file, text)
+            offsets.map { at -> runCatching { navigation.targets(psi, at, kind) }.getOrDefault(emptyList()) }
+        }
+
     /** Where the source class [fqn], or its [member], is declared, for a go-to from another language. */
-    fun declarationOf(fqn: String, member: String?): JavaNavTarget? =
-        IntellijPsiHost.withParseLock { navigation.declarationOf(fqn, member) }
+    fun declarationOf(fqn: String, member: String?, paramTypes: List<String>? = null): JavaNavTarget? =
+        IntellijPsiHost.withParseLock { navigation.declarationOf(fqn, member, paramTypes) }
 
     /** The go-to actions that have a target at [offset], each with its targets. */
     fun navigationOptions(file: VirtualFile, text: CharSequence, offset: Int): List<Pair<JavaNavKind, List<JavaNavTarget>>> =

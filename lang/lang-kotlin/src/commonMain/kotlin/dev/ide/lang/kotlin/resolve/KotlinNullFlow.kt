@@ -246,11 +246,70 @@ private fun KotlinResolver.condGuarantees(
     // below are: reading the real contract needs the declaration, and these two are stdlib names whose meaning
     // is fixed. A project function that shadows one of them would be believed here, which is the same trade
     // `requireNotNull`/`check` already make.
-    is KtDotQualifiedExpression -> !whenTrue && isNullOrEmptyGuard(c, matches)
+    is KtDotQualifiedExpression -> (!whenTrue && isNullOrEmptyGuard(c, matches)) ||
+        ((c.selectorExpression as? KtCallExpression)?.let { contractGuarantees(it, c.receiverExpression, whenTrue, matches) } == true)
+
+    // A project function whose `contract { returns(true) implies (s != null) }` speaks for its result.
+    is KtCallExpression -> contractGuarantees(c, null, whenTrue, matches)
 
     is KtSafeQualifiedExpression -> false
 
     else -> false
+}
+
+/**
+ * Whether a call to a SOURCE function guarantees the matched value non-null through the function's own contract:
+ * `fun isValid(s: String?): Boolean { contract { returns(true) implies (s != null) }; … }` makes
+ * `if (isValid(x)) x.length` safe, as the compiler's contract reader does. The `implies` condition is judged by
+ * [condGuarantees] with each of the function's parameters standing for the argument passed to it, and `this` for
+ * [receiver] (an extension's receiver). Only a `returns(true|false)`, a bare `returns()` and `returnsNotNull()`
+ * effect are read, and only from the first statement of a block body, which is where Kotlin requires the
+ * `contract { }` call. A library function's contract is not in reach (it lives in @Metadata), so it says nothing.
+ */
+private fun KotlinResolver.contractGuarantees(
+    call: KtCallExpression,
+    receiver: KtExpression?,
+    whenTrue: Boolean,
+    matches: (KtExpression?) -> Boolean,
+): Boolean {
+    val callee = runCatching { resolveCalleeFunction(call) }.getOrNull() ?: return false
+    if (!callee.origin.fromSource) return false
+    val fn = (callee.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
+        as? dev.ide.kotlin.syntax.psi.KtNamedFunction ?: return false
+    val first = fn.bodyBlockExpression?.statements?.firstOrNull() as? KtCallExpression ?: return false
+    if ((first.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() != "contract") return false
+    val effects = first.lambdaArguments.firstOrNull()?.getLambdaExpression()?.bodyExpression?.statements.orEmpty()
+    val params = fn.valueParameters.map { it.name }
+    val args = call.valueArguments
+    // Each contract expression names a parameter (or `this`); it matches when the argument passed for it does.
+    val argMatches: (KtExpression?) -> Boolean = { e ->
+        when (val x = unwrapParens(e)) {
+            is dev.ide.kotlin.syntax.psi.KtThisExpression -> receiver != null && matches(receiver)
+            is KtNameReferenceExpression -> {
+                val named = args.firstOrNull { it.getArgumentName()?.asName?.identifier == x.getReferencedName() }
+                val i = params.indexOf(x.getReferencedName())
+                val arg = named ?: args.getOrNull(i)?.takeIf { it.getArgumentName() == null && i >= 0 }
+                arg != null && matches(arg.getArgumentExpression())
+            }
+            else -> false
+        }
+    }
+    for (effect in effects) {
+        val implies = effect as? KtBinaryExpression ?: continue
+        if (implies.operationReference.getReferencedName() != "implies") continue
+        val returns = implies.left as? KtCallExpression ?: continue
+        val holds = when ((returns.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()) {
+            "returns" -> when (returns.valueArguments.singleOrNull()?.getArgumentExpression()?.text) {
+                "true" -> whenTrue
+                "false" -> !whenTrue
+                null -> returns.valueArguments.isEmpty()
+                else -> false
+            }
+            else -> false
+        }
+        if (holds && condGuarantees(implies.right, true, argMatches)) return true
+    }
+    return false
 }
 
 /** `v.isNullOrBlank()` / `v.isNullOrEmpty()` on the matched value — false implies non-null (their contract). */
@@ -389,11 +448,12 @@ private fun isNotNullAssertStatement(
 /** A stdlib precondition that makes the accessed value non-null past the call: `requireNotNull(v)` /
  *  `checkNotNull(v)` (throws on a null VALUE), or `require(cond)` / `check(cond)` whose boolean condition
  *  guarantees it (`require(v != null)`, `check(a != null && b != null)`) — the `returns() implies (…)`
- *  contract smart-casts after the call. */
+ *  contract smart-casts after the call. The value or condition is the FIRST argument: a lazy message may follow
+ *  it, in parentheses or as a trailing lambda (`checkNotNull(v) { "v" }`), and it narrows just the same. */
 private fun KotlinResolver.isNotNullPrecondition(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
     val call = stripParens(st) as? KtCallExpression ?: return false
     val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
-    val arg = call.valueArguments.singleOrNull()?.getArgumentExpression()
+    val arg = call.valueArguments.takeIf { it.size <= 2 }?.firstOrNull()?.getArgumentExpression()
     return when (callee) {
         "requireNotNull", "checkNotNull" -> matches(arg)
         "require", "check" -> arg != null && condGuarantees(arg, true, matches)

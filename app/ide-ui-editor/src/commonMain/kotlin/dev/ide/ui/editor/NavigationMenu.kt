@@ -77,7 +77,7 @@ sealed interface NavMenuState {
 }
 
 /**
- * The unified editor context menu — a floating glass dropdown (styled like [CodeActionsMenu]) anchored under
+ * The unified editor context menu — a floating opaque dropdown (styled like [CodeActionsMenu]) anchored under
  * the caret, hosted in a `Popup` by [CodeEditor]. In [NavMenuState.Menu] it lists, in labeled sections that
  * appear only when non-empty: **Go to** (the applicable navigation actions), **Quick fixes**, and
  * **Intentions** (the caret's [actions]). Picking a nav action navigates (single target) or flips to
@@ -100,7 +100,7 @@ fun NavMenu(
 ) {
     Column(
         Modifier.width(width)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         when (state) {

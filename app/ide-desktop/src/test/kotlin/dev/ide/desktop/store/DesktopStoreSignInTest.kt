@@ -19,6 +19,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import dev.ide.core.auth.LoopbackRedirectListener
 import kotlin.time.Duration.Companion.seconds
 
 /** Desktop store sign-in: the loopback redirect listener, the account wrapper that starts it, and the token file. */

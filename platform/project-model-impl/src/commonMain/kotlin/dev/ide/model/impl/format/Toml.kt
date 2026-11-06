@@ -3,8 +3,8 @@ package dev.ide.model.impl.format
 /**
  * A small, dependency-free TOML reader/writer for the native `module.toml` manifest. The IDE owns
  * this format, so only the subset the manifest uses is supported rather than the whole TOML spec:
- * comments, `[table]` / `[table.sub]` headers, `key = value`, and values that are quoted strings,
- * integers, booleans, arrays, and inline tables, including arrays that mix strings and inline tables
+ * comments, `[table]` / `[table.sub]` headers, `key = value`, and values that are quoted or literal
+ * (`'single-quoted'`) strings, integers, booleans, arrays, and inline tables, including arrays that mix strings and inline tables
  * (the `dependencies` blocks).
  *
  * Parsed documents are nested ordered [Map]<String, Any?> (a `[a.b]` header creates `a` -> `b`),
@@ -126,6 +126,7 @@ object Toml {
             skipSpaces()
             return when (val c = s[pos]) {
                 '"' -> readString()
+                '\'' -> readLiteralString()
                 '[' -> readArray()
                 '{' -> readInlineTable()
                 't', 'f' -> readBoolean()
@@ -150,20 +151,25 @@ object Toml {
             return list
         }
 
+        /**
+         * An inline table. Read leniently, the way TOML 1.1 allows: it may span lines, hold comments, and end
+         * with a trailing comma. The writer never emits those, but a hand-edited `module.toml` (a dependency
+         * list formatted one field per line) does, and TOML 1.0's strict form failed the whole module with
+         * "expected a key" in the field.
+         */
         private fun readInlineTable(): Map<String, Any?> {
             expect('{')
             val map = LinkedHashMap<String, Any?>()
-            skipSpaces()
-            if (s[pos] == '}') { pos++; return map }
             while (true) {
-                skipSpaces()
+                skipInsignificant()
+                if (peek() == '}') { pos++; break } // empty table, or a trailing comma
                 val key = readKey()
                 skipSpaces()
                 expect('=')
                 skipSpaces()
                 map[key] = readValue()
-                skipSpaces()
-                when (s[pos]) {
+                skipInsignificant()
+                when (peek()) {
                     ',' -> { pos++; }
                     '}' -> { pos++; break }
                     else -> error("expected ',' or '}' in inline table at $pos")
@@ -172,9 +178,12 @@ object Toml {
             return map
         }
 
+        private fun peek(): Char? = if (pos < s.length) s[pos] else null
+
         private fun readKey(): String {
             skipSpaces()
-            if (s[pos] == '"') return readString()
+            if (peek() == '"') return readString()
+            if (peek() == '\'') return readLiteralString()
             val start = pos
             while (pos < s.length && (s[pos].isLetterOrDigit() || s[pos] == '_' || s[pos] == '-')) pos++
             require(pos > start) { "expected a key at $pos" }
@@ -200,6 +209,15 @@ object Toml {
                     else -> sb.append(c)
                 }
             }
+        }
+
+        /** A TOML literal string, `'like this'`: no escapes, ends at the next single quote on the line. */
+        private fun readLiteralString(): String {
+            expect('\'')
+            val start = pos
+            while (pos < s.length && s[pos] != '\'' && s[pos] != '\n') pos++
+            require(pos < s.length && s[pos] == '\'') { "unterminated literal string at $start" }
+            return s.substring(start, pos++)
         }
 
         private fun readNumber(): Any {

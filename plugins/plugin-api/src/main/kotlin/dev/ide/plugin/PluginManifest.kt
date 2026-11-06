@@ -341,8 +341,67 @@ const val PLUGIN_API_VERSION: Int = 4
  *  - `dev.ide.plugin.action.ActionContext.workspaceServices` and `dev.ide.model.ModuleSources.setFacetData`.
  *    An action was handed paths and no model, so "add this feature to the module" had no module to add it
  *    to; and nothing a plugin could reach would set a facet and save it.
+ *
+ * `3.2.0` lets a plugin's own Run row run an interactive program in the Run console:
+ * `dev.ide.build.RunAction.console` and `dev.ide.build.RunConsole`. A contributed row could only stream into
+ * the build log, or run JVM bytecode through `BuildContext.programInterpreter`; a native program (the NDK
+ * plugin's C and C++ console apps) had no way to reach the terminal, its input bar or its Stop. The host now
+ * opens the console session for a row that asks and hands its `ProgramIo` to the graph. Additive, and a
+ * property rather than a constructor parameter, so `RunAction`'s published constructor is unchanged;
+ * [PLUGIN_API_VERSION] stays at `4`, and on a `3.1.0` host the setter throws a `NoSuchMethodError` a plugin
+ * can catch.
+ *
+ * `3.3.0` lets a plugin teach the IDE a language through a Language Server Protocol server, and opens the
+ * editor features that were Java- and Kotlin-only to every plugin language:
+ * - `lsp-api` (new coordinate): `dev.ide.lsp.LanguageServerDefinition` on `LANGUAGE_SERVER_EP`
+ *   (`platform.languageServer`), `LanguageServerConnection` (with a `process` factory) and
+ *   `LanguageServerContext`. The host's client turns a definition into diagnostics, completion, code actions,
+ *   navigation, usages, rename, semantic colours, folding, formatting, signature help, inlay hints, hover and
+ *   the structure view. Capability [PluginCapabilities.LANG_SERVER].
+ * - `analysis-api`: `NavigationProvider` on `NAVIGATION_PROVIDER_EP` (Go to Implementation / Type
+ *   Declaration), `ReferenceProvider` on `REFERENCE_PROVIDER_EP` (Find Usages, Highlight Usages) and
+ *   `RenameProvider` on `RENAME_PROVIDER_EP`, with `NavigationKind`, `SymbolReference`, `RenameTarget` and
+ *   `RenameResult`. Find Usages and Rename were hardwired to the Java and Kotlin backends.
+ * - `model-api`: `DocFormat.MARKDOWN`, for a hover's Markdown.
+ * - `build-api`: `TestProvider` on `TEST_PROVIDER_EP` (`platform.testProvider`), `TestDeclaration` and
+ *   `TestReport`: a plugin language's tests get gutter run marks, a Run-picker row and the Tests tab (with
+ *   re-run), which were the JVM's alone. `build-api` now depends on `language-api` for `LanguageId`.
+ * The editor's folding pass now runs for every file, as the semantic pass already did. Additive, so
+ * [PLUGIN_API_VERSION] stays at `4`.
+ *
+ * `3.4.0` adds [PluginRegistration.privateDataDir], a per-plugin directory on the IDE's private storage, for
+ * what [PluginRegistration.dataDir] (shared storage) cannot hold: symbolic links, and files no other app may
+ * read. A plugin that needed that had picked a path of its own under the app's data, which nothing tracked, so
+ * it outlived the plugin. The IDE now lists both directories of an uninstalled plugin and deletes them when
+ * the user asks. Additive, so [PLUGIN_API_VERSION] stays at `4`; on an older host reading the property throws
+ * `NoSuchMethodError`, which a plugin can catch.
+ *
+ * `3.4.0` also adds `dev.ide.model.AndroidModules` on `ANDROID_MODULES` (`platform.androidModules`,
+ * WORKSPACE) in `project-model-api`: each Android module's configuration as the build resolves it (SDK levels,
+ * namespace and application id, build features, build types, flavors, every variant with its application id,
+ * and the variant the editor analyses). A plugin could not read any of it, since the facet lives in the
+ * unpublished Android support module. Read-only, and its types are interfaces, so it can grow without a break.
+ * On an older host the key resolves to nothing.
+ *
+ * And `dev.ide.plugin.ui.UiRegistration.colorScheme` with `dev.ide.plugin.ui.ColorScheme`
+ * ([PluginCapabilities.UI_COLOR_SCHEME]): a plugin ships whole editor color schemes, as the JSON the IDE's
+ * scheme editor exports, listed beside the presets and read-only like them. A plugin could add entries to a
+ * scheme (`colorAttribute`) but not a scheme, so a theme plugin was not possible. With it,
+ * `UiRegistration.appTheme` and `dev.ide.plugin.ui.AppTheme` ([PluginCapabilities.UI_APP_THEME]): the whole
+ * app's Material palette, dark and light, as Material Theme Builder exports it, offered as an Accent choice.
+ *
+ * And `dev.ide.model.ModuleDependencies` on `MODULE_DEPENDENCIES` (`platform.moduleDependencies`, WORKSPACE)
+ * in `project-model-api`: search the repositories, list an artifact's versions, read a module's resolved graph
+ * with its version conflicts, and add a library, a BOM or a repository the way the Dependencies screen does
+ * ([PluginCapabilities.MODEL_DEPENDENCIES]). A plugin could attach a declaration nothing had resolved, and
+ * could not check that a coordinate existed first.
+ *
+ * And `dev.ide.lang.KotlinGeneratedMemberProvider` on `KOTLIN_GENERATED_MEMBER_EP`
+ * (`platform.kotlinGeneratedMembers`) in `language-api`: the editor half of a Kotlin compiler plugin, the
+ * members it generates, so they complete and resolve. The engine's own point spoke the Kotlin backend's
+ * internal source model; this one speaks a read-only class view and plain member descriptions.
  */
-const val PLUGIN_SPI_VERSION: String = "3.1.0"
+const val PLUGIN_SPI_VERSION: String = "3.4.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

@@ -91,7 +91,10 @@ internal fun KotlinResolver.inferCallBindings(
                     ?.let { inferBuilderVars(it, expr, cs) }
             }
         } else {
-            inferType(expr)?.let { cs.addSubtypeConstraint(it, pt) } // argument ≤ parameter
+            // A SPREAD argument (`listOf(*arr)`) passes the array's ELEMENTS to the vararg, whose parameter type
+            // is the element type: constraining the whole `Array<String>` against it typed the call `List<Array>`.
+            val argType = inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
+            argType?.let { cs.addSubtypeConstraint(it, pt) } // argument ≤ parameter
         }
     }
     // No erasure fallback: return ONLY variables a constraint solved, so the caller's additive merge touches
@@ -155,3 +158,19 @@ internal fun KotlinResolver.newConstraintSystem(sym: KotlinSymbol): KotlinConstr
     sym.typeParameters.forEach { cs.registerVariable(it, bounds[it] as? KotlinType) }
     return cs
 }
+
+/** The element type a spread `*arr` contributes to a vararg: `Array<E>` → E, a primitive array → its primitive
+ *  (`IntArray` → Int). Null when [arrayType] is not an array, so no constraint is guessed from it. */
+internal fun KotlinResolver.spreadElementType(arrayType: KotlinType): KotlinType? {
+    if (arrayType.qualifiedName == "kotlin.Array") return arrayType.typeArguments.firstOrNull() as? KotlinType
+    val prim = PRIMITIVE_ARRAY_ELEMENTS[arrayType.qualifiedName] ?: return null
+    return service.typeByFqn(prim)
+}
+
+private val PRIMITIVE_ARRAY_ELEMENTS = mapOf(
+    "kotlin.IntArray" to "kotlin.Int", "kotlin.LongArray" to "kotlin.Long", "kotlin.ShortArray" to "kotlin.Short",
+    "kotlin.ByteArray" to "kotlin.Byte", "kotlin.CharArray" to "kotlin.Char", "kotlin.FloatArray" to "kotlin.Float",
+    "kotlin.DoubleArray" to "kotlin.Double", "kotlin.BooleanArray" to "kotlin.Boolean",
+    "kotlin.UIntArray" to "kotlin.UInt", "kotlin.ULongArray" to "kotlin.ULong",
+    "kotlin.UShortArray" to "kotlin.UShort", "kotlin.UByteArray" to "kotlin.UByte",
+)

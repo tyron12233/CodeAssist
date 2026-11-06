@@ -92,7 +92,9 @@ interface PluginRegistration {
     fun busConnection(): MessageBusConnection
 
     /**
-     * A directory this plugin owns, created on first read and removed when the plugin is uninstalled.
+     * A directory this plugin owns, created on first read. When the plugin is uninstalled the IDE lists what it
+     * left here (with [privateDataDir]) under the Plugins screen and Storage, and deletes it when the user says
+     * so, not before: someone uninstalling to reinstall a differently signed build keeps their data.
      *
      * For state that is not a setting: a cache, a downloaded index or ruleset, a small database, a log of the
      * plugin's own. [dev.ide.platform.settings.PreferenceStore] covers string key/value and nothing else, and
@@ -105,8 +107,28 @@ interface PluginRegistration {
      *
      * Reading it creates it, so a plugin can write immediately. It is not shared between plugins: the
      * platform derives it from [pluginId] and a caller cannot ask for another plugin's.
+     *
+     * On a device this is on shared storage (the app's external files), which a file manager can browse and
+     * which cannot hold a symbolic link or anything that must stay out of another app's reach. Such files go
+     * in [privateDataDir].
      */
     val dataDir: Path
+
+    /**
+     * A directory this plugin owns on the IDE's PRIVATE storage, created on first read: on a device, the app's
+     * internal files, which no other app and no file manager can read, and which (unlike [dataDir]) can hold
+     * symbolic links. For an unpacked toolchain that links back into [nativeLibraryDir], a package cache with
+     * links between its entries, or anything sensitive. On a desktop host it is a directory beside [dataDir].
+     *
+     * Everything said of [dataDir] holds here too: derived from [pluginId], application-scoped, and offered
+     * for deletion (never deleted unasked) once the plugin is uninstalled. A plugin that kept such files in a
+     * path of its own under the app's data should move them here, so they stop outliving it.
+     *
+     * Added in SPI `3.4.0`. On an older host the property does not exist and reading it throws
+     * `NoSuchMethodError` (an `AbstractMethodError` on some runtimes), which a plugin that must also run
+     * there catches and falls back from.
+     */
+    val privateDataDir: Path
 
     /** A [Logger] whose records are attributed to this plugin (via [pluginId]) so the in-app Logs viewer can
      *  filter by plugin. The attribution is set by the platform and cannot be forged by the caller. */

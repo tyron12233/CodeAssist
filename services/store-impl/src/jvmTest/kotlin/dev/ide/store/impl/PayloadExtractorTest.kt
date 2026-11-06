@@ -70,26 +70,43 @@ class PayloadExtractorTest {
         assertTrue(File(dir, "app/src/main/kotlin/Main.kt").exists(), "sources must survive")
     }
 
-    /** A store download is source: a packaged app, dex, jar, native library or class in the archive never
-     *  lands on disk, whatever its case or folder. */
+    /**
+     * Build output never lands on disk; the project's own libraries do. A store project used to arrive without
+     * its `.aar` files in `libs/` and `.so` files in `jniLibs/`, because every `.so`/`.aar`/`.jar` was dropped by extension, and the
+     * installed copy could not build.
+     */
     @Test
-    fun executableEntriesAreNotInstalled() {
+    fun buildOutputIsNotInstalledButTheProjectsLibrariesAre() {
         val parent = tempDir("ca-extract-exec-")
         val zip = zipOf(
             "app/build/outputs/apk/debug/app-debug.apk" to "PK",
+            "app/build/intermediates/merged_native_libs/libx.so" to "ELF",
             "Payload.APK" to "PK",
+            "classes.dex" to "dex",
+            "out/Main.class" to "cafebabe",
+            ".idea/workspace.xml" to "<x/>",
             "app/libs/helper.jar" to "PK",
             "app/libs/widget.aar" to "PK",
             "app/src/main/jniLibs/arm64-v8a/libnative.so" to "ELF",
-            "classes.dex" to "dex",
-            "out/Main.class" to "cafebabe",
+            "app/src/main/resources/lib/libbridge.so" to "ELF",
+            "app/src/main/java/com/example/build/Config.java" to "class Config {}",
             "app/src/main/kotlin/Main.kt" to "fun main() {}",
         )
         val r = PayloadExtractor().extract(zip.absolutePath, parent.absolutePath, "exec")
         assertTrue(r is StoreResult.Ok, "extract should succeed: $r")
         val dir = File((r as StoreResult.Ok).value)
         val installed = dir.walkTopDown().filter { it.isFile }.map { it.relativeTo(dir).path.replace('\\', '/') }.toSet()
-        assertEquals(setOf("app/src/main/kotlin/Main.kt"), installed)
+        assertEquals(
+            setOf(
+                "app/libs/helper.jar",
+                "app/libs/widget.aar",
+                "app/src/main/jniLibs/arm64-v8a/libnative.so",
+                "app/src/main/resources/lib/libbridge.so",
+                "app/src/main/java/com/example/build/Config.java",
+                "app/src/main/kotlin/Main.kt",
+            ),
+            installed,
+        )
     }
 
     /** A `./`-prefixed or backslash-separated entry names the same file; the strip matches on the

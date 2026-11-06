@@ -121,7 +121,7 @@ object NoopAnalyticsService : AnalyticsService {
  * "environment" event; [SESSION_START] is the per-launch anchor.
  */
 object Events {
-    // performance — the only telemetry collected (plus the crash report below). No feature-usage events.
+    // performance
     const val COLD_START = "cold_start"          // app bootstrap time (per launch)
     const val INDEX_PERF = "index_perf"           // index build duration (per build/reindex)
     const val BUILD_RESULT = "build_result"       // build/run outcome + duration (per build)
@@ -132,11 +132,27 @@ object Events {
     const val PASS_PERF = "pass_perf"             // every other editor pass (props `pass`, `lang`, `queue_*`)
     const val FRAME_PERF = "frame_perf"           // whole frame, vsync to done (`over_count` = missed the deadline)
     const val FRAME_CPU_PERF = "frame_cpu_perf"   // the app's own share of that frame (`over_count` = ours alone overran)
+    // A preview render, from asking for it to having it: props `kind` (`compose`/`layout`), `first` (the first
+    // render of that file this session, which pays for lowering/linking, or a re-render after an edit), `ok`.
+    const val PREVIEW_PERF = "preview_perf"
+    // Opening a Compose preview until its first picture, split by step: props `phase` (`total`, `lower`, `session`
+    // = starting the render in the preview process, `frame` = from there to the first frame), `kind` (`first` open of
+    // that file this session or `again`), `proc` (`cold` = the preview process wasn't running yet, or `warm`) and
+    // `renderer` (`remote` or `inprocess`).
+    const val PREVIEW_OPEN_PERF = "preview_open_perf"
+
+    // usage: how often each feature is used, counted on the device and sent as one row per feature (`feature`,
+    // `count`) when telemetry is flushed. Only once the user agreed to the wording that names it; ids per [Features].
+    const val FEATURE_USED = "feature_used"
 
     // crash / stability
     const val APP_CRASH = "app_crash"       // uncaught exception (fatal path)
     const val ERROR_LOGGED = "error_logged"  // a caught ERROR-level failure (non-fatal, scrubbed)
     const val APP_ANR = "app_anr"            // a previous process killed for not responding (scrubbed thread dump)
+    // The main thread blocked for seconds and then recovered (`duration_ms`, the scrubbed main stack sampled
+    // while it was stuck, `in_plugin`). Play counts these as ANRs when input was waiting; [APP_ANR] only ever
+    // sees the ones that ended the process.
+    const val MAIN_STALL = "main_stall"
 
     // ads: how often full-screen ads show and how people respond to them (Android only). The `ad_` and `ads_`
     // prefixes are what [categoryOf] keys on.
@@ -145,10 +161,22 @@ object Events {
     const val AD_SKIPPED = "ad_skipped"      // a long build got no ad (`reason`)
     const val ADS_SETTING = "ads_setting"    // the user changed an ad setting (`setting`, `on`, `via`)
 
-    /** The category an event name belongs to. Everything we emit is PERFORMANCE except stability and ad events. */
+    /** The category an event name belongs to: PERFORMANCE unless it is a stability, usage or ad event. */
     fun categoryOf(name: String): EventCategory = when {
-        name == APP_CRASH || name == ERROR_LOGGED || name == APP_ANR -> EventCategory.CRASH
+        name == APP_CRASH || name == ERROR_LOGGED || name == APP_ANR || name == MAIN_STALL -> EventCategory.CRASH
+        name == FEATURE_USED -> EventCategory.USAGE
         name.startsWith("ad_") || name.startsWith("ads_") -> EventCategory.ADS
         else -> EventCategory.PERFORMANCE
     }
+}
+
+/**
+ * The ids [Events.FEATURE_USED] counts are snake_case names from a closed set the app defines (`UiFeatures` in the
+ * UI port, which the shared UI can link and this module can't); never anything a user typed or named. [isValid]
+ * is the gate the counter applies, so a malformed id can't reach the backend.
+ */
+object Features {
+    private val VALID = Regex("[a-z][a-z0-9_]{1,47}")
+
+    fun isValid(id: String): Boolean = VALID.matches(id)
 }

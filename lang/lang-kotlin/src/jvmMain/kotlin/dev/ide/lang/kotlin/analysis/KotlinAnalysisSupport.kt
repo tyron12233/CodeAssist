@@ -139,6 +139,31 @@ class KotlinPermissionFixProvider : QuickFixProvider {
     }
 }
 
+/**
+ * Code-keyed quick fixes for the editor's own diagnostics: remove an unused import / variable / private member,
+ * `var` to `val` (and back for a reassigned `val`), drop a redundant `?.` / `!!` / cast / elvis / projection,
+ * safe call or `!!` on a nullable receiver, add or remove `override`, and complete a non-exhaustive `when`.
+ * See [dev.ide.lang.kotlin.KotlinQuickFixes].
+ */
+class KotlinDiagnosticFixProvider : QuickFixProvider {
+    override val forCodes = dev.ide.lang.kotlin.KotlinQuickFixes.CODES
+    override val languages = setOf(KOTLIN)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        val analyzer = target.resolver as? KotlinSourceAnalyzer ?: return emptyList()
+        val code = diagnostic.code ?: return emptyList()
+        val r = diagnostic.range
+        return analyzer.diagnosticFixes(target.file, code, r.start, r.end, diagnostic.message).map { fix ->
+            object : QuickFix {
+                override val title = fix.title
+                override val kind = CodeActionKind.QUICK_FIX
+                override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit =
+                    WorkspaceEdit.of(ctx.target.file, *fix.edits.toTypedArray())
+            }
+        }
+    }
+}
+
 object KotlinAnalysisSupport {
     val PLUGIN = PluginId("kotlin-analysis")
 
@@ -149,6 +174,7 @@ object KotlinAnalysisSupport {
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinSuspendModifierFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinNewApiFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinPermissionFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, KotlinDiagnosticFixProvider(), plugin)
         // Caret intentions (see KotlinEditorActions).
         extensions.register(ACTION_PROVIDER_EP, KotlinSurroundActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinIntroduceVariableActionProvider(), plugin)

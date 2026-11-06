@@ -48,6 +48,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -57,6 +58,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -70,6 +74,11 @@ import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.components.AdSlot
+import dev.ide.ui.markdown.linkify
+import dev.ide.ui.components.ExternalLinkGuard
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.foundation.text.selection.SelectionContainer
 import dev.ide.ui.components.CodeMotifColors
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.LinearProgressIndicator
@@ -126,6 +135,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import dev.ide.ui.components.RatingSummary
 import dev.ide.ui.components.ReviewCard
+import dev.ide.ui.components.TranslateToggle
 import dev.ide.ui.generated.resources.notif_days
 import dev.ide.ui.generated.resources.notif_hours
 import dev.ide.ui.generated.resources.notif_just_now
@@ -145,6 +155,27 @@ import dev.ide.ui.generated.resources.review_hidden_done
 import dev.ide.ui.generated.resources.review_reported
 import dev.ide.ui.generated.resources.profile_likes
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.backend.UiStoreUpdate
+import dev.ide.ui.backend.UiLocalChanges
+import androidx.compose.material3.AlertDialog
+import dev.ide.ui.generated.resources.store_update_to
+import dev.ide.ui.generated.resources.store_update_versions
+import dev.ide.ui.generated.resources.store_update_conflict_title
+import dev.ide.ui.generated.resources.store_update_conflict_body
+import dev.ide.ui.generated.resources.store_update_conflict_more
+import dev.ide.ui.generated.resources.store_update_conflict_unknown
+import dev.ide.ui.generated.resources.store_update_conflict_keep
+import dev.ide.ui.generated.resources.store_update_as_copy
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.backend.UiStoreMergeResult
+import androidx.compose.material3.FilledTonalButton
+import dev.ide.ui.generated.resources.store_update_merge
+import dev.ide.ui.generated.resources.store_update_changed_files
+import dev.ide.ui.generated.resources.store_update_merge_note
+import dev.ide.ui.generated.resources.store_merge_done_title
+import dev.ide.ui.generated.resources.store_merge_conflicts_body
+import dev.ide.ui.generated.resources.store_merge_open
+import dev.ide.ui.generated.resources.close
 
 /**
  * The full-screen detail page for a store item, in the Material 3 Expressive language.
@@ -197,6 +228,17 @@ fun StoreItemScreen(
     var reviewsRefresh by remember(item.id) { mutableStateOf(0) }
     var myReview by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
     var lightbox by remember(item.id) { mutableStateOf(-1) }
+    // A newer version of this project, when it is installed here and the publisher has moved on. Re-asked
+    // after an update attempt (the epoch) and whenever it becomes installed.
+    var updateEpoch by remember(item.id) { mutableStateOf(0) }
+    val installed = install is InstallState.Installed
+    val update by produceState<UiStoreUpdate?>(null, item.id, installed, updateEpoch) {
+        value = if (installed) runCatching { backend.store.updateFor(item.id) }.getOrNull() else null
+    }
+    // The user's changes, when they stand in the way of updating in place: shows the choice.
+    var conflict by remember(item.id) { mutableStateOf<UiLocalChanges?>(null) }
+    // A merge that left files with both sides in them: listed so the user knows where to look.
+    var merged by remember(item.id) { mutableStateOf<UiStoreMergeResult?>(null) }
     val shots = rememberResolvedScreenshots(backend, item)
 
     val tabs = remember(item) { availableTabs(item) }
@@ -204,66 +246,106 @@ fun StoreItemScreen(
     // Neutral, like every other surface: the hero used to hash the item id to pick one of three tints.
     val pair = tonalPair(item.id.hashCode())
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
-            DetailTopBar(
-                title = item.title,
-                isSaved = isSaved,
-                onBack = onBack,
-                onToggleSaved = onToggleSaved,
-                onShare = onShare?.let { { it(item) } },
-            )
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
-                item("hero") { DetailHero(backend, item, pair, onOpenPublisher) }
-                item("cta") {
-                    InstallRow(
-                        item = item,
-                        state = install,
-                        onRate = onRate,
-                        onPrimary = {
-                            when {
-                                item.templateId != null -> onCreateFromTemplate(item.templateId!!)
-                                // Already on the device: open it. This branch used to be a literal no-op,
-                                // so the button that said "Open in editor" did nothing at all.
-                                install is InstallState.Installed ->
-                                    install.rootPath?.let { path -> onOpenInstalled?.invoke(path) }
-                                !item.available -> message = null
-                                else -> scope.launch {
-                                    message = null
-                                    val result = runCatching { backend.store.install(item.id) }.getOrNull()
-                                    message = result?.message
-                                }
-                            }
-                        },
-                    )
-                }
-                item("hint") { InstallHint(item, message ?: progress?.message) }
-
-                if (tabs.size > 1) {
-                    item("tabs") { TabRowPills(tabs, tab) { tab = it } }
-                }
-
-                when (tab) {
-                    StoreTab.Overview -> overview(backend, item, shots) { lightbox = it }
-                    StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
-                    StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
-                    StoreTab.Reviews -> item("reviews") {
-                        ReviewsPanel(
-                            backend = backend,
-                            item = item,
-                            onWrite = { reviewSheet = true },
-                            onNeedSignIn = { signInForReview = true },
-                            refresh = reviewsRefresh,
-                            onPage = { myReview = it.mine },
+        // Listings, READMEs, changelogs and reviews are written by other people: ask before leaving for their links.
+        ExternalLinkGuard {
+            Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
+                DetailTopBar(
+                    title = item.title,
+                    isSaved = isSaved,
+                    onBack = onBack,
+                    onToggleSaved = onToggleSaved,
+                    onShare = onShare?.let { { it(item) } },
+                )
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
+                    item("hero") {
+                        // The app's own icon, blurred into a wash of its colours: icons are made to be colourful,
+                        // and the first try (the first screenshot) went near-black on every project with a dark UI,
+                        // which is most of them. A plugin's generated icon gives it a colour of its own the same way.
+                        // Only a published item gets one: a bundled template's card stays tonal.
+                        val icon = rememberItemIcon(backend, item)
+                        val first = shots.firstOrNull { !hasSamplePreview(it) }
+                        DetailHero(
+                            backend, item, pair, onOpenPublisher,
+                            backdrop = when {
+                                icon != null -> icon
+                                first != null -> { m: Modifier -> ShotImage(backend, first, ContentScale.Crop, m) }
+                                else -> null
+                            },
                         )
                     }
-                }
+                    item("cta") {
+                        InstallRow(
+                            item = item,
+                            state = install,
+                            update = update,
+                            onOpen = (install as? InstallState.Installed)?.rootPath?.let { path ->
+                                onOpenInstalled?.let { open -> { open(path) } }
+                            },
+                            onRate = onRate,
+                            onPrimary = {
+                                when {
+                                    item.templateId != null -> onCreateFromTemplate(item.templateId!!)
+                                    // An update: in place when nothing the user did would be lost, otherwise the
+                                    // choice. The check is the project on disk now, not what the page last saw.
+                                    update != null && install is InstallState.Installed -> scope.launch {
+                                        message = null
+                                        val changes = runCatching { backend.store.localChanges(item.id) }.getOrNull()
+                                        if (changes != null && changes.blocksInPlace) {
+                                            conflict = changes
+                                        } else {
+                                            message = backend.store.update(item.id, asCopy = false).message
+                                            updateEpoch++
+                                        }
+                                    }
+                                    // Already on the device: open it. This branch used to be a literal no-op,
+                                    // so the button that said "Open in editor" did nothing at all.
+                                    install is InstallState.Installed ->
+                                        install.rootPath?.let { path -> onOpenInstalled?.invoke(path) }
+                                    !item.available -> message = null
+                                    else -> scope.launch {
+                                        message = null
+                                        val result = runCatching { backend.store.install(item.id) }.getOrNull()
+                                        message = result?.message
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    item("hint") {
+                        val versions = update?.let {
+                            stringResource(Res.string.store_update_versions, it.installedVersion ?: "?", it.availableVersion ?: "?")
+                        }
+                        val shown = message ?: progress?.message ?: versions
+                        InstallHint(item, shown, versionSaid = shown != null && shown == versions)
+                    }
 
-                // At the foot of whichever tab is open, rather than inside the overview builder: the
-                // listing is one page with four views of it, and an ad that appears on one view and
-                // vanishes on the next reads as a glitch. Below the install CTA either way, so it never
-                // stands between a reader and the button they came for.
-                item("ad") {
-                    AdSlot(AdPlacement.STORE_ITEM, Modifier.padding(horizontal = 20.dp).padding(top = 24.dp))
+                    if (tabs.size > 1) {
+                        item("tabs") { TabRowPills(tabs, tab) { tab = it } }
+                    }
+
+                    when (tab) {
+                        StoreTab.Overview -> overview(backend, item, shots) { lightbox = it }
+                        StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
+                        StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
+                        StoreTab.Reviews -> item("reviews") {
+                            ReviewsPanel(
+                                backend = backend,
+                                item = item,
+                                onWrite = { reviewSheet = true },
+                                onNeedSignIn = { signInForReview = true },
+                                refresh = reviewsRefresh,
+                                onPage = { myReview = it.mine },
+                            )
+                        }
+                    }
+
+                    // At the foot of whichever tab is open, rather than inside the overview builder: the
+                    // listing is one page with four views of it, and an ad that appears on one view and
+                    // vanishes on the next reads as a glitch. Below the install CTA either way, so it never
+                    // stands between a reader and the button they came for.
+                    item("ad") {
+                        AdSlot(AdPlacement.STORE_ITEM, Modifier.padding(horizontal = 20.dp).padding(top = 24.dp))
+                    }
                 }
             }
         }
@@ -275,6 +357,35 @@ fun StoreItemScreen(
                 lightbox,
                 onClose = { lightbox = -1 },
                 onIndex = { lightbox = it },
+            )
+        }
+        conflict?.let { changes ->
+            UpdateConflictDialog(
+                changes = changes,
+                onMerge = {
+                    conflict = null
+                    scope.launch {
+                        val result = backend.store.mergeUpdate(item.id)
+                        message = result.message
+                        if (result.success && result.conflicts.isNotEmpty()) merged = result
+                        updateEpoch++
+                    }
+                },
+                onCopy = {
+                    conflict = null
+                    scope.launch {
+                        message = backend.store.update(item.id, asCopy = true).message
+                        updateEpoch++
+                    }
+                },
+                onDismiss = { conflict = null },
+            )
+        }
+        merged?.let { result ->
+            MergeConflictsDialog(
+                result = result,
+                onOpen = result.rootPath?.let { path -> onOpenInstalled?.let { open -> { merged = null; open(path) } } },
+                onDismiss = { merged = null },
             )
         }
         if (reviewSheet) {
@@ -294,117 +405,6 @@ fun StoreItemScreen(
                 onOpenUrl = onOpenUrl,
             )
         }
-    }
-}
-
-/**
- * Fullscreen screenshot viewer.
- *
- * Fills the fixed dark editor ground rather than the theme's surface: the thing being shown is either a
- * screenshot of a running app or a code panel, and both were composed against dark. Prev/next buttons sit
- * beside the dot indicator rather than relying on the swipe alone, so the control is reachable without a
- * gesture.
- */
-@Composable
-private fun ScreenshotLightbox(
-    backend: IdeBackend,
-    item: UiStoreItem,
-    resolved: List<String>,
-    index: Int,
-    onClose: () -> Unit,
-    onIndex: (Int) -> Unit,
-) {
-    val c = MaterialTheme.colorScheme
-    val real = resolved
-    val shots: List<String?> = when {
-        real.isNotEmpty() -> real
-        hasSamplePreview(item.previewKey) -> listOf(item.previewKey!!)
-        // Remote shots that have not been fetched yet: hold their places so the strip does not change
-        // length under the reader when the images land.
-        item.screenshots.isNotEmpty() -> List(item.screenshots.size) { null }
-        else -> listOf(null, null)
-    }
-    val current = index.coerceIn(0, shots.lastIndex)
-    Box(
-        Modifier.fillMaxSize().background(CodeMotifColors.Chrome)
-            // Swallow taps so the content behind the overlay cannot be reached.
-            .clickable(enabled = true, onClick = {}),
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier.size(46.dp).clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Symbol(CaSymbols.close, contentDescription = stringResource(Res.string.back), size = 23.dp, tint = Color.White)
-                }
-                Text(
-                    "${current + 1} / ${shots.size}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(46.dp))
-            }
-            Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CodeMotifColors.Chrome)) {
-                    val key = shots[current]
-                    when {
-                        key == null -> CodePanel(item, current)
-                        hasSamplePreview(key) -> SamplePreview(key, Modifier.fillMaxWidth().height(340.dp))
-                        // Fit, not crop: the viewer is where the whole screenshot has to be legible.
-                        else -> ShotImage(
-                            backend,
-                            key,
-                            ContentScale.Fit,
-                            Modifier.fillMaxWidth().height(340.dp),
-                        )
-                    }
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                LightboxNav(CaSymbols.chevronLeft, Color.White.copy(alpha = 0.1f), Color.White) {
-                    onIndex((current - 1 + shots.size) % shots.size)
-                }
-                Row(
-                    Modifier.padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    shots.indices.forEach { i ->
-                        // The active dot stretches into a bar rather than changing colour alone.
-                        val width by animateDpAsState(if (i == current) 22.dp else 7.dp, label = "lightboxDot")
-                        Box(
-                            Modifier.width(width).height(7.dp).clip(CircleShape)
-                                .background(if (i == current) Color.White else Color.White.copy(alpha = 0.35f)),
-                        )
-                    }
-                }
-                LightboxNav(CaSymbols.chevronRight, c.primaryContainer, c.onPrimaryContainer) {
-                    onIndex((current + 1) % shots.size)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LightboxNav(glyph: Char, container: Color, content: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.size(46.dp).clip(CircleShape).background(container).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Symbol(glyph, contentDescription = null, size = 22.dp, tint = content)
     }
 }
 
@@ -477,33 +477,59 @@ internal fun DetailTopBar(
 }
 
 /**
- * The tonal hero.
+ * The listing's header: icon, name, publisher and the figures.
  *
- * The icon tile is **inverted** against the card — the container's `on*` role as its background — so the
- * one element that has to read as an app icon does, against a field of the same hue.
+ * For a published project it carries the project's own colour: its icon (or, without one, its first
+ * screenshot) fills the card, blurred and darkened, and everything on it is drawn in white. Every listing
+ * used to open on the same neutral card, which is most of why the page read as a form.
+ * The blur is unavailable before Android 12, so the scrim alone has to keep the text legible; it is set
+ * dark enough to.
+ *
+ * Without one it is the tonal card it always was, with the item's glyph as a watermark. The icon tile is
+ * **inverted** against the card (the container's `on*` role as its background) so the one element that has
+ * to read as an app icon does, against a field of the same hue.
  */
 @Composable
 private fun DetailHero(
     backend: IdeBackend,
     item: UiStoreItem,
-    pair: TonalPair,
+    tonal: TonalPair,
     onOpenPublisher: ((String) -> Unit)? = null,
+    /** The screenshot behind the header, or null for the tonal card. */
+    backdrop: (@Composable (Modifier) -> Unit)? = null,
 ) {
+    // Text and figures on a darkened photograph are white whatever the theme; on the tonal card they are
+    // the card's own on-colour. One pair, so no element can use the wrong half of it.
+    val pair = if (backdrop != null) TonalPair(Color.Black, Color.White) else tonal
     Surface(
         shape = RoundedCornerShape(32.dp),
-        color = pair.container,
+        color = if (backdrop != null) CodeMotifColors.Chrome else pair.container,
         contentColor = pair.onContainer,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
     ) {
         Box(Modifier.clipToBounds()) {
-            Symbol(
-                glyph = CaSymbols.forIconId(item.iconId),
-                contentDescription = null,
-                size = 170.dp,
-                tint = pair.onContainer.copy(alpha = 0.13f),
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 22.dp, y = 34.dp),
-            )
-            Column(Modifier.padding(20.dp)) {
+            if (backdrop != null) {
+                // Scaled past the card's edges before the blur, so the blur has colour to spread at the
+                // rim instead of fading into the card's own background there.
+                backdrop(Modifier.matchParentSize().graphicsLayer { scaleX = 1.6f; scaleY = 1.6f }.blur(36.dp))
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.30f),
+                            1f to Color.Black.copy(alpha = 0.72f),
+                        ),
+                    ),
+                )
+            } else {
+                Symbol(
+                    glyph = CaSymbols.forIconId(item.iconId),
+                    contentDescription = null,
+                    size = 170.dp,
+                    tint = pair.onContainer.copy(alpha = 0.13f),
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 22.dp, y = 34.dp),
+                )
+            }
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = if (backdrop != null) 28.dp else 20.dp, bottom = 20.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     val appIcon = rememberItemIcon(backend, item)
                     Box(
@@ -635,6 +661,124 @@ private fun HeroStat(
     SupportingOnContainer(label, pair.onContainer, Modifier.padding(top = 1.dp))
 }
 
+/**
+ * The user has changed the installed project, so replacing its files would throw their work away.
+ *
+ * Three ways on, safest-for-their-work first. **Update and keep my changes** merges the new version into
+ * their copy (offered when the installed version's files were kept, which is every install from this
+ * version on). **Install as a new copy** leaves their copy exactly as it is. **Cancel** does nothing. The
+ * changed files are named, up to a handful, so "you changed this project" is something they can check.
+ */
+@Composable
+private fun UpdateConflictDialog(
+    changes: UiLocalChanges,
+    onMerge: () -> Unit,
+    onCopy: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val touched = changes.modified + changes.deleted
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Symbol(CaSymbols.update, contentDescription = null, size = 24.dp) },
+        title = { Text(stringResource(Res.string.store_update_conflict_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!changes.known) {
+                    Text(stringResource(Res.string.store_update_conflict_unknown))
+                } else {
+                    Text(
+                        stringResource(
+                            if (changes.canMerge) Res.string.store_update_changed_files else Res.string.store_update_conflict_body,
+                        ),
+                    )
+                    ChangedFileList(touched)
+                }
+                Text(
+                    stringResource(if (changes.canMerge) Res.string.store_update_merge_note else Res.string.store_update_conflict_keep),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        },
+        // Stacked, not side by side: three labels this long do not fit one row on a phone.
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                if (changes.canMerge) {
+                    FilledTonalButton(onClick = onMerge) { Text(stringResource(Res.string.store_update_merge)) }
+                }
+                TextButton(onClick = onCopy) { Text(stringResource(Res.string.store_update_as_copy)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
+            }
+        },
+    )
+}
+
+/** After a merge: the files where both sides changed the same lines, which now hold both versions. */
+@Composable
+private fun MergeConflictsDialog(result: UiStoreMergeResult, onOpen: (() -> Unit)?, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Symbol(CaSymbols.update, contentDescription = null, size = 24.dp) },
+        title = { Text(stringResource(Res.string.store_merge_done_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.store_merge_conflicts_body))
+                ChangedFileList(result.conflicts)
+            }
+        },
+        confirmButton = {
+            if (onOpen != null) {
+                TextButton(onClick = onOpen) { Text(stringResource(Res.string.store_merge_open)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) }
+            }
+        },
+        dismissButton = if (onOpen != null) {
+            { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } }
+        } else {
+            null
+        },
+    )
+}
+
+/** Up to a handful of project paths, in the code face, cut from the middle so the file name stays visible. */
+@Composable
+private fun ChangedFileList(paths: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        paths.take(CONFLICT_LIST_MAX).forEach { path ->
+            Text(
+                compactPath(path),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = dev.ide.ui.theme.Ca.type.codeFamily),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        if (paths.size > CONFLICT_LIST_MAX) {
+            Text(
+                stringResource(Res.string.store_update_conflict_more, paths.size - CONFLICT_LIST_MAX),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+/**
+ * A project path short enough for one line of a dialog, keeping the end: `…/utils/Helper.kt` rather than
+ * `plugin/src/main/kotlin/com/…`. Done here rather than with a middle ellipsis, which not every platform's
+ * text layout honours: desktop cut the end anyway, hiding the file name, the one part that says what changed.
+ */
+internal fun compactPath(path: String, max: Int = 34): String {
+    if (path.length <= max) return path
+    val parts = path.split('/')
+    for (keep in (parts.size - 1) downTo 1) {
+        val tail = parts.takeLast(keep).joinToString("/")
+        if (tail.length + 2 <= max || keep == 1) return "…/$tail"
+    }
+    return path
+}
+
+/** How many changed files the conflict dialog names before "and N more". */
+private const val CONFLICT_LIST_MAX = 6
+
 /** The install state machine, as the design draws it: the button's shape changes with the state. */
 private sealed interface InstallState {
     data object Idle : InstallState
@@ -649,6 +793,10 @@ private fun InstallRow(
     state: InstallState,
     onRate: (() -> Unit)?,
     onPrimary: () -> Unit,
+    /** A newer version, when there is one: the primary action becomes the update. */
+    update: UiStoreUpdate? = null,
+    /** Opens the installed project. Shown beside the button only while the button is the update. */
+    onOpen: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     val busy = state is InstallState.Downloading
@@ -656,12 +804,15 @@ private fun InstallRow(
         item.templateId != null -> stringResource(Res.string.store_create)
         !item.available -> stringResource(Res.string.store_coming_soon)
         busy -> stringResource(Res.string.store_installing)
+        state is InstallState.Installed && update != null ->
+            stringResource(Res.string.store_update_to, update.availableVersion ?: "")
         state is InstallState.Installed -> stringResource(Res.string.store_open_in_editor)
         else -> stringResource(Res.string.store_install_project)
     }
     val glyph = when {
         item.templateId != null -> CaSymbols.add
         busy -> CaSymbols.progressActivity
+        state is InstallState.Installed && update != null -> CaSymbols.update
         state is InstallState.Installed -> CaSymbols.playArrow
         else -> CaSymbols.download
     }
@@ -693,6 +844,19 @@ private fun InstallRow(
                 SpinningSymbol(glyph, spinning = busy)
                 Spacer(Modifier.width(9.dp))
                 Text(label, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        if (update != null && onOpen != null && !busy) {
+            Surface(
+                onClick = onOpen,
+                shape = RoundedCornerShape(percent = 50),
+                color = c.secondaryContainer,
+                contentColor = c.onSecondaryContainer,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Symbol(CaSymbols.playArrow, contentDescription = stringResource(Res.string.store_open_in_editor), size = 22.dp)
+                }
             }
         }
         if (onRate != null) {
@@ -732,10 +896,11 @@ private fun SpinningSymbol(glyph: Char, spinning: Boolean) {
 
 /** The one-line requirements note under the CTA — the only centred prose on the screen. */
 @Composable
-private fun InstallHint(item: UiStoreItem, message: String?) {
+private fun InstallHint(item: UiStoreItem, message: String?, versionSaid: Boolean = false) {
     val parts = listOfNotNull(
         message,
-        item.version?.let { "v$it" },
+        // Left out when the message already names the versions, as an update's does.
+        item.version?.takeIf { !versionSaid }?.let { "v$it" },
         item.language,
         item.downloadBytes.takeIf { it > 0 }?.let { formatSize(it) },
     )
@@ -796,8 +961,24 @@ private fun LazyListScope.overview(
     item("about") {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 22.dp)) {
             Eyebrow(stringResource(Res.string.store_item_about))
-            // Markdown rather than a plain Text: this is publisher-written prose. See ListingProse.
-            ListingProse(item.description, Modifier.padding(top = 8.dp))
+            // The translation lives as long as this listing is open: flipping back and forth is free, and
+            // reopening the listing asks again (the server answers that from its cache).
+            val translation = remember(item.id) { TranslationState() }
+            val target = remember { translationTarget() }
+            val scope = rememberCoroutineScope()
+            // Markdown rather than a plain Text: this is publisher-written prose. See ListingProse. A
+            // translation keeps the Markdown, so it is drawn the same way.
+            ListingProse(translation.shown("description") ?: item.description, Modifier.padding(top = 8.dp))
+            if (backend.store.translationAvailable() && offerTranslation(item.description, target)) {
+                TranslateToggle(
+                    showingTranslation = translation.showing,
+                    busy = translation.busy,
+                    error = translation.error,
+                    onToggle = {
+                        scope.launch { translation.toggle { backend.store.translateListing(item.id, target) } }
+                    },
+                )
+            }
         }
     }
     if (item.tags.isNotEmpty()) {
@@ -816,7 +997,7 @@ private fun LazyListScope.overview(
     }
     item("specs") { SpecTable(item) }
     if (item.rating >= 0f && item.ratingCount > 0) {
-        item("ratings") { RatingsPanel(item) }
+        item("ratings") { RatingsPanel(backend, item) }
     }
 }
 
@@ -861,16 +1042,23 @@ private fun ScreenshotCarousel(
         modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
     ) {
         itemsIndexed(shots) { i, key ->
+            // Each tile takes its image's own shape at a fixed height. These used to be landscape 218 x 154
+            // tiles, which cropped a portrait phone screenshot (nearly every screenshot the store has) down to a
+            // strip of its middle. Until an image's size is known, a tile is phone-shaped.
+            val bitmap = if (key != null && !hasSamplePreview(key)) rememberShotBitmap(backend, key) else null
+            val aspect = bitmap?.let { (it.width.toFloat() / it.height).coerceIn(0.42f, 1.9f) } ?: PHONE_ASPECT
             Box(
-                Modifier.width(218.dp).height(154.dp)
-                    .clip(cardShape(i))
+                Modifier.height(SHOT_TILE_HEIGHT).width(SHOT_TILE_HEIGHT * aspect)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(CodeMotifColors.Chrome)
                     .clickable { onOpen(i) },
             ) {
                 when {
                     key == null -> CodePanel(item, i)
                     hasSamplePreview(key) -> SamplePreview(key, Modifier.fillMaxSize())
-                    else -> ShotImage(backend, key, ContentScale.Crop, Modifier.fillMaxSize())
+                    bitmap != null -> androidx.compose.foundation.Image(
+                        bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                    )
                 }
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(9.dp)
@@ -884,9 +1072,25 @@ private fun ScreenshotCarousel(
     }
 }
 
+/** How tall a screenshot is in the listing's strip. Tall enough to see a phone screen as one. */
+private val SHOT_TILE_HEIGHT = 300.dp
+
+/** A phone screenshot's width over its height, used until a tile knows its image's real shape. */
+private const val PHONE_ASPECT = 0.48f
+
+/** The decoded image behind a cached screenshot file, or null until it lands (and when it cannot be read). */
+@Composable
+private fun rememberShotBitmap(backend: IdeBackend, path: String): ImageBitmap? {
+    val bitmap by produceState<ImageBitmap?>(null, path) {
+        val bytes = backend.projects.imageBytes(path)
+        value = bytes?.let { withContext(Dispatchers.Default) { decodeImageBytes(it) } }
+    }
+    return bitmap
+}
+
 /** The abstract editor stand-in: chrome bar, file-tree gutter, syntax-coloured bars. */
 @Composable
-private fun CodePanel(item: UiStoreItem, index: Int) {
+internal fun CodePanel(item: UiStoreItem, index: Int) {
     Column {
         Row(
             Modifier.fillMaxWidth().height(24.dp).background(CodeMotifColors.ChromeBar)
@@ -992,13 +1196,22 @@ private fun SpecTable(item: UiStoreItem) {
 /**
  * The ratings block: a big light average on a filled panel, beside the star histogram.
  *
- * The histogram is derived from the average and the count, not from real per-star buckets — the catalog
- * reports only a mean today. It is drawn only when there are ratings at all.
+ * The bars are the real per-star counts, from the same reviews call the Ratings tab makes (one row asked
+ * for: the distribution comes with every page). They used to be a shape drawn around the average, which
+ * showed 4- and 3-star ratings on a project whose only review gave it 5. Until the counts arrive, or when
+ * they cannot be fetched, the tracks stay empty: an empty bar is unknown, a drawn one is a claim.
+ *
+ * Bars are proportional to the most common rating, as [dev.ide.ui.components.RatingHistogram] draws them.
  */
 @Composable
-private fun RatingsPanel(item: UiStoreItem) {
+private fun RatingsPanel(backend: IdeBackend, item: UiStoreItem) {
     val c = MaterialTheme.colorScheme
     if (item.rating < 0f || item.ratingCount <= 0) return
+    val distribution by produceState<Map<Int, Int>>(emptyMap(), item.id) {
+        if (!backend.store.reviewsAvailable()) return@produceState
+        value = runCatching { backend.store.reviews(item.id, limit = 1).distribution }.getOrDefault(emptyMap())
+    }
+    val peak = (distribution.values.maxOrNull() ?: 0).coerceAtLeast(1)
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 26.dp)) {
         Text(
             stringResource(Res.string.store_item_tab_reviews),
@@ -1048,10 +1261,13 @@ private fun RatingsPanel(item: UiStoreItem) {
                             modifier = Modifier.width(8.dp),
                         )
                         Box(Modifier.weight(1f).height(9.dp).clip(CircleShape).background(c.surfaceContainerHighest)) {
-                            Box(
-                                Modifier.fillMaxWidth(histogramShare(item.rating, star))
-                                    .height(9.dp).clip(CircleShape).background(c.primary),
-                            )
+                            val n = distribution[star] ?: 0
+                            if (n > 0) {
+                                Box(
+                                    Modifier.fillMaxWidth(n.toFloat() / peak)
+                                        .height(9.dp).clip(CircleShape).background(c.primary),
+                                )
+                            }
                         }
                     }
                 }
@@ -1090,12 +1306,17 @@ private fun ChangelogCard(item: UiStoreItem) {
                 color = c.onSurface,
             )
         }
-        Text(
-            item.changelog.orEmpty(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = c.onSurfaceVariant,
-            modifier = Modifier.padding(start = 19.dp, top = 8.dp),
-        )
+        SelectionContainer(Modifier.padding(start = 19.dp, top = 8.dp)) {
+            Text(
+                linkify(
+                    item.changelog.orEmpty(),
+                    SpanStyle(),
+                    SpanStyle(color = c.primary, textDecoration = TextDecoration.Underline),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -1115,11 +1336,7 @@ private fun formatRating(rating: Float): String {
     return "${tenths / 10}.${tenths % 10}"
 }
 
-internal fun compactCount(n: Int): String = when {
-    n >= 1_000_000 -> "${n / 1_000_000}M"
-    n >= 1_000 -> "${n / 1_000}K"
-    else -> n.toString()
-}
+internal fun compactCount(n: Int): String = dev.ide.ui.components.compactNumber(n)
 
 private fun formatSize(bytes: Long): String {
     val mb = bytes / 1_048_576.0
@@ -1128,18 +1345,6 @@ private fun formatSize(bytes: Long): String {
         return "${tenths / 10}.${tenths % 10} MB"
     }
     return "${(bytes / 1024).coerceAtLeast(1)} KB"
-}
-
-/**
- * A plausible distribution around [average] for the histogram bars.
- *
- * Presentation, not data: the catalog reports a mean and a count, never per-star buckets. The bars are a
- * shape around the mean so the panel reads correctly, and they are only ever drawn next to the real
- * average and the real count.
- */
-private fun histogramShare(average: Float, star: Int): Float {
-    val distance = kotlin.math.abs(star - average)
-    return (1f - (distance / 2.2f)).coerceIn(0.02f, 1f)
 }
 
 private fun fileNameFor(item: UiStoreItem, index: Int): String {
@@ -1174,6 +1379,11 @@ private fun ReviewsPanel(
     val signedIn = backend.store.authState().collectAsState().value.signedIn
     val scope = rememberCoroutineScope()
     val now = remember(refresh) { dev.ide.ui.platform.nowMillis() }
+    // Per review, by author (one review per author per project). Kept across re-sorts and refetches: the
+    // same review keeps its translation however the list around it moves.
+    val translations = remember(item.id) { mutableStateMapOf<String, TranslationState>() }
+    val translateTarget = remember { translationTarget() }
+    val translatable = backend.store.translationAvailable()
     val reportedNote = stringResource(Res.string.review_reported)
     val hiddenNote = stringResource(Res.string.review_hidden_done)
 
@@ -1273,9 +1483,32 @@ private fun ReviewsPanel(
         }
         current.reviews.forEach { review ->
             Spacer(Modifier.height(12.dp))
+            val translation = translations.getOrPut(review.authorId) { TranslationState() }
+            val canTranslate = translatable &&
+                (offerTranslation(review.review, translateTarget) || offerTranslation(review.reply, translateTarget))
             ReviewCard(
                 review = review,
                 relativeTime = relativeAge(review.postedAtMs, now),
+                reviewText = translation.shown("review") ?: review.review,
+                replyText = translation.shown("reply") ?: review.reply,
+                translate = if (canTranslate) {
+                    {
+                        TranslateToggle(
+                            showingTranslation = translation.showing,
+                            busy = translation.busy,
+                            error = translation.error,
+                            onToggle = {
+                                scope.launch {
+                                    translation.toggle {
+                                        backend.store.translateReview(item.id, review.authorId, translateTarget)
+                                    }
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    null
+                },
                 onVote = if (signedIn) {
                     { helpful ->
                         scope.launch {

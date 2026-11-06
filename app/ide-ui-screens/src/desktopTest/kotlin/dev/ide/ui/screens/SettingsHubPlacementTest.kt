@@ -21,7 +21,7 @@ class SettingsHubPlacementTest {
         assertEquals(
             listOf(
                 HubGroup.Editor to listOf("appearance", "Colors", "editor", "CodeStyle", "keymap", "Symbols"),
-                HubGroup.Code to listOf("completion", "analysis"),
+                HubGroup.Code to listOf("completion", "analysis", "LanguageServers"),
                 HubGroup.Build to listOf("buildRuntime", "SdkManager", "Keystore"),
                 HubGroup.Extensions to listOf("Plugins"),
                 HubGroup.System to listOf("Storage", "privacy"),
@@ -44,10 +44,18 @@ class SettingsHubPlacementTest {
 
     @Test
     fun aGroupWithNothingOfferedStillKeepsItsTools() {
-        // No pages at all (a backend with no settings): the tool screens alone still make every group but Code.
+        // No pages at all (a backend with no settings): the tool screens alone still make every group, Code
+        // included now that Language Servers is a tool there.
         assertEquals(
-            listOf(HubGroup.Editor, HubGroup.Build, HubGroup.Extensions, HubGroup.System),
+            listOf(HubGroup.Editor, HubGroup.Code, HubGroup.Build, HubGroup.Extensions, HubGroup.System),
             hubPlacement(emptyList()).map { it.first },
         )
+    }
+
+    @Test
+    fun aToolTheHostCannotUseIsLeftOut() {
+        // Android: a language server the user installed could never start there.
+        val code = ids(hubPlacement(appPages, hiddenTools = setOf(HubTool.LanguageServers))).toMap().getValue(HubGroup.Code)
+        assertEquals(listOf("completion", "analysis"), code)
     }
 }

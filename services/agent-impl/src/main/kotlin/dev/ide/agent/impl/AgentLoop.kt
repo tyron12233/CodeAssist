@@ -54,6 +54,19 @@ class AgentLoop(
     private val effort: String? = null,
     /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
     private val compactor: HistoryCompactor = HistoryCompactor(),
+    /**
+     * When the (already trimmed) transcript is still bigger than this many characters, the loop summarizes it and
+     * carries on from the summary, mid-task if need be. Null never does; the user can still run /compact.
+     */
+    private val autoCompactChars: Int? = null,
+    /**
+     * When the next request is expected to be bigger than this many prompt tokens, the loop summarizes first, the
+     * same as [autoCompactChars]. Measured from what the provider reported for the previous request, so it holds
+     * where a character count cannot: code costs far more tokens per character than prose, and a price step (Haiku
+     * 5.5 bills 5x past a 100K prompt) is drawn in tokens. Null never does. The character limit still applies
+     * before there is a measurement (a fresh or restored conversation).
+     */
+    private val autoCompactTokens: Int? = null,
     /** Keeps requests under the provider's per-minute limits; null sends as fast as the loop runs. */
     private val pacer: RequestPacer? = null,
     /** Records what each mutating call changed, for diffs and undo; null records nothing. */
@@ -64,17 +77,38 @@ class AgentLoop(
         /** How many rate-limit waits one turn may sit through before it gives up and reports the error. */
         const val MAX_RATE_LIMIT_WAITS = 6
 
+        /** Characters per token for what a step adds (mostly code and tool output), erring on the high side. */
+        const val CHARS_PER_TOKEN = 3
+
         /** The wait when a rate limit names no retry delay. */
         const val DEFAULT_RATE_LIMIT_WAIT_MS = 30_000L
 
         /** A provider asking for longer than this is reported rather than waited out. */
         const val MAX_RATE_LIMIT_WAIT_MS = 120_000L
 
+        /** How much of a tool's result the transcript keeps for the user to read (the model gets all of it). */
+        const val MAX_SHOWN_OUTPUT = 20_000
+
+        /** How many times one turn may go again after its reply was cut off at the output limit. */
+        const val MAX_TRUNCATION_RETRIES = 1
+
+        /** Told to the model when its reply was cut off at the output limit. */
+        const val TRUNCATED = "Your previous reply hit the output token limit and was cut off, so the tool call " +
+            "it was writing was lost and did not run. Do it again in smaller pieces: write a large file as a first " +
+            "part with write_file or create_file, then add the rest with edit_file calls of a few hundred lines " +
+            "each. Keep explanations short."
+
         /** How many times one turn may lower its output cap to what the account's credit covers. */
         const val MAX_CREDIT_RETRIES = 2
 
         /** Below this many output tokens a tool-using turn is not worth sending; the credit error is reported. */
         const val MIN_CREDIT_MAX_TOKENS = 1024
+
+        /** Asks for a summary in the middle of a task, so the task can carry on from it. */
+        const val COMPACT_MID_TASK = "This conversation is getting too long to send. Summarize it so the work can " +
+            "continue from your summary alone: the user's goal and requirements, decisions made, which files you " +
+            "created or changed and what is in them now, what is done, what is left, and any error you were " +
+            "fixing. Be specific about file paths and names. Do not call any tools. Reply with the summary only."
 
         /** Sent on the final turn once the iteration cap is hit; no tools are offered alongside it. */
         const val COMPACT = "Summarize this conversation so far so it can continue from your summary alone. " +
@@ -89,9 +123,17 @@ class AgentLoop(
 
     private val history = mutableListOf<LlmMessage>()
 
+    /**
+     * The prompt size the provider reported for the last request, and [HistoryCompactor.size] of what that request
+     * carried. The next request's size is estimated from these plus whatever was added since. Null before the
+     * first measurement and after anything that replaces the history.
+     */
+    private var measuredPrompt: Pair<Int, Int>? = null
+
     fun reset() {
         history.clear()
         compactor.reset()
+        measuredPrompt = null
     }
 
     /** The conversation so far, so a rebuilt loop can carry it over (see [restore]), every tool call answered. */
@@ -108,6 +150,7 @@ class AgentLoop(
     fun restore(messages: List<LlmMessage>, dropThinking: Boolean) {
         history.clear()
         compactor.reset()
+        measuredPrompt = null
         pairToolResults(messages).mapTo(history) { m ->
             if (!dropThinking) m else m.copy(content = m.content.filter { it !is ContentPart.Thinking })
         }
@@ -133,6 +176,7 @@ class AgentLoop(
         // Answered before the new message goes in, so an interrupted call's result sits right after the call.
         pairHistory()
         history += if (images.isEmpty()) LlmMessage.user(userText) else LlmMessage.user(userText, images)
+        appendSessionContext()
         sink.emit(AgentEvent.UserMessage(userText))
         creditCap = null
         runTurns(sink)
@@ -155,13 +199,20 @@ class AgentLoop(
         var iteration = 0
         var rateLimitWaits = 0
         var creditRetries = 0
+        var truncationRetries = 0
+        var compacted = false
         // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
         var total = TokenUsage()
         while (iteration++ < maxIterations) {
+            // Once per turn: a summary that is itself too big would otherwise be summarized again and again.
+            if (!compacted && history.size > 2 && tooLongToSend()) {
+                compacted = true
+                autoCompact(sink)
+            }
             val request = LlmRequest(
                 model = model,
                 system = systemPrompt(),
-                messages = withSessionContext(compactor.compact(history)),
+                messages = compactor.compact(history),
                 tools = tools.specs(),
                 maxTokens = requestMaxTokens,
                 thinking = true,
@@ -200,9 +251,28 @@ class AgentLoop(
             }
             rateLimitWaits = 0
             turn.usage?.let { total += it }
+            turn.usage?.promptTokens?.takeIf { it > 0 }?.let { measuredPrompt = it to compactor.size(request.messages) }
 
             history += LlmMessage.assistant(turn.assistantParts())
             val calls = turn.toolCalls()
+            if (calls.isEmpty() && turn.stopReason == StopReason.MAX_TOKENS) {
+                // The reply ran out of output tokens. Usually that is a tool call cut off mid-arguments (a whole
+                // file written in one go), which the provider drops, so ending the turn here would leave the user
+                // with "I'm writing the file now" and nothing written. Say so and let the model go again, smaller.
+                if (truncationRetries < MAX_TRUNCATION_RETRIES) {
+                    truncationRetries++
+                    history += LlmMessage.user(TRUNCATED)
+                    continue
+                }
+                sink.emit(
+                    AgentEvent.Error(
+                        "The reply hit the output limit before it finished, so its last step did not run. " +
+                            "Ask for a smaller change, or for the file to be written in parts.",
+                        null,
+                    ),
+                )
+                return
+            }
             if (calls.isEmpty()) {
                 sink.emit(AgentEvent.TurnCompleted(turn.stopReason, total))
                 return
@@ -279,10 +349,63 @@ class AgentLoop(
         }
         history.clear()
         compactor.reset()
+        measuredPrompt = null
         history += LlmMessage.user("Continue the earlier conversation. Here is where it got to.")
         history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
         sink.emit(AgentEvent.TurnCompleted(turn.stopReason, turn.usage))
         return true
+    }
+
+    /**
+     * [compactConversation] in the middle of a turn: the summary is not shown as an answer, and the turn carries on
+     * from it. Leaves the history alone when the summary cannot be had, so the request goes out as it would have
+     * (and fails on its size, which says what to do).
+     */
+    private suspend fun autoCompact(sink: AgentEventSink) {
+        pairHistory()
+        val before = compactor.size(compactor.compact(history))
+        // The same system prompt, tools, thinking and effort as the step it replaces, so the whole conversation is
+        // read back from the prompt cache instead of being written to it again: changing the tool set or switching
+        // thinking off would both throw the cached prefix away, on the biggest prompt of the task.
+        val request = LlmRequest(
+            model = model,
+            system = systemPrompt(),
+            messages = compactor.compact(history) + LlmMessage.user(COMPACT_MID_TASK),
+            tools = tools.specs(),
+            maxTokens = requestMaxTokens,
+            thinking = true,
+            thinkingBudget = thinkingBudget,
+            webSearch = webSearch,
+            effort = effort,
+        )
+        pace(request, sink)
+        val turn = Turn()
+        client.chat(request).collect { event -> turn.consume(event, AgentEventSink { }) }
+        // Tools are offered only to keep the prefix identical; a reply that calls one is not a summary.
+        if (turn.failure != null || turn.text.isBlank() || turn.toolCalls().isNotEmpty()) return
+        history.clear()
+        compactor.reset()
+        measuredPrompt = null
+        history += LlmMessage.user("Continue the earlier conversation. Here is where it got to.")
+        history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
+        history += LlmMessage.user("Carry on with the task from where you left off.")
+        appendSessionContext()
+        sink.emit(AgentEvent.Compacted(before, compactor.size(history)))
+    }
+
+    /**
+     * Whether the next request should be summarized first: its estimated prompt is over [autoCompactTokens], or,
+     * before any measurement exists, its transcript is over [autoCompactChars].
+     */
+    private fun tooLongToSend(): Boolean {
+        val size = compactor.size(compactor.compact(history))
+        val tokenLimit = autoCompactTokens
+        val measured = measuredPrompt
+        if (tokenLimit != null && measured != null) {
+            val (tokens, sizeThen) = measured
+            return tokens + (size - sizeThen) / CHARS_PER_TOKEN > tokenLimit
+        }
+        return autoCompactChars?.let { size > it } ?: false
     }
 
     /** Waits, visibly, when sending [request] now would break a known per-minute limit, then records it. */
@@ -334,14 +457,22 @@ class AgentLoop(
      * never stored in [history], so it stays exactly one message long and always sits after everything the
      * provider has already cached.
      */
-    private fun withSessionContext(messages: List<LlmMessage>): List<LlmMessage> {
-        val context = sessionContext()?.takeIf { it.isNotBlank() } ?: return messages
-        // An operator instruction has to follow a user turn (a tool-result run counts as one), so a history
-        // left mid-turn by a cancelled run gets no session context rather than a rejected request.
-        val last = messages.lastOrNull()?.role ?: return messages
-        if (last != LlmRole.USER && last != LlmRole.TOOL) return messages
-        return messages + LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(context)))
+    /**
+     * Writes the session context (permission mode, project) into the history after the user's message, when it
+     * differs from the last one written. Append-only on purpose: it used to be added to every request and dropped
+     * from the next, and a note that moves is an edit to earlier history, which invalidates the prompt cache (and,
+     * on current models, the earlier reasoning) from that point. Haiku 5.5 re-wrote the whole conversation to the
+     * cache on every step that way. Written once and left in place, it is part of a prefix that only grows.
+     */
+    private fun appendSessionContext() {
+        val context = sessionContext()?.takeIf { it.isNotBlank() } ?: return
+        if (context == lastContext()) return
+        history += LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(context)))
     }
+
+    /** The session context last written into the history, if any. */
+    private fun lastContext(): String? = history.lastOrNull { it.role == LlmRole.SYSTEM }
+        ?.content?.filterIsInstance<ContentPart.Text>()?.joinToString("\n") { it.text }
 
     /**
      * Runs the turn's tool calls, preserving their order in the returned results. Read-only calls run
@@ -378,7 +509,7 @@ class AgentLoop(
         }
 
         val summary = runCatching { tool.summarize(args) }.getOrDefault(call.name)
-        sink.emit(AgentEvent.ToolCallStarted(call.id, call.name, summary))
+        sink.emit(AgentEvent.ToolCallStarted(call.id, call.name, summary, input = call.arguments))
 
         if (tool.mutating) {
             // Ask with the change itself in hand when the tool can say what it would do, so the prompt shows a
@@ -409,7 +540,12 @@ class AgentLoop(
         }
         changed?.takeIf { it.isNotEmpty() }?.let { sink.emit(AgentEvent.FilesChanged(call.id, it)) }
         result.event?.let { sink.emit(it) }
-        sink.emit(AgentEvent.ToolCallFinished(call.id, ok = !result.isError, resultSummary = brief(result.content)))
+        sink.emit(
+            AgentEvent.ToolCallFinished(
+                call.id, ok = !result.isError, resultSummary = brief(result.content),
+                output = result.content.take(MAX_SHOWN_OUTPUT), images = result.images,
+            ),
+        )
         return LlmMessage.toolResult(call.id, result.content, result.isError, result.images)
     }
 

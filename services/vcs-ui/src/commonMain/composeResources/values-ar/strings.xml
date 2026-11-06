@@ -21,6 +21,7 @@
     <string name="vcs_branch">الفرع</string>
     <string name="vcs_detached">‏HEAD منفصل</string>
     <string name="vcs_no_commits">لا إيداعات بعد</string>
+    <string name="vcs_no_repo_branch">لا يوجد مستودع</string>
     <string name="vcs_up_to_date">محدَّث</string>
     <string name="vcs_not_pushed_yet">لم يُدفع بعد</string>
     <string name="vcs_fetch">جلب</string>
@@ -77,6 +78,7 @@
     <string name="vcs_branches_none">لا توجد فروع مطابقة.</string>
     <string name="vcs_new_branch">فرع جديد</string>
     <string name="vcs_new_branch_hint">اسم الفرع</string>
+    <string name="vcs_new_branch_from">يبدأ من %1$s</string>
     <string name="vcs_create">إنشاء</string>
     <string name="vcs_current_branch">الحالي</string>
     <string name="vcs_merge_into">الدمج في %1$s</string>
@@ -248,6 +250,7 @@
     <string name="vcs_msg_unknown_commit">إيداع غير معروف %1$s</string>
     <string name="vcs_msg_diff_failed">تعذّرت مقارنة %1$s</string>
     <string name="vcs_msg_show_failed">تعذّرت قراءة %1$s عند %2$s</string>
+    <string name="vcs_msg_blame_failed">تعذّر معرفة من غيّر %1$s</string>
     <string name="vcs_msg_list_stashes_failed">تعذّر سرد عمليات الحفظ المؤقت</string>
     <string name="vcs_msg_stage_failed">تعذّر تجهيز الملفات المحددة</string>
     <string name="vcs_msg_unstage_failed">تعذّر إلغاء تجهيز الملفات المحددة</string>
@@ -255,7 +258,7 @@
     <string name="vcs_msg_discard_conflicted">في %1$s تعارض دمج. احلّه، أو ألغِ الدمج للتراجع عن كل شيء.</string>
     <string name="vcs_msg_resolve_failed">تعذّر وضع علامة على التعارضات كمحلولة</string>
     <string name="vcs_msg_commit_message_required">أدخل رسالة الإيداع</string>
-    <string name="vcs_msg_identity_required">اضبط اسمك وبريدك الإلكتروني في الإعدادات قبل الإيداع</string>
+    <string name="vcs_msg_identity_required">اضبط الاسم والبريد الإلكتروني اللذين تُوقَّع بهما إيداعاتك</string>
     <string name="vcs_msg_commit_failed">تعذّر إنشاء الإيداع</string>
     <string name="vcs_msg_create_branch_failed">تعذّر إنشاء الفرع %1$s</string>
     <string name="vcs_msg_checkout_failed">تعذّر التبديل إلى %1$s</string>

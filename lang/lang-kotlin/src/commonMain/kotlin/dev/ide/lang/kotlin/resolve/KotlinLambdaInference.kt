@@ -219,8 +219,13 @@ internal fun KotlinResolver.samConstructorShape(call: KtCallExpression): KotlinS
     val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
     val fqn = service.resolveTypeName(callee.getReferencedName(), fileContext) ?: return null
     if (service.isInterfaceType(fqn) != true) return null
-    val typeArgs = call.typeArgumentList?.arguments.orEmpty()
+    var typeArgs = call.typeArgumentList?.arguments.orEmpty()
         .mapNotNull { it.typeReference?.text?.let { t -> service.typeFromText(t, fileContext) } }
+    // No explicit type arguments: the type the context expects (`fun c(): Comparator<String> = Comparator { a,
+    // b -> … }`, an argument slot typed `Comparator<in T>`) supplies them, so `a`/`b` are `String`, not unknown.
+    if (typeArgs.isEmpty()) expectedTypeAt(call.textRange.startOffset)
+        ?.takeIf { sameSimpleName(it.qualifiedName, fqn) }
+        ?.let { e -> typeArgs = e.typeArguments.mapNotNull { it as? KotlinType } }
     return service.functionalShape(service.typeByFqn(fqn, typeArgs))
 }
 
@@ -255,4 +260,19 @@ internal fun KotlinResolver.lambdaParamIndex(
     val vararg = sym.varargParamIndex
     if (vararg in 0..<argIndex) return vararg
     return argIndex
+}
+
+/** The same classifier under its Kotlin or JVM spelling (`kotlin.Comparator` aliases `java.util.Comparator`),
+ *  for matching an expected type against a SAM-constructor callee. */
+internal fun sameSimpleName(a: String, b: String): Boolean = a.substringAfterLast('.') == b.substringAfterLast('.')
+
+/** Whether every type argument of [t] is a known type with no type variable in it. An expected type taken from
+ *  a still-generic parameter slot (`submit(task: Callable<T>)`) carries the callee's own `T`, which says
+ *  nothing about the argument and must not pin it. */
+internal fun concreteArgs(t: KotlinType): Boolean {
+    fun concrete(r: dev.ide.lang.resolve.TypeRef?): Boolean {
+        val k = r as? KotlinType ?: return false
+        return !k.isTypeParameter && k.typeArguments.all(::concrete)
+    }
+    return t.typeArguments.all(::concrete)
 }

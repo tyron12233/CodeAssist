@@ -62,9 +62,15 @@ private fun mapCompletionSnippet(action: CaretAction): UiSnippet? {
 
 /** Map engine [Diagnostic]s to the UI DTO (with line/col computed from [text]). Shared by the editor and the
  *  Learn exercise editor (which analyzes against a hidden scratch engine). */
-internal fun List<Diagnostic>.toUiDiagnostics(text: String): List<UiDiagnostic> = map { d ->
-    val (line, col) = lineColOf(text, d.range.start)
-    UiDiagnostic(
+internal fun List<Diagnostic>.toUiDiagnostics(text: String): List<UiDiagnostic> {
+    if (isEmpty()) return emptyList()
+    val lines = LineStarts(text)
+    return map { d -> d.toUiDiagnostic(lines.line(d.range.start), lines.column(d.range.start)) }
+}
+
+private fun Diagnostic.toUiDiagnostic(line: Int, col: Int): UiDiagnostic {
+    val d = this
+    return     UiDiagnostic(
         severity = when (d.severity) {
             Severity.ERROR -> UiSeverity.Error
             Severity.WARNING -> UiSeverity.Warning
@@ -80,16 +86,30 @@ internal fun List<Diagnostic>.toUiDiagnostics(text: String): List<UiDiagnostic> 
     )
 }
 
-private fun lineColOf(text: String, offset: Int): Pair<Int, Int> {
-    val end = offset.coerceIn(0, text.length)
-    var line = 0
-    var col = 0
-    var i = 0
-    while (i < end) {
-        if (text[i] == '\n') { line++; col = 0 } else col++
-        i++
+/**
+ * The start offset of every line of [text], built once, so mapping many offsets to (line, column) costs a binary
+ * search each. Scanning from the start of the file for every diagnostic made a file with hundreds of warnings
+ * cost hundreds of whole-file scans per analysis pass. Lines and columns here are 0-based.
+ */
+internal class LineStarts(private val text: String) {
+    private val starts: IntArray = run {
+        var n = 1
+        for (c in text) if (c == '\n') n++
+        val a = IntArray(n)
+        var k = 1
+        for (i in text.indices) if (text[i] == '\n') a[k++] = i + 1
+        a
     }
-    return line to col
+
+    /** The 0-based line holding [offset] (clamped into the text). */
+    fun line(offset: Int): Int {
+        val end = offset.coerceIn(0, text.length)
+        val i = starts.binarySearch(end)
+        return if (i >= 0) i else -i - 2
+    }
+
+    /** The 0-based column of [offset] on its line (clamped into the text). */
+    fun column(offset: Int): Int = offset.coerceIn(0, text.length) - starts[line(offset)]
 }
 
 private fun mapCompletionKind(k: CompletionItemKind): UiCompletionKind = when (k) {

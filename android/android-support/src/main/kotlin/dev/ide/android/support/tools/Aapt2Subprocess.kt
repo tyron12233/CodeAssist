@@ -59,6 +59,8 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
         protoFormat: Boolean,
         overlays: List<Path>,
         rTxt: Path?,
+        includes: List<Path>,
+        packageId: Int?,
     ): ToolResult {
         Files.createDirectories(genJavaDir)
         outApk.parent?.let { Files.createDirectories(it) }
@@ -68,6 +70,11 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
             add(aapt2.toString()); add("link")
             add("-o"); add(outApk.toString())
             add("-I"); add(androidJar.toString())
+            includes.forEach { add("-I"); add(it.toString()) }
+            packageId?.let {
+                add("--package-id"); add("0x" + it.toString(16))
+                if (it < 0x7f) add("--allow-reserved-package-id")
+            }
             add("--manifest"); add(manifest.toString())
             add("--java"); add(genJavaDir.toString())
             add("--custom-package"); add(customPackage)

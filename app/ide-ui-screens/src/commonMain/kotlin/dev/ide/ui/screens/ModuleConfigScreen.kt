@@ -292,6 +292,9 @@ fun ModuleConfigScreen(
         val twoPane = maxWidth >= MODULES_TWO_PANE_BREAKPOINT
         // Two panes always show a module; a phone shows the list until one is picked.
         val shown = selected ?: if (twoPane) list.modules.firstOrNull()?.name else null
+        // The module two panes open by default is as much on screen as one the user picked, so it stays open when
+        // the window narrows to one pane (a phone rotated to portrait went back to the bare list).
+        LaunchedEffect(twoPane, shown) { if (twoPane && selected == null && shown != null) selected = shown }
         PlatformBackHandler(enabled = !twoPane && selected != null) { selected = null }
 
         val detail: @Composable (String, (() -> Unit)?) -> Unit = { name, back ->
@@ -1225,9 +1228,10 @@ private fun JavaLevelPicker(levels: List<String>, selected: String, onSelect: (S
                 selected = lvl == selected,
                 onClick = { onSelect(lvl) },
                 shape = SegmentedButtonDefaults.itemShape(i, levels.size),
-                // No check mark: four "Java NN" segments with one have to fit a 360dp phone.
+                // No check mark, and only the number: the field is already labelled "Java version", and four
+                // "Java NN" segments ellipsized to "Java ..." on a phone, hiding the one thing that differs.
                 icon = {},
-                label = { Text(prettyLevel(lvl), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                label = { Text(levelNumber(lvl), maxLines = 1, softWrap = false) },
             )
         }
     }
@@ -1873,3 +1877,6 @@ private fun rowTitle(row: SnapshotStateList<FieldState>, index: Int): String {
 }
 
 private fun prettyLevel(enumName: String): String = enumName.replace("JAVA_", "Java ")
+
+/** Just the release number of a level (`JAVA_17` is "17"), for places already labelled as the Java version. */
+private fun levelNumber(enumName: String): String = enumName.removePrefix("JAVA_").replace('_', '.')

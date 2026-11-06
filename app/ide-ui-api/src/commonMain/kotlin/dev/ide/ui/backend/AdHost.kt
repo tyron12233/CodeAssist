@@ -42,7 +42,8 @@ enum class AdPlacement {
  * [dev.ide.ui.CodeAssistApp]; [None] (the default) means "this platform has no ads".
  *
  * Ad slots are NATIVE — the host renders them inside the app's own card chrome (see
- * [dev.ide.ui.components.AdSlot]), never as banners. The one exception is a single full-screen interstitial
+ * [dev.ide.ui.components.AdSlot]). Banners appear in two places only, in the same chrome: a native slot that no
+ * native ad filled, and the build console's footer while a build runs ([BannerAd]). The one full-screen exception is a single full-screen interstitial
  * shown occasionally at natural breaks ([preloadInterstitial]/[showInterstitial]) — currently a long-running
  * build finishing its wait and a completed tutorial lesson. Whether ads are shown at all — native slots AND
  * that interstitial — is decided in common by [dev.ide.ui.ads.AdController] from the user's "show ads" and
@@ -70,6 +71,16 @@ interface AdHost {
     fun showPrivacyOptions() {}
 
     /**
+     * Whether this build can open the ad SDK's debugging panel (AdMob's Ad Inspector: each ad unit's mediation
+     * group, which networks initialized, and how each request went). Developer builds only; the SDK itself
+     * opens it only on a registered test device (an emulator always is one).
+     */
+    val adInspectorAvailable: Boolean get() = false
+
+    /** Open the ad debugging panel ([adInspectorAvailable]). No-op where unsupported. */
+    fun openAdInspector() {}
+
+    /**
      * An opaque identity for the installed build: the same string for every launch of one installation, and a
      * different one after a fresh install or an update (on Android, the package's `lastUpdateTime`).
      * [dev.ide.ui.ads.AdController] uses it to turn ads back on once per install/update. Null where the host
@@ -86,6 +97,17 @@ interface AdHost {
      */
     @Composable
     fun NativeAd(placement: AdPlacement, modifier: Modifier)
+
+    /**
+     * Render a banner ad for [placement] inside the shared card chrome, with [modifier] applied to the card.
+     * Used where a native card doesn't fit the moment: the build console's footer while a build runs (see
+     * [dev.ide.ui.components.BuildRunningBannerSlot]). Like [NativeAd], called only while ads are active, and
+     * drawing nothing (no card, no padding) until a banner has loaded or when none fills. A native slot whose
+     * native request fills nothing may also fall back to a banner, but that happens inside the host's
+     * [NativeAd]. No-op where unsupported (desktop; the default).
+     */
+    @Composable
+    fun BannerAd(placement: AdPlacement, modifier: Modifier) {}
 
     /**
      * Begin loading the full-screen interstitial ahead of showing it (idempotent — a repeat call while one is
@@ -112,10 +134,44 @@ interface AdHost {
     val interstitialShowing: Boolean get() = false
 
     /**
-     * Whether the device is short of memory. Full-screen ads skip builds here: the ad's WebView next to an
-     * on-device build makes the system more likely to kill one of them. False by default.
+     * Where the interstitial stands, as a short word for analytics when a show finds none ready: `ready`,
+     * `loading`, `failed_<code>` (the last load failed; 3 is no fill), `expired`, `not_requested`,
+     * `not_started` or `no_webview`. `none` where unsupported (desktop; the default).
+     */
+    val interstitialState: String get() = "none"
+
+    /**
+     * When [interstitialState] is `failed_<code>`, a short account of that failure for analytics: the SDK's
+     * error domain and message, plus which mediation adapters answered with what. Code 0 ("internal error")
+     * covers both an ad-blocked device and a flaky network, and only this tells them apart. Null otherwise.
+     */
+    val interstitialFailureDetail: String? get() = null
+
+    /**
+     * Whether the device is short of physical memory. Full-screen ads skip builds here: the ad's WebView next to
+     * an on-device build makes the system more likely to kill one of them. That is decided by RAM, so a host
+     * should not count a merely small Java heap. False by default.
      */
     val lowMemoryDevice: Boolean get() = false
+
+    /**
+     * Whether this host can show a REWARDED ad: the one ad the user asks for, in exchange for CodeAssist Free AI
+     * points. Independent of the "show ads" preference on purpose: turning passive ads off must not take away
+     * the user's way to earn points, and nothing here is shown unless the user taps for it. Still subject to ad
+     * consent where consent applies. False where unsupported (desktop; the default).
+     */
+    val rewardedAvailable: Boolean get() = false
+
+    /**
+     * Show a rewarded ad for the signed-in account [userId], loading one first if none is ready, and call
+     * [onResult] once the ad has closed (or failed): true when the viewer earned the reward.
+     *
+     * [userId] travels to Google as the ad's server-side verification user id, and the points are credited by
+     * the server only when Google's SIGNED callback for this view arrives. [onResult] being true means "go and
+     * re-read the wallet", never "add points here". Called on the main thread. Never call this from an ad
+     * placement or tie it to anything but an explicit tap: rewards for ads are allowed only on rewarded units.
+     */
+    fun showRewarded(userId: String, onResult: (earned: Boolean) -> Unit) = onResult(false)
 
     /** A no-op bridge for hosts without ads (desktop; the default). */
     object None : AdHost {

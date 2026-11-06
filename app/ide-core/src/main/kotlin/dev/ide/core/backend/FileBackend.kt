@@ -10,7 +10,14 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.backend.UiConflictChoice
+import dev.ide.ui.backend.UiDeleteResult
 import dev.ide.ui.backend.UiDirEntry
+import dev.ide.ui.backend.UiTransferItem
+import dev.ide.ui.backend.UiTransferKind
+import dev.ide.ui.backend.UiTransferResult
+import dev.ide.ui.backend.UiUndoResult
+import dev.ide.core.ConflictChoice
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSourceRootRole
@@ -39,12 +46,21 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         // Picker-safe: with no project open (the lazy-start path), the engine-backed tree builders would hit
         // the non-null `services` accessor. Hand back an empty root so the shared UI state can be constructed
         // before a project is opened; it is rebuilt for real once `openProject` bumps the epoch.
-        if (ctx.servicesOrNull == null) return TreeNode(id = "empty", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "module")
-        return when (mode) {
-            TreeViewMode.Project -> projectTree()
-            TreeViewMode.AllFiles -> allFilesTree()
+        if (ctx.servicesOrNull == null) return emptyTree()
+        return try {
+            when (mode) {
+                TreeViewMode.Project -> projectTree()
+                TreeViewMode.AllFiles -> allFilesTree()
+            }
+        } catch (e: IllegalStateException) {
+            // The tree is built off the main thread, and closing the project mid-walk makes the next
+            // `ctx.services` read throw "No project is open" (seen in the field from IdeUiState.loadTree). There
+            // is no tree to show then; anything else is a real failure and still propagates.
+            if (ctx.servicesOrNull == null) emptyTree() else throw e
         }
     }
+
+    private fun emptyTree() = TreeNode(id = "empty", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "module")
 
     // File-tree expansion is remembered per project + view mode in the project's generic settings store
     // (`.platform/settings.properties`), keyed by the stable path-based TreeNode ids. Empty stored value =
@@ -211,29 +227,71 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         dirIcons: Map<Path, String> = emptyMap(),
         excluded: Boolean = false,
     ): List<TreeNode> {
-        val entries = runCatching { Files.list(dir).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
-        val dirs = entries.filter { Files.isDirectory(it) && !isDerivedDir(it) }.sortedBy { it.fileName.toString().lowercase() }
-        val files = entries.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString().lowercase() }
-        return dirs.map { d ->
-            val derived = excluded || d.fileName?.toString() == "build"
-            TreeNode(
-                id = "dir:$d",
-                name = d.fileName.toString(),
-                kind = NodeKind.Folder,
-                filePath = null,
-                iconId = when {
-                    derived -> "build-output"
-                    else -> dirIcons[d.normalize()]
-                        ?: ctx.services.iconFor(IconTarget.Directory(d.fileName.toString(), emptySet())) ?: "folder"
-                },
-                children = rawChildren(d, moduleRoots, dirIcons, derived),
-                dirPath = d.toString(),
-                styleHint = if (derived) "excluded" else null,
-            )
-        } + files.map { f ->
+        val (dirs, files) = rawPartition(dir)
+        return dirs.map { d -> rawDirNode(d, moduleRoots, dirIcons, excluded) } + files.map { f ->
             val node = fileNode(f, ctx.services.moduleForFile(f), moduleRoots)
             if (excluded) node.copy(styleHint = "excluded") else node
         }
+    }
+
+    /**
+     * A raw directory row that **compacts single-child chains**, like VS Code's compact folders: from [start] it
+     * follows the chain while a level holds exactly one directory and no files, so `src/ → main/ → java/` is one
+     * `src/main/java` row instead of three indent levels. On a phone each level costs width the file names need.
+     *
+     * The chain only extends into plain directories. A directory with its own meaning (a module, a source or
+     * res root, `build/`) starts a row of its own so its icon stays visible: `src/main` then `java/com/acme`
+     * with the source-root icon. Each level is kept as a [PackageSegment] so the UI can still target any of
+     * them for New, and the row's id and [TreeNode.dirPath] are the deepest directory's (what Rename edits).
+     */
+    private fun rawDirNode(
+        start: Path,
+        moduleRoots: Map<Path, String>,
+        dirIcons: Map<Path, String>,
+        excluded: Boolean,
+    ): TreeNode {
+        val derived = excluded || start.fileName?.toString() == "build"
+        val chain = arrayListOf(start)
+        var listing = rawPartition(start)
+        while (true) {
+            val (dirs, files) = listing
+            val next = dirs.singleOrNull() ?: break
+            if (files.isNotEmpty() || dirIcons.containsKey(next.normalize()) || next.fileName?.toString() == "build") break
+            chain.add(next)
+            listing = rawPartition(next)
+        }
+        val end = chain.last()
+        val labels = chain.map { it.fileName.toString() }
+        val (dirs, files) = listing
+        val children = dirs.map { d -> rawDirNode(d, moduleRoots, dirIcons, derived) } + files.map { f ->
+            val node = fileNode(f, ctx.services.moduleForFile(f), moduleRoots)
+            if (derived) node.copy(styleHint = "excluded") else node
+        }
+        return TreeNode(
+            id = "dir:$end",
+            name = labels.joinToString("/"),
+            kind = NodeKind.Folder,
+            filePath = null,
+            iconId = when {
+                derived -> "build-output"
+                else -> dirIcons[start.normalize()]
+                    ?: ctx.services.iconFor(IconTarget.Directory(start.fileName.toString(), emptySet())) ?: "folder"
+            },
+            children = children,
+            packageSegments = if (chain.size > 1) {
+                chain.indices.map { k -> PackageSegment(labels.subList(0, k + 1).joinToString("/"), chain[k].toString()) }
+            } else emptyList(),
+            dirPath = end.toString(),
+            styleHint = if (derived) "excluded" else null,
+        )
+    }
+
+    /** What the All-Files view lists in [dir]: (subdirectories minus [isDerivedDir], files), each sorted by name. */
+    private fun rawPartition(dir: Path): Pair<List<Path>, List<Path>> {
+        val entries = runCatching { Files.list(dir).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
+        val dirs = entries.filter { Files.isDirectory(it) && !isDerivedDir(it) }.sortedBy { it.fileName.toString().lowercase() }
+        val files = entries.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString().lowercase() }
+        return dirs to files
     }
 
     /** Bulky/derived directories not worth showing even in the All-Files view. (`build/` IS shown — dimmed.) */
@@ -241,7 +299,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         val name = dir.fileName?.toString() ?: return false
         if (name == ".gradle" || name == ".idea") return true
         // The platform caches can be large + transient; keep `.platform/workspace.json` etc. visible though.
-        return dir.parent?.fileName?.toString() == ".platform" && name == "caches"
+        return dir.parent?.fileName?.toString() == ".platform" && (name == "caches" || name == "local-history" || name == "trash")
     }
 
     /** A surfaced content root. `SOURCE`/`GENERATED`/`AIDL` roots are package contexts (compactable,
@@ -498,6 +556,50 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
 
     override fun copyPath(path: String, destDir: String): String? =
         ctx.services.copyPath(Paths.get(path), Paths.get(destDir))?.toString()?.also { ctx.bumpFileSystemEpoch() }
+
+    override fun transferPaths(kind: UiTransferKind, items: List<UiTransferItem>, destDir: String): UiTransferResult {
+        val r = ctx.services.transferPaths(
+            move = kind == UiTransferKind.Move,
+            items = items.map { Paths.get(it.path) to it.onConflict.toCore() },
+            destDir = Paths.get(destDir),
+        )
+        if (r.done.isNotEmpty() || r.undoToken != null) ctx.bumpFileSystemEpoch()
+        // Report against the caller's own spellings of the sources, so it can match them back to its selection.
+        val asGiven = items.associateBy({ Paths.get(it.path).toAbsolutePath().normalize() }, { it.path })
+        fun given(p: Path) = asGiven[p] ?: p.toString()
+        return UiTransferResult(
+            done = r.done.entries.associate { (from, to) -> given(from) to to.toString() },
+            skipped = r.skipped.map(::given),
+            failed = r.failed.entries.associate { (p, why) -> given(p) to why },
+            undoToken = r.undoToken,
+        )
+    }
+
+    override fun deletePaths(paths: List<String>): UiDeleteResult {
+        val r = ctx.services.deletePaths(paths.map { Paths.get(it) })
+        if (r.deleted.isNotEmpty()) ctx.bumpFileSystemEpoch()
+        return UiDeleteResult(r.deleted.map { it.toString() }, r.failed.mapKeys { it.key.toString() }, r.undoToken)
+    }
+
+    override val supportsUndo: Boolean get() = true
+
+    override fun undoFileOperation(token: String): UiUndoResult {
+        val r = ctx.services.undoFileOperation(token)
+        if (r.moved.isNotEmpty() || r.removed.isNotEmpty() || r.restored.isNotEmpty()) ctx.bumpFileSystemEpoch()
+        return UiUndoResult(
+            ok = r.ok,
+            message = r.message,
+            moved = r.moved.entries.associate { (from, to) -> from.toString() to to.toString() },
+            removed = r.removed.map { it.toString() },
+            restored = r.restored.map { it.toString() },
+        )
+    }
+
+    private fun UiConflictChoice.toCore(): ConflictChoice = when (this) {
+        UiConflictChoice.Replace -> ConflictChoice.Replace
+        UiConflictChoice.KeepBoth -> ConflictChoice.KeepBoth
+        UiConflictChoice.Skip -> ConflictChoice.Skip
+    }
 
     override fun listDirectory(dirPath: String): List<UiDirEntry> {
         val dir = Paths.get(dirPath)

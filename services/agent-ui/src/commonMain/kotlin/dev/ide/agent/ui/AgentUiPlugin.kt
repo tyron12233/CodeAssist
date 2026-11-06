@@ -1,6 +1,9 @@
 package dev.ide.agent.ui
 
+import androidx.compose.runtime.collectAsState
+import dev.ide.ui.ext.HomeTabContribution
 import dev.ide.ui.ext.OverlayContribution
+import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.UiContributionScope
@@ -23,7 +26,18 @@ object AgentUiPlugin : UiPlugin {
                 title = "AI",
                 iconId = "sparkle",
                 anchor = ToolWindowAnchor.RIGHT,
-                content = { ctx -> ChatDrawer(ctx.backend, fileActions = ctx.fileActions, activeFilePath = ctx.activeFilePath) },
+                content = { ctx -> ChatDrawer(ctx.backend, fileActions = ctx.fileActions, activeFilePath = ctx.activeFilePath, onOpenFile = { ctx.openFile(it) }) },
+                // A reply still running: the AI icon animates in the editor's stripe and bottom bar.
+                busy = { backend -> backend.agent.chatState.collectAsState().value.busy },
+            ),
+        )
+        // The AI home tab: create an app by chatting, or chat about a project, without opening the editor.
+        scope.homeTab(
+            HomeTabContribution(
+                id = HomeTabContribution.AI,
+                title = "AI",
+                icon = CaIcons.sparkle,
+                content = { ctx -> AgentHomeTab(ctx) },
             ),
         )
         // The write-permission prompt (ASK_EACH): observes backend.agent.permissionRequest and shows only while

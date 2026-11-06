@@ -653,6 +653,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         programInterpreter = ctx.programInterpreter,
     )
 
+    /** The plugins' test runners, minus any that claim a kind the built-in runners own. */
+    internal fun testProviders(): List<dev.ide.build.TestProvider> =
+        ctx.platform.extensions.extensions(dev.ide.build.TEST_PROVIDER_EP)
+            .filter { it.id.isNotBlank() && it.id != TestOutput.LOCAL && it.id != TestOutput.INSTRUMENTED && ':' !in it.id }
+
     /** Messages from [buildContext]'s error channel, awaiting the next [launch]. */
     private val extensionWarnings = java.util.Collections.synchronizedList(ArrayList<String>())
 
@@ -664,6 +669,15 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
      */
     private fun contributedAction(id: String): Pair<String, RunAction>? {
         val context = buildContext()
+        // A plugin's tests: `<provider id>:<module>[:<targets>]`, the shape a gutter mark and a re-run both use.
+        for (provider in testProviders()) {
+            if (!id.startsWith("${provider.id}:")) continue
+            val rest = id.removePrefix("${provider.id}:")
+            val module = ctx.modules().firstOrNull { it.name == rest.substringBefore(':') } ?: continue
+            val targets = rest.substringAfter(':', "").split('\n').filter { it.isNotEmpty() }
+            val project = ctx.projectOf(module) ?: continue
+            provider.run(module, targets, project, context)?.let { return module.name to it }
+        }
         for (project in ctx.store.workspace.projects) {
             val system = buildSystemFor(project) ?: continue
             val spec = project.runTasksSafely(system).firstOrNull { it.id == id } ?: continue
@@ -691,6 +705,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // every such module offers — so a library module (no main) is still buildable from the Run picker.
         for (m in ctx.modules()) {
             if (!isConsoleRunModule(m)) continue
+            // A plugin's module type (a Dart package) that no build system builds offers its own rows through
+            // RUN_TASK_PROVIDER_EP; a Build row here would only fail with "no build system supports it".
+            if (buildSystemFor(m.type) == null && ctx.projectOf(m)?.let { buildSystemFor(it) } == null) continue
             if (runnableMainFor(m) != null) add(
                 RunTaskOption(
                     "run:${m.name}", "Run ${m.name}", "run"
@@ -702,6 +719,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // active variant.
         for (m in ctx.modules()) {
             if (hasTestSources(m)) add(RunTaskOption("test:${m.name}", "Test ${m.name}", "test"))
+            for (provider in testProviders()) {
+                if (runCatching { provider.appliesTo(m) }.getOrDefault(false)) {
+                    add(RunTaskOption("${provider.id}:${m.name}", "${provider.displayName} · ${m.name}", "test"))
+                }
+            }
             // Instrumented tests need a device the IDE drives over adb, so only where the installer can.
             if (m.type.id == "android-app" && ctx.apkInstaller?.runsInstrumentation == true && hasAndroidTestSources(m)) {
                 add(RunTaskOption("${TestOutput.INSTRUMENTED}:${m.name}", "Instrumented tests · ${m.name}", "test"))
@@ -713,6 +735,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 // On device, the android Run builds + installs + launches. On desktop it does the same onto a
                 // device over adb, one entry per connected device, and the assemble task stays beside them.
                 val installer = ctx.apkInstaller
+                // A plugin is tried in the sandbox IDE first: no install, no restart, and a crash there leaves
+                // this IDE standing. Listed ahead of "Install plugin" so it is what Run does by default.
+                if (PluginProject.isPluginModule(m) && pluginSandbox() != null) {
+                    add(RunTaskOption("pluginSandbox:${m.name}:${v.name}", "Run plugin in sandbox $cap · ${m.name}", "android"))
+                }
                 if (installer != null) {
                     val action = if (PluginProject.isPluginModule(m)) "Install plugin" else "Run"
                     val targets = if (installer.choosesTarget) installer.targets() else emptyList()
@@ -948,7 +975,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> assemble $variant · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     )
                 }
 
@@ -974,7 +1001,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> bundle $variant (.aab) · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     ) { log -> log("Signed bundle: $aab") }
                 }
 
@@ -1000,7 +1027,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> assembleAar $variant (.aar) · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     ) { log -> log("Packaged AAR: $aar") }
                 }
 
@@ -1059,6 +1086,33 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                     ) { log -> log("Built: ${jarPath(module)}") }
                 }
 
+                id.startsWith("pluginSandbox:") -> {
+                    val parts = id.removePrefix("pluginSandbox:").split(":", limit = 2)
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val sandbox = pluginSandbox() ?: return fail("The plugin sandbox is only available on device.")
+                    val android = androidBuild ?: return fail("Android SDK not found.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val graph = android.createBuildGraph(
+                        project,
+                        BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE),
+                        buildContext(),
+                    )
+                    val apk = AndroidBuildSystem.signedApkPath(module, variant)
+                    launch(
+                        module.name,
+                        graph,
+                        "> Run plugin in sandbox $variant · ${module.name}",
+                        firstBuildDexBanner(module, variant)
+                    ) { log ->
+                        // The sandbox says what it did: started fresh, or reloaded the plugin in place.
+                        sandbox.launch(apk, log)
+                    }
+                }
+
                 id.startsWith("androidRun:") -> {
                     // module:variant[:target]. Limit 3, because a target can be a network adb serial
                     // (`192.168.1.5:5555`) with a colon of its own.
@@ -1100,7 +1154,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         module.name,
                         graph,
                         "> $label $variant · ${module.name}",
-                        firstBuildDexBanner(module)
+                        firstBuildDexBanner(module, variant)
                     ) { log ->
                         installer.installAndLaunch(apk, launchPkg, target, log)
                         if (isPlugin) {
@@ -1117,11 +1171,22 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 else -> {
                     val contributed = contributedAction(id) ?: return fail("Unknown task: $id")
                     val (label, action) = contributed
+                    // A contributor running an interactive program asked for the Run console: open the same
+                    // session a built-in console run gets and hand its I/O to the graph before it starts.
+                    val console = action.console
+                    if (console != null) {
+                        val sessionId = runConsoleSeq.incrementAndGet()
+                        val io = RunProgramIo(sessionId, label, console.title)
+                        currentRunIo = io
+                        _runConsole.value = RunConsoleUi(sessionId, label, console.title)
+                        console.io = io
+                    }
                     launch(
                         label,
                         action.graph,
                         action.header,
                         action.banner,
+                        onComplete = if (console != null) ::finalizeRunConsole else null,
                         onSuccess = action.onSuccess
                     )
                 }
@@ -1174,8 +1239,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
      * is empty on a machine's first Android build, so every library is dexed from scratch — the slow part of
      * a cold build. We reassure the user the next build reuses the cache, but only when there are enough
      * libraries that dexing is actually felt; a tiny app dexes fast and the notice would just be noise.
+     *
+     * A minified [variant] gets no notice: R8 dexes the whole app itself and never fills the library dex
+     * cache, so the notice would claim a first build on every release build, and the next one is no faster.
      */
-    private fun firstBuildDexBanner(module: Module): String? {
+    private fun firstBuildDexBanner(module: Module, variant: String? = null): String? {
+        if (variant != null && minifies(module, variant)) return null
         val depCount = runCatching {
             module.classpath(DependencyScope.RUNTIME_ONLY).entries.count { it.kind == ClasspathEntryKind.LIBRARY }
         }.getOrDefault(0)
@@ -1193,6 +1262,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             notes += "This module's minSdk is $minSdk. Below API 26, on-device dexing must desugar the whole " + "library classpath, which is significantly slower and re-dexes every library when dependencies " + "change. If your app can require API 26+, raising minSdk makes library dexing far faster and cacheable."
         }
         return notes.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+    }
+
+    /** Whether [variant] of [module] is built through R8 (`minifyEnabled`) rather than D8 library dexing. */
+    private fun minifies(module: Module, variant: String): Boolean {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return false
+        val v = AndroidVariants.select(module, variant) ?: return false
+        return facet.buildType(v.buildTypeName)?.minifyEnabled == true
     }
 
     /** Whether the shared dex cache already holds any dexed output (so a build isn't the cold first one). */
@@ -1438,7 +1514,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         val wasRunning = _buildState.value.status == RunStatus.Running
         _buildState.update {
             if (it.status == RunStatus.Running) it.copy(
-                status = RunStatus.Failed, log = it.log + logLine("Stopped.", UiLogLevel.Warn)
+                status = RunStatus.Failed, stopped = true, log = it.log + logLine("Stopped.", UiLogLevel.Warn)
             ) else it
         }
         if (wasRunning) {
@@ -1572,6 +1648,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
 
     /** A build-blocking message when [module] (or a module it depends on) has unresolved declared dependencies,
      *  else null. A build can't succeed against a missing classpath, so we refuse with a clear, actionable why. */
+    /** The host's sandbox IDE for trying a plugin build, or null where there is none (desktop, tests). */
+    private fun pluginSandbox(): dev.ide.core.PluginSandbox? =
+        runCatching { ctx.store.workspace.serviceOrNull(dev.ide.core.PLUGIN_SANDBOX) }.getOrNull()
+
     private fun unresolvedBlocker(module: Module): String? {
         val bad = ctx.moduleBuildClosure(module)
             .flatMap { m -> ctx.dependencies.declaredUnresolved(m).map { m.name to it } }

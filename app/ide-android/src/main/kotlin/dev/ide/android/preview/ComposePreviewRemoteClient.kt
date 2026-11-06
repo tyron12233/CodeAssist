@@ -8,6 +8,9 @@ import android.graphics.Bitmap
 import android.graphics.ColorSpace
 import android.hardware.HardwareBuffer
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.os.IBinder
 import android.os.Process
 import dev.ide.core.LoweredComposePreview
@@ -63,7 +66,56 @@ class ComposePreviewRemoteClient(context: Context) {
 
     private val deathRecipient = IBinder.DeathRecipient {
         log.warn("ui(pid=${Process.myPid()}): :preview died (binderDied). IDE SURVIVED, falling back in-process.")
-        synchronized(lock) { daemon = null }
+        synchronized(lock) { daemon = null; parked.clear() }
+    }
+
+    /** Where a session's callbacks go. Swapped when a parked session is reused by another preview. */
+    internal class SinkRoute(@Volatile var sink: FrameSink) {
+        /** False from the moment a session's program is cleared until the next one is sent, so a frame of the
+         *  previous preview still in flight never reaches the preview that took the session over. */
+        @Volatile var accepting = true
+    }
+
+    private class Parked(val key: String, val session: Session, val parkedAt: Long)
+
+    /** Sessions a preview let go of recently (guarded by [lock]), kept warm for the next one with the same key. */
+    private val parked = ArrayList<Parked>()
+    private val main = Handler(Looper.getMainLooper())
+
+    /**
+     * Keep [session] for reuse instead of closing it: switching to another `@Preview`, or back, then takes it with
+     * [takeParked] and only sends the new program, instead of building a new off-screen display, window and
+     * composition in `:preview`. Its program is cleared so it stops drawing while parked. At most [PARK_MAX] are
+     * kept, each for [PARK_MS]; [key] must name everything a session is opened with that [Session.resize] and
+     * [Session.update] can't change (classpath, resources, content mode, sandbox).
+     */
+    fun park(session: Session, key: String) {
+        session.clearProgram()
+        val evicted = ArrayList<Session>()
+        synchronized(lock) {
+            parked += Parked(key, session, SystemClock.elapsedRealtime())
+            while (parked.size > PARK_MAX) evicted += parked.removeAt(0).session
+        }
+        evicted.forEach { it.close() }
+        main.postDelayed({ closeExpired() }, PARK_MS + 50)
+    }
+
+    /** A parked session opened with [key], now delivering to [sink], or null when there is none to reuse. */
+    fun takeParked(key: String, sink: FrameSink): Session? {
+        val session = synchronized(lock) {
+            val i = parked.indexOfLast { it.key == key && it.session.daemon === daemon }
+            if (i < 0) null else parked.removeAt(i).session
+        } ?: return null
+        session.rebind(sink)
+        return session
+    }
+
+    private fun closeExpired() {
+        val now = SystemClock.elapsedRealtime()
+        val expired = synchronized(lock) {
+            parked.filter { now - it.parkedAt >= PARK_MS }.also { parked.removeAll(it) }
+        }
+        expired.forEach { it.session.close() }
     }
 
     private val connection = object : ServiceConnection {
@@ -90,6 +142,9 @@ class ComposePreviewRemoteClient(context: Context) {
     /** Eagerly start + bind `:preview` (forks the process) so the first open doesn't pay the bind latency. */
     fun warmUp() = ensureBound()
 
+    /** Whether `:preview` is already running and bound, i.e. an open now doesn't pay for starting the process. */
+    fun isConnected(): Boolean = synchronized(lock) { daemon != null }
+
     private fun awaitDaemon(timeoutMs: Long): IComposePreviewSession? {
         ensureBound()
         synchronized(lock) {
@@ -109,7 +164,8 @@ class ComposePreviewRemoteClient(context: Context) {
      * carries the module jars for library composables the bundled Compose lacks (empty → bundled-only).
      */
     fun openSession(
-        lowered: LoweredComposePreview,
+        /** Null opens the session with nothing to render yet; the program follows with [Session.update]. */
+        lowered: LoweredComposePreview?,
         widthPx: Int,
         heightPx: Int,
         density: Float,
@@ -126,29 +182,32 @@ class ComposePreviewRemoteClient(context: Context) {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
         val local = seq.incrementAndGet()
         val dir = File(appContext.cacheDir, "compose-preview/session-$local").apply { mkdirs() }
+        val route = SinkRoute(sink)
         val callback = object : IComposePreviewCallback.Stub() {
             override fun onFrame(frameFile: String?, widthPx: Int, heightPx: Int, s: Long) {
+                if (!route.accepting) { runCatching { File(frameFile!!).delete() }; return }
                 val bmp = runCatching { readFrame(File(frameFile!!), widthPx, heightPx) }.getOrNull() ?: return
                 runCatching { File(frameFile!!).delete() }
-                sink.onFrame(bmp, s)
+                route.sink.onFrame(bmp, s)
             }
             override fun onFrameBuffer(buffer: HardwareBuffer?, widthPx: Int, heightPx: Int, s: Long) {
                 if (buffer == null) return
+                if (!route.accepting) { runCatching { buffer.close() }; return }
                 // Wrap the shared GPU buffer directly — no pixel copy. Our HardwareBuffer handle can be closed once
                 // the (hardware) bitmap holds its reference. Only reached on API 29+ (:preview gates the fast path).
                 val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     runCatching { Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB)) }.getOrNull()
                 } else null
                 runCatching { buffer.close() }
-                if (bmp != null) sink.onFrame(bmp, s)
+                if (bmp != null) route.sink.onFrame(bmp, s)
             }
-            override fun onError(message: String?) { sink.onError(message ?: "unknown error") }
-            override fun onContentSize(widthPx: Int, heightPx: Int) { sink.onContentSize(widthPx, heightPx) }
-            override fun onPartialError(message: String?) { sink.onPartialError(message) }
+            override fun onError(message: String?) { route.sink.onError(message ?: "unknown error") }
+            override fun onContentSize(widthPx: Int, heightPx: Int) { route.sink.onContentSize(widthPx, heightPx) }
+            override fun onPartialError(message: String?) { route.sink.onPartialError(message) }
             override fun onSandboxFindings(findings: Array<out String>?) {
                 // "categoryId\tmember" — an unknown id (a newer :preview against an older IDE) is dropped
                 // rather than crashing the callback thread.
-                sink.onSandboxFindings(
+                route.sink.onSandboxFindings(
                     findings.orEmpty().mapNotNull { entry ->
                         val i = entry.indexOf('\t')
                         if (i <= 0) return@mapNotNull null
@@ -159,10 +218,10 @@ class ComposePreviewRemoteClient(context: Context) {
         }
         val blob = File(dir, "req-open.blob")
         return runCatching {
-            blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
+            blob.writeBytes(if (lowered == null) ByteArray(0) else ComposePreviewWireCodec.encode(lowered))
             val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, wrapContent, dir.path, sandbox, callback)
             if (id < 0) { dir.deleteRecursively(); null }
-            else Session(d, id, runCatching { d.pid() }.getOrDefault(-1), dir)
+            else Session(d, id, runCatching { d.pid() }.getOrDefault(-1), dir, route)
         }.getOrElse { log.warn("compose openSession threw", it); dir.deleteRecursively(); null }
     }
 
@@ -203,13 +262,27 @@ class ComposePreviewRemoteClient(context: Context) {
     }
 
     /** A live remote preview session: push edits via [update], re-target via [resize], tear down via [close]. */
-    inner class Session(
-        private val daemon: IComposePreviewSession,
+    inner class Session internal constructor(
+        internal val daemon: IComposePreviewSession,
         val id: Int,
         val remotePid: Int,
         private val frameDir: File,
+        private val route: SinkRoute,
     ) {
+        /** Deliver this session's callbacks to [sink] from now on; frames wait for the next [update]. */
+        internal fun rebind(sink: FrameSink) {
+            route.accepting = false
+            route.sink = sink
+        }
+
+        /** Drop the program (an empty blob): the session draws nothing until the next [update]. */
+        internal fun clearProgram() {
+            route.accepting = false
+            runCatching { daemon.updateBytes(id, ByteArray(0)) }
+        }
+
         fun update(lowered: LoweredComposePreview) {
+            route.accepting = true
             runCatching {
                 val encoded = ComposePreviewWireCodec.encode(lowered)
                 // Carry the blob inline over Binder when it fits under the async transaction buffer (the common
@@ -250,6 +323,10 @@ class ComposePreviewRemoteClient(context: Context) {
 
     companion object {
         private const val BIND_TIMEOUT_MS = 10_000L
+
+        /** How many released sessions are kept warm, and for how long (see [park]). */
+        private const val PARK_MAX = 2
+        private const val PARK_MS = 30_000L
 
         /** Live-edit blobs at or below this go inline over the oneway Binder call; larger ones use the shared file.
          *  256 KB sits well under the ~1 MB Binder transaction limit (and the async buffer half of it). */

@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 class AnalyticsLogSink(
     private val analytics: AnalyticsService,
     private val throttleMs: Long = 10_000,
+    /** Records that are not this app's errors to report (a plugin sandbox's log relayed into the real IDE). */
+    private val ignore: (LogRecord) -> Boolean = { false },
 ) : LogSink {
 
     private val lastSent = ConcurrentHashMap<String, Long>()
@@ -29,6 +31,7 @@ class AnalyticsLogSink(
     override fun log(record: LogRecord) {
         val t = record.throwable ?: return
         if (record.level != LogLevel.ERROR) return
+        if (ignore(record)) return
 
         val signature = t.javaClass.name
         val now = System.currentTimeMillis()
