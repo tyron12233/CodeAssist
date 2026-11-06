@@ -29,9 +29,10 @@ import java.io.File
  * `cd` in one [run] is still in effect in the next, exactly like the ZipCLI terminal. Calls are serialized:
  * the session and the file system are not meant for concurrent writers.
  *
- * Runs are non-interactive. A command that needs confirmation (a destructive `delete`, an overwrite) stops the
- * batch *before* the prompt and the [Outcome] names it, so a caller (the AI agent, a script button) decides
- * whether to repeat the run with `confirm = true`. `edit` (the terminal's full-screen editor) is unavailable.
+ * Runs are non-interactive by default. A command that needs confirmation (a destructive `delete`, an overwrite)
+ * stops the batch *before* the prompt and the [Outcome] names it, so a caller (the AI agent) decides whether to
+ * repeat the run with `confirm = true`; a caller that can ask a person (the terminal window) passes `onConfirm`
+ * to [run] instead. `edit` (the Android terminal's full-screen editor) is unavailable either way.
  *
  * Host-specific commands of the Android app (`saf`, `mcp`) are deliberately not registered here.
  */
@@ -75,12 +76,17 @@ class ZipCliProject(root: File) {
 
     /** Parses [script] without running or changing anything; returns one line per problem (empty = fine). */
     suspend fun check(script: String): List<String> =
-        mutex.withLock { newRunner(CollectingIo(MAX_CHECK_CHARS)).check(script).problems }
+        mutex.withLock { newRunner(CollectingIo(MAX_CHECK_CHARS, null, null)).check(script).problems }
 
     /**
      * Runs [script] (one command, several, or a multi-line script with `&&`, `||`, `for` loops and heredocs).
      * [cwd] is a virtual path (relative paths resolve against the session's current directory); when it is
      * not an existing directory nothing runs and the outcome says so.
+     *
+     * Interactive callers (the terminal window) pass [onLine], called with every output line as it is printed
+     * (error lines carry their `error: ` prefix), and [onConfirm], which answers a confirmation prompt: with it
+     * a destructive step asks and carries on instead of stopping the batch. Without [onConfirm] the run is
+     * non-interactive (see the class comment). Pass `maxOutputChars = 0` to stream through [onLine] only.
      */
     suspend fun run(
         script: String,
@@ -88,6 +94,8 @@ class ZipCliProject(root: File) {
         cwd: String? = null,
         timeoutSeconds: Long = DEFAULT_TIMEOUT_SECONDS,
         maxOutputChars: Int = Limits.MCP_OUTPUT_CHARS,
+        onLine: ((String) -> Unit)? = null,
+        onConfirm: (suspend (String) -> Boolean)? = null,
     ): Outcome {
         if (script.isBlank()) return failure("Nothing to run: the command is empty.", 2)
         if (script.length > Limits.MCP_COMMAND_CHARS) {
@@ -102,7 +110,7 @@ class ZipCliProject(root: File) {
                 }
                 shell.cwd = target
             }
-            val io = CollectingIo(maxOutputChars)
+            val io = CollectingIo(maxOutputChars, onLine, onConfirm)
             val runner = newRunner(io)
             synchronized(history) {
                 history += script.trim()
@@ -132,25 +140,33 @@ class ZipCliProject(root: File) {
     private fun failure(message: String, status: Int) =
         Outcome(message + "\n", status, shell.cwd, truncated = false, timedOut = false, pendingConfirmation = null, notRun = 0)
 
-    /** Collects output into a string, capped; never answers a prompt (the runner stops before one instead). */
-    private class CollectingIo(private val cap: Int) : ScriptIo {
+    /**
+     * Collects output into a string (capped) and forwards each line to [onLine] as it is printed. A prompt is
+     * answered by [onConfirm] when there is one; without it nobody can answer, so [canPrompt] is false and the
+     * runner stops the batch before the prompt instead.
+     */
+    private class CollectingIo(
+        private val cap: Int,
+        private val onLine: ((String) -> Unit)?,
+        private val onConfirm: (suspend (String) -> Boolean)?,
+    ) : ScriptIo {
         private val sb = StringBuilder()
         var truncated = false
             private set
 
-        override val canPrompt: Boolean get() = false
+        override val canPrompt: Boolean get() = onConfirm != null
 
         fun text(): String = sb.toString()
 
         override fun print(lines: List<String>, kind: LineKind) {
             for (line in lines) {
-                if (sb.length >= cap) { truncated = true; return }
-                if (kind == LineKind.ERROR) sb.append("error: ")
-                sb.append(line).append('\n')
+                val text = if (kind == LineKind.ERROR) "error: $line" else line
+                onLine?.invoke(text)
+                if (sb.length >= cap) truncated = true else sb.append(text).append('\n')
             }
         }
 
-        override suspend fun confirm(prompt: String): Boolean = false
+        override suspend fun confirm(prompt: String): Boolean = onConfirm?.invoke(prompt) ?: false
         override fun clear() {}
         override fun openEditor(path: String, content: String) {}
         override suspend fun requestSafPermission() {}

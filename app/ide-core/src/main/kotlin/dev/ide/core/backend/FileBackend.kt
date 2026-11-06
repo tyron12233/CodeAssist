@@ -33,6 +33,7 @@ private const val MAX_TEXT_BYTES = 5_000_000L
 internal class FileBackend(private val ctx: BackendContext) : FileService {
 
     override val fileSystemEpoch: StateFlow<Int> get() = ctx.fileSystemEpoch
+    override fun notifyExternalChange() = ctx.bumpFileSystemEpoch()
 
     override fun fileTree(mode: TreeViewMode): TreeNode {
         // Picker-safe: with no project open (the lazy-start path), the engine-backed tree builders would hit

@@ -53,6 +53,7 @@ dependencies {
     implementation(project(":vcs-impl")) // the Git engine (JGit working copy + the GitHub client + the account store)
     implementation(project(":vcs-ui")) // the version-control Compose UI plugin (VcsUiPlugin) — paired with VcsPlugin in BuiltInPlugins
     implementation(project(":zipcli-plugin")) // ZipCLI: the engine plugin + the `zipcli` agent tool (see AgentBackend)
+    implementation(project(":zipcli-ui")) // the ZipCLI terminal tab (ZipCliUiPlugin) — paired with ZipCliPlugin in BuiltInPlugins
     // Opt-in usage analytics. `api` because AnalyticsService appears in IdeServicesBackend's (public)
     // constructor signature, so a host wiring it (ide-android) needs the type on its compile classpath.
     api(project(":analytics-api"))

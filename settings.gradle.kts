@@ -184,6 +184,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
+        ":zipcli-ui", // the ZipCLI terminal tab as a self-contained plugin module
         ":ide-core",
         ":ide-desktop",
         // The iOS shell: a Compose `UIViewController` over :ide-ui, the third host beside desktop and
@@ -249,7 +250,7 @@ val layers = mapOf(
         "deps-api", "deps-impl", "vcs-api", "vcs-impl", "vcs-ui",
         "store-api", "store-impl", "store-bridge",
         "analytics-api", "analytics-impl", "agent-api", "agent-impl", "agent-mcp", "agent-ui",
-        "zipcli-core", "zipcli-plugin",
+        "zipcli-core", "zipcli-plugin", "zipcli-ui",
     ),
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl", "spi-compat"),

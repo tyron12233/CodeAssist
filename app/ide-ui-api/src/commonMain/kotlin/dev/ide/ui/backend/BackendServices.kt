@@ -68,6 +68,10 @@ interface FileService {
 
     /** Bumps whenever a file is created/imported/removed, so the UI re-reads [fileTree]. */
     val fileSystemEpoch: StateFlow<Int> get() = MutableStateFlow(0)
+
+    /** A tool outside the IDE's own file operations (a terminal plugin) may have changed files on disk: bump
+     *  [fileSystemEpoch] so the tree and open tabs re-read. A host with nothing to refresh keeps the no-op. */
+    fun notifyExternalChange() {}
 }
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,10 @@
 # ZipCLI in CodePrimer
 
 ZipCLI (the Android file / search-and-replace / ZIP command line, with its scripting language) is built in as a
-plugin. The AI agent gets one extra tool, `zipcli`, that runs ZipCLI commands and scripts over the **open
-project**; the project root appears as `/project`. Typical uses: bulk `replace` across a source tree, `find` /
+plugin with two entry points, both over the **open project** (its root appears as `/project`):
+
+- a **ZipCLI terminal tab** in the bottom console, beside Log / Problems / App log;
+- a `zipcli` **tool for the AI agent**. Typical uses: bulk `replace` across a source tree, `find` /
 `search` with ZipCLI's smart-case and regex handling, `zip` / `unzip` of assets or release bundles, and
 re-runnable `.zcli` scripts (see `services/zipcli-core/docs/SCRIPTING.md` and `examples/backup.zcli`).
 
@@ -14,8 +16,9 @@ re-runnable `.zcli` scripts (see `services/zipcli-core/docs/SCRIPTING.md` and `e
 | `services/zipcli-core/src/main/kotlin/dev/ide/zipcli/ZipCliProject.kt` | CodePrimer glue: mounts a project directory at `/project`, runs scripts non-interactively | us |
 | `services/zipcli-core/tests/`, `docs/`, `examples/`, `CHANGELOG.md` | ZipCLI's own tests and docs, copied verbatim | only `sync-from-zipcli.sh` |
 | `services/zipcli-plugin/` | `ZipCliPlugin` (identity, Settings > Plugins toggle) and `ZipCliAgentTool` | us |
+| `services/zipcli-ui/` | `ZipCliUiPlugin` (the terminal tab), `TerminalPanel` / `TerminalSession` (common Compose) | us |
 
-Not brought over: the Android app shell and UI, the SAF (folder-grant) file system and `saf` command, and the
+Not brought over: the Android app shell and its terminal UI (replaced by `zipcli-ui`), the SAF (folder-grant) file system and `saf` command, and the
 `mcp` server commands. CodePrimer has its own agent MCP server, and projects are plain directories.
 
 ## Shared files touched (the whole upstream-conflict surface)
@@ -23,12 +26,14 @@ Not brought over: the Android app shell and UI, the SAF (folder-grant) file syst
 | File | Change |
 |---|---|
 | `settings.gradle.kts` | 2 `include(...)` lines + 1 line in the `"services"` group list |
-| `app/ide-core/build.gradle.kts` | 1 dependency line |
-| `app/ide-core/module.toml` | `{ module = "zipcli-plugin" }` in the `implementation` list |
-| `app/ide-core/.../plugins/BuiltInPlugins.kt` | 1 import + 1 `BuiltInPlugin(ZipCliPlugin())` entry |
+| `app/ide-core/build.gradle.kts` | 2 dependency lines |
+| `app/ide-core/module.toml` | `zipcli-plugin` and `zipcli-ui` in the `implementation` list |
+| `app/ide-core/.../plugins/BuiltInPlugins.kt` | 2 imports + 1 `BuiltInPlugin(ZipCliPlugin(), ui = ZipCliUiPlugin)` entry |
+| `app/ide-ui-api/.../backend/BackendServices.kt` | `FileService.notifyExternalChange()`, a default no-op |
+| `app/ide-core/.../backend/FileBackend.kt` | its override (bumps the file-system epoch) |
 | `app/ide-core/.../agent/AgentBackend.kt` | 2 imports + the `zipCliTool` block + `+ zipCliTool` in `tools` |
 
-Everything else is new files, so a merge can only conflict in these five. If upstream edits one of those lines,
+Everything else is new files, so a merge can only conflict in these files. If upstream edits one of those lines,
 keep both sides: the ZipCLI lines are independent of whatever upstream added next to them.
 
 ## Keeping up with upstream CodeAssist
@@ -49,6 +54,17 @@ services/zipcli-core/tests/run.sh         # engine tests (needs kotlinc)
 
 The script copies the same file set every time and stops with an error if a new ZipCLI file needs an Android
 type, so the JVM module cannot silently break.
+
+## The terminal tab
+
+Open the console at the bottom of the editor and pick **ZipCLI**. Enter runs the line; Up / Down (or the two arrow
+buttons) walk the history; **Stop** cancels the running command; **Clear** empties the scrollback; the
+scrollback is selectable. Output streams as it is printed, and a destructive step shows a **Yes / No** strip and
+waits for you. The working directory and variables persist, and each project has its own session, which keeps
+running (and keeps its scrollback) while you look at another console tab. After every command the file tree and
+open tabs are refreshed. Your own commands run immediately; only the agent's go through the permission prompt.
+The input is one line: for several commands put them in a `.zcli` file and `run` it (heredocs and `edit` need
+that or the agent tool).
 
 ## Behaviour and limits
 
