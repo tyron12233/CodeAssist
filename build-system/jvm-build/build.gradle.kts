@@ -26,6 +26,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // The test runner's fixtures are JUnit 4 classes too (JUnit 5 + kotlin.test come with the shared test stack).
     testImplementation(libs.junit4)
+    // RunResourcesTest drives the REAL Compose resource reader a desktop run redirects (see run/RunResources.kt).
+    testImplementation(libs.compose.resources.desktop)
 }
 
 // `test/fixtures` holds tests FOR the IDE's test runner, several failing on purpose; the module's own test task

@@ -127,7 +127,11 @@ open class AsmPeerFactory(
                 else -> dispatch.invoke(proxy, vmObject, method.name, descriptor, args)
             }
             val sink = proxyExceptionSink
-            if (sink == null) dispatchMethod()
+            if (sink == null) try {
+                dispatchMethod()
+            } catch (t: Throwable) {
+                throw crossingProxy(method, t)
+            }
             else try {
                 dispatchMethod()
             } catch (t: Throwable) {

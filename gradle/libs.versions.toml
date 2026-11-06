@@ -149,6 +149,8 @@ compose-runtime-desktop = { module = "org.jetbrains.compose.runtime:runtime-desk
 # compose-ui, for the one published SPI signature that needs a DrawScope (plugin-ui-api's editor painter).
 # compileOnly there, like the runtime above: a loaded plugin binds to the IDE's own Compose.
 compose-ui-desktop = { module = "org.jetbrains.compose.ui:ui-desktop", version.ref = "compose" }
+# Compose resources (JVM/desktop), test-only in :jvm-build: a run points its real reader at the program's classpath.
+compose-resources-desktop = { module = "org.jetbrains.compose.components:components-resources-desktop", version.ref = "compose" }
 # The androidx.compose artifacts Compose Multiplatform maps to on Android, i.e. exactly what the IDE's APK
 # bundles. A plugin app compiles against these (compileOnly) and binds to the IDE's copies at runtime, so they
 # must stay in step with `compose` above and with the pins CodeAssistPluginTemplate writes into a scaffolded

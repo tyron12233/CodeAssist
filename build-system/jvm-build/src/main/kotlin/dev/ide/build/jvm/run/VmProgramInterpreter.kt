@@ -99,6 +99,8 @@ class VmProgramInterpreter(
         val programOut = PrintStream(ProgramOut(io), true, "UTF-8")
         val savedOut = System.out; val savedErr = System.err; val savedIn = System.`in`
         System.setOut(programOut); System.setErr(programOut); System.setIn(io.stdin)
+        // Bridged libraries (Compose resources) look the program's resources up on the run's classpath.
+        val resources = RunResources.install(javaClass.classLoader, request.classpath)
         try {
             coroutineScope {
                 // Wakes on cancellation (Stop): ask the VM to unwind every thread's instruction loop and
@@ -139,6 +141,7 @@ class VmProgramInterpreter(
             // close (a class it had not loaded yet then fails with `IllegalStateException: zip file closed`)
             // or a console that has already been detached.
             windows.disposeAll()
+            resources?.close()
             System.setOut(savedOut); System.setErr(savedErr); System.setIn(savedIn)
             jars.forEach { runCatching { it.close() } }
         }

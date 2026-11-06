@@ -309,7 +309,11 @@ class ReflectiveBridge(
             // return (e.g. a `DisposableEffectResult` from an inlined `onDispose { }`) is converted to its real
             // peer, else the raw VmObject reaches the caller and ClassCastExceptions there.
             val guarded = proxyExceptionSink != null || proxyFallback != null
-            return if (!guarded) marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
+            return if (!guarded) try {
+                marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
+            } catch (t: Throwable) {
+                throw crossingProxy(method, t)
+            }
             else try {
                 marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
             } catch (t: Throwable) {
@@ -427,3 +431,15 @@ class ReflectiveBridge(
         }
     }
 }
+
+/**
+ * What a proxy standing for interpreted code throws when [t] escapes it. A checked throwable [method] does not
+ * declare would be wrapped by the proxy anyway, in an [UndeclaredThrowableException] with NO message, and a
+ * caller that shows only the message turns that into nothing: Compose Desktop's window error dialog read just
+ * "Unknown error" for a `MissingResourceException` thrown inside an interpreted `Window { }` body. Wrapping it
+ * here, with the cause's own text, is the same wrapper (so [ReflectiveBridge]'s unwrap still recovers the
+ * cause for an interpreted caller), just readable.
+ */
+internal fun crossingProxy(method: Method, t: Throwable): Throwable =
+    if (t is RuntimeException || t is Error || method.exceptionTypes.any { it.isInstance(t) }) t
+    else UndeclaredThrowableException(t, t.toString())

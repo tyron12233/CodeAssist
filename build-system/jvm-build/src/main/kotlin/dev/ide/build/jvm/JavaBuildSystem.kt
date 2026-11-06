@@ -19,6 +19,7 @@ import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.moduleClosure
+import dev.ide.build.engine.resourcesDir
 import dev.ide.build.engine.testModuleDeps
 import dev.ide.build.Lifecycle
 import dev.ide.build.jvm.test.TestRunTask
@@ -107,10 +108,14 @@ class JavaBuildSystem(
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
         val java = JavaPlugin(bootClasspathFor, kotlin, plugins, generators)
-        for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
+        val closure = moduleClosure(listOf(module.id), byId)
+        for (m in closure) java.registerModule(tasks, m, byId, withJar = false)
+        // Each module's processed resources join the classpath, as on a real JVM: the interpreter reads only
+        // `.class` files from it, but a program's resources (a Compose `Res` image or string) are looked up on it.
+        val resources = closure.map { resourcesDir(it) }
         val runName = TaskName(":${module.name}:run")
         tasks.register(runName) {
-            InterpretExecTask(runName, mainClass, { runtimeClasspath(module) }, interpreter, programArgs, instanceMain, programIo)
+            InterpretExecTask(runName, mainClass, { runtimeClasspath(module, resources) }, interpreter, programArgs, instanceMain, programIo)
         }.configure { dependsOn(TaskName(":${module.name}:classes")) }
         return tasks.build()
     }
@@ -141,9 +146,9 @@ class JavaBuildSystem(
 
     /** Runtime classpath for running [module]: its own output (Java + Kotlin) + the full runtime dependency
      *  closure (each module output paired with its sibling `kotlin-classes`, present only for Kotlin modules). */
-    private fun runtimeClasspath(module: Module): List<Path> {
+    private fun runtimeClasspath(module: Module, resourceDirs: List<Path> = emptyList()): List<Path> {
         val depEntries = module.classpath(DependencyScope.RUNTIME_ONLY).entries.map { Paths.get(it.root.path) }
-        return (classOutputs(module) + depEntries + kotlinSiblings(depEntries))
+        return (classOutputs(module) + depEntries + kotlinSiblings(depEntries) + resourceDirs)
             .filter { Files.isDirectory(it) || Files.isRegularFile(it) }
             .distinct()
     }

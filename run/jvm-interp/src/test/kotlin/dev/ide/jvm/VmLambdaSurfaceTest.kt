@@ -78,3 +78,26 @@ class VmLambdaSurfaceTest {
         assertEquals(true, thrown.message?.contains("interpreted-only value") == true)
     }
 }
+
+/** What real code sees when interpreted code it called through a proxy throws. */
+class CrossingProxyTest {
+
+    @Test
+    fun anUndeclaredCheckedThrowableCrossesWithItsOwnMessage() {
+        // Compose Desktop's window error dialog shows only the message: a bare proxy wrapper read "Unknown error".
+        val missing = java.io.IOException("Missing resource with path: composeResources/x/drawable/logo.png")
+        val crossed = crossingProxy(Runnable::class.java.getMethod("run"), missing)
+        val wrapper = crossed as java.lang.reflect.UndeclaredThrowableException
+        assertSame(missing, wrapper.undeclaredThrowable, "still the proxy's own wrapper, so the bridge can unwrap it")
+        assertEquals(true, wrapper.message?.contains("composeResources/x/drawable/logo.png"))
+    }
+
+    @Test
+    fun uncheckedAndDeclaredThrowablesCrossAsThemselves() {
+        val run = Runnable::class.java.getMethod("run")
+        val unchecked = IllegalStateException("x")
+        assertSame(unchecked, crossingProxy(run, unchecked))
+        val declared = java.io.IOException("y") // Callable.call declares Exception
+        assertSame(declared, crossingProxy(java.util.concurrent.Callable::class.java.getMethod("call"), declared))
+    }
+}
