@@ -334,7 +334,7 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
                 .use { it.readBytes().toString(Charsets.UTF_8) }
             PluginManifestToml.parse(text)
         }.getOrElse { return reject(it.message ?: it::class.java.name) }
-        return DevPlugin(manifest, PluginOrigin(SOURCE_ID, info.packageName ?: apk.name), apk, javaClass.classLoader)
+        return DevPlugin(appContext, manifest, PluginOrigin(SOURCE_ID, info.packageName ?: apk.name), apk, javaClass.classLoader)
     }
 
     private fun reject(reason: String): RejectedPlugin {
@@ -343,6 +343,7 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
     }
 
     private class DevPlugin(
+        private val context: Context,
         override val manifest: PluginManifest,
         override val origin: PluginOrigin,
         private val apk: File,
@@ -351,8 +352,14 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
         override fun classLoader(): ClassLoader =
             PathClassLoader(apk.absolutePath, nativeLibraryDir?.toString(), parent)
 
-        /** The APK's `lib/<abi>` for this device, unpacked next to it (an install would have done that). */
-        override val nativeLibraryDir: Path? by lazy { unpackNativeLibs(apk) }
+        /**
+         * The APK's `lib/<abi>` for this device: installed, when it packages programs (only an installed app's
+         * libraries may be run, see [SandboxNativeLibs]), else unpacked next to it, which is enough to load a
+         * JNI library.
+         */
+        override val nativeLibraryDir: Path? by lazy {
+            SandboxNativeLibs.installedDir(context, apk) ?: unpackNativeLibs(apk)
+        }
     }
 
     companion object {
@@ -457,6 +464,8 @@ class AndroidPluginSandbox(
         }
         val manifest = runCatching { DevApkPluginSource(appContext, copy).manifest() }.getOrNull()
         val name = manifest?.name
+        // Before the sandbox (or the running one) loads it: the programs it packages need an installed home.
+        SandboxNativeLibs.ensureInstalled(appContext, copy, log)
         // A sandbox that is already up takes the new build in place: no new process, no app start, and the
         // project and screen it was on stay where they were.
         if (sandboxPid() != null && hotReload(copy, name, log)) {

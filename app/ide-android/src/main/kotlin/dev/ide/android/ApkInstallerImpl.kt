@@ -47,7 +47,14 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
 
         val installer = pm.packageInstaller
         val sessionId = installer.createSession(
-            PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply { setAppPackageName(packageName) },
+            PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                setAppPackageName(packageName)
+                // Always the user's call: the IDE holds UPDATE_PACKAGES_WITHOUT_USER_ACTION for the plugin
+                // sandbox's own programs app, which would otherwise make this update the user's app unasked.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+                }
+            },
         )
         runCatching {
             installer.openSession(sessionId).use { session ->

@@ -10,6 +10,8 @@
          visible; the installer already sees what it installs, but declaring the MAIN/LAUNCHER query makes
          that resolution robust (and is the standard fix for getLaunchIntentForPackage returning null). -->
     <queries>
+        <!-- The plugin sandbox's programs, installed as an app of their own (plugins/SandboxNativeLibs.kt). -->
+        <package android:name="${applicationId}.sandboxlibs" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -26,6 +28,10 @@
          install-confirmation. The user must also grant "install unknown apps" to CodeAssist (we deep-link
          to that Settings screen when it isn't granted yet). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Lets the plugin sandbox update its programs app (plugins/SandboxNativeLibs.kt) without asking each
+         time: Android 12+ skips the prompt for an update of an app this one installed only when this is declared
+         (a normal permission, granted at install). The Run of a user's app still asks (ApkInstallerImpl). -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!-- The build/run daemon (:build process) promotes to a foreground service while a build or program is
          running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).
