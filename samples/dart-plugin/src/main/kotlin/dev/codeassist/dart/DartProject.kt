@@ -7,8 +7,16 @@ import dev.ide.model.FacetTemplate
 import dev.ide.model.ModuleType
 import dev.ide.model.PlatformKind
 import dev.ide.model.SourceSetTemplate
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.stream.Collectors
 
 /**
@@ -73,17 +81,37 @@ object DartPackages {
     }
 
     /**
-     * Whether `pub get` has to run before [pkg] can be compiled or analysed: it never has, or `pubspec.yaml`
-     * or `pubspec.lock` changed since it last did. A package importing itself (`package:name/...`) needs the
-     * package config even with no dependencies at all.
+     * Whether `pub get` has to run before [pkg] can be compiled or analysed: it never has, `pubspec.yaml` or
+     * `pubspec.lock` changed since it last did, or a package the config names is no longer on disk. A package
+     * importing itself (`package:name/...`) needs the package config even with no dependencies at all.
      */
     fun needsPubGet(pkg: Path): Boolean {
         val config = pkg.resolve(PACKAGE_CONFIG)
         if (!Files.isRegularFile(config)) return true
         val configAt = Files.getLastModifiedTime(config).toMillis()
-        return listOf(PUBSPEC, "pubspec.lock").any { name ->
+        val changed = listOf(PUBSPEC, "pubspec.lock").any { name ->
             val f = pkg.resolve(name)
             Files.isRegularFile(f) && Files.getLastModifiedTime(f).toMillis() > configAt
+        }
+        // The config names packages by their folder in the pub cache. With that folder gone (the cache or the
+        // plugin's data cleared) a newer config still compiled against nothing: thousands of errors inside
+        // Flutter itself, its `meta` and `vector_math` missing.
+        return changed || packages(pkg).any { (_, root) -> !Files.isDirectory(root) }
+    }
+
+    /** Package name to root directory, from `.dart_tool/package_config.json`. */
+    fun packages(pkg: Path): List<Pair<String, Path>> {
+        val configFile = pkg.resolve(PACKAGE_CONFIG)
+        val text = runCatching { String(Files.readAllBytes(configFile)) }.getOrNull() ?: return emptyList()
+        val config = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return emptyList()
+        val base = configFile.parent.toUri()
+        return (config["packages"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            val rootUri = (o["rootUri"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            val resolved = runCatching { Paths.get(base.resolve(URI(if (rootUri.endsWith("/")) rootUri else "$rootUri/"))) }
+                .getOrNull() ?: return@mapNotNull null
+            name to resolved.normalize()
         }
     }
 

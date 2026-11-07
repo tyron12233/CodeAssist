@@ -227,7 +227,7 @@ internal class FlutterPreviewEngine(private val controller: FlutterPreviewContro
             val intent = Intent().setClassName(FlutterPlayer.PACKAGE, FlutterPreviewService.CLASS)
             bound = runCatching { ctx.bindService(intent, connection, Context.BIND_AUTO_CREATE or Context.BIND_IMPORTANT) }
                 .getOrDefault(false)
-            if (!bound) controller.engineFailed("The Dart plugin's preview service could not be reached.")
+            if (!bound) controller.engineFailed("The Dart plugin's preview service could not be reached. ${FlutterPlayer.blockedHint()}")
         }
         open()
     }

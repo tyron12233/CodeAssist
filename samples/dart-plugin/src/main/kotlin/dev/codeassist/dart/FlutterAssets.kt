@@ -3,17 +3,12 @@ package dev.codeassist.dart
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import java.io.ByteArrayOutputStream
-import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.stream.Collectors
 
 /**
@@ -111,18 +106,7 @@ object FlutterAssets {
     }
 
     /** Package name to root directory, from `.dart_tool/package_config.json`. */
-    fun packages(pkg: Path): List<Pair<String, Path>> {
-        val configFile = pkg.resolve(DartPackages.PACKAGE_CONFIG)
-        val config = runCatching { Json.parseToJsonElement(read(configFile)).jsonObject }.getOrNull() ?: return emptyList()
-        val base = configFile.parent.toUri()
-        return (config["packages"] as? JsonArray).orEmpty().mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
-            val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
-            val rootUri = (o["rootUri"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
-            val resolved = base.resolve(URI(rootUri.let { if (it.endsWith("/")) it else "$it/" }))
-            name to Paths.get(resolved).normalize()
-        }
-    }
+    fun packages(pkg: Path): List<Pair<String, Path>> = DartPackages.packages(pkg)
 
     private fun read(path: Path): String = runCatching { String(Files.readAllBytes(path)) }.getOrDefault("")
 }

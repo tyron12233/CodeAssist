@@ -51,6 +51,25 @@ class DartPackagesTest {
     }
 
     @Test
+    fun pubGetIsNeededWhenAPackageTheConfigNamesIsGone() {
+        val cache = Files.createDirectories(dir.resolve("cache/meta-1.17.0"))
+        val pubspec = write("p/pubspec.yaml", "name: p\n")
+        val config = write(
+            "p/" + DartPackages.PACKAGE_CONFIG,
+            """{"configVersion":2,"packages":[
+              {"name":"meta","rootUri":"${cache.toUri()}","packageUri":"lib/"},
+              {"name":"p","rootUri":"../","packageUri":"lib/"}]}""",
+        )
+        Files.setLastModifiedTime(pubspec, FileTime.fromMillis(1_000_000))
+        Files.setLastModifiedTime(config, FileTime.fromMillis(2_000_000))
+        val pkg = dir.resolve("p")
+        assertEquals(listOf("meta" to cache, "p" to pkg), DartPackages.packages(pkg))
+        assertFalse(DartPackages.needsPubGet(pkg))
+        Files.delete(cache)
+        assertTrue(DartPackages.needsPubGet(pkg), "the pub cache lost a package the config names")
+    }
+
+    @Test
     fun executablesAreTheTopLevelDartFilesInBin() {
         assertEquals(emptyList<Path>(), DartPackages.executables(dir))
         write("bin/zeta.dart")

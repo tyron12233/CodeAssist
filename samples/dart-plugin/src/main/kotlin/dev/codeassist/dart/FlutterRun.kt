@@ -46,14 +46,31 @@ object FlutterPlayer {
         }
     }
 
-    fun launch(timeoutMs: Long = 20_000): Started {
+    /**
+     * Start the player and wait for its VM service: [reachTimeoutMs] for the launcher to answer, which only a
+     * launch the system blocked leaves unanswered, then [timeoutMs] for the engine.
+     */
+    fun launch(reachTimeoutMs: Long = 8_000, timeoutMs: Long = 20_000): Started {
         val context = appContext() ?: throw IOException("No Android context to start the Flutter player from.")
+        val reached = CompletableFuture<Unit>()
         val answer = CompletableFuture<Started>()
         val receiver = object : ResultReceiver(null) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                val uri = resultData?.getString(FlutterPlayerActivity.EXTRA_URI)
-                if (resultCode == 0 && uri != null) answer.complete(Started(uri, resultData.getString(FlutterPlayerActivity.EXTRA_ISOLATE), resultData.getBinder(FlutterPlayerActivity.EXTRA_CONTROL)))
-                else answer.completeExceptionally(IOException("The Flutter player started without a VM service."))
+                when (resultCode) {
+                    FlutterPlayerActivity.RESULT_REACHED -> reached.complete(Unit)
+                    FlutterPlayerActivity.RESULT_REFUSED -> {
+                        val caller = resultData?.getString(FlutterPlayerActivity.EXTRA_CALLER) ?: "an unidentified caller"
+                        val e = IOException("The Flutter player refused to start: it took the caller to be $caller, not CodeAssist.")
+                        reached.completeExceptionally(e)
+                        answer.completeExceptionally(e)
+                    }
+                    else -> {
+                        reached.complete(Unit)
+                        val uri = resultData?.getString(FlutterPlayerActivity.EXTRA_URI)
+                        if (resultCode == 0 && uri != null) answer.complete(Started(uri, resultData.getString(FlutterPlayerActivity.EXTRA_ISOLATE), resultData.getBinder(FlutterPlayerActivity.EXTRA_CONTROL)))
+                        else answer.completeExceptionally(IOException("The Flutter player started without a VM service."))
+                    }
+                }
             }
         }
         val intent = Intent()
@@ -64,13 +81,42 @@ object FlutterPlayer {
         val options = if (android.os.Build.VERSION.SDK_INT >= 34) {
             android.app.ActivityOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
         } else null
-        context.startActivity(intent, options)
-        return try {
-            answer.get(timeoutMs, TimeUnit.MILLISECONDS)
-        } catch (e: java.util.concurrent.TimeoutException) {
-            throw IOException("The Flutter player did not start within ${timeoutMs / 1000} seconds.")
-        } catch (e: java.util.concurrent.ExecutionException) {
-            throw e.cause ?: e
+        try {
+            context.startActivity(intent, options)
+        } catch (e: RuntimeException) {
+            // ActivityNotFoundException, SecurityException: the plugin's app is missing or out of reach.
+            throw IOException("Could not open the Flutter player: ${e.message}. ${blockedHint()}")
+        }
+        await(reached, reachTimeoutMs) {
+            // Some systems drop a launch into another app without a word (startActivity returns as if it worked).
+            "Android did not open the Flutter player (the CodeAssist Dart app). ${blockedHint()}"
+        }
+        return await(answer, timeoutMs) {
+            "The Flutter player opened, but its engine did not start within ${timeoutMs / 1000} seconds. " +
+                "If it closed by itself it crashed; its logcat (tag \"flutter\") says why."
+        }
+    }
+
+    private fun <T> await(future: CompletableFuture<T>, timeoutMs: Long, timedOut: () -> String): T = try {
+        future.get(timeoutMs, TimeUnit.MILLISECONDS)
+    } catch (e: java.util.concurrent.TimeoutException) {
+        throw IOException(timedOut())
+    } catch (e: java.util.concurrent.ExecutionException) {
+        throw e.cause ?: e
+    }
+
+    /**
+     * What to do when the system keeps CodeAssist from starting the plugin's app. Xiaomi's systems (MIUI,
+     * HyperOS) block it unless the app has Autostart; other makers have their own versions of the switch.
+     */
+    internal fun blockedHint(): String {
+        val maker = "${android.os.Build.MANUFACTURER} ${android.os.Build.BRAND}".lowercase()
+        return if (listOf("xiaomi", "redmi", "poco").any { it in maker }) {
+            "On Xiaomi, Redmi and POCO phones, open Settings > Apps > Manage apps > CodeAssist Dart, turn on " +
+                "Autostart, and run again."
+        } else {
+            "Some phones stop one app from starting another: allow CodeAssist Dart to start in the background " +
+                "(often called Autostart) in the system settings, and run again."
         }
     }
 
