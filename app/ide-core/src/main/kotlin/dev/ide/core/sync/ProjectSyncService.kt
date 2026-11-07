@@ -45,11 +45,27 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
     /** The recorded owner of this workspace (present for an imported project, including legacy Gradle ones). */
     fun marker(): ExternalProjectMarker.Info? = ExternalProjectMarker.read(ctx.workspaceRoot)
 
-    /** True when the build files own the model, so the IDE's own model is a projection of them. */
+    /**
+     * True when the build files own the model, so the IDE's own model is a projection of them.
+     *
+     * Remembered for [EXTERNAL_TTL_NS], or until the marker is written or cleared: answering it asks every
+     * importer to detect the workspace and reads the marker, all on disk, and the UI reads it on the main thread
+     * through `IdeBackend.project` on every recomposition (one such stat was on main in a 3.41.0 ANR).
+     */
     fun isExternal(): Boolean {
-        val importer = importer() ?: return marker() != null
-        return importer.ownership == ModelOwnership.EXTERNAL
+        val generation = ExternalProjectMarker.generation
+        val now = System.nanoTime()
+        externalMemo?.let { if (it.generation == generation && now - it.at < EXTERNAL_TTL_NS) return it.value }
+        val importer = importer()
+        val value = if (importer == null) marker() != null else importer.ownership == ModelOwnership.EXTERNAL
+        externalMemo = ExternalMemo(generation, now, value)
+        return value
     }
+
+    private class ExternalMemo(val generation: Long, val at: Long, val value: Boolean)
+
+    @Volatile
+    private var externalMemo: ExternalMemo? = null
 
     /** The build-file writer for this project's importer, or null when declarations can't be written back. */
     fun writer(): BuildFileWriter? {
@@ -159,6 +175,9 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
 
     companion object {
         private val log = Log.logger("ide.sync")
+
+        /** How long [isExternal] trusts its last answer when no marker write says otherwise. */
+        private const val EXTERNAL_TTL_NS = 3_000_000_000L
 
         /**
          * The importer claiming [root], highest [dev.ide.model.sync.Detection.confidence] first. Static so the

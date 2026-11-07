@@ -35,6 +35,14 @@ internal object ExternalProjectMarker {
     private const val LEGACY_GRADLE_MARKER = "imported-from-gradle"
     private const val LEGACY_GRADLE_IMPORTER = "gradle-compat"
 
+    /**
+     * Bumped by every [write] and [clear], so a cached answer derived from the marker (see
+     * [ProjectSyncService.isExternal]) knows to look again. Global rather than per root: writes are rare.
+     */
+    @Volatile
+    var generation: Long = 0L
+        private set
+
     private fun markerFile(root: Path): Path = root.resolve(".platform").resolve(MARKER)
     private fun legacyFile(root: Path): Path = root.resolve(".platform").resolve(LEGACY_GRADLE_MARKER)
 
@@ -44,6 +52,7 @@ internal object ExternalProjectMarker {
         Files.createDirectories(file.parent)
         val body = (listOf("importer=$importerId", summary) + notes.filter { it.isNotBlank() })
         file.writeText(body.joinToString("\n", postfix = "\n"))
+        generation++
     }
 
     /** The recorded owner of [root], or null when the project is a native one. Reads the legacy Gradle
@@ -67,6 +76,7 @@ internal object ExternalProjectMarker {
     fun clear(root: Path) {
         runCatching { Files.deleteIfExists(markerFile(root)) }
         runCatching { Files.deleteIfExists(legacyFile(root)) }
+        generation++
     }
 
     private fun readOrNull(path: Path): String? =
