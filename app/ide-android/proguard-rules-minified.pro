@@ -60,6 +60,33 @@
 -keep class org.eclipse.jgit.** { *; }
 -keep class com.googlecode.javaewah.** { *; }
 
+# --- Libraries the preview / console interpreters call BY NAME. A user's @Preview or `main` links against the
+#     IDE's bundled Compose, coroutines, stdlib and AndroidX: the interpreter resolves those calls reflectively at
+#     runtime, so whatever the IDE's own code doesn't happen to use looks dead to R8. Device-verified 2026-11-07:
+#     without these the template project's preview failed ("Array contains no element matching the predicate");
+#     R8 had removed ~9.1k androidx.compose and ~1.7k kotlin/kotlinx entries. --------------------------------------
+-keep class androidx.compose.** { *; }
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+-keep class androidx.lifecycle.** { *; }
+-keep class androidx.activity.** { *; }
+-keep class androidx.core.** { *; }
+-keep class androidx.collection.** { *; }
+-keep class androidx.savedstate.** { *; }
+
+# --- Reflection / serialization / protobuf driven libraries R8 trimmed heavily: bundletool + its protobuf model
+#     (on-device .aab builds), Jackson + the MCP SDK + JSON schema + YAML (the agent's MCP client and skills), Gson.
+-keep class shadow.bundletool.** { *; }
+-keep class com.android.bundle.** { *; }
+-keep class com.android.aapt.** { *; }
+-keep class com.google.protobuf.** { *; }
+-keep class tools.jackson.** { *; }
+-keep class com.fasterxml.** { *; }
+-keep class io.modelcontextprotocol.** { *; }
+-keep class com.networknt.** { *; }
+-keep class org.snakeyaml.** { *; }
+-keep class com.google.gson.** { *; }
+
 # NOTE: JNA is deliberately NOT kept. It arrives only via Eclipse core.filesystem
 # (JDT); the native path is unused on ART (no libjnidispatch.so shipped, pure-Java
 # fallback), and the JNA classes the kept Eclipse code references are retained

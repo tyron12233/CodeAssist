@@ -1,6 +1,15 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
+// AGP 9.2.1's bundled R8 (9.2.14) crashes with an NPE when shrinking the app (`minifyMinifiedWithR8`: "Cannot
+// invoke Object.getClass() because <parameter1> is null", and two other NPEs under -dontshrink / partial keep
+// sets). R8 on the buildscript classpath takes precedence over AGP's; 9.4.28 shrinks the app cleanly. This also
+// becomes the D8 every variant dexes with.
+buildscript {
+    repositories { google() }
+    dependencies { classpath("com.android.tools:r8:9.4.28") }
+}
+
 plugins {
     // Resolve all plugin versions once for the whole build; modules apply them themselves. The Kotlin
     // JVM and Multiplatform plugins ship in the same artifact, so both must be declared here (with a
