@@ -233,15 +233,19 @@ fun MonoChip(
             if (glyph != null) Symbol(glyph, contentDescription = null, size = 14.dp)
             Text(
                 text,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontFamily = dev.ide.ui.theme.Ca.type.codeFamily,
-                ),
+                // Arabic and Hebrew have no monospace form: in the code font their letters come apart, so a chip
+                // whose text is in one of them (a translated lesson title, a tag) is set in the UI font.
+                style = if (text.any(::isRtlLetter)) MaterialTheme.typography.labelMedium
+                else MaterialTheme.typography.labelMedium.copy(fontFamily = dev.ide.ui.theme.Ca.type.codeFamily),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
+
+/** Hebrew, Arabic, Syriac, Thaana, N'Ko and their presentation forms. */
+private fun isRtlLetter(c: Char): Boolean = c in '\u0590'..'\u08FF' || c in '\uFB1D'..'\uFDFF' || c in '\uFE70'..'\uFEFF'
 
 /**
  * Home's 64 dp primary call to action, and the mirrored square button beside it.

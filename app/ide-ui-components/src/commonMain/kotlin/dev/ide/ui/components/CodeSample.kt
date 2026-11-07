@@ -30,16 +30,20 @@ import dev.ide.ui.theme.Ide
 fun CodeSample(code: String, language: String = "kotlin", modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(Ca.radius.md)
     val highlighted = highlight(code, codeLanguageOf(language), Ide.colors.syntax)
-    Box(
-        modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Ide.colors.editorBg)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        Text(highlighted, style = Ide.type.code)
+    // Code reads left to right in every locale. Under an RTL layout the card would right-align and scroll from
+    // the right, and a line with no letters of its own (a lone `}`) would take the paragraph's RTL direction.
+    dev.ide.ui.LtrContent {
+        Box(
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(Ide.colors.editorBg)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Text(highlighted, style = Ide.type.code.copy(textDirection = androidx.compose.ui.text.style.TextDirection.Ltr))
+        }
     }
 }
 

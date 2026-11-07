@@ -1418,10 +1418,23 @@ private fun SegmentedPathLabel(
     modifier: Modifier = Modifier,
 ) {
     val lastIndex = segments.lastIndex
+    // A path or package reads left to right in every locale: a Row under RTL would lay the levels out
+    // backwards (`budgetapp.example.com`). The menus each level opens are UI, so they get the outer direction.
+    val outerDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
     // Row measures unweighted children first, so the deepest level (unweighted) gets its width before the
     // prefix levels (weighted, not filling) share what is left and ellipsize. In a narrow drawer that keeps
     // `java/com/acme/feature` reading as `java/c…/a…/feature`, not a full prefix with the leaf squeezed out.
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+    dev.ide.ui.LtrContent {
+    Row(
+        modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        // Still against the row's start edge, which is the right one under RTL, like every other row's name.
+        horizontalArrangement = if (outerDirection == androidx.compose.ui.unit.LayoutDirection.Rtl) {
+            androidx.compose.foundation.layout.Arrangement.End
+        } else {
+            androidx.compose.foundation.layout.Arrangement.Start
+        },
+    ) {
         segments.forEachIndexed { i, seg ->
             if (i > 0) Text(separator, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf. Split on
@@ -1449,6 +1462,9 @@ private fun SegmentedPathLabel(
                             .clickable { open = true }
                             .padding(horizontal = 2.dp),
                     )
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides outerDirection,
+                    ) {
                     CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                         MenuSectionLabel(stringResource(Res.string.filetree_new_in, seg.packageName))
                         NewActionItems(
@@ -1463,9 +1479,11 @@ private fun SegmentedPathLabel(
                             onNewSource = onNewSource,
                         ) { open = false }
                     }
+                    }
                 }
             }
         }
+    }
     }
 }
 

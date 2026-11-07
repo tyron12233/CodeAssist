@@ -314,8 +314,11 @@ private fun ShortcutRecorder(spec: String, onRecord: (String) -> Unit) {
         contentAlignment = Alignment.CenterEnd,
     ) {
         when {
-            recording && held.isNotEmpty() -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                shortcutKeys(held + "…").single().forEach { Keycap(it) }
+            // A chord reads left to right (`Ctrl` `Tab`) in every locale, as keyboards and menus print it.
+            recording && held.isNotEmpty() -> dev.ide.ui.LtrContent {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    shortcutKeys(held + "…").single().forEach { Keycap(it) }
+                }
             }
             recording && refused -> Text(
                 stringResource(Res.string.keymap_needs_modifier, if (usesCommandKey) "⌘ / ⌥" else "Ctrl / Alt"),
@@ -323,10 +326,12 @@ private fun ShortcutRecorder(spec: String, onRecord: (String) -> Unit) {
             )
             recording -> Text(stringResource(Res.string.keymap_recording), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
             spec.isEmpty() -> Text(stringResource(Res.string.keymap_not_set), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelLarge)
-            else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                shortcutKeys(spec).forEachIndexed { i, stroke ->
-                    if (i > 0) Spacer(Modifier.width(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { stroke.forEach { Keycap(it) } }
+            else -> dev.ide.ui.LtrContent {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    shortcutKeys(spec).forEachIndexed { i, stroke ->
+                        if (i > 0) Spacer(Modifier.width(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { stroke.forEach { Keycap(it) } }
+                    }
                 }
             }
         }

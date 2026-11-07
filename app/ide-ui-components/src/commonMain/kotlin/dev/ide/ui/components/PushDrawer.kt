@@ -32,9 +32,11 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
@@ -87,6 +89,11 @@ fun PushDrawer(
         val maxPx = with(density) { drawerWidth.toPx() }
         val flingPx = with(density) { FlingCommit.toPx() }
         val touchSlop = LocalViewConfiguration.current.touchSlop
+        // The drawer hangs off the content's START edge (`offset` mirrors under RTL, so in Arabic it comes in from
+        // the right), but pointer deltas and velocities are physical. Every horizontal one is multiplied by this,
+        // so "toward the drawer's side" means the same thing in both directions: a swipe from the right opens a
+        // drawer that comes from the right.
+        val dir = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
         val scope = rememberCoroutineScope()
         val offset = remember { Animatable(0f) }
         offset.updateBounds(0f, maxPx)
@@ -129,7 +136,7 @@ fun PushDrawer(
         // opens the drawer once it exceeds slop and the gesture reads horizontal overall. From capture
         // until release every horizontal delta is claimed here (pre-scroll), so a mid-gesture reversal
         // moves the drawer back instead of scrolling the editor sideways underneath it.
-        val connection = remember(maxPx, gesturesEnabled) {
+        val connection = remember(maxPx, gesturesEnabled, dir) {
             object : NestedScrollConnection {
                 private var sumX = 0f
                 private var sumY = 0f
@@ -145,7 +152,7 @@ fun PushDrawer(
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                     if (!gesturesEnabled || source != NestedScrollSource.UserInput) return Offset.Zero
                     if (!captured) return Offset.Zero
-                    dragBy(available.x)
+                    dragBy(dir * available.x)
                     return Offset(available.x, 0f)
                 }
 
@@ -155,10 +162,10 @@ fun PushDrawer(
                     sumY += consumed.y + available.y
                     if (consumed.x != 0f) childOwnsX = true
                     if (!captured && !childOwnsX && offset.value == 0f) {
-                        leakX = (leakX + available.x).coerceAtLeast(0f)
+                        leakX = (leakX + dir * available.x).coerceAtLeast(0f)
                         if (leakX > touchSlop && abs(sumX) > abs(sumY)) {
                             captured = true
-                            dragBy(available.x)
+                            dragBy(dir * available.x)
                             return Offset(available.x, 0f)
                         }
                     }
@@ -171,7 +178,7 @@ fun PushDrawer(
                         // Settle on `scope`, not this fling coroutine: it must be queued AFTER the last
                         // dragBy's snapTo (same single-threaded scope, FIFO) so a stale snap can't cancel
                         // the settle animation via the Animatable's mutation mutex and leave it stuck.
-                        scope.launch { settle(available.x) }
+                        scope.launch { settle(dir * available.x) }
                         return Velocity(available.x, 0f)
                     }
                     reset()
@@ -187,7 +194,7 @@ fun PushDrawer(
 
         // Horizontal drags no child claimed (on the drawer panel, chrome, or the tap-catcher over pushed
         // content) move an open drawer directly — this is the drag-to-close path.
-        val closeDrag = rememberDraggableState { delta -> dragBy(delta) }
+        val closeDrag = rememberDraggableState { delta -> dragBy(dir * delta) }
 
         // The drag-to-close modifier is ATTACHED only while the drawer is actually there to close, rather than
         // left in place with `enabled = false`. A horizontal `draggable` answers its children's "is an ancestor
@@ -203,7 +210,7 @@ fun PushDrawer(
                 // Settle on `scope` so it is ordered after the drag's pending snapTo (see onPreFling):
                 // running it inline on the draggable coroutine let a stale snap cancel it, leaving the
                 // drawer stuck mid-swipe on release instead of snapping to the nearer edge.
-                onDragStopped = { velocity -> scope.launch { settle(velocity) } },
+                onDragStopped = { velocity -> scope.launch { settle(dir * velocity) } },
             )
         } else {
             Modifier
@@ -246,8 +253,10 @@ fun PushDrawer(
                                 .width(14.dp)
                                 .graphicsLayer { alpha = (offset.value / maxPx).coerceIn(0f, 1f) }
                                 .background(
+                                    // Dark at the seam, which is on the right under RTL (gradients are physical).
                                     Brush.horizontalGradient(
-                                        listOf(Color.Black.copy(alpha = 0.18f), Color.Transparent),
+                                        listOf(Color.Black.copy(alpha = 0.18f), Color.Transparent)
+                                            .let { if (dir < 0f) it.reversed() else it },
                                     ),
                                 ),
                         )

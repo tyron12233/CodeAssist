@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -92,7 +94,12 @@ fun RightToolOverlay(state: IdeUiState) {
     // Composited while open OR mid-animation; a fully closed drawer composes nothing over the editor.
     val visible by remember { derivedStateOf { shown.value > 0.5f || state.selectedRightPanel != null } }
 
-    // A leftward drag (negative delta) opens; a rightward drag closes.
+    // The panel sits at the END edge (`CenterEnd` and `offset` mirror under RTL, so in Arabic it comes in from
+    // the left), but pointer deltas and velocities are physical. Each horizontal one is multiplied by this before
+    // use, so the code below reads as LTR: a drag toward the panel's edge's opposite (leftward in LTR) opens it.
+    val dir = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+
+    // A leftward drag (negative delta, after [dir]) opens; a rightward drag closes.
     fun dragBy(delta: Float) {
         scope.launch { shown.snapTo((shown.value - delta).coerceIn(0f, openPxState.floatValue)) }
     }
@@ -116,7 +123,7 @@ fun RightToolOverlay(state: IdeUiState) {
     // so taps and scrolls there still reach the top bar, editor and bottom bar; only a claimed drag is consumed.
     // Open, it stops sharing and the scrim keeps the editor from being touched.
     val edgeGrab = if (!isMobilePlatform) Modifier else Modifier.pointerInputSharedWithSiblings(
-        key = Unit,
+        key = dir,
         share = { !visible },
     ) {
         val edgePx = EdgeGrabWidth.toPx()
@@ -126,15 +133,21 @@ fun RightToolOverlay(state: IdeUiState) {
         // same swipe now and consumes its drags, so the drawer has to see the movement, and claim it, first.
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            if (shown.value > 0.5f || down.position.x < size.width - edgePx) return@awaitEachGesture
+            // The panel's own edge: the right one, or the left one under RTL.
+            val atEdge = if (dir > 0f) down.position.x >= size.width - edgePx else down.position.x <= edgePx
+            if (shown.value > 0.5f || !atEdge) return@awaitEachGesture
             // Cooperate with the editor's horizontal scroll: if the active editor still has
             // content to reveal rightward (it is not at its horizontal end), this leftward
             // swipe belongs to it — don't grab it for the drawer. Grabbing unconditionally
             // stole horizontal scrolling near the right edge (issue #1493). The drawer still
             // opens by swipe once the editor is at its horizontal end or the file has no
             // horizontal overflow, and always via the top-bar button.
+            // The editor's code reads left to right in every locale, so under RTL (a rightward swipe from the left
+            // edge) the editor owns the swipe until it is back at its horizontal start.
             val ed = state.active?.session
-            if (ed != null && ed.hScrollOffsetPx < ed.hScrollMaxPx - 0.5f) return@awaitEachGesture
+            val editorCanScroll = ed != null &&
+                (if (dir > 0f) ed.hScrollOffsetPx < ed.hScrollMaxPx - 0.5f else ed.hScrollOffsetPx > 0.5f)
+            if (editorCanScroll) return@awaitEachGesture
             var totalX = 0f
             var totalY = 0f
             var claimed = false
@@ -145,12 +158,12 @@ fun RightToolOverlay(state: IdeUiState) {
                 if (!change.pressed) {
                     if (claimed) {
                         change.consume()
-                        scope.launch { settle(tracker.calculateVelocity().x, flingPx) }
+                        scope.launch { settle(dir * tracker.calculateVelocity().x, flingPx) }
                     }
                     break
                 }
                 val delta = change.positionChangeIgnoreConsumed()
-                totalX += delta.x
+                totalX += dir * delta.x
                 totalY += delta.y
                 if (!claimed) {
                     if (abs(totalY) > touchSlop && abs(totalY) > abs(totalX)) break
@@ -158,7 +171,7 @@ fun RightToolOverlay(state: IdeUiState) {
                 }
                 if (claimed) {
                     tracker.addPosition(change.uptimeMillis, change.position)
-                    dragBy(delta.x)
+                    dragBy(dir * delta.x)
                     change.consume()
                 }
             }
@@ -187,10 +200,10 @@ fun RightToolOverlay(state: IdeUiState) {
                     .graphicsLayer { alpha = (shown.value / openPx).coerceIn(0f, 1f) }
                     .background(Color.Black.copy(alpha = 0.32f))
                     .draggable(
-                        rememberDraggableState { dragBy(it) },
+                        rememberDraggableState { dragBy(dir * it) },
                         Orientation.Horizontal,
                         enabled = isMobilePlatform,
-                        onDragStopped = { velocity -> scope.launch { settle(velocity, flingPx) } },
+                        onDragStopped = { velocity -> scope.launch { settle(dir * velocity, flingPx) } },
                     ),
             )
             // The open panel, falling back to the first so content stays rendered through the close animation.
