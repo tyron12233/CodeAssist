@@ -33,10 +33,17 @@ internal class FindReplaceController(private val session: EditorSession) {
     var regexError by mutableStateOf(false)
         private set
 
+    // What the last [recompute] searched for. A recompute with the same inputs was driven by an edit to the
+    // buffer, not to the search, and must leave the caret where the user is typing.
+    private var lastSearch: Pair<String, FindOptions>? = null
+    // Set by [replaceCurrent]: its own edit should move on to (select) the following occurrence.
+    private var selectAfterEdit = false
+
     /** Open the bar (Ctrl-F / Ctrl-R or the toolbar button), optionally seeding the query from a selection. */
     fun openBar(replace: Boolean, seed: String? = null) {
         seed?.let { query = it }
         replaceMode = replace
+        if (!open) lastSearch = null // reopening re-finds from the caret, even for the same query
         open = true
     }
 
@@ -55,7 +62,9 @@ internal class FindReplaceController(private val session: EditorSession) {
             listOf(RangeEdit(m.start, m.end, replaceWith, m.start + replaceWith.length)),
             TextRange(m.start + replaceWith.length),
         )
-        // matches recompute on the textRevision bump; currentIndex then points at the following occurrence
+        // matches recompute on the textRevision bump; currentIndex then points at the following occurrence,
+        // which that recompute selects
+        selectAfterEdit = true
     }
 
     fun replaceAll() {
@@ -66,12 +75,23 @@ internal class FindReplaceController(private val session: EditorSession) {
     }
 
     /**
-     * Recompute matches for the current [query]/[options] against the live buffer, selecting the one nearest
-     * the caret so it scrolls into view. Driven from a debounced effect in the composable; a closed bar or an
-     * empty query clears everything.
+     * Recompute matches for the current [query]/[options] against the live buffer. Driven from a debounced effect
+     * in the composable; a closed bar or an empty query clears everything.
+     *
+     * When the search itself changed (the bar opened, the query or an option was edited), the match nearest the
+     * caret is selected so it scrolls into view. When only the buffer changed, the highlights and the counter
+     * follow but the selection is left alone: the user is typing in the editor (often right next to a match),
+     * and selecting a match there would make the next keystroke type over it.
      */
     fun recompute() {
-        if (!open || query.isEmpty()) { matches = emptyList(); regexError = false; return }
+        if (!open || query.isEmpty()) {
+            matches = emptyList(); regexError = false; lastSearch = null; selectAfterEdit = false
+            return
+        }
+        val search = query to options
+        val select = search != lastSearch || selectAfterEdit
+        lastSearch = search
+        selectAfterEdit = false
         regexError = options.regex && runCatching { Regex(query) }.isFailure
         val found = findMatches(session.doc.text, query, options)
         matches = found
@@ -79,7 +99,7 @@ internal class FindReplaceController(private val session: EditorSession) {
             currentIndex = 0
         } else {
             currentIndex = matchIndexFrom(found, session.selection.start).coerceIn(0, found.size - 1)
-            session.setSelectionRange(found[currentIndex].start, found[currentIndex].end)
+            if (select) session.setSelectionRange(found[currentIndex].start, found[currentIndex].end)
         }
     }
 }
