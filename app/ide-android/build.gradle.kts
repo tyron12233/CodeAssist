@@ -805,6 +805,14 @@ android {
             useLegacyPackaging = true
             keepDebugSymbols += setOf("**/libaapt2.so")
         }
+        // Store dex UNCOMPRESSED (and page-aligned) so ART maps it straight from the APK: file-backed pages that
+        // every app process (the IDE, :preview, :build, :sandbox) shares and the kernel can reclaim. Deflated —
+        // AGP's default at minSdk < 28 — ART inflates the ~188 MB of dex into private memory in EACH process
+        // (measured: IDE 346 -> 203 MB PSS, :preview 227 -> 60 MB). Play already ships Android 10+ split APKs
+        // this way; this covers the GitHub release APK and Android 8-9. Costs APK size, not download size on Play.
+        dex {
+            useLegacyPackaging = false
+        }
     }
 
     androidResources {
