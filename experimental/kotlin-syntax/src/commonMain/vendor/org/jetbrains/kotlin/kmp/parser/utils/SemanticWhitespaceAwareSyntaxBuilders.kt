@@ -29,7 +29,8 @@ internal interface SemanticWhitespaceAwareSyntaxBuilder : SyntaxTreeBuilder {
 internal class SemanticWhitespaceAwareSyntaxBuilderImpl(val delegate: SyntaxTreeBuilder) : SyntaxTreeBuilderAdapter(delegate),
     SemanticWhitespaceAwareSyntaxBuilder {
     companion object {
-        private val complexTokens = syntaxElementTypeSetOf(KtTokens.SAFE_ACCESS, KtTokens.ERROR_SAFE_ACCESS, KtTokens.ELVIS, KtTokens.EXCLEXCL)
+        /** Tokens the builder assembles from two lexer tokens, as one-token composites (also inside a collapsed body). */
+        internal val complexTokens = syntaxElementTypeSetOf(KtTokens.SAFE_ACCESS, KtTokens.ERROR_SAFE_ACCESS, KtTokens.ELVIS, KtTokens.EXCLEXCL)
         private val newlineBeforeCurrentTokenIgnoredSet =
             syntaxElementTypeSetOf(KtTokens.BLOCK_COMMENT, KtTokens.DOC_COMMENT, KtTokens.EOL_COMMENT, KtTokens.SHEBANG_COMMENT)
     }

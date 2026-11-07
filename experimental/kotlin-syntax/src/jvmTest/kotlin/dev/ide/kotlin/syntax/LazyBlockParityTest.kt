@@ -201,7 +201,8 @@ class LazyBlockParityTest {
                 val fresh = KotlinSyntax.parseFileLazily(next, uncached, isScript)
                 if (reparsed != null) {
                     if (inBody) applied++
-                    (compare(fresh, reparsed) ?: sameTokens(fresh, reparsed))?.let { diverged += "${file.name}#$step@$at: $it" }
+                    (compare(fresh, reparsed) ?: sameTokens(fresh, reparsed) ?: sameNumbering(fresh, reparsed))
+                        ?.let { diverged += "${file.name}#$step@$at: $it" }
                     if (reparsed.syntaxErrorRanges() != fresh.syntaxErrorRanges()) diverged += "${file.name}#$step@$at errors"
                 }
                 text = next
@@ -225,6 +226,31 @@ class LazyBlockParityTest {
             return tree.getChildren(n).any { walk(it) }
         }
         return walk(tree.getRoot())
+    }
+
+    /**
+     * Null when both files' trees number their composites alike, slot for slot, the parser's end-marker slots
+     * included. What a node is found by across two parses of the same text (`RelativeElement`, the source
+     * index's carry-over) relies on it: a reparse that numbered a body differently from a fresh parse moved
+     * every later index in its declaration.
+     */
+    private fun sameNumbering(a: dev.ide.kotlin.syntax.psi.KtFile, b: dev.ide.kotlin.syntax.psi.KtFile): String? {
+        val ta = a.session.tree
+        val tb = b.session.tree
+        if (ta.rootIndex != tb.rootIndex) return "root index ${ta.rootIndex} vs ${tb.rootIndex}"
+        for (i in 0 until ta.rootIndex) {
+            val type = ta.compositeTypeAt(i)
+            if (type != tb.compositeTypeAt(i)) return "slot $i: $type vs ${tb.compositeTypeAt(i)}"
+            if (type == null) continue
+            val n = LightNode(i)
+            if (ta.getStartOffset(n) != tb.getStartOffset(n) || ta.getEndOffset(n) != tb.getEndOffset(n)) return "slot $i ($type): range"
+            if (ta.parentIndex(n) != tb.parentIndex(n)) return "slot $i ($type): parent ${ta.parentIndex(n)} vs ${tb.parentIndex(n)}"
+            if (ta.childCount(n) != tb.childCount(n)) return "slot $i ($type): child count"
+            for (k in 0 until ta.childCount(n)) {
+                if (ta.childIndexAt(n, k) != tb.childIndexAt(n, k)) return "slot $i ($type): child $k"
+            }
+        }
+        return null
     }
 
     /** Null when both files' trees hold the same tokens at the same offsets. */

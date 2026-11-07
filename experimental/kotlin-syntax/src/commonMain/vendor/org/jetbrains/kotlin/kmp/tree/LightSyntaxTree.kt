@@ -73,6 +73,12 @@ class LightSyntaxTree(
      */
     private val compositeStartOffsets: IntArray,
     /**
+     * For each START-marker index, the index of its DONE marker; every other slot (a DONE marker's, a standalone
+     * error marker's) holds its own index. A composite's descendants, and their end markers, are exactly the
+     * slots between the two, which is what lets [withReplacedSubtree] number a replaced body as a parse would.
+     */
+    private val compositeDoneIndex: IntArray,
+    /**
      * Builder of tree structure like `JavaLightTreeStructure`
      */
     buildLanguageSpecificTreeStructure: (LightSyntaxTree) -> Any
@@ -92,6 +98,17 @@ class LightSyntaxTree(
 
     fun isComposite(node: LightNode): Boolean = node.index in 0..rootIndex
     fun isToken(node: LightNode): Boolean = node.index < 0 && node.index != Int.MIN_VALUE
+
+    /**
+     * The type of the composite at [index], or null when no node has it. Composites are numbered among the
+     * parser's markers, its end markers included, and an end marker's slot has no type of its own; [getType]
+     * on one throws. For an index worked out rather than read off the tree (see `RelativeElement`).
+     */
+    fun compositeTypeAt(index: Int): SyntaxElementType? = when (index) {
+        rootIndex -> rootNodeType
+        in 0 until rootIndex -> compositeTypes[index]
+        else -> null
+    }
 
     fun getType(node: LightNode): SyntaxElementType {
         val idx = node.index
@@ -220,8 +237,9 @@ class LightSyntaxTree(
      */
     fun withReplacedSubtree(node: LightNode, newSource: CharSequence, sub: LightSyntaxTree, subNode: LightNode): LightSyntaxTree? {
         val b = node.index
-        if (b < 0 || b >= rootIndex || subNode.index < 0 || subNode.index >= sub.rootIndex) return null
-        if (compositeTypes[b] != sub.compositeTypes[subNode.index]) return null
+        val sb = subNode.index
+        if (b < 0 || b >= rootIndex || sb < 0 || sb >= sub.rootIndex) return null
+        if (compositeTypes[b] != sub.compositeTypes[sb]) return null
         val firstToken = edgeToken(node, first = true)
         val lastToken = edgeToken(node, first = false)
         val subFirst = sub.edgeToken(subNode, first = true)
@@ -230,75 +248,73 @@ class LightSyntaxTree(
         val bodyStart = compositeStartOffsets[b]
         val oldBodyEnd = compositeEndOffsets[b]
         val delta = newSource.length - source.length
-        val subStart = sub.compositeStartOffsets[subNode.index]
+        val subStart = sub.compositeStartOffsets[sb]
         if (tokens.getTokenStart(firstToken) != bodyStart || tokens.getTokenEnd(lastToken) != oldBodyEnd) return null
         if (sub.tokens.getTokenStart(subFirst) != subStart ||
             sub.tokens.getTokenEnd(subLast) - subStart != oldBodyEnd + delta - bodyStart) return null
 
-        // The markers inside [node]: every index from it to its last descendant's, in production order.
-        var lastInner = b
-        fun maxInner(i: Int) {
-            val list = childrenByIndex[i]
-            for (k in list.indices) {
-                val c = list[k].index
-                if (c >= 0) { if (c > lastInner) lastInner = c; maxInner(c) }
-            }
-        }
-        maxInner(b)
-        // The replacement's markers, numbered in pre-order right after [node].
-        val subSlots = HashMap<Int, Int>()
-        val subOrder = ArrayList<Int>()
-        fun number(i: Int) {
-            val list = sub.childrenByIndex[i]
-            for (k in list.indices) {
-                val c = list[k].index
-                if (c >= 0) { subSlots[c] = b + 1 + subOrder.size; subOrder += c; number(c) }
-            }
-        }
-        number(subNode.index)
-        val markerShift = subOrder.size - (lastInner - b)
-        fun marker(i: Int): Int = if (i > lastInner) i + markerShift else i
+        // The slots of [node] and its descendants, end markers included: [b, oldDone] here, [sb, subDone] in the
+        // replacement. The replacement's are laid over this tree's one for one, from [b] on, so the result numbers
+        // every node as a parse of [newSource] does (what `RelativeElement` finds nodes again by), and the slots
+        // after the body move by the difference.
+        val oldDone = compositeDoneIndex[b]
+        val subDone = sub.compositeDoneIndex[sb]
+        if (oldDone <= b || subDone <= sb || oldDone >= rootIndex || subDone >= sub.rootIndex) return null
+        val markerShift = (subDone - sb) - (oldDone - b)
+        fun marker(i: Int): Int = if (i > oldDone) i + markerShift else i
+        fun inSub(i: Int): Boolean = i in sb..subDone
+        fun subMarker(i: Int): Int = b + (i - sb)
 
         val oldCount = tokens.tokenCount
         val m = subLast - subFirst + 1
         val tokenShift = m - (lastToken - firstToken + 1)
         if (markerShift == 0 && tokenShift == 0) {
-            sameShapeWith(b, lastInner, subOrder, subSlots, newSource, delta, sub, subNode, subFirst, firstToken, lastToken, subStart, bodyStart)
+            sameShapeWith(b, sb, subDone, newSource, delta, sub, subFirst, firstToken, lastToken, subStart, bodyStart)
                 ?.let { return it }
         }
         fun token(t: Int): Int = if (t > lastToken) t + tokenShift else t
         fun subToken(t: Int): Int = firstToken + (t - subFirst)
         fun child(c: Int): Int = if (c >= 0) marker(c) else -(token(-(c + 1)) + 1)
-        fun subChild(c: Int): Int = if (c >= 0) subSlots.getValue(c) else -(subToken(-(c + 1)) + 1)
+        fun subChild(c: Int): Int = if (c >= 0) subMarker(c) else -(subToken(-(c + 1)) + 1)
 
         val newRoot = rootIndex + markerShift
-        val parents = IntArray(newRoot)
+        val parents = IntArray(newRoot) { newRoot }
         val types = arrayOfNulls<SyntaxElementType>(newRoot)
         val starts = IntArray(newRoot)
         val ends = IntArray(newRoot)
+        val dones = IntArray(newRoot) { it }
         @Suppress("UNCHECKED_CAST")
         val children = arrayOfNulls<List<LightNode>>(newRoot + 1) as Array<List<LightNode>>
+        val none: List<LightNode> = emptyList()
         for (i in 0 until rootIndex) {
-            if (i in (b + 1)..lastInner) continue
+            if (i in (b + 1)..oldDone) continue
             val j = marker(i)
             parents[j] = marker(parentStartIndex[i])
             types[j] = compositeTypes[i]
             starts[j] = compositeStartOffsets[i].let { if (it >= oldBodyEnd) it + delta else it }
             ends[j] = compositeEndOffsets[i].let { if (it >= oldBodyEnd) it + delta else it }
-            children[j] = remapped(childrenByIndex[i], lastInner, lastToken, ::child)
+            dones[j] = if (i == b) subMarker(subDone) else marker(compositeDoneIndex[i])
+            children[j] = remapped(childrenByIndex[i], oldDone, lastToken, ::child)
         }
-        children[newRoot] = remapped(childrenByIndex[rootIndex], lastInner, lastToken, ::child)
-        for (i in subOrder) {
-            val j = subSlots.getValue(i)
+        children[newRoot] = remapped(childrenByIndex[rootIndex], oldDone, lastToken, ::child)
+        for (i in (sb + 1)..subDone) {
+            val j = subMarker(i)
+            val type = sub.compositeTypes[i]
+            types[j] = type
+            dones[j] = subMarker(sub.compositeDoneIndex[i])
+            if (type == null) {
+                // An end marker's slot: no node, nothing else to say, as in a parse.
+                children[j] = none
+                continue
+            }
             val p = sub.parentStartIndex[i]
-            parents[j] = if (p == subNode.index) b else subSlots.getValue(p)
-            types[j] = sub.compositeTypes[i]
+            parents[j] = if (inSub(p)) subMarker(p) else newRoot
             starts[j] = sub.compositeStartOffsets[i] - subStart + bodyStart
             ends[j] = sub.compositeEndOffsets[i] - subStart + bodyStart
             val list = sub.childrenByIndex[i]
             children[j] = if (list.isEmpty()) list else ChildrenList(IntArray(list.size) { subChild(list[it].index) })
         }
-        val bodyChildren = sub.childrenByIndex[subNode.index]
+        val bodyChildren = sub.childrenByIndex[sb]
         children[b] = ChildrenList(IntArray(bodyChildren.size) { subChild(bodyChildren[it].index) })
 
         val newCount = oldCount + tokenShift
@@ -318,7 +334,7 @@ class LightSyntaxTree(
             tokenStarts[t] = sub.tokens.getTokenStart(st) - subStart + bodyStart
             tokenEnds[t] = sub.tokens.getTokenEnd(st) - subStart + bodyStart
             val p = sub.tokenParentStart[st]
-            tokenParents[t] = if (p == subNode.index) b else subSlots[p] ?: newRoot
+            tokenParents[t] = if (inSub(p)) subMarker(p) else newRoot
         }
         for (t in lastToken + 1 until oldCount) {
             val j = t + tokenShift
@@ -339,6 +355,7 @@ class LightSyntaxTree(
             childrenByIndex = children,
             compositeEndOffsets = ends,
             compositeStartOffsets = starts,
+            compositeDoneIndex = dones,
             buildLanguageSpecificTreeStructure = { it },
         )
     }
@@ -346,20 +363,18 @@ class LightSyntaxTree(
     /**
      * [withReplacedSubtree] for the commonest keystroke: the body comes back with the same composites, in the
      * same nesting, over as many tokens as before (a letter typed into a name). Every index then means what it
-     * meant, so the new tree shares this one's composite types, parents, children and token parents, as well as
-     * the token types when none in the body changed; only the offsets are new. Trees are never written after
-     * they are built, which is what makes the sharing safe. Null when any composite or token of the body does
-     * not line up one for one, and the caller builds the tree in full.
+     * meant, so the new tree shares this one's composite types, parents, children, end markers and token
+     * parents, as well as the token types when none in the body changed; only the offsets are new. Trees are
+     * never written after they are built, which is what makes the sharing safe. Null when any slot or token of
+     * the body does not line up one for one, and the caller builds the tree in full.
      */
     private fun sameShapeWith(
         b: Int,
-        lastInner: Int,
-        subOrder: List<Int>,
-        subSlots: Map<Int, Int>,
+        sb: Int,
+        subDone: Int,
         newSource: CharSequence,
         delta: Int,
         sub: LightSyntaxTree,
-        subNode: LightNode,
         subFirst: Int,
         firstToken: Int,
         lastToken: Int,
@@ -368,19 +383,19 @@ class LightSyntaxTree(
     ): LightSyntaxTree? {
         // Where a node of the new body lands in this tree: its slot, or for a token its old index.
         fun slotOf(c: Int): Int =
-            if (c >= 0) (if (c == subNode.index) b else subSlots[c] ?: return Int.MIN_VALUE)
+            if (c >= 0) (if (c in sb..subDone) b + (c - sb) else Int.MIN_VALUE)
             else -((-(c + 1) - subFirst + firstToken) + 1)
         fun sameChildren(old: List<LightNode>, new: List<LightNode>): Boolean {
             if (old.size != new.size) return false
             for (k in old.indices) if (old[k].index != slotOf(new[k].index)) return false
             return true
         }
-        if (!sameChildren(childrenByIndex[b], sub.childrenByIndex[subNode.index])) return null
-        for (k in subOrder.indices) {
-            val sc = subOrder[k]
-            val i = b + 1 + k
-            if (i > lastInner) return null
+        if (!sameChildren(childrenByIndex[b], sub.childrenByIndex[sb])) return null
+        for (sc in (sb + 1)..subDone) {
+            val i = b + (sc - sb)
             if (compositeTypes[i] != sub.compositeTypes[sc]) return null
+            if (compositeDoneIndex[i] != slotOf(sub.compositeDoneIndex[sc])) return null
+            if (compositeTypes[i] == null) continue
             if (parentStartIndex[i] != slotOf(sub.parentStartIndex[sc])) return null
             if (!sameChildren(childrenByIndex[i], sub.childrenByIndex[sc])) return null
         }
@@ -398,10 +413,11 @@ class LightSyntaxTree(
             ends[i] = if (e >= oldBodyEnd) e + delta else e
         }
         // The body's own composites sit where the new parse put them.
-        for (k in subOrder.indices) {
-            val sc = subOrder[k]
-            starts[b + 1 + k] = sub.compositeStartOffsets[sc] - subStart + bodyStart
-            ends[b + 1 + k] = sub.compositeEndOffsets[sc] - subStart + bodyStart
+        for (sc in (sb + 1)..subDone) {
+            if (sub.compositeTypes[sc] == null) continue
+            val i = b + (sc - sb)
+            starts[i] = sub.compositeStartOffsets[sc] - subStart + bodyStart
+            ends[i] = sub.compositeEndOffsets[sc] - subStart + bodyStart
         }
 
         val count = tokens.tokenCount
@@ -438,16 +454,17 @@ class LightSyntaxTree(
             childrenByIndex = childrenByIndex,
             compositeEndOffsets = ends,
             compositeStartOffsets = starts,
+            compositeDoneIndex = compositeDoneIndex,
             buildLanguageSpecificTreeStructure = { it },
         )
     }
 
     /** [list] with [child] applied to each entry, or [list] itself when no entry lies past the replaced range. */
-    private inline fun remapped(list: List<LightNode>, lastInner: Int, lastToken: Int, child: (Int) -> Int): List<LightNode> {
+    private inline fun remapped(list: List<LightNode>, lastReplaced: Int, lastToken: Int, child: (Int) -> Int): List<LightNode> {
         if (list !is ChildrenList) return list
         val ints = list.indices
         var needs = false
-        for (c in ints) if ((c >= 0 && c > lastInner) || (c < 0 && -(c + 1) > lastToken)) { needs = true; break }
+        for (c in ints) if ((c >= 0 && c > lastReplaced) || (c < 0 && -(c + 1) > lastToken)) { needs = true; break }
         if (!needs) return list
         return ChildrenList(IntArray(ints.size) { child(ints[it]) })
     }
@@ -566,6 +583,7 @@ fun buildLanguageSpecificLightTree(
         childrenByIndex = childrenByIndex,
         compositeEndOffsets = compositeEndOffsets,
         compositeStartOffsets = compositeStartOffsets,
+        compositeDoneIndex = IntArray(markerCount) { if (doneForStart[it] >= 0) doneForStart[it] else it },
         buildLanguageSpecificTreeStructure = buildLanguageSpecificTreeStructure,
     )
 }

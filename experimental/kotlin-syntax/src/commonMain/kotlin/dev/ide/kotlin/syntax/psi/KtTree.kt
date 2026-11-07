@@ -167,9 +167,11 @@ interface LazyBodyParser {
 
 /**
  * Whether a lazy parse left [node] collapsed: a block opened by `{` holding only tokens (and the one-token
- * composites the parser builds for `?:`, `!!` and the like), or a lambda whose literal carries no body.
- * Judged by shape because the tree records no flag; a block wrongly taken as collapsed would only be parsed
- * again into the same tree, which `LazyBlockParityTest` pins.
+ * composites the builder assembles for `?:`, `!!`, `?.`), or a lambda whose literal carries no body.
+ * Judged by shape because the tree records no flag. Any other composite means the grammar parsed the block in
+ * place (a branch of an `if` in a property initializer, say), even one whose children are all tokens, such as
+ * `{ a }`: taken as collapsed, an edit in it was spliced back as a collapsed body, which reads the same once
+ * expanded but numbers its nodes unlike a parse of the file.
  */
 internal fun isCollapsedBody(tree: LightSyntaxTree, node: LightNode, type: SyntaxElementType = tree.getType(node)): Boolean {
     // By index throughout: this runs on every block and lambda of a file, per parse.
@@ -186,6 +188,7 @@ internal fun isCollapsedBody(tree: LightSyntaxTree, node: LightNode, type: Synta
     for (i in 0 until n) {
         val c = LightNode(tree.childIndexAt(node, i))
         if (tree.isToken(c)) continue
+        if (tree.getType(c) !in org.jetbrains.kotlin.kmp.parser.utils.SemanticWhitespaceAwareSyntaxBuilderImpl.complexTokens) return false
         for (j in 0 until tree.childCount(c)) if (!tree.isToken(LightNode(tree.childIndexAt(c, j)))) return false
     }
     return true
@@ -298,8 +301,9 @@ private fun KtElement.indexAt(rel: RelativeElement): Int {
     if (root < 0) return -1
     val index = root + rel.index
     if (index >= tree.rootIndex) return -1
+    // A differently shaped subtree can put any slot there, an end marker's (no node, no type) among them.
+    if (tree.compositeTypeAt(index) != rel.type) return -1
     val candidate = LightNode(index)
-    if (tree.getType(candidate) != rel.type) return -1
     val start = tree.getStartOffset(candidate)
     if (start - tree.getStartOffset(node) != rel.start || tree.getEndOffset(candidate) - start != rel.length) return -1
     return index
