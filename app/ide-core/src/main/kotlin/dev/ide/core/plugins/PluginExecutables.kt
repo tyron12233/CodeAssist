@@ -30,12 +30,24 @@ object PluginExecutables {
         val mine = all.filter { it.name.startsWith("lib/$abi/") && it.name.indexOf('/', "lib/$abi/".length) < 0 }
             .sortedBy { it.name }
         val executables = mine.filter { e ->
-            zip.getInputStream(e).use { input -> isExecutable(input.readNBytes(HEADER_BYTES)) }
+            zip.getInputStream(e).use { input -> isExecutable(readUpTo(input, HEADER_BYTES)) }
         }.map { it.name }
         if (executables.isEmpty()) return null
         val digest = MessageDigest.getInstance("SHA-256")
         for (e in mine) digest.update("${e.name}:${e.crc}:${e.size}\n".toByteArray())
         Scan(abi, mine.map { it.name }, executables, digest.digest().joinToString("") { "%02x".format(it) })
+    }
+
+    /** Up to [limit] bytes from the start of [input]. (`InputStream.readNBytes` is API 33; the app's floor is 26.) */
+    private fun readUpTo(input: java.io.InputStream, limit: Int): ByteArray {
+        val buf = ByteArray(limit)
+        var n = 0
+        while (n < limit) {
+            val r = input.read(buf, n, limit - n)
+            if (r < 0) break
+            n += r
+        }
+        return if (n == limit) buf else buf.copyOf(n)
     }
 
     /**
