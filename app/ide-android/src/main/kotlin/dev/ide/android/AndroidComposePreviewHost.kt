@@ -1,8 +1,16 @@
 package dev.ide.android
 
 import android.graphics.Bitmap
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import android.view.TextureView
+import android.graphics.SurfaceTexture
+import android.graphics.Matrix
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent as AndroidKeyEvent
 import android.view.MotionEvent as AndroidMotionEvent
 import androidx.compose.foundation.Image
@@ -67,6 +75,8 @@ import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.PreviewParameterBinding
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.ui.ComposePreviewHost
+import dev.ide.ui.EndlessAnimationWatch
+import dev.ide.ui.LocalPreviewAnimation
 import dev.ide.ui.LocalPreviewBufferStale
 import dev.ide.ui.whileBufferCurrent
 import dev.ide.ui.backend.UiComposePreview
@@ -91,6 +101,9 @@ private const val PREVIEW_READY_MAX_ATTEMPTS = 300
 private const val MAX_PREVIEW_PX = 2400
 /** Fall back to the in-process renderer if the `:preview` session streams no frame within this long of opening. */
 private const val REMOTE_FIRST_FRAME_TIMEOUT_MS = 6_000L
+
+/** How often a running remote preview is checked for an endless animation (see [EndlessAnimationWatch]). */
+private const val ENDLESS_ANIMATION_CHECK_MS = 1_000L
 /** How long a preview's frame must stay unchanged before it is saved as its last frame (see PreviewFrameCache). */
 private const val FRAME_SAVE_SETTLE_MS = 800L
 
@@ -313,7 +326,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         }
         var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible == true) }
         CompositionLocalProvider(LocalConfiguration provides cfg) {
-            Box(modifier, contentAlignment = Alignment.Center) {
+            BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
                 // The remote session opens as soon as its classpath and resource roots are known, WHILE the preview is
                 // still lowering: starting `:preview`'s executor, resources and surface took ~0.8 s that used to
                 // follow the lowering. The program reaches the session when it is ready (update).
@@ -328,8 +341,18 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             val pcfg = preview.config
             val surfaceDp = PreviewDevices.renderSurfaceDp(pcfg.device, pcfg.widthDp, pcfg.heightDp, pcfg.showSystemUi)
             val wrapContent = surfaceDp == null
-            val wDp = surfaceDp?.first ?: PreviewDevices.DEFAULT_VIEWPORT_WIDTH_DP
-            val hDp = surfaceDp?.second ?: PreviewDevices.DEFAULT_VIEWPORT_HEIGHT_DP
+            val cfgWDp = surfaceDp?.first ?: PreviewDevices.DEFAULT_VIEWPORT_WIDTH_DP
+            val cfgHDp = surfaceDp?.second ?: PreviewDevices.DEFAULT_VIEWPORT_HEIGHT_DP
+            // The pane's Rotate turns the card landscape, but the config sizes above are the device's portrait ones:
+            // the remote surface kept rendering portrait into a landscape card (a cropped middle strip). When the
+            // slot this preview is given is turned the other way, render at the slot's own size (the pane's density
+            // is the device's, so its dp ARE device dp, mock system bars already taken out) — what in-process fills.
+            val slotW = maxWidth.value
+            val slotH = maxHeight.value
+            val rotated = surfaceDp != null && constraints.hasBoundedWidth && constraints.hasBoundedHeight &&
+                slotW >= 1f && slotH >= 1f && (slotW > slotH) != (cfgWDp > cfgHDp)
+            val wDp = if (rotated) slotW.toInt() else cfgWDp
+            val hDp = if (rotated) slotH.toInt() else cfgHDp
             // Clamp UNIFORMLY (both axes by the same factor) so the surface keeps the card's aspect
             // even when a high-density / tall device would exceed MAX_PREVIEW_PX — a per-axis clamp
             // skewed the aspect, which re-introduced letterboxing AND offset the forwarded touch
@@ -622,7 +645,20 @@ private fun RemoteComposePreview(
     // across a night/size change draws it (scaled) until the re-rendered one streams in.
     val cpKey = jars.joinToString("\n")
     val resKey = resRoots.joinToString("\n")
-    var frame by remember(client, cpKey, resKey, namespace) { mutableStateOf<Bitmap?>(null) }
+    // The latest STREAMED frame (the first frames, and every frame when direct rendering is unavailable). It is
+    // read only at DRAW time (the frame Box's drawBehind), so a new frame redraws the pane without recomposing it;
+    // [frameSize] is the composition's view of it and changes only when the frame's dimensions do.
+    val frameState = remember(client, cpKey, resKey, namespace) { mutableStateOf<Bitmap?>(null) }
+    var frameSize by remember(client, cpKey, resKey, namespace) { mutableStateOf<IntSize?>(null) }
+    // Direct rendering: once a content frame has streamed in, `:preview` renders straight into this pane's
+    // TextureView (setOutput), so an animating preview costs the IDE no Bitmap, GC or recomposition per frame —
+    // just compositing the texture. The streamed bitmap shows until the texture has its first buffer.
+    val textureReady = remember(client, cpKey, resKey, namespace) { mutableStateOf(false) }
+    val outputBox = remember(client, cpKey, resKey, namespace) { arrayOfNulls<android.view.Surface>(1) }
+    val textureBox = remember(client, cpKey, resKey, namespace) { arrayOfNulls<TextureView>(1) }
+    var outputEpoch by remember(client, cpKey, resKey, namespace) { mutableIntStateOf(0) }
+    // Bumped on every frame from either source: the last-frame cache saves once it stops moving.
+    val frameTick = remember(client, cpKey, resKey, namespace) { java.util.concurrent.atomic.AtomicLong(0) }
     // The measured content size (surface px) of a wrap-to-content preview — the `:preview` reports it so we crop
     // the fixed-surface frame to just the content and let the card size to it. Null for a fixed-size preview.
     var contentSize by remember(client, cpKey, resKey, namespace) { mutableStateOf<IntSize?>(null) }
@@ -633,6 +669,11 @@ private fun RemoteComposePreview(
     var sessionEpoch by remember(client, cpKey, resKey, namespace) { mutableIntStateOf(0) }
     val fallback by rememberUpdatedState(onUnavailable)
     val openLowered by rememberUpdatedState(lowered)
+    val pendingFrame = remember(client, cpKey, resKey, namespace) { java.util.concurrent.atomic.AtomicReference<Bitmap?>(null) }
+    val watch = remember(client, cpKey, resKey, namespace) { EndlessAnimationWatch() }
+    val animation = LocalPreviewAnimation.current
+    val paused by animation.paused
+    val onEndless by rememberUpdatedState(animation.onEndlessAnimation)
 
     // Open the session off the main thread (the :preview bind can block) and stream frames in; re-open ONLY on a
     // classpath / resource change — NOT on a program edit (→ update()) or a size/night change (→ resize()).
@@ -644,7 +685,21 @@ private fun RemoteComposePreview(
         val poolKey = listOf(cpKey, resKey, namespace, wrapContent.toString(), sandbox.joinToString(",")).joinToString("\u0000")
         fun release(s: ComposePreviewRemoteClient.Session) = if (broken) s.close() else client.park(s, poolKey)
         val sink = object : ComposePreviewRemoteClient.FrameSink {
-            override fun onFrame(bitmap: Bitmap, seq: Long) { timeline?.finish("remote"); main.post { frame = bitmap } }
+            override fun onFrame(bitmap: Bitmap, seq: Long) {
+                timeline?.finish("remote")
+                watch.onFrame(SystemClock.uptimeMillis())
+                frameTick.incrementAndGet()
+                // Coalesce: at most one frame post queued on main; a frame arriving before it runs replaces the
+                // pending one instead of queueing a second redraw of the pane.
+                if (pendingFrame.getAndSet(bitmap) == null) main.post {
+                    val b = pendingFrame.getAndSet(null) ?: return@post
+                    frameState.value = b
+                    val size = IntSize(b.width, b.height)
+                    // A new size (a resize recreated `:preview`'s display): the texture's buffers are the old size
+                    // until `:preview` re-attaches, so show the streamed frame meanwhile.
+                    if (frameSize != size) { frameSize = size; textureReady.value = false }
+                }
+            }
             override fun onError(message: String) {
                 // The fallback is deliberate — a fatal remote failure may be remote-only, and in-process may well
                 // render it fine, so this is a recovery path rather than something to report. But the message
@@ -678,101 +733,213 @@ private fun RemoteComposePreview(
     LaunchedEffect(sessionEpoch, lowered) {
         val s = sessionBox[0] ?: return@LaunchedEffect
         val program = lowered ?: return@LaunchedEffect
+        watch.onActivity(SystemClock.uptimeMillis())
         withContext(Dispatchers.IO) { s.update(program) }
+    }
+    // Pause / resume the session's animations with the pane, and pause the pane when the preview animates nonstop
+    // (no edit or input) for a while: an endless animation otherwise keeps both processes rendering and the IDE
+    // redrawing for as long as the preview is on screen, which froze low-end phones (material3's
+    // CircularWavyProgressIndicator moves its wave forever, even at a fixed progress).
+    LaunchedEffect(sessionEpoch, paused) {
+        val s = sessionBox[0] ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { s.setPaused(paused) }
+        if (paused) return@LaunchedEffect
+        watch.onActivity(SystemClock.uptimeMillis())
+        while (true) {
+            delay(ENDLESS_ANIMATION_CHECK_MS)
+            if (watch.isEndless(SystemClock.uptimeMillis())) {
+                remoteLog.info("preview animated nonstop for ${EndlessAnimationWatch.PAUSE_AFTER_MS}ms with no edits or input: pausing it")
+                onEndless()
+                break
+            }
+        }
     }
     // Size / night change: re-target the LIVE session instead of re-opening (a night toggle re-renders on the same
     // off-screen surface; a size change recreates it in `:preview`). oneway, so hop off main. Also fires right
     // after each open with the opened values — a harmless no-op in `:preview` when nothing actually changed.
     LaunchedEffect(sessionEpoch, widthPx, heightPx, density, night) {
         val s = sessionBox[0] ?: return@LaunchedEffect
+        watch.onActivity(SystemClock.uptimeMillis()) // a rotate / night toggle: the user is looking at it
         withContext(Dispatchers.IO) { s.resize(widthPx, heightPx, density, night) }
     }
     // First-frame watchdog: no frame within the deadline → fall back in-process.
     // Counted from when the session has a program: one opened ahead of its lowering has nothing to draw until then.
     LaunchedEffect(sessionEpoch, lowered != null) {
-        if (sessionBox[0] != null && lowered != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
+        if (sessionBox[0] != null && lowered != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frameSize == null) fallback() }
+    }
+    // Hand the pane's TextureView surface to the session once a content frame has streamed in (`:preview` applies it
+    // after its next content frame too). Re-sent when the surface or the session changes; detached when the surface
+    // is destroyed (onSurfaceTextureDestroyed) and when the session is parked (clearProgram).
+    // Keyed on the frame SIZE: after a resize `:preview` waits for this re-send, which runs after the AndroidView's
+    // update block has resized the texture's buffers.
+    LaunchedEffect(sessionEpoch, outputEpoch, frameSize) {
+        val s = sessionBox[0] ?: return@LaunchedEffect
+        val out = outputBox[0] ?: return@LaunchedEffect
+        val dims = frameSize ?: return@LaunchedEffect
+        textureBox[0]?.surfaceTexture?.setDefaultBufferSize(dims.width, dims.height)
+        withContext(Dispatchers.IO) { s.setOutput(out) }
     }
 
     // A wrap-to-content preview renders into the fixed device-sized surface with the composable measured at its
     // intrinsic size, top-left. Show only the reported content rect so the card shows just the content (at its own
-    // aspect) instead of the full device surface with empty space below/right. Cropped at DRAW time (a painter
-    // with a source rect): copying each streamed frame into a new cropped Bitmap cost a GPU copy + an allocation
-    // on the UI thread per frame, i.e. 60 a second while the preview animates.
-    val full = frame
+    // aspect) instead of the full device surface with empty space below/right. Cropped at DRAW time (a source rect
+    // for the streamed bitmap, a transform for the texture): copying each frame into a new cropped Bitmap cost a
+    // GPU copy + an allocation on the UI thread per frame.
+    val dims = frameSize
     val cs = contentSize
-    val crop = if (full != null && wrapContent && cs != null && cs.width > 0 && cs.height > 0 &&
-        (cs.width < full.width || cs.height < full.height)
-    ) IntSize(cs.width.coerceAtMost(full.width), cs.height.coerceAtMost(full.height)) else null
-    val image = remember(full) { full?.asImageBitmap() }
-    val painter = remember(image, crop) {
-        image?.let { BitmapPainter(it, IntOffset.Zero, crop ?: IntSize(it.width, it.height)) }
-    }
+    val crop = if (dims != null && wrapContent && cs != null && cs.width > 0 && cs.height > 0 &&
+        (cs.width < dims.width || cs.height < dims.height)
+    ) IntSize(cs.width.coerceAtMost(dims.width), cs.height.coerceAtMost(dims.height)) else null
+    val shown = crop ?: dims
+    val latestShown by rememberUpdatedState(shown)
+    val latestCrop by rememberUpdatedState(crop)
     Box(modifier, contentAlignment = Alignment.Center) {
-        if (painter != null) {
-            // The frame is drawn scaled to the pane width (ContentScale.FillWidth). Forward each pointer event to
-            // the remote session, mapped to the off-screen canvas px. We use a NATIVE pointerInput (not
-            // pointerInteropFilter): PointerInputScope guarantees `change.position` lies within (0,0)..`size`, so
-            // the fraction position/size is exact regardless of the preview surface's graphicsLayer fit/zoom
-            // SCALE and the previewed density — pointerInteropFilter reported coordinates in a scale-mismatched
-            // space, so taps landed increasingly above the touch toward the bottom of the preview.
-            val bw = painter.intrinsicSize.width.toInt()
-            val bh = painter.intrinsicSize.height.toInt()
+        if (dims != null && shown != null) {
+            // The frame is drawn scaled to the pane width. Forward each pointer event to the remote session, mapped
+            // to the off-screen canvas px. We use a NATIVE pointerInput (not pointerInteropFilter): PointerInputScope
+            // guarantees `change.position` lies within (0,0)..`size`, so the fraction position/size is exact
+            // regardless of the preview surface's graphicsLayer fit/zoom SCALE and the previewed density —
+            // pointerInteropFilter reported coordinates in a scale-mismatched space, so taps landed increasingly
+            // above the touch toward the bottom of the preview.
+            val bw = shown.width
+            val bh = shown.height
             val focusRequester = remember { FocusRequester() }
-            Image(
-                painter = painter,
-                contentDescription = null,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
+            Box(
+                Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .focusable()
-                    // Forward key events (hardware keyboard, nav/shortcut keys, onKeyEvent handlers) to the focused
-                    // preview. Don't swallow BACK, so the user can still navigate out. Soft-keyboard TEXT entry
-                    // (commitText) is a separate IME bridge — see docs.
-                    .onPreviewKeyEvent { ev ->
-                        val s = sessionBox[0]
-                        val ke = ev.nativeKeyEvent
-                        if (s != null && ke.keyCode != AndroidKeyEvent.KEYCODE_BACK) {
-                            s.dispatchKey(ke.action, ke.keyCode, ke.metaState, ke.eventTime)
-                            true
-                        } else false
-                    }
-                    // Re-launched on a surface resize (the canvas px change); the session is read live from the box.
-                    .pointerInput(bw, bh) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val change = awaitPointerEvent().changes.firstOrNull() ?: continue
-                                val s = sessionBox[0]
-                                if (s != null && size.width > 0 && size.height > 0) {
-                                    val action = when {
-                                        change.changedToDownIgnoreConsumed() -> AndroidMotionEvent.ACTION_DOWN
-                                        change.changedToUpIgnoreConsumed() -> AndroidMotionEvent.ACTION_UP
-                                        else -> AndroidMotionEvent.ACTION_MOVE
-                                    }
-                                    // Tap focuses the preview so keyboard/nav keys route to it (tap elsewhere to leave).
-                                    if (action == AndroidMotionEvent.ACTION_DOWN) runCatching { focusRequester.requestFocus() }
-                                    // position ∈ (0,0)..size (guaranteed by PointerInputScope) → exact fraction → canvas px.
-                                    val cx = (change.position.x / size.width).coerceIn(0f, 1f) * bw
-                                    val cy = (change.position.y / size.height).coerceIn(0f, 1f) * bh
-                                    s.dispatchInput(action, cx, cy, change.id.value.toInt(), change.uptimeMillis)
+                    .aspectRatio(bw.toFloat() / bh.toFloat())
+                    // The streamed frame, read here (draw phase) so a new one only redraws. Hidden once the texture
+                    // shows: a frame can be partly transparent, and a stale bitmap must not show through it.
+                    .drawBehind {
+                        if (textureReady.value) return@drawBehind
+                        val b = frameState.value ?: return@drawBehind
+                        val src = latestShown ?: return@drawBehind
+                        drawImage(
+                            b.asImageBitmap(),
+                            srcOffset = IntOffset.Zero,
+                            srcSize = IntSize(src.width.coerceAtMost(b.width), src.height.coerceAtMost(b.height)),
+                            dstSize = IntSize(this.size.width.toInt(), this.size.height.toInt()),
+                        )
+                    },
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        TextureView(ctx).apply {
+                            isOpaque = false
+                            textureBox[0] = this
+                            surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                                override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
+                                    frameSizeOf(frameState.value)?.let { st.setDefaultBufferSize(it.width, it.height) }
+                                    outputBox[0] = android.view.Surface(st)
+                                    outputEpoch++
+                                }
+                                override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {}
+                                override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                                    // Detach first (oneway, ordered before anything sent later on this binder), so
+                                    // `:preview` stops rendering into a surface that is about to be released.
+                                    val out = outputBox[0]
+                                    outputBox[0] = null
+                                    sessionBox[0]?.setOutput(null)
+                                    out?.release()
+                                    textureReady.value = false
+                                    outputEpoch++
+                                    return true
+                                }
+                                override fun onSurfaceTextureUpdated(st: SurfaceTexture) {
+                                    timeline?.finish("remote")
+                                    watch.onFrame(SystemClock.uptimeMillis())
+                                    frameTick.incrementAndGet()
+                                    if (!textureReady.value) textureReady.value = true
                                 }
                             }
                         }
                     },
-            )
+                    modifier = Modifier.matchParentSize(),
+                    update = { tv ->
+                        // `:preview` renders the whole surface into the buffer; size the buffers to it and show only
+                        // the cropped top-left rect by scaling the texture up within the view.
+                        tv.surfaceTexture?.setDefaultBufferSize(dims.width, dims.height)
+                        tv.setTransform(Matrix().apply {
+                            setScale(dims.width.toFloat() / shown.width, dims.height.toFloat() / shown.height)
+                        })
+                    },
+                    onRelease = { tv -> if (textureBox[0] === tv) textureBox[0] = null },
+                )
+                // Input goes to an overlay on top of the texture, so the View never sees (or eats) it.
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .focusRequester(focusRequester)
+                        .focusable()
+                        // Forward key events (hardware keyboard, nav/shortcut keys, onKeyEvent handlers) to the
+                        // focused preview. Don't swallow BACK, so the user can still navigate out. Soft-keyboard TEXT
+                        // entry (commitText) is a separate IME bridge — see docs.
+                        .onPreviewKeyEvent { ev ->
+                            val s = sessionBox[0]
+                            val ke = ev.nativeKeyEvent
+                            if (s != null && ke.keyCode != AndroidKeyEvent.KEYCODE_BACK) {
+                                watch.onActivity(SystemClock.uptimeMillis())
+                                s.dispatchKey(ke.action, ke.keyCode, ke.metaState, ke.eventTime)
+                                true
+                            } else false
+                        }
+                        // Re-launched on a surface resize (the canvas px change); the session is read live from the box.
+                        .pointerInput(bw, bh) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val change = awaitPointerEvent().changes.firstOrNull() ?: continue
+                                    val s = sessionBox[0]
+                                    if (s != null && size.width > 0 && size.height > 0) {
+                                        val action = when {
+                                            change.changedToDownIgnoreConsumed() -> AndroidMotionEvent.ACTION_DOWN
+                                            change.changedToUpIgnoreConsumed() -> AndroidMotionEvent.ACTION_UP
+                                            else -> AndroidMotionEvent.ACTION_MOVE
+                                        }
+                                        // Tap focuses the preview so keyboard/nav keys route to it (tap elsewhere to leave).
+                                        if (action == AndroidMotionEvent.ACTION_DOWN) runCatching { focusRequester.requestFocus() }
+                                        // position ∈ (0,0)..size (guaranteed by PointerInputScope) → exact fraction → canvas px.
+                                        val cx = (change.position.x / size.width).coerceIn(0f, 1f) * bw
+                                        val cy = (change.position.y / size.height).coerceIn(0f, 1f) * bh
+                                        watch.onActivity(SystemClock.uptimeMillis())
+                                        s.dispatchInput(action, cx, cy, change.id.value.toInt(), change.uptimeMillis)
+                                    }
+                                }
+                            }
+                        },
+                )
+            }
         } else {
             LastFrameOrSpinner(frameKey, Modifier.fillMaxWidth()) { timeline?.mark("lastFrame") }
         }
     }
-    // Keep the frame on screen for the next open, once it has settled (not every frame of an animation).
+    // Keep the frame on screen for the next open, once it has settled (not every frame of an animation): saved when
+    // no frame arrived for a full check interval. Read from the texture once it is showing (a one-off copy), else the
+    // streamed bitmap.
     val context = LocalContext.current
-    LaunchedEffect(full, frameKey, crop) {
-        val f = full ?: return@LaunchedEffect
+    LaunchedEffect(frameKey, sessionEpoch) {
         val key = frameKey ?: return@LaunchedEffect
-        delay(FRAME_SAVE_SETTLE_MS)
-        PreviewFrameCache.save(context, key, f, crop?.width, crop?.height)
+        var seen = -1L
+        var saved = -1L
+        while (true) {
+            delay(FRAME_SAVE_SETTLE_MS)
+            val tick = frameTick.get()
+            if (tick == 0L || tick != seen) { seen = tick; continue }
+            if (tick == saved) continue
+            saved = tick
+            val tv = textureBox[0]
+            val shownNow = latestShown ?: continue
+            if (textureReady.value && tv != null && tv.isAvailable) {
+                val copy = runCatching { tv.getBitmap(shownNow.width, shownNow.height) }.getOrNull() ?: continue
+                PreviewFrameCache.save(context, key, copy, null, null)
+            } else {
+                val b = frameState.value ?: continue
+                PreviewFrameCache.save(context, key, b, latestCrop?.width, latestCrop?.height)
+            }
+        }
     }
 }
+
+private fun frameSizeOf(b: Bitmap?): IntSize? = b?.let { IntSize(it.width, it.height) }
 
 /**
  * Render the lowered preview, expanding a `@PreviewParameter` into one stacked render per sample value (each in

@@ -11,6 +11,7 @@
 // (state in the remote slot table survives). Input forwarding + the hang watchdog are later phases.
 package dev.ide.android.preview;
 
+import android.view.Surface;
 import dev.ide.android.preview.IComposePreviewCallback;
 
 interface IComposePreviewSession {
@@ -63,4 +64,16 @@ interface IComposePreviewSession {
 
     // Tear down the session (dismiss the Presentation, release the display + VM executor). oneway.
     oneway void close(int sessionId);
+
+    // Freeze (true) or resume (false) the session's animations. Paused, the composition's frame clock stops after
+    // the next frame is delivered, so an endless animation stops drawing and streaming; an update/resize/input
+    // still renders one frame. Survives a surface recreation (resize). oneway.
+    oneway void setPaused(int sessionId, boolean paused);
+
+    // Render straight into [surface] (the IDE preview pane's TextureView) instead of streaming frames back: no copy,
+    // Bitmap or recomposition per frame on the IDE side. Applied once the session has delivered a content frame
+    // the usual way (so the pane never shows the blank pre-content frames), and again after a resize recreates the
+    // display. null detaches: frames stream over the callback again. The IDE detaches before releasing the
+    // surface. oneway.
+    oneway void setOutput(int sessionId, in Surface surface);
 }

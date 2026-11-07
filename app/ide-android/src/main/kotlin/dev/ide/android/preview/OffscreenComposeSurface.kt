@@ -17,11 +17,15 @@ import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.WindowManager
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.runtime.Recomposer
+import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -35,6 +39,10 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import java.util.concurrent.CountDownLatch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -131,39 +139,132 @@ class OffscreenComposeSurface(
     @Volatile private var presentation: Presentation? = null
     @Volatile private var gestureDownTime = 0L
 
+    // Frame pacing (frame thread only). The composition draws at the display rate, and a never-ending animation
+    // (material3's wavy progress indicators, an infinite transition) draws forever: delivering every frame made
+    // the IDE redraw its whole window 60 times a second and, on the CPU path, moved ~7.5 MB per frame through
+    // disk. Frames are delivered at most every [minIntervalMs]; one that arrives sooner is HELD (replacing any
+    // older held one) and delivered when its slot comes, so the last frame of an animation always arrives.
+    @Volatile private var lastDeliveredAt = 0L
+    private var held: Image? = null
+    private var heldScheduled = false
+    private val flushHeld = Runnable {
+        heldScheduled = false
+        val img = held ?: return@Runnable
+        held = null
+        runCatching { img.use { deliver(it) } }
+    }
+
+    /** Uptime until which frames go out at the full rate: an input gesture should track the finger. */
+    @Volatile private var boostUntil = 0L
+
+    /** Input: run (and deliver) frames at the full rate for a moment, even while paused (the tap's effect shows). */
+    private fun noteInput() {
+        boostUntil = SystemClock.uptimeMillis() + INPUT_BOOST_MS
+        clock?.boostUntilNanos = System.nanoTime() + INPUT_BOOST_MS * 1_000_000L
+        mainHandler.post { if (!closed.get()) clock?.allowFrames(INPUT_FRAMES_WHILE_PAUSED) }
+    }
+
+    private fun minIntervalMs(now: Long): Long {
+        val zeroCopy = hwMode && onHardwareFrame != null
+        val boosted = now < boostUntil
+        return when {
+            zeroCopy -> if (boosted) 0L else HW_FRAME_INTERVAL_MS
+            else -> if (boosted) CPU_BOOSTED_FRAME_INTERVAL_MS else CPU_FRAME_INTERVAL_MS
+        }
+    }
+
     init {
         imageReader.setOnImageAvailableListener({ reader ->
           // Never let a single bad frame take down the frame thread (an invalidated reader throwing
           // IllegalStateException, a short/padded plane, …) — a dropped frame is the right degradation.
           runCatching {
             // acquireLatestImage drops any queued older frames, so a slow consumer coalesces to the newest frame
-            // instead of falling behind — the preview shows "live", not a lagging backlog.
-            reader.acquireLatestImage()?.use { img ->
+            // instead of falling behind — the preview shows "live", not a lagging backlog. With a held frame that
+            // is at most 3 images acquired at once (held + latest + the one it probes), within maxImages.
+            val img = reader.acquireLatestImage() ?: return@runCatching
+            var keep = false
+            try {
                 // Drop pre-content frames: a freshly-shown Presentation delivers its window buffer BEFORE the
                 // composition draws — a fully-transparent frame (the "black flash" on open). Once content has been
                 // seen, stop sampling (latch) so the zero-copy path never touches the pixels again.
                 if (!contentSeen) {
                     val drawn = firstDrawNanos
                     val afterDraw = drawn != 0L && (img.timestamp == 0L || img.timestamp >= drawn)
-                    if (!afterDraw && !hasContent(img)) return@use
+                    if (!afterDraw && !hasContent(img)) return@runCatching
                     contentSeen = true
                 }
-                val hwCb = onHardwareFrame
-                if (hwMode && hwCb != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val hb = img.hardwareBuffer ?: return@use
-                    frames.incrementAndGet()
-                    hb.use { hb ->
-                        hwCb(hb, img.width, img.height)
-                    }
+                val now = SystemClock.uptimeMillis()
+                val wait = lastDeliveredAt + minIntervalMs(now) - now
+                if (wait <= 0 && held == null) {
+                    deliver(img)
                 } else {
-                    val frame = Frame(readFrameBytes(img), img.width, img.height)
-                    latestBytes.set(frame.bytes)
-                    frames.incrementAndGet()
-                    runCatching { onFrame?.invoke(frame) }
+                    held?.close()
+                    held = img
+                    keep = true
+                    if (!heldScheduled) {
+                        heldScheduled = true
+                        frameHandler.postDelayed(flushHeld, wait.coerceAtLeast(1L))
+                    }
                 }
+            } finally {
+                if (!keep) img.close()
             }
           }
         }, frameHandler)
+    }
+
+    /** Hand [img] to the consumer (frame thread); [img] is closed by the caller. */
+    private fun deliver(img: Image) {
+        lastDeliveredAt = SystemClock.uptimeMillis()
+        val hwCb = onHardwareFrame
+        if (hwMode && hwCb != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val hb = img.hardwareBuffer ?: return
+            frames.incrementAndGet()
+            hb.use { hb ->
+                hwCb(hb, img.width, img.height)
+            }
+        } else {
+            val frame = Frame(readFrameBytes(img), img.width, img.height)
+            latestBytes.set(frame.bytes)
+            frames.incrementAndGet()
+            runCatching { onFrame?.invoke(frame) }
+        }
+    }
+
+    // The composition runs on its OWN Recomposer, driven by [clock] (a 30 fps cap + pause) instead of the window
+    // recomposer Compose would create, which ticks at the display rate. Created in [start] on the main thread.
+    @Volatile private var clock: PreviewFrameClock? = null
+    private var recomposerScope: CoroutineScope? = null
+    private var recomposer: Recomposer? = null
+    @Volatile private var pausedRequested = false
+
+    /**
+     * Freeze ([paused] = true) or resume the composition's animations. Paused, the clock lets a couple more frames
+     * through and then stops, so an endless animation stops recomposing and drawing and nothing streams; a preview
+     * paused before its first frame (or right after an edit) still shows it.
+     */
+    fun setPaused(paused: Boolean) {
+        pausedRequested = paused
+        mainHandler.post { if (!closed.get()) clock?.setPaused(paused) }
+    }
+
+    /** While paused, let the composition run a couple of frames (an edit, a resize, input), then freeze again. */
+    fun renderOneFrame() {
+        mainHandler.post { if (!closed.get()) clock?.allowFrames() }
+    }
+
+    /**
+     * Where the display renders: [output] (a Surface the IDE owns, e.g. its preview pane's TextureView, so frames go
+     * straight to the screen with no copy, Bitmap or recomposition on the IDE side), or this surface's own
+     * [ImageReader] when null (frames reach [onFrame]/[onHardwareFrame]). The composition is redrawn into the new
+     * target right away, paused or not. The caller keeps ownership of [output]: detach (null) before releasing it.
+     */
+    fun setOutput(output: Surface?) {
+        mainHandler.post {
+            if (closed.get()) return@post
+            runCatching { virtualDisplay.surface = output ?: imageReader.surface }
+            composeView?.invalidate()
+        }
     }
 
     /** Set the streaming [content] (on the main thread) and keep the composition alive; frames flow to [onFrame]. */
@@ -171,7 +272,17 @@ class OffscreenComposeSurface(
         runOnMain {
             owner.resume()
             val p = Presentation(context, virtualDisplay.display)
+            val ui = AndroidUiDispatcher.Main
+            val frameClock = PreviewFrameClock(ui[MonotonicFrameClock]!!).also { it.setPaused(pausedRequested) }
+            val ctx = ui + frameClock
+            val r = Recomposer(ctx)
+            val scope = CoroutineScope(ctx)
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { r.runRecomposeAndApplyChanges() }
+            clock = frameClock
+            recomposer = r
+            recomposerScope = scope
             val view = ComposeView(p.context).apply {
+                setParentCompositionContext(r)
                 setViewTreeLifecycleOwner(owner)
                 setViewTreeViewModelStoreOwner(owner)
                 setViewTreeSavedStateRegistryOwner(owner)
@@ -255,6 +366,7 @@ class OffscreenComposeSurface(
      * tracked from its ACTION_DOWN so MOVE/UP belong to the same gesture.
      */
     fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
+        noteInput()
         mainHandler.post {
             val now = SystemClock.uptimeMillis()
             if (action == MotionEvent.ACTION_DOWN) gestureDownTime = now
@@ -271,6 +383,7 @@ class OffscreenComposeSurface(
     /** Forward a key event: rebuild a [KeyEvent] and dispatch it to the Presentation's decor view (posted to main,
      *  non-blocking). Reaches hardware-keyboard handling + `onKeyEvent`/focus/nav keys in the composition. */
     fun dispatchKey(action: Int, keyCode: Int, metaState: Int) {
+        noteInput()
         mainHandler.post {
             val now = SystemClock.uptimeMillis()
             val ev = KeyEvent(now, now, action, keyCode, 0, metaState)
@@ -291,7 +404,11 @@ class OffscreenComposeSurface(
         if (!closed.compareAndSet(false, true)) return   // idempotent: evict + onDestroy may both close a session
         onFrame = null
         onHardwareFrame = null
-        runOnMain { runCatching { presentation?.dismiss() } }
+        runOnMain {
+            runCatching { presentation?.dismiss() }
+            runCatching { recomposer?.cancel() }
+            runCatching { recomposerScope?.cancel() }
+        }
         // Stop the producer, then detach the listener so no new frame callback is queued.
         runCatching { virtualDisplay.release() }
         runCatching { imageReader.setOnImageAvailableListener(null, null) }
@@ -301,7 +418,12 @@ class OffscreenComposeSurface(
         // thread — the native SIGSEGV (SetByteArrayRegion/memcpy over an unmapped page) this fixes. Handler
         // messages are serial, so the posted close runs only AFTER any in-flight frame read finishes, and
         // quitSafely still delivers this already-due message before the looper exits.
-        frameHandler.post { runCatching { imageReader.close() } }
+        frameHandler.post {
+            frameHandler.removeCallbacks(flushHeld)
+            held?.let { runCatching { it.close() } }
+            held = null
+            runCatching { imageReader.close() }
+        }
         frameThread.quitSafely()
     }
 
@@ -379,5 +501,18 @@ class OffscreenComposeSurface(
             if (!restored) { savedState.performRestore(null); restored = true }
             registry.currentState = Lifecycle.State.RESUMED
         }
+    }
+
+    companion object {
+        /** Zero-copy delivery cap (~30 fps): smooth enough to watch an animation, half the IDE redraws of 60. */
+        const val HW_FRAME_INTERVAL_MS = 33L
+        /** CPU path (API < 29, or a GPU reader that couldn't be created): every frame is a full RGBA copy written
+         *  to disk and read back, so it is held to ~10 fps (15 while the user is interacting). */
+        const val CPU_FRAME_INTERVAL_MS = 100L
+        const val CPU_BOOSTED_FRAME_INTERVAL_MS = 66L
+        /** How long after an input event frames go out at the boosted rate. */
+        const val INPUT_BOOST_MS = 500L
+        /** Frames an input event may run while paused: enough for a click's state change and a short ripple. */
+        const val INPUT_FRAMES_WHILE_PAUSED = 15
     }
 }

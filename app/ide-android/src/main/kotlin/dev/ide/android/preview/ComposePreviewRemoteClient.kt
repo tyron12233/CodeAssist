@@ -278,6 +278,8 @@ class ComposePreviewRemoteClient(context: Context) {
         /** Drop the program (an empty blob): the session draws nothing until the next [update]. */
         internal fun clearProgram() {
             route.accepting = false
+            // A parked session must stop drawing into the pane it was rendering for (that surface is going away).
+            runCatching { daemon.setOutput(id, null) }
             runCatching { daemon.updateBytes(id, ByteArray(0)) }
         }
 
@@ -300,6 +302,18 @@ class ComposePreviewRemoteClient(context: Context) {
 
         fun resize(widthPx: Int, heightPx: Int, density: Float, night: Boolean) {
             runCatching { daemon.resize(id, widthPx, heightPx, density, night) }
+        }
+
+        /** Freeze ([paused]) or resume the remote composition's animations. Paused, it stops streaming after its
+         *  next frame; an [update], [resize] or input still renders one. oneway. */
+        fun setPaused(paused: Boolean) {
+            runCatching { daemon.setPaused(id, paused) }
+        }
+
+        /** Have `:preview` render straight into [surface] (a TextureView's), or stream frames again when null. The
+         *  caller keeps ownership: detach (null) before releasing the surface. oneway. */
+        fun setOutput(surface: android.view.Surface?) {
+            runCatching { daemon.setOutput(id, surface) }
         }
 
         /** Forward a pointer event ([action] a MotionEvent action; [x]/[y] in the off-screen canvas' pixel space)

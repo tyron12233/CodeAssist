@@ -43,7 +43,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
+import dev.ide.ui.LocalPreviewAnimation
 import dev.ide.ui.LocalPreviewBufferStale
+import dev.ide.ui.PreviewAnimationControl
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.components.CaDropdownMenu
@@ -122,6 +124,11 @@ fun ComposePreviewPane(
     val liveText = rememberUpdatedState(text)
     val liveNow = rememberUpdatedState(live)
     val bufferStale = remember(path) { derivedStateOf { liveNow.value && liveText.value != renderText } }
+    // Paused also freezes the preview's animations (an endless one otherwise keeps the host rendering and the IDE
+    // redrawing for as long as it's on screen), and a host that sees one run nonstop pauses the pane itself.
+    val animation = remember(path) {
+        PreviewAnimationControl(derivedStateOf { !liveNow.value }) { live = false }
+    }
     // Gate rendering on the workspace index being ready to resolve LIBRARY composables. Interpreting a preview
     // while the index is still building resolves library calls (e.g. material3's `lightColorScheme`) to zero
     // candidates and latches a "unresolved call" failure that never self-heals on its own.
@@ -329,8 +336,9 @@ fun ComposePreviewPane(
             }
         },
         bottomBarExtras = {
-            // Stop/resume the live preview so editing doesn't trigger interpretation (host-only — desktop has
-            // no live interpreter). Resuming catches up to the current buffer after the usual debounce.
+            // Stop/resume the live preview so editing doesn't trigger interpretation and animations freeze
+            // (host-only — desktop has no live interpreter). Resuming catches up to the current buffer after the
+            // usual debounce.
             if (host != null) {
                 Divider()
                 PillButton({ live = !live }) {
@@ -394,6 +402,7 @@ fun ComposePreviewPane(
                     CompositionLocalProvider(
                         LocalDensity provides Density(density, fontScale),
                         LocalPreviewBufferStale provides bufferStale,
+                        LocalPreviewAnimation provides animation,
                     ) {
                         val preview = @Composable {
                             host.Preview(

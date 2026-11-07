@@ -5,6 +5,7 @@ import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.Configuration
 import android.hardware.HardwareBuffer
+import android.view.Surface
 import android.os.IBinder
 import android.os.Process
 import android.os.SystemClock
@@ -164,6 +165,16 @@ class ComposePreviewSessionService : Service() {
         override fun close(sessionId: Int) {
             sessions.remove(sessionId)?.let { runCatching { it.close() } }
         }
+
+        override fun setPaused(sessionId: Int, paused: Boolean) {
+            sessions[sessionId]?.setPaused(paused)
+        }
+
+        override fun setOutput(sessionId: Int, surface: Surface?) {
+            val session = sessions[sessionId]
+            if (session == null) { surface?.release(); return }
+            session.setOutput(surface)
+        }
     }
 
     /** Rebuild the previewed module's resource resolver from its res dirs (the IDE can't hand us the in-memory
@@ -309,7 +320,46 @@ class ComposePreviewSessionService : Service() {
         @Volatile private var lastPartial: String? = null
         @Volatile private var lastFindings: List<String> = emptyList()
 
+        /** Whether the IDE froze this session's animations (see [setPaused]); re-applied to a recreated surface. */
+        @Volatile private var paused = false
+
         private fun newSurface() = OffscreenComposeSurface(applicationContext, width, height, (density * 160f).toInt().coerceAtLeast(1))
+            .also { it.setPaused(paused) }
+
+        /** Freeze or resume animations. Paused, the surface's frame clock stops after a couple more frames. */
+        fun setPaused(paused: Boolean) {
+            this.paused = paused
+            surface.setPaused(paused)
+        }
+
+        // The IDE's direct-render target (see setOutput). Applied to the CURRENT surface only once that surface has
+        // delivered a content frame over the callback, so its blank pre-content frames never reach the pane.
+        @Volatile private var output: Surface? = null
+        @Volatile private var outputApplied = false
+        /** Whether the CURRENT surface has delivered a content frame (reset when it is recreated or re-gated). */
+        @Volatile private var contentOnSurface = false
+        /** Whether the IDE sent [output] for the CURRENT surface's size. A resize clears it: the IDE re-sends once it
+         *  has resized the texture's buffers, so a frame never lands in buffers of the old size. */
+        @Volatile private var outputConfirmed = false
+
+        fun setOutput(newOutput: Surface?) {
+            val old = output
+            output = newOutput
+            outputApplied = false
+            outputConfirmed = newOutput != null
+            if (newOutput == null) surface.setOutput(null)
+            else if (contentOnSurface) applyOutput()
+            // The previous Surface object is our own parcelled copy: release it (the IDE owns the real one).
+            if (old != null && old !== newOutput) surface.postToMain { runCatching { old.release() } }
+        }
+
+        /** Point the current surface at [output] if it isn't yet. Safe from any thread. */
+        private fun applyOutput() {
+            val target = output ?: return
+            if (outputApplied || !outputConfirmed) return
+            outputApplied = true
+            surface.setOutput(target)
+        }
 
         /** When [open] began (elapsed realtime), for the first-frame timing line; 0 when not opened through it. */
         @Volatile var openedAt = 0L
@@ -428,6 +478,9 @@ class ComposePreviewSessionService : Service() {
                     // The session was opened ahead of its program, so the surface has only drawn nothing so far:
                     // wait for this program's first draw before streaming, and time the first frame from here.
                     surface.rearmContentGate()
+                    // Back to streaming until this program's first content frame (then the output is re-applied).
+                    contentOnSurface = false
+                    if (outputApplied) { outputApplied = false; surface.setOutput(null) }
                     openedAt = SystemClock.elapsedRealtime()
                     seqAtProgram = seq.get()
                     hasProgram = true
@@ -438,6 +491,8 @@ class ComposePreviewSessionService : Service() {
                 }
                 programState.value = lowered
             }
+            // Paused: still show the edit (queued after the state write, so the frame it lets through has it).
+            surface.renderOneFrame()
         }
 
         fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
@@ -456,6 +511,9 @@ class ComposePreviewSessionService : Service() {
                 // The ImageReader/VirtualDisplay are fixed-size, so a dimension change must recreate the surface
                 // (the composition restarts — matches the old behavior).
                 runCatching { surface.close() }
+                contentOnSurface = false
+                outputApplied = false
+                outputConfirmed = false
                 surface = newSurface()
                 start(current)
             } else if (newNight != nightState.value) {
@@ -463,11 +521,13 @@ class ComposePreviewSessionService : Service() {
                 // the `key(night)` subtree remounts + re-renders in place — no teardown, no spinner flash.
                 currentResources = cachedResources(resDirs, namespace, density, newNight)
                 surface.postToMain { nightState.value = newNight }
+                surface.renderOneFrame()
             }
         }
 
         fun close() {
             runCatching { surface.close() }
+            output?.let { o -> output = null; runCatching { o.release() } }
             // The executor is owned by [executorCache] (shared across sessions) — do NOT close it here; eviction
             // or [onDestroy] does. Closing it would pull the jars out from under a concurrent session on the same
             // classpath.
@@ -496,6 +556,8 @@ class ComposePreviewSessionService : Service() {
                 f.outputStream().use { it.write(frame.bytes) }
                 cb.onFrame(f.path, frame.width, frame.height, s)
             }.onFailure { log.warn("compose session $id frame push failed", it) }
+            contentOnSurface = true
+            applyOutput()
         }
 
         /** Zero-copy: hand the GPU HardwareBuffer straight to the IDE over the oneway callback (which dups the
@@ -506,6 +568,8 @@ class ComposePreviewSessionService : Service() {
             timeFirstFrame(s)
             runCatching { cb.onFrameBuffer(hb, w, h, s) }
                 .onFailure { log.warn("compose session $id hardware frame push failed", it) }
+            contentOnSurface = true
+            applyOutput()
         }
 
         /**
