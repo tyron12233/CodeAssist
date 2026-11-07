@@ -28,10 +28,9 @@
          install-confirmation. The user must also grant "install unknown apps" to CodeAssist (we deep-link
          to that Settings screen when it isn't granted yet). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- Lets the plugin sandbox update its programs app (plugins/SandboxNativeLibs.kt) without asking each
-         time: Android 12+ skips the prompt for an update of an app this one installed only when this is declared
-         (a normal permission, granted at install). The Run of a user's app still asks (ApkInstallerImpl). -->
-    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- Not UPDATE_PACKAGES_WITHOUT_USER_ACTION: Play refuses any upload declaring it ("APK uses a restricted
+         permission"; it is for app stores). Without it the plugin sandbox's programs app (plugins/
+         SandboxNativeLibs.kt) shows Android's install prompt on each update, which its install already handles. -->
 
     <!-- The build/run daemon (:build process) promotes to a foreground service while a build or program is
          running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).
