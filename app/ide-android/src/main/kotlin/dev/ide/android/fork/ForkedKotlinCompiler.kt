@@ -5,6 +5,8 @@ import dev.ide.android.R8ForkSupport
 import dev.ide.lang.kotlin.compile.KotlinCompileRequest
 import dev.ide.lang.kotlin.compile.KotlinCompileResult
 import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
+import dev.ide.lang.kotlin.compile.KotlinDiagnostic
+import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.Logger
 import java.io.BufferedReader
@@ -36,6 +38,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * device whose RAM cannot back a fork, a worker that will not start, a worker that dies mid-compile, or a
  * protocol error. After [MAX_WORKER_FAILURES] such failures the fork is abandoned for the rest of the
  * session, so a device where this cannot work pays the cost once rather than on every module.
+ *
+ * The one exception is a worker that DIES mid-compile on Android 10 or older ([ART_JIT_CRASHES]): there the
+ * cause is ART's JIT miscompiling the compiler's own code (#1748), and the in-process compiler runs that same
+ * code under the same JIT, in the build process, which it then takes down. Such a compile fails the module with
+ * that explanation instead.
  *
  * The forked VMs use the same launchers as the R8 fork, so a fork that aborts on startup is already
  * attributed to a tool VM rather than to the app by `dev.ide.platform.ForkedToolVm.isToolVmCrash`.
@@ -93,6 +100,7 @@ class ForkedKotlinCompiler(
         return withWorker(
             status = status,
             onUnavailable = { fallback.compile(request, status) },
+            onCrashed = { reason -> crashedResult(reason) },
             body = { worker ->
                 status("Compiling in the Kotlin compiler VM (${worker.xmxMb} MB heap)")
                 worker.compile(request)
@@ -111,7 +119,8 @@ class ForkedKotlinCompiler(
         // command then pays the environment stand-up inside it, exactly as the in-process warm-up does.
         warmingUp.incrementAndGet()
         try {
-            withWorker(status = {}, onUnavailable = { fallback.warmUp(bootClasspath) }) { worker ->
+            // A warm-up compiles a file too, so after a crash it is skipped rather than run in-process.
+            withWorker(status = {}, onUnavailable = { fallback.warmUp(bootClasspath) }, onCrashed = {}) { worker ->
                 worker.warmUp(bootClasspath)
             }
         } finally {
@@ -147,7 +156,13 @@ class ForkedKotlinCompiler(
      * request, and a fresh worker would only spend that long again before the in-process fallback runs it a
      * third time.
      */
-    private fun <T> withWorker(status: (String) -> Unit, onUnavailable: () -> T, body: (Worker) -> T): T {
+    private fun <T> withWorker(
+        status: (String) -> Unit,
+        onUnavailable: () -> T,
+        /** What a call answers instead of [onUnavailable] when the worker died on a device with [ART_JIT_CRASHES]. */
+        onCrashed: (reason: String) -> T,
+        body: (Worker) -> T,
+    ): T {
         if (!slots.tryAcquire()) {
             val busyWith = if (warmingUp.get() > 0) "it is still warming up" else "another module is compiling"
             status("Waiting for the Kotlin compiler VM: $busyWith")
@@ -177,6 +192,14 @@ class ForkedKotlinCompiler(
                     }
                 }
             }
+            if (lastFailure is WorkerDied && ART_JIT_CRASHES) {
+                // Not counted toward abandoning the fork: that would only send later modules in-process, where the
+                // same crash ends the build process. The next compile tries a fresh worker again.
+                val reason = lastFailure.message ?: "the worker exited"
+                log.warn("forked-kotlinc: worker crashed on Android ${android.os.Build.VERSION.SDK_INT} ($reason); not compiling in-process")
+                status("The Kotlin compiler VM crashed; not retrying in-process on this Android version")
+                return onCrashed(reason)
+            }
             lastFailure?.let { noteFailure(it.message ?: it.javaClass.name) }
             status(
                 "Compiling Kotlin in-process: " +
@@ -187,6 +210,18 @@ class ForkedKotlinCompiler(
         } finally {
             slots.release()
         }
+    }
+
+    private fun crashedResult(reason: String): KotlinCompileResult {
+        val message = "The Kotlin compiler crashed. Android ${android.os.Build.VERSION.RELEASE}'s runtime is known to " +
+            "miscompile parts of the Kotlin compiler, and compiling in the build process instead would crash it the " +
+            "same way. Build again; if it keeps failing, please add to " +
+            "https://github.com/tyron12233/CodeAssist/issues/1748"
+        return KotlinCompileResult(
+            success = false,
+            messages = listOf("error: $message", "worker: $reason"),
+            diagnostics = listOf(KotlinDiagnostic(KotlinDiagnosticSeverity.ERROR, message)),
+        )
     }
 
     private fun takeIdle(): Worker? {
@@ -299,7 +334,7 @@ class ForkedKotlinCompiler(
             writer.flush()
             val reply = replies.poll(timeoutSec, TimeUnit.SECONDS)
                 ?: throw WorkerTimeout("worker did not answer within ${timeoutSec}s${stderr.suffix()}")
-            if (reply == EOF) error("worker exited mid-command${stderr.suffix()}")
+            if (reply == EOF) throw WorkerDied("worker exited mid-command${stderr.suffix()}")
             if (reply != KotlincWorkerMain.DONE) error("worker replied '$reply'${stderr.suffix()}")
         }
 
@@ -338,6 +373,14 @@ class ForkedKotlinCompiler(
                     add("-Xmx${xmxMb}m")
                     add("-Djava.io.tmpdir=$tmpDir")
                     add("-Dkotlin.colors.enabled=false")
+                    // ART's JIT on Android 10 and older miscompiles the compiler's FIR code when it inlines through
+                    // an inline cache: Play's reports for 3.41.0 show calls into the heap or boot.art from JIT code
+                    // in FirJavaFacadeKt.convertJavaMethodToFir/convertJavaFieldToFir, and crashes inside
+                    // HInliner::TryInlinePolymorphicCall itself (#1748). The JIT reads -Xcompiler-option, and a
+                    // zero inline budget turns its inliner off; methods still compile, only without inlining.
+                    if (ART_JIT_CRASHES) {
+                        add("-Xcompiler-option"); add("--inline-max-code-units=0")
+                    }
                     System.getProperty("kotlinc.art.home")?.let { add("-Dkotlinc.art.home=$it") }
                 }
                 val cmd = buildList {
@@ -376,6 +419,9 @@ class ForkedKotlinCompiler(
 
     /** A worker that is still alive but did not reply within the command's timeout. */
     private class WorkerTimeout(message: String) : RuntimeException(message)
+
+    /** A worker whose process ended while it held a command: a crash, the OS killing it, or an abort. */
+    private class WorkerDied(message: String) : RuntimeException(message)
 
     /** Keeps the worker's stderr drained (so it can never block on a full pipe) and its tail for diagnostics. */
     private class StderrTail(reader: BufferedReader) {
@@ -456,5 +502,11 @@ class ForkedKotlinCompiler(
 
         /** Pushed onto the reply queue when the worker's stdout reaches EOF, i.e. the process is gone. */
         const val EOF = "\u0000EOF"
+
+        /**
+         * Android 10 and older, whose ART JIT crashes in the Kotlin compiler's code (#1748): Play's 3.41.0 reports
+         * are all API 29, nearly all 32-bit. The releases before it (API 26-28, all this app supports) share that JIT.
+         */
+        val ART_JIT_CRASHES: Boolean = android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.Q
     }
 }
