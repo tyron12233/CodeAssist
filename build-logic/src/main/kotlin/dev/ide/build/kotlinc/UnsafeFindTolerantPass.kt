@@ -3,9 +3,12 @@ package dev.ide.build.kotlinc
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.InsnList
 import org.objectweb.asm.tree.InsnNode
 import org.objectweb.asm.tree.LabelNode
+import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.TryCatchBlockNode
+import org.objectweb.asm.tree.VarInsnNode
 
 /**
  * Makes the IntelliJ platform's `com.intellij.util.containers.Unsafe` initialize on ART.
@@ -26,6 +29,14 @@ import org.objectweb.asm.tree.TryCatchBlockNode
  * relies on: its replacement shim (aa-runtime `src/aaShims`) does not implement `copyMemory` at all.
  * Desktop bytecode is untouched (this pass runs only in the Android build), and even there the rewrite
  * would be behavior-preserving: every lookup succeeds on a real JDK.
+ *
+ * Second, `getAndAddInt` is resolved but DENIED: ART lists `sun.misc.Unsafe.getAndAddInt` as hidden API
+ * (`max-target-r`), so with targetSdk above 30 the lookup fails (logcat: "hiddenapi: Accessing hidden method
+ * Lsun/misc/Unsafe;->getAndAddInt ... denied") and its handle is null too. Unlike `copyMemory` it IS used: the
+ * read-unlock in `ConcurrentIntObjectHashMap`/`ConcurrentLongObjectHashMap` `TreeBin.find` (a bin of 8+
+ * colliding keys). It threw after taking the read lock, so the bin stayed locked and the next write to it parked
+ * forever. The wrapper's `getAndAddInt` body is replaced with a call to `VarHandleCompat.getAndAddInt`, a CAS
+ * loop over the `getIntVolatile`/`compareAndSwapInt` ART does allow.
  */
 class UnsafeFindTolerantPass : ArtPatchPass {
 
@@ -55,11 +66,26 @@ class UnsafeFindTolerantPass : ArtPatchPass {
                 // AGP recomputes frames/maxs for instrumented methods; maxStack only needs to fit the handler.
                 if (find.maxStack < 1) find.maxStack = 1
             }
+            methods.singleOrNull { it.name == "getAndAddInt" && it.desc == GET_AND_ADD_INT_DESC }?.let { m ->
+                m.instructions = InsnList().apply {
+                    add(VarInsnNode(Opcodes.ALOAD, 0))
+                    add(VarInsnNode(Opcodes.LLOAD, 1))
+                    add(VarInsnNode(Opcodes.ILOAD, 3))
+                    add(MethodInsnNode(Opcodes.INVOKESTATIC, SHIM, "getAndAddInt", GET_AND_ADD_INT_DESC, false))
+                    add(InsnNode(Opcodes.IRETURN))
+                }
+                m.tryCatchBlocks = mutableListOf()
+                m.localVariables = null
+                m.maxStack = 4
+                m.maxLocals = 4
+            }
             accept(downstream)
         }
     }
 
-    private companion object {
+    internal companion object {
         const val TARGET = "com.intellij.util.containers.Unsafe"
+        const val SHIM = "dev/ide/lang/jdt/compat/VarHandleCompat"
+        const val GET_AND_ADD_INT_DESC = "(Ljava/lang/Object;JI)I"
     }
 }

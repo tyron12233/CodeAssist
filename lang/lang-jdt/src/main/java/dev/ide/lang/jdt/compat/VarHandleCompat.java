@@ -112,6 +112,26 @@ public final class VarHandleCompat {
         return new IllegalStateException(t);
     }
 
+    // --- the platform's own sun.misc.Unsafe wrapper ---
+
+    /**
+     * Stand-in for {@code com.intellij.util.containers.Unsafe.getAndAddInt}, whose body the build points here (see
+     * {@code UnsafeFindTolerantPass} in {@code build-logic}). ART lists {@code sun.misc.Unsafe.getAndAddInt} as
+     * hidden ({@code max-target-r}), so with targetSdk above 30 the wrapper's lookup is denied and its handle is
+     * null. Its one caller, the read-unlock in the platform maps' {@code TreeBin.find}, then threw after taking the
+     * read lock, leaving the bin locked so the next write to it parked forever. This is the classic CAS loop over
+     * {@code getIntVolatile}/{@code compareAndSwapInt}, which ART does allow.
+     */
+    public static int getAndAddInt(Object owner, long offset, int delta) {
+        if (U == null) throw new UnsupportedOperationException("sun.misc.Unsafe is unavailable");
+        try {
+            while (true) {
+                int current = (int) GET_INT.invoke(U, owner, offset);
+                if ((boolean) CAS_INT.invoke(U, owner, offset, current, current + delta)) return current;
+            }
+        } catch (Throwable t) { throw rethrow(t); }
+    }
+
     // --- field access modes ---
 
     public boolean compareAndSet(Object owner, int expected, int update) {
