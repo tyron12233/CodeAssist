@@ -58,9 +58,12 @@ Text(stringResource(Res.string.run_building_module, moduleName))
 </plurals>
 ```
 ```kotlin
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 Text(pluralStringResource(Res.plurals.modules, count, count))
 ```
+
+Import `dev.ide.ui.pluralStringResource`, not the library's: it takes the same arguments but first repairs a
+process default locale with no language, which makes the library's version throw `NoSuchElementException`.
 
 ### Non-composable call sites
 

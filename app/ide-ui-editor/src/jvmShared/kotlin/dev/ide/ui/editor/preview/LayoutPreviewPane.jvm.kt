@@ -61,7 +61,7 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.layout_preview_resource_error_open
 import dev.ide.ui.generated.resources.layout_preview_resource_errors
 import dev.ide.ui.generated.resources.layout_preview_resource_errors_last_render
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.preview.RCanvas
 import dev.ide.preview.RImage

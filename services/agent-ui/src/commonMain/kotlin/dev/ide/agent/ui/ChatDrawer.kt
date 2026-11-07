@@ -194,7 +194,7 @@ import dev.ide.ui.markdown.defaultHeadingStyle
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaMotion
 import dev.ide.ui.theme.Ide
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**

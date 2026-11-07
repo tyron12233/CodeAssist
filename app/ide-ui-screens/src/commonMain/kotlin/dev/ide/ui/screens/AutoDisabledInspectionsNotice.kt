@@ -15,7 +15,7 @@ import dev.ide.ui.generated.resources.insp_off_many
 import dev.ide.ui.generated.resources.insp_off_slow
 import dev.ide.ui.generated.resources.insp_turn_back_on
 import dev.ide.ui.generated.resources.settings_title
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The Settings page that lists the inspections (the built-in Analysis page). */

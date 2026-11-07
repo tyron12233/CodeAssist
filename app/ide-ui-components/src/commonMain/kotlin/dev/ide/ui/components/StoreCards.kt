@@ -54,7 +54,7 @@ import dev.ide.ui.theme.CaShapes
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import kotlin.math.roundToInt
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**

@@ -164,7 +164,7 @@ import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**

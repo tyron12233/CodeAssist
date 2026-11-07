@@ -32,7 +32,7 @@ import dev.ide.ui.generated.resources.close_project_save_and_close
 import dev.ide.ui.generated.resources.close_project_title
 import dev.ide.ui.generated.resources.close_project_unsaved
 import dev.ide.ui.theme.Ca
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**

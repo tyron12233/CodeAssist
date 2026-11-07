@@ -148,7 +148,7 @@ import dev.ide.ui.joinMeta
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import dev.ide.ui.generated.resources.publish_from_share
 import dev.ide.ui.generated.resources.publish_from_share_body
 import org.jetbrains.compose.resources.stringResource

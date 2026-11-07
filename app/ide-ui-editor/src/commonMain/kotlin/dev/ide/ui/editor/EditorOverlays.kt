@@ -103,7 +103,7 @@ import dev.ide.ui.generated.resources.edoverlay_select_all
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.platform.hasHardwareKeyboard
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 // Editor overlay chrome: the small Compose surfaces that float over the canvas (rename prompt, inline

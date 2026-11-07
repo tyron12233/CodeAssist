@@ -60,7 +60,7 @@ import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
 import org.jetbrains.compose.resources.PluralStringResource
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**

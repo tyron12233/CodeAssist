@@ -167,7 +167,7 @@ import dev.ide.ui.theme.Ide
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The Plugins screen's tabs: what can be downloaded, what the user installed, what ships with the IDE. */

@@ -21,7 +21,7 @@ import dev.ide.ui.components.SupportingOnContainer
 import dev.ide.ui.components.formatRating
 import dev.ide.ui.components.installsLabel
 import dev.ide.ui.generated.resources.*
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

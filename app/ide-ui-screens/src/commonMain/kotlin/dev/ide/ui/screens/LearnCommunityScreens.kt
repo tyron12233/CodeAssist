@@ -73,7 +73,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 // =====================================================================================================

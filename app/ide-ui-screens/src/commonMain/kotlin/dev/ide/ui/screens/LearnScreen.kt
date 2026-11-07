@@ -218,7 +218,7 @@ private fun LearnHeader(lessonsDone: Int, streak: Int = 0) {
                     Symbol(CaSymbols.localFireDepartment, contentDescription = null, size = 17.dp)
                     Text(
                         if (streak > 0) stringResource(Res.string.learn_streak_chip, streak)
-                        else org.jetbrains.compose.resources.pluralStringResource(Res.plurals.learn_lessons_done, lessonsDone, lessonsDone),
+                        else dev.ide.ui.pluralStringResource(Res.plurals.learn_lessons_done, lessonsDone, lessonsDone),
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }

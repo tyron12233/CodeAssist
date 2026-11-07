@@ -833,7 +833,10 @@ class IdeServicesBackend(
                         // any that fail from memory pressure without saying so) be told apart from logic bugs.
                         // `in_plugin` keeps a plugin's crash out of the IDE's own crash-free rate; the plugin's
                         // id is not sent (an unpublished plugin's id is its developer's package name).
+                        // `locale` (a language tag, e.g. "id-ID") because some crashes depend on it: Compose's
+                        // plural lookup throws for a default locale with no language.
                         dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name) + MemSample.now().props() +
+                            ("locale" to runCatching { java.util.Locale.getDefault().toLanguageTag() }.getOrDefault("?")) +
                             (if (plugin != null) mapOf("in_plugin" to "1") else emptyMap()),
                     )
                 )

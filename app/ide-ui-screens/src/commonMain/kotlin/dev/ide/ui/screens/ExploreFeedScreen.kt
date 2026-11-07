@@ -87,7 +87,7 @@ import dev.ide.ui.components.motifFor
 import dev.ide.ui.components.storeBlurb
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.joinMeta
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.LocalExpressiveShapeCycling

@@ -70,7 +70,7 @@ import dev.ide.ui.generated.resources.filetree_selected_count
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMouse
 import dev.ide.ui.platform.usesCommandKey
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** What Cut or Copy put on the tree's clipboard: [paths], to be moved ([cut]) or copied by the next paste. */

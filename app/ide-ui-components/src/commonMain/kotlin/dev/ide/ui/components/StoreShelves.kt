@@ -50,7 +50,7 @@ import dev.ide.ui.theme.TonalPair
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**

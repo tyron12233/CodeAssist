@@ -93,7 +93,7 @@ import dev.ide.ui.generated.resources.support_show_interstitials_desc
 import dev.ide.ui.generated.resources.support_show_interstitials
 import dev.ide.ui.generated.resources.support_show_ads_desc
 import dev.ide.ui.generated.resources.ads_off_locked
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import dev.ide.ui.generated.resources.support_ad_privacy
 import dev.ide.ui.generated.resources.support_ad_privacy_desc
 import dev.ide.ui.generated.resources.support_ad_privacy_button

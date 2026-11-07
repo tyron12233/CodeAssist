@@ -199,7 +199,7 @@ import dev.ide.ui.generated.resources.dep_versions_auto_resolved
 import dev.ide.ui.generated.resources.dep_versions_load_failed
 import dev.ide.ui.generated.resources.remove
 import dev.ide.ui.generated.resources.save
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 

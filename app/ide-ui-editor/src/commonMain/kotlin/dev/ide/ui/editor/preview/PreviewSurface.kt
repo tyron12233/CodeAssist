@@ -87,7 +87,7 @@ import dev.ide.ui.generated.resources.preview_unlock
 import dev.ide.ui.generated.resources.preview_zoom_in
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.min
 import kotlin.math.roundToInt

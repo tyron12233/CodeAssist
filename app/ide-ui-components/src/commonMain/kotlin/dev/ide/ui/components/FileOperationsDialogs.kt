@@ -77,7 +77,7 @@ import dev.ide.ui.generated.resources.fileop_conflict_keep_both
 import dev.ide.ui.generated.resources.fileop_conflict_skip
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The on-disk path a node's file operations act on: a file's own path, a package's deepest directory, or a

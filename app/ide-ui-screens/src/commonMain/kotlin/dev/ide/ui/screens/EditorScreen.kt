@@ -61,7 +61,7 @@ import dev.ide.ui.generated.resources.fileop_notice_duplicated
 import dev.ide.ui.generated.resources.fileop_notice_deleted
 import dev.ide.ui.generated.resources.fileop_notice_failed
 import dev.ide.ui.generated.resources.fileop_notice_undone
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** Width at/below which the UI reflows to the compact (phone) layout. */

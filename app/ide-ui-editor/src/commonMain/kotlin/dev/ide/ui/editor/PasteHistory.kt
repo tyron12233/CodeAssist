@@ -38,7 +38,7 @@ import dev.ide.ui.generated.resources.paste_history_empty
 import dev.ide.ui.generated.resources.paste_history_lines
 import dev.ide.ui.generated.resources.paste_history_title
 import dev.ide.ui.theme.Ide
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 

@@ -95,7 +95,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.theme.Ide
 import kotlinx.coroutines.delay
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.generated.resources.block_block_count
 

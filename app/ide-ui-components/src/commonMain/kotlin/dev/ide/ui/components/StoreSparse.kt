@@ -59,7 +59,7 @@ import dev.ide.ui.generated.resources.store_pitch_subject
 import dev.ide.ui.generated.resources.store_pitch_subject_one
 import dev.ide.ui.generated.resources.store_project_count
 import dev.ide.ui.generated.resources.store_publish_cta
-import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Symbol
