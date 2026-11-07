@@ -2825,4 +2825,34 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="lsp_status_running">Running</string>
     <string name="lsp_status_starting">Starting</string>
     <string name="lsp_status_not_started">Not started</string>
+    <!-- Learn: a checked exercise's verdict (UiExerciseVerdict), worded here rather than by the engine. -->
+    <string name="learn_v_correct">Correct, nicely done!</string>
+    <string name="learn_v_expected_output">Not quite. Expected output:</string>
+    <string name="learn_v_must_include">Not quite. Your output should include: %1$s</string>
+    <string name="learn_v_retry">Not quite. Give it another try.</string>
+    <string name="learn_v_use_source">Your output is right, but the exercise wants you to actually use %1$s, not just print the answer.</string>
+    <string name="learn_v_no_compile">Your code didn't compile. Check the errors below and try again.</string>
+    <string name="learn_v_no_run">Your code didn't run.</string>
+    <string name="learn_v_test_failed">Test %1$s of %2$s failed.</string>
+    <string name="learn_v_input">Input:</string>
+    <string name="learn_v_no_input">(no input)</string>
+    <string name="learn_v_expected_output_label">Expected output:</string>
+    <string name="learn_v_should_include">Your output should include: %1$s</string>
+    <string name="learn_v_tests_passed">All %1$s tests passed. Nicely done!</string>
+    <string name="learn_v_tests_pass_use_source">All %1$s tests pass, but the exercise wants you to actually use %2$s.</string>
+    <string name="learn_v_no_exercise">This step has no exercise to check.</string>
+    <string name="learn_v_open_from_learn">Open this lesson from Learn so its practice project is the one in the editor.</string>
+    <string name="learn_v_runner_unsupported">Running exercises isn't available in this build.</string>
+    <string name="learn_v_runner_unavailable">The exercise runner isn't available.</string>
+    <string name="learn_v_runner_prepare_failed">Couldn't prepare the exercise runner: %1$s</string>
+    <string name="learn_v_save_failed">Couldn't save your code: %1$s</string>
+    <string name="learn_v_runner_failed">The exercise runner failed: %1$s</string>
+    <string name="learn_v_xml_malformed">This isn't well-formed XML yet. Check that every tag is closed and every attribute is quoted.</string>
+    <string name="learn_v_layout_needs">Almost. Your layout still needs: %1$s.</string>
+    <string name="learn_v_layout_no_render">The structure is right, but the layout couldn't be rendered.</string>
+    <string name="learn_v_layout_problem">The structure is right, but the preview reports a problem (below).</string>
+    <string name="learn_v_ide_done">Done, nicely done!</string>
+    <string name="learn_v_ide_todo">Not yet. Still to do: %1$s.</string>
+    <string name="learn_v_list_sep">,</string>
+    <string name="learn_v_rule_sep">;</string>
 </resources>

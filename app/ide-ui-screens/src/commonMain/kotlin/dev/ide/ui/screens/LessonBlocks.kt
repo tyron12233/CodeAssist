@@ -123,9 +123,10 @@ fun inlineMarkup(md: String): AnnotatedString {
     val codeBg = MaterialTheme.colorScheme.surfaceContainerHigh
     val codeColor = MaterialTheme.colorScheme.onSurface
     val linkColor = MaterialTheme.colorScheme.primary
-    return remember(md, codeFamily, codeBg, codeColor, linkColor) {
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    return remember(md, codeFamily, codeBg, codeColor, linkColor, rtl) {
         buildInline(
-            md,
+            if (rtl) isolateCodeSpans(md) else md,
             MdStyles(
                 base = SpanStyle(),
                 code = SpanStyle(fontFamily = codeFamily, background = codeBg, color = codeColor),
@@ -134,3 +135,12 @@ fun inlineMarkup(md: String): AnnotatedString {
         )
     }
 }
+
+/**
+ * [md] with each `` `code` `` span's content wrapped in a left-to-right isolate (U+2066 … U+2069). Inside an
+ * Arabic sentence the bidi algorithm otherwise splits a span at its neutral characters and reorders the pieces:
+ * `println(...)` read as `( ... )println`, and braces mirrored. The isolate keeps the span one left-to-right run;
+ * the marks are invisible.
+ */
+internal fun isolateCodeSpans(md: String): String =
+    Regex("`([^`\n]+)`").replace(md) { "`\u2066${it.groupValues[1]}\u2069`" }

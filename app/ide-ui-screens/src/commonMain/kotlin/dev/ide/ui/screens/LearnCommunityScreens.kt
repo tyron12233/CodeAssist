@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,7 +99,8 @@ fun LearnDiscussionScreen(
     val signedIn = backend.store.authState().collectAsState().value.signedIn
     var scoped by remember(stepId) { mutableStateOf(stepId != null) }
     var reload by remember { mutableStateOf(0) }
-    val lesson by produceState<UiLesson?>(null, lessonId) { value = runCatching { backend.learn.lesson(lessonId) }.getOrNull() }
+    val fetchedLesson by produceState<UiLesson?>(null, lessonId) { value = runCatching { backend.learn.lesson(lessonId) }.getOrNull() }
+    val lesson = rememberLocalized(fetchedLesson) { l, t -> l?.localized(t) }
     val threads by produceState<List<UiLearnThreadSummary>?>(null, lessonId, scoped, reload) {
         value = runCatching { backend.learn.threads(lessonId, if (scoped) stepId else null) }.getOrNull()
     }
@@ -453,7 +455,8 @@ fun LearnAskScreen(
 ) {
     val signedIn = backend.store.authState().collectAsState().value.signedIn
     val scope = rememberCoroutineScope()
-    val lesson by produceState<UiLesson?>(null, lessonId) { value = runCatching { backend.learn.lesson(lessonId) }.getOrNull() }
+    val fetchedLesson by produceState<UiLesson?>(null, lessonId) { value = runCatching { backend.learn.lesson(lessonId) }.getOrNull() }
+    val lesson = rememberLocalized(fetchedLesson) { l, t -> l?.localized(t) }
     val step = lesson?.steps?.firstOrNull { it.id == stepId }
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
@@ -566,7 +569,8 @@ fun LearnSolutionsScreen(
     var reporting by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     val sentMsg = stringResource(Res.string.learn_report_sent)
-    val lesson by produceState<UiLesson?>(null, lessonId) { value = runCatching { backend.learn.lesson(lessonId) }.getOrNull() }
+    val fetchedLesson by produceState<UiLesson?>(null, lessonId) { value = runCatching { backend.learn.lesson(lessonId) }.getOrNull() }
+    val lesson = rememberLocalized(fetchedLesson) { l, t -> l?.localized(t) }
     val page by produceState<UiLearnSolutionPage?>(null, lessonId, stepId, sort, reload, signedIn) {
         value = runCatching { backend.learn.solutions(lessonId, stepId, sort) }.getOrNull()
     }

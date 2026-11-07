@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -129,12 +130,13 @@ fun LearnScreen(
         runCatching { backend.learn.syncProgress() }
         synced++
     }
-    val catalog by produceState(UiLearnCatalog(), backend, epoch, refreshed) {
+    val fetchedCatalog by produceState(UiLearnCatalog(), backend, epoch, refreshed) {
         value = runCatching { backend.learn.catalog() }.getOrDefault(UiLearnCatalog())
     }
+    val catalog = rememberLocalized(fetchedCatalog) { c, t -> c.localized(t) }
     val progress = remember(backend, epoch, synced) { runCatching { backend.learn.progress() }.getOrNull() }
-    val resume = remember(backend, epoch, synced) { runCatching { backend.learn.resume() }.getOrNull() }
-    val account = remember(backend, epoch, synced, signedIn) { runCatching { backend.learn.account() }.getOrNull() }
+    val resume = rememberLocalized(remember(backend, epoch, synced) { runCatching { backend.learn.resume() }.getOrNull() }) { r, t -> r?.localized(t) }
+    val account = rememberLocalized(remember(backend, epoch, synced, signedIn) { runCatching { backend.learn.account() }.getOrNull() }) { a, t -> a?.localized(t) }
     var selectedCat by remember { mutableStateOf<String?>(null) }
 
     val categories = remember(catalog) { orderedCategories(catalog.tracks) }
@@ -350,7 +352,7 @@ private fun TrackFilterRow(categories: List<String>, active: String?, onPick: (S
         }
         itemsKeyed(categories, key = { it }) { cat ->
             PillChip(
-                label = cat,
+                label = LocalBackendText.current.tr(cat),
                 selected = active == cat,
                 leadingGlyph = CaSymbols.check,
                 onClick = { onPick(cat) },

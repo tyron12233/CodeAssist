@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -196,7 +197,7 @@ fun YouScreen(
                     onDelete = { deleteError = null; pendingDelete = it },
                     onOpenItem = onOpenItem,
                     onPublish = onPublish,
-                    learning = learning,
+                    learning = rememberLocalized(learning) { l, t -> l?.localized(t) },
                     lessonsStarted = lessonsStarted,
                     onOpenPublicProfile = { onOpenPublicProfile(current.handle) },
                     onSignOut = {

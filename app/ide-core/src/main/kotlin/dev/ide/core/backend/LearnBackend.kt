@@ -1,5 +1,6 @@
 package dev.ide.core.backend
 
+import dev.ide.ui.backend.UiExerciseVerdict as V
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
 import dev.ide.core.LoweredComposePreview
@@ -251,7 +252,7 @@ internal class LearnBackend(
 
     private suspend fun checkExercise(lessonId: String, stepId: String, code: String): UiExerciseResult {
         val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive
-            ?: return UiExerciseResult(passed = false, compiled = false, message = "This step has no exercise to check.")
+            ?: return failure("This step has no exercise to check.", V.NO_EXERCISE)
         // A layout exercise is checked against its structure and a render; nothing compiles or runs, so it
         // needs no scratch project (and works with no project manager at all).
         step.check.layout?.let { layout ->
@@ -259,32 +260,32 @@ internal class LearnBackend(
         }
         if (step.check.ide.isNotEmpty()) {
             val services = activeWorkspaceFor(step.language)
-                ?: return failure("Open this lesson from Learn so its practice project is the one in the editor.")
+                ?: return failure("Open this lesson from Learn so its practice project is the one in the editor.", V.OPEN_FROM_LEARN)
             return withContext(Dispatchers.IO) { checkIde(step.check.ide, probeFor(services, step.language)) }
         }
         if (ctx.manager == null) {
-            return UiExerciseResult(passed = false, compiled = false, message = "Running exercises isn't available in this build.")
+            return failure("Running exercises isn't available in this build.", V.RUNNER_UNSUPPORTED)
         }
         return withContext(Dispatchers.Default) {
             // In the editor the learner's own workspace is the active project: run there, so what Check runs
             // is exactly what they see (and no second engine is started). Elsewhere, the hidden scratch.
             val workspace = activeWorkspaceFor(step.language)
             val services = workspace ?: try {
-                scratchFor(step.language) ?: return@withContext failure("The exercise runner isn't available.")
+                scratchFor(step.language) ?: return@withContext failure("The exercise runner isn't available.", V.RUNNER_UNAVAILABLE)
             } catch (e: Throwable) {
-                return@withContext failure("Couldn't prepare the exercise runner: ${reason(e)}")
+                return@withContext failure("Couldn't prepare the exercise runner: ${reason(e)}", V.RUNNER_PREPARE_FAILED, reason(e))
             }
             runCatching {
                 if (workspace != null) workspace.save(workspaceFile(workspace, step.language), code)
                 else writeMain(services, step.language, code)
             }.exceptionOrNull()?.let {
-                return@withContext failure("Couldn't save your code: ${reason(it)}")
+                return@withContext failure("Couldn't save your code: ${reason(it)}", V.SAVE_FAILED, reason(it))
             }
             if (step.check.cases.isNotEmpty()) return@withContext runCases(services, step.check, code)
             val cap = try {
                 services.runAndCapture("app")
             } catch (e: Throwable) {
-                return@withContext failure("The exercise runner failed: ${reason(e)}")
+                return@withContext failure("The exercise runner failed: ${reason(e)}", V.RUNNER_FAILED, reason(e))
             }
             interpret(cap, step.check, code)
         }
@@ -301,19 +302,23 @@ internal class LearnBackend(
             val cap = try {
                 services.runAndCapture("app", stdin = case.stdin)
             } catch (e: Throwable) {
-                return failure("The exercise runner failed: ${reason(e)}")
+                return failure("The exercise runner failed: ${reason(e)}", V.RUNNER_FAILED, reason(e))
             }
             if (!cap.compiled) return interpret(cap, check, code)
             if (i == 0) firstOutput = cap.stdout
             val verdict = caseVerdict(cap.stdout, case, check.caseSensitive)
             if (verdict != null) {
-                val input = case.stdin.trimEnd().ifBlank { "(no input)" }
+                val stdin = case.stdin.trimEnd()
+                val input = stdin.ifBlank { "(no input)" }
+                val head = listOf("${i + 1}", "$total", stdin)
                 return UiExerciseResult(
                     passed = false,
                     compiled = true,
                     output = cap.stdout,
                     message = "Test ${i + 1} of $total failed.\nInput:\n$input\n$verdict",
                     diagnostics = cap.diagnostics,
+                    verdict = if (case.expectedOutput != null) V.TEST_FAILED_EXPECTED else V.TEST_FAILED_INCLUDE,
+                    args = head + (case.expectedOutput?.trimEnd()?.let(::listOf) ?: case.mustContain),
                 )
             }
         }
@@ -323,9 +328,14 @@ internal class LearnBackend(
                 passed = false, compiled = true, output = firstOutput,
                 message = "All $total tests pass, but the exercise wants you to actually use " +
                     missing.joinToString(", ") { "`$it`" } + ".",
+                verdict = V.TESTS_PASS_USE_SOURCE,
+                args = listOf("$total") + missing,
             )
         }
-        return UiExerciseResult(passed = true, compiled = true, output = firstOutput, message = "All $total tests passed. Nicely done!")
+        return UiExerciseResult(
+            passed = true, compiled = true, output = firstOutput, message = "All $total tests passed. Nicely done!",
+            verdict = V.TESTS_PASSED, args = listOf("$total"),
+        )
     }
 
     /** Null when [stdout] satisfies [case], else what was expected. */
@@ -694,9 +704,13 @@ internal class LearnBackend(
 
     private fun interpret(cap: RunCapture, check: ExerciseCheck, code: String): UiExerciseResult {
         if (!cap.compiled) {
-            val msg = if (cap.diagnostics.isNotEmpty()) "Your code didn't compile — check the errors below and try again."
+            val compileErrors = cap.diagnostics.isNotEmpty()
+            val msg = if (compileErrors) "Your code didn't compile — check the errors below and try again."
             else "Your code didn't run. " + (cap.diagnostics.firstOrNull().orEmpty())
-            return UiExerciseResult(passed = false, compiled = false, output = cap.stdout, message = msg.trim(), diagnostics = cap.diagnostics)
+            return UiExerciseResult(
+                passed = false, compiled = false, output = cap.stdout, message = msg.trim(), diagnostics = cap.diagnostics,
+                verdict = if (compileErrors) V.NO_COMPILE else V.NO_RUN,
+            )
         }
         val actual = normalize(cap.stdout, check.caseSensitive)
         val outputOk = when {
@@ -708,15 +722,23 @@ internal class LearnBackend(
         // literals stripped), so printing the expected answer as a literal doesn't pass the exercise.
         val missing = missingConstructs(code, check.requireSource)
         val ok = outputOk && missing.isEmpty()
-        val message = when {
-            ok -> "Correct, nicely done!"
-            !outputOk && check.expectedOutput != null -> "Not quite. Expected output:\n${check.expectedOutput}"
-            !outputOk && check.mustContain.isNotEmpty() -> "Not quite. Your output should include: ${check.mustContain.joinToString(", ")}"
-            !outputOk -> "Not quite. Give it another try."
+        val (message, verdict, args) = when {
+            ok -> Triple("Correct, nicely done!", V.CORRECT, emptyList())
+            !outputOk && check.expectedOutput != null ->
+                Triple("Not quite. Expected output:\n${check.expectedOutput}", V.EXPECTED_OUTPUT, listOf(check.expectedOutput))
+            !outputOk && check.mustContain.isNotEmpty() ->
+                Triple("Not quite. Your output should include: ${check.mustContain.joinToString(", ")}", V.MUST_INCLUDE, check.mustContain)
+            !outputOk -> Triple("Not quite. Give it another try.", V.RETRY, emptyList())
             // Output matched but a construct is missing → the learner hardcoded the answer.
-            else -> "Your output is right, but the exercise wants you to actually use ${missing.joinToString(", ") { "`$it`" }} — not just print the answer."
+            else -> Triple(
+                "Your output is right, but the exercise wants you to actually use ${missing.joinToString(", ") { "`$it`" }} — not just print the answer.",
+                V.USE_SOURCE, missing,
+            )
         }
-        return UiExerciseResult(passed = ok, compiled = true, output = cap.stdout, message = message, diagnostics = cap.diagnostics)
+        return UiExerciseResult(
+            passed = ok, compiled = true, output = cap.stdout, message = message, diagnostics = cap.diagnostics,
+            verdict = verdict, args = args,
+        )
     }
 
     private fun normalize(s: String, caseSensitive: Boolean): String {
@@ -724,7 +746,8 @@ internal class LearnBackend(
         return if (caseSensitive) t else t.lowercase()
     }
 
-    private fun failure(message: String) = UiExerciseResult(passed = false, compiled = false, message = message)
+    private fun failure(message: String, verdict: String = "", vararg args: String) =
+        UiExerciseResult(passed = false, compiled = false, message = message, verdict = verdict, args = args.toList())
     private fun reason(e: Throwable) = e.message ?: e.javaClass.simpleName
 
     // ---- content mapping (drops the server-side ExerciseCheck) ----

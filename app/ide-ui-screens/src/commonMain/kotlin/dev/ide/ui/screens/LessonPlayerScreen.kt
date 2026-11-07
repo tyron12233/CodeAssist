@@ -467,19 +467,39 @@ internal fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(icon, null, Modifier.size(18.dp), tint = tint)
-            Text(result.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+            Text(exerciseMessage(result), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
         }
-        if (result.output.isNotBlank()) {
+        val output = exerciseOutput(result)
+        if (output.isNotBlank()) {
             Text(stringResource(Res.string.learn_output), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-            Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(Ide.colors.consoleBg)
-                    .horizontalScroll(rememberScrollState()).padding(10.dp),
-            ) {
-                Text(result.output.trimEnd(), color = MaterialTheme.colorScheme.onSurface, style = Ide.type.codeSmall)
+            // A program's output and the compiler's diagnostics are machine output and read left to right in
+            // every locale, as the build console does; a layout or workspace checklist is prose and does not.
+            val checklist = isChecklist(result)
+            val box: @Composable () -> Unit = {
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(Ide.colors.consoleBg)
+                        .horizontalScroll(rememberScrollState()).padding(10.dp),
+                ) {
+                    Text(
+                        output.trimEnd(),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = if (checklist) Ide.type.codeSmall
+                        else Ide.type.codeSmall.copy(textDirection = androidx.compose.ui.text.style.TextDirection.Ltr),
+                    )
+                }
             }
+            if (checklist) box() else dev.ide.ui.LtrContent(box)
         }
-        result.diagnostics.forEach { d ->
-            Text(d, color = MaterialTheme.colorScheme.error, style = Ide.type.codeSmall)
+        if (result.diagnostics.isNotEmpty()) dev.ide.ui.LtrContent {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                result.diagnostics.forEach { d ->
+                    Text(
+                        d,
+                        color = MaterialTheme.colorScheme.error,
+                        style = Ide.type.codeSmall.copy(textDirection = androidx.compose.ui.text.style.TextDirection.Ltr),
+                    )
+                }
+            }
         }
     }
 }

@@ -2,6 +2,7 @@
 
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,7 +94,7 @@ fun CreateProjectScreen(
     /** Pre-select a template (e.g. opened from a Projects Store item) and jump straight to its configure step. */
     initialTemplateId: String? = null,
 ) {
-    val templates = remember { backend.projects.projectTemplates() }
+    val templates = rememberLocalized(remember { backend.projects.projectTemplates() }) { list, t -> list.map { it.localized(t) } }
     // Sample projects (weather, notes, the Compose games…) belong to the Explore page only; the
     // Create-Project gallery lists starter templates. They keep the `sample-` id prefix the store
     // partitions on. A sample can still be created here when deep-linked from Explore, since
@@ -235,7 +236,7 @@ private fun TemplateGrid(
         if (grouped && categories.size > 1) {
             categories.forEachIndexed { i, cat ->
                 item(key = "header:${cat.key}", span = { GridItemSpan(maxLineSpan) }) {
-                    SectionLabel(cat.label, Modifier.padding(top = if (i == 0) 0.dp else 12.dp))
+                    SectionLabel(LocalBackendText.current.tr(cat.label), Modifier.padding(top = if (i == 0) 0.dp else 12.dp))
                 }
                 items(cat.templates, key = { it.id }) { t -> TemplateCard(t, onClick = { onPick(t) }) }
             }
@@ -312,7 +313,7 @@ private fun CategoryRail(
     Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         CategoryRailItem(stringResource(Res.string.templates_all), total, selected == null) { onSelect(null) }
         for (cat in categories) {
-            CategoryRailItem(cat.label, cat.templates.size, selected == cat.key) { onSelect(cat.key) }
+            CategoryRailItem(LocalBackendText.current.tr(cat.label), cat.templates.size, selected == cat.key) { onSelect(cat.key) }
         }
     }
 }
@@ -367,7 +368,7 @@ private fun CategoryChips(
     ) {
         item("all") { Chip(stringResource(Res.string.templates_all), total, selected == null) { onSelect(null) } }
         items(categories, key = { it.key }) { cat ->
-            Chip(cat.label, cat.templates.size, selected == cat.key) { onSelect(cat.key) }
+            Chip(LocalBackendText.current.tr(cat.label), cat.templates.size, selected == cat.key) { onSelect(cat.key) }
         }
     }
 }

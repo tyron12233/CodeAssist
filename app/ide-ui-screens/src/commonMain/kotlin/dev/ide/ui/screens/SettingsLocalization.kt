@@ -13,8 +13,9 @@ import org.jetbrains.compose.resources.stringResource
  * is the pure-JVM engine and can't reach Compose resources. Rather than translate there, the UI maps a built-in
  * page id / control key to a string resource here and resolves it at render time.
  *
- * The overlay is an OVERRIDE: where a resource exists it wins, otherwise the backend-supplied string is used
- * verbatim. That keeps plugin-contributed pages working (unknown ids fall through), and lets the device-specific
+ * The overlay is an OVERRIDE: where a resource exists it wins, otherwise the backend-supplied string goes through
+ * the backend text table ([LocalBackendText]), which covers the pages and controls with no resource of their own
+ * (the Keymap, AI and Version Control pages, every description), and is used verbatim when that has none either. That keeps plugin-contributed pages working (unknown ids fall through), and lets the device-specific
  * Build Runtime descriptions (they interpolate this device's heap sizes) stay backend-authored while their
  * static titles/options still localize.
  *
@@ -163,34 +164,34 @@ private val UNIT_WORD: Map<String, StringResource> = mapOf(
 /** The localized page title for a built-in page; the backend title for a plugin page. */
 @Composable
 fun localizedPageTitle(page: UiSettingsPage): String =
-    PAGE_TITLE[page.id]?.let { stringResource(it) } ?: page.title
+    PAGE_TITLE[page.id]?.let { stringResource(it) } ?: LocalBackendText.current.tr(page.title)
 
 /** The localized control title, falling back to the backend-supplied title. */
 @Composable
 fun localizedControlTitle(pageId: String, c: UiSettingControl): String =
-    CONTROL_TITLE["$pageId.${c.key}"]?.let { stringResource(it) } ?: c.title
+    CONTROL_TITLE["$pageId.${c.key}"]?.let { stringResource(it) } ?: LocalBackendText.current.tr(c.title)
 
 /** The localized control description, falling back to the backend-supplied description (may be null). */
 @Composable
 fun localizedControlDescription(pageId: String, c: UiSettingControl): String? =
-    CONTROL_DESC["$pageId.${c.key}"]?.let { stringResource(it) } ?: c.description
+    CONTROL_DESC["$pageId.${c.key}"]?.let { stringResource(it) } ?: LocalBackendText.current.trOrNull(c.description)
 
 /** The localized label for one choice option, falling back to the backend-supplied label. */
 @Composable
 fun localizedOptionLabel(pageId: String, key: String, option: UiSettingControl.Choice.Option): String =
-    OPTION_LABEL["$pageId.$key.${option.value}"]?.let { stringResource(it) } ?: option.label
+    OPTION_LABEL["$pageId.$key.${option.value}"]?.let { stringResource(it) } ?: LocalBackendText.current.tr(option.label)
 
 /** The localized action button label, falling back to the backend-supplied label. */
 @Composable
 fun localizedActionButton(pageId: String, c: UiSettingControl.Action): String =
-    ACTION_BUTTON["$pageId.${c.key}"]?.let { stringResource(it) } ?: c.buttonLabel
+    ACTION_BUTTON["$pageId.${c.key}"]?.let { stringResource(it) } ?: LocalBackendText.current.tr(c.buttonLabel)
 
 /** The localized group sub-heading, falling back to the raw group name (null stays null). */
 @Composable
 fun localizedGroup(group: String?): String? =
-    group?.let { GROUP_TITLE[it]?.let { r -> stringResource(r) } ?: it }
+    group?.let { GROUP_TITLE[it]?.let { r -> stringResource(r) } ?: LocalBackendText.current.tr(it) }
 
 /** The localized slider unit, falling back to the raw unit (symbol units pass through; null stays null). */
 @Composable
 fun localizedUnit(unit: String?): String? =
-    unit?.let { UNIT_WORD[it]?.let { r -> stringResource(r) } ?: it }
+    unit?.let { UNIT_WORD[it]?.let { r -> stringResource(r) } ?: LocalBackendText.current.tr(it) }

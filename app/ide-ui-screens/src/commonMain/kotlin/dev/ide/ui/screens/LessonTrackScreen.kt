@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -68,9 +69,10 @@ fun LessonTrackScreen(
     modifier: Modifier = Modifier,
     epoch: Int = 0,
 ) {
-    val catalog by produceState<dev.ide.ui.backend.UiLearnCatalog?>(null, backend, trackId, epoch) {
+    val fetchedCatalog by produceState<dev.ide.ui.backend.UiLearnCatalog?>(null, backend, trackId, epoch) {
         value = runCatching { backend.learn.catalog() }.getOrNull()
     }
+    val catalog = rememberLocalized(fetchedCatalog) { c, t -> c?.localized(t) }
     val track = catalog?.tracks?.firstOrNull { it.id == trackId }
     val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
 

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -104,9 +105,10 @@ fun PublisherProfileScreen(
     }
     val current = profile
     // What this person has learned. Null (nothing to show) leaves the section out entirely.
-    val learning by produceState<dev.ide.ui.backend.UiLearnPublicProfile?>(null, handle, backend) {
+    val fetchedLearning by produceState<dev.ide.ui.backend.UiLearnPublicProfile?>(null, handle, backend) {
         value = runCatching { backend.learn.publicProfile(handle) }.getOrNull()
     }
+    val learning = rememberLocalized(fetchedLearning) { l, t -> l?.localized(t) }
     var sort by remember(handle) { mutableStateOf(ProfileSort.Popular) }
     val sorts = remember(current?.items) { usefulSorts(current?.items.orEmpty()) }
     val now = remember(current) { dev.ide.ui.platform.nowMillis() }

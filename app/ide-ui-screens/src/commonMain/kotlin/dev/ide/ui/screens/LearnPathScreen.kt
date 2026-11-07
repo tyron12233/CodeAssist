@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,9 +65,10 @@ fun LearnPathScreen(
     modifier: Modifier = Modifier,
     epoch: Int = 0,
 ) {
-    val catalog by produceState(UiLearnCatalog(), backend, epoch) {
+    val fetchedCatalog by produceState(UiLearnCatalog(), backend, epoch) {
         value = runCatching { backend.learn.catalog() }.getOrDefault(UiLearnCatalog())
     }
+    val catalog = rememberLocalized(fetchedCatalog) { c, t -> c.localized(t) }
     val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
     val path = catalog.paths.firstOrNull { it.id == pathId }
 

@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.ui.backend.UiExerciseResult
+import dev.ide.ui.backend.UiExerciseVerdict
 
 /**
  * One thing a hands-on CodeAssist lesson checks actually happened in the learner's workspace: a file now has
@@ -101,6 +102,8 @@ internal suspend fun checkIde(conditions: List<IdeCondition>, probe: WorkspacePr
         output = lines.joinToString("\n"),
         message = if (passed) "Done, nicely done!" else "Not yet. Still to do: " + unmet.joinToString("; ") + ".",
         diagnostics = diagnostics,
+        verdict = if (passed) UiExerciseVerdict.IDE_DONE else UiExerciseVerdict.IDE_TODO,
+        args = unmet,
     )
 }
 

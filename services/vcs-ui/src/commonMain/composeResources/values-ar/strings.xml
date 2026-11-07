@@ -352,4 +352,7 @@
     <string name="vcs_msg_activity_pushing">جارٍ الدفع</string>
     <string name="vcs_msg_activity_cloning">جارٍ الاستنساخ</string>
     <string name="vcs_msg_activity_publishing">جارٍ النشر</string>
+    <string name="vcs_clone_auth_title">يتطلب هذا المستودع تسجيل الدخول</string>
+    <string name="vcs_clone_auth_signed_out">تُستنسخ المستودعات الخاصة بحساب GitHub تضيفه هنا. تسجيل الدخول إلى متجر المشاريع لا يمنح CodeAssist صلاحية الوصول إلى مستودعاتك.</string>
+    <string name="vcs_clone_auth_signed_in">تعذّر على الحساب المسجَّل الدخول به فتحه. تحقق من أن الحساب يمكنه رؤية هذا المستودع، أو أضف حسابًا آخر.</string>
 </resources>

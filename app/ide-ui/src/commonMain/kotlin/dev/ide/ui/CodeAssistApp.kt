@@ -170,7 +170,10 @@ fun CodeAssistApp(
         // Read once per composition of the root: a session that crosses midnight into the season picks it up
         // on the next settings change or launch, which is soon enough for a decoration.
         val season = if (app.settings.seasonalTouches) Season.current() else null
+        // Translations of the text the backend writes in English (lessons, templates, settings pages).
+        val backendText = dev.ide.ui.screens.rememberBackendText()
         CompositionLocalProvider(
+            dev.ide.ui.screens.LocalBackendText provides backendText,
             LocalSeason provides season,
             LocalAds provides app.adController,
             LocalHostFileActions provides fileActions,

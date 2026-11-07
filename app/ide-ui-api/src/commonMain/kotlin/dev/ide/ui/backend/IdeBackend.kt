@@ -476,7 +476,57 @@ data class UiExerciseResult(
     val output: String = "",
     val message: String = "",
     val diagnostics: List<String> = emptyList(),
+    /**
+     * Which of the [UiExerciseVerdict]s [message] words, so the UI can say it in the learner's language from its
+     * own resources, filled in with [args]. Empty for a message that has none, which is then shown as it is.
+     */
+    val verdict: String = "",
+    val args: List<String> = emptyList(),
 )
+
+/**
+ * The verdicts a checked exercise comes back with, and the [UiExerciseResult.args] each one carries. The
+ * English [UiExerciseResult.message] says the same thing, for a client that does not know a verdict.
+ */
+object UiExerciseVerdict {
+    const val CORRECT = "correct"
+    /** args: the expected output. */
+    const val EXPECTED_OUTPUT = "expected_output"
+    /** args: each fragment the output must include. */
+    const val MUST_INCLUDE = "must_include"
+    const val RETRY = "retry"
+    /** args: each construct the source must use. */
+    const val USE_SOURCE = "use_source"
+    const val NO_COMPILE = "no_compile"
+    /** args: the first diagnostic, or none. */
+    const val NO_RUN = "no_run"
+    /** args: case number, case count, its input (empty for none), the expected output. */
+    const val TEST_FAILED_EXPECTED = "test_failed_expected"
+    /** args: case number, case count, its input (empty for none), then each fragment the output must include. */
+    const val TEST_FAILED_INCLUDE = "test_failed_include"
+    /** args: case count. */
+    const val TESTS_PASSED = "tests_passed"
+    /** args: case count, then each construct the source must use. */
+    const val TESTS_PASS_USE_SOURCE = "tests_pass_use_source"
+    const val NO_EXERCISE = "no_exercise"
+    const val OPEN_FROM_LEARN = "open_from_learn"
+    const val RUNNER_UNSUPPORTED = "runner_unsupported"
+    const val RUNNER_UNAVAILABLE = "runner_unavailable"
+    /** args: the reason. */
+    const val RUNNER_PREPARE_FAILED = "runner_prepare_failed"
+    /** args: the reason. */
+    const val SAVE_FAILED = "save_failed"
+    /** args: the reason. */
+    const val RUNNER_FAILED = "runner_failed"
+    const val XML_MALFORMED = "xml_malformed"
+    /** args: each unmet rule's label, as authored (translate each through the backend text table). */
+    const val LAYOUT_NEEDS = "layout_needs"
+    const val LAYOUT_NO_RENDER = "layout_no_render"
+    const val LAYOUT_PROBLEM = "layout_problem"
+    const val IDE_DONE = "ide_done"
+    /** args: each unmet condition's label, as authored (translate each through the backend text table). */
+    const val IDE_TODO = "ide_todo"
+}
 
 /** Local learning progress: for each lesson id, the set of completed step ids. */
 data class UiLearnProgress(val completedByLesson: Map<String, Set<String>> = emptyMap())

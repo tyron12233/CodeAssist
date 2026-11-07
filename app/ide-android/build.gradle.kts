@@ -904,6 +904,8 @@ val bundleComposeStringAsset = tasks.register<Copy>("bundleComposeStringAsset") 
     dependsOn(":ide-ui-resources:desktopProcessResources")
     from(project(":ide-ui-resources").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.ui.generated.resources")) {
         include("values*/**/*.cvr")
+        // The backend-text translation tables (Learn, templates, settings), read with Res.readBytes.
+        include("files/**")
     }
     into(layout.buildDirectory.dir("compose-strings-asset/composeResources/dev.ide.ui.generated.resources"))
 }

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.backend.localized
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -28,8 +29,15 @@ internal class LessonPlayerState(
     initialStep: Int,
     private val scope: CoroutineScope,
 ) {
-    var lesson: UiLesson? by mutableStateOf(null)
-        private set
+    private var fetched: UiLesson? by mutableStateOf(null)
+
+    /** The table the lesson is shown through; [rememberLessonPlayerState] keeps it current. */
+    var text: dev.ide.ui.backend.BackendText by mutableStateOf(dev.ide.ui.backend.BackendText.EMPTY)
+
+    /** The lesson in the UI's language (see [LocalBackendText]). */
+    val lesson: UiLesson? by androidx.compose.runtime.derivedStateOf {
+        fetched?.localized(text)
+    }
     var stepIndex: Int by mutableStateOf(initialStep.coerceAtLeast(0))
         private set
     var canAdvance: Boolean by mutableStateOf(false)
@@ -53,7 +61,7 @@ internal class LessonPlayerState(
 
     init {
         scope.launch {
-            lesson = runCatching { lessonId?.let { backend.learn.lesson(it) } }.getOrNull()
+            fetched = runCatching { lessonId?.let { backend.learn.lesson(it) } }.getOrNull()
             if (steps.isNotEmpty()) stepIndex = stepIndex.coerceIn(0, steps.size - 1)
         }
         // On every step change: reset the advance gate for its kind, and record the learner's place for the
@@ -96,6 +104,9 @@ internal fun rememberLessonPlayerState(
     lessonId: String?,
     initialStep: Int,
     scope: CoroutineScope = rememberCoroutineScope(),
-): LessonPlayerState = remember(backend, lessonId, scope) {
-    LessonPlayerState(backend, lessonId, initialStep, scope)
+): LessonPlayerState {
+    val state = remember(backend, lessonId, scope) { LessonPlayerState(backend, lessonId, initialStep, scope) }
+    val text = LocalBackendText.current
+    androidx.compose.runtime.SideEffect { state.text = text }
+    return state
 }

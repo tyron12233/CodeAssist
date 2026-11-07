@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.ui.backend.UiExerciseResult
+import dev.ide.ui.backend.UiExerciseVerdict
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import javax.xml.parsers.DocumentBuilderFactory
@@ -33,6 +34,7 @@ internal fun checkLayout(xml: String, check: LayoutCheck, render: (String) -> Li
             compiled = false,
             message = "This isn't well-formed XML yet. Check that every tag is closed and every attribute is quoted.",
             diagnostics = listOfNotNull(why.ifBlank { null }),
+            verdict = UiExerciseVerdict.XML_MALFORMED,
         )
     }
 
@@ -58,11 +60,11 @@ internal fun checkLayout(xml: String, check: LayoutCheck, render: (String) -> Li
     if (check.cleanRender) lines += if (renderOk) "✓ renders cleanly" else "✗ renders cleanly"
 
     val passed = unmet.isEmpty() && renderOk
-    val message = when {
-        passed -> "Correct, nicely done!"
-        unmet.isNotEmpty() -> "Almost. Your layout still needs: " + unmet.joinToString("; ") + "."
-        problems == null -> "The structure is right, but the layout couldn't be rendered."
-        else -> "The structure is right, but the preview reports a problem (below)."
+    val (message, verdict) = when {
+        passed -> "Correct, nicely done!" to UiExerciseVerdict.CORRECT
+        unmet.isNotEmpty() -> "Almost. Your layout still needs: " + unmet.joinToString("; ") + "." to UiExerciseVerdict.LAYOUT_NEEDS
+        problems == null -> "The structure is right, but the layout couldn't be rendered." to UiExerciseVerdict.LAYOUT_NO_RENDER
+        else -> "The structure is right, but the preview reports a problem (below)." to UiExerciseVerdict.LAYOUT_PROBLEM
     }
     return UiExerciseResult(
         passed = passed,
@@ -70,6 +72,8 @@ internal fun checkLayout(xml: String, check: LayoutCheck, render: (String) -> Li
         output = lines.joinToString("\n"),
         message = message,
         diagnostics = problems.orEmpty(),
+        verdict = verdict,
+        args = if (verdict == UiExerciseVerdict.LAYOUT_NEEDS) unmet else emptyList(),
     )
 }
 
