@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * protocol error. After [MAX_WORKER_FAILURES] such failures the fork is abandoned for the rest of the
  * session, so a device where this cannot work pays the cost once rather than on every module.
  *
- * The one exception is a worker that DIES mid-compile on Android 10 or older ([ART_JIT_CRASHES]): there the
+ * The one exception is a worker that DIES mid-compile on Android 11 or older ([ART_JIT_CRASHES]): there the
  * cause is ART's JIT miscompiling the compiler's own code (#1748), and the in-process compiler runs that same
  * code under the same JIT, in the build process, which it then takes down. Such a compile fails the module with
  * that explanation instead.
@@ -373,7 +373,7 @@ class ForkedKotlinCompiler(
                     add("-Xmx${xmxMb}m")
                     add("-Djava.io.tmpdir=$tmpDir")
                     add("-Dkotlin.colors.enabled=false")
-                    // ART's JIT on Android 10 and older miscompiles the compiler's FIR code when it inlines through
+                    // ART's JIT on Android 11 and older miscompiles the compiler's FIR code when it inlines through
                     // an inline cache: Play's reports for 3.41.0 show calls into the heap or boot.art from JIT code
                     // in FirJavaFacadeKt.convertJavaMethodToFir/convertJavaFieldToFir, and crashes inside
                     // HInliner::TryInlinePolymorphicCall itself (#1748). The JIT reads -Xcompiler-option, and a
@@ -504,9 +504,12 @@ class ForkedKotlinCompiler(
         const val EOF = "\u0000EOF"
 
         /**
-         * Android 10 and older, whose ART JIT crashes in the Kotlin compiler's code (#1748): Play's 3.41.0 reports
-         * are all API 29, nearly all 32-bit. The releases before it (API 26-28, all this app supports) share that JIT.
+         * Android 11 and older, whose ART JIT crashes in the Kotlin compiler's code (#1748). Play's 3.41.0 reports
+         * were first all API 29, nearly all 32-bit; the next days added API 30 with the same signature
+         * (HGraph::InlineInto under HInliner::TryInlinePolymorphicCall, jit-cache FirJavaFacadeKt.
+         * convertJavaMethodToFir) on 64-bit Samsung and vivo devices. The releases before (API 26-28) share that JIT;
+         * none of the reports are API 31 or newer.
          */
-        val ART_JIT_CRASHES: Boolean = android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.Q
+        val ART_JIT_CRASHES: Boolean = android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.R
     }
 }
