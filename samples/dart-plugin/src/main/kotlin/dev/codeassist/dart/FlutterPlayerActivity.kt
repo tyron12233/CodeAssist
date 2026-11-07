@@ -87,6 +87,8 @@ class FlutterPlayerActivity : FlutterActivity() {
         /** Result codes besides 0 (the VM service) and 1 (none): the launcher let the caller in, or did not. */
         const val RESULT_REACHED = 2
         const val RESULT_REFUSED = 3
+        /** A PendingIntent the caller made: its creator says who the caller is, on any Android version. */
+        const val EXTRA_IDENTITY = "dev.codeassist.dart.CALLER_IDENTITY"
         /** With [RESULT_REFUSED]: the package the launcher took the caller to be. */
         const val EXTRA_CALLER = "caller"
         /** The isolate the player's engine started, which picks its view out of the VM's. */

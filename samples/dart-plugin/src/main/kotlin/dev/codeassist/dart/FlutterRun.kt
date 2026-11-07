@@ -38,6 +38,10 @@ object FlutterPlayer {
     /** The player's gate, which checks that CodeAssist is the caller (see FlutterPlayerLauncher). */
     private const val ACTIVITY = "dev.codeassist.dart.FlutterPlayerLauncher"
 
+    /** The identity token's intent: never sent, only its PendingIntent's creator is read. */
+    private const val IDENTITY_ACTION = "dev.codeassist.dart.PLAYER_CALLER"
+    private const val IDENTITY_REQUEST = 0x5EED
+
     class Started(val uri: String, val isolate: String?, private val control: android.os.IBinder?) {
         /** End the player: its task closed, its process gone. Safe to call again, or once it is already gone. */
         fun quit() {
@@ -77,6 +81,18 @@ object FlutterPlayer {
             .setClassName(PACKAGE, ACTIVITY)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(FlutterPlayerActivity.EXTRA_RECEIVER, receiver)
+            // Who is asking, before Android 14: a PendingIntent's creator is recorded by the system and cannot be
+            // forged, and this one is made for the player alone. (The referrer the launcher used to read is only
+            // filled in for a start from an Activity, and this one comes from the build process: it was always
+            // empty there, and every run below Android 14 was refused.)
+            .putExtra(
+                FlutterPlayerActivity.EXTRA_IDENTITY,
+                android.app.PendingIntent.getBroadcast(
+                    context, IDENTITY_REQUEST,
+                    Intent(IDENTITY_ACTION).setPackage(context.packageName),
+                    android.app.PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
         // Android 14 and later tell the player who is starting it only when the caller agrees to say.
         val options = if (android.os.Build.VERSION.SDK_INT >= 34) {
             android.app.ActivityOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
