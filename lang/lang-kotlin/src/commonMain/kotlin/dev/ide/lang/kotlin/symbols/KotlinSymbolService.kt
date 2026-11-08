@@ -284,6 +284,13 @@ class KotlinSymbolService(
     private val classpathShapeMemo = ConcurrentMap<String, Holder<TypeShape>>()
     private val builtinShapeMemo = ConcurrentMap<String, Holder<TypeShape>>()
 
+    /** A package's top-level classifiers by simple name, for [libraryClassifier]. Its index query returns EVERY
+     *  declaration of the package and decodes them all to find one name, and [aliasedShape] asks once for each
+     *  name [typeShape] misses: every partially typed identifier, probed against each default-imported
+     *  package, so a per-name memo never hit (~25 MB per 30 s of typing on a device profile). Per package, a
+     *  new name is a map lookup. */
+    private val libraryClassifiersMemo = ConcurrentMap<String, Map<String, PkgDecl>>()
+
     /** Key for [typeNameMemo]: a simple/qualified type name, resolved in one file scope ([FileContext.scopeKey])
      *  and one enclosing-class chain. A small allocation per lookup, but every field's `hashCode` is a cached
      *  String hash, so the probe is far cheaper than the resolution it replaces. */
@@ -416,7 +423,7 @@ class KotlinSymbolService(
     private val classpathMemos: List<ConcurrentMap<*, *>> get() = listOf(
         classpathExtMemo, checkMembersMemo, companionMembersMemo, mappedStaticsMemo, classpathTypeExistsMemo,
         classpathOwnMembersMemo, classpathBoundMembersMemo, classpathSupertypeMemo, supertypeArgTemplateMemo, topLevelLibMemo,
-        topLevelBuiltinMemo, classpathShapeMemo, builtinShapeMemo, javaShapeCache,
+        topLevelBuiltinMemo, classpathShapeMemo, builtinShapeMemo, javaShapeCache, libraryClassifiersMemo,
     )
 
     private fun clearClasspathMemos() {
@@ -3296,8 +3303,15 @@ class KotlinSymbolService(
         val pkg = fqn.substringBeforeLast('.', "")
         if (pkg.isEmpty()) return null
         val name = fqn.substringAfterLast('.')
-        return idx.exact<PkgDecl>(KotlinPackageDeclIndex.id, pkg)
-            .firstOrNull { it.classifier && it.name == name }
+        // A partial (mid-build) answer must not be kept, so only memoize while the classpath memos are usable.
+        if (!classpathCacheUsable(idx)) {
+            return idx.exact<PkgDecl>(KotlinPackageDeclIndex.id, pkg).firstOrNull { it.classifier && it.name == name }
+        }
+        val byName = libraryClassifiersMemo[pkg] ?: HashMap<String, PkgDecl>().also { m ->
+            for (d in idx.exact<PkgDecl>(KotlinPackageDeclIndex.id, pkg)) if (d.classifier && d.name !in m) m[d.name] = d
+            libraryClassifiersMemo[pkg] = m
+        }
+        return byName[name]
     }
 
     /**
