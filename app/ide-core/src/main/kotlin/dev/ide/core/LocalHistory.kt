@@ -4,7 +4,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
@@ -23,9 +22,7 @@ import kotlin.io.path.writeText
  * save stays as fast as before.
  */
 class LocalHistory(private val root: Path, private val projectRoot: Path) {
-    private val writer: ExecutorService = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "local-history").apply { isDaemon = true }
-    }
+    private val writer: ExecutorService = BackgroundThreads.single("local-history")
 
     /** One kept version: [id] is its time (epoch millis), unique within a file. */
     data class Snapshot(val id: Long, val sizeChars: Long)

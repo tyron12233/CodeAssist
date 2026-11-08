@@ -55,6 +55,18 @@ import java.util.concurrent.atomic.AtomicReference
  */
 object AndroidIde {
 
+    /**
+     * How [dev.ide.core.BackgroundThreads] lower themselves here: nice 5, a third of a normal thread's CPU share
+     * whenever the UI thread or the GC want it. Not [android.os.Process.THREAD_PRIORITY_BACKGROUND] (10): at 10
+     * and above Android also moves the thread into the background cpuset, little cores only, which would starve
+     * indexing even on an idle phone. Each process that runs an engine calls this before starting one.
+     */
+    fun installBackgroundPriority() {
+        dev.ide.core.BackgroundThreads.lowerCurrentThread = {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT + 5)
+        }
+    }
+
     /** Heavy (file copy + project gen + JDT init) — call off the main thread. */
     fun bootstrap(context: Context): Session {
         val startNs = System.nanoTime()
@@ -63,6 +75,7 @@ object AndroidIde {
         // background index concurrency to stop provoking the 32-bit-ART torn-reference SIGSEGV (see RuntimeInfo).
         // `android.os.Process.is64Bit()` reports THIS process, not merely device capability (API 23+; minSdk 26).
         dev.ide.platform.RuntimeInfo.set32Bit(!android.os.Process.is64Bit())
+        installBackgroundPriority()
         initBuiltApks(context)
 
         // App-specific EXTERNAL storage (Android/data/<pkg>/files/codeassist)

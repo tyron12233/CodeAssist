@@ -315,6 +315,7 @@ import kotlin.io.path.writeText
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -491,10 +492,11 @@ class IdeServices private constructor(
     // On a 32-bit ARM process, serialize ALL background index-scope work (the initial build launch, per-save
     // reindex, warm-ups) onto ONE thread so it never fans across the shared pool alongside the editor — part of
     // collapsing concurrent heap churn away from the `ide-engine` thread to stop provoking the 32-bit-ART
-    // torn-reference SIGSEGV (see [dev.ide.platform.RuntimeInfo]). 64-bit / desktop keep the full Default pool.
+    // torn-reference SIGSEGV (see [dev.ide.platform.RuntimeInfo]). 64-bit / desktop keep one thread per core.
+    // Either way they are lowered-priority threads ([BackgroundThreads]), not the shared Default pool, so the
+    // index build yields the CPU to the UI thread and the GC on a slow phone instead of competing with them.
     private val indexDispatcher: CoroutineDispatcher =
-        if (dev.ide.platform.RuntimeInfo.is32Bit) Dispatchers.Default.limitedParallelism(1)
-        else Dispatchers.Default
+        if (dev.ide.platform.RuntimeInfo.is32Bit) sharedIndexDispatcher1 else sharedIndexDispatcher
     private val indexScope = CoroutineScope(SupervisorJob() + indexDispatcher)
 
     /** The project-open index build, so work that must not overlap its memory peak can wait for it. */
@@ -6261,4 +6263,15 @@ internal fun <T> runSync(block: suspend () -> T): T {
     block.startCoroutine(Continuation(EmptyCoroutineContext) { result.set(it); done.countDown() })
     if (result.get() == null) done.await()
     return result.get()!!.getOrThrow()
+}
+
+/** Shared by every [IdeServices]: index threads idle out after 30s, so one pool serves every open project. */
+private val sharedIndexDispatcher: CoroutineDispatcher by lazy {
+    BackgroundThreads.pool("ide-index", Runtime.getRuntime().availableProcessors().coerceAtLeast(2))
+        .asCoroutineDispatcher()
+}
+
+/** The 32-bit ART variant: every index-scope task on one thread (see [dev.ide.platform.RuntimeInfo]). */
+private val sharedIndexDispatcher1: CoroutineDispatcher by lazy {
+    BackgroundThreads.single("ide-index").asCoroutineDispatcher()
 }

@@ -124,10 +124,7 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
         val SWEEP_THREADS = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 4)
 
         val sweepPool: java.util.concurrent.ExecutorService by lazy {
-            val n = java.util.concurrent.atomic.AtomicInteger()
-            java.util.concurrent.Executors.newFixedThreadPool(SWEEP_THREADS) { r ->
-                Thread(r, "kotlin-usages-${n.incrementAndGet()}").apply { isDaemon = true }
-            }
+            dev.ide.core.BackgroundThreads.pool("kotlin-usages", SWEEP_THREADS)
         }
     }
 
