@@ -186,6 +186,8 @@ class ProjectManager private constructor(
     /** The last-read prefs and the file identity it was read from; see [cachedPrefs]. Guarded by [prefsLock]. */
     private var prefsCache: Properties? = null
     private var prefsStamp: PrefsStamp? = null
+    /** When [prefsStamp] was last compared with the file ([System.nanoTime]). Guarded by [prefsLock]. */
+    private var prefsCheckedAt: Long = 0L
 
     /**
      * What turns a crashing installed plugin off for the next launch, and starts without plugins after repeated
@@ -348,6 +350,8 @@ class ProjectManager private constructor(
         return applicationContainer.getService(APP_KEYSTORE_REGISTRY)
     }
 
+    // A getter, not a stored property: the init blocks above read preferences during construction, before a
+    // property declared down here is assigned (a stored one is null then, and every early read saw no prefs).
     private val prefsFile: Path get() = homeDir.resolve("prefs.properties")
 
     /** Directories a backup sweeps: the live projects, plus any legacy data still on disk. */
@@ -835,11 +839,16 @@ class ProjectManager private constructor(
      * The prefs as last read, re-read only when the file changed. Every [preference] call used to open and
      * parse the whole file, and Settings reads dozens of keys per frame it rebuilds (one per control, about
      * 30 per [dev.ide.core.settings.SettingsStore.load]), on the UI thread: that was the lag in the settings
-     * screens. One stat per read still sees a write from another process (the `:build` daemon shares this
-     * file). Callers must not mutate the result.
+     * screens. The file is stat'ed at most every [PREFS_RECHECK_NANOS], which still sees a write from another
+     * process (the `:build` daemon shares this file) within a fraction of a second; this process's own writes
+     * land in the cache at once. The keymap reads two keys per command on every key press, so a stat per read
+     * was dozens of syscalls and path objects per keystroke. Callers must not mutate the result.
      */
     private fun cachedPrefs(): Properties = synchronized(prefsLock) {
+        val now = System.nanoTime()
+        prefsCache?.let { if (now - prefsCheckedAt < PREFS_RECHECK_NANOS) return it }
         val stamp = stampOf(prefsFile)
+        prefsCheckedAt = now
         prefsCache?.takeIf { stamp == prefsStamp }?.let { return it }
         return loadPrefs().also { prefsCache = it; prefsStamp = stamp }
     }
@@ -1164,6 +1173,9 @@ class ProjectManager private constructor(
         name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
 
     companion object {
+        /** How long [cachedPrefs] trusts its copy before stat'ing the file again. */
+        private const val PREFS_RECHECK_NANOS = 250_000_000L
+
         private const val LEGACY_IMPORTED_PREF = "legacy.projects.imported"
         /** [trashDir]'s name under the projects folder. */
         private const val TRASH_DIR = ".trash"

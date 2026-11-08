@@ -2406,6 +2406,24 @@ class IdeServices private constructor(
      * a desktop JDK) and as a warning on the device, whose build compiles against `android.jar`'s `java.*`.
      */
     private fun apiLevelContext(id: ModuleId): ApiLevelContext? {
+        // The checks ask once per call they look at, so a pass asks hundreds of times. Rebuilding meant walking
+        // the workspace for the module and mapping (and normalizing) every boot-classpath path each time, so
+        // keep the answer for the model revision it was read at, re-reading at most every couple of seconds
+        // (a platform installed under the same model revision still turns up).
+        val now = System.nanoTime()
+        val generation = store.generation
+        apiLevelContexts[id]?.let { c -> if (c.generation == generation && now - c.at < PERMISSION_CONTEXT_TTL_NANOS) return c.value }
+        val value = readApiLevelContext(id)
+        apiLevelContexts[id] = CachedApiLevelContext(generation, now, value)
+        return value
+    }
+
+    private class CachedApiLevelContext(val generation: Int, val at: Long, val value: ApiLevelContext?)
+
+    /** The last [apiLevelContext] per module, with the model revision and time it was read at. */
+    private val apiLevelContexts = ConcurrentHashMap<ModuleId, CachedApiLevelContext>()
+
+    private fun readApiLevelContext(id: ModuleId): ApiLevelContext? {
         val module = store.workspace.projects.firstNotNullOfOrNull { p -> p.modules.firstOrNull { it.id == id } }
             ?: return null
         val facet = module.facets.get(AndroidFacet.KEY)
