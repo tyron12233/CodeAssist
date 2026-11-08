@@ -66,14 +66,27 @@ class EditorTouchScrollTest {
         )
     }
 
+    @Test
+    fun `a hand that drifts a little after a long press keeps the word selected`() {
+        val session = session()
+        // 36px at density 2 = 18dp: past touch slop, so the scroll container takes the move, but well inside
+        // the drift a held finger is allowed before the long press counts as a pan.
+        drive(session, restMs = LONG_REST_MS, swipeSteps = 2, stepPx = 18f)
+        assertTrue(
+            !session.selection.collapsed,
+            "a few dp of shake after the long press must not throw its word selection away (was ${session.selection})",
+        )
+    }
+
     private fun session() = EditorSession(longLine, languageFor("Sample.kt"), TextRange(0))
 
     /**
-     * Press inside the long line, optionally rest for [restMs], then drag left in [swipeSteps] steps and lift.
+     * Press inside the long line, optionally rest for [restMs], then drag left in [swipeSteps] steps of [stepPx]
+     * and lift.
      * Frames are pumped throughout, since the long-press timer resolves on the scene's dispatcher.
      */
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun drive(session: EditorSession, restMs: Long = 0, swipeSteps: Int = 0) {
+    private fun drive(session: EditorSession, restMs: Long = 0, swipeSteps: Int = 0, stepPx: Float = 40f) {
         val scene = ImageComposeScene(width = 760, height = 400, density = Density(2f)) {
             CodeAssistTheme(dark = true) { content(session) }
         }
@@ -101,7 +114,7 @@ class EditorTouchScrollTest {
             }
             repeat(swipeSteps) {
                 stamp += FRAME_MS
-                x -= 40f
+                x -= stepPx
                 scene.sendPointerEvent(PointerEventType.Move, Offset(x, y), type = PointerType.Touch, timeMillis = stamp)
                 pump(FRAME_MS)
             }

@@ -446,26 +446,40 @@ internal fun Modifier.editorInput(
             }
             if (hit != null) {
                 down.consume()
-                // The handle sits ~a line below its anchor, so the finger covers the row below. Lift the
-                // hit-point back up to the anchored line so dragging tracks what you see.
-                val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
+                // The end being dragged, and the one that stays put (recorded now: see SelectionHandleDrag).
+                val (dragged, fixed) = when (hit) {
+                    'a' -> sel.min to sel.max
+                    'b' -> sel.max to sel.min
+                    else -> sel.start to null
+                }
+                fun caretPoint(offset: Int): SelectionHandleDrag.CaretPoint {
+                    val (_, x, top) = geometry.caretGeometry(offset)
+                    return SelectionHandleDrag.CaretPoint(x, top)
+                }
+                val start = caretPoint(dragged)
+                val handleDrag = SelectionHandleDrag(
+                    fixedEnd = fixed,
+                    start = dragged,
+                    grab = down.position,
+                    hotspot = Offset(start.x, start.rowTop + metrics.lineHeight / 2f),
+                    lineHeight = metrics.lineHeight,
+                    deadZone = viewConfiguration.touchSlop / 2,
+                    resistX = metrics.charWidth * 0.5f,
+                    resistY = metrics.lineHeight * 0.3f,
+                )
                 // The loupe shows the edge being dragged, which the finger and the handle both cover.
                 fun showLoupeAt(offset: Int) {
-                    val (_, x, top) = geometry.caretGeometry(offset)
-                    interaction.loupeSource = Offset(x, top + metrics.lineHeight / 2f)
+                    val p = caretPoint(offset)
+                    interaction.loupeSource = Offset(p.x, p.rowTop + metrics.lineHeight / 2f)
                 }
                 try {
-                    var moved = false
                     drag(down.id) { change ->
-                        val off = geometry.offsetAt(change.position.copy(y = change.position.y - lift))
-                        when (hit) {
-                            'a' -> session.setSelectionRange(session.selection.max, off)
-                            'b' -> session.setSelectionRange(session.selection.min, off)
-                            else -> session.setCaret(off)
+                        if (handleDrag.moveTo(change.position, geometry::offsetAt, ::caretPoint)) {
+                            val (from, to) = handleDrag.selection
+                            if (fixed == null) session.setCaret(to) else session.setSelectionRange(from, to)
                         }
-                        // Not on the grab itself: a tap on a handle should not flash a loupe.
-                        if (!moved && (change.position - down.position).getDistance() > viewConfiguration.touchSlop / 2) moved = true
-                        if (moved) showLoupeAt(off)
+                        // Not before the finger leaves the dead zone: a tap on a handle should not flash a loupe.
+                        if (handleDrag.started) showLoupeAt(handleDrag.moving)
                         change.consume()
                     }
                 } finally {
@@ -503,6 +517,13 @@ internal fun Modifier.editorInput(
             // completes the long press, while travel past slop means the finger is panning after all — then the
             // long press is abandoned, the document is left exactly as it was, and the drag reaches the scroll
             // containers as if the press had never lingered.
+            //
+            // "Past slop" here is a wider [heldDrift], not touch slop: a hand held still for the long press still
+            // shakes, and at touch slop a few dp of that threw the word selection away (issue #1751). The scroll
+            // containers still claim the move at their own slop, so a drift inside [heldDrift] can nudge the view
+            // by a few dp; the selection survives it. So the decision is by distance, not by whether the move
+            // was consumed.
+            val heldDrift = maxOf(slop * 2, 24.dp.toPx())
             var panned = false
             var lifted = false
             while (true) {
@@ -511,7 +532,7 @@ internal fun Modifier.editorInput(
                 if (!change.pressed) {
                     lifted = true; break
                 }
-                if (change.isConsumed || (change.position - down.position).getDistance() > slop) {
+                if ((change.position - down.position).getDistance() > heldDrift) {
                     panned = true; break
                 }
             }
