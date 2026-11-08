@@ -126,7 +126,7 @@ internal fun EditorCenter(
     val pluginNavigator = LocalPluginNavigator.current
     val pluginFileOpener = LocalPluginFileOpener.current
     // Gradle compatibility mode: non-null only for a project imported from Gradle. Drives the top-bar compat
-    // chip + the details banner below the toolbar; the chip re-opens a dismissed banner. `compatEpoch` re-keys
+    // chip + the details banner below the toolbar; the chip toggles the banner. `compatEpoch` re-keys
     // the disk read so a convert/revert (which drops/re-adds the marker without changing rootPath) refreshes it
     // — otherwise the cached non-null value would leave a ghost banner/chip after converting.
     var compatEpoch by remember(project.rootPath) { mutableStateOf(0) }
@@ -135,13 +135,29 @@ internal fun EditorCenter(
     var compatInfo by remember(project.rootPath) { mutableStateOf<UiCompatibilityInfo?>(null) }
     var compatLoaded by remember(project.rootPath) { mutableStateOf(false) }
     var showCompatBanner by remember(project.rootPath) { mutableStateOf(false) }
+    // Closed by the user for this project: then only the top bar's chip shows the mode (it toggles the banner),
+    // not even the one-line notice. A project shared with Android Studio over git stays in compatibility mode
+    // for good, and the row was in its way on every open (#1752). Remembered with the notes the user saw, so a
+    // sync that reads something new brings the notice back, as does a build file changed since the last sync.
+    var compatHidden by remember(project.rootPath) { mutableStateOf(false) }
+    val compatHiddenKey = remember(project.rootPath) { "gradleCompat.hidden." + project.rootPath.hashCode().toUInt().toString(16) }
+    fun compatSeen(info: UiCompatibilityInfo) = info.notes.joinToString("\n").hashCode().toString()
     LaunchedEffect(project.rootPath, compatEpoch) {
-        val info = withContext(Dispatchers.Default) { state.backend.projects.compatibilityInfo() }
+        val (info, hiddenFor) = withContext(Dispatchers.Default) {
+            state.backend.projects.compatibilityInfo() to state.backend.settings.preference(compatHiddenKey)
+        }
         compatInfo = info
+        compatHidden = info != null && !info.syncNeeded && hiddenFor == compatSeen(info)
         if (!compatLoaded) {
-            showCompatBanner = info != null
+            showCompatBanner = info != null && !compatHidden
             compatLoaded = true
         }
+    }
+    fun hideCompatBanner() {
+        showCompatBanner = false
+        val info = compatInfo ?: return
+        compatHidden = true
+        depsScope.launch(Dispatchers.Default) { state.backend.settings.setPreference(compatHiddenKey, compatSeen(info)) }
     }
     var showConvertDialog by remember(project.rootPath) { mutableStateOf(false) }
     // A project adopted from a folder nothing recognized (a clone). Read once per project: the marker only
@@ -258,7 +274,7 @@ internal fun EditorCenter(
                 onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
                 onIndexClick = { state.indexDetailOpen = true },
                 compatibilityMode = compatInfo != null,
-                onCompatClick = { showCompatBanner = true },
+                onCompatClick = { if (showCompatBanner) hideCompatBanner() else showCompatBanner = true },
                 pluginActions = toolbarActions,
                 onPluginAction = { id ->
                     depsScope.launch {
@@ -292,7 +308,7 @@ internal fun EditorCenter(
                     // The three that are a single sentence live in the strip; the three that need a card of their own
                     // contribute a summary line whose action reveals that card, so at most one card is ever open.
                     val notices = buildList {
-                        if (compatInfo != null && !showCompatBanner) {
+                        if (compatInfo != null && !showCompatBanner && !compatHidden) {
                             add(
                                 EditorNotice(
                                     id = "gradle-compat",
@@ -345,7 +361,7 @@ internal fun EditorCenter(
                             info = info,
                             visible = showCompatBanner,
                             compact = compact,
-                            onDismiss = { showCompatBanner = false },
+                            onDismiss = { hideCompatBanner() },
                             onConvert = { showConvertDialog = true },
                             // Re-read the notes (and the multiplatform target) the sync just rewrote.
                             onSynced = { compatEpoch++ },
