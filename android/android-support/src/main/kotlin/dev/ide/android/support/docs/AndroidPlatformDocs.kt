@@ -46,8 +46,25 @@ class AndroidPlatformDocs private constructor(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Map<String, ClassDocs>>?) = size > DECODED_PACKAGES
     }
 
+    /**
+     * Recently asked classes, by the fqn they were asked as, with [NO_DOCS] for a class the pack does not
+     * cover. Completion asks for the docs of every binary type it offers on every keystroke, and those span
+     * more packages than [decoded] holds, so without this each keystroke inflated whole packages again (a
+     * device profile: ~15 MB per 30 s of typing). An entry keeps only its own class alive, not its package.
+     */
+    private val classes = object : LinkedHashMap<String, ClassDocs>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ClassDocs>?) = size > CACHED_CLASSES
+    }
+
     /** The docs of [fqn] (`android.app.Activity`, nested as `android.view.View.OnClickListener`), or null. */
     fun classDocs(fqn: String): ClassDocs? {
+        synchronized(classes) { classes[fqn] }?.let { return it.takeIf { it !== NO_DOCS } }
+        val found = lookUp(fqn)
+        synchronized(classes) { classes[fqn] = found ?: NO_DOCS }
+        return found
+    }
+
+    private fun lookUp(fqn: String): ClassDocs? {
         val name = fqn.replace('$', '.')
         var dot = name.lastIndexOf('.')
         while (dot > 0) {
@@ -85,6 +102,10 @@ class AndroidPlatformDocs private constructor(
         private const val MAGIC = 0x41444F43 // "ADOC"
         private const val VERSION = 1
         private const val DECODED_PACKAGES = 24
+        private const val CACHED_CLASSES = 512
+
+        /** [classes]'s marker for a class the pack has no docs for. */
+        private val NO_DOCS = ClassDocs("", "", null, emptyList())
 
         /** The resource the pack ships as, next to `android-api-levels.bin`. */
         const val RESOURCE = "/android-docs.bin"
