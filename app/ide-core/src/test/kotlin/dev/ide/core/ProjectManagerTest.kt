@@ -80,12 +80,20 @@ class ProjectManagerTest {
             val daemon = ProjectManager.desktop(root.resolve("projects"))
             assertEquals(null, ui.preference("a"))
 
+            // The cache trusts its copy for a quarter second (the keymap reads prefs on every key press), so
+            // another manager's write shows up within that, not at once; it must not stay hidden.
+            fun ProjectManager.seen(key: String, value: String): String? {
+                val deadline = System.nanoTime() + 2_000_000_000L
+                while (preference(key) != value && System.nanoTime() < deadline) Thread.sleep(25)
+                return preference(key)
+            }
+
             ui.setPreferences(mapOf("a" to "1", "b" to "2"))
-            assertEquals("1", ui.preference("a"))
-            assertEquals("2", daemon.preference("b"))
+            assertEquals("1", ui.preference("a"), "this manager's own write lands in its cache at once")
+            assertEquals("2", daemon.seen("b", "2"))
 
             daemon.setPreference("a", "changed")
-            assertEquals("changed", ui.preference("a"), "the other manager's write must not be hidden by the cache")
+            assertEquals("changed", ui.seen("a", "changed"), "the other manager's write must not be hidden by the cache")
             assertEquals("2", ui.preference("b"))
         }
     }
