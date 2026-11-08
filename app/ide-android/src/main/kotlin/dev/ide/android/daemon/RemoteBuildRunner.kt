@@ -255,10 +255,16 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     )
 
     init {
-        // Bind eagerly when the project opens, so the daemon is up before the first build. A low-memory device
-        // binds on the first Run instead: an idle :build process is a whole second runtime the system would
-        // otherwise have to find room for while the user is only editing.
-        if (!DeviceMemory.isLow) client.bind {}
+        // Bind eagerly when the project opens, so the daemon is up before the first build. Two cases bind on the
+        // first Run instead:
+        //  - a low-memory device: an idle :build process is a whole second runtime the system would otherwise
+        //    have to find room for while the user is only editing;
+        //  - an APK ART has not compiled yet (just updated, or no room to compile): starting :build then means
+        //    verifying ~200 MB of dex on its main thread, at the same moment this process is doing the same
+        //    for the project open. That start is an ANR on slow phones (Play: "Executing service").
+        val compiled = ArtCompiledCode.present(appContext)
+        if (!DeviceMemory.isLow && compiled) client.bind {}
+        else log.info("ui: build daemon deferred to the first Run (lowMemory=${DeviceMemory.isLow}, compiled=$compiled)")
     }
 
     /**
