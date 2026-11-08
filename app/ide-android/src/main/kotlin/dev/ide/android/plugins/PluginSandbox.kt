@@ -336,7 +336,7 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
                 .use { it.readBytes().toString(Charsets.UTF_8) }
             PluginManifestToml.parse(text)
         }.getOrElse { return reject(it.message ?: it::class.java.name) }
-        return DevPlugin(manifest, PluginOrigin(SOURCE_ID, info.packageName ?: apk.name), apk, javaClass.classLoader)
+        return DevPlugin(manifest, PluginOrigin(SOURCE_ID, info.packageName ?: apk.name), apk, programLauncher(appContext), javaClass.classLoader)
     }
 
     private fun reject(reason: String): RejectedPlugin {
@@ -348,37 +348,65 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
         override val manifest: PluginManifest,
         override val origin: PluginOrigin,
         private val apk: File,
+        private val launcher: File?,
         private val parent: ClassLoader?,
     ) : DiscoveredPlugin {
         override fun classLoader(): ClassLoader =
             PathClassLoader(apk.absolutePath, nativeLibraryDir?.toString(), parent)
 
-        /**
-         * The APK's `lib/<abi>` for this device, unpacked next to it: enough to load a JNI library. A program
-         * there cannot be run on Android 10+ (see AndroidPluginSandbox.warnAboutPrograms); the sandbox installs
-         * nothing to change that.
-         */
-        override val nativeLibraryDir: Path? by lazy { unpackNativeLibs(apk) }
+        /** The APK's `lib/<abi>` for this device, unpacked next to it, its programs runnable ([unpackNativeLibs]). */
+        override val nativeLibraryDir: Path? by lazy { unpackNativeLibs(apk, launcher) }
     }
 
     companion object {
         const val SOURCE_ID = "sandbox"
         private val log = Log.logger("PluginSandbox")
 
-        private fun unpackNativeLibs(apk: File): Path? = runCatching {
+        /** Where [unpackNativeLibs] keeps the real files of the programs its symlinks start. */
+        internal const val PROGRAMS_DIR = ".programs"
+
+        /**
+         * The IDE's own installed `libsandboxexec.so` (tools/sandbox-exec), which starts a plugin's program through
+         * the system linker; null before Android 10, where a program runs from the app's storage as it is.
+         */
+        internal fun programLauncher(context: Context): File? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+            return File(context.applicationInfo.nativeLibraryDir ?: return null, "libsandboxexec.so").takeIf { it.isFile }
+        }
+
+        /**
+         * Unpacks [apk]'s `lib/<abi>` for this device next to it, as an install would have extracted it.
+         *
+         * A JNI library only needs to be there. A program does not run from there on Android 10+ (`exec` of a file
+         * in the app's own storage is refused with error=13), and the plugin starts it by that path. So with a
+         * [launcher], each program the system linker can load moves to [PROGRAMS_DIR] and its name becomes a
+         * symlink to the launcher, which may be exec'd (it is in the IDE's installed library directory) and runs
+         * `/system/bin/linker64 <PROGRAMS_DIR>/<name> <args>`: the way the NDK plugin's Run starts a user's
+         * program. Nothing is installed. A static program stays as it is: no linker can load it.
+         */
+        internal fun unpackNativeLibs(apk: File, launcher: File?): Path? = runCatching {
             val out = File(apk.parentFile, apk.nameWithoutExtension + "-lib")
             ZipFile(apk).use { zip ->
                 val abi = Build.SUPPORTED_ABIS.firstOrNull { abi -> zip.entries().asSequence().any { it.name.startsWith("lib/$abi/") } }
                     ?: return@runCatching null
+                // Fresh each time: a symlink is not replaced by writing through it (that would write the launcher).
+                out.deleteRecursively()
                 out.mkdirs()
                 for (e in zip.entries().asSequence().filter { it.name.startsWith("lib/$abi/") && !it.isDirectory }) {
-                    val target = File(out, e.name.substringAfterLast('/'))
+                    val name = e.name.substringAfterLast('/')
+                    val target = File(out, name)
                     zip.getInputStream(e).use { input -> target.outputStream().use { input.copyTo(it) } }
-                    target.setExecutable(true, true)
+                    if (launcher != null && target.inputStream().use { PluginExecutables.isLinkerLoadable(PluginExecutables.head(it)) }) {
+                        val programs = File(out, PROGRAMS_DIR).apply { mkdirs() }
+                        Files.move(target.toPath(), File(programs, name).toPath())
+                        Files.createSymbolicLink(target.toPath(), launcher.toPath())
+                    } else {
+                        target.setExecutable(true, true)
+                    }
                 }
             }
             out.toPath().takeIf { Files.isDirectory(it) }
-        }.getOrNull()
+        }.onFailure { log.warn("could not unpack the native libraries of $apk", it) }.getOrNull()
     }
 }
 
@@ -445,17 +473,19 @@ class AndroidPluginSandbox(
     }
 
     /**
-     * Says up front when [apk] packages programs (not just JNI libraries): Android 10+ runs a program only from an
-     * installed app's library directory, and the sandbox loads a build that was never installed, so starting one
-     * there fails with `error=13, Permission denied`. The sandbox deliberately installs nothing on the plugin's
-     * behalf (Play rejected the IDE for doing so), so the developer installs the plugin to try those.
+     * Says up front when [apk] packages programs the sandbox cannot start. On Android 10+ a program in the app's
+     * own storage runs only through the system linker ([DevApkPluginSource.unpackNativeLibs]), which cannot load
+     * a static one; installed, the plugin runs those. The sandbox deliberately installs nothing on the plugin's
+     * behalf (Play rejected the IDE for doing so).
      */
     private fun warnAboutPrograms(apk: File, log: (String) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val scan = runCatching { PluginExecutables.scan(apk.toPath(), Build.SUPPORTED_ABIS.toList()) }.getOrNull() ?: return
-        val names = scan.executables.joinToString { it.substringAfterLast('/') }
-        log("The plugin packages programs ($names). Android runs those only from an installed app, so in the sandbox")
-        log("starting them fails (error=13, Permission denied). Install the plugin to try them.")
+        val stuck = if (DevApkPluginSource.programLauncher(appContext) == null) scan.executables else scan.static
+        if (stuck.isEmpty()) return
+        val names = stuck.joinToString { it.substringAfterLast('/') }
+        log("The plugin packages statically linked programs ($names). Android runs those only from an installed app,")
+        log("so in the sandbox starting them fails (error=13). Install the plugin to try them, or build them as PIE.")
     }
 
     override fun launch(apk: Path, log: (String) -> Unit): Boolean {

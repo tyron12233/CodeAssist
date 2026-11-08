@@ -7,7 +7,6 @@ import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -47,7 +46,7 @@ class PluginExecutablesTest {
     }
 
     @Test
-    fun aBuildWithAProgramForThisDeviceNeedsAnInstalledHome() {
+    fun aBuildWithAProgramForThisDeviceIsFound() {
         val apk = apk(
             "lib/arm64-v8a/libcsc.so" to head("pie-exe"),
             "lib/arm64-v8a/libjni.so" to head("jni-lib"),
@@ -60,18 +59,22 @@ class PluginExecutablesTest {
     }
 
     @Test
-    fun librariesOnlyOrNothingForThisDeviceNeedNone() {
+    fun librariesOnlyOrNothingForThisDeviceIsNoProgram() {
         assertNull(PluginExecutables.scan(apk("lib/arm64-v8a/libjni.so" to head("jni-lib")), listOf("arm64-v8a")))
         assertNull(PluginExecutables.scan(apk("lib/x86_64/libcsc.so" to head("pie-exe")), listOf("arm64-v8a")))
         assertNull(PluginExecutables.scan(apk(), listOf("arm64-v8a")))
     }
 
     @Test
-    fun theFingerprintFollowsTheLibrariesOnly() {
-        val a = PluginExecutables.scan(apk("lib/arm64-v8a/libcsc.so" to head("pie-exe")), listOf("arm64-v8a"))!!
-        val same = PluginExecutables.scan(apk("lib/arm64-v8a/libcsc.so" to head("pie-exe")), listOf("arm64-v8a"))!!
-        val changed = PluginExecutables.scan(apk("lib/arm64-v8a/libcsc.so" to head("pie-exe") + byteArrayOf(0)), listOf("arm64-v8a"))!!
-        assertEquals(a.fingerprint, same.fingerprint, "a rebuild with the same libraries needs no new install")
-        assertNotEquals(a.fingerprint, changed.fingerprint)
+    fun onlyAPieIsLoadedByTheSystemLinker() {
+        assertTrue(PluginExecutables.isLinkerLoadable(head("pie-exe")), "what the NDK builds")
+        assertFalse(PluginExecutables.isLinkerLoadable(head("static-exe")), "a fixed-address program needs the kernel")
+        assertFalse(PluginExecutables.isLinkerLoadable(head("jni-lib")), "a library is not a program")
+        val scan = PluginExecutables.scan(
+            apk("lib/arm64-v8a/libcsc.so" to head("pie-exe"), "lib/arm64-v8a/libaapt2.so" to head("static-exe")),
+            listOf("arm64-v8a"),
+        )!!
+        assertEquals(listOf("lib/arm64-v8a/libaapt2.so", "lib/arm64-v8a/libcsc.so"), scan.executables)
+        assertEquals(listOf("lib/arm64-v8a/libaapt2.so"), scan.static)
     }
 }

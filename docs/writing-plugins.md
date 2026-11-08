@@ -2877,6 +2877,14 @@ in `dispose` (a thread, a posted callback) keeps running the old code, and what 
 plugin when it opened stays as it was until that project is opened again. A build that cannot be swapped in
 (it fails to load, or it now depends on another plugin) starts a fresh sandbox instead.
 
+The programs your plugin packages run in the sandbox too, although nothing is installed: there,
+`reg.nativeLibrary(name)` names a link that starts the program through the system linker
+(`/system/bin/linker64`), the way the NDK plugin runs a user's program. Three things differ from an installed
+plugin. A statically linked program cannot be started this way (the NDK builds position-independent programs,
+which can be; the build log names any that cannot). The running program's `/proc/self/exe` is the linker. And
+its `argv[0]` is the real file, kept in a hidden `.programs` folder of the library directory, so a program that
+looks for its own files beside itself should be given their paths instead.
+
 What makes it worth using is what happens when the plugin misbehaves there:
 
 - A throw on the sandbox's main thread ends the sandbox, and the stack trace appears in the IDE you ran it from

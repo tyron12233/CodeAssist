@@ -803,7 +803,8 @@ android {
         // (when an NDK is present) would corrupt it.
         jniLibs {
             useLegacyPackaging = true
-            keepDebugSymbols += setOf("**/libaapt2.so")
+            // libsandboxexec.so (tools/sandbox-exec) is a static program too: the plugin sandbox's program launcher.
+            keepDebugSymbols += setOf("**/libaapt2.so", "**/libsandboxexec.so")
         }
         // Store dex UNCOMPRESSED (and page-aligned) so ART maps it straight from the APK: file-backed pages that
         // every app process (the IDE, :preview, :build, :sandbox) shares and the kernel can reclaim. Deflated —
