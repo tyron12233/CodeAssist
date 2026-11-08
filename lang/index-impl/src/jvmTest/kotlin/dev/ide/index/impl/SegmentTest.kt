@@ -441,4 +441,53 @@ class SegmentTest {
             } finally { s.close() }
         }
     }
+
+    /**
+     * Term scans compare UTF-8 bytes in place instead of decoding each term. UTF-8 byte order is code-point
+     * order, which differs from [String.compareTo]'s UTF-16 order exactly where a character at or above U+E000
+     * meets a supplementary one (an emoji sorts BEFORE U+E000 as UTF-16, after it as UTF-8). Every exact and
+     * prefix query here must answer what the decoded-String semantics answer, including across 64-byte blocks
+     * (terms straddle block boundaries under the tiny cache).
+     */
+    @Test
+    fun byteComparedScansMatchStringSemantics() {
+        withTempDir("seg") { dir ->
+            val terms = listOf(
+                "a", "ab", "abc", "abd", "b", "ba", "\u00e9t\u00e9", "\u00e9tude", "z", "zz",
+                "\uE000", "\uE000x", "\uFFFDq", "\uD83D\uDE00", "\uD83D\uDE00x", "x\uD83D\uDE00", "x\uE000",
+                "kotlin.collections.List", "kotlin.collections.listOf", "kotlin.coroutines.Continuation",
+                "a".repeat(70), "a".repeat(70) + "b",
+            )
+            val entries = terms.map { entry(it, "v:$it") }
+            for (cache in listOf(BlockCache(8L * 1024 * 1024), BlockCache(maxBytes = 128, blockSize = 64))) {
+                val s = seg(dir, entries, cache = cache)
+                try {
+                    val probes = terms + listOf("", "aa", "abz", "\u00e9", "\uE001", "\uD83D\uDE00", "x", "kotlin.co", "kotlin.collections.", "\uD83D", "zzz", "0")
+                    for (k in probes) {
+                        val wantExact = terms.filter { it == k }.map { "v:$it" }
+                        assertEquals(wantExact, exact(s, k).map { it as String }, "exact '$k'")
+                        val wantPrefix = terms.filter { it.startsWith(k) }.map { "v:$it" }.sorted()
+                        assertEquals(wantPrefix, prefix(s, k).map { it.value as String }.sorted(), "prefix '$k'")
+                    }
+                } finally { s.close() }
+            }
+        }
+    }
+
+    @Test
+    fun compareUtf8AgreesWithStringCompareOrSaysAmbiguous() {
+        val words = listOf("", "a", "ab", "b", "\u00e9", "\u0800", "\uE000", "\uFFFF", "\uD83D\uDE00", "\uD800\uDC00", "a\uE000", "a\uD83D\uDE00")
+        for (t in words) for (k in words) {
+            val got = Segment.compareUtf8(t.encodeToByteArray(), 0, t.encodeToByteArray().size, k.encodeToByteArray())
+            if (got == Int.MIN_VALUE) continue // decided by decoding instead
+            val cmp = t.compareTo(k)
+            val want = when {
+                cmp == 0 -> Segment.TERM_EQUAL
+                cmp < 0 -> Segment.TERM_LESS
+                t.startsWith(k) -> Segment.TERM_EXTENDS
+                else -> Segment.TERM_GREATER
+            }
+            assertEquals(want, got, "'$t' vs '$k'")
+        }
+    }
 }

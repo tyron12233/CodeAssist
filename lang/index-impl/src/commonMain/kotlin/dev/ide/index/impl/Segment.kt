@@ -97,14 +97,14 @@ internal class Segment private constructor(
     fun exact(key: String, out: MutableList<Any>) {
         if (numTerms == 0) return
         if (key < minTerm || key > maxTerm) return // outside this segment's term range — nothing to read
+        val keyBytes = utf8KeyOrNull(key)
         val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(key)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
-            val term = cur.readString()
+            val c = cur.classifyTerm(key, keyBytes)
             val postingsRel = cur.readVarLong()
-            val cmp = term.compareTo(key)
-            if (cmp == 0) { readPostings(postingsRel) { v, _ -> out.add(v) }; return }
-            if (cmp > 0) return // sorted: we've passed where key would be
+            if (c == TERM_EQUAL) { readPostings(postingsRel) { v, _ -> out.add(v) }; return }
+            if (c != TERM_LESS) return // sorted: we've passed where key would be
         }
     }
 
@@ -115,16 +115,20 @@ internal class Segment private constructor(
         // last term, or the first term already lies beyond p's window (it sorts after p yet doesn't start with p,
         // so it — and everything after it — is >= the window's exclusive upper bound). No disk read either way.
         if (p.isNotEmpty() && (p > maxTerm || (p < minTerm && !minTerm.startsWith(p)))) return
+        val keyBytes = utf8KeyOrNull(p)
         val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(p)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
-            val term = cur.readString()
+            val c = cur.classifyTerm(p, keyBytes)
             val postingsRel = cur.readVarLong()
-            when {
-                term < p -> {} // still before the prefix window (sparse landed us just before it)
-                term.startsWith(p) -> readPostings(postingsRel) { v, origin ->
-                    out.add(Hit(term, v, Scoring.scorePrefix(term, p, origin)))
-                    if (out.size >= cap) return
+            when (c) {
+                TERM_LESS -> {} // still before the prefix window (sparse landed us just before it)
+                TERM_EQUAL, TERM_EXTENDS -> {
+                    val term = cur.termString() // decoded only inside the window
+                    readPostings(postingsRel) { v, origin ->
+                        out.add(Hit(term, v, Scoring.scorePrefix(term, p, origin)))
+                        if (out.size >= cap) return
+                    }
                 }
                 else -> return // term > p and not a prefix → past the window
             }
@@ -191,18 +195,22 @@ internal class Segment private constructor(
     ) {
         if (numTerms == 0 || out.size >= cap) return
         val p = first.toString()
+        val keyBytes = utf8KeyOrNull(p)
         val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(p)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
-            val term = cur.readString()
+            val c = cur.classifyTerm(p, keyBytes)
             val postingsRel = cur.readVarLong()
-            when {
-                term < p -> {} // still before the window (sparse landed us just before it)
-                term.startsWith(p) -> if (seen == null || term !in seen) readPostings(postingsRel) { v, origin ->
-                    val s = score(term, origin)
-                    if (s > 0) {
-                        out.add(Hit(term, v, s))
-                        if (out.size >= cap) return
+            when (c) {
+                TERM_LESS -> {} // still before the window (sparse landed us just before it)
+                TERM_EQUAL, TERM_EXTENDS -> {
+                    val term = cur.termString()
+                    if (seen == null || term !in seen) readPostings(postingsRel) { v, origin ->
+                        val s = score(term, origin)
+                        if (s > 0) {
+                            out.add(Hit(term, v, s))
+                            if (out.size >= cap) return
+                        }
                     }
                 }
                 else -> return // past the window
@@ -273,9 +281,11 @@ internal class Segment private constructor(
      *  are served by the [BlockCache] (no resident pool), and hot strings keep their blocks cache-warm. */
     private fun poolString(id: Int): String {
         if (id < 0 || id >= numStrings) return "" // a corrupt id degrades to empty rather than crashing the query
-        val off = Cursor(poolTableBase + id.toLong() * poolTableWidth).readFixedUInt(poolTableWidth)
-        val sc = Cursor(poolStringsBase + off)
-        return sc.readUtf8(sc.readVarLong().toInt())
+        return cache.pooledString(segId, id) {
+            val off = Cursor(poolTableBase + id.toLong() * poolTableWidth).readFixedUInt(poolTableWidth)
+            val sc = Cursor(poolStringsBase + off)
+            sc.readUtf8(sc.readVarLong().toInt())
+        }
     }
 
     /** Log the first unreadable value in this segment (throttled to once); the query then skips it and continues. */
@@ -321,6 +331,53 @@ internal class Segment private constructor(
         }
 
         fun readString(): String = readUtf8(readVarLong().toInt())
+
+        /** Where the term last read by [classifyTerm] starts, and its length in bytes; see [termString]. */
+        private var termStart = 0L
+        private var termLen = 0
+
+        /**
+         * Reads past the next length-framed term and says where it sorts against [key], as one of
+         * [TERM_LESS], [TERM_EQUAL], [TERM_EXTENDS] (sorts after [key] and starts with it) or [TERM_GREATER].
+         *
+         * When [keyBytes] (the key's UTF-8) is given, the term's bytes are compared in place in the cached block
+         * and no String is made: a scan reads up to [SPARSE_INTERVAL] terms before reaching the key, and decoding
+         * each one just to compare it was most of an index query's garbage. Unsigned UTF-8 byte order is
+         * code-point order, which is [String.compareTo]'s UTF-16 order except where a character at or above
+         * U+E000 meets a supplementary one; a first difference involving such a lead byte is decided by decoding
+         * instead, as is every term when the key has a surrogate (null [keyBytes]).
+         */
+        fun classifyTerm(key: String, keyBytes: ByteArray?): Int {
+            val n = readVarLong().toInt()
+            termStart = pos; termLen = n
+            if (keyBytes != null) {
+                ensure()
+                val off = (pos - blkBase).toInt()
+                val c = if (off + n <= blk!!.size) compareUtf8(blk!!, off, n, keyBytes)
+                else compareUtf8(readBytes(n), 0, n, keyBytes)
+                pos = termStart + n
+                if (c != TERM_AMBIGUOUS) return c
+            } else {
+                pos = termStart + n
+            }
+            val t = termString()
+            val cmp = t.compareTo(key)
+            return when {
+                cmp == 0 -> TERM_EQUAL
+                cmp < 0 -> TERM_LESS
+                t.startsWith(key) -> TERM_EXTENDS
+                else -> TERM_GREATER
+            }
+        }
+
+        /** The term [classifyTerm] last read, decoded. Leaves the read position where it was. */
+        fun termString(): String {
+            val save = pos
+            pos = termStart
+            val s = readUtf8(termLen)
+            pos = save
+            return s
+        }
 
         /** [n] bytes decoded as UTF-8, straight out of the cached block when they lie in one (almost every
          *  name does), instead of copying them out first. */
@@ -392,6 +449,44 @@ internal class Segment private constructor(
         // transparently rebuilt (indexArtifact's runCatching skips the failed open → the artifact needs a build).
         internal const val MAGIC = 0x49445833 // "IDX3"
         const val SPARSE_INTERVAL = 64
+
+        // [Cursor.classifyTerm]'s answers.
+        internal const val TERM_LESS = -1
+        internal const val TERM_EQUAL = 0
+        internal const val TERM_EXTENDS = 1
+        internal const val TERM_GREATER = 2
+        private const val TERM_AMBIGUOUS = Int.MIN_VALUE
+
+        /** [key] as UTF-8 for an in-place comparison, or null when it holds a surrogate (compared decoded). */
+        internal fun utf8KeyOrNull(key: String): ByteArray? {
+            for (ch in key) if (ch.isSurrogate()) return null
+            return key.encodeToByteArray()
+        }
+
+        /**
+         * The term `a[off, off+n)` against [key], both UTF-8, as a [Cursor.classifyTerm] answer, or
+         * [TERM_AMBIGUOUS] when the first difference is between lead bytes where UTF-8 order and UTF-16 order
+         * can disagree (0xEE and up: U+E000..U+FFFF and the supplementary planes).
+         */
+        internal fun compareUtf8(a: ByteArray, off: Int, n: Int, key: ByteArray): Int {
+            val k = key.size
+            val m = minOf(n, k)
+            var i = 0
+            while (i < m) {
+                val x = a[off + i].toInt() and 0xFF
+                val y = key[i].toInt() and 0xFF
+                if (x != y) {
+                    if (x >= 0xEE || y >= 0xEE) return TERM_AMBIGUOUS
+                    return if (x < y) TERM_LESS else TERM_GREATER
+                }
+                i++
+            }
+            return when {
+                n == k -> TERM_EQUAL
+                n > k -> TERM_EXTENDS
+                else -> TERM_LESS
+            }
+        }
         /** Open an existing segment file: read the footer (resident sparse index), keep the file for reads. */
         fun open(
             file: String,

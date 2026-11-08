@@ -54,6 +54,45 @@ internal class BlockCache(
 
     private fun keyOf(segId: Int, blockIndex: Long): Long = (segId.toLong() shl 40) or blockIndex
 
+    /**
+     * A small direct-mapped front for [blocks], read without the lock. An index query touches a block for
+     * nearly every term and value it reads, and going through the LRU on each one cost a lock-lambda and a
+     * boxed `Long` key per lookup: a third of the editor's garbage while typing (a device profile put the
+     * index at ~190 MB per 30 s of typing). A hit here allocates nothing.
+     *
+     * Each slot holds an immutable [Hot] (key and block together), so a racing reader sees one whole entry or
+     * another, never a key from one and a block from another. A stale slot is harmless: blocks never change
+     * (segments are immutable and segment ids are never reused), and [evictSegment] clears a closed
+     * segment's slots so they do not pin its memory. It can keep up to [HOT_SLOTS] blocks alive beyond the
+     * LRU's budget.
+     */
+    private class Hot(val key: Long, val block: ByteArray)
+    private val hot = arrayOfNulls<Hot>(HOT_SLOTS)
+
+    private fun hotSlot(key: Long): Int = ((key * -7046029254386353131L) ushr (64 - HOT_BITS)).toInt()
+
+    /** Decoded pool strings ([Segment]'s string constant pool), direct-mapped like [hot] and keyed by
+     *  `(segId, poolId)`. A pooled string (an owner FQN, a `kind`) is read again for every value that names
+     *  it, and decoding it each time was the index's largest source of garbage. */
+    private class PooledString(val key: Long, val value: String)
+    private val strings = arrayOfNulls<PooledString>(STRING_SLOTS)
+
+    private fun stringSlot(key: Long): Int = ((key * -7046029254386353131L) ushr (64 - STRING_BITS)).toInt()
+
+    /** The pooled string [id] of [segId], decoding it with [decode] only when it is not cached. */
+    inline fun pooledString(segId: Int, id: Int, decode: () -> String): String {
+        val key = (segId.toLong() shl 32) or (id.toLong() and 0xFFFFFFFFL)
+        val slot = stringSlotOf(key)
+        cachedString(slot, key)?.let { return it }
+        val value = decode()
+        putString(slot, key, value)
+        return value
+    }
+
+    @PublishedApi internal fun stringSlotOf(key: Long): Int = stringSlot(key)
+    @PublishedApi internal fun cachedString(slot: Int, key: Long): String? = strings[slot]?.takeIf { it.key == key }?.value
+    @PublishedApi internal fun putString(slot: Int, key: Long, value: String) { strings[slot] = PooledString(key, value) }
+
     /** Record the file backing [segId] so its handle can be (re)opened on demand. */
     fun registerSegment(segId: Int, file: String) {
         handleLock.withLock { segFiles[segId] = file }
@@ -76,16 +115,20 @@ internal class BlockCache(
     fun block(segId: Int, fileOffset: Long): ByteArray {
         val blockIndex = fileOffset / blockSize
         val key = keyOf(segId, blockIndex)
-        lock.withLock { blocks[key] }?.let { return it }
+        val slot = hotSlot(key)
+        hot[slot]?.let { if (it.key == key) return it.block }
+        lock.withLock { blocks[key] }?.let { hot[slot] = Hot(key, it); return it }
 
         // Miss: read off-lock so a slow disk read never stalls other queries.
         val arr = readBlock(segId, blockIndex * blockSize)
 
-        return lock.withLock {
+        val result = lock.withLock {
             blocks[key]?.let { return@withLock it } // another thread won the race; reuse its block
             blocks[key] = arr
             arr
         }
+        hot[slot] = Hot(key, result)
+        return result
     }
 
     private fun readBlock(segId: Int, base: Long): ByteArray {
@@ -122,6 +165,8 @@ internal class BlockCache(
     fun evictSegment(segId: Int) {
         val hi = segId.toLong()
         lock.withLock { blocks.removeKeys { (it ushr 40) == hi } }
+        for (i in hot.indices) if (hot[i]?.let { (it.key ushr 40) == hi } == true) hot[i] = null
+        for (i in strings.indices) if (strings[i]?.let { (it.key ushr 32) == hi } == true) strings[i] = null
         handleLock.withLock {
             openHandles.remove(segId)?.let { runCatching { it.close() } }
             segFiles.remove(segId)
@@ -130,6 +175,8 @@ internal class BlockCache(
 
     fun clear() {
         lock.withLock { blocks.clear() }
+        hot.fill(null)
+        strings.fill(null)
         handleLock.withLock {
             openHandles.values.forEach { runCatching { it.close() } }
             openHandles.clear()
@@ -141,5 +188,10 @@ internal class BlockCache(
         // Cap on simultaneously-open segment handles (file descriptors). Generous enough that a query's
         // working set of segments stays open, small enough to leave headroom under the process FD limit.
         const val DEFAULT_MAX_OPEN_HANDLES = 128
+
+        private const val HOT_BITS = 8
+        private const val HOT_SLOTS = 1 shl HOT_BITS
+        private const val STRING_BITS = 12
+        private const val STRING_SLOTS = 1 shl STRING_BITS
     }
 }
