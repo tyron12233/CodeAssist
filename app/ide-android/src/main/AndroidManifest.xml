@@ -10,8 +10,6 @@
          visible; the installer already sees what it installs, but declaring the MAIN/LAUNCHER query makes
          that resolution robust (and is the standard fix for getLaunchIntentForPackage returning null). -->
     <queries>
-        <!-- The plugin sandbox's programs, installed as an app of their own (plugins/SandboxNativeLibs.kt). -->
-        <package android:name="${applicationId}.sandboxlibs" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -29,8 +27,7 @@
          to that Settings screen when it isn't granted yet). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Not UPDATE_PACKAGES_WITHOUT_USER_ACTION: Play refuses any upload declaring it ("APK uses a restricted
-         permission"; it is for app stores). Without it the plugin sandbox's programs app (plugins/
-         SandboxNativeLibs.kt) shows Android's install prompt on each update, which its install already handles. -->
+         permission"; it is for app stores). Every install the IDE makes asks the user. -->
 
     <!-- The build/run daemon (:build process) promotes to a foreground service while a build or program is
          running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).

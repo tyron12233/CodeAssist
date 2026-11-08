@@ -10,7 +10,9 @@ import android.os.FileObserver
 import android.os.Process
 import dalvik.system.PathClassLoader
 import dev.ide.android.SandboxActivity
+import dev.ide.android.support.BuiltApks
 import dev.ide.core.PluginSandbox
+import dev.ide.core.plugins.PluginExecutables
 import dev.ide.core.plugins.SandboxLogLine
 import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.platform.log.Log
@@ -334,7 +336,7 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
                 .use { it.readBytes().toString(Charsets.UTF_8) }
             PluginManifestToml.parse(text)
         }.getOrElse { return reject(it.message ?: it::class.java.name) }
-        return DevPlugin(appContext, manifest, PluginOrigin(SOURCE_ID, info.packageName ?: apk.name), apk, javaClass.classLoader)
+        return DevPlugin(manifest, PluginOrigin(SOURCE_ID, info.packageName ?: apk.name), apk, javaClass.classLoader)
     }
 
     private fun reject(reason: String): RejectedPlugin {
@@ -343,7 +345,6 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
     }
 
     private class DevPlugin(
-        private val context: Context,
         override val manifest: PluginManifest,
         override val origin: PluginOrigin,
         private val apk: File,
@@ -353,13 +354,11 @@ class DevApkPluginSource(context: Context, private val apk: File) : PluginSource
             PathClassLoader(apk.absolutePath, nativeLibraryDir?.toString(), parent)
 
         /**
-         * The APK's `lib/<abi>` for this device: installed, when it packages programs (only an installed app's
-         * libraries may be run, see [SandboxNativeLibs]), else unpacked next to it, which is enough to load a
-         * JNI library.
+         * The APK's `lib/<abi>` for this device, unpacked next to it: enough to load a JNI library. A program
+         * there cannot be run on Android 10+ (see AndroidPluginSandbox.warnAboutPrograms); the sandbox installs
+         * nothing to change that.
          */
-        override val nativeLibraryDir: Path? by lazy {
-            SandboxNativeLibs.installedDir(context, apk) ?: unpackNativeLibs(apk)
-        }
+        override val nativeLibraryDir: Path? by lazy { unpackNativeLibs(apk) }
     }
 
     companion object {
@@ -445,10 +444,30 @@ class AndroidPluginSandbox(
         }
     }
 
+    /**
+     * Says up front when [apk] packages programs (not just JNI libraries): Android 10+ runs a program only from an
+     * installed app's library directory, and the sandbox loads a build that was never installed, so starting one
+     * there fails with `error=13, Permission denied`. The sandbox deliberately installs nothing on the plugin's
+     * behalf (Play rejected the IDE for doing so), so the developer installs the plugin to try those.
+     */
+    private fun warnAboutPrograms(apk: File, log: (String) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val scan = runCatching { PluginExecutables.scan(apk.toPath(), Build.SUPPORTED_ABIS.toList()) }.getOrNull() ?: return
+        val names = scan.executables.joinToString { it.substringAfterLast('/') }
+        log("The plugin packages programs ($names). Android runs those only from an installed app, so in the sandbox")
+        log("starting them fails (error=13, Permission denied). Install the plugin to try them.")
+    }
+
     override fun launch(apk: Path, log: (String) -> Unit): Boolean {
         val source = apk.toFile()
         if (!source.isFile) {
             log("No APK at $apk: the build did not produce one.")
+            return false
+        }
+        // Only a plugin build this IDE made is loaded: the path alone proves nothing, since a clone or an import
+        // can put any file there, and the sandbox runs the APK's code. Hashes the APK (callers are off main).
+        if (!BuiltApks.isRecorded(apk)) {
+            log("Not loading ${apk.fileName}: the sandbox runs only plugin builds CodeAssist made. Build the plugin again.")
             return false
         }
         val dir = SandboxProcess.stateDir(appContext)
@@ -464,8 +483,7 @@ class AndroidPluginSandbox(
         }
         val manifest = runCatching { DevApkPluginSource(appContext, copy).manifest() }.getOrNull()
         val name = manifest?.name
-        // Before the sandbox (or the running one) loads it: the programs it packages need an installed home.
-        SandboxNativeLibs.ensureInstalled(appContext, copy, log)
+        warnAboutPrograms(copy, log)
         // A sandbox that is already up takes the new build in place: no new process, no app start, and the
         // project and screen it was on stay where they were.
         if (sandboxPid() != null && hotReload(copy, name, log)) {
