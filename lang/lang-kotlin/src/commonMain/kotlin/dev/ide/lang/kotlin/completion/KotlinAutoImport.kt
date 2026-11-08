@@ -18,6 +18,7 @@ internal class KotlinAutoImport(private val kt: KtFile, fileContext: FileContext
     private val visiblePackages = (DefaultImports.STAR_PACKAGES + fileContext.packageName +
         fileContext.imports.filter { it.isStar }.map { it.packageName }).toHashSet()
     private val explicitImports = fileContext.imports.filter { !it.isStar }.map { it.fqn }.toHashSet()
+    private val planner = KotlinImportEdits.Planner(kt)
 
     /** The `import <fqn>` edit, spliced in sorted position, or no edit when [fqn] is already visible (same
      *  package, a star import, or an explicit import) or is unqualified. */
@@ -25,7 +26,7 @@ internal class KotlinAutoImport(private val kt: KtFile, fileContext: FileContext
         if ('.' !in fqn) return emptyList()
         val pkg = fqn.substringBeforeLast('.')
         if (pkg in visiblePackages || fqn in explicitImports) return emptyList()
-        val plan = KotlinImportEdits.planImport(kt, fqn) ?: return emptyList()
+        val plan = planner.plan(fqn) ?: return emptyList()
         return listOf(TextEdit(TextRange(plan.offset, plan.offset), plan.text))
     }
 }

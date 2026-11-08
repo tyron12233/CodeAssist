@@ -111,9 +111,13 @@ object ImportLayout {
         importRegionStart: Int = 0,
         render: (ImportEntry) -> String,
     ): InsertPlan? {
-        if (existing.any { it.entry.dedupeKey == entry.dedupeKey }) return null // already imported
+        // Already imported. ImportEntry is a data class over exactly the [ImportEntry.dedupeKey] fields, so
+        // equality is that identity without building two lists per comparison (completion plans an import
+        // for every unimported candidate, so this runs candidates x imports times per keystroke).
+        if (existing.any { it.entry == entry }) return null
         val line = render(entry)
-        val sameBlock = existing.filter { sameBlock(it.entry, entry, config) }
+        val sameBlock = if (!config.separateStaticImports) existing
+        else existing.filter { sameBlock(it.entry, entry, config) }
 
         // Common case: the entry's block already has imports — insert in sorted position within it.
         if (sameBlock.isNotEmpty()) {
@@ -168,8 +172,8 @@ object ImportLayout {
         !config.separateStaticImports || a.isStatic == b.isStatic
 
     private fun dedupe(entries: List<ImportEntry>): List<ImportEntry> {
-        val seen = HashSet<List<Any?>>()
-        return entries.filter { seen.add(it.dedupeKey) }
+        val seen = HashSet<ImportEntry>()
+        return entries.filter { seen.add(it) }
     }
 
     /** Replace >= threshold single imports sharing a (container, static-ness) with one wildcard. Existing

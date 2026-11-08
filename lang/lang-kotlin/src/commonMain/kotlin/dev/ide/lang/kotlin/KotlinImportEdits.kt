@@ -24,8 +24,9 @@ object KotlinImportEdits {
     }
 
     /** The file's existing imports as positioned entries (directive start → just past its line's newline). */
-    fun existingImports(ktFile: KtFile): List<PositionedImport> {
-        val text = ktFile.text
+    fun existingImports(ktFile: KtFile): List<PositionedImport> = existingImports(ktFile, ktFile.text)
+
+    private fun existingImports(ktFile: KtFile, text: CharSequence): List<PositionedImport> {
         return ktFile.importDirectives.mapNotNull { imp ->
             val fq = imp.importedFqName?.asString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val entry = ImportEntry(fq, isStatic = false, isWildcard = imp.isAllUnder, alias = imp.aliasName)
@@ -34,21 +35,36 @@ object KotlinImportEdits {
     }
 
     /** Offset just past the newline of the package directive's line, or null when there is no package line. */
-    fun packageLineEnd(ktFile: KtFile): Int? {
+    fun packageLineEnd(ktFile: KtFile): Int? = packageLineEnd(ktFile, ktFile.text)
+
+    private fun packageLineEnd(ktFile: KtFile, text: CharSequence): Int? {
         val pkg = ktFile.packageDirective?.takeIf { it.textLength > 0 && it.text.isNotBlank() } ?: return null
-        return lineEndAfter(ktFile.text, pkg.textRange.endOffset)
+        return lineEndAfter(text, pkg.textRange.endOffset)
     }
 
     /** Plan splicing `import <fqn>` in sorted position, or null when it is already imported. */
-    fun planImport(ktFile: KtFile, fqn: String): ImportLayout.InsertPlan? =
-        ImportLayout.planInsert(
-            entry = ImportEntry(fqn),
-            existing = existingImports(ktFile),
-            config = CONFIG,
-            text = ktFile.text,
-            packageLineEnd = packageLineEnd(ktFile),
-            render = ::render,
-        )
+    fun planImport(ktFile: KtFile, fqn: String): ImportLayout.InsertPlan? = Planner(ktFile).plan(fqn)
+
+    /**
+     * Plans imports into one unchanging [ktFile], reading its text, imports and package line once. Completion
+     * plans an import for every unimported candidate on every keystroke; doing that through [planImport]
+     * re-read every import directive (and the whole text, three times) per candidate.
+     */
+    class Planner(private val ktFile: KtFile) {
+        private val text: CharSequence by lazy { ktFile.text }
+        private val existing: List<PositionedImport> by lazy { existingImports(ktFile, text) }
+        private val packageLineEnd: Int? by lazy { packageLineEnd(ktFile, text) }
+
+        fun plan(fqn: String): ImportLayout.InsertPlan? =
+            ImportLayout.planInsert(
+                entry = ImportEntry(fqn),
+                existing = existing,
+                config = CONFIG,
+                text = text,
+                packageLineEnd = packageLineEnd,
+                render = ::render,
+            )
+    }
 
     /** Advance [from] past the rest of its line and its trailing newline (clamped to the end of [text]). */
     private fun lineEndAfter(text: CharSequence, from: Int): Int {
