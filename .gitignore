@@ -62,6 +62,7 @@ dist/
 
 # Release announcement drafts (never commit; they feed `gh release create` from the working tree only)
 discord_release_*.txt
+discord_release_*.md
 
 # Self-hosting workspace (.platform). The DURABLE half is committed so a fresh checkout can be built by
 # CodeAssist itself: workspace.json (the module list), gradle-model.json (what Gradle exported), and
