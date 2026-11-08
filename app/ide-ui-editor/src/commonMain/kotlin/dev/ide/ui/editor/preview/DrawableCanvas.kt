@@ -148,7 +148,8 @@ private fun DrawScope.gradientBrush(g: UiGradient, rect: Rect): Brush {
     }.toTypedArray()
     val center = Offset(rect.left + rect.width * g.centerX, rect.top + rect.height * g.centerY)
     return when (g.kind) {
-        "radial" -> Brush.radialGradient(*stops, center = center, radius = min(rect.width, rect.height) * g.radiusFraction)
+        // Android's RadialGradient throws on a radius <= 0 (a 0 gradientRadius, or a stroke wider than a tiny swatch).
+        "radial" -> Brush.radialGradient(*stops, center = center, radius = (min(rect.width, rect.height) * g.radiusFraction).coerceAtLeast(1f))
         "sweep" -> Brush.sweepGradient(*stops, center = center)
         else -> {
             val rad = g.angle * PI.toFloat() / 180f
