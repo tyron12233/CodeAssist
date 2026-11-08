@@ -375,6 +375,20 @@ class IdeServices private constructor(
      *  backend points at this engine on project swap. */
     private val env: ApplicationEnvironment,
 ) : AutoCloseable {
+
+    // Declared first, ahead of every init block and initializer below: a stored property declared later is
+    // still null while those run, and these are read by [sourceRoots] / [apiLevelContext], which construction
+    // can reach. (Moving a lazily computed value into a stored property declared mid-class is how
+    // ProjectManager once lost its preferences.)
+    private class CachedRoots(val generation: Int, val roots: List<Path>)
+
+    /** [sourceRoots] per module, with the model revision each was read at. */
+    private val sourceRootsMemo = ConcurrentHashMap<ModuleId, CachedRoots>()
+
+    private class CachedApiLevelContext(val generation: Int, val at: Long, val value: ApiLevelContext?)
+
+    /** The last [apiLevelContext] per module, with the model revision and time it was read at. */
+    private val apiLevelContexts = ConcurrentHashMap<ModuleId, CachedApiLevelContext>()
     // The project-settings cache (see [cachedProjectSettings]), declared first: initializers below read settings.
     private val projectSettingsLock = Any()
     private var projectSettingsCache: java.util.Properties? = null
@@ -2266,9 +2280,19 @@ class IdeServices private constructor(
     /** Restore a converted project's Gradle build files and re-enter compatibility mode. */
     internal fun revertToGradle(): GradleImport.ConvertOutcome = GradleImport.revertToGradle(workspaceRoot)
 
-    fun sourceRoots(module: Module): List<Path> = module.sourceSets.flatMap { it.contentRoots }
-        .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-        .map { Paths.get(it.dir.path) }
+    fun sourceRoots(module: Module): List<Path> {
+        // [moduleForFile] asks for every module's roots on each call, and the editor asks that per pass and per
+        // lookup; resolving each content root re-normalized its path every time (~7 MB per 30 s of typing on a
+        // device profile). Kept per module for the model revision it was read at, so a new root shows at once.
+        val generation = store.generation
+        sourceRootsMemo[module.id]?.let { if (it.generation == generation) return it.roots }
+        val roots = module.sourceSets.flatMap { it.contentRoots }
+            .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
+            .map { Paths.get(it.dir.path) }
+        sourceRootsMemo[module.id] = CachedRoots(generation, roots)
+        return roots
+    }
+
 
     /** Content roots to surface in the project tree — code, resources, and assets (so `res/` is editable). */
     fun treeRoots(module: Module): List<Path> {
@@ -2418,10 +2442,6 @@ class IdeServices private constructor(
         return value
     }
 
-    private class CachedApiLevelContext(val generation: Int, val at: Long, val value: ApiLevelContext?)
-
-    /** The last [apiLevelContext] per module, with the model revision and time it was read at. */
-    private val apiLevelContexts = ConcurrentHashMap<ModuleId, CachedApiLevelContext>()
 
     private fun readApiLevelContext(id: ModuleId): ApiLevelContext? {
         val module = store.workspace.projects.firstNotNullOfOrNull { p -> p.modules.firstOrNull { it.id == id } }
