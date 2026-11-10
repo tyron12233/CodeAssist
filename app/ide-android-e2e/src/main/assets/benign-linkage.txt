@@ -1,0 +1,3 @@
+# Linkage errors the app logs on an UNMINIFIED build too, so they are not R8's doing. One regex per line,
+# matched against the exception line (the log message). Regenerate from linkage-all.txt after a run with
+# `-Pcodeassist.r8=false`, and keep each entry as narrow as the class name allows.
