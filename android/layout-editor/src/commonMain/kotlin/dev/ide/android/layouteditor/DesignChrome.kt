@@ -404,3 +404,57 @@ internal fun PrepareLibrariesCard(count: Int, preparing: Boolean, onPrepare: () 
         }
     }
 }
+
+/**
+ * A property or attribute editor as a dialog: the property named in its header (with the attribute it writes,
+ * in code type), its editor in a scrolling body, and Done. Edits apply as they are made, so the canvas behind
+ * already shows them; Done (or a tap outside) only closes.
+ */
+@Composable
+internal fun EditorDialog(
+    glyph: Char,
+    title: String,
+    attribute: String?,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.92f).widthIn(max = 560.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+        ) {
+            Column(Modifier.padding(top = 20.dp, bottom = 12.dp)) {
+                Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) { Symbol(glyph, null, size = 22.dp, tint = MaterialTheme.colorScheme.onPrimaryContainer, filled = true) }
+                    Column(Modifier.padding(start = 14.dp).weight(1f)) {
+                        Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (attribute != null) Text(
+                            attribute,
+                            style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Column(
+                    Modifier.padding(horizontal = 20.dp).padding(top = 16.dp).heightIn(max = 460.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) { content() }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        Text(stringResource(Res.string.le_done), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+}

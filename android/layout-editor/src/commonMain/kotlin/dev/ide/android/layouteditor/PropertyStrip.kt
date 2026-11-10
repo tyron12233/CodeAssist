@@ -1,11 +1,7 @@
 package dev.ide.android.layouteditor
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,15 +12,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -91,38 +84,27 @@ internal fun PropertyStrip(
     val openSpec = (basic + recent).firstOrNull { it.key == open }
     val shape = RoundedCornerShape(28.dp)
 
+    // The open property's editor, as a dialog over the canvas; its edits show in the render behind it.
+    if (openSpec != null) {
+        EditorDialog(
+            glyph = openSpec.glyph,
+            title = stringResource(openSpec.label),
+            // The attribute it writes, when it is one; Size or Margin span several.
+            attribute = openSpec.writeAttribute(pc::accepts).takeIf {
+                openSpec.attributes.size == 1 || openSpec.editor == PropertyEditor.IMAGE || openSpec.editor == PropertyEditor.COLOR
+            },
+            onDismiss = { open = null },
+        ) {
+            PropertyEditorBody(openSpec, pc.recording(openSpec.key))
+        }
+    }
+
     Surface(
         modifier = modifier.shadow(12.dp, shape),
         shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(Modifier.animateContentSize()) {
-            // The open property's editor, above the row it came from.
-            if (openSpec != null) {
-                Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Symbol(openSpec.glyph, null, size = 18.dp, tint = MaterialTheme.colorScheme.primary)
-                        Text(
-                            stringResource(openSpec.label),
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(start = 8.dp).weight(1f),
-                        )
-                        // The attribute it writes, when it is one; Size or Margin span several.
-                        if (openSpec.attributes.size == 1 || openSpec.editor == PropertyEditor.IMAGE || openSpec.editor == PropertyEditor.COLOR) Text(
-                            openSpec.writeAttribute(pc::accepts).substringAfter(':'),
-                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        BarButton(Sym.close, stringResource(Res.string.le_close), size = 36.dp) { open = null }
-                    }
-                    AnimatedContent(openSpec.key, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "editor") { _ ->
-                        Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()).padding(top = 8.dp, end = 8.dp, bottom = 4.dp)) {
-                            PropertyEditorBody(openSpec, pc.recording(openSpec.key))
-                        }
-                    }
-                }
-            }
-
             // Which view: its kind and id, with a switcher to any element of the layout.
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ElementSwitcher(document, element, onSelect, Modifier.weight(1f))

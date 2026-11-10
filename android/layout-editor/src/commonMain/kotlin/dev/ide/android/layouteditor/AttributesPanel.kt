@@ -79,7 +79,9 @@ internal fun AttributesPanel(
         catalog = runCatching { model.attributes(path, element.tag, parentTag) }.getOrDefault(emptyList())
     }
     val byName = remember(catalog) { catalog.orEmpty().associateBy { it.name } }
-    var drafts by remember(element.start, element.tag) { mutableStateOf(emptyList<String>()) }
+    // The attribute being added: its value is asked for in a dialog, and nothing is written until there is one
+    // (an empty attribute would break the render).
+    var adding by remember(element.start, element.tag) { mutableStateOf<String?>(null) }
     var allOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val ref = element.ref
@@ -92,6 +94,21 @@ internal fun AttributesPanel(
     val setNames = element.attributes.map { it.name }.filterNot { it == "xmlns" || it.startsWith("xmlns:") }
     val common = remember(element.tag, catalog, setNames) {
         commonAttributesFor(element.tag).filter { it in byName || it in setNames }
+    }
+
+    adding?.let { name ->
+        EditorDialog(
+            glyph = Sym.add,
+            title = name.substringAfter(':'),
+            attribute = name,
+            onDismiss = { adding = null },
+        ) {
+            AttributeRow(
+                name, null, byName[name], canEdit,
+                onSet = { if (it.isNotBlank()) { set(name, it); adding = null } },
+                onRemove = { adding = null },
+            ) { f, c -> complete(name, f, c) }
+        }
     }
 
     Column(modifier) {
@@ -135,7 +152,7 @@ internal fun AttributesPanel(
 
             // Everything else the view accepts.
             val others = setNames.filter { it !in common }
-            val addable = catalog.orEmpty().map { it.name }.filter { it !in setNames && it !in common && it !in drafts }
+            val addable = catalog.orEmpty().map { it.name }.filter { it !in setNames && it !in common }
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     .clickable { allOpen = !allOpen }.padding(horizontal = 18.dp, vertical = 14.dp),
@@ -143,7 +160,7 @@ internal fun AttributesPanel(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(stringResource(Res.string.le_attrs_all), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f, fill = false))
-                CountBadge(others.size + addable.size + drafts.size)
+                CountBadge(others.size + addable.size)
                 Box(Modifier.weight(1f))
                 Symbol(if (allOpen) Sym.unfoldLess else Sym.expandMore, null, size = 20.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -154,19 +171,11 @@ internal fun AttributesPanel(
                 for (name in others.filter(::matches)) {
                     AttributeRow(name, element.attribute(name)?.value, byName[name], canEdit, { set(name, it) }, { remove(name) }) { f, c -> complete(name, f, c) }
                 }
-                for (name in drafts.filter(::matches)) {
-                    AttributeRow(
-                        name, null, byName[name], canEdit,
-                        // A draft is written only once it has a value: an empty attribute would break the render.
-                        onSet = { if (it.isNotBlank()) { set(name, it); drafts = drafts - name } },
-                        onRemove = { drafts = drafts - name },
-                    ) { f, c -> complete(name, f, c) }
-                }
                 val shownAddable = addable.filter(::matches).take(if (q.isEmpty()) 40 else 200)
                 if (shownAddable.isNotEmpty()) SectionLabel(stringResource(Res.string.le_attrs_add))
                 for (name in shownAddable) {
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = canEdit) { drafts = drafts + name }
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = canEdit) { adding = name }
                             .padding(horizontal = 8.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -97,4 +97,5 @@
     <string name="le_strip_recent_empty">Properties you change show up here, so the next view is one tap away.</string>
     <string name="le_strip_basic_empty">No quick properties for this view. Open all attributes to edit it.</string>
     <string name="le_strip_switch">Select another view</string>
+    <string name="le_done">Done</string>
 </resources>

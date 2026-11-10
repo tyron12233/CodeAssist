@@ -193,14 +193,14 @@ class DesignerSnapshotTest {
     fun phoneStripWithTheSizeEditor() {
         val caret = xml.indexOf("<Button")
         // The strip's third tile (Enabled) is at 20 + 2 * 120 + 56; Size starts past the edge, so open Enabled's neighbour.
-        val f = snap("phone-strip-size", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(316f, 892f - 66f)))
+        val f = snap("phone-dialog-enabled", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(316f, 892f - 66f)))
         assertTrue(f.length() > 0)
     }
 
     @Test
     fun phoneStripWithTheColorEditor() {
         val caret = xml.indexOf("<Button")
-        val f = snap("phone-strip-color", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(196f, 892f - 66f)))
+        val f = snap("phone-dialog-color", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(196f, 892f - 66f)))
         assertTrue(f.length() > 0)
     }
 
