@@ -272,6 +272,12 @@ dependencies {
     api("org.jetbrains.intellij.deps.fastutil:intellij-deps-fastutil:8.5.14-jb1") { isTransitive = false }
     api("org.jetbrains:annotations:24.1.0")
     api("io.opentelemetry:opentelemetry-api:1.34.1") { isTransitive = false }
+    // opentelemetry-api's own dependency, which isTransitive = false above drops. Span extends
+    // io.opentelemetry.context.ImplicitContextKeyed, so without it Span can't be resolved on ART. Unminified that
+    // stays latent (IntelliJ's CoreProgressManager only touches spans on a path we don't hit), but R8 inlines a
+    // PropagatedSpan into CoreProgressManager.startProcessSpan, and the unresolvable return type then fails
+    // verification of the whole class: every Kotlin compile died creating KotlinCoreEnvironment (VerifyError).
+    api("io.opentelemetry:opentelemetry-context:1.34.1") { isTransitive = false }
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
 }
 
