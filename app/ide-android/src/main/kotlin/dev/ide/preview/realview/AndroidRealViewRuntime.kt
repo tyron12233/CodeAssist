@@ -237,6 +237,9 @@ class AndroidRealViewRuntime(
         root.draw(canvas)
         // A view whose own code failed mid-frame drew with the framework's fallback; mark it so the gap is seen.
         for ((view, why) in vmFactory.brokenViews()) runCatching { drawBrokenOverlay(canvas, root, view, why) }
+        // A window's bars are only its colours: the clock, the status icons and the navigation handle come from
+        // System UI, which a preview has none of. Drawn here so the frame looks like the screen.
+        if (usedDecor) runCatching { SystemBars.draw(canvas, bmp, w, h, statusBarPx(ctx), navigationBarPx(ctx), ctx.resources.displayMetrics.density) }
         val tDraw = System.nanoTime()
 
         // Snapshot the inflated tree (class/id/bounds/attributes) for the Preview view's hierarchy +
@@ -351,16 +354,20 @@ class AndroidRealViewRuntime(
         runCatching {
             val insets = WindowInsets.Builder().setInsets(
                 WindowInsets.Type.systemBars(),
-                Insets.of(
-                    0,
-                    systemDimenPx(ctx, "status_bar_height", 24),
-                    0,
-                    systemDimenPx(ctx, "navigation_bar_height", 48)
-                ),
+                Insets.of(0, statusBarPx(ctx), 0, navigationBarPx(ctx)),
             ).build()
             root.dispatchApplyWindowInsets(insets)
         }
     }
+
+    /** The status bar's height: the framework's own. */
+    private fun statusBarPx(ctx: Context): Int = systemDimenPx(ctx, "status_bar_height", 24)
+
+    /**
+     * The navigation bar's height: gesture navigation's handle bar (the default on current Android), not the
+     * framework's three-button bar, whatever this device happens to use itself.
+     */
+    private fun navigationBarPx(ctx: Context): Int = (GESTURE_NAV_BAR_DP * ctx.resources.displayMetrics.density).toInt()
 
     /** A framework dimen (e.g. `status_bar_height`) in px, or [defaultDp] converted to px if unavailable. */
     private fun systemDimenPx(ctx: Context, name: String, defaultDp: Int): Int {
@@ -456,6 +463,8 @@ class AndroidRealViewRuntime(
     }
 
     private companion object {
+        const val GESTURE_NAV_BAR_DP = 24
+
         /** The jars holding a module's `R` classes: the preview's own (its link's ids) or, without one, the
          *  build's. */
         val R_JAR_NAMES = setOf(dev.ide.android.support.PreviewResourceLinker.R_JAR_NAME, "R.jar")
