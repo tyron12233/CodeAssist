@@ -646,15 +646,21 @@ private fun ModelPicker(
     onOpen: (Boolean) -> Unit,
 ) {
     val current = currentModel(cfg)
+    // A model without a display name shows its own name, not the routing path in front of it: an id like
+    // `ms/deepseek-ai/DeepSeek-V4.1-Flash-1017` is mostly provider prefix.
     val label = models.firstOrNull { it.id == current }?.displayName
-        ?: current.ifBlank { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.displayName ?: "" }
+        ?: current.substringAfterLast('/').ifBlank { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.displayName ?: "" }
     Box {
         Row(
             Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable { onOpen(true) },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Ellipsized within whatever width the header leaves it, the chevron kept.
+            Text(
+                label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+            )
             val chevron by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
             Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

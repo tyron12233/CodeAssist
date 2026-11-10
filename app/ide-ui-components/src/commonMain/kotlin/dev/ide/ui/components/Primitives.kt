@@ -277,7 +277,8 @@ fun Chip(
             .padding(horizontal = 9.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = textColor, style = MaterialTheme.typography.labelSmall)
+        // One line: a chip squeezed by its neighbours stacked its characters into a column (CJK breaks anywhere).
+        Text(text, color = textColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
     }
 }
 

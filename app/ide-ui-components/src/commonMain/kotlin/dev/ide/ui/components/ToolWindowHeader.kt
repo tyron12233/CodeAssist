@@ -258,8 +258,13 @@ fun ToolWindowSwitcherHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    leading?.invoke(this)
-                    Spacer(Modifier.weight(1f))
+                    // The leading control (a model name, which can be a long id) takes only what the actions leave
+                    // and ellipsizes; given its own width it squeezed the actions into one-letter columns.
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) { leading?.invoke(this) }
                     Row(
                         Modifier.toolWindowActionsAlpha(),
                         verticalAlignment = Alignment.CenterVertically,
