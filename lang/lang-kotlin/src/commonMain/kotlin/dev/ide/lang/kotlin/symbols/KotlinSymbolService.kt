@@ -397,6 +397,16 @@ class KotlinSymbolService(
     @Volatile
     private var extMemoBuilding = false
 
+    // The finished build the classpath memos were filled against. Watching for a build START (above) is not
+    // enough on its own: it only works when some query happens to run WHILE the build does. A dependency added
+    // to a fresh project shows the gap: this service is recreated with the new jars, a background analysis
+    // queries it at once against the index's previous, settled build (which doesn't have them yet) and caches
+    // the misses (`Text` is not a library function), and then the index rebuilds with nobody asking. Every
+    // later query sees `building == false` both times and keeps serving the misses: a Compose template's
+    // preview said `unresolved/ambiguous call Text (candidates=0)` for good, "Rebuild preview" included.
+    @Volatile
+    private var memoBuild: dev.ide.index.IndexBuildStats? = null
+
     /**
      * The wired [index] when it can be trusted to ANSWER a classpath query, else null — which routes the query
      * to the live classpath reader, the same source a standalone/test run uses.
@@ -426,7 +436,14 @@ class KotlinSymbolService(
         topLevelBuiltinMemo, classpathShapeMemo, builtinShapeMemo, javaShapeCache, libraryClassifiersMemo,
     )
 
+    /** Bumped every time the classpath memos are dropped, i.e. whenever what a library lookup answers may have
+     *  changed. Folded into [externalContentStamp], so the analyzer's per-file resolver caches (which memoize
+     *  call targets resolved THROUGH these lookups) are dropped with them instead of serving the old answers. */
+    @Volatile
+    private var classpathEpoch = 0L
+
     private fun clearClasspathMemos() {
+        classpathEpoch++
         for (m in classpathMemos) m.clear()
         typeNameMemo = ConcurrentMap()
         typeTextMemo = ConcurrentMap()
@@ -471,6 +488,15 @@ class KotlinSymbolService(
         val building = status.building
         if (building && !extMemoBuilding) clearClasspathMemos()
         extMemoBuilding = building
+        // A build that ran unobserved still publishes new stats when it ends. Drop the memos when it changed the
+        // classpath (indexed something new, or a different set size); a plain resync over the same artifacts,
+        // the frequent case while typing, keeps them.
+        val stats = status.stats
+        if (!building && stats != null && stats !== memoBuild) {
+            val previous = memoBuild
+            memoBuild = stats
+            if (previous != null && (stats.artifactsBuilt > 0 || stats.artifacts != previous.artifacts)) clearClasspathMemos()
+        }
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
         // those must never enter the session memos or they'd keep serving the partial view after the build.
         // A SETTLED-but-partial index is the exception: [queryIndex] withholds it, so the answers being cached
@@ -683,7 +709,13 @@ class KotlinSymbolService(
     fun externalContentStamp(exceptPath: String): Long {
         // Read outside [stateLock]: the host may parse an open Java buffer to answer.
         val java = javaSourceStamp()
-        return stateLock.withLock { kotlinContentStamp(exceptPath) * 31L + java }
+        // The classpath counts as external content too. A dependency that finished indexing changes what `Text`
+        // resolves to without touching any source, and the per-file resolver caches keyed on this stamp had
+        // memoized the miss: a new Compose project's preview said `Text (candidates=0)` for the rest of the
+        // session. The memo check runs first because it is lazy (it notices a finished rebuild on the next
+        // lookup), and a pass reusing its old resolver caches would otherwise never make that lookup.
+        queryIndex?.let { classpathCacheUsable(it) }
+        return stateLock.withLock { kotlinContentStamp(exceptPath) * 31L + java } * 31L + classpathEpoch
     }
 
     private fun kotlinContentStamp(exceptPath: String): Long {
