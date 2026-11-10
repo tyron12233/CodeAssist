@@ -75,7 +75,7 @@ class DexDiagnosticsTest {
             "Warning in com/google/common/Foo.class:",
             "  Default interface methods are only supported starting with Android N (--min-api 24)",
         ))
-        assertTrue(out.any { it.contains("suppressed") }, "benign warnings are still folded to a count: $out")
+        assertTrue(out.any { it.contains("benign D8 warning(s) hidden") }, "benign warnings are still folded to a count: $out")
         assertEquals(null, DexDiagnostics.firstError(out), "a benign warning is not an error")
     }
 }
