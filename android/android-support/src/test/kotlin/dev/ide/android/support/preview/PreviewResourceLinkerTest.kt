@@ -208,22 +208,12 @@ class PreviewResourceLinkerTest {
             assertEquals(baseCopy, Files.readString(mergedCopy), "saving the edited layout rebuilt the base")
             assertTrue(rJarBytes.contentEquals(Files.readAllBytes(rJar)), "an id-preserving save regenerated the R.jar")
 
-            // An `@+id` that exists only in the unsaved buffer reaches the R.jar.
+            // An `@+id` that exists only in the unsaved buffer borrows a spare id of the table (no project code can
+            // name it before it is saved and compiled), so the R.jar stays as it is and the result names the spare.
             val withId = saved.replace("<TextView ", "<TextView android:id=\"@+id/fresh\" ")
-            link(layout, withId)
-            val idFields = listOf("com/example/app/R\$id.class").map { entry ->
-                ZipFile(rJar.toFile()).use { z ->
-                    val fields = ArrayList<String>()
-                    org.objectweb.asm.ClassReader(z.getInputStream(z.getEntry(entry)).readBytes()).accept(
-                        object : org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
-                            override fun visitField(a: Int, n: String, d: String?, s: String?, v: Any?) =
-                                null.also { fields += n }
-                        }, 0,
-                    )
-                    fields
-                }
-            }
-            idFields.forEach { assertTrue("fresh" in it, "buffer-only id missing from the R.jar: $it") }
+            val fresh = link(layout, withId)
+            assertEquals(listOf("fresh"), fresh.idAliases.values.toList())
+            assertTrue(rJarBytes.contentEquals(Files.readAllBytes(rJar)), "a buffer-only id regenerated the R.jar")
 
             // Previewing another layout makes the saved file count again: the base picks up its saved content.
             link(second, LAYOUT.trimIndent())
@@ -276,11 +266,37 @@ class PreviewResourceLinkerTest {
             assertEquals(dump(reference.resourcesAp!!), dump(quick.resourcesAp!!))
             assertTrue("Edited" in dump(quick.resourcesAp!!))
 
-            // A new id needs the table to change: that edit links in full again.
-            link(linker, edited.replace("<LinearLayout ", "<LinearLayout android:id=\"@+id/brand_new\" "))
-            assertFalse(Files.readString(fullRecord) == fullKey, "a new id must relink the table")
-            assertTrue("brand_new" in Files.readString(rJava))
+            // A new id borrows one of the table's spare ids: still a quick relink, the ids unchanged, and the
+            // result says which spare stands for it.
+            val withNewId = link(linker, edited.replace("<LinearLayout ", "<LinearLayout android:id=\"@+id/brand_new\" "))
+            assertEquals(fullKey, Files.readString(fullRecord), "a new id relinked the whole table")
+            assertEquals(rBefore, Files.readString(rJava), "the ids changed")
+            val (spare, name) = withNewId.idAliases.entries.single().toPair()
+            assertEquals("brand_new", name)
+            assertTrue(spare.startsWith(PreviewResourceLinker.SPARE_PREFIX))
+            // Linking the same text again reads the aliases back rather than losing them.
+            assertEquals(withNewId.idAliases, link(linker, edited.replace("<LinearLayout ", "<LinearLayout android:id=\"@+id/brand_new\" ")).idAliases)
         }
+    }
+
+    @Test
+    fun newIdsBorrowSpareIdsInEveryReference() {
+        val spares = (0 until PreviewResourceLinker.SPARE_IDS).map { "${PreviewResourceLinker.SPARE_PREFIX}$it" }
+        val declared = spares.toSet() + "title"
+        val text = """<A android:id="@+id/title"/><B android:id="@+id/go" app:layout_constraintTop_toBottomOf="@id/go" x="@android:id/text1"/>"""
+        val (out, aliases) = PreviewResourceLinker.withSpareIds(text, declared)!!
+        val spare = aliases.entries.single { it.value == "go" }.key
+        assertEquals(
+            """<A android:id="@id/title"/><B android:id="@id/$spare" app:layout_constraintTop_toBottomOf="@id/$spare" x="@android:id/text1"/>""",
+            out,
+        )
+    }
+
+    @Test
+    fun moreNewIdsThanSparesLinkInFull() {
+        val declared = setOf("${PreviewResourceLinker.SPARE_PREFIX}0")
+        assertNull(PreviewResourceLinker.withSpareIds("""<A android:id="@+id/a"/><B android:id="@+id/b"/>""", declared))
+        assertNotNull(PreviewResourceLinker.withSpareIds("""<A android:id="@+id/a"/>""", declared))
     }
 
     @Test

@@ -4837,7 +4837,10 @@ class IdeServices private constructor(
         // Trace each captured view back to its `<Tag …>` in the live buffer (stamping sourceOffset) so the
         // Preview can open the editable attribute editor on tap. Best-effort — a failure leaves the tree
         // unstamped (read-only), never breaking the render.
-        val viewTree = result.viewTree?.let { vt ->
+        val viewTree = result.viewTree?.let { captured ->
+            // A view whose id only the unsaved buffer declares was rendered with a spare id (the quick relink's
+            // stand-in, see PreviewResourceLinker.withSpareIds): give it its own name back before matching by id.
+            val vt = linked?.idAliases?.takeIf { it.isNotEmpty() }?.let { renameIds(captured, it) } ?: captured
             runCatching {
                 LayoutSourceMapper.stamp(
                     vt,
@@ -4865,6 +4868,13 @@ class IdeServices private constructor(
             },
         )
     }
+
+    /** [node] and its subtree with every id in [aliases] replaced by the name it stands for. */
+    private fun renameIds(node: dev.ide.preview.PreviewViewNode, aliases: Map<String, String>): dev.ide.preview.PreviewViewNode =
+        dev.ide.preview.PreviewViewNode(
+            node.className, node.id?.let { aliases[it] ?: it }, node.left, node.top, node.right, node.bottom,
+            node.properties, node.children.map { renameIds(it, aliases) }, node.sourceOffset,
+        )
 
     /** Parse the live layout buffer into the tolerant XML DOM (with source offsets) for the attribute editor. */
     private fun parseLayoutXml(file: Path, text: String): XmlParsedFile =

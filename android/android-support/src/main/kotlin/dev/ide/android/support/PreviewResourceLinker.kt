@@ -63,6 +63,11 @@ class PreviewResourceLinker(
         val resourceErrors: List<ResourceError> = emptyList(),
         /** Classes the preview interprets beside the project's own ([PreviewToolsClasses]), or null. */
         val toolsJar: Path? = null,
+        /**
+         * Ids of the rendered table that stand for ids only the live buffer declares: spare id → the name the
+         * layout gave it. A view the renderer reports with a spare id is that view. Empty after a full link.
+         */
+        val idAliases: Map<String, String> = emptyMap(),
     )
 
     /** An aapt2 error in the project's resources: the user's [file] (null when aapt2 named none), its 1-based
@@ -77,6 +82,36 @@ class PreviewResourceLinker(
 
         /** What the last full link was linked from, and its size, for [quickRelink]. */
         private const val FULL_KEY = "full-key.txt"
+
+        /** Ids the base declares unused, for [withSpareIds]: more new views than this between full links relinks fully. */
+        internal const val SPARE_IDS = 64
+        internal const val SPARE_PREFIX = "ca_preview_spare_"
+
+        /** `@+id/name`, the declaration of an id in a layout. */
+        private val NEW_ID = Regex("""(?<![\w:])@\+id/([A-Za-z0-9_.]+)""")
+
+        /** Any reference to one of the app's ids: `@+id/name` (group 1 "+") or `@id/name`; not `@android:id/`. */
+        private val ID_REF = Regex("""(?<![\w:])@(\+?)id/([A-Za-z0-9_.]+)""")
+
+        /**
+         * [text] with every id the table already declares referenced (`@+id/x` → `@id/x`: declaring it again in the
+         * scratch package would give the view an id the table does not know) and every id it lacks given one of the
+         * base's spare ids ([SPARE_IDS]), in all of its references, so a view dropped with a new id still takes the
+         * quick relink. Returns the text and spare → name, or null when the spares run out (a full link then
+         * declares the ids for real).
+         */
+        internal fun withSpareIds(text: String, declared: Set<String>): Pair<String, Map<String, String>>? {
+            val fresh = LinkedHashSet<String>()
+            for (m in NEW_ID.findAll(text)) if (m.groupValues[1].replace('.', '_') !in declared) fresh += m.groupValues[1]
+            val spares = (0 until SPARE_IDS).map { "$SPARE_PREFIX$it" }.filter { it in declared }
+            if (fresh.size > spares.size) return null
+            val spareFor = fresh.withIndex().associate { (i, name) -> name to spares[i] }
+            val out = ID_REF.replace(text) { m ->
+                val name = m.groupValues[2]
+                spareFor[name]?.let { "@id/$it" } ?: if (m.groupValues[1] == "+" && name.replace('.', '_') in declared) "@id/$name" else m.value
+            }
+            return out to spareFor.entries.associate { (name, spare) -> spare to name }
+        }
 
         /** Dead bytes [quickRelink]'s patches may leave in `resources.ap_` before a full link compacts it. */
         private const val MAX_PATCH_GROWTH = 8L shl 20
@@ -149,12 +184,16 @@ class PreviewResourceLinker(
         val keyFile = outDir.resolve("key.txt")
         val key = cacheKey(base, manifest, editedLayout, liveText)
         var quick = false
+        val aliasFile = outDir.resolve("id-aliases.txt")
         if (!Files.exists(previewAp) || readTextOrNull(keyFile) != key) {
+            Files.deleteIfExists(aliasFile)
             progress("Compiling resources")
             val rewritten = PreviewLayoutRewriter.rewrite(liveText, frameworkAttrs)
             val fullKey = fullLinkKey(base, manifest, editedLayout, packageName, minSdk, targetSdk)
-            quick = runCatching { quickRelink(outDir, fullKey, manifest, editedLayout, rewritten, packageName, minSdk, targetSdk, previewAp) }
-                .onFailure { log.warn("quick relink failed, linking in full: ${it.message}") }.getOrDefault(false)
+            val aliases = runCatching { quickRelink(outDir, fullKey, manifest, editedLayout, rewritten, packageName, minSdk, targetSdk, previewAp) }
+                .onFailure { log.warn("quick relink failed, linking in full: ${it.message}") }.getOrNull()
+            quick = aliases != null
+            if (!aliases.isNullOrEmpty()) Files.write(aliasFile, aliases.entries.joinToString("\n") { "${it.key}\t${it.value}" }.toByteArray())
             if (!quick) {
                 // Compile the live buffer as a one-file overlay res tree, mirroring the edited file's qualifier dir
                 // (layout / layout-land / …) so aapt2 derives the right resource type + configuration.
@@ -208,11 +247,15 @@ class PreviewResourceLinker(
         )
         val toolsJar = runCatching { PreviewToolsClasses.jar(cacheRoot) }
             .onFailure { log.warn("preview tools classes unavailable: ${it.message}") }.getOrNull()
-        return Result(previewAp, rJar = previewRJar, toolsJar = toolsJar)
+        val idAliases = readTextOrNull(aliasFile)?.lineSequence()?.mapNotNull { l ->
+            l.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        }?.toMap().orEmpty()
+        return Result(previewAp, rJar = previewRJar, toolsJar = toolsJar, idAliases = idAliases)
     }
 
     /**
-     * Relinks only the edited layout, when that is all that changed: no `@+id` the table lacks, and [previewAp]
+     * Relinks only the edited layout, when that is all that changed: every `@+id` the table lacks can borrow a spare
+ * one ([withSpareIds]; the result maps them back, empty when none was needed), and [previewAp]
      * still descends from the last full link of this layout ([FULL_KEY] holds [fullKey]). The layout is linked
      * alone against [previewAp] as an include (aapt2 then resolves every reference to the table's own ids, in a
      * fraction of a full link, which rebuilds the whole table), and its compiled copies replace the old ones in
@@ -224,20 +267,14 @@ class PreviewResourceLinker(
     private fun quickRelink(
         outDir: Path, fullKey: String, manifest: Path, edited: Path, text: String, packageName: String,
         minSdk: Int, targetSdk: Int, previewAp: Path,
-    ): Boolean {
-        val record = readTextOrNull(outDir.resolve(FULL_KEY))?.lines() ?: return false
-        if (!Files.isRegularFile(previewAp) || record.firstOrNull() != fullKey) return false
-        val fullSize = record.getOrNull(1)?.toLongOrNull() ?: return false
-        if (Files.size(previewAp) > fullSize + MAX_PATCH_GROWTH) return false
+    ): Map<String, String>? {
+        val record = readTextOrNull(outDir.resolve(FULL_KEY))?.lines() ?: return null
+        if (!Files.isRegularFile(previewAp) || record.firstOrNull() != fullKey) return null
+        val fullSize = record.getOrNull(1)?.toLongOrNull() ?: return null
+        if (Files.size(previewAp) > fullSize + MAX_PATCH_GROWTH) return null
         val full = previewAp
-        val ids = declaredIds(outDir, packageName) ?: return false
-        // Ids the table already has are referenced, not declared: declaring one again in this scratch package
-        // would give the layout's views ids the table does not know.
-        var unknownId = false
-        val referenced = Regex("""@\+id/([A-Za-z0-9_.]+)""").replace(text) { m ->
-            if (m.groupValues[1].replace('.', '_') in ids) "@id/" + m.groupValues[1] else { unknownId = true; m.value }
-        }
-        if (unknownId) return false
+        val ids = declaredIds(outDir, packageName) ?: return null
+        val (referenced, aliases) = withSpareIds(text, ids) ?: return null
 
         val qualifier = edited.parent?.fileName?.toString() ?: "layout"
         val name = edited.fileName.toString()
@@ -248,10 +285,10 @@ class PreviewResourceLinker(
         Files.createDirectories(src.resolve(qualifier))
         Files.write(src.resolve(qualifier).resolve(name), referenced.toByteArray())
         val c = aapt2.compile(listOf(src), compiled)
-        if (!c.result.success) return false
+        if (!c.result.success) return null
         val scratch = outDir.resolve("quick.ap_")
         val linked = aapt2.linkAgainst(c.archives, manifest, listOf(frameworkTable(), full), 0x80, minSdk, targetSdk, scratch)
-        if (!linked.success) return false
+        if (!linked.success) return null
 
         // The compiled layout (and any API-versioned copies aapt2 made of it) must be exactly the entries the
         // table already holds for it; anything else needs the table itself to change.
@@ -263,12 +300,12 @@ class PreviewResourceLinker(
         val existing = java.util.zip.ZipFile(full.toFile()).use { z ->
             z.entries().asSequence().map { it.name }.filter { ownEntry.matches(it) }.toSet()
         }
-        if (produced.isEmpty() || produced.keys != existing) return false
+        if (produced.isEmpty() || produced.keys != existing) return null
 
         val tmp = outDir.resolve("resources.ap_.tmp")
-        if (!ApkEntryPatcher.replace(full, tmp, produced)) return false
+        if (!ApkEntryPatcher.replace(full, tmp, produced)) return null
         Files.move(tmp, previewAp, StandardCopyOption.REPLACE_EXISTING)
-        return true
+        return aliases
     }
 
     /** The id names the last full link's `R` declares (`R.id`), or null without one. */
@@ -379,6 +416,7 @@ class PreviewResourceLinker(
             val tm = System.nanoTime()
             mergeMaps[outDir] = fingerprint to mergeResourceDirs(resDirs.filter { Files.isDirectory(it) }, merged)
             rewriteLayouts(merged)
+            writeSpareIds(merged)
             compiledDir.toFile().deleteRecursively()
             val tc = System.nanoTime()
             val r = aapt2.compile(listOf(merged), compiledDir)
@@ -395,6 +433,14 @@ class PreviewResourceLinker(
             Files.write(keyFile, sigs.entries.joinToString("\n") { "${it.key}\t${it.value}" }.toByteArray())
             Base.Built(zips)
         }.getOrNull()
+    }
+
+    /** Declares the spare ids [withSpareIds] lends to ids only the live buffer has, in the base's own values. */
+    private fun writeSpareIds(merged: Path) {
+        val values = merged.resolve("values")
+        Files.createDirectories(values)
+        val items = (0 until SPARE_IDS).joinToString("\n") { "    <item type=\"id\" name=\"$SPARE_PREFIX$it\"/>" }
+        Files.write(values.resolve("preview_spare_ids.xml"), "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n$items\n</resources>\n".toByteArray())
     }
 
     /** Rewrites every merged layout for the preview ([PreviewLayoutRewriter]): an included layout or a list item
@@ -527,6 +573,7 @@ class PreviewResourceLinker(
         }
         // Not a file: the base's merged layouts are rewritten, so a new rewriter rebuilds it.
         out["#layout-rewriter"] = PreviewLayoutRewriter.VERSION
+        out["#spare-ids"] = SPARE_IDS.toString()
         return out
     }
 
