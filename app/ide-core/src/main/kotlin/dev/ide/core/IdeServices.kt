@@ -527,7 +527,8 @@ class IdeServices private constructor(
     /** Each library jar and `res/` folder in [scope] that has a content id, to its segment key. */
     internal fun librarySegmentKeys(scope: IndexScope): Map<Path, String> =
         scope.stableJarIds.filterKeys { it in scope.libraryJars }.mapValues { dev.ide.core.index.LibraryIndexRepository.jarKey(it.value) } +
-            scope.stableJarIds.filterKeys { it in scope.libraryResourceRoots }.mapValues { dev.ide.core.index.LibraryIndexRepository.resKey(it.value) }
+            scope.stableJarIds.filterKeys { it in scope.libraryResourceRoots }.mapValues { dev.ide.core.index.LibraryIndexRepository.resKey(it.value) } +
+            scope.stableJarIds.filterKeys { it in scope.sourceArchives }.mapValues { dev.ide.core.index.LibraryIndexRepository.srcKey(it.value) }
 
     /** The index extensions this workspace runs (built-in and plugin-contributed), each with its version. */
     internal fun indexExtensions() = platform.extensions.extensions(INDEX_EP)
@@ -547,7 +548,10 @@ class IdeServices private constructor(
         val url = runCatching { androidTools?.dexPackUrl?.invoke() }.getOrNull() ?: return
         val indexes = platform.extensions.extensions(INDEX_EP).associate { it.id.value to it.version }
         indexRepositories.computeIfAbsent(url) { dev.ide.core.index.LibraryIndexRepository(baseUrl = it) }
-            .fetch(librarySegmentKeys(scope), indexCacheRoot, indexes) { indexLog.info(it) }
+            .fetch(librarySegmentKeys(scope), indexCacheRoot, indexes, log = { indexLog.info(it) },
+                // Downloading (and unpacking) competes with a running build for a small device's CPU and network;
+                // wait it out. The pass that needs the segments waits with it, capped (BuildActivity.MAX_WAIT_MS).
+                beforeDownload = { kotlinx.coroutines.runBlocking { dev.ide.platform.BuildActivity.awaitIdle() } })
     }
 
     /** The workspace index (class names, packages, members, source symbols). Built in the background. The index
@@ -1065,6 +1069,7 @@ class IdeServices private constructor(
         val jdt = modules().map { analyzerFor(it) }.filterIsInstance<JvmIndexScopeProvider>()
         val libraryJars =
             (jdt.flatMap { it.classpathJarPaths } + listOfNotNull(BundledKotlinStdlib.jar())).distinct()
+        val sourceArchives = jdt.flatMap { it.librarySourceArchives }.distinct()
         val libraryResourceRoots = modules().flatMap { m ->
             if (m.facets.get(AndroidFacet.KEY) != null) runCatching {
                 AndroidResources.libraryResourceDirs(m, store.workspace)
@@ -1084,12 +1089,14 @@ class IdeServices private constructor(
             stableJarIds = (libraryJars.mapNotNull { p -> jarContentIds.idOf(p)?.let { p to it } } +
                 // A Maven AAR's res/ folder is keyed by the AAR's content, like its jars (the same map keys both;
                 // see IndexScope), so its segments are shared and can be prebuilt. Other res roots keep their key.
-                libraryResourceRoots.mapNotNull { r -> aarOf(r)?.let { jarContentIds.idOf(it) }?.let { r to it } })
+                libraryResourceRoots.mapNotNull { r -> aarOf(r)?.let { jarContentIds.idOf(it) }?.let { r to it } } +
+                // A library's -sources.jar likewise (the source-doc index: parameter names and javadoc).
+                sourceArchives.filter { Files.isRegularFile(it) }.mapNotNull { a -> jarContentIds.idOf(a)?.let { a to it } })
                 .toMap().also { jarContentIds.flush() },
             jdkHome = jdt.firstNotNullOfOrNull { it.jdkHome },
             // Attached library/SDK SOURCE archives (incl. the downloaded JDK src.zip, folded in by the JDT
             // branch of analyzerFor) → the source-doc index: real param names + javadoc/KDoc.
-            sourceArchives = jdt.flatMap { it.librarySourceArchives }.distinct(),
+            sourceArchives = sourceArchives,
             // Index res/ XML. The project's OWN + dependency-module res goes to the resident source side
             // (editable); immutable dependency/AAR res goes to disk segments ([libraryResourceRoots]) so a
             // Material/AndroidX resource set (a ~600 KB merged values.xml + hundreds of files) is parsed once

@@ -78,16 +78,18 @@ class LibraryIndexRepositoryTest {
         assertNotEquals(first, JarContentIds(dir.resolve(".jar-ids")).idOf(jar), "a rewritten jar is hashed again")
     }
 
-    /** An AAR's classes.jar and its res/ folder come from one archive per library version. */
+    /** An AAR's classes.jar, its res/ folder and its sources jar come from one archive per library version. */
     @Test
-    fun aJarAndItsAarsResFolderInstallFromOneArchive() {
+    fun aJarItsAarsResFolderAndItsSourcesInstallFromOneArchive() {
         val root = tmp()
         val jar = resolvedJar(root, "g/lib/1.0/lib-1.0-exploded/classes.jar", "x")
         val res = Files.createDirectories(root.resolve("resolved-deps/g/lib/1.0/lib-1.0-exploded/res"))
-        val keys = mapOf(jar to jarKey(jar), res to LibraryIndexRepository.resKey("sha-aar"))
+        val sources = resolvedJar(root, "g/lib/1.0/lib-1.0-sources.jar", "src")
+        val keys = mapOf(jar to jarKey(jar), res to LibraryIndexRepository.resKey("sha-aar"), sources to LibraryIndexRepository.srcKey("sha-src"))
         val net = MapNet(published(keys, indexes))
         val cache = tmp()
-        assertEquals(2, repo(net).fetch(keys, cache, indexes))
+        assertEquals(3, repo(net).fetch(keys, cache, indexes))
+        assertTrue(Files.exists(cache.resolve(LibraryIndexRepository.segmentPath("java.classes", 3, "src-sha-src"))), "the sources jar's segments too")
         assertEquals(1, net.requests.get(), "one archive for the library version")
         assertEquals("segment-java.classes-res-sha-aar", String(Files.readAllBytes(cache.resolve(LibraryIndexRepository.segmentPath("java.classes", 3, "res-sha-aar")))))
         assertEquals(0L, Files.size(cache.resolve(LibraryIndexRepository.segmentPath("android.resources", 7, jarKey(jar)))), "an empty segment stays empty")

@@ -73,6 +73,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -573,6 +574,22 @@ class IdeServicesBackend(
                     if (pass === lastTracked) return@collect
                     lastTracked = pass
                     track(dev.ide.analytics.Events.INDEX_PERF, indexPerfProps(pass))
+                }
+            }
+        }
+        // Tell background work (source-doc indexing, prebuilt downloads) when a build is compiling, wherever it runs:
+        // the live buildState covers the in-process and the `:build`-process runner alike. A user program that is
+        // running after its build doesn't count (the console's Running phase). See BuildActivity.
+        analyticsScope.launch {
+            projectEpoch.collectLatest {
+                val svc = activeServices
+                if (svc == null) { dev.ide.platform.BuildActivity.set(false); return@collectLatest }
+                try {
+                    kotlinx.coroutines.flow.combine(svc.build.buildState, svc.build.runConsole) { bs, console ->
+                        bs.status == dev.ide.ui.backend.RunStatus.Running && console?.phase != dev.ide.ui.backend.RunPhase.Running
+                    }.distinctUntilChanged().collect { dev.ide.platform.BuildActivity.set(it) }
+                } finally {
+                    dev.ide.platform.BuildActivity.set(false)
                 }
             }
         }

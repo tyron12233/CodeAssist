@@ -99,7 +99,11 @@ class LibraryIndexRepository(
      * segment key) that lacks one of [indexes] (index id to version). Returns how many artifacts it completed.
      * Never throws.
      */
-    fun fetch(keys: Map<Path, String>, cacheRoot: Path, indexes: Map<String, Int>, log: (String) -> Unit = {}): Int = runCatching {
+    fun fetch(
+        keys: Map<Path, String>, cacheRoot: Path, indexes: Map<String, Int>, log: (String) -> Unit = {},
+        /** Called before each library version is downloaded (the host waits out a running build there). */
+        beforeDownload: () -> Unit = {},
+    ): Int = runCatching {
         // Only artifacts the repository could have (a Maven coordinate); the IDE's own jars come with the app.
         val wanted = keys.filter { (path, key) ->
             LibraryCoordinate.of(path) != null && indexes.any { (ix, v) -> !Files.exists(cacheRoot.resolve(segmentPath(ix, v, key))) }
@@ -115,7 +119,7 @@ class LibraryIndexRepository(
         val pool = java.util.concurrent.Executors.newFixedThreadPool(6.coerceAtMost(byArtifact.size))
         val done = try {
             pool.invokeAll(byArtifact.map { (c, wantedKeys) ->
-                java.util.concurrent.Callable { runCatching { install(c, flavor, wantedKeys.toSet(), cacheRoot, indexes) }.getOrDefault(0) }
+                java.util.concurrent.Callable { runCatching { beforeDownload(); install(c, flavor, wantedKeys.toSet(), cacheRoot, indexes) }.getOrDefault(0) }
             }).sumOf { it.get() }
         } finally {
             pool.shutdownNow()
@@ -155,11 +159,15 @@ class LibraryIndexRepository(
         /** The segment file format the repository's segments are written in (`Segment.MAGIC`, "IDX3"). */
         private const val SEGMENT_FORMAT = "idx3"
 
+        /** What an archive holds; bumped when a version gains artifacts a published archive lacks (2: sources jars),
+         *  so every version is republished instead of the old archives being skipped as already there. */
+        private const val CONTENT_VERSION = 2
+
         /** The flavor for segments built by [indexes] (index id to version): the format plus a digest of the set. */
         fun flavorOf(indexes: Map<String, Int>): String {
             val md = MessageDigest.getInstance("SHA-256")
             md.update(indexes.toSortedMap().entries.joinToString(",") { "${it.key}=${it.value}" }.toByteArray())
-            return SEGMENT_FORMAT + "-" + md.digest().take(5).joinToString("") { "%02x".format(it) }
+            return "$SEGMENT_FORMAT-$CONTENT_VERSION-" + md.digest().take(5).joinToString("") { "%02x".format(it) }
         }
 
         fun pathOf(coordinate: LibraryCoordinate, flavor: String): String =
@@ -173,6 +181,9 @@ class LibraryIndexRepository(
 
         /** The segment key of a library `res/` folder whose AAR has content [id] (`res-<stable id>`). */
         fun resKey(id: String) = "res-$id"
+
+        /** The segment key of a library's `-sources.jar` with content [id] (`src-<stable id>`). */
+        fun srcKey(id: String) = "src-$id"
 
         /** Whether every library version among [keys]' artifacts already has an archive for [indexes]' flavor. */
         fun isPublished(keys: Map<Path, String>, repoRoot: Path, indexes: Map<String, Int>): Boolean {

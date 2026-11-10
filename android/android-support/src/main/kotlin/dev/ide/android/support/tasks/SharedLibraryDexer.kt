@@ -170,6 +170,27 @@ class SharedLibraryDexer(
     }
 
     /**
+     * Download only: install into the shared cache whatever the [dexPack] has among [jars] that the cache lacks,
+     * and dex nothing. What a project's first build would otherwise download while the user waits, done as soon as
+     * its dependencies are known. Returns how many libraries it installed (0 when the key isn't own-content).
+     */
+    fun prefetch(jars: List<Path>, u: Universe): Int {
+        val pack = dexPack ?: return 0
+        val cache = dexCacheRoot ?: return 0
+        if (release || !cacheKeyIsOwnContentOnly(minApi, desugaredLibConfig)) return 0
+        val tagDir = cache.resolve(cacheTag(u.desugarDigest))
+        val wanted = jars.distinct().mapNotNull { jar ->
+            val hash = u.hashOf[jar] ?: return@mapNotNull null
+            if (DexArchives.bucketVerified(tagDir.resolve(hash))) return@mapNotNull null
+            val classes = DexArchives.classNamesOf(jar)
+            if (classes.isEmpty()) null else dev.ide.android.support.pack.DexPackSource.Wanted(hash, jar, classes)
+        }.distinctBy { it.hash }
+        if (wanted.isEmpty()) return 0
+        checkCanceled()
+        return pack.fetch(wanted, tagDir, log)
+    }
+
+    /**
      * Before dexing [todo] locally, let the [dexPack] fill the shared cache with the ones it already has, so
      * [dexOneLibrary] finds them there. Only for an own-content cache key: below minSdk 26 (or with core-library
      * desugaring) a bucket depends on the whole library set, which a published library can't know.

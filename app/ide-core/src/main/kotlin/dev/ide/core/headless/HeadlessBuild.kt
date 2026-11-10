@@ -203,11 +203,12 @@ class HeadlessEngine private constructor(private val ide: IdeServices) : AutoClo
      * ([dev.ide.core.index.LibraryIndexRepository]). Returns the coordinates written.
      */
     suspend fun publishIndexes(cacheRoot: Path, repoRoot: Path, key: java.security.PrivateKey): List<dev.ide.android.support.pack.LibraryCoordinate> {
-        // What the editor indexes (the compile classpath and the AARs' res folders), keyed by content as on a phone.
+        // What the editor indexes (the compile classpath, the AARs' res folders, the libraries' sources jars), keyed
+        // by content as on a phone.
         val full = ide.libraryIndexScope()
         val scope = dev.ide.index.IndexScope(
             libraryJars = full.libraryJars, stableJarIds = full.stableJarIds,
-            libraryResourceRoots = full.libraryResourceRoots,
+            libraryResourceRoots = full.libraryResourceRoots, sourceArchives = full.sourceArchives,
         )
         val extensions = ide.indexExtensions()
         val service = dev.ide.index.impl.IndexServiceImpl(extensions, cacheRoot)
