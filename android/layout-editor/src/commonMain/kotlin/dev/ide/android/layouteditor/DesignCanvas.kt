@@ -4,7 +4,15 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +66,10 @@ import org.jetbrains.compose.resources.stringResource
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+/** How the canvas settles after a programmatic zoom or pan: quick, with no bounce past the target. */
+private val CanvasSpring = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+private val CanvasOffsetSpring = spring<Offset>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+
 /** Blueprint ground + line, fixed rather than themed: a blueprint reads as one on any app theme. */
 private val BlueprintGround = Color(0xFF0F2A44)
 private val BlueprintLine = Color(0xFF7FC7E8)
@@ -104,6 +116,22 @@ internal fun DesignCanvas(
     val fitNow by rememberUpdatedState(fit)
     val imageW = render?.image?.width ?: state.widthPx
     val k = cardW / imageW.coerceAtLeast(1)
+
+    // What is drawn trails the target transform: a gesture moves it exactly, anything else springs to it. The
+    // first placement (before the canvas has a size there is nothing to fit to) snaps rather than zooming in.
+    val shownScale = remember { Animatable(scale) }
+    val shownPan = remember { Animatable(state.pan, Offset.VectorConverter) }
+    var placed by remember { mutableStateOf(false) }
+    val sized = canvasSize != IntSize.Zero
+    LaunchedEffect(scale, sized) {
+        if (state.gesturing || !placed) shownScale.snapTo(scale)
+        else shownScale.animateTo(scale, CanvasSpring)
+        if (sized) placed = true
+    }
+    LaunchedEffect(state.pan) {
+        if (state.gesturing || !placed) shownPan.snapTo(state.pan)
+        else shownPan.animateTo(state.pan, CanvasOffsetSpring)
+    }
 
     val accent = MaterialTheme.colorScheme.primary
     val dot = MaterialTheme.colorScheme.outlineVariant
@@ -161,10 +189,34 @@ internal fun DesignCanvas(
                 else drawDots(dot, 16.dp.toPx(), 1.dp.toPx())
             }
             .pointerInput(state) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val base = if (state.zoom <= 0f) fitNow else state.zoom
-                    state.zoom = (base * zoom).coerceIn(0.1f, 6f)
-                    state.pan += pan
+                // Pan and pinch, marked as a gesture for its whole length so the canvas tracks the fingers instead
+                // of animating after them. Nothing moves until past touch slop, so a tap still reaches the card.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var engaged = false
+                    var travel = Offset.Zero
+                    try {
+                        do {
+                            val event = awaitPointerEvent()
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            if (!engaged) {
+                                travel += pan
+                                if (zoom != 1f || travel.getDistance() > viewConfiguration.touchSlop) {
+                                    engaged = true
+                                    state.gesturing = true
+                                }
+                            }
+                            if (engaged && (zoom != 1f || pan != Offset.Zero)) {
+                                val base = if (state.zoom <= 0f) fitNow else state.zoom
+                                state.zoom = (base * zoom).coerceIn(0.1f, 6f)
+                                state.pan += pan
+                                event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        state.gesturing = false
+                    }
                 }
             }
             .pointerInput(Unit) { detectTapGestures(onTap = { currentOnSelect(null) }) },
@@ -174,8 +226,10 @@ internal fun DesignCanvas(
         Box(
             Modifier
                 .graphicsLayer {
-                    scaleX = scale; scaleY = scale
-                    translationX = state.pan.x; translationY = state.pan.y
+                    val sc = shownScale.value
+                    val p = shownPan.value
+                    scaleX = sc; scaleY = sc
+                    translationX = p.x; translationY = p.y
                 }
                 .requiredSize(state.wdp.dp, state.hdp.dp)
                 .shadow(if (state.blueprint) 0.dp else 18.dp, shape)
@@ -216,9 +270,12 @@ internal fun DesignCanvas(
         val node = selectedNode
         if (showActionBar && node != null && selected != null && canvasSize != IntSize.Zero) {
             val r = node.rect(k)
+            // Placed from the transform as drawn, so the bar travels with the card while it animates.
+            val sc = shownScale.value
+            val sp = shownPan.value
             fun toCanvas(p: Offset) = Offset(
-                canvasSize.width / 2f + state.pan.x + (p.x - cardW / 2f) * scale,
-                canvasSize.height / 2f + state.pan.y + (p.y - cardH / 2f) * scale,
+                canvasSize.width / 2f + sp.x + (p.x - cardW / 2f) * sc,
+                canvasSize.height / 2f + sp.y + (p.y - cardH / 2f) * sc,
             )
             val bottom = toCanvas(Offset(r.center.x, r.bottom))
             val top = toCanvas(Offset(r.center.x, r.top))

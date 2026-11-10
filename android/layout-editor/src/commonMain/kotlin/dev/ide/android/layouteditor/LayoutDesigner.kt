@@ -5,6 +5,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -285,14 +290,26 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { stripHeight = it.height },
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (showStrip) 8.dp else 16.dp), verticalAlignment = Alignment.Bottom) {
+                    val rowGap by androidx.compose.animation.core.animateDpAsState(if (showStrip) 8.dp else 16.dp, label = "toolbarGap")
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = rowGap), verticalAlignment = Alignment.Bottom) {
                         DesignToolbar(state = state, docked = docked, modifier = Modifier)
                         Box(Modifier.weight(1f))
                         ZoomControls(state, Modifier)
                     }
-                    val el = selected
-                    if (showStrip && el != null) {
-                        PropertyStrip(
+                    // The strip slides up from the bottom edge and the toolbar row rides up on it. The last
+                    // selection is kept so the strip still has content while it slides away.
+                    val lastSelected = remember { mutableStateOf<LayoutElement?>(null) }
+                    if (selected != null) lastSelected.value = selected
+                    val el = selected ?: lastSelected.value
+                    AnimatedVisibility(
+                        visible = showStrip && el != null,
+                        enter = expandVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow), expandFrom = Alignment.Top) +
+                            slideInVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) { it / 3 } +
+                            fadeIn(tween(180)),
+                        exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) +
+                            slideOutVertically(tween(200)) { it / 3 } + fadeOut(tween(150)),
+                    ) {
+                        if (el != null) PropertyStrip(
                             document = document,
                             element = el,
                             pc = PropertyContext(

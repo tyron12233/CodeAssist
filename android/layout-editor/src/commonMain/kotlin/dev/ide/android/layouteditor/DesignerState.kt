@@ -43,6 +43,12 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
     var zoom by mutableStateOf(0f)
     var pan by mutableStateOf(Offset.Zero)
 
+    /**
+     * True while the user's fingers are moving the canvas. The canvas follows a gesture exactly and animates
+     * every other change of [zoom] or [pan] (the zoom buttons, fit, keeping the selection in view).
+     */
+    var gesturing by mutableStateOf(false)
+
     var selection by mutableStateOf<SelectionKey?>(null)
 
     /** The open bottom sheet on a phone, and how much of the height it takes. */
