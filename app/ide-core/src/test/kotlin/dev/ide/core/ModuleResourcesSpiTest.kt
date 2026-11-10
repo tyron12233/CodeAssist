@@ -454,4 +454,19 @@ class ModuleResourcesSpiTest {
         )
         assertNotNull(host.createResourceFile(layout, "layout", "fix_created"))
     }
+
+    @Test
+    fun `a PNG drawable resolves from the manifest, as it does from a layout`() {
+        // Issue #1754: the resource index reads only `res/**.xml`, so an image drawable is in the repository alone,
+        // and the manifest (outside `res/`) never reached it: android:icon="@drawable/ic_launcher" was flagged.
+        val png = root.resolve("app/src/main/res/drawable/ic_launcher_png.png")
+        java.nio.file.Files.createDirectories(png.parent)
+        java.nio.file.Files.write(png, byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47))
+        val host = services.xmlResourceHost
+        val manifest = services.store.vfs.fileFor(root.resolve("app/src/main/AndroidManifest.xml"))
+        val layout = services.store.vfs.fileFor(root.resolve("app/src/main/res/layout/activity_main.xml"))
+        assertTrue(host.hasResource(layout, "drawable", "ic_launcher_png"), "a layout resolves the PNG")
+        assertTrue(host.hasResource(manifest, "drawable", "ic_launcher_png"), "the manifest resolves the PNG")
+        assertFalse(host.hasResource(manifest, "drawable", "no_such_image"), "a missing drawable is still reported")
+    }
 }

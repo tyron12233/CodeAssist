@@ -4424,18 +4424,27 @@ class IdeServices private constructor(
         // repository is a fallback so a resource added/edited in an OPEN res buffer (not yet saved/indexed) is
         // seen live — otherwise `@string/justAdded` in a layout would be flagged unresolved until the next save.
         // The fallback only ADDS resolutions (never flags more), so it can't introduce a false positive.
+        // The repository is also what sees a NON-XML file resource: the index reads only `res/**.xml`, so a
+        // `drawable/ic_launcher.png` or a WebP mipmap is in the repository alone. Its module therefore has to be
+        // found for every file the check runs in, the manifest included (outside `res/`): looking it up as a
+        // resource file only left `android:icon="@drawable/ic_launcher"` flagged although the PNG was there.
         override fun typeHasAny(file: VirtualFile, rClass: String): Boolean {
             val type = ResourceType.byRClass(rClass) ?: return false
             if (indexTypeHasAny(type)) return true
-            val module = moduleForResourceFile(Paths.get(file.path)) ?: return false
+            val module = moduleForXmlFile(file) ?: return false
             return resourceRepo(module)?.types()?.contains(type) == true
         }
 
         override fun hasResource(file: VirtualFile, rClass: String, name: String): Boolean {
             val type = ResourceType.byRClass(rClass) ?: return true // unknown type → don't flag
             if (indexHasResource(type, name)) return true
-            val module = moduleForResourceFile(Paths.get(file.path)) ?: return false
+            val module = moduleForXmlFile(file) ?: return false
             return resourceRepo(module)?.has(type, name) == true
+        }
+
+        /** The Android module of a resource XML or a manifest. */
+        private fun moduleForXmlFile(file: VirtualFile): Module? = Paths.get(file.path).let { p ->
+            moduleForResourceFile(p) ?: moduleForManifestFile(p)?.takeIf { it.facets.get(AndroidFacet.KEY) != null }
         }
 
         override fun isValueType(rClass: String): Boolean = resources.isValueType(rClass)
