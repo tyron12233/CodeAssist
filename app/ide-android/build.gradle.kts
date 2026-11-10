@@ -476,7 +476,7 @@ val testAdmobRewardedUnitId = "ca-app-pub-3940256099942544/5224354917"
 val realAdmobRewardedUnitId = (findProperty("ADMOB_REWARDED_UNIT_ID") as String?)
     ?: System.getenv("ADMOB_REWARDED_UNIT_ID")
     ?: "ca-app-pub-7523005242346905/8159191965"
-// Google's TEST adaptive-banner unit, used by debug/profile/minified for both banner uses below.
+// Google's TEST adaptive-banner unit, used by debug/profile for both banner uses below.
 val testAdmobBannerUnitId = "ca-app-pub-3940256099942544/9214589741"
 // The real banner units, baked in like the ids above. A blank one turns that banner off in release: AndroidAdHost
 // then shows nothing where it would go. ADMOB_BANNER_UNIT_ID is the banner a native slot
@@ -669,10 +669,17 @@ android {
 
     buildTypes {
         getByName("release") {
-            // R8 is OFF: the app loads JDT/ecj/D8/apksig classes reflectively and dexes user code at
-            // runtime, so aggressive shrinking would strip needed classes. Revisit with keep rules if
-            // download size becomes a concern.
-            isMinifyEnabled = false
+            // R8 shrinks the shipping build. The app reaches most of its toolchain (Kotlin compiler, IntelliJ
+            // platform, JDT, D8/R8, bundletool) and the libraries user code links against by NAME, through
+            // reflection, ServiceLoader and the preview/console interpreters, so proguard-rules.pro keeps
+            // those wholesale and lets R8 tree-shake the rest. A missing keep is a RUNTIME failure inside a
+            // feature, never a build error: :ide-android-e2e drives every feature against this build
+            // (as `profile`) on a device, run it after touching the rules or adding a dependency.
+            // -Pcodeassist.r8=false builds it unminified: the baseline :ide-android-e2e's benign-linkage list
+            // is collected from, and a quick way to tell whether a runtime failure is R8's doing.
+            isMinifyEnabled = providers.gradleProperty("codeassist.r8").orNull != "false"
+            isShrinkResources = false // code is the bulk; resources are reached by name from user projects
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
             // The shipped build serves real AdMob ads (falls back to test ids if none were configured).
             manifestPlaceholders["admobAppId"] = realAdmobAppId
@@ -686,8 +693,8 @@ android {
         // A release-like, non-debuggable build that's still installable locally (signed with the debug key).
         // Use this — never `debug` — to judge runtime/typing/recomposition performance: a `debuggable` app
         // runs with ART optimizations off and the Compose runtime is disproportionately slow in that mode,
-        // so debug timings are not representative. Mirrors `release` (R8 stays off for the reflection/runtime-
-        // dexing reasons above); only the signing differs so `adb install` works without the release keystore.
+        // so debug timings are not representative. Mirrors `release`, R8 included, so it is also the build
+        // :ide-android-e2e tests; only the signing and the ad ids differ.
         create("profile") {
             initWith(getByName("release"))
             // Sign with the release/upload key when a keystore is configured (so testers get a build with
@@ -700,35 +707,6 @@ android {
             isProfileable = true
             // This build is for on-device perf testing, so keep TEST ads (initWith(release) copied the real
             // ids — undo that) — a tester must never click a live ad.
-            manifestPlaceholders["admobAppId"] = testAdmobAppId
-            buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
-            buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
-            buildConfigField("String", "AD_REWARDED_UNIT_ID", "\"$testAdmobRewardedUnitId\"")
-            buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
-            buildConfigField("String", "AD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
-            buildConfigField("String", "AD_BUILD_BANNER_UNIT_ID", "\"$testAdmobBannerUnitId\"")
-        }
-        // EXPERIMENTAL, non-shipping: an R8-minified build used only to measure how far the app's own
-        // dex (~61% of the APK, mostly the bundled Kotlin compiler + IntelliJ platform) can shrink. The
-        // shipping `release` build keeps R8 OFF (see above) because the toolchain is loaded reflectively;
-        // this variant explores that "revisit with keep rules" note behind conservative keep rules
-        // (proguard-rules-minified.pro keeps the reflective toolchain wholesale and tree-shakes only the
-        // safe libraries). Build with `:ide-android:assembleMinified` — R8 whole-program on this input is
-        // memory-hungry, so bump org.gradle.jvmargs (~8g) for the run. NOT runtime-validated: a minified
-        // build can boot and still break when it compiles/dexes a user project, so never ship it without
-        // exercising the full toolchain (compile -> dex -> sign -> run -> completion) on-device.
-        create("minified") {
-            initWith(getByName("release"))
-            isMinifyEnabled = true
-            isShrinkResources = false // isolate code shrinking; resources aren't the bulk
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules-minified.pro",
-            )
-            // Sign with the release/upload key when configured, else the debug key so it installs locally.
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
-            matchingFallbacks += listOf("release")
-            // Non-shipping: keep Google TEST ad ids (initWith(release) copied the real ones).
             manifestPlaceholders["admobAppId"] = testAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
@@ -954,7 +932,7 @@ val composeStringPackages: Map<String, String> = rootProject.subprojects
     }
     .toMap()
 
-tasks.matching { it.name.matches(Regex("merge(Debug|Profile|Release|Minified)Assets")) }.configureEach {
+tasks.matching { it.name.matches(Regex("merge(Debug|Profile|Release)Assets")) }.configureEach {
     val expected = composeStringPackages
     doLast {
         val merged = outputs.files.files.firstOrNull() ?: return@doLast
