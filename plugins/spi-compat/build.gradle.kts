@@ -51,4 +51,6 @@ tasks.test {
     // `-Dspi.updateBaselines=true` reaches the test worker only if it is forwarded, the same way the
     // regression suites' own flag is forwarded in the root build.
     System.getProperty("spi.updateBaselines")?.let { systemProperty("spi.updateBaselines", it) }
+    // ProguardSpiKeepsTest reads the shipping app's R8 rules: a change there alone must rerun it.
+    inputs.file(rootProject.file("app/ide-android/proguard-rules.pro")).withPathSensitivity(PathSensitivity.RELATIVE)
 }

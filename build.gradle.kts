@@ -3,12 +3,22 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 // AGP 9.2.1's bundled R8 (9.2.14) crashes with an NPE when shrinking the app (`minifyMinifiedWithR8`: "Cannot
 // invoke Object.getClass() because <parameter1> is null", and two other NPEs under -dontshrink / partial keep
-// sets). R8 on the buildscript classpath takes precedence over AGP's; 9.4.28 shrinks the app cleanly. This also
-// becomes the D8 every variant dexes with.
+// sets). R8 on the buildscript classpath takes precedence over AGP's. 9.4.28 and 9.4.34 still hit the same NPE
+// now and then (retraced: ArgumentPropagatorProgramOptimizer.isPrototypeChangesAllowed, thread-timing dependent),
+// failing about one release shrink in three; 9.5.29 does not. This also becomes the D8 every variant dexes with.
 buildscript {
     repositories { google() }
-    dependencies { classpath("com.android.tools:r8:9.4.28") }
+    dependencies { classpath("com.android.tools:r8:9.5.29") }
 }
+
+// R8 must not merge classes horizontally in this app. IntelliJ (inside the Kotlin compiler) keys its PSI caches by
+// the provider lambda's CLASS (`CachedValuesManager.getKeyForClass(provider.getClass())`), and merging folds
+// same-shaped lambdas into one class: `ClassInnerStuffCache.getFields()` then got the cached `getInnerClasses()`
+// result ("PsiClass[] cannot be cast to PsiField[]") and Java-classpath analysis (KSP/Room, kotlinc on a
+// project with Java libraries) died. Lambda classes are synthesized DURING R8, so no keep rule can reach them;
+// this switch is R8's only way to turn the pass off. It is read from the JVM that runs R8 (the Gradle daemon,
+// AGP runs R8 in-process), and it doesn't move Play's optimization score, which counts keep rules, not passes.
+System.setProperty("com.android.tools.r8.disableHorizontalClassMerging", "true")
 
 plugins {
     // Resolve all plugin versions once for the whole build; modules apply them themselves. The Kotlin
