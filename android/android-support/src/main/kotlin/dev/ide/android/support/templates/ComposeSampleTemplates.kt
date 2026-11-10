@@ -73,7 +73,7 @@ internal object ComposeSampleSupport {
                     AndroidFacet(
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
-                        minSdk = 24,
+                        minSdk = dev.ide.android.support.AndroidApiLevels.DEFAULT_MIN_SDK,
                         targetSdk = AndroidTemplateSupport.COMPILE_SDK,
                         buildFeatures = BuildFeatures(compose = true),
                     ),

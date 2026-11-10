@@ -27,6 +27,18 @@ internal object AndroidTemplateSupport {
         help = "Lowest Android version the app supports.",
     )
 
+    /**
+     * [minSdkParam] without the levels below [floor] (what a library the template depends on requires), still
+     * defaulting to [AndroidApiLevels.DEFAULT_MIN_SDK]. Defaulting to the floor instead made new Compose and
+     * Material projects start below 26, where every library is desugared and the dex cache can't be shared
+     * between projects or filled from the pre-dexed pack.
+     */
+    fun minSdkParamFrom(floor: Int): TemplateParameter.Choice {
+        val options = minSdkParam.options.filter { it.value.toInt() >= floor }
+        val default = options.indexOfFirst { it.value.toInt() == AndroidApiLevels.DEFAULT_MIN_SDK }
+        return minSdkParam.copy(options = options, defaultIndex = default.coerceAtLeast(0))
+    }
+
     /** The targetSdk picker: the API level the app is tested/optimised against, newest by default (Play
      *  requires a current target, and an old one opts the app into compatibility behaviour). */
     val targetSdkParam = TemplateParameter.Choice(
@@ -250,10 +262,7 @@ object MaterialYouAppTemplate : ProjectTemplate {
     override fun parameters(): List<TemplateParameter> = listOf(
         AndroidTemplateSupport.languageParam,
         // Material Components requires minSdk 23; drop the lower options the plain app template offers.
-        AndroidTemplateSupport.minSdkParam.copy(
-            options = AndroidTemplateSupport.minSdkParam.options.filter { it.value.toInt() >= AndroidTemplateSupport.MATERIAL_MIN_SDK },
-            defaultIndex = 0,
-        ),
+        AndroidTemplateSupport.minSdkParamFrom(AndroidTemplateSupport.MATERIAL_MIN_SDK),
         AndroidTemplateSupport.targetSdkParam,
     )
 
@@ -262,7 +271,7 @@ object MaterialYouAppTemplate : ProjectTemplate {
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
-        val minSdk = args.int("minSdk", AndroidTemplateSupport.MATERIAL_MIN_SDK)
+        val minSdk = args.int("minSdk", AndroidApiLevels.DEFAULT_MIN_SDK)
         val targetSdk = args.int("targetSdk", AndroidTemplateSupport.COMPILE_SDK)
         val kotlin = AndroidTemplateSupport.isKotlin(args)
         scaffold.workspace.beginModification().apply {
