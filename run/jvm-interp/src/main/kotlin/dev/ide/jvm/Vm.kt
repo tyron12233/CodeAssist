@@ -113,6 +113,7 @@ class Vm(
     private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
     private val reflection = InterpretedReflection(this)
+    private val proxies = InterpretedProxies(this, reflection)
 
     /** Stored for a name known NOT to be interpreted (bridged or absent): [classes] is a [java.util.concurrent
      *  .ConcurrentHashMap], which cannot hold a null value, so [resolve] uses this sentinel and maps it back to
@@ -542,6 +543,18 @@ class Vm(
                         recvName.replace('/', '.'),
                 ),
             )
+        }
+        // java.lang.reflect.Proxy over an interpreted interface, whose class literal the real Proxy rejects as
+        // "not an interface": the VM makes the proxy itself ([InterpretedProxies]).
+        if (owner == "java/lang/reflect/Proxy" && receiver == null) {
+            val result = when (name) {
+                "newProxyInstance" -> proxies.newProxyInstance(args.getOrNull(1) as? Array<*>, args.getOrNull(2))
+                "getInvocationHandler" -> proxies.invocationHandlerOf(args.getOrNull(0))
+                "isProxyClass" -> (args.getOrNull(0) as? Class<*>)?.let { peerFactory.interpretedNameOf(it) }
+                    ?.let { Marshalling.realPrimToVm(proxies.isProxyClassName(it)) } ?: InterpretedReflection.NOT_HANDLED
+                else -> InterpretedReflection.NOT_HANDLED
+            }
+            if (result !== InterpretedReflection.NOT_HANDLED) return Reflected(result)
         }
         // Members, supertypes, generic signatures and annotations of an interpreted type, and the use of a
         // mirrored Method/Field: see [InterpretedReflection].

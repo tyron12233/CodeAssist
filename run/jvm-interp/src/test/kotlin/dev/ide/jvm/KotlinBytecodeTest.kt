@@ -35,6 +35,10 @@ class KotlinBytecodeTest {
 
     private fun call(name: String, desc: String, vararg args: Any?): Any? = vm.invokeStatic(KFX, name, desc, args.toList())
 
+    @Test fun proxyFakesAnInterpretedKotlinInterface() {
+        assertEquals(dev.ide.jvm.kfixtures.kotlinProxyFake(), vm.invokeStatic("dev/ide/jvm/kfixtures/KProxyKt", "kotlinProxyFake", "()Ljava/lang/String;"))
+    }
+
     /**
      * A `boolean`/`byte`/`char`/`short`-returning lambda linked via `LambdaMetafactory` (its impl returns the
      * primitive, adapted to the erased `Function0.invoke():Object`) must box to ITS OWN wrapper when its result

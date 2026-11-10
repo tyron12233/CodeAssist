@@ -117,6 +117,10 @@ internal class InterpretedReflection(private val vm: Vm) {
 
     private val VmClass.isInterface: Boolean get() = access and Opcodes.ACC_INTERFACE != 0
 
+    /** [cls]'s declared methods as `getDeclaredMethods` returns them, each with the interpreted method it stands
+     *  for (what a proxy over an interpreted interface hands its handler, see [InterpretedProxies]). */
+    fun declaredMethods(cls: VmClass): Map<Method, MethodNode> = mirror(cls).methods
+
     /** The mirror of [cls], built the first time interpreted code reflects over its members. */
     private fun mirror(cls: VmClass): Mirror = mirrors[cls.name] ?: synchronized(this) {
         mirrors[cls.name] ?: buildMirror(cls).also { mirrors[cls.name] = it; byMirrorClass[it.cls] = it }
@@ -249,6 +253,19 @@ internal class InterpretedReflection(private val vm: Vm) {
         val isStatic = node.access and Opcodes.ACC_STATIC != 0
         val vmTarget = target?.let { Marshalling.realToVm(it) }
         if (!isStatic && vmTarget == null) throw VmException(NullPointerException("${node.name} needs an instance"))
+        // A lambda implementing the interface: its abstract method is the lambda body (a proxy handler forwarding
+        // `method.invoke(delegate, args)` to a lambda delegate lands here).
+        if (vmTarget is VmLambda && node.name == vmTarget.samName && node.access and Opcodes.ACC_ABSTRACT != 0) {
+            val vmArgs = realArgs.mapIndexed { i, a -> Marshalling.realToVm(coerce(a, params[i]), params[i]) }
+            val result = try {
+                vmTarget.invokeSamReal(vmArgs)
+            } catch (t: VmInterruptedException) {
+                throw t
+            } catch (t: Throwable) {
+                throw VmException(java.lang.reflect.InvocationTargetException(t))
+            }
+            return Marshalling.realToVm(Marshalling.vmToReal(result, Descriptors.returnType(node.desc)))
+        }
         val (declaring, method) = if (isStatic || node.access and Opcodes.ACC_PRIVATE != 0 || vmTarget !is VmObject) cls to node
             else vm.findInHierarchy(vmTarget.vmClass, node.name, node.desc) ?: (cls to node)
         val result = try {

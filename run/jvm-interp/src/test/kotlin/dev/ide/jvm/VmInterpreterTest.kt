@@ -11,6 +11,7 @@ import dev.ide.jvm.fixtures.Recover
 import dev.ide.jvm.fixtures.ReflectArray
 import dev.ide.jvm.fixtures.ReflectMembers
 import dev.ide.jvm.fixtures.ReflectMethods
+import dev.ide.jvm.fixtures.ReflectProxy
 import dev.ide.jvm.fixtures.Statics
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -137,6 +138,19 @@ class VmInterpreterTest {
         // sameClass returns Z; invokeStatic yields a boolean in the interpreter's computational form (1 = true),
         // proving loadClass(name) and the class literal resolve to the SAME reflection Class.
         assertEquals(1, vm.invokeStatic(RI, "sameClass", "(Ljava/lang/ClassLoader;Ljava/lang/String;)Z", listOf(cl, dog)))
+    }
+
+    @Test fun proxyOverAnInterpretedInterface() {
+        // Reported from a plugin's unit tests: `Proxy.newProxyInstance(…, PluginRegistration::class.java)` threw
+        // "dev.ide.jvm.reflect.dev_ide_plugin_PluginRegistration_R4 is not an interface", because an interpreted
+        // interface's class literal is a stand-in CLASS and the real Proxy was handed it.
+        val RP = "dev/ide/jvm/fixtures/ReflectProxy"
+        val str = "()Ljava/lang/String;"
+        assertEquals(ReflectProxy.routesEveryMethod(), vm.invokeStatic(RP, "routesEveryMethod", str))
+        assertEquals(ReflectProxy.delegatesThroughMethod(), vm.invokeStatic(RP, "delegatesThroughMethod", str))
+        assertEquals(ReflectProxy.mixesWithARealInterface(), vm.invokeStatic(RP, "mixesWithARealInterface", str))
+        assertEquals(ReflectProxy.exceptions(), vm.invokeStatic(RP, "exceptions", str))
+        assertEquals(ReflectProxy.misuse(), vm.invokeStatic(RP, "misuse", str))
     }
 
     @Test fun reflectionSeesAnInterpretedClassesMethodsAndSupertypes() {
