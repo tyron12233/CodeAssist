@@ -59,16 +59,28 @@ data class ToolDiagnostic(
 enum class ToolSeverity { ERROR, WARNING, INFO }
 
 /**
- * D8 emits a per-method desugaring warning when *library* code uses an API above the build's min-api —
- * e.g. guava's `MethodHandle`/`VarHandle` helpers warn "only supported starting with Android O
- * (--min-api 26)" at min-api < 26. They are benign (guava selects those code paths at runtime only on
- * capable devices) and flood the console, so the dexer suppresses them and surfaces a single count.
+ * D8 warnings about library code that the developer can neither act on nor is harmed by. They arrive by the
+ * dozen on any Compose app below min-api 26, so the dexer drops them from the Problems list and the console
+ * and keeps a one-line count in the build transcript:
+ *  - "… only supported starting with Android O (--min-api 26)": library code (guava's MethodHandle/VarHandle
+ *    helpers) that only takes those paths at runtime on devices that have them.
+ *  - "Type `X` was not found, it is required for default or static interface methods desugaring of `Y`": `X` is
+ *    not in the app at all (a hidden platform class like `android.view.HardwareCanvas`, a device-provided
+ *    `androidx.window.extensions` type, `java.lang.instrument`, an optional dependency the app doesn't use), so
+ *    `Y` is never loaded. A type the app DOES have is on the desugaring classpath and never warns.
+ *  - "Methods with invalid locals information": debug info Kotlin's inliner wrote for its own locals; D8 drops
+ *    that debug info and the code is unchanged. D8 follows them with "Some warnings are typically a sign of using
+ *    an outdated Java toolchain", which goes with them.
  */
 internal fun isBenignDexWarning(message: String): Boolean =
-    "only supported starting with Android" in message
+    "only supported starting with Android" in message ||
+        "it is required for default or static interface methods desugaring" in message ||
+        "invalid locals information" in message ||
+        // D8's trailer to the locals warnings above, printed once as its own diagnostic.
+        "sign of using an outdated Java toolchain" in message
 
-/** Drop benign desugaring warnings (and their `Warning in …:` headers) from D8's line output, appending a
- *  one-line count when any were suppressed. */
+/** Drop benign D8 warnings ([isBenignDexWarning]), with their `Warning in …:` headers and indented detail
+ *  lines, from D8's line output, appending a one-line count when any were dropped. */
 internal fun suppressBenignDexWarnings(lines: List<String>): List<String> {
     val out = ArrayList<String>(lines.size)
     var suppressed = 0
@@ -76,13 +88,17 @@ internal fun suppressBenignDexWarnings(lines: List<String>): List<String> {
     while (i < lines.size) {
         val line = lines[i]
         // A D8 warning is a "Warning in <file>…:" header followed by the message line; drop both when benign.
-        if (line.startsWith("Warning in ") && i + 1 < lines.size && isBenignDexWarning(lines[i + 1])) {
-            suppressed++; i += 2; continue
+        val skip = when {
+            line.startsWith("Warning in ") && i + 1 < lines.size && isBenignDexWarning(lines[i + 1]) -> 2
+            isBenignDexWarning(line) -> 1
+            else -> 0
         }
-        if (isBenignDexWarning(line)) { suppressed++; i++; continue }
-        out.add(line); i++
+        if (skip == 0) { out.add(line); i++; continue }
+        suppressed++; i += skip
+        // A multi-line warning ("Methods with invalid locals information:") lists its methods indented below it.
+        while (i < lines.size && lines[i].isNotEmpty() && lines[i][0].isWhitespace()) i++
     }
-    if (suppressed > 0) out.add("($suppressed D8 desugaring warning(s) suppressed — library APIs needing a higher min-api; benign)")
+    if (suppressed > 0) out.add("($suppressed benign D8 warning(s) hidden: library code needing a higher min-api, types the app doesn't contain, or Kotlin inliner debug info)")
     return out
 }
 
@@ -108,6 +124,8 @@ internal class DexDiagnosticsCollector : DiagnosticsHandler {
     private fun record(severity: ToolSeverity, prefix: String, d: Diagnostic) {
         val message = d.diagnosticMessage.orEmpty()
         log.add("$prefix: $message")
+        // Benign warnings stay in [log] (where [DexDiagnostics.humanize] counts them) but are not Problems.
+        if (severity != ToolSeverity.ERROR && isBenignDexWarning(message)) return
         val position = d.position as? TextPosition
         diagnostics.add(
             ToolDiagnostic(
