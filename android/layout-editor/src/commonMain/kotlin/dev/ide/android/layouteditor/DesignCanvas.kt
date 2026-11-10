@@ -192,7 +192,12 @@ internal fun DesignCanvas(
     val accent = MaterialTheme.colorScheme.primary
     val dot = MaterialTheme.colorScheme.outlineVariant
     val handleFill = MaterialTheme.colorScheme.surface
-    val selectedNode = remember(tree, selected) { if (tree != null && selected != null) nodeFor(tree, selected) else null }
+    // A view just dropped is selected before any frame has it; until one does, its ghost is where it is, and
+    // mapping it into the old frame would outline whatever view used to start at its place in the text.
+    val ghostSelected = state.ghost?.let { it.becomes == state.selection } == true
+    val selectedNode = remember(tree, selected, ghostSelected) {
+        if (tree != null && selected != null && !ghostSelected) nodeFor(tree, selected) else null
+    }
     val parentNode = remember(tree, selected) {
         val p = selected?.parent
         if (tree != null && p != null) nodeFor(tree, p) else null
