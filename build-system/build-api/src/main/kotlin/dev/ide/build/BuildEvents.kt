@@ -1,6 +1,7 @@
 package dev.ide.build
 
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 
 /**
  * Build and run lifecycle events, published by the IDE on the application message bus.
@@ -15,8 +16,12 @@ import dev.ide.platform.Topic
  * listener that touches the UI must marshal.
  */
 object BuildTopics {
-    val BUILD: Topic<BuildEventListener> = Topic("ide.build", BuildEventListener::class.java)
-    val RUN: Topic<RunEventListener> = Topic("ide.run", RunEventListener::class.java)
+    val BUILD: Topic<BuildEventListener> = Topic("ide.build") { listeners ->
+        BuildEventListener { event -> deliverToAll(listeners) { it.onBuildEvent(event) } }
+    }
+    val RUN: Topic<RunEventListener> = Topic("ide.run") { listeners ->
+        RunEventListener { event -> deliverToAll(listeners) { it.onRunEvent(event) } }
+    }
 }
 
 /** A build's lifecycle: a compile or assemble, including the compile half of a run. */

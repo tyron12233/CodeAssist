@@ -20,7 +20,17 @@ import java.lang.reflect.Proxy
  * ```
  *
  * Listener methods are expected to return `void`/`Unit`.
+ *
+ * It is also unsafe under R8: the proxy needs [listenerType] to still be an interface at runtime, and R8
+ * merges an interface with a single implementation into that implementation. `SettingsTopics.CHANGES`
+ * declared this way crashed the release build on the first settings toggle ("... is not an interface",
+ * #1758), because its only implementation was one lambda. The explicit fan-out has no such dependency,
+ * which is why every topic in the IDE uses it.
  */
+@Deprecated(
+    "The proxy fan-out breaks once R8 merges the listener interface into its only implementation. " +
+        "Name the fan-out: Topic(name) { listeners -> L { e -> deliverToAll(listeners) { it.call(e) } } }",
+)
 @Suppress("FunctionName", "UNCHECKED_CAST")
 fun <L : Any> Topic(name: String, listenerType: Class<L>): Topic<L> = Topic(name) { listeners ->
     val handler = InvocationHandler { proxy, method, args ->

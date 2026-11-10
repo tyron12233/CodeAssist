@@ -4,6 +4,7 @@
 package dev.ide.plugin.editor
 
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 
 /**
  * Editor-session transitions, on the application message bus.
@@ -22,7 +23,9 @@ import dev.ide.platform.Topic
  * come from the UI side rather than from an engine worker, so a listener must not block on the call.
  */
 object EditorTopics {
-    val EDITOR: Topic<EditorEventListener> = Topic("ide.editor", EditorEventListener::class.java)
+    val EDITOR: Topic<EditorEventListener> = Topic("ide.editor") { listeners ->
+        EditorEventListener { event -> deliverToAll(listeners) { it.onEditorEvent(event) } }
+    }
 }
 
 /** An editor-session transition. Paths are workspace paths; offsets index the editor's current text. */

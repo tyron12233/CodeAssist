@@ -7,6 +7,7 @@ import dev.ide.platform.Disposable
 import dev.ide.platform.ExtensionPoint
 import dev.ide.platform.PluginId
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,7 +37,7 @@ class PlatformCoreTest {
             assertEquals(listOf("java-lib"), platform.extensions.extensions(ep).map { it.id() })
 
             // 2) a listener subscribes and receives a published event
-            val topic = Topic("platform.builds", BuildListener::class.java)
+            val topic = Topic<BuildListener>("platform.builds") { ls -> BuildListener { m -> deliverToAll(ls) { it.onBuilt(m) } } }
             val built = CopyOnWriteArrayList<String>()
             platform.messageBus.connect().subscribe(topic, BuildListener { built.add(it) })
             platform.messageBus.syncPublisher(topic).onBuilt("app")

@@ -1,6 +1,7 @@
 package dev.ide.index
 
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 
 /**
  * Index build progress, on the application message bus.
@@ -20,7 +21,9 @@ import dev.ide.platform.Topic
  * indexing worker rather than the UI thread.
  */
 object IndexTopics {
-    val INDEXING: Topic<IndexEventListener> = Topic("ide.indexing", IndexEventListener::class.java)
+    val INDEXING: Topic<IndexEventListener> = Topic("ide.indexing") { listeners ->
+        IndexEventListener { event -> deliverToAll(listeners) { it.onIndexEvent(event) } }
+    }
 }
 
 /** Indexing progress. [Finished] carries the terminal [IndexStatus], whose `ready` flag distinguishes a

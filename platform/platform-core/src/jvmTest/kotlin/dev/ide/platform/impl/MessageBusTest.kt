@@ -16,6 +16,7 @@ class MessageBusTest {
         fun inc(by: Int)
     }
 
+    @Suppress("DEPRECATION") // covers the JVM compat factory itself
     private val topic = Topic("test.counter", Counter::class.java)
 
     @Test

@@ -2,6 +2,7 @@ package dev.ide.plugin.impl
 
 import dev.ide.platform.PluginId
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 import dev.ide.platform.impl.ExtensionRegistryImpl
 import dev.ide.platform.impl.MessageBusImpl
 import dev.ide.platform.log.Log
@@ -17,7 +18,9 @@ fun interface TestEventListener {
     fun onEvent(value: String)
 }
 
-private val TEST_TOPIC = Topic("test.plugin.events", TestEventListener::class.java)
+private val TEST_TOPIC = Topic<TestEventListener>("test.plugin.events") { ls ->
+    TestEventListener { v -> deliverToAll(ls) { it.onEvent(v) } }
+}
 
 /** The bus + logger surface added to [PluginRegistration]: a plugin can subscribe (tracked for unload) and
  *  publish on its own topic, and get a logger attributed to its id. */

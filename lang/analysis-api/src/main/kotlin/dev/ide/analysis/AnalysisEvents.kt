@@ -1,6 +1,7 @@
 package dev.ide.analysis
 
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 
 /**
  * The analysis pipeline's published-diagnostics event, on the application message bus.
@@ -16,7 +17,9 @@ import dev.ide.platform.Topic
  * a file can produce many events while it is being edited.
  */
 object AnalysisTopics {
-    val ANALYSIS: Topic<AnalysisEventListener> = Topic("ide.analysis", AnalysisEventListener::class.java)
+    val ANALYSIS: Topic<AnalysisEventListener> = Topic("ide.analysis") { listeners ->
+        AnalysisEventListener { event -> deliverToAll(listeners) { it.onAnalysisEvent(event) } }
+    }
 }
 
 /** A file's merged diagnostics were (re)published by the analysis pipeline. [path] is a workspace path. */

@@ -1,6 +1,7 @@
 package dev.ide.core.settings
 
 import dev.ide.platform.Topic
+import dev.ide.platform.deliverToAll
 
 /**
  * A settings value changed (a generic settings-page control, or an engine-level per-project choice like
@@ -24,5 +25,7 @@ fun interface SettingsListener {
 }
 
 object SettingsTopics {
-    val CHANGES: Topic<SettingsListener> = Topic("settings.changes", SettingsListener::class.java)
+    val CHANGES: Topic<SettingsListener> = Topic("settings.changes") { listeners ->
+        SettingsListener { events -> deliverToAll(listeners) { it.onSettingsChanged(events) } }
+    }
 }

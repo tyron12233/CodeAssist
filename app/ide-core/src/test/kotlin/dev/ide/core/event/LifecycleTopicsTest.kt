@@ -8,6 +8,9 @@ import dev.ide.build.BuildEventListener
 import dev.ide.build.BuildTopics
 import dev.ide.build.RunEvent
 import dev.ide.build.RunEventListener
+import dev.ide.core.settings.SettingChanged
+import dev.ide.core.settings.SettingsListener
+import dev.ide.core.settings.SettingsTopics
 import dev.ide.index.IndexEvent
 import dev.ide.index.IndexEventListener
 import dev.ide.index.IndexStatus
@@ -24,10 +27,30 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Round-trips each plugin-facing lifecycle topic over a real bus: the sealed payloads and the
- *  `fun interface` listeners must proxy correctly (this is what the engine/backend publish sites drive).
+ *  `fun interface` listeners must fan out correctly (this is what the engine/backend publish sites drive).
  *  The topics themselves live in the api module that owns each payload, so a plugin outside this build can
  *  name them; this module is their only publisher. */
 class LifecycleTopicsTest {
+
+    /** #1758: the settings topic was the one declared over a reflective proxy, and every toggle crashed
+     *  once R8 merged its only listener into the interface. Publishing reaches every subscriber, and one
+     *  that throws doesn't stop delivery to the next. */
+    @Test
+    fun `settings topic fans out to every subscriber`() {
+        val bus = MessageBusImpl()
+        val got = mutableListOf<String>()
+        val conn = bus.connect()
+        conn.subscribe(SettingsTopics.CHANGES, SettingsListener { error("first listener fails") })
+        conn.subscribe(SettingsTopics.CHANGES, SettingsListener { events -> events.mapTo(got) { it.key } })
+
+        val failure = runCatching {
+            bus.syncPublisher(SettingsTopics.CHANGES)
+                .onSettingsChanged(listOf(SettingChanged("agent", "mcpServer", projectScoped = false)))
+        }.exceptionOrNull()
+
+        assertEquals(listOf("mcpServer"), got)
+        assertEquals("first listener fails", failure?.message)
+    }
 
     @Test
     fun `editor topic delivers events in order`() {
