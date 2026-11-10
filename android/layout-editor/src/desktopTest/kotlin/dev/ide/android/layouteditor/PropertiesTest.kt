@@ -78,4 +78,23 @@ class PropertiesTest {
         assertTrue(crop.width >= 100f && crop.height >= 50f)
         assertEquals("16dp", dp(16f)); assertEquals("0.5", dp(0.5f, "")); assertEquals(12f, dpNumber("12sp"))
     }
+
+    @Test
+    fun aDraftShowsItsEditsAndWritesNothingUntilFlushed() {
+        val e = el("""android:text="Hi" android:layout_margin="8dp"""")
+        val written = ArrayList<Pair<String, String?>>()
+        val pc = PropertyContext(e, emptyMap(), true, { written += it }, { _, _, _ -> error("unused") }, { emptyList() }, { emptyList() })
+        val draft = HashMap<String, String?>()
+        val d = pc.draftOf(draft)
+
+        d.set("android:text", "Hello")
+        d.write(boxWrites(d::value, BOX_MARGIN, BoxValues("16dp", "16dp", "16dp", "16dp")))
+
+        assertTrue(written.isEmpty(), "a draft wrote to the buffer: $written")
+        assertEquals("Hello", d.value("android:text"))
+        assertEquals("16dp", readBox(d::value, BOX_MARGIN).uniform)
+        // The element itself is untouched.
+        assertEquals("Hi", pc.value("android:text"))
+        assertEquals("8dp", readBox(e, BOX_MARGIN).uniform)
+    }
 }

@@ -38,6 +38,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalDensity
@@ -91,7 +94,19 @@ internal fun PropertyStrip(
     val openSpec = (basic + recent).firstOrNull { it.key == open }
     val shape = RoundedCornerShape(20.dp)
 
-    // The open property's editor, as a dialog over the canvas; its edits show in the render behind it.
+    // The open property's editor, as a dialog over the canvas. Its edits collect in a draft (the editor shows
+    // them) and are written together when it closes: one edit, one render, one undo step, instead of a render
+    // behind the dialog for every value tried.
+    val draft = remember(open) { mutableStateMapOf<String, String?>() }
+    var clearDialogFocus by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun closeEditor() {
+        // A field still being typed in commits when it loses focus: into the draft, before it is written.
+        clearDialogFocus?.invoke()
+        val key = open
+        val writes = draft.entries.filter { (name, value) -> pc.value(name) != value }.map { it.key to it.value }
+        open = null
+        if (writes.isNotEmpty() && key != null) pc.recording(key).write(writes)
+    }
     if (openSpec != null) {
         EditorDialog(
             glyph = openSpec.glyph,
@@ -100,9 +115,11 @@ internal fun PropertyStrip(
             attribute = openSpec.writeAttribute(pc::accepts).takeIf {
                 openSpec.attributes.size == 1 || openSpec.editor == PropertyEditor.IMAGE || openSpec.editor == PropertyEditor.COLOR
             },
-            onDismiss = { open = null },
+            onDismiss = ::closeEditor,
         ) {
-            PropertyEditorBody(openSpec, pc.recording(openSpec.key))
+            val focus = LocalFocusManager.current
+            SideEffect { clearDialogFocus = { focus.clearFocus(force = true) } }
+            PropertyEditorBody(openSpec, pc.draftOf(draft))
         }
     }
 

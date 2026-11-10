@@ -73,10 +73,23 @@ internal class PropertyContext(
     val complete: suspend (attribute: String, field: String, caret: Int) -> LayoutValueCompletion,
     val resources: suspend (type: String) -> List<LayoutResource>,
     val themeColors: suspend () -> List<LayoutResource>,
+    /** An attribute's value as the editor should show it: the element's, or a draft's ([draftOf]). */
+    val lookup: (String) -> String? = { element.attribute(it)?.value },
 ) {
-    fun accepts(name: String): Boolean = name in catalog || element.attribute(name) != null
-    fun value(name: String): String? = element.attribute(name)?.value
+    fun accepts(name: String): Boolean = name in catalog || lookup(name) != null
+    fun value(name: String): String? = lookup(name)
     fun set(name: String, value: String?) = write(listOf(name to value))
+
+    /**
+     * This context with its writes going to [draft] instead of the buffer, and its values read through it: a
+     * dialog's edits collect there and are written together when it closes.
+     */
+    fun draftOf(draft: MutableMap<String, String?>): PropertyContext = PropertyContext(
+        element, catalog, canEdit,
+        write = { writes -> for ((k, v) in writes) draft[k] = v },
+        complete = complete, resources = resources, themeColors = themeColors,
+        lookup = { name -> if (name in draft) draft[name] else lookup(name) },
+    )
 }
 
 /** The editor for [spec], sized for the strip's editor area. */
@@ -149,13 +162,13 @@ private enum class Side { Start, Top, End, Bottom }
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BoxEditor(box: BoxAttributes, pc: PropertyContext) {
-    val current = readBox(pc.element, box)
+    val current = readBox(pc::value, box)
     var picked by remember { mutableStateOf(Side.entries.toSet()) }
     fun valueOf(s: Side) = when (s) { Side.Start -> current.start; Side.Top -> current.top; Side.End -> current.end; Side.Bottom -> current.bottom }
     fun apply(value: String?) {
         fun pick(s: Side) = if (s in picked) value else valueOf(s)
         val next = BoxValues(pick(Side.Start), pick(Side.Top), pick(Side.End), pick(Side.Bottom))
-        pc.write(boxWrites(pc.element, box, next))
+        pc.write(boxWrites(pc::value, box, next))
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // The diagram: four side buttons around the view.

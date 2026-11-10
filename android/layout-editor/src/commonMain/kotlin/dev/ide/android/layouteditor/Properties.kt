@@ -116,8 +116,11 @@ internal data class BoxValues(val start: String?, val top: String?, val end: Str
     val isEmpty: Boolean get() = start == null && top == null && end == null && bottom == null
 }
 
-internal fun readBox(element: LayoutElement, box: BoxAttributes): BoxValues {
-    fun v(name: String) = element.attribute(name)?.value?.takeIf { it.isNotBlank() }
+internal fun readBox(element: LayoutElement, box: BoxAttributes): BoxValues = readBox({ element.attribute(it)?.value }, box)
+
+/** [readBox] over values read by [value] (an element's, or a dialog's draft over them). */
+internal fun readBox(value: (String) -> String?, box: BoxAttributes): BoxValues {
+    fun v(name: String) = value(name)?.takeIf { it.isNotBlank() }
     val all = v(box.shorthand)
     val h = v(box.horizontal) ?: all
     val vert = v(box.vertical) ?: all
@@ -134,7 +137,11 @@ internal fun readBox(element: LayoutElement, box: BoxAttributes): BoxValues {
  * longhand removed), else the four sides (and the shorthand forms removed). Null means remove. Only attributes
  * that change are returned; a pair `(name, null)` is a removal.
  */
-internal fun boxWrites(element: LayoutElement, box: BoxAttributes, next: BoxValues): List<Pair<String, String?>> {
+internal fun boxWrites(element: LayoutElement, box: BoxAttributes, next: BoxValues): List<Pair<String, String?>> =
+    boxWrites({ element.attribute(it)?.value }, box, next)
+
+/** [boxWrites] against values read by [current] (an element's, or a dialog's draft over them). */
+internal fun boxWrites(current: (String) -> String?, box: BoxAttributes, next: BoxValues): List<Pair<String, String?>> {
     val target = LinkedHashMap<String, String?>()
     val uniform = next.uniform
     if (next.isEmpty) {
@@ -151,7 +158,7 @@ internal fun boxWrites(element: LayoutElement, box: BoxAttributes, next: BoxValu
         target[box.end] = next.end
         target[box.bottom] = next.bottom
     }
-    return target.filter { (name, value) -> element.attribute(name)?.value != value }.map { it.key to it.value }
+    return target.filter { (name, value) -> current(name) != value }.map { it.key to it.value }
 }
 
 /** `16dp` → 16; null for anything that is not a plain dp/sp/px number (a `@dimen/` reference). */
