@@ -115,7 +115,8 @@ class DesignerSnapshotTest {
         override suspend fun removeAttribute(path: String, text: String, element: ElementRef, attribute: String) = emptyList<LayoutEdit>()
         override suspend fun resources(path: String, type: String) = when (type) {
             "string" -> listOf(dev.ide.android.layout.LayoutResource("string", "sign_in", "@string/sign_in", value = "Sign in"))
-            "color" -> listOf(0xFF6750A4, 0xFF625B71, 0xFFB3261E).mapIndexed { i, c -> dev.ide.android.layout.LayoutResource("color", "brand_$i", "@color/brand_$i", argb = c.toInt()) }
+            "color" -> listOf(0xFF6750A4, 0xFF625B71, 0xFFB3261E).mapIndexed { i, c -> dev.ide.android.layout.LayoutResource("color", "brand_$i", "@color/brand_$i", argb = c.toInt()) } +
+                (0 until 40).map { i -> dev.ide.android.layout.LayoutResource("color", "abc_lib_$i", "@color/abc_lib_$i", argb = null, library = true) }
             else -> emptyList()
         }
         override suspend fun viewClasses(path: String) = listOf(
@@ -151,11 +152,11 @@ class DesignerSnapshotTest {
         }
     }
 
-    private fun snap(name: String, wDp: Int, hDp: Int, dark: Boolean, ctx: EditorPreviewContext, taps: List<Offset> = emptyList()): File {
+    private fun snap(name: String, wDp: Int, hDp: Int, dark: Boolean, ctx: EditorPreviewContext, taps: List<Offset> = emptyList(), select: SelectionKey? = null): File {
         val density = 2f
         val scene = ImageComposeScene(wDp * 2, hDp * 2, Density(density)) {
             MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Color(0xFF80D5D4), primaryContainer = Color(0xFF00504F), secondaryContainer = Color(0xFF324B4B)) else lightColorScheme()) {
-                LayoutDesigner(ctx)
+                LayoutDesigner(ctx, initialSelection = select)
             }
         }
         var t = 0L
@@ -174,10 +175,13 @@ class DesignerSnapshotTest {
         return file
     }
 
+    /** The sign-in button, selected from the start (in Preview mode the caret does not select). */
+    private val BUTTON = SelectionKey("btn_sign_in", emptyList())
+
     @Test
     fun phoneWithASelection() {
         val caret = xml.indexOf("<Button")
-        val f = snap("phone-selected", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret))
+        val f = snap("phone-selected", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON)
         assertTrue(f.length() > 0)
     }
 
@@ -185,14 +189,14 @@ class DesignerSnapshotTest {
     fun phoneWithTheAttributesSheet() {
         val caret = xml.indexOf("<Button")
         // The Attributes button on the bottom toolbar: 16dp inset, 6dp padding, the second 48dp button.
-        val f = snap("phone-attributes", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(98f, 892f - 46f)))
+        val f = snap("phone-attributes", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(98f, 892f - 46f)))
         assertTrue(f.length() > 0)
     }
 
     @Test
     fun phoneWithTheTreeSheet() {
         val caret = xml.indexOf("<Button")
-        val f = snap("phone-tree", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(46f, 892f - 46f)))
+        val f = snap("phone-tree", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(46f, 892f - 46f)))
         assertTrue(f.length() > 0)
     }
 
@@ -200,14 +204,14 @@ class DesignerSnapshotTest {
     fun phoneStripWithTheSizeEditor() {
         val caret = xml.indexOf("<Button")
         // The strip's third tile (Enabled) is at 20 + 2 * 120 + 56; Size starts past the edge, so open Enabled's neighbour.
-        val f = snap("phone-dialog-enabled", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(316f, 892f - 66f)))
+        val f = snap("phone-dialog-enabled", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(316f, 892f - 66f)))
         assertTrue(f.length() > 0)
     }
 
     @Test
     fun phoneStripWithTheColorEditor() {
         val caret = xml.indexOf("<Button")
-        val f = snap("phone-dialog-color", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(196f, 892f - 66f)))
+        val f = snap("phone-dialog-color", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(196f, 892f - 66f)))
         assertTrue(f.length() > 0)
     }
 
@@ -221,7 +225,7 @@ class DesignerSnapshotTest {
     @Test
     fun phoneWithTheRootSelected() {
         // The root fills the screen: its action bar has no room above or below and sits at the visible bottom.
-        val f = snap("phone-root", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = 5))
+        val f = snap("phone-root", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = 5), select = SelectionKey(null, emptyList()))
         assertTrue(f.length() > 0)
     }
 

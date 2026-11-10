@@ -220,7 +220,7 @@ internal class HostAndroidLayoutModel(
 
     override suspend fun resources(path: String, type: String): List<dev.ide.android.layout.LayoutResource> =
         ctx.background("layoutResources") { services.layoutResources(Paths.get(path), type) }.orEmpty().map {
-            dev.ide.android.layout.LayoutResource(type, it.name, "@$type/${it.name}", it.value, it.file, it.argb)
+            dev.ide.android.layout.LayoutResource(type, it.name, "@$type/${it.name}", it.value, it.file, it.argb, library = it.library)
         }
 
     override suspend fun themeColors(path: String): List<dev.ide.android.layout.LayoutResource> =

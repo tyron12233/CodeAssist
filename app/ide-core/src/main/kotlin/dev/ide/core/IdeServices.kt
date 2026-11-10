@@ -4952,7 +4952,7 @@ class IdeServices private constructor(
     }
 
     /** One resource for the layout services: its name, default-config value or file, and resolved color. */
-    internal class LayoutResourceInfo(val name: String, val value: String?, val file: String?, val argb: Int?)
+    internal class LayoutResourceInfo(val name: String, val value: String?, val file: String?, val argb: Int?, val library: Boolean = false)
 
     /**
      * The module's resources of the R class [rClass] for [file]'s module, default configuration first, with
@@ -4966,13 +4966,17 @@ class IdeServices private constructor(
         val repo = cached?.repo ?: return null
         val theme = manifestThemeAndLabel(module, repo).first
         val values = dev.ide.preview.impl.ProjectPreviewResources(repo, 1f, themeName = theme)
+        // The project's own res dirs (this module and the modules it depends on); anything else came from a library.
+        val own = runCatching { AndroidResources.projectResourceDirs(module, store.workspace) }.getOrDefault(emptyList())
+            .map { it.toAbsolutePath().normalize() }
         return repo.names(type).sorted().map { name ->
             val defs = repo.definitions(type, name)
             val def = defs.firstOrNull { it.qualifier.isEmpty() } ?: defs.first()
             val argb = if (type == ResourceType.COLOR) {
                 (values.resolve("@color/$name", dev.ide.preview.ValueFormat.COLOR) as? dev.ide.preview.ResolvedValue.Color)?.argb
             } else null
-            LayoutResourceInfo(name, def.value, def.source?.toString(), argb)
+            val library = defs.none { d -> d.source?.toAbsolutePath()?.normalize()?.let { src -> own.any { src.startsWith(it) } } == true }
+            LayoutResourceInfo(name, def.value, def.source?.toString(), argb, library)
         }
     }
 

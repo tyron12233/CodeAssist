@@ -76,7 +76,11 @@ private val DOCKED_MIN_WIDTH = 720.dp
  * holds no project state of its own beyond what the user is looking at.
  */
 @Composable
-internal fun LayoutDesigner(ctx: EditorPreviewContext) {
+internal fun LayoutDesigner(
+    ctx: EditorPreviewContext,
+    /** What starts selected; a test seam (the editor selects by caret or tap). */
+    initialSelection: SelectionKey? = null,
+) {
     val renderer = ctx.service(LAYOUT_RENDERER)
     val model = ctx.service(ANDROID_LAYOUT_MODEL)
     if (renderer == null || model == null) {
@@ -89,13 +93,13 @@ internal fun LayoutDesigner(ctx: EditorPreviewContext) {
         }
         return
     }
-    DesignerSurface(ctx, renderer, model)
+    DesignerSurface(ctx, renderer, model, initialSelection)
 }
 
 @Composable
-private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer, model: AndroidLayoutModel) {
+private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer, model: AndroidLayoutModel, initialSelection: SelectionKey?) {
     val path = ctx.path
-    val state = remember(path) { DesignerState.forPath(path) }
+    val state = remember(path) { DesignerState.forPath(path).also { it.selection = initialSelection } }
     val scope = rememberCoroutineScope()
     val currentCtx by rememberUpdatedState(ctx)
 

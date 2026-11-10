@@ -116,4 +116,6 @@
     <string name="le_compact_problems">Render problems (%1$d)</string>
     <string name="le_compact_resource_errors">Resource errors (%1$d)</string>
     <string name="le_compact_prepare">Prepare libraries</string>
+    <string name="le_res_library_colors">Library colors (%1$d)</string>
+    <string name="le_res_library_images">Library images (%1$d)</string>
 </resources>

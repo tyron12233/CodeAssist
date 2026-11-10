@@ -326,7 +326,12 @@ private fun TextEditor(attr: String, pc: PropertyContext) {
     }
 }
 
-/** Colors: the theme's roles first (they follow dark mode), then the project's color resources, then any value. */
+/**
+ * Colors. The value comes first (the swatch and the field: typing one is the quickest way to any color, and a
+ * long list must not push it out of reach), then the theme's roles (they follow dark mode), then the project's
+ * own color resources. A library's colors (AppCompat's `abc_*` and the like, which outnumber a project's many
+ * times over) stay folded away until asked for. The lists scroll inside a bounded height.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ColorPicker(attr: String, pc: PropertyContext) {
@@ -337,19 +342,13 @@ private fun ColorPicker(attr: String, pc: PropertyContext) {
         theme = runCatching { pc.themeColors() }.getOrDefault(emptyList())
         colors = runCatching { pc.resources("color") }.getOrDefault(emptyList())
     }
+    var query by remember { mutableStateOf("") }
+    var showLibrary by remember { mutableStateOf(false) }
+    val q = query.trim().lowercase()
+    fun matches(c: LayoutResource) = q.isEmpty() || c.name.lowercase().contains(q)
+    val own = colors.filter { !it.library && matches(it) }
+    val library = colors.filter { it.library }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (theme.isNotEmpty()) {
-            SectionLabel(stringResource(Res.string.le_res_theme_colors))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (c in theme) Swatch(c, selected = v == c.reference || v == "?${c.name}", enabled = pc.canEdit) { pc.set(attr, c.reference) }
-            }
-        }
-        if (colors.isNotEmpty()) {
-            SectionLabel(stringResource(Res.string.le_res_colors))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (c in colors) Swatch(c, selected = v == c.reference, enabled = pc.canEdit) { pc.set(attr, c.reference) }
-            }
-        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
                 Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(parseHexColor(v.orEmpty()) ?: MaterialTheme.colorScheme.surfaceContainerHighest)
@@ -360,6 +359,46 @@ private fun ColorPicker(attr: String, pc: PropertyContext) {
             }
             if (v != null) ChoiceChip(stringResource(Res.string.le_attr_unset), selected = false, enabled = pc.canEdit) { pc.set(attr, null) }
         }
+        if (theme.isNotEmpty()) {
+            SectionLabel(stringResource(Res.string.le_res_theme_colors))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (c in theme) Swatch(c, selected = v == c.reference || v == "?${c.name}", enabled = pc.canEdit) { pc.set(attr, c.reference) }
+            }
+        }
+        if (colors.count { !it.library } + (if (showLibrary) library.size else 0) > 12) {
+            SearchField(query, { query = it }, stringResource(Res.string.le_res_search))
+        }
+        if (own.isNotEmpty()) {
+            SectionLabel(stringResource(Res.string.le_res_colors))
+            SwatchGrid(own, v, pc.canEdit) { pc.set(attr, it.reference) }
+        }
+        if (library.isNotEmpty()) {
+            FoldHeader(stringResource(Res.string.le_res_library_colors, library.size), showLibrary) { showLibrary = !showLibrary }
+            if (showLibrary) SwatchGrid(library.filter(::matches), v, pc.canEdit) { pc.set(attr, it.reference) }
+        }
+    }
+}
+
+/** Color swatches in a grid that scrolls within a bounded height, so a long list never buries what follows. */
+@Composable
+private fun SwatchGrid(colors: List<LayoutResource>, value: String?, enabled: Boolean, onPick: (LayoutResource) -> Unit) {
+    LazyVerticalGrid(
+        GridCells.Adaptive(64.dp), Modifier.heightIn(max = 216.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(colors, key = { it.reference }) { c -> Swatch(c, selected = value == c.reference, enabled = enabled) { onPick(c) } }
+    }
+}
+
+/** A section that opens and closes: its title (with a count) and a chevron. */
+@Composable
+private fun FoldHeader(title: String, open: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onToggle).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) { SectionLabel(title) }
+        Symbol(if (open) Sym.expandMore else Sym.chevronRight, null, size = 20.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -389,6 +428,7 @@ private fun ImagePicker(attr: String, pc: PropertyContext) {
         images = runCatching { pc.resources("drawable") + pc.resources("mipmap") }.getOrDefault(emptyList())
     }
     var query by remember { mutableStateOf("") }
+    var showLibrary by remember { mutableStateOf(false) }
     val list = images
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (list == null) {
@@ -398,10 +438,17 @@ private fun ImagePicker(attr: String, pc: PropertyContext) {
         if (list.isEmpty()) {
             Text(stringResource(Res.string.le_res_no_images), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (list.size > 8) SearchField(query, { query = it }, stringResource(Res.string.le_res_search))
+        // The project's own images; a library's (often hundreds) stay folded away until asked for.
+        val ownImages = list.filter { !it.library }
+        val libraryImages = list.filter { it.library }
+        if (ownImages.size + (if (showLibrary) libraryImages.size else 0) > 8) SearchField(query, { query = it }, stringResource(Res.string.le_res_search))
         val q = query.trim().lowercase()
+        val shown = (ownImages + if (showLibrary) libraryImages else emptyList()).filter { q.isEmpty() || it.name.lowercase().contains(q) }
+        if (libraryImages.isNotEmpty()) {
+            FoldHeader(stringResource(Res.string.le_res_library_images, libraryImages.size), showLibrary) { showLibrary = !showLibrary }
+        }
         LazyVerticalGrid(GridCells.Adaptive(76.dp), Modifier.heightIn(max = 260.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(list.filter { q.isEmpty() || it.name.lowercase().contains(q) }, key = { it.reference }) { r ->
+            items(shown, key = { it.reference }) { r ->
                 val on = v == r.reference
                 Column(
                     Modifier.clip(RoundedCornerShape(14.dp))

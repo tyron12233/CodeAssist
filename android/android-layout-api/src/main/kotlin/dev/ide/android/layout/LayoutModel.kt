@@ -100,6 +100,8 @@ class LayoutResource(
     val value: String? = null,
     val file: String? = null,
     val argb: Int? = null,
+    /** Defined by a library the project depends on (AppCompat's `abc_*`), not by the project itself. */
+    val library: Boolean = false,
 )
 
 /** The project's layout model. See [AndroidLayoutModel]. */
