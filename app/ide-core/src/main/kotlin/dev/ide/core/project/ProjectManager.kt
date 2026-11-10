@@ -1250,6 +1250,10 @@ class ProjectManager private constructor(
             appLogChannel: AppLogChannel? = null,
             /** Whether app-log forwarding is enabled (the "Forward app logs" setting; read per build). Default on. */
             appLogEnabledProvider: () -> Boolean = { true },
+            /** Where debug builds download pre-dexed libraries from (read per build); null = off. */
+            dexPackUrlProvider: () -> String? = { dev.ide.android.support.pack.LibraryPack.DEFAULT_BASE_URL },
+            /** The app's pre-dexed bundled jars, by name (see [AndroidDeviceTools.predexedJars]). */
+            predexedJars: Map<String, Path> = emptyMap(),
             /** The host's installed-plugin sources (on device: the installed plugin APKs). */
             pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
             /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
@@ -1272,7 +1276,8 @@ class ProjectManager private constructor(
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,
-                mergeChunkProvider = mergeChunkProvider, appLogRuntimeJar = appLogRuntimeJar, appLogEnabled = appLogEnabledProvider)
+                mergeChunkProvider = mergeChunkProvider, appLogRuntimeJar = appLogRuntimeJar, appLogEnabled = appLogEnabledProvider,
+                dexPackUrl = dexPackUrlProvider, predexedJars = predexedJars)
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,

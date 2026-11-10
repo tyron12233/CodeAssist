@@ -463,7 +463,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
     private fun toUiPage(page: SettingsPage): UiSettingsPage {
         val project = page.scope == SettingsScope.PROJECT
         val controls =
-            if (page.id == BuiltInSettingsPages.BUILD_RUNTIME) buildRuntimeControls()
+            if (page.id == BuiltInSettingsPages.BUILD_RUNTIME) buildRuntimeControls(page)
             else page.controls().map { toUiControl(page.id, it, project) }
         return UiSettingsPage(
             id = page.id,
@@ -483,9 +483,17 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
      * (measured once in the background by the host): null = not yet measured, 0 = forking unavailable here.
      */
     private val R8_MIN_MB = 768
+
+    /** Build Runtime keys [buildRuntimeControls] renders itself (or hides on purpose, like the R8 heap in
+     *  In-process mode), so their static descriptors are never listed on top. */
+    private val DYNAMIC_BUILD_RUNTIME_KEYS = setOf(
+        BuiltInSettingsPages.SEPARATE_PROCESS, BuiltInSettingsPages.BUILD_NOTIFICATIONS,
+        BuiltInSettingsPages.R8_MODE, BuiltInSettingsPages.R8_MAX_HEAP,
+        BuiltInSettingsPages.DEX_OFFHEAP_MB, BuiltInSettingsPages.DEX_MERGE_BATCH, BuiltInSettingsPages.DEX_FORK_CONCURRENCY,
+    )
     private val FALLBACK_R8_MAX_MB = 2048 // slider max before the device limit has been measured
 
-    private fun buildRuntimeControls(): List<UiSettingControl> {
+    private fun buildRuntimeControls(page: SettingsPage): List<UiSettingControl> {
         val pid = BuiltInSettingsPages.BUILD_RUNTIME
         val appHeapMb = (Runtime.getRuntime().maxMemory() / (1024L * 1024L)).toInt()
         val ceiling = ctx.manager?.preference(BuiltInSettingsPages.R8_CEILING_PREF)?.trim()?.toIntOrNull()
@@ -577,6 +585,13 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             BuiltInSettingsPages.DEX_FORK_CONCURRENCY, "Max concurrent dex forks",
             forkConcDesc, forkConc, 0, 4, 1, null, true, dexGroup,
         )
+        // Every other control the page declares (low memory mode, prebuilt libraries, app-log forwarding, the
+        // Kotlin compiler VM) renders from its descriptor. Before, only the dynamic controls above were listed,
+        // so those settings were read by the app but couldn't be seen or changed. They all act on the device's
+        // own build, so a host without one (desktop) doesn't list them.
+        if (ctx.separateProcessBuildsSupported) {
+            page.controls().filter { it.key !in DYNAMIC_BUILD_RUNTIME_KEYS }.forEach { out += toUiControl(pid, it, project = false) }
+        }
         return out
     }
 

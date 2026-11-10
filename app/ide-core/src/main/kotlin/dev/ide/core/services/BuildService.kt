@@ -272,6 +272,19 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                     }
                 },
                 platformFor = platformJarFor,
+                // Libraries we dexed and published ahead of time (signed, one file per library version), so a new
+                // project's first build downloads its Compose/AndroidX dex instead of dexing ~70 jars on the phone.
+                // The jars the IDE adds to every user app itself (no Maven coordinate) come pre-dexed in the APK;
+                // everything else is looked up in the repository.
+                dexPack = dev.ide.android.support.pack.DexPackSource.chain(
+                    dev.ide.android.support.pack.BundledDex(
+                        listOfNotNull(
+                            BundledKotlinStdlib.jar()?.let { j -> t.predexedJars["kotlin-stdlib"]?.let { j to it } },
+                            t.appLogRuntimeJar?.let { j -> t.predexedJars["applog-runtime"]?.let { j to it } },
+                        ).toMap(),
+                    ),
+                    dev.ide.android.support.pack.DexRepository.at(t.dexPackUrl),
+                ),
             )
         }
         val installed = BundledAndroidToolchain.installed()
