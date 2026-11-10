@@ -124,11 +124,20 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     // Whether a render is pending or in flight, reported to the host so a frame is only taken once drawn.
     var pending by remember(path) { mutableStateOf(true) }
     LaunchedEffect(pending) { currentCtx.reportRendering(pending) }
+    // The designer's own edits since the frame on screen: they render at once (the debounce is for typing), and
+    // the frame they produce animates in from the one before (see Transition.kt). Plain holders, not state:
+    // only the render effect reads them.
+    val designerEdits = remember(path) { ArrayList<List<LayoutEdit>>() }
+    val designerPins = remember(path) { ArrayList<Pin>() }
+    val renderNow = remember(path) { BooleanArray(1) }
+    val designerText = remember(path) { arrayOfNulls<String>(1) }
     // What the render reads besides the buffer (compiled project views, prepared libraries): a change renders again.
     val inputs by renderer.inputs.collectAsState()
     LaunchedEffect(path, ctx.text, state.deviceIndex, state.landscape, state.night, renderTick, inputs, state.sharpenTick) {
         pending = true
-        delay(RENDER_DEBOUNCE_MS)
+        val immediate = renderNow[0]
+        renderNow[0] = false
+        if (!immediate) delay(RENDER_DEBOUNCE_MS)
         val request = LayoutRenderRequest(
             path = path,
             text = ctx.text,
@@ -143,7 +152,21 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         if (next == null) return@LaunchedEffect
         resourceErrors = next.resourceErrors
         // Errors in resources keep the last good render behind them: a half-typed edit should not blank it.
-        if (next.resourceErrors.isEmpty() || render == null) render = next
+        if (next.resourceErrors.isEmpty() || render == null) {
+            val before = render
+            // Animate only a frame of exactly what the designer's edits made: typing since then, or a frame that
+            // could not be drawn, just swaps in.
+            if (before?.image != null && next.image != null && designerEdits.isNotEmpty() && request.text == designerText[0]) {
+                state.transition = FrameTransition(
+                    before, next, designerEdits.toList(),
+                    designerPins.toList() + listOfNotNull(state.ghost?.let { Pin(it.rect, it.becomes, fromPicture = false) }),
+                )
+            }
+            render = next
+        }
+        designerEdits.clear()
+        designerPins.clear()
+        state.ghost = null
         rendered = true
         if (!next.librariesNeedPreparing) preparing = false
         problems = next.problems.map { p -> p.tag?.let { "<${it.substringAfterLast('.')}> ${p.message}" } ?: p.message }
@@ -204,6 +227,10 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         if (edits.isEmpty()) return
         // Applying moves the code editor's caret to the first edit; that is not the user pointing at a view.
         lastCaretWrite = edits.minOf { it.start }
+        val before = currentCtx.text
+        designerEdits += edits
+        designerText[0] = edits.sortedByDescending { it.start }.fold(before) { t, e -> t.substring(0, e.start) + e.newText + t.substring(e.end) }
+        renderNow[0] = true
         currentCtx.applyEdits(edits.map { TextReplacement(it.start, it.end, it.newText) })
     }
 
@@ -308,8 +335,10 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     val taken = doc.elements().mapNotNull { it.id }.toSet()
                     val attrs = defaultAttributes(payload.cls.tag, payload.cls.isViewGroup, target, taken, density)
                     val id = attrs.firstOrNull { it.first == "android:id" }?.second?.substringAfter('/')
-                    insertElementEdits(doc, parent, target.index, payload.cls.tag, attrs) to
-                        SelectionKey(id, pathOf(parent) + target.index)
+                    val key = SelectionKey(id, pathOf(parent) + target.index)
+                    // Shown at once where the view will go; the frame that has it replaces it.
+                    state.ghost = Ghost(ghostRect(dropped, null, density), payload.cls.tag, key)
+                    insertElementEdits(doc, parent, target.index, payload.cls.tag, attrs) to key
                 }
                 is DragPayload.Move -> {
                     val el = payload.element.within(doc) ?: return@restructure null
@@ -318,7 +347,14 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     val oldIndex = el.parent?.children?.indexOf(el) ?: 0
                     val newIndex = if (sameParent && oldIndex < target.index) target.index - 1 else target.index
                     // The parent's own path shifts when the element leaves from before it among its siblings.
-                    edits to SelectionKey(el.id, if (el.id == null) pathOf(parent) + newIndex else emptyList())
+                    val key = SelectionKey(el.id, if (el.id == null) pathOf(parent) + newIndex else emptyList())
+                    // The moved view travels from where it was drawn; until its frame lands, it shows where it goes.
+                    render?.root?.let { root -> nodeFor(root, payload.element) }?.let { node ->
+                        val was = node.frameRect()
+                        designerPins += Pin(was, key, fromPicture = true)
+                        state.ghost = Ghost(ghostRect(dropped, was.width to was.height, density), el.tag, key)
+                    }
+                    edits to key
                 }
             }
         }
@@ -344,7 +380,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         }
         val index = after?.let { parent.children.indexOf(it) + 1 } ?: parent.children.size
         val inset = 16f * state.device.density
-        drop(DragPayload.New(cls), DropTarget(parent, index, null, null, inset, inset))
+        drop(DragPayload.New(cls), targetAt(render?.root, parent, index, inset))
     }
 
     var designerOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }

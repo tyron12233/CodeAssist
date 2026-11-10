@@ -60,6 +60,12 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
 
     var selection by mutableStateOf<SelectionKey?>(null)
 
+    /** The view just dropped, drawn where it goes until the frame that has it lands. */
+    var ghost by mutableStateOf<Ghost?>(null)
+
+    /** The step from the last frame to the one a designer edit produced, while the canvas animates it. */
+    var transition by mutableStateOf<FrameTransition?>(null)
+
     /** A view being dragged from the palette or moved, across every surface of the editor. */
     val drag = DragState()
 

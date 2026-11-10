@@ -1,6 +1,14 @@
 package dev.ide.android.layouteditor
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -111,6 +119,31 @@ internal fun DesignCanvas(
     val density = LocalDensity.current
     val obscuredPx = with(density) { obscuredBottom.toPx() }
     val image = remember(render) { render?.image?.toImageBitmap() }
+
+    // ---- From the last frame to this one, when a designer edit made it (see Transition.kt) ------------------
+    val transition = state.transition?.takeIf { it.to === render }
+    val fromImage = remember(transition) { transition?.from?.image?.toImageBitmap() }
+    val motions = remember(transition) {
+        val t = transition ?: return@remember emptyList()
+        val oldRoot = t.from.root ?: return@remember emptyList()
+        val newRoot = t.to.root ?: return@remember emptyList()
+        val matched = HashMap(matchViews(oldRoot, newRoot, t.edits))
+        // A dropped view grows out of its ghost; a moved one travels from where it was drawn.
+        val fromGhost = HashSet<LayoutViewNode>()
+        for (pin in t.pins) {
+            val node = pin.to.resolve(document)?.let { nodeFor(newRoot, it) } ?: continue
+            matched[node] = pin.from
+            if (!pin.fromPicture) fromGhost += node
+        }
+        planMotion(newRoot, matched).map { if (it.node in fromGhost) Motion(it.node, it.from, it.scaled, fromPicture = false) else it }
+    }
+    val progress = remember(transition) { Animatable(if (transition == null) 1f else 0f) }
+    LaunchedEffect(transition) {
+        if (transition == null) return@LaunchedEffect
+        progress.animateTo(1f, tween(TRANSITION_MS, easing = FastOutSlowInEasing))
+        if (state.transition === transition) state.transition = null
+    }
+    val labels = rememberTextMeasurer()
     val tree = render?.root
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val cardW = with(density) { state.wdp.dp.toPx() }
@@ -332,12 +365,20 @@ internal fun DesignCanvas(
                 if (state.blueprint) {
                     tree?.let { drawBlueprint(it, k) }
                 } else if (image != null) {
-                    drawImage(
-                        image,
-                        dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                        filterQuality = FilterQuality.Medium,
-                    )
+                    val t = transition
+                    val from = fromImage
+                    val p = progress.value
+                    if (t != null && from != null && p < 1f) {
+                        drawTransition(from, t.from.widthPx, image, frameW, motions, p, k, accent)
+                    } else {
+                        drawImage(
+                            image,
+                            dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                            filterQuality = FilterQuality.Medium,
+                        )
+                    }
                 }
+                state.ghost?.let { drawGhost(it, k, accent, labels) }
                 parentNode?.let { drawDashed(it.rect(k), accent.copy(alpha = 0.55f), 1.dp.toPx()) }
                 selectedNode?.let { if (drag.payload == null) drawSelection(it.rect(k), accent, handleFill, 1.dp.toPx()) }
                 hover?.let { t -> drawDropTarget(t, k, accent) }
@@ -468,5 +509,64 @@ private fun EmptyLayoutHint(root: LayoutElement, modifier: Modifier) {
             Text(root.simpleName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
             Text(stringResource(Res.string.le_empty_hint), style = MaterialTheme.typography.bodySmall, color = Color(0xFF6B7280))
         }
+    }
+}
+
+/** How long a designer edit's frame takes to arrive from the one before. */
+private const val TRANSITION_MS = 240
+
+/**
+ * One step of a frame transition at [p] (0..1): the new frame with the old one fading out over it, and each
+ * travelling view drawn on top as its piece of the pictures, moving from where it was to where it is and
+ * dissolving from its old pixels into its new ones. Pictures may be drawn smaller than their frames (a render
+ * scale), so pixel rectangles are scaled per picture.
+ */
+private fun DrawScope.drawTransition(
+    from: ImageBitmap, fromFrameW: Int, to: ImageBitmap, toFrameW: Int,
+    motions: List<Motion>, p: Float, k: Float, accent: Color,
+) {
+    val full = IntSize(size.width.roundToInt(), size.height.roundToInt())
+    drawImage(to, dstSize = full, filterQuality = FilterQuality.Medium)
+    drawImage(from, dstSize = full, alpha = 1f - p, filterQuality = FilterQuality.Medium)
+    val sFrom = from.width.toFloat() / fromFrameW.coerceAtLeast(1)
+    val sTo = to.width.toFloat() / toFrameW.coerceAtLeast(1)
+    for (m in motions) {
+        val target = m.node.frameRect()
+        val at = lerp(m.from, target, p)
+        val dstOffset = IntOffset((at.left * k).roundToInt(), (at.top * k).roundToInt())
+        val dstSize = IntSize((at.width * k).roundToInt().coerceAtLeast(1), (at.height * k).roundToInt().coerceAtLeast(1))
+        if (m.fromPicture) {
+            piece(from, m.from, sFrom)?.let { (o, s) -> drawImage(from, o, s, dstOffset, dstSize, filterQuality = FilterQuality.Medium) }
+            piece(to, target, sTo)?.let { (o, s) -> drawImage(to, o, s, dstOffset, dstSize, alpha = p, filterQuality = FilterQuality.Medium) }
+        } else {
+            // Out of a ghost: the ghost's box closes onto the view and fades, and the view comes in at its own size
+            // (stretched to a ghost's typical size it would flash huge), gliding from the ghost's corner.
+            drawRoundRect(accent.copy(alpha = 0.18f * (1f - p)), Offset(dstOffset.x.toFloat(), dstOffset.y.toFloat()),
+                Size(dstSize.width.toFloat(), dstSize.height.toFloat()), CornerRadius(4.dp.toPx()))
+            val own = IntSize((target.width * k).roundToInt().coerceAtLeast(1), (target.height * k).roundToInt().coerceAtLeast(1))
+            piece(to, target, sTo)?.let { (o, s) -> drawImage(to, o, s, dstOffset, own, alpha = p, filterQuality = FilterQuality.Medium) }
+        }
+    }
+}
+
+/** [r] (frame pixels) as a pixel rectangle of [image] drawn at [scale] pixels per frame pixel, or null when empty. */
+private fun piece(image: ImageBitmap, r: Rect, scale: Float): Pair<IntOffset, IntSize>? {
+    val l = (r.left * scale).roundToInt().coerceIn(0, image.width)
+    val t = (r.top * scale).roundToInt().coerceIn(0, image.height)
+    val rr = (r.right * scale).roundToInt().coerceIn(l, image.width)
+    val b = (r.bottom * scale).roundToInt().coerceIn(t, image.height)
+    if (rr - l < 1 || b - t < 1) return null
+    return IntOffset(l, t) to IntSize(rr - l, b - t)
+}
+
+/** A dropped view, where it goes, until the frame that has it lands: a tinted box named for the view. */
+private fun DrawScope.drawGhost(g: Ghost, k: Float, accent: Color, labels: TextMeasurer) {
+    val r = Rect(g.rect.left * k, g.rect.top * k, g.rect.right * k, g.rect.bottom * k)
+    val corner = CornerRadius(4.dp.toPx())
+    drawRoundRect(accent.copy(alpha = 0.18f), r.topLeft, r.size, corner)
+    drawRoundRect(accent, r.topLeft, r.size, corner, style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))))
+    val label = labels.measure(g.tag.substringAfterLast('.'), TextStyle(color = accent, fontSize = 11.sp, fontWeight = FontWeight.Medium))
+    if (label.size.width + 8.dp.toPx() <= r.width && label.size.height <= r.height) {
+        drawText(label, topLeft = Offset(r.left + (r.width - label.size.width) / 2f, r.top + (r.height - label.size.height) / 2f))
     }
 }

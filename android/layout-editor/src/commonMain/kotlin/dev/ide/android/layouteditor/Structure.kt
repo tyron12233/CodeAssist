@@ -97,25 +97,43 @@ internal fun dropTargetAt(
         // The line between the neighbours either side of the insertion point.
         val prev = nodes.lastOrNull { (el, n) -> n != null && parent.children.indexOf(el) < index }?.second
         val next = before?.second
-        line = if (vertical) {
-            val ly = when {
-                prev != null && next != null -> (prev.bottom + next.top) / 2f
-                next != null -> next.top.toFloat()
-                prev != null -> prev.bottom.toFloat()
-                else -> (area.top + area.bottom) / 2f
-            }
-            floatArrayOf(area.left.toFloat(), ly, area.right.toFloat(), ly)
-        } else {
-            val lx = when {
-                prev != null && next != null -> (prev.right + next.left) / 2f
-                next != null -> next.left.toFloat()
-                prev != null -> prev.right.toFloat()
-                else -> (area.left + area.right) / 2f
-            }
-            floatArrayOf(lx, area.top.toFloat(), lx, area.bottom.toFloat())
-        }
+        line = insertionLine(vertical, area, prev, next)
     }
     return DropTarget(parent, index, area, line, x - area.left, y - area.top)
+}
+
+/** The line a view inserted between [prev] and [next] (either may be absent) of a list [area] goes on. */
+private fun insertionLine(vertical: Boolean, area: LayoutViewNode, prev: LayoutViewNode?, next: LayoutViewNode?): FloatArray =
+    if (vertical) {
+        val ly = when {
+            prev != null && next != null -> (prev.bottom + next.top) / 2f
+            next != null -> next.top.toFloat()
+            prev != null -> prev.bottom.toFloat()
+            else -> (area.top + area.bottom) / 2f
+        }
+        floatArrayOf(area.left.toFloat(), ly, area.right.toFloat(), ly)
+    } else {
+        val lx = when {
+            prev != null && next != null -> (prev.right + next.left) / 2f
+            next != null -> next.left.toFloat()
+            prev != null -> prev.right.toFloat()
+            else -> (area.left + area.right) / 2f
+        }
+        floatArrayOf(lx, area.top.toFloat(), lx, area.bottom.toFloat())
+    }
+
+/**
+ * The target for placing a view at [index] in [parent] without a pointer (a palette tap): the same container
+ * bounds and insertion line a drag there would show, from the rendered [root], so the ghost appears where the
+ * view will. [inset] places it in a container that is not a list. Without a render, just the place in the tree.
+ */
+internal fun targetAt(root: LayoutViewNode?, parent: LayoutElement, index: Int, inset: Float): DropTarget {
+    val area = root?.let { nodeFor(it, parent) } ?: return DropTarget(parent, index, null, null, inset, inset)
+    val kind = containerKind(parent)
+    if (kind != ContainerKind.VERTICAL && kind != ContainerKind.HORIZONTAL) return DropTarget(parent, index, area, null, inset, inset)
+    val prev = parent.children.getOrNull(index - 1)?.let { nodeFor(root, it) }
+    val next = parent.children.getOrNull(index)?.let { nodeFor(root, it) }
+    return DropTarget(parent, index, area, insertionLine(kind == ContainerKind.VERTICAL, area, prev, next), inset, inset)
 }
 
 /** A namespace a written attribute may need declared on the root. */
