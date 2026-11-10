@@ -52,6 +52,19 @@ class VmPeerTest {
         assertEquals(Peers.askHeavy(), vm.invokeStatic(PEERS, "askHeavy", "()I"), "reached through real code")
     }
 
+    @Test fun peerOfABacktickNamedClassHasADexLegalName() {
+        // Reported on device: `Space characters in SimpleName 'dev/ide/jvm/peers/..._CsProjectTest_sources are
+        // every cs file, sorted__inlined_sortedBy_1_Peer8' are not allowed prior to DEX version 040`. The peer's
+        // name was the interpreted class name with only '/' and '$' replaced, so a Kotlin backtick function's
+        // space survived and D8 refused the peer below minSdk 30.
+        val shape = vm.invokeStatic(
+            "dev/ide/jvm/kfixtures/KPeerNamesKt", "sources are every file, sorted", "()Ldev/ide/jvm/host/Shape;",
+        ) as Shape
+        assertEquals(400, shape.describe())
+        val simple = shape.javaClass.name.substringAfterLast('.')
+        assertTrue(simple.all { it.isLetterOrDigit() || it == '_' }, "peer name not dex-legal: ${shape.javaClass.name}")
+    }
+
     @Test fun interpretedInterfaceImplPassedToPlatformApi() {
         for (n in listOf(0, 1, 5, 10)) {
             assertEquals(Peers.mapDoubled(n), vm.invokeStatic(PEERS, "mapDoubled", "(I)I", listOf(n)), "mapDoubled($n)")

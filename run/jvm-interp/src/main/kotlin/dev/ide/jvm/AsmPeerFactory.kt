@@ -174,7 +174,7 @@ open class AsmPeerFactory(
      *  constructor per descriptor so `getConstructor` matches. Never instantiated (newInstance is intercepted),
      *  so each constructor simply invokes `Object.<init>` and returns. */
     private fun defineReflectionClass(className: String, ctorDescriptors: List<String>): Class<*> {
-        val traceable = className.replace('/', '_').replace('$', '_')
+        val traceable = traceableSimpleName(className)
         val internalName = "dev/ide/jvm/reflect/${traceable}_R${counter.incrementAndGet()}"
         val cw = object : ClassWriter(COMPUTE_FRAMES) {
             override fun getClassLoader(): ClassLoader = parent
@@ -194,6 +194,14 @@ open class AsmPeerFactory(
         return cls
     }
 
+    /** The interpreted class name flattened into one simple-name segment for a generated class. Kotlin
+     *  backtick names (`fun `sources are sorted`()`) put spaces, commas and similar into JVM names; D8 rejects
+     *  those below DEX 040 (minSdk < 30), so anything that is not a Java identifier part becomes `_`. The name
+     *  is only for stack traces; the counter suffix keeps it unique. */
+    private fun traceableSimpleName(className: String): String = buildString(className.length) {
+        for (c in className) append(if (c.isLetterOrDigit() || c == '_') c else '_')
+    }
+
     /** Peer classes are shared by shape, so unrelated interpreted classes that realize the same real supertypes
      *  and overrides get one generated class. An ENUM peer is the exception: its `values()` universe is one
      *  enum's constants, so the enum's name is part of the key. */
@@ -206,7 +214,7 @@ open class AsmPeerFactory(
             if (spec.enumConstants != null) "|enum:${spec.className}" else ""
 
     private fun definePeer(spec: PeerSpec, superCtorDescriptor: String): Class<*> {
-        val traceableName = spec.className.replace('/', '_').replace('$', '_')
+        val traceableName = traceableSimpleName(spec.className)
         val internalName = "dev/ide/jvm/peers/${traceableName}_Peer${counter.incrementAndGet()}"
         val peerType = Type.getObjectType(internalName)
         val superType = Type.getType(spec.superClass)
