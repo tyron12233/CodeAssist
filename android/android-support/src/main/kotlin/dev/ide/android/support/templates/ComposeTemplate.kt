@@ -31,13 +31,10 @@ object JetpackComposeAppTemplate : ProjectTemplate {
     private val log = Log.logger("Jetpack Compose Template Generator")
 
     override fun parameters(): List<TemplateParameter> = listOf(
-        // Compose requires minSdk 23+; drop the lower options.
-        AndroidTemplateSupport.minSdkParam.copy(
-            options = AndroidTemplateSupport.minSdkParam.options.filter {
-                it.value.toInt() >= dev.ide.android.support.AndroidFeatureDependencies.COMPOSE_MIN_SDK
-            },
-            defaultIndex = 0,
-        ),
+        // Compose requires minSdk 23+; drop the lower options. The default is the level new modules use (26), not
+        // the lowest Compose allows: below 26 every library has to be desugared and the dex cache can't be shared
+        // between projects, which made a new Compose app's first build dex all ~70 of its libraries.
+        AndroidTemplateSupport.minSdkParamFrom(dev.ide.android.support.AndroidFeatureDependencies.COMPOSE_MIN_SDK),
         AndroidTemplateSupport.targetSdkParam,
     )
 
@@ -46,7 +43,7 @@ object JetpackComposeAppTemplate : ProjectTemplate {
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
-        val minSdk = args.int("minSdk", dev.ide.android.support.AndroidFeatureDependencies.COMPOSE_MIN_SDK)
+        val minSdk = args.int("minSdk", dev.ide.android.support.AndroidApiLevels.DEFAULT_MIN_SDK)
         val targetSdk = args.int("targetSdk", AndroidTemplateSupport.COMPILE_SDK)
         scaffold.workspace.beginModification().apply {
             addProject(args.name, BuildSystemId.NATIVE, scaffold.rootDir)
@@ -178,3 +175,4 @@ object JetpackComposeAppTemplate : ProjectTemplate {
     }
 
 }
+

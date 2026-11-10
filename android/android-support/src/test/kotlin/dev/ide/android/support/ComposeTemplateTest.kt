@@ -53,6 +53,19 @@ class ComposeTemplateTest {
         }
     }
 
+    /**
+     * New Compose apps start at minSdk 26. Below it D8 desugars every library and keys the dex cache on the whole
+     * library set, so a fresh project re-dexed all ~70 Compose libraries (83 s of a 97 s first build on a 2 GB
+     * device) instead of reusing another project's.
+     */
+    @Test
+    fun newComposeAppsDefaultToTheDesugarFreeMinSdk() {
+        val picker = JetpackComposeAppTemplate.parameters().first { it.key == "minSdk" } as dev.ide.model.template.TemplateParameter.Choice
+        assertEquals("26", picker.options[picker.defaultIndex].value)
+        assertTrue(picker.options.all { it.value.toInt() >= AndroidFeatureDependencies.COMPOSE_MIN_SDK }, "still offers 23-25")
+        assertTrue(picker.options.any { it.value == "23" }, "23 stays selectable")
+    }
+
     // --- support ---
 
     private fun args(extra: Map<String, String> = emptyMap()) = TemplateArgs(
