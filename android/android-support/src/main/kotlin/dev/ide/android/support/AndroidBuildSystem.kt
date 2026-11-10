@@ -363,6 +363,14 @@ class AndroidBuildSystem(
         // classes + custom-view attrs resolve against the app-linked resource table).
         val extraPackages = (depAndroidLibs.mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace } +
             libs.aarPackages).distinct()
+        // Non-transitive R (AGP 8's default, see AndroidFacet.nonTransitiveRClass): aapt2 writes only the app's R,
+        // plus its symbol table, and each library's R is made from that library's own R.txt with the final ids.
+        val nonTransitiveR = facet.nonTransitiveRClass
+        val appRTxt = layout.rJar.resolveSibling("R.txt")
+        val librarySymbols = if (!nonTransitiveR) emptyList() else
+            depAndroidLibs.mapNotNull { lib ->
+                lib.facets.get(AndroidFacet.KEY)?.namespace?.let { it to buildDir(lib).resolve("intermediates").resolve("r").resolve("R.txt") }
+            } + libs.aarSymbols.map { it.packageName to it.rTxt }
 
         // Firebase/Play Services: a google-services.json in the module generates string resources merged
         // into the app's res (below the app's own res, so the app can still override). Located AGP-style.
@@ -580,7 +588,7 @@ class AndroidBuildSystem(
                 linkManifest,
                 androidJar,
                 facet.namespace,
-                extraPackages,
+                if (nonTransitiveR) emptyList() else extraPackages,
                 facet.minSdk,
                 facet.targetSdk,
                 versionCode,
@@ -591,10 +599,14 @@ class AndroidBuildSystem(
                 proguardRules = if (minify) layout.aaptProguardRules else null,
                 protoFormat = protoResources,
                 mergedRes = layout.mergedRes,
+                rTxt = if (nonTransitiveR) appRTxt else null,
             )
         }
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
-        tasks.task(generateRFile, listOf(aapt2Link)) { GenerateRJarTask(generateRFile, layout.genJava, layout.rJar) }
+        tasks.task(generateRFile, listOf(aapt2Link) + (if (nonTransitiveR) depAndroidLibs.map { TaskName(":${it.name}:generateR") } else emptyList())) {
+            if (nonTransitiveR) GenerateRJarTask(generateRFile, layout.genJava, layout.rJar, appRTxt, librarySymbols)
+            else GenerateRJarTask(generateRFile, layout.genJava, layout.rJar)
+        }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + aidlDep + listOfNotNull(generateSources)) {
                 AndroidKotlinCompileTask(
@@ -967,7 +979,7 @@ class AndroidBuildSystem(
             return
         }
 
-        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging) }
+        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging, compressionLevel = if (release) java.util.zip.Deflater.BEST_COMPRESSION else java.util.zip.Deflater.BEST_SPEED) }
         tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
         val assemble = step("assemble")
@@ -1488,13 +1500,14 @@ class AndroidBuildSystem(
      * nothing ([SharedLibraryDexer.prefetch]). A no-op without a [dexPack], without a shared cache, or below
      * minSdk 26 (whose cache key covers the whole library set). Returns how many libraries it installed.
      */
-    fun prefetchLibraryDex(app: Module, variantName: String, hashCacheDir: Path, log: (String) -> Unit = {}, checkCanceled: () -> Unit = {}): Int {
+    fun prefetchLibraryDex(app: Module, variantName: String, log: (String) -> Unit = {}, checkCanceled: () -> Unit = {}): Int {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return 0
         val cache = dexCacheRoot ?: return 0
         if (dexPack == null || !SharedLibraryDexer.cacheKeyIsOwnContentOnly(facet.minSdk, null) || facet.coreLibraryDesugaringEnabled) return 0
         val jars = libraryDexJars(app, variantName)
         if (jars.isEmpty()) return 0
-        val universe = SharedLibraryDexer.computeUniverse(jars, hashCacheDir, facet.minSdk, null)
+        // The build's own hash cache, so the build finds these jars already hashed.
+        val universe = SharedLibraryDexer.computeUniverse(jars, cache.resolve(SharedLibraryDexer.SHARED_HASHES), facet.minSdk, null)
         return SharedLibraryDexer(dexer, sdk.androidJar, facet.minSdk, false, cache, null, log = log, checkCanceled = checkCanceled, dexPack = dexPack)
             .prefetch(jars, universe)
     }

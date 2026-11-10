@@ -37,6 +37,9 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         // Emit the R8/D8 knobs only when non-default so the encoded map matches a default-valued reload.
         if (!facet.r8FullMode) put("r8FullMode", false)
         if (facet.coreLibraryDesugaringEnabled) put("coreLibraryDesugaringEnabled", true)
+        // Always written, like AGP's `android.nonTransitiveRClass`: the module settings then show the switch, and
+        // which way a module builds its R classes is stated rather than implied by the absence of a key.
+        put("nonTransitiveRClass", facet.nonTransitiveRClass)
         // buildFeatures: flatten the on flags into the `[android]` table (off ⇒ absent), like the knobs above.
         if (facet.buildFeatures.viewBinding) put("viewBinding", true)
         if (facet.buildFeatures.compose) put("compose", true)
@@ -73,6 +76,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             productFlavors = values.tableList("productFlavors").map { decodeFlavor(it) },
             r8FullMode = values["r8FullMode"] as? Boolean ?: true,
             coreLibraryDesugaringEnabled = values["coreLibraryDesugaringEnabled"] as? Boolean ?: false,
+            nonTransitiveRClass = values["nonTransitiveRClass"] as? Boolean ?: false,
             buildFeatures = BuildFeatures(
                 viewBinding = values["viewBinding"] as? Boolean ?: false,
                 compose = values["compose"] as? Boolean ?: false,

@@ -276,6 +276,9 @@ class GradleProjectImporter : ProjectImporter {
         versionName = spec.versionName ?: AndroidFacet.DEFAULT_VERSION_NAME,
         manifestPlaceholders = spec.manifestPlaceholders,
         buildConfigFields = spec.buildConfigFields.map(::buildConfigField),
+        // AGP 8 made non-transitive R the default; a project that still wants transitive R says so in
+        // gradle.properties (`android.nonTransitiveRClass=false`).
+        nonTransitiveRClass = spec.nonTransitiveRClass ?: true,
         isApplication = spec.kind == GradleImport.Kind.ANDROID_APP,
         flavorDimensions = spec.flavorDimensions,
         // AGP always has `debug` and `release`: a `buildTypes { }` naming only `release` configures that one and

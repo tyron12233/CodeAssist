@@ -54,6 +54,7 @@ object JetpackComposeAppTemplate : ProjectTemplate {
                 languageLevel = scaffold.languageLevel
                 putFacet(
                     AndroidFacet(
+                        nonTransitiveRClass = true,   // AGP 8's default for new projects
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = minSdk,

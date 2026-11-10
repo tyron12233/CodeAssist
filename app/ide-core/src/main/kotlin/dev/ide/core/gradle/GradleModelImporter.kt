@@ -288,6 +288,23 @@ class GradleModelImporter : ProjectImporter {
             .mapNotNull { it["name"] as? String }
             .toSet()
 
+    /** `android.nonTransitiveRClass` from the build's root `gradle.properties` (the directory holding the settings
+     *  script, at or above [moduleDir]), or null when it isn't set there. */
+    private fun nonTransitiveRClassOf(moduleDir: Path): Boolean? {
+        var dir: Path? = moduleDir
+        while (dir != null) {
+            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) || Files.isRegularFile(dir.resolve("settings.gradle"))) {
+                val props = dir.resolve("gradle.properties").takeIf { Files.isRegularFile(it) } ?: return null
+                return runCatching {
+                    Files.readAllLines(props).map { it.trim() }.firstOrNull { it.startsWith("android.nonTransitiveRClass") }
+                        ?.substringAfter('=')?.trim()?.toBooleanStrictOrNull()
+                }.getOrNull()
+            }
+            dir = dir.parent
+        }
+        return null
+    }
+
     private fun androidFacet(
         raw: Map<*, *>,
         module: String,
@@ -312,6 +329,8 @@ class GradleModelImporter : ProjectImporter {
             versionCode = android.int("versionCode") ?: AndroidFacet.DEFAULT_VERSION_CODE,
             versionName = android["versionName"] as? String ?: AndroidFacet.DEFAULT_VERSION_NAME,
             isApplication = android["isApplication"] as? Boolean ?: true,
+            // AGP 8's default unless the build's gradle.properties turns it off (or the model says otherwise).
+            nonTransitiveRClass = android["nonTransitiveRClass"] as? Boolean ?: nonTransitiveRClassOf(moduleDir) ?: true,
             buildFeatures = BuildFeatures(
                 compose = features?.get("compose") as? Boolean ?: false,
                 parcelize = features?.get("parcelize") as? Boolean ?: false,

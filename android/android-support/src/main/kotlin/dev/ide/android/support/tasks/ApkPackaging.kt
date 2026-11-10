@@ -65,8 +65,91 @@ internal object ApkPackaging {
         javaResJars: List<Path> = emptyList(),
         artProfile: Pair<Path, Path>? = null,
         noCompress: (String) -> Boolean = AndroidPackaging()::isNoCompressed,
+        /** Deflate level for entries this step compresses itself. A debug build trades a slightly larger APK for
+         *  a faster package (and faster edit-and-run); a release build keeps the smallest. */
+        compressionLevel: Int = Deflater.BEST_COMPRESSION,
     ): List<String> {
         outApk.parent?.let { Files.createDirectories(it) }
+        runCatching { assembleFast(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars, artProfile, noCompress, compressionLevel) }
+            .getOrNull()?.let { return it }
+        return assembleSlow(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars, artProfile, noCompress)
+    }
+
+    /** How many entries the last fast assembly reused from the previous APK and how many it wrote (diagnostics). */
+    @Volatile var lastReuse: Pair<Int, Int> = 0 to 0
+
+    /**
+     * The packager without recompression: aapt2's and the Java resource jars' entries are copied as the compressed
+     * bytes they already are, and a file whose bytes match the previous APK's entry of that name (size, CRC and
+     * storage) is copied out of the previous APK, so an edit that changed one `classes*.dex` deflates only that one.
+     * Same entries, order and storage as [assembleSlow]. Null when the inputs need something it doesn't do (a
+     * deflated aapt2 entry the no-compress rule wants STORED, zip64): the caller then packages the slow way.
+     */
+    private fun assembleFast(
+        resourcesAp: Path, dexDirs: List<Path>, assetsDirs: List<Path>, jniLibDirs: List<Path>, outApk: Path,
+        javaResJars: List<Path>, artProfile: Pair<Path, Path>?, noCompress: (String) -> Boolean, level: Int,
+    ): List<String>? {
+        val ap = ZipIndex.read(resourcesAp) ?: return null
+        val jars = javaResJars.filter { Files.isRegularFile(it) && Files.size(it) > 22 }.map { ZipIndex.read(it) ?: return null }
+        val previous = if (Files.isRegularFile(outApk)) ZipIndex.read(outApk) else null
+        val crcs = CrcCache(outApk.resolveSibling("." + outApk.fileName.toString() + ".crcs"))
+        val tmp = outApk.resolveSibling(outApk.fileName.toString() + ".tmp")
+        val written = LinkedHashSet<String>()
+        var reused = 0
+        var fresh = 0
+        try {
+            ApkZipWriter(tmp, level).use { w ->
+                fun put(name: String, file: Path, stored: Boolean) {
+                    val prev = previous?.entries?.get(name)
+                    if (prev != null && prev.size == Files.size(file) && (prev.method == ZipEntry.STORED) == stored &&
+                        prev.crc == crcs.crcOf(file)
+                    ) { w.copyRaw(previous, prev); reused++ } else { w.putFile(name, file, stored); fresh++ }
+                }
+                fun copy(from: ZipIndex, e: ZipIndex.Entry): Boolean {
+                    if (noCompress(e.name) && e.method != ZipEntry.STORED) return false
+                    w.copyRaw(from, e); return true
+                }
+                // 1) Everything aapt2 produced, storage kept as aapt2 chose it.
+                for (e in ap.entries.values.sortedBy { it.name }) {
+                    if (written.add(e.name) && !copy(ap, e)) return null
+                }
+                // 2) classes.dex / classes2.dex …
+                for ((name, dex) in packagedDex(dexDirs)) if (written.add(name)) put(name, dex, noCompress(name))
+                // 3) The compiled Baseline Profile (STORED; see [assembleSlow]).
+                artProfile?.let { (prof, profm) ->
+                    for ((name, file) in listOf(ArtProfiles.APK_PROFILE to prof, ArtProfiles.APK_PROFILE_METADATA to profm)) {
+                        if (Files.isRegularFile(file) && written.add(name)) put(name, file, stored = true)
+                    }
+                }
+                // 4) assets/**
+                for (dir in assetsDirs.filter { Files.isDirectory(it) }) allFiles(dir).forEach { f ->
+                    val name = "assets/" + dir.relativize(f).toString().replace('\\', '/')
+                    if (written.add(name)) put(name, f, noCompress(name))
+                }
+                // 5) native libs
+                for (dir in jniLibDirs.filter { Files.isDirectory(it) }) allFiles(dir).forEach { f ->
+                    val name = "lib/" + dir.relativize(f).toString().replace('\\', '/')
+                    if (written.add(name)) put(name, f, noCompress(name))
+                }
+                // 6) Java resources, aapt2's output winning a collision.
+                for (jar in jars) for (e in jar.entries.values.sortedBy { it.name }) {
+                    if (written.add(e.name) && !copy(jar, e)) return null
+                }
+            }
+            Files.move(tmp, outApk, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            crcs.save()
+        } finally {
+            Files.deleteIfExists(tmp)
+        }
+        lastReuse = reused to fresh
+        return written.toList()
+    }
+
+    /** The original packager: every entry goes through [ZipOutputStream], copied ones inflated and re-deflated. */
+    private fun assembleSlow(
+        resourcesAp: Path, dexDirs: List<Path>, assetsDirs: List<Path>, jniLibDirs: List<Path>, outApk: Path,
+        javaResJars: List<Path>, artProfile: Pair<Path, Path>?, noCompress: (String) -> Boolean,
+    ): List<String> {
         val written = LinkedHashSet<String>()
         ZipOutputStream(Files.newOutputStream(outApk)).use { zos ->
             zos.setLevel(Deflater.BEST_COMPRESSION)

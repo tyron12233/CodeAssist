@@ -126,6 +126,7 @@ object AndroidAppTemplate : ProjectTemplate {
                 languageLevel = scaffold.languageLevel
                 putFacet(
                     AndroidFacet(
+                        nonTransitiveRClass = true,   // AGP 8's default for new projects
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = minSdk,
@@ -283,6 +284,7 @@ object MaterialYouAppTemplate : ProjectTemplate {
                 languageLevel = scaffold.languageLevel
                 putFacet(
                     AndroidFacet(
+                        nonTransitiveRClass = true,   // AGP 8's default for new projects
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = minSdk,
@@ -492,6 +494,7 @@ object AndroidLibraryTemplate : ProjectTemplate {
                 languageLevel = scaffold.languageLevel
                 putFacet(
                     AndroidFacet(
+                        nonTransitiveRClass = true,   // AGP 8's default for new projects
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = minSdk,

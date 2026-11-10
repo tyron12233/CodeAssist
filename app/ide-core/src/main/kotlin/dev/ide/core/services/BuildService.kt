@@ -361,14 +361,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             delay(DEX_PREFETCH_DELAY_MS)      // coalesce a burst of model commits into one pass
             if (buildJob?.isActive == true || dev.ide.platform.BuildActivity.active.value) return@launch
             val android = androidBuild ?: return@launch
-            val hashes = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex-prefetch")
             for (module in ctx.modules()) {
                 if (module.facets.get(AndroidFacet.KEY)?.isApplication != true) continue
                 if (unresolvedBlocker(module) != null) continue
                 val n = runCatching {
                     kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) {
                         android.prefetchLibraryDex(
-                            module, ctx.activeVariant(module), hashes.resolve(module.name),
+                            module, ctx.activeVariant(module),
                             log = { memLog.info("dex prefetch ${module.name}: $it") },
                             checkCanceled = { if (dev.ide.platform.BuildActivity.active.value) throw kotlinx.coroutines.CancellationException("build started") },
                         )

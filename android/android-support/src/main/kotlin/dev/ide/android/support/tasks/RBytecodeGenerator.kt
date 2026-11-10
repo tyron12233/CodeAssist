@@ -66,6 +66,58 @@ object RBytecodeGenerator {
     }
 
     /**
+     * The app's `R.jar` with NON-TRANSITIVE library R classes: the app's own `R` from aapt2's [rJavaFiles] (complete,
+     * as always), plus one `R` per dependency library holding only the symbols that library's own `R.txt` lists
+     * ([libraries]: package to `R.txt`), with the final ids the app's link assigned them ([appRTxt], aapt2's
+     * `--output-text-symbols`). What AGP's `android.nonTransitiveRClass` produces: each library `R` is small, where
+     * aapt2's `--extra-packages` gave every library package the app's whole table (seconds to dex on a phone).
+     * Fields are final, as in any app `R`, so a `switch` on a library id still compiles. Returns the class count.
+     */
+    fun writeAppJar(rJavaFiles: List<Path>, appRTxt: Path, libraries: List<Pair<String, Path>>, outJar: Path): Int {
+        outJar.parent?.let { Files.createDirectories(it) }
+        val appSymbols = HashMap<String, String>()
+        runCatching { read(appRTxt) }.getOrDefault("").lineSequence().forEach { raw ->
+            val line = raw.trim(); symbolKey(line)?.let { appSymbols[it] = line }
+        }
+        var total = 0
+        java.util.jar.JarOutputStream(Files.newOutputStream(outJar)).use { jos ->
+            val sink = { name: String, bytes: ByteArray ->
+                jos.putNextEntry(java.util.jar.JarEntry("$name.class")); jos.write(bytes); jos.closeEntry()
+            }
+            val appPackages = HashSet<String>()
+            for (rj in rJavaFiles) {
+                val model = parse(read(rj))
+                if (model.pkg.isEmpty()) continue
+                appPackages += model.pkg
+                total += emit(model, sink)
+            }
+            val merged = LinkedHashMap<String, MutableList<Path>>()
+            for ((pkg, rTxt) in libraries) if (pkg.isNotEmpty() && pkg !in appPackages) merged.getOrPut(pkg) { ArrayList() }.add(rTxt)
+            for ((pkg, files) in merged) {
+                // The library's own symbol names, valued from the app's table (a symbol the app's link dropped is
+                // left out rather than given a placeholder id).
+                val text = files.asSequence().flatMap { f -> runCatching { read(f) }.getOrDefault("").lineSequence() }
+                    .mapNotNull { symbolKey(it.trim()) }.distinct().mapNotNull { appSymbols[it] }.joinToString("\n")
+                val model = parseSymbols(pkg, listOf(text), isFinal = true)
+                if (model.types.isNotEmpty()) total += emit(model, sink)
+            }
+            if (total == 0) {
+                jos.putNextEntry(java.util.jar.JarEntry("META-INF/MANIFEST.MF"))
+                jos.write("Manifest-Version: 1.0\r\n\r\n".toByteArray()); jos.closeEntry()
+            }
+        }
+        return total
+    }
+
+    /** `<int|int[]> <type> <name>` of an `R.txt` line, the key a symbol has in every table it appears in. */
+    private fun symbolKey(line: String): String? {
+        val isArray = line.startsWith("int[] ")
+        if (!isArray && !line.startsWith("int ")) return null
+        val parts = line.split(Regex("\\s+"), limit = 4)
+        return if (parts.size >= 3) "${parts[0]} ${parts[1]} ${parts[2]}" else null
+    }
+
+    /**
      * Package the `R` of one aapt2 [rJava] into [outJar], uncompressed: for a local cache file that is read back
      * soon, deflating it costs more than it saves. Returns the class count.
      */
@@ -131,7 +183,7 @@ object RBytecodeGenerator {
      * (unlike `R.java`) no array spans lines. Unparseable lines are skipped rather than failing the build: a
      * malformed symbol costs one unresolvable field, a thrown exception costs the whole compile.
      */
-    private fun parseSymbols(pkg: String, texts: List<String>): RModel {
+    private fun parseSymbols(pkg: String, texts: List<String>, isFinal: Boolean = false): RModel {
         val types = LinkedHashMap<String, TypeClass>()
         val seen = HashSet<String>()
         for (text in texts) for (raw in text.lineSequence()) {
@@ -151,10 +203,10 @@ object RBytecodeGenerator {
                 val values = value.removePrefix("{").substringBefore('}')
                     .split(',').map { it.trim() }.filter { it.isNotEmpty() }
                     .mapNotNull { runCatching { decodeInt(it) }.getOrNull() }
-                type.arrays.add(ArrayField(name, values.toIntArray(), isFinal = false))
+                type.arrays.add(ArrayField(name, values.toIntArray(), isFinal = isFinal))
             } else {
                 val v = runCatching { decodeInt(value) }.getOrNull()
-                if (v != null) type.ints.add(IntField(name, v, isFinal = false))
+                if (v != null) type.ints.add(IntField(name, v, isFinal = isFinal))
             }
         }
         return RModel(pkg, types.values.toList())

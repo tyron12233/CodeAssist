@@ -21,6 +21,7 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.util.zip.ZipFile
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import dev.ide.model.impl.open
 
@@ -34,7 +35,17 @@ import dev.ide.model.impl.open
 class AndroidLibResourceMergeTest {
 
     @Test
-    fun mergesAndroidLibDependencyResources() {
+    fun mergesAndroidLibDependencyResources() = build(nonTransitiveR = false)
+
+    /**
+     * The same build with non-transitive R (AGP 8's default): the library's R comes from its own R.txt with the
+     * app's final ids, so its code still finds `R.string.liba_greeting`, and holds nothing of the app's own
+     * resources, which a transitive build gives every library package.
+     */
+    @Test
+    fun nonTransitiveRGivesTheLibraryOnlyItsOwnResources() = build(nonTransitiveR = true)
+
+    private fun build(nonTransitiveR: Boolean) {
         val sdk = assumeAndroidSdk()
 
         testEnv("android-libres") { env ->
@@ -54,7 +65,7 @@ class AndroidLibResourceMergeTest {
                 }
                 addModule("app", appType).apply {
                     languageLevel = LanguageLevel.JAVA_17
-                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
+                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34, nonTransitiveRClass = nonTransitiveR))
                     addDependency(ModuleDependency(ModuleId("liba"), DependencyScope.IMPLEMENTATION))
                 }
                 commit()
@@ -88,6 +99,13 @@ class AndroidLibResourceMergeTest {
                 val dex = dexNames.joinToString("") { zf.getInputStream(zf.getEntry(it)).readBytes().toString(Charsets.ISO_8859_1) }
                 assertTrue("Lcom/example/liba/LibGreeter;" in dex, "android-lib code not dexed")
                 assertTrue("Lcom/example/liba/R" in dex, "the library's final R must be dexed (by the app)")
+            }
+            // The app's final R.jar: the library's R holds app_name only when R is transitive.
+            ZipFile(dir.resolve("app/build/intermediates/debug/R.jar").toFile().takeIf { it.exists() }
+                ?: Files.walk(dir.resolve("app/build")).use { w -> w.filter { it.fileName.toString() == "R.jar" }.findFirst().get().toFile() }).use { zf ->
+                val libString = zf.getInputStream(zf.getEntry("com/example/liba/R\$string.class")).readBytes().toString(Charsets.ISO_8859_1)
+                assertTrue("liba_greeting" in libString, "the library's own string")
+                assertEquals(!nonTransitiveR, "app_name" in libString, "the app's own string in the library's R (transitive only)")
             }
 
             // Decoupled R model: the library's own compiled output carries LibGreeter but NOT R; its R is a

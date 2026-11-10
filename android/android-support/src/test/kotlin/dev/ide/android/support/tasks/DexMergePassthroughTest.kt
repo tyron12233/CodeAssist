@@ -12,6 +12,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -116,6 +117,33 @@ class DexMergePreMergedLibraryTest {
             assertEquals(TaskResult.Success, task.execute(SimpleTaskContext()))
             assertTrue(Files.readAllBytes(out.resolve("maaaaaaaaaaaaaaaaaaaaaaaa/classes.dex")).contentEquals(byteArrayOf(7, 7, 7)))
             assertEquals(1, merges.get(), "only the per-class library was merged")
+        }
+    }
+}
+
+/** A prebuilt library's module bucket is a pointer to its shared bucket; the merge reads the dex from there. */
+class DexMergePointerBucketTest {
+    @Test
+    fun aPointerBucketIsReadFromTheSharedCache() = withTempDir("pointer") { tmp ->
+        runBlocking {
+            val shared = tmp.resolve("cache/minApi26-debug/aaaaaaaaaaaaaaaaaaaaaaaa"); Files.createDirectories(shared)
+            Files.write(shared.resolve("classes.dex"), byteArrayOf(4, 2))
+            Files.write(shared.resolve(DexArchives.MERGED_MARKER), byteArrayOf())
+            DexArchives.markBucketVerified(shared)
+            val ext = tmp.resolve("ext")
+            val bucket = ext.resolve("aaaaaaaaaaaaaaaaaaaaaaaa")
+            DexArchives.pointTo(bucket, shared)
+            assertTrue(DexArchives.bucketVerified(bucket), "a pointer to a verified bucket is verified")
+            val dexer = object : Dexer {
+                override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?) = ToolResult.ok(emptyList())
+                override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?) = ToolResult.ok(emptyList())
+            }
+            val out = tmp.resolve("out")
+            assertEquals(TaskResult.Success, DexMergeTask(TaskName("mergeExtDex"), listOf(ext), tmp.resolve("android.jar"), 26, false, out, dexer, groupPerBucket = true).execute(SimpleTaskContext()))
+            assertTrue(Files.readAllBytes(out.resolve("maaaaaaaaaaaaaaaaaaaaaaaa/classes.dex")).contentEquals(byteArrayOf(4, 2)))
+            // Gone from the shared cache: the pointer no longer counts, so the next build fetches or dexes it again.
+            DexArchives.clearDir(shared)
+            assertFalse(DexArchives.bucketVerified(bucket))
         }
     }
 }
