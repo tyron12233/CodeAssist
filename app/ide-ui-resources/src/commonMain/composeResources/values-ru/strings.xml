@@ -567,6 +567,7 @@
     <string name="palette_key_scope">сменить область</string>
     <string name="palette_key_close">закрыть</string>
     <string name="run_no_active_run">Нет активного запуска.</string>
+    <string name="run_program_window">Окно программы</string>
     <string name="run_back">Назад</string>
     <string name="run_run_again">Запустить снова</string>
     <string name="run_building">Сборка…</string>

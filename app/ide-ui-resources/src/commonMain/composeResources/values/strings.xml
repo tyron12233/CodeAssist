@@ -1184,6 +1184,7 @@ We never collect your code, file or project names, what you type, or anything th
 
     <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">No active run.</string>
+    <string name="run_program_window">Program window</string>
     <string name="run_back">Back</string>
     <string name="run_run_again">Run again</string>
     <string name="run_building">Building…</string>

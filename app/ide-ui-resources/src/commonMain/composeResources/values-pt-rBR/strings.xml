@@ -608,6 +608,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
 
     <!-- run/preview/edoverlay -->
     <string name="run_no_active_run">Nenhuma execução ativa.</string>
+    <string name="run_program_window">Janela do programa</string>
     <string name="run_back">Voltar</string>
     <string name="run_run_again">Executar novamente</string>
     <string name="run_building">Compilando…</string>

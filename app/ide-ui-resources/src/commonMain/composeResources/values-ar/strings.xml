@@ -1263,6 +1263,7 @@
 
     <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">لا يوجد تشغيل نشط.</string>
+    <string name="run_program_window">نافذة البرنامج</string>
     <string name="run_back">رجوع</string>
     <string name="run_run_again">تشغيل مرة أخرى</string>
     <string name="run_building">جاري البناء…</string>

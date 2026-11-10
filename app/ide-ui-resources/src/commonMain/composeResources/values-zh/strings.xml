@@ -1169,6 +1169,7 @@
 
     <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">当前没有运行中的任务。</string>
+    <string name="run_program_window">程序窗口</string>
     <string name="run_back">返回</string>
     <string name="run_run_again">再次运行</string>
     <string name="run_building">正在构建…</string>

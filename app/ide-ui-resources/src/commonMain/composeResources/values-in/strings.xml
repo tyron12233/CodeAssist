@@ -585,6 +585,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="palette_key_scope">ganti cakupan</string>
     <string name="palette_key_close">tutup</string>
     <string name="run_no_active_run">Tidak ada proses yang berjalan.</string>
+    <string name="run_program_window">Jendela program</string>
     <string name="run_back">Kembali</string>
     <string name="run_run_again">Jalankan lagi</string>
     <string name="run_building">Membangun…</string>
