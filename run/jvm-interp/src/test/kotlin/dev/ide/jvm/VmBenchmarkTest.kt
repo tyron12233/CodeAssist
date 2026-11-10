@@ -39,4 +39,20 @@ class VmBenchmarkTest {
 
         assertTrue(opsPerSec > 1_000_000, "interpreter throughput regressed badly: $opsPerSec ops/sec")
     }
+
+    /**
+     * Objects of an interpreted class over a real superclass, each of which gets a peer: the shape of a layout
+     * inflate. The peer's shape is a property of the class, so creating the thousandth costs what the second did.
+     */
+    @Test fun peeredConstruction() {
+        val pb = "dev/ide/jvm/fixtures/PeerBench"
+        assertEquals(dev.ide.jvm.fixtures.PeerBench.make(10), vm.invokeStatic(pb, "make", "(I)I", listOf(10)))
+        repeat(5) { vm.invokeStatic(pb, "make", "(I)I", listOf(200)) }
+        val n = 5_000
+        val start = System.nanoTime()
+        vm.invokeStatic(pb, "make", "(I)I", listOf(n))
+        val ns = System.nanoTime() - start
+        println("VM-BENCH peers: $n peered objects in ${ns / 1_000_000}ms (${ns / n / 1000}us each)")
+        assertTrue(ns / n < 2_000_000, "peered construction regressed badly: ${ns / n}ns each")
+    }
 }

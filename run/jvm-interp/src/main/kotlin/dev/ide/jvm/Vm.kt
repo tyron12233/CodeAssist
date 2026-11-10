@@ -131,6 +131,16 @@ class Vm(
      *  cached because the peer shape is rebuilt for every constant the enum constructs. */
     private val enumConstantClasses = java.util.concurrent.ConcurrentHashMap<String, List<VmClass>>()
 
+    /**
+     * [peerSpec] per class, and [overridableMethods] per real supertype set. Both depend only on class
+     * structure, yet were recomputed for every interpreted object that gets a peer: each view an inflate
+     * creates reflected over its whole real superclass chain (`getDeclaredMethods` on View, TextView, ...),
+     * which profiled at about half of a Material layout's inflate on a device. Keyed by the [VmClass] object,
+     * so a class [forgetClasses] reloads gets a spec of its own.
+     */
+    private val peerSpecs = java.util.concurrent.ConcurrentHashMap<VmClass, PeerSpec>()
+    private val overridableBySupers = java.util.concurrent.ConcurrentHashMap<List<Class<*>>, Map<String, Candidate>>()
+
     /** The compiler-generated array of an enum's constants, in ordinal order (see [enumConstantPeers]). */
     private val ENUM_VALUES_FIELD = "\$VALUES"
 
@@ -281,6 +291,7 @@ class Vm(
      */
     fun forgetClasses(match: (String) -> Boolean) {
         classes.keys.removeIf(match)
+        peerSpecs.keys.removeIf { match(it.name) }
     }
 
     /** The [VmMonitor] for a `synchronized`/`wait`/`notify` on [ref]: attached to the object itself for an
@@ -795,7 +806,10 @@ class Vm(
      *  ENUM's constants all share ONE peer class (a real enum, whose `values()` universe is that enum's
      *  constants), so the shape is taken from the enum itself even for a constant with a body, and covers
      *  every body's overrides. */
-    private fun peerSpec(vmClass: VmClass): PeerSpec {
+    private fun peerSpec(vmClass: VmClass): PeerSpec =
+        peerSpecs[vmClass] ?: computePeerSpec(vmClass).also { peerSpecs.putIfAbsent(vmClass, it) }
+
+    private fun computePeerSpec(vmClass: VmClass): PeerSpec {
         val enumClass = enumBaseOf(vmClass)
         val shapeOf = enumClass ?: vmClass
         val superClass = loadReal(realSuperName(shapeOf))
@@ -985,6 +999,12 @@ class Vm(
      *  superclass declares FINAL blocks the signature entirely — the same signature reachable through an
      *  interface (Map.size vs kotlin AbstractMap's final size) must not become an override. */
     private fun overridableMethods(
+        superClass: Class<*>,
+        interfaces: List<Class<*>>
+    ): Map<String, Candidate> =
+        overridableBySupers.getOrPut(listOf(superClass) + interfaces) { computeOverridableMethods(superClass, interfaces) }
+
+    private fun computeOverridableMethods(
         superClass: Class<*>,
         interfaces: List<Class<*>>
     ): Map<String, Candidate> {
