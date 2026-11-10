@@ -81,6 +81,8 @@ internal fun DesignCanvas(
     actions: DesignActions,
     onOpenAttributes: () -> Unit,
     obscuredBottom: Dp,
+    /** Whether the selection chip sits under the top bar, which the visible area then starts below. */
+    chipShown: Boolean,
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
@@ -114,7 +116,7 @@ internal fun DesignCanvas(
     // The part of the canvas the selection can be seen in: under the top bar and the selection chip, above
     // whatever covers the bottom (the toolbar row, and the strip or sheet on a phone). The action bar and the
     // auto-pan below both use it, so the bar is never placed where the pan does not show.
-    val visibleTop = with(density) { 112.dp.toPx() }
+    val visibleTop = with(density) { (if (chipShown) 112.dp else 68.dp).toPx() }
     val visibleBottom = canvasSize.height - obscuredPx - with(density) { if (obscuredPx > 0f) 12.dp.toPx() else 84.dp.toPx() }
     LaunchedEffect(selectedNode, (obscuredPx / 16f).toInt(), canvasSize) {
         if (obscuredPx <= 0f) {

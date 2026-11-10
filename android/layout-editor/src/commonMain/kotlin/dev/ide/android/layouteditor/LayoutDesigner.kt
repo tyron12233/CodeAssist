@@ -217,6 +217,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         val paneHeight = maxHeight
         val density = LocalDensity.current
         val showStrip = !docked && selected != null && state.sheet == null && !stripClosed
+        val showChip = selected != null && !showStrip && state.sheet != DesignPanel.Attributes && !(docked && state.attributesDocked)
         val tree: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
             ComponentTreePanel(
                 document = document,
@@ -261,6 +262,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     onOpenAttributes = { if (!docked) stripClosed = false else state.attributesDocked = true },
                     // On a phone the sheet (or the strip) covers the lower part of the canvas; the canvas keeps the
                     // selection above it.
+                    chipShown = showChip,
                     obscuredBottom = when {
                         docked -> 0.dp
                         state.sheet != null -> paneHeight * state.sheetFraction
@@ -270,7 +272,9 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     modifier = Modifier.fillMaxSize(),
                 )
                 DesignTopBar(state, Modifier.align(Alignment.TopCenter).padding(12.dp))
-                Column(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 64.dp)) {
+                // The chip names the selection only where nothing else does: the strip, the attributes sheet and
+                // the docked attributes pane all lead with it.
+                if (showChip) Column(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 64.dp)) {
                     selected?.let { SelectionChip(it) }
                 }
                 if (progress != null || !rendered) {

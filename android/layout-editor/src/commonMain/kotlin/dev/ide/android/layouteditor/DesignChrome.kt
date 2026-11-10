@@ -206,14 +206,15 @@ internal fun RenderStatusChip(stage: String?, modifier: Modifier) {
 @Composable
 internal fun DesignToolbar(state: DesignerState, docked: Boolean, modifier: Modifier) {
     Floating(modifier) {
-        Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        // 40dp buttons in 4dp of padding: 48dp tall, the same as the zoom controls beside it.
+        Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val treeOn = if (docked) state.treeDocked else state.sheet == DesignPanel.Tree
             val attrsOn = if (docked) state.attributesDocked else state.sheet == DesignPanel.Attributes
-            BarButton(Sym.accountTree, stringResource(Res.string.le_panel_tree), selected = treeOn, size = 48.dp) {
+            BarButton(Sym.accountTree, stringResource(Res.string.le_panel_tree), selected = treeOn, size = 40.dp) {
                 if (docked) state.treeDocked = !state.treeDocked
                 else state.sheet = if (state.sheet == DesignPanel.Tree) null else DesignPanel.Tree
             }
-            BarButton(Sym.tune, stringResource(Res.string.le_panel_attributes), selected = attrsOn, size = 48.dp) {
+            BarButton(Sym.tune, stringResource(Res.string.le_panel_attributes), selected = attrsOn, size = 40.dp) {
                 if (docked) state.attributesDocked = !state.attributesDocked
                 else state.sheet = if (state.sheet == DesignPanel.Attributes) null else DesignPanel.Attributes
             }
@@ -226,7 +227,7 @@ internal fun DesignToolbar(state: DesignerState, docked: Boolean, modifier: Modi
 internal fun ZoomControls(state: DesignerState, modifier: Modifier) {
     Floating(modifier) {
         Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            BarButton(Sym.zoomOut, stringResource(Res.string.le_zoom_out), size = 36.dp) {
+            BarButton(Sym.zoomOut, stringResource(Res.string.le_zoom_out), size = 40.dp) {
                 state.zoom = ((if (state.zoom <= 0f) 1f else state.zoom) / 1.25f).coerceIn(0.1f, 6f)
             }
             Text(
@@ -236,7 +237,7 @@ internal fun ZoomControls(state: DesignerState, modifier: Modifier) {
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            BarButton(Sym.zoomIn, stringResource(Res.string.le_zoom_in), size = 36.dp) {
+            BarButton(Sym.zoomIn, stringResource(Res.string.le_zoom_in), size = 40.dp) {
                 state.zoom = ((if (state.zoom <= 0f) 1f else state.zoom) * 1.25f).coerceIn(0.1f, 6f)
             }
         }
