@@ -76,7 +76,8 @@ class EditorPreview(
      * Whether the pane wants the whole screen when it is the editor's only surface (Preview mode, not Split): the
      * host then hides its phone bottom bar (Search, Source, AI, More) so a canvas the user works in, a design
      * surface or a scene editor, gets that room. The editor's own top bar and toggle stay, so leaving is one tap.
-     * Since SPI 3.5.0.
+     * Such a pane owns its chrome: problems it reports are still kept (a headless render reports them) but the
+     * host draws no problem chip over it, so show them in your own UI. Since SPI 3.5.0.
      */
     val fullScreen: Boolean,
     val content: @Composable (EditorPreviewContext) -> Unit,

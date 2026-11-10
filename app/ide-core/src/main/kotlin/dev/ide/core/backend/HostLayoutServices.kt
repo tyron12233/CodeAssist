@@ -195,6 +195,15 @@ internal class HostAndroidLayoutModel(
             dev.ide.android.layout.LayoutResource("attr", name, "?attr/$name", argb = argb)
         }
 
+    override suspend fun viewClasses(path: String): List<dev.ide.android.layout.LayoutViewClass> =
+        ctx.background("layoutViewClasses") { services.layoutViewClasses(Paths.get(path)) }.orEmpty().map {
+            dev.ide.android.layout.LayoutViewClass(
+                it.tag, it.isViewGroup,
+                when (it.origin) { 0 -> dev.ide.android.layout.ViewOrigin.FRAMEWORK; 2 -> dev.ide.android.layout.ViewOrigin.PROJECT; else -> dev.ide.android.layout.ViewOrigin.LIBRARY },
+                it.doc,
+            )
+        }
+
     private fun toInfo(a: AttributeSpec): LayoutAttributeInfo {
         val types = a.resourceTypes.map { it.rClass }
         val formats = buildSet {

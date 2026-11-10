@@ -27,7 +27,7 @@ internal val DESIGN_DEVICES = listOf(
 )
 
 /** The side panels. On a phone one shows at a time as a bottom sheet; on a wide pane they dock. */
-internal enum class DesignPanel { Tree, Attributes }
+internal enum class DesignPanel { Palette, Tree, Attributes }
 
 /** The editor's per-file UI state. Plain Compose state: it lives as long as the pane does. */
 @Stable
@@ -51,6 +51,9 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
 
     var selection by mutableStateOf<SelectionKey?>(null)
 
+    /** A view being dragged from the palette or moved, across every surface of the editor. */
+    val drag = DragState()
+
     /** The open bottom sheet on a phone, and how much of the height it takes. */
     var sheet by mutableStateOf<DesignPanel?>(null)
     var sheetFraction by mutableStateOf(0.55f)
@@ -59,6 +62,7 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
     var sheetPan by mutableStateOf(0f)
 
     /** The docked panes on a wide surface. */
+    var paletteDocked by mutableStateOf(true)
     var treeDocked by mutableStateOf(true)
     var attributesDocked by mutableStateOf(true)
 

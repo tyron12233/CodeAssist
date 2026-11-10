@@ -250,6 +250,9 @@ class AndroidXmlContributor(
      *  what analysis accepts can't drift apart. */
     fun customViewTags(): List<Widget> = customViews()
 
+    /** The framework widgets a layout may name by simple name (the SDK metadata's own list). */
+    fun frameworkWidgets(): List<Widget> = layout().childTagsFor(null)
+
     private fun tagItems(pos: XmlCompletionPosition): List<CompletionItem> {
         // Framework widgets (simple names, from the SDK metadata) + custom views from the library classpath
         // (fully-qualified names — a layout must spell a non-framework view with its FQN). Deduped by tag.

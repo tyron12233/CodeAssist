@@ -33,6 +33,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -100,6 +103,8 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     // Bumped to render again with nothing else changed: after preparing libraries, or by hand.
     var renderTick by remember(path) { mutableIntStateOf(0) }
     var preparing by remember(path) { mutableStateOf(false) }
+    // The last render's problems: reported to the host, and shown here (a full-screen pane draws its own).
+    var problems by remember(path) { mutableStateOf(emptyList<String>()) }
     // Whether a render is pending or in flight, reported to the host so a frame is only taken once drawn.
     var pending by remember(path) { mutableStateOf(true) }
     LaunchedEffect(pending) { currentCtx.reportRendering(pending) }
@@ -122,7 +127,8 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         if (next.resourceErrors.isEmpty() || render == null) render = next
         rendered = true
         if (!next.librariesNeedPreparing) preparing = false
-        currentCtx.reportProblems(next.problems.map { p -> p.tag?.let { "<${it.substringAfterLast('.')}> ${p.message}" } ?: p.message })
+        problems = next.problems.map { p -> p.tag?.let { "<${it.substringAfterLast('.')}> ${p.message}" } ?: p.message }
+        currentCtx.reportProblems(problems)
     }
     // While the one-time library preparation runs, look again every few seconds: its build reports to the IDE's
     // console, not to this pane, and a render is how the pane learns the libraries are ready.
@@ -217,7 +223,62 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
+    // ---- Palette and structure ----------------------------------------------------------------------------
+    var viewClasses by remember(path) { mutableStateOf<List<dev.ide.android.layout.LayoutViewClass>?>(null) }
+    LaunchedEffect(path) { viewClasses = runCatching { model.viewClasses(path) }.getOrDefault(emptyList()) }
+    val groupTags = remember(viewClasses) { viewClasses.orEmpty().associate { it.tag to it.isViewGroup } }
+    fun isViewGroup(el: LayoutElement): Boolean =
+        groupTags[el.tag] ?: (el.children.isNotEmpty() || el.tag == "merge" || el.simpleName.endsWith("Layout") ||
+            el.simpleName.endsWith("ScrollView") || el.simpleName.endsWith("Group") || el.simpleName.endsWith("CardView"))
+
+    fun pathOf(el: LayoutElement): List<Int> = SelectionKey.of(el).path
+
+    /** Insert a new view, or move one, to [target]; then select it where it landed. */
+    fun drop(payload: DragPayload, target: DropTarget?) {
+        if (target == null || !ctx.canEdit) return
+        val density = state.device.density
+        when (payload) {
+            is DragPayload.New -> {
+                val taken = document.elements().mapNotNull { it.id }.toSet()
+                val attrs = defaultAttributes(payload.cls.tag, payload.cls.isViewGroup, target, taken, density)
+                apply(insertElementEdits(document, target.parent, target.index, payload.cls.tag, attrs))
+                val id = attrs.firstOrNull { it.first == "android:id" }?.second?.substringAfter('/')
+                state.selection = SelectionKey(id, pathOf(target.parent) + target.index)
+            }
+            is DragPayload.Move -> {
+                val el = payload.element
+                val edits = moveElementEdits(document, el, target.parent, target.index, target, density)
+                if (edits.isEmpty()) return
+                val sameParent = el.parent === target.parent
+                val oldIndex = el.parent?.children?.indexOf(el) ?: 0
+                val newIndex = if (sameParent && oldIndex < target.index) target.index - 1 else target.index
+                // The parent's own path shifts when the element leaves from before it among its siblings.
+                apply(edits)
+                state.selection = SelectionKey(el.id, if (el.id == null) pathOf(target.parent) + newIndex else emptyList())
+            }
+        }
+    }
+
+    /** A palette tap: add the view inside the selected container, or after the selected view, else in the root. */
+    fun addFromPalette(cls: dev.ide.android.layout.LayoutViewClass) {
+        val root = document.root ?: return
+        val sel = selected
+        val parent = when {
+            sel != null && isViewGroup(sel) -> sel
+            sel?.parent != null -> sel.parent!!
+            else -> root
+        }
+        val index = if (sel != null && parent !== sel) parent.children.indexOf(sel) + 1 else parent.children.size
+        val inset = 16f * state.device.density
+        drop(DragPayload.New(cls), DropTarget(parent, index, null, null, inset, inset))
+    }
+
+    var designerOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+    BoxWithConstraints(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .onGloballyPositioned { designerOrigin = it.positionInRoot() },
+    ) {
         val docked = maxWidth >= DOCKED_MIN_WIDTH
         val paneHeight = maxHeight
         val density = LocalDensity.current
@@ -228,6 +289,21 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 document = document,
                 selected = selected,
                 onSelect = { select(it) },
+                onClose = onClose,
+                modifier = mod,
+                drag = if (ctx.canEdit) state.drag else null,
+                isViewGroup = ::isViewGroup,
+                onDrop = ::drop,
+            )
+        }
+        val palette: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
+            PalettePanel(
+                classes = viewClasses,
+                onAdd = { addFromPalette(it); if (!docked) state.sheet = null },
+                dragSource = { cls ->
+                    if (!ctx.canEdit) Modifier
+                    else Modifier.dragSource(state.drag, { DragPayload.New(cls) }, { p, t -> drop(p, t); if (t != null && !docked) state.sheet = null })
+                },
                 onClose = onClose,
                 modifier = mod,
             )
@@ -251,9 +327,14 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         }
 
         Row(Modifier.fillMaxSize()) {
-            if (docked && state.treeDocked) {
-                PanelFrame(Modifier.width(272.dp).fillMaxHeight().padding(start = 12.dp, top = 12.dp, bottom = 12.dp)) {
-                    tree(Modifier.fillMaxSize(), null)
+            if (docked && (state.treeDocked || state.paletteDocked)) {
+                Column(Modifier.width(284.dp).fillMaxHeight().padding(start = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (state.paletteDocked) PanelFrame(Modifier.fillMaxWidth().weight(if (state.treeDocked) 0.48f else 1f)) {
+                        palette(Modifier.fillMaxSize(), null)
+                    }
+                    if (state.treeDocked) PanelFrame(Modifier.fillMaxWidth().weight(if (state.paletteDocked) 0.52f else 1f)) {
+                        tree(Modifier.fillMaxSize(), null)
+                    }
                 }
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -270,6 +351,8 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     chipShown = showChip,
                     // On a phone with the strip open, its header carries these; the floating bar would cover the view.
                     showActionBar = !showStrip,
+                    isViewGroup = ::isViewGroup,
+                    onDrop = ::drop,
                     obscuredBottom = when {
                         docked -> 0.dp
                         state.sheet != null -> paneHeight * state.sheetFraction
@@ -284,8 +367,9 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 if (showChip) Column(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 64.dp)) {
                     selected?.let { SelectionChip(it) }
                 }
-                if (progress != null || !rendered) {
-                    RenderStatusChip(progress, Modifier.align(Alignment.TopEnd).padding(top = 64.dp, end = 12.dp))
+                Column(Modifier.align(Alignment.TopEnd).padding(top = 64.dp, end = 12.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (progress != null || !rendered) RenderStatusChip(progress, Modifier)
+                    if (problems.isNotEmpty()) ProblemsChip(problems)
                 }
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { stripHeight = it.height },
@@ -366,6 +450,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     onDismiss = { state.sheet = null },
                 ) { mod ->
                     when (shown.value) {
+                        DesignPanel.Palette -> palette(mod) { state.sheet = null }
                         DesignPanel.Tree -> tree(mod) { state.sheet = null }
                         DesignPanel.Attributes -> attributes(mod) { state.sheet = null }
                         null -> {}
@@ -373,6 +458,9 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 }
             }
         }
+
+        // The dragged view, over everything.
+        DragGhost(state.drag, designerOrigin)
     }
 }
 

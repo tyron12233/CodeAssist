@@ -118,6 +118,13 @@ class DesignerSnapshotTest {
             "color" -> listOf(0xFF6750A4, 0xFF625B71, 0xFFB3261E).mapIndexed { i, c -> dev.ide.android.layout.LayoutResource("color", "brand_$i", "@color/brand_$i", argb = c.toInt()) }
             else -> emptyList()
         }
+        override suspend fun viewClasses(path: String) = listOf(
+            "TextView" to false, "Button" to false, "ImageView" to false, "EditText" to false, "CheckBox" to false,
+            "Switch" to false, "LinearLayout" to true, "FrameLayout" to true, "ScrollView" to true, "ProgressBar" to false,
+            "com.google.android.material.textfield.TextInputLayout" to true, "com.google.android.material.chip.Chip" to false,
+            "androidx.recyclerview.widget.RecyclerView" to true, "androidx.constraintlayout.widget.ConstraintLayout" to true,
+        ).map { (t, g) -> dev.ide.android.layout.LayoutViewClass(t, g, if ('.' in t) dev.ide.android.layout.ViewOrigin.LIBRARY else dev.ide.android.layout.ViewOrigin.FRAMEWORK) } +
+            dev.ide.android.layout.LayoutViewClass("com.example.app.ChartView", false, dev.ide.android.layout.ViewOrigin.PROJECT)
         override suspend fun themeColors(path: String) = listOf("colorPrimary" to 0xFF006A6A, "colorSecondary" to 0xFF4A6363, "colorSurface" to 0xFFF4FBFA)
             .map { (n, c) -> dev.ide.android.layout.LayoutResource("attr", n, "?attr/$n", argb = c.toInt()) }
     }
@@ -201,6 +208,13 @@ class DesignerSnapshotTest {
     fun phoneStripWithTheColorEditor() {
         val caret = xml.indexOf("<Button")
         val f = snap("phone-dialog-color", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(196f, 892f - 66f)))
+        assertTrue(f.length() > 0)
+    }
+
+    @Test
+    fun phonePaletteSheet() {
+        // Nothing selected (no strip): the toolbar's first button, Palette, at the bottom-left.
+        val f = snap("phone-palette", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = 0), taps = listOf(Offset(40f, 892f - 40f)))
         assertTrue(f.length() > 0)
     }
 

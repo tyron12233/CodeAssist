@@ -50,6 +50,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -97,6 +100,10 @@ internal fun DesignCanvas(
     chipShown: Boolean,
     /** Whether the floating action bar shows; false where the property strip carries the actions instead. */
     showActionBar: Boolean,
+    /** Whether an element holds children, which decides where a drag can drop. */
+    isViewGroup: (LayoutElement) -> Boolean,
+    /** A drag (from the palette, or a long-pressed view here) was released. */
+    onDrop: (DragPayload, DropTarget?) -> Unit,
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
@@ -179,11 +186,40 @@ internal fun DesignCanvas(
     val currentK by rememberUpdatedState(k)
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentOnOpenAttributes by rememberUpdatedState(onOpenAttributes)
+    val currentOnDrop by rememberUpdatedState(onDrop)
+
+    // Drag and drop: the canvas resolves a root-coordinate point to a drop target in the render.
+    var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
+    fun cardPointOf(root: Offset): Offset {
+        val local = root - canvasOrigin
+        val sc = shownScale.value.coerceAtLeast(0.01f)
+        return Offset(
+            (local.x - canvasSize.width / 2f - shownPan.value.x) / sc + cardW / 2f,
+            (local.y - canvasSize.height / 2f - shownPan.value.y) / sc + cardH / 2f,
+        )
+    }
+    fun rootPointOf(card: Offset): Offset = canvasOrigin + Offset(
+        canvasSize.width / 2f + shownPan.value.x + (card.x - cardW / 2f) * shownScale.value,
+        canvasSize.height / 2f + shownPan.value.y + (card.y - cardH / 2f) * shownScale.value,
+    )
+    val drag = state.drag
+    drag.canvasTarget = { root ->
+        val local = root - canvasOrigin
+        val t = tree
+        if (t == null || local.x < 0 || local.y < 0 || local.x > canvasSize.width || local.y > canvasSize.height) null
+        else {
+            val c = cardPointOf(root)
+            val moving = (drag.payload as? DragPayload.Move)?.element
+            dropTargetAt(t, document, c.x / k, c.y / k, isViewGroup, moving)
+        }
+    }
+    val hover: DropTarget? = drag.payload?.let { drag.canvasTarget?.invoke(drag.position) }
 
     Box(
         modifier
             .clipToBounds()
             .onSizeChanged { canvasSize = it }
+            .onGloballyPositioned { canvasOrigin = it.positionInRoot() }
             .drawBehind {
                 if (state.blueprint) drawRect(BlueprintGround.copy(alpha = 0.92f))
                 else drawDots(dot, 16.dp.toPx(), 1.dp.toPx())
@@ -236,6 +272,34 @@ internal fun DesignCanvas(
                 .clip(shape)
                 .background(if (state.blueprint) BlueprintGround else Color.White)
                 .border(1.dp, if (state.blueprint) BlueprintLine.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant, shape)
+                .pointerInput(drag) {
+                    // A long press on a view picks it up to move; the drag then follows the finger to its drop.
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { p ->
+                            val t = currentTree ?: return@detectDragGesturesAfterLongPress
+                            val hit = elementAtPoint(t, currentDoc, p.x / currentK, p.y / currentK)
+                            if (hit != null && hit.parent != null) {
+                                currentOnSelect(hit)
+                                drag.position = rootPointOf(p)
+                                drag.payload = DragPayload.Move(hit)
+                            }
+                        },
+                        onDrag = { change, amount ->
+                            if (drag.payload != null) {
+                                change.consume()
+                                // The card is scaled; a finger's travel in it is travel times the scale on screen.
+                                drag.position += amount * shownScale.value
+                            }
+                        },
+                        onDragEnd = {
+                            val payload = drag.payload ?: return@detectDragGesturesAfterLongPress
+                            val target = drag.targetAt(drag.position)
+                            drag.payload = null
+                            currentOnDrop(payload, target)
+                        },
+                        onDragCancel = { drag.payload = null },
+                    )
+                }
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = { p ->
@@ -259,7 +323,8 @@ internal fun DesignCanvas(
                     )
                 }
                 parentNode?.let { drawDashed(it.rect(k), accent.copy(alpha = 0.55f), 1.dp.toPx()) }
-                selectedNode?.let { drawSelection(it.rect(k), accent, handleFill, 1.dp.toPx()) }
+                selectedNode?.let { if (drag.payload == null) drawSelection(it.rect(k), accent, handleFill, 1.dp.toPx()) }
+                hover?.let { t -> drawDropTarget(t, k, accent) }
             }
             if (document.root != null && document.root?.children?.isEmpty() == true) {
                 EmptyLayoutHint(document.root!!, Modifier.fillMaxSize().padding(12.dp))
@@ -268,7 +333,7 @@ internal fun DesignCanvas(
 
         // The action bar: canvas pixels, constant size, under the selection (above it when there is no room).
         val node = selectedNode
-        if (showActionBar && node != null && selected != null && canvasSize != IntSize.Zero) {
+        if (showActionBar && drag.payload == null && node != null && selected != null && canvasSize != IntSize.Zero) {
             val r = node.rect(k)
             // Placed from the transform as drawn, so the bar travels with the card while it animates.
             val sc = shownScale.value
@@ -329,6 +394,28 @@ private fun DrawScope.drawBlueprint(node: LayoutViewNode, k: Float) {
     val r = node.rect(k)
     drawRect(BlueprintLine.copy(alpha = if (node.sourceOffset != null) 0.9f else 0.35f), r.topLeft, r.size, style = Stroke(1.dp.toPx()))
     for (c in node.children) drawBlueprint(c, k)
+}
+
+/** Where a drag would land: the receiving container washed and outlined, and the insertion line for a list. */
+private fun DrawScope.drawDropTarget(t: DropTarget, k: Float, accent: Color) {
+    t.area?.let { a ->
+        val r = a.rect(k)
+        drawRect(accent.copy(alpha = 0.08f), r.topLeft, r.size)
+        drawRect(accent, r.topLeft, r.size, style = Stroke(2.dp.toPx()))
+        val line = t.line
+        if (line != null) {
+            val w = 3.dp.toPx()
+            drawLine(accent, Offset(line[0] * k, line[1] * k), Offset(line[2] * k, line[3] * k), strokeWidth = w)
+            drawCircle(accent, 4.dp.toPx(), Offset(line[0] * k, line[1] * k))
+            drawCircle(accent, 4.dp.toPx(), Offset(line[2] * k, line[3] * k))
+        } else {
+            // A free or constraint layout: mark the point it will be pinned at.
+            val c = Offset((a.left + t.x) * k, (a.top + t.y) * k)
+            val arm = 8.dp.toPx()
+            drawLine(accent, c - Offset(arm, 0f), c + Offset(arm, 0f), strokeWidth = 2.dp.toPx())
+            drawLine(accent, c - Offset(0f, arm), c + Offset(0f, arm), strokeWidth = 2.dp.toPx())
+        }
+    }
 }
 
 private fun DrawScope.drawDashed(r: Rect, color: Color, w: Float) {

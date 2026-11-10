@@ -82,7 +82,9 @@ fun PluginPreviewPane(
         // try/catch around a composition, so this is a real limit rather than something handled here: the
         // plugin owns its own failures, and the problem chip is how it reports them.
         preview.content(ctx)
-        PreviewProblemChip(
+        // A full-screen pane owns its chrome, problems included: the host still keeps the list (the status a
+        // headless render reports) but draws no chip over the pane's own controls.
+        if (!preview.fullScreen) PreviewProblemChip(
             problems.map { PreviewIssue(PreviewIssueLevel.ERROR, preview.title, it) },
             Modifier.align(Alignment.BottomStart).padding(8.dp),
         )

@@ -140,6 +140,21 @@ class HostLayoutServicesTest {
         assertEquals("Hi there", hi?.value)
     }
 
+    @Test
+    fun modelListsViewClassesForThePalette() {
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        backend = IdeServicesBackend(initial = s)
+        val layout = root.resolve("app/src/main/res/layout/probe.xml")
+        Files.createDirectories(layout.parent)
+        Files.writeString(layout, layoutText)
+        val model = s.store.workspaceContainer.getService(ANDROID_LAYOUT_MODEL)
+        val classes = runBlocking { model.viewClasses(layout.toString()) }.associateBy { it.tag }
+        val button = assertNotNull(classes["Button"], "framework widgets by simple name")
+        assertEquals(dev.ide.android.layout.ViewOrigin.FRAMEWORK, button.origin)
+        assertTrue(!button.isViewGroup)
+        assertTrue(classes["LinearLayout"]?.isViewGroup == true)
+    }
+
     private fun apply(text: String, edits: List<LayoutEdit>): String {
         var out = text
         for (e in edits.sortedByDescending { it.start }) out = out.substring(0, e.start) + e.newText + out.substring(e.end)

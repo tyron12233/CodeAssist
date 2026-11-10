@@ -26,6 +26,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
@@ -43,6 +46,7 @@ import dev.ide.android.layouteditor.generated.resources.le_tree_search
 import dev.ide.android.layouteditor.generated.resources.le_tree_search_hint
 import dev.ide.android.layouteditor.generated.resources.le_tree_title
 import dev.ide.android.layouteditor.generated.resources.le_tree_root
+import dev.ide.android.layouteditor.generated.resources.le_tree_drag
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -57,7 +61,18 @@ internal fun ComponentTreePanel(
     onSelect: (LayoutElement) -> Unit,
     onClose: (() -> Unit)?,
     modifier: Modifier,
+    drag: DragState? = null,
+    isViewGroup: (LayoutElement) -> Boolean = { it.children.isNotEmpty() },
+    onDrop: (DragPayload, DropTarget?) -> Unit = { _, _ -> },
 ) {
+    // Each row's bounds in root coordinates, for resolving a drop over the tree to a row.
+    val rowBounds = remember { HashMap<LayoutElement, androidx.compose.ui.geometry.Rect>() }
+    if (drag != null) {
+        val docNow = document
+        drag.treeTarget = { p -> treeDropTarget(docNow, rowBounds, p, isViewGroup, (drag.payload as? DragPayload.Move)?.element) }
+        androidx.compose.runtime.DisposableEffect(drag) { onDispose { drag.treeTarget = null } }
+    }
+    val hover = drag?.payload?.let { drag.treeTarget?.invoke(drag.position) }
     // Collapsed elements by their selection key, so collapsing survives the re-parse every edit makes.
     var collapsed by remember { mutableStateOf(emptySet<SelectionKey>()) }
     var searching by remember { mutableStateOf(false) }
@@ -129,6 +144,10 @@ internal fun ComponentTreePanel(
             items(rows, key = { "${it.element.start}:${it.element.tag}" }) { row ->
                 TreeRowView(
                     row = row,
+                    hover = hover?.let { treeHover(it, row.element) },
+                    bounds = rowBounds,
+                    handle = if (drag == null || row.element.parent == null) Modifier else
+                        Modifier.dragSource(drag, { DragPayload.Move(row.element) }, onDrop, immediate = true),
                     selected = row.element === selected,
                     onSelect = { onSelect(row.element) },
                     onToggle = {
@@ -144,13 +163,37 @@ internal fun ComponentTreePanel(
 private class TreeRow(val element: LayoutElement, val depth: Int, val collapsed: Boolean)
 
 @Composable
-private fun TreeRowView(row: TreeRow, selected: Boolean, onSelect: () -> Unit, onToggle: () -> Unit) {
+private fun TreeRowView(
+    row: TreeRow,
+    hover: TreeHover?,
+    bounds: MutableMap<LayoutElement, androidx.compose.ui.geometry.Rect>,
+    handle: Modifier,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onToggle: () -> Unit,
+) {
     val el = row.element
-    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent
+    val accent = MaterialTheme.colorScheme.primary
+    val bg = when {
+        hover == TreeHover.INSIDE -> MaterialTheme.colorScheme.primaryContainer
+        selected -> MaterialTheme.colorScheme.secondaryContainer
+        else -> androidx.compose.ui.graphics.Color.Transparent
+    }
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp).clip(RoundedCornerShape(50)).background(bg)
-            .clickable(onClick = onSelect).height(44.dp).padding(start = (4 + row.depth * 18).dp, end = 12.dp),
+        Modifier.fillMaxWidth()
+            .onGloballyPositioned { bounds[el] = it.boundsInRoot() }
+            .drawBehind {
+                // The insertion line for a drop before or after this row.
+                if (hover == TreeHover.BEFORE || hover == TreeHover.AFTER) {
+                    val y = if (hover == TreeHover.BEFORE) 1.dp.toPx() else size.height - 1.dp.toPx()
+                    val x0 = (12 + row.depth * 18).dp.toPx()
+                    drawLine(accent, androidx.compose.ui.geometry.Offset(x0, y), androidx.compose.ui.geometry.Offset(size.width - 8.dp.toPx(), y), strokeWidth = 3.dp.toPx())
+                    drawCircle(accent, 4.dp.toPx(), androidx.compose.ui.geometry.Offset(x0, y))
+                }
+            }
+            .padding(horizontal = 8.dp, vertical = 1.dp).clip(RoundedCornerShape(50)).background(bg)
+            .clickable(onClick = onSelect).height(44.dp).padding(start = (4 + row.depth * 18).dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -181,5 +224,48 @@ private fun TreeRowView(row: TreeRow, selected: Boolean, onSelect: () -> Unit, o
                 modifier = Modifier.weight(1f, fill = false),
             )
         }
+        Box(Modifier.weight(1f))
+        // The handle: drag the row to another place in the tree, or onto the canvas.
+        if (el.parent != null) {
+            Box(Modifier.size(36.dp).then(handle), contentAlignment = Alignment.Center) {
+                Symbol(Sym.dragIndicator, stringResource(Res.string.le_tree_drag), size = 18.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Where on a row a drop is going. */
+internal enum class TreeHover { BEFORE, INSIDE, AFTER }
+
+private fun treeHover(t: DropTarget, el: LayoutElement): TreeHover? {
+    if (t.parent === el && t.area == null) return TreeHover.INSIDE
+    val siblings = t.parent.children
+    return when {
+        t.index < siblings.size && siblings[t.index] === el -> TreeHover.BEFORE
+        t.index > 0 && t.index == siblings.size && siblings.last() === el -> TreeHover.AFTER
+        else -> null
+    }
+}
+
+/**
+ * The drop a point over the tree means: the row under it, then its top third inserts before it, its bottom third
+ * after it, and the middle of a row that holds children puts the view inside, at the end. A row inside the view
+ * being moved takes nothing.
+ */
+internal fun treeDropTarget(
+    document: LayoutDocument,
+    rows: Map<LayoutElement, androidx.compose.ui.geometry.Rect>,
+    p: androidx.compose.ui.geometry.Offset,
+    isViewGroup: (LayoutElement) -> Boolean,
+    moving: LayoutElement?,
+): DropTarget? {
+    val (el, r) = rows.entries.firstOrNull { (e, r) -> r.contains(p) && document.elements().any { it === e } }?.toPair() ?: return null
+    if (moving != null && moving.walk().any { it === el }) return null
+    val parent = el.parent
+    val f = (p.y - r.top) / r.height.coerceAtLeast(1f)
+    return when {
+        parent == null || (isViewGroup(el) && f in 0.3f..0.7f) -> DropTarget(el, el.children.size, null, null, 0f, 0f)
+        f < 0.5f -> DropTarget(parent, parent.children.indexOf(el), null, null, 0f, 0f)
+        else -> DropTarget(parent, parent.children.indexOf(el) + 1, null, null, 0f, 0f)
     }
 }

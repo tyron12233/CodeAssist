@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -208,6 +209,11 @@ internal fun DesignToolbar(state: DesignerState, docked: Boolean, modifier: Modi
     Floating(modifier) {
         // 40dp buttons in 4dp of padding: 48dp tall, the same as the zoom controls beside it.
         Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val paletteOn = if (docked) state.paletteDocked else state.sheet == DesignPanel.Palette
+            BarButton(Sym.widgets, stringResource(Res.string.le_panel_palette), selected = paletteOn, size = 40.dp) {
+                if (docked) state.paletteDocked = !state.paletteDocked
+                else state.sheet = if (state.sheet == DesignPanel.Palette) null else DesignPanel.Palette
+            }
             val treeOn = if (docked) state.treeDocked else state.sheet == DesignPanel.Tree
             val attrsOn = if (docked) state.attributesDocked else state.sheet == DesignPanel.Attributes
             BarButton(Sym.accountTree, stringResource(Res.string.le_panel_tree), selected = treeOn, size = 40.dp) {
@@ -286,6 +292,8 @@ private fun InverseButton(glyph: Char, label: String, enabled: Boolean = true, o
 /** A bottom sheet over the canvas, with a handle to drag its height. */
 @Composable
 internal fun DesignSheet(state: DesignerState, maxHeight: Dp, onDismiss: () -> Unit, content: @Composable (Modifier) -> Unit) {
+    // While a view is dragged out of it the sheet steps aside (it stays composed: the drag belongs to it).
+    val aside by androidx.compose.animation.core.animateFloatAsState(if (state.drag.payload != null) 1f else 0f, label = "sheetAside")
     var fraction by state::sheetFraction
     val fullPx = with(LocalDensity.current) { maxHeight.toPx() }.coerceAtLeast(1f)
     val drag = rememberDraggableState { delta ->
@@ -296,6 +304,10 @@ internal fun DesignSheet(state: DesignerState, maxHeight: Dp, onDismiss: () -> U
         modifier = Modifier
             .fillMaxWidth()
             .height(maxHeight * fraction)
+            .graphicsLayer {
+                alpha = 1f - 0.75f * aside
+                translationY = aside * size.height * 0.6f
+            }
             .shadow(16.dp, shape)
             .imePadding()
             .pointerInput(Unit) { detectTapGestures { } },
@@ -454,6 +466,30 @@ internal fun EditorDialog(
                         Text(stringResource(Res.string.le_done), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** The render's problems: a count that opens the list. */
+@Composable
+internal fun ProblemsChip(problems: List<String>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Floating(Modifier.clip(PillShape).clickable { open = !open }) {
+            Row(
+                Modifier.height(32.dp).padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Symbol(Sym.warning, stringResource(Res.string.le_problems), size = 16.dp, tint = MaterialTheme.colorScheme.error)
+                Text(problems.size.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Column(Modifier.widthIn(max = 320.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.le_problems), style = MaterialTheme.typography.titleSmall)
+                for (p in problems) Text(p, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

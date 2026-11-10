@@ -98,4 +98,18 @@
     <string name="le_strip_basic_empty">No quick properties for this view. Open all attributes to edit it.</string>
     <string name="le_strip_switch">Select another view</string>
     <string name="le_done">Done</string>
+    <string name="le_panel_palette">Palette</string>
+    <string name="le_palette_title">Palette</string>
+    <string name="le_palette_hint">Tap to add, or hold and drag onto the canvas</string>
+    <string name="le_palette_search">Search views</string>
+    <string name="le_palette_empty">No views match.</string>
+    <string name="le_palette_common">Common</string>
+    <string name="le_palette_text">Text</string>
+    <string name="le_palette_buttons">Buttons</string>
+    <string name="le_palette_widgets">Widgets</string>
+    <string name="le_palette_layouts">Layouts</string>
+    <string name="le_palette_containers">Containers</string>
+    <string name="le_palette_project">Project</string>
+    <string name="le_tree_drag">Drag to move</string>
+    <string name="le_problems">Render problems</string>
 </resources>

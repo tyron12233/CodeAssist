@@ -4958,6 +4958,23 @@ class IdeServices private constructor(
         }
     }
 
+    /** A view class for the layout palette: tag, holds children, and 0 = framework, 1 = library, 2 = project. */
+    internal class LayoutViewClassInfo(val tag: String, val isViewGroup: Boolean, val origin: Int, val doc: String?)
+
+    /** The view classes a layout in [file]'s module can use: framework widgets, library views, project views. */
+    internal fun layoutViewClasses(file: Path): List<LayoutViewClassInfo>? {
+        val module = moduleForResourceFile(file) ?: return null
+        val contributor = androidXmlContributor(module) ?: return null
+        val project = runCatching { currentSourceCustomViewScan().widgets }.getOrDefault(emptyList()).mapTo(HashSet()) { it.tag }
+        val out = ArrayList<LayoutViewClassInfo>()
+        val seen = HashSet<String>()
+        for (w in contributor.frameworkWidgets()) if (seen.add(w.tag)) out += LayoutViewClassInfo(w.tag, w.isViewGroup, 0, w.doc)
+        for (w in contributor.customViewTags()) if (seen.add(w.tag)) {
+            out += LayoutViewClassInfo(w.tag, w.isViewGroup, if (w.tag in project) 2 else 1, w.doc)
+        }
+        return out
+    }
+
     /** The app theme's color attributes that resolve to a color, as (attr name, argb). */
     internal fun layoutThemeColors(file: Path): List<Pair<String, Int>>? {
         val module = moduleForResourceFile(file) ?: return null

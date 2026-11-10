@@ -66,6 +66,26 @@ interface AndroidLayoutModel {
      * color picker offers first: theme colors follow the theme and dark mode, where a hard-coded one does not.
      */
     suspend fun themeColors(path: String): List<LayoutResource> = emptyList()
+
+    /**
+     * The view classes a layout in [path]'s module can use, for a palette: the framework's widgets (by simple
+     * name, as a layout writes them), the libraries' views and the project's own `View` subclasses (by fully
+     * qualified name). The same set the XML editor completes tags from.
+     */
+    suspend fun viewClasses(path: String): List<LayoutViewClass> = emptyList()
+}
+
+/** Where a view class comes from. */
+enum class ViewOrigin { FRAMEWORK, LIBRARY, PROJECT }
+
+/** A view class a layout can use: its [tag] as written, whether it holds children, and where it comes from. */
+class LayoutViewClass(
+    val tag: String,
+    val isViewGroup: Boolean,
+    val origin: ViewOrigin,
+    val doc: String? = null,
+) {
+    val simpleName: String get() = tag.substringAfterLast('.')
 }
 
 /**
