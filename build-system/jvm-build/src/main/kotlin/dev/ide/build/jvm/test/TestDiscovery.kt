@@ -64,6 +64,13 @@ data class TestMethod(
  *  per-test hooks run around the inner class's own. */
 data class OuterLevel(val internalName: String, val beforeEach: List<TestHook>, val afterEach: List<TestHook>)
 
+/**
+ * A JUnit 4 rule: a public field, or a public no-argument method, annotated `@Rule` (an instance member, read from
+ * each test's own instance) or `@ClassRule` (a static one, read once for the class). Its value must be a `TestRule`;
+ * that is checked when the test runs, as the declared type may be any supertype.
+ */
+data class RuleRef(val owner: String, val name: String, val descriptor: String, val isMethod: Boolean, val isStatic: Boolean)
+
 /** A field JUnit 4's `Parameterized` runner sets from parameter [index] (`@Parameter(index)`). */
 data class ParamField(val owner: String, val name: String, val descriptor: String, val index: Int)
 
@@ -89,6 +96,13 @@ data class TestClass(
     /** How a parameter set reaches the instance: the constructor taking it ([paramConstructor]), or [paramFields]. */
     val paramConstructor: String? = null,
     val paramFields: List<ParamField> = emptyList(),
+    /** JUnit 4 `@Rule`s in the order they wrap a test: each one around the ones before it, so the last is outermost. */
+    val rules: List<RuleRef> = emptyList(),
+    /** JUnit 4 `@ClassRule`s, in the same order, wrapping the class's hooks and all its tests. */
+    val classRules: List<RuleRef> = emptyList(),
+    /** Set when the class is declared wrongly (a rule that is not public, say): every test fails with it, as
+     *  JUnit's validation fails the class, instead of running without what the class asked for. */
+    val classError: String? = null,
 ) {
     val fqn: String get() = internalName.replace('/', '.')
 }
@@ -199,6 +213,8 @@ object TestDiscovery {
             !nested && !parameterized && !hasNoArgConstructor(node) -> "a test class needs a constructor without parameters"
             else -> null
         }
+        val rules = if (framework == TestFramework.JUNIT4) junit4Rules(chain, JUNIT4_RULE, static = false) else RuleScan()
+        val classRules = if (framework == TestFramework.JUNIT4) junit4Rules(chain, JUNIT4_CLASS_RULE, static = true) else RuleScan()
         return TestClass(
             internalName = node.name,
             framework = framework,
@@ -214,8 +230,57 @@ object TestDiscovery {
             classParams = params?.first,
             paramConstructor = params?.second?.takeIf { params.third.isEmpty() },
             paramFields = params?.third.orEmpty(),
+            rules = rules.refs,
+            classRules = classRules.refs,
+            classError = rules.error ?: classRules.error,
         )
     }
+
+    private class RuleScan(val refs: List<RuleRef> = emptyList(), val error: String? = null)
+
+    /**
+     * The `@Rule` (or, with [static], `@ClassRule`) members of [chain], in the order JUnit 4.13 applies them: the
+     * subclass's before its superclasses', methods before fields, then by `order` descending (a higher order is
+     * applied first, so it ends up inner). A member a subclass redeclares counts once. A member JUnit would reject
+     * (not public, wrongly static, taking parameters) is reported as [RuleScan.error] with JUnit's wording, plus
+     * the Kotlin spelling, since `@Rule val x` puts the annotation on a private field.
+     */
+    private fun junit4Rules(chain: List<ClassNode>, annotation: String, static: Boolean): RuleScan {
+        val label = if (static) "@ClassRule" else "@Rule"
+        val kotlinHint = if (static) "in Kotlin, @JvmField @ClassRule inside a companion object" else "in Kotlin, write @get:Rule or add @JvmField"
+        val methods = LinkedHashMap<String, Pair<RuleRef, Int>>()
+        val fields = LinkedHashMap<String, Pair<RuleRef, Int>>()
+        var error: String? = null
+        fun check(name: String, access: Int, takesArgs: Boolean): Boolean {
+            val problem = when {
+                access and Opcodes.ACC_PUBLIC == 0 -> "must be public ($kotlinHint)"
+                (access and Opcodes.ACC_STATIC != 0) != static -> if (static) "must be static ($kotlinHint)" else "must not be static"
+                takesArgs -> "must not take parameters"
+                else -> null
+            }
+            if (problem != null && error == null) error = "The $label '$name' $problem."
+            return problem == null
+        }
+        for (cls in chain.asReversed()) {
+            for (m in cls.methods.orEmpty()) {
+                val ann = annotations(m).firstOrNull { it.desc == annotation } ?: continue
+                if (m.name + m.desc in methods) continue
+                if (!check(m.name, m.access, Type.getArgumentTypes(m.desc).isNotEmpty())) continue
+                methods[m.name + m.desc] = RuleRef(cls.name, m.name, m.desc, isMethod = true, isStatic = static) to orderOf(ann)
+            }
+            for (f in cls.fields.orEmpty()) {
+                val ann = (f.visibleAnnotations.orEmpty() + f.invisibleAnnotations.orEmpty()).firstOrNull { it.desc == annotation } ?: continue
+                if (f.name in fields) continue
+                if (!check(f.name, f.access, takesArgs = false)) continue
+                fields[f.name] = RuleRef(cls.name, f.name, f.desc, isMethod = false, isStatic = static) to orderOf(ann)
+            }
+        }
+        val ordered = (methods.values + fields.values).sortedByDescending { it.second }.map { it.first }
+        return RuleScan(ordered, error)
+    }
+
+    /** `@Rule(order = n)`; JUnit's default is -1. */
+    private fun orderOf(a: AnnotationNode): Int = (value(a, "order") as? Int) ?: -1
 
     /** [node] and its superclasses, the topmost first, so their hooks run in JUnit's order. */
     private fun chainOf(node: ClassNode, lookup: (String) -> ClassNode?): List<ClassNode> {
@@ -586,6 +651,8 @@ object TestDiscovery {
 
     private const val JUNIT4_TEST = "Lorg/junit/Test;"
     private const val JUNIT4_IGNORE = "Lorg/junit/Ignore;"
+    private const val JUNIT4_RULE = "Lorg/junit/Rule;"
+    private const val JUNIT4_CLASS_RULE = "Lorg/junit/ClassRule;"
     private const val JUNIT4_RUN_WITH = "Lorg/junit/runner/RunWith;"
     private const val JUNIT4_PARAMETERIZED = "org/junit/runners/Parameterized"
     private const val JUNIT4_PARAMETERS = "Lorg/junit/runners/Parameterized\$Parameters;"

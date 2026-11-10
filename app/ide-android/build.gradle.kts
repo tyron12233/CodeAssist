@@ -223,6 +223,34 @@ val bundleVmSpikeMaterial3Asset = tasks.register<Copy>("bundleVmSpikeMaterial3As
     into(layout.buildDirectory.dir("vm-spike-asset/vmbench"))
 }
 
+// --- unit-test runner + interpreted-reflection fixtures (androidTest: TestRunnerArtSpike) ----------
+// TestRunnerArtSpike runs the IDE's JUnit runner on ART exactly as a phone test run does: JUnit and hamcrest are
+// INTERPRETED from their jars, and every generated class (peers, reflection mirrors, the rule Statement) is dexed
+// by DexPeerFactory. The fixtures are :jvm-build's and :jvm-interp's own test classes, STAGED from their test
+// output (not checked in) so they cannot go stale. Wired to the androidTest asset merge only, so an app build
+// does not compile those test sources.
+val testRunSpikeJars: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { testRunSpikeJars(libs.junit4) }
+val bundleTestRunSpikeAsset = tasks.register<Copy>("bundleTestRunSpikeAsset") {
+    description = "Stage the JUnit runner and reflection fixtures, plus junit/hamcrest jars, for TestRunnerArtSpike."
+    dependsOn(":jvm-build:testClasses", ":jvm-interp:testClasses")
+    into(layout.buildDirectory.dir("vm-spike-asset/testrun"))
+    from(project(":jvm-build").layout.buildDirectory.dir("classes/kotlin/test")) {
+        include("dev/ide/build/jvm/test/fixtures/RuleFixture*.class", "dev/ide/build/jvm/test/fixtures/RulePrivateFixture*.class")
+        include("dev/ide/build/jvm/test/fixtures/BacktickFixture*.class")
+        into("classes")
+    }
+    from(project(":jvm-interp").layout.buildDirectory.dir("classes/java/test")) {
+        include("dev/ide/jvm/fixtures/ReflectMethods*.class", "dev/ide/jvm/fixtures/ReflectMembers*.class")
+        into("classes")
+    }
+    from(testRunSpikeJars) { into("jars") }
+}
+tasks.matching { it.name.endsWith("AndroidTestAssets") }.configureEach { dependsOn(bundleTestRunSpikeAsset) }
+
 // --- Full Compose stack, Android variants (androidTest: interpret foundation/ui, milestone A) ------
 // VmTextFieldArtSpike against material3 1.5.0-alpha24 needs foundation classes newer than the app bundles
 // (androidx.compose.foundation.style.MutableStyleState); the flip must interpret those from the project jars,

@@ -168,11 +168,42 @@ open class AsmPeerFactory(
     override fun reflectionClass(className: String, constructorDescriptors: List<String>): Class<*> =
         reflectionClasses.getOrPut(className) { defineReflectionClass(className, constructorDescriptors) }
 
+    override fun reflectionMirror(className: String, methods: List<ReflectedMethod>, fields: List<ReflectedField>): Class<*> {
+        val internalName = "dev/ide/jvm/reflect/${traceableSimpleName(className)}_M${counter.incrementAndGet()}"
+        val cw = object : ClassWriter(COMPUTE_FRAMES) {
+            override fun getClassLoader(): ClassLoader = parent
+        }
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT, internalName, null, "java/lang/Object", null)
+        val declaredFields = HashSet<String>()
+        for (f in fields) {
+            if (!dexLegal(f.name) || !declaredFields.add(f.name)) continue
+            cw.visitField(f.access and FIELD_ACCESS, f.name, loadableType(Type.getType(f.descriptor)).descriptor, null, null).visitEnd()
+        }
+        val declared = HashSet<String>()
+        for (m in methods) {
+            if (!dexLegal(m.name)) continue
+            val desc = loadableDescriptor(m.descriptor)
+            if (!declared.add(m.name + desc)) continue // overloads differing only in interpreted types
+            val bodiless = m.access and (Opcodes.ACC_ABSTRACT or Opcodes.ACC_NATIVE) != 0
+            val g = GeneratorAdapter(m.access and METHOD_ACCESS, AsmMethod(m.name, desc), null, null, cw)
+            if (!bodiless) {
+                g.throwException(Type.getType(UnsupportedOperationException::class.java), "a reflection mirror is never run")
+            }
+            g.endMethod()
+        }
+        cw.visitEnd()
+        return define(internalName.replace('/', '.'), cw.toByteArray())
+    }
+
+    /** A member name D8 accepts below DEX 040: a Kotlin backtick name (spaces, commas) is left out of a mirror. */
+    private fun dexLegal(name: String) = name.isNotEmpty() && name.all { it.isLetterOrDigit() || it == '_' || it == '$' || it == '-' }
+
     override fun interpretedNameOf(cls: Class<*>): String? = reflectionNames[cls]
 
     /** A minimal real class extending `Object` that stands for an interpreted type in reflection, with a public
      *  constructor per descriptor so `getConstructor` matches. Never instantiated (newInstance is intercepted),
-     *  so each constructor simply invokes `Object.<init>` and returns. */
+     *  so each constructor simply invokes `Object.<init>` and returns. Its members are mirrored separately, on
+     *  demand ([reflectionMirror]). */
     private fun defineReflectionClass(className: String, ctorDescriptors: List<String>): Class<*> {
         val traceable = traceableSimpleName(className)
         val internalName = "dev/ide/jvm/reflect/${traceable}_R${counter.incrementAndGet()}"
@@ -180,7 +211,7 @@ open class AsmPeerFactory(
             override fun getClassLoader(): ClassLoader = parent
         }
         cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", null)
-        val descriptors = ctorDescriptors.ifEmpty { listOf("()V") }
+        val descriptors = ctorDescriptors.map(::loadableDescriptor).distinct().ifEmpty { listOf("()V") }
         for (desc in descriptors) {
             val g = GeneratorAdapter(Opcodes.ACC_PUBLIC, AsmMethod("<init>", desc), null, null, cw)
             g.loadThis()
@@ -192,6 +223,25 @@ open class AsmPeerFactory(
         val cls = define(internalName.replace('/', '.'), cw.toByteArray())
         reflectionNames[cls] = className
         return cls
+    }
+
+    /** [descriptor] with every reference type the parent loader cannot load replaced by `Object`, so reflecting
+     *  over a stand-in never fails resolving a parameter type. */
+    private fun loadableDescriptor(descriptor: String): String {
+        val t = Type.getMethodType(descriptor)
+        return Type.getMethodDescriptor(loadableType(t.returnType), *t.argumentTypes.map(::loadableType).toTypedArray())
+    }
+
+    private fun loadableType(x: Type): Type = when (x.sort) {
+        Type.ARRAY -> loadableType(x.elementType).let { e -> if (e == x.elementType) x else Type.getType("[".repeat(x.dimensions) + e.descriptor) }
+        Type.OBJECT -> if (loadable(x.internalName)) x else OBJECT
+        else -> x
+    }
+
+    private val loadableCache = ConcurrentHashMap<String, Boolean>()
+
+    private fun loadable(internalName: String): Boolean = loadableCache.getOrPut(internalName) {
+        runCatching { Class.forName(internalName.replace('/', '.'), false, parent) }.isSuccess
     }
 
     /** The interpreted class name flattened into one simple-name segment for a generated class. Kotlin
@@ -406,6 +456,12 @@ open class AsmPeerFactory(
         /** The static factory an enum peer is instantiated through (see [generateFactory]). */
         const val FACTORY_METHOD = "newPeer"
         val OBJECT: Type = Type.getType(Any::class.java)
+        /** The modifiers a mirror member keeps from the interpreted one. */
+        const val METHOD_ACCESS = Opcodes.ACC_PUBLIC or Opcodes.ACC_PRIVATE or Opcodes.ACC_PROTECTED or Opcodes.ACC_STATIC or
+            Opcodes.ACC_FINAL or Opcodes.ACC_SYNCHRONIZED or Opcodes.ACC_SYNTHETIC or Opcodes.ACC_BRIDGE or
+            Opcodes.ACC_VARARGS or Opcodes.ACC_ABSTRACT or Opcodes.ACC_NATIVE
+        const val FIELD_ACCESS = Opcodes.ACC_PUBLIC or Opcodes.ACC_PRIVATE or Opcodes.ACC_PROTECTED or Opcodes.ACC_STATIC or
+            Opcodes.ACC_FINAL or Opcodes.ACC_VOLATILE or Opcodes.ACC_TRANSIENT or Opcodes.ACC_SYNTHETIC or Opcodes.ACC_ENUM
         val DISPATCH: Type = Type.getType(PeerDispatch::class.java)
         val SUPPLIER: Type = Type.getType(java.util.function.Supplier::class.java)
         val INVOKE = AsmMethod(

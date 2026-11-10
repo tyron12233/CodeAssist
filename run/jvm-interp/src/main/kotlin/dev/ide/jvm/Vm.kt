@@ -77,7 +77,7 @@ class Vm(
     private val policy: InterpretPolicy = InterpretPolicy.DEFAULT,
     internal val bridge: NativeBridge = ReflectiveBridge(),
     /** Produces the real peer objects that let platform code invoke interpreted overrides. */
-    private val peerFactory: PeerFactory = AsmPeerFactory(),
+    internal val peerFactory: PeerFactory = AsmPeerFactory(),
     /** When > 0, a `java.lang.Thread` the program constructs is given this stack size (bytes). Interpreted
      *  recursion runs on the host thread stack, so a spawned thread needs a generous stack like the main run
      *  thread; the default host stack (a few hundred KB) overflows far shallower. 0 = use the host default
@@ -91,6 +91,7 @@ class Vm(
 ) {
     private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
+    private val reflection = InterpretedReflection(this)
 
     /** Stored for a name known NOT to be interpreted (bridged or absent): [classes] is a [java.util.concurrent
      *  .ConcurrentHashMap], which cannot hold a null value, so [resolve] uses this sentinel and maps it back to
@@ -211,10 +212,20 @@ class Vm(
                 cn.interfaces ?: emptyList(),
                 cn.access,
                 cn.methods ?: emptyList(),
-                cn.fields ?: emptyList()
+                cn.fields ?: emptyList(),
+                cn.signature,
+                cn.visibleAnnotations ?: emptyList(),
             )
         }
         return resolved.takeIf { it !== notInterpreted }
+    }
+
+    /** Registers [cn], a class the VM generated itself (an annotation's implementation, see
+     *  [InterpretedReflection]), so it resolves and runs like one read from the classpath. */
+    internal fun defineSynthetic(cn: ClassNode): VmClass {
+        val cls = VmClass(cn.name, cn.superName, cn.interfaces ?: emptyList(), cn.access, cn.methods ?: emptyList(),
+            cn.fields ?: emptyList(), cn.signature, cn.visibleAnnotations ?: emptyList())
+        return classes.putIfAbsent(cn.name, cls) ?: cls
     }
 
     /**
@@ -487,6 +498,9 @@ class Vm(
                 ),
             )
         }
+        // Members, supertypes, generic signatures and annotations of an interpreted type, and the use of a
+        // mirrored Method/Field: see [InterpretedReflection].
+        reflection.intercept(receiver, name, descriptor, args).let { if (it !== InterpretedReflection.NOT_HANDLED) return Reflected(it) }
         // Constructor.newInstance(args) on a reflection-class constructor: run the interpreted constructor.
         if (receiver is java.lang.reflect.Constructor<*> && name == "newInstance") {
             val internal = peerFactory.interpretedNameOf(receiver.declaringClass) ?: return null
@@ -564,7 +578,7 @@ class Vm(
 
     /** A parameter descriptor with any INTERPRETED reference type replaced by `Object` (no real class exists for
      *  it), so a reflection-class stub constructor uses only loadable parameter types. */
-    private fun realizeType(t: String): String = when {
+    internal fun realizeType(t: String): String = when {
         t.startsWith("[") -> "[" + realizeType(t.substring(1))
         t.startsWith("L") -> if (resolve(
                 t.substring(
@@ -861,7 +875,7 @@ class Vm(
     private fun declaresInChain(vmClass: VmClass, name: String, descriptor: String): Boolean =
         findInHierarchy(vmClass, name, descriptor) != null
 
-    private fun loadReal(internalName: String): Class<*> =
+    internal fun loadReal(internalName: String): Class<*> =
         Class.forName(internalName.replace('/', '.'), false, loader)
 
     /** The real [Class] a `ldc` class-literal constant names. Only reference and array literals reach here (a

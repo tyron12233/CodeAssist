@@ -39,9 +39,11 @@ class TestRunnerTest {
     /** Runs [classes] and returns the protocol records plus the program's own (non-record) output. */
     private fun run(classes: List<TestClass>): Pair<List<Result>, String> {
         val runnerDir = Files.createTempDirectory("test-runner")
-        val main = runnerDir.resolve(TestRunnerGenerator.MAIN_CLASS + ".class")
-        Files.createDirectories(main.parent)
-        Files.write(main, TestRunnerGenerator.generate(classes))
+        for ((name, bytes) in TestRunnerGenerator.generateAll(classes)) {
+            val file = runnerDir.resolve("$name.class")
+            Files.createDirectories(file.parent)
+            Files.write(file, bytes)
+        }
         val out = StringBuilder()
         val io = object : ProgramIo {
             override fun stdout(text: String) { synchronized(out) { out.append(text) } }
@@ -132,6 +134,7 @@ class TestRunnerTest {
 
         assertEquals(TestProtocol.PASSED, r.final("InheritedFixture", "inherited").event)
         assertEquals(TestProtocol.PASSED, r.final("InheritedFixture", "own").event)
+        assertEquals(TestProtocol.PASSED, r.final("BacktickFixture", "sources are every file, sorted").event)
 
         // Hooks: beforeAll once, then before/after around every Jupiter test, in that order.
         assertEquals(1, Regex("beforeAll").findAll(output).count(), output)
@@ -139,6 +142,32 @@ class TestRunnerTest {
         assertEquals(4, Regex("\nbefore\nafter").findAll(output).count(), "each run Jupiter test is wrapped: $output")
         assertTrue("base before\nown before" in output, output)
         assertEquals(TestProtocol.FINISHED, r.last().event)
+    }
+
+    @Test
+    fun appliesJunit4Rules() {
+        val classes = discovered().filter { it.fqn.removePrefix(fixtures).startsWith("Rule") }
+        val (r, output) = run(classes)
+        fun final(method: String) = r.final("RuleFixture", method)
+        // Reported: a TemporaryFolder rule was never applied, so `newFile` threw "the temporary folder has not yet
+        // been created". The runner called the test directly and ignored @Rule.
+        assertEquals(TestProtocol.PASSED, final("createsFiles").event, final("createsFiles").message)
+        assertEquals(TestProtocol.PASSED, final("knowsItsName").event, final("knowsItsName").message)
+        assertEquals(TestProtocol.PASSED, final("classRuleApplies").event, final("classRuleApplies").message)
+        assertEquals(TestProtocol.PASSED, final("expectedByRule").event, final("expectedByRule").message)
+        assertEquals(TestProtocol.PASSED, final("hamcrestMatchers").event, final("hamcrestMatchers").message)
+        val failed = final("failsInsideRules")
+        assertEquals(TestProtocol.FAILED, failed.event)
+        assertTrue("on purpose" in failed.message, failed.message)
+        assertTrue("watched createsFiles ok" in output && "watched failsInsideRules failed" in output, output)
+        assertTrue("method-rule createsFiles on RuleFixture test=true" in output, output)
+        // The folder is deleted once its test is over.
+        val root = Regex("rule-tmp-root=(.*)").find(output)?.groupValues?.get(1) ?: error("no root printed: $output")
+        assertTrue(!File(root).exists(), "the temporary folder outlived its test: $root")
+
+        val private = r.final("RulePrivateFixture", "needsTheRule")
+        assertEquals(TestProtocol.FAILED, private.event)
+        assertTrue("The @Rule 'tmp' must be public" in private.message && "@get:Rule" in private.message, private.message)
     }
 
     @Test

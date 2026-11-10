@@ -1,6 +1,7 @@
 package dev.ide.jvm
 
 import org.objectweb.asm.Opcodes
+import org.objectweb.asm.tree.AnnotationNode
 import org.objectweb.asm.tree.FieldNode
 import org.objectweb.asm.tree.MethodNode
 
@@ -20,7 +21,13 @@ internal class VmClass(
     val access: Int,
     val methods: List<MethodNode>,
     fields: List<FieldNode>,
+    /** The generic `Signature` attribute and runtime-visible annotations, for reflection ([InterpretedReflection]). */
+    val signature: String? = null,
+    val visibleAnnotations: List<AnnotationNode> = emptyList(),
 ) {
+    /** The declared fields as read, for reflection. */
+    val fieldNodes: List<FieldNode> = fields
+
     /** Descriptors of the declared instance fields, by name, used to default an instance's fields on allocation. */
     val instanceFieldDescs: Map<String, String> =
         fields.filter { it.access and Opcodes.ACC_STATIC == 0 }.associate { it.name to it.desc }

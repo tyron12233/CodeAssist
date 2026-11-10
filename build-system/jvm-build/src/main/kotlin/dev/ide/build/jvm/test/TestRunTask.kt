@@ -66,9 +66,11 @@ class TestRunTask(
         val count = classes.sumOf { it.tests.size }
         ctx.logger()("> Running $count test(s) in ${classes.size} class(es)")
 
-        val mainFile = runnerDir.resolve(TestRunnerGenerator.MAIN_CLASS + ".class")
-        Files.createDirectories(mainFile.parent)
-        Files.write(mainFile, TestRunnerGenerator.generate(classes))
+        for ((name, bytes) in TestRunnerGenerator.generateAll(classes)) {
+            val file = runnerDir.resolve("$name.class")
+            Files.createDirectories(file.parent)
+            Files.write(file, bytes)
+        }
 
         val request = InterpretRunRequest(
             classpath = listOf(runnerDir) + classpath,

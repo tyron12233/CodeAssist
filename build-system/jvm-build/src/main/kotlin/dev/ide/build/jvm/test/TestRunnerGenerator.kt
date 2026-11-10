@@ -12,6 +12,9 @@ import org.objectweb.asm.Opcodes.IF_ICMPEQ
 import org.objectweb.asm.Opcodes.IF_ICMPGE
 import org.objectweb.asm.Opcodes.INVOKEINTERFACE
 import org.objectweb.asm.Opcodes.PUTFIELD
+import org.objectweb.asm.Opcodes.GETFIELD
+import org.objectweb.asm.Opcodes.PUTSTATIC
+import org.objectweb.asm.Opcodes.IF_ICMPNE
 import org.objectweb.asm.Opcodes.ACC_FINAL
 import org.objectweb.asm.Opcodes.ACC_PUBLIC
 import org.objectweb.asm.Opcodes.ACC_STATIC
@@ -66,20 +69,57 @@ object TestRunnerGenerator {
     /** The generated class's internal name; nothing under `dev/` is bridged, so the VM interprets it. */
     const val MAIN_CLASS = "dev/ide/testrun/Main"
 
+    /** The JUnit 4 `Statement` a rule wraps: one test's hooks and body, or a whole class under a `@ClassRule`.
+     *  Written only when some class has rules, as it extends a class from the project's JUnit. */
+    const val BODY_CLASS = "dev/ide/testrun/Body"
+
     private const val TEST_DESC = "(Ljava/lang/Object;[Ljava/lang/Object;[Ljava/lang/Object;Ljava/lang/String;)I"
+    private const val BODY_DESC = "(ILjava/lang/Object;[Ljava/lang/Object;)V"
+    private const val STATEMENT = "org/junit/runners/model/Statement"
+    private const val DESCRIPTION = "org/junit/runner/Description"
+    private const val METHOD_RULE = "org/junit/rules/MethodRule"
+    private const val FRAMEWORK_METHOD = "org/junit/runners/model/FrameworkMethod"
+    private const val RULE_DESC = "(L$STATEMENT;Ljava/lang/Object;L$DESCRIPTION;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/String;)L$STATEMENT;"
+
+    /** Every class a run needs, by internal name: the [MAIN_CLASS], and the [BODY_CLASS] when a test class has rules. */
+    fun generateAll(classes: List<TestClass>): Map<String, ByteArray> {
+        val out = linkedMapOf(MAIN_CLASS to generate(classes))
+        if (classes.any { it.usesRules }) out[BODY_CLASS] = generateBody()
+        return out
+    }
+
+    private val TestClass.runnable: Boolean get() = skipReason == null && classError == null
+    private val TestClass.usesRules: Boolean get() = runnable && (rules.isNotEmpty() || classRules.isNotEmpty())
+
+    /** The test body id [writeBodyDispatch] switches on: a class's tests by position, a class under class rules negative. */
+    private fun bodyId(ci: Int, ti: Int) = (ci shl 16) or ti
+    private fun classBodyId(ci: Int) = -(ci + 1)
 
     fun generate(classes: List<TestClass>): ByteArray {
         val cw = ClassWriter(ClassWriter.COMPUTE_MAXS)
         cw.visit(V1_6, ACC_PUBLIC or ACC_FINAL, MAIN_CLASS, null, "java/lang/Object", null)
         writeEmit(cw)
+        if (classes.any { it.usesRules }) {
+            writeRule(cw)
+            writeBodyDispatch(cw, classes)
+        }
         writeDescribe(cw)
         writeIter(cw)
         writeArgs(cw)
         if (classes.any { c -> c.tests.any { it.factory != null } }) writeJupiterArgs(cw)
         writeJoin(cw)
         classes.forEachIndexed { ci, c ->
-            writeClassMethod(cw, ci, c)
-            c.tests.forEachIndexed { ti, t -> writeTestMethod(cw, ci, ti, c, t) }
+            if (c.usesRules && c.classRules.isNotEmpty()) {
+                cw.visitField(ACC_STATIC, "r$ci", "I", null, null).visitEnd()
+                writeClassMethod(cw, ci, c, name = "cb$ci")
+                writeClassRuleWrapper(cw, ci, c)
+            } else {
+                writeClassMethod(cw, ci, c, name = "c$ci")
+            }
+            c.tests.forEachIndexed { ti, t ->
+                writeTestMethod(cw, ci, ti, c, t)
+                if (c.usesRules && c.rules.isNotEmpty() && t.skipReason == null) writeBodyMethod(cw, ci, ti, c, t)
+            }
         }
         writeMain(cw, classes)
         cw.visitEnd()
@@ -133,9 +173,16 @@ object TestRunnerGenerator {
      * `static int cN()`: the class's all-hooks around its tests; returns how many failed.
      * Locals: 0 shared instance, 1 failed count, 2 caught throwable, 3 iterator, 4 index, 5 arguments, 6 name.
      */
-    private fun writeClassMethod(cw: ClassWriter, ci: Int, c: TestClass) {
-        val mv = cw.visitMethod(ACC_STATIC, "c$ci", "()I", null, null)
+    private fun writeClassMethod(cw: ClassWriter, ci: Int, c: TestClass, name: String) {
+        val mv = cw.visitMethod(ACC_STATIC, name, "()I", null, null)
         mv.visitCode()
+        if (c.classError != null) {
+            for (t in c.tests) emit(mv, TestProtocol.FAILED, c.fqn, t.name, message = c.classError)
+            pushInt(mv, c.tests.size)
+            mv.visitInsn(IRETURN)
+            mv.visitMaxs(0, 0); mv.visitEnd()
+            return
+        }
         if (c.skipReason != null) {
             for (t in c.tests) emit(mv, TestProtocol.SKIPPED, c.fqn, t.name, message = c.skipReason)
             mv.visitInsn(ICONST_0)
@@ -477,36 +524,36 @@ object TestRunnerGenerator {
         mv.visitVarInsn(ALOAD, 4)
         mv.visitJumpInsn(IFNONNULL, report)
 
-        // Before-hooks (the enclosing classes' first) then the test: the first throw ends both, as in JUnit.
-        guarded(mv, failureLocal = 4) {
-            c.outer.forEachIndexed { level, o -> for (h in o.beforeEach) callHook(mv, o.internalName, h, outerLocal(level)) }
-            for (h in c.beforeEach) callHook(mv, c.internalName, h, receiverLocal = 5)
-            mv.visitVarInsn(ALOAD, 5)
-            mv.visitTypeInsn(CHECKCAST, c.internalName)
-            if (t.parameterized) Type.getArgumentTypes(t.descriptor).forEachIndexed { i, p -> unpack(mv, 1, i, p) }
-            mv.visitMethodInsn(INVOKEVIRTUAL, c.internalName, t.name, t.descriptor, false)
-            popReturn(mv, Type.getReturnType(t.descriptor))
-        }
-        t.expected?.let { expected -> checkExpected(mv, expected) }
-        // After-hooks always run, the class's own then its enclosing classes'; each one's failure counts only
-        // when the test had not already failed.
-        val after = c.afterEach.map { c.internalName to (it to 5) } +
-            c.outer.indices.reversed().flatMap { level -> c.outer[level].afterEach.map { c.outer[level].internalName to (it to outerLocal(level)) } }
-        for ((cls, hookAndReceiver) in after) {
-            val (h, receiver) = hookAndReceiver
-            val start = Label(); val end = Label(); val handler = Label(); val done = Label()
-            mv.visitTryCatchBlock(start, end, handler, "java/lang/Throwable")
-            mv.visitLabel(start)
-            callHook(mv, cls, h, receiver)
-            mv.visitLabel(end)
-            mv.visitJumpInsn(GOTO, done)
-            mv.visitLabel(handler)
-            mv.visitVarInsn(ASTORE, 8)
-            mv.visitVarInsn(ALOAD, 4)
-            mv.visitJumpInsn(IFNONNULL, done)
-            mv.visitVarInsn(ALOAD, 8)
-            mv.visitVarInsn(ASTORE, 4)
-            mv.visitLabel(done)
+        if (!c.usesRules || c.rules.isEmpty()) {
+            writeBody(mv, c, t, instanceLocal = 5, argsLocal = 1, failureLocal = 4, caughtLocal = 8, outerLocal = outerLocal)
+        } else {
+            // The rules wrap the hooks and the test, as BlockJUnit4ClassRunner wraps them: each rule's value is read
+            // from this test's instance, and the outermost one's statement is evaluated.
+            guarded(mv, failureLocal = 4) {
+                mv.visitTypeInsn(NEW, BODY_CLASS)
+                mv.visitInsn(DUP)
+                pushInt(mv, bodyId(ci, ti))
+                mv.visitVarInsn(ALOAD, 5)
+                mv.visitVarInsn(ALOAD, 1)
+                mv.visitMethodInsn(INVOKESPECIAL, BODY_CLASS, "<init>", BODY_DESC, false)
+                for (r in c.rules) {
+                    mv.visitVarInsn(ALOAD, 5)
+                    mv.visitTypeInsn(CHECKCAST, r.owner)
+                    if (r.isMethod) mv.visitMethodInsn(INVOKEVIRTUAL, r.owner, r.name, r.descriptor, false)
+                    else mv.visitFieldInsn(GETFIELD, r.owner, r.name, r.descriptor)
+                    mv.visitLdcInsn(c.fqn)
+                    mv.visitVarInsn(ALOAD, 3)
+                    mv.visitInsn(ICONST_0)
+                    mv.visitTypeInsn(ANEWARRAY, "java/lang/annotation/Annotation")
+                    mv.visitMethodInsn(INVOKESTATIC, DESCRIPTION, "createTestDescription",
+                        "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/annotation/Annotation;)L$DESCRIPTION;", false)
+                    mv.visitLdcInsn(r.name)
+                    mv.visitVarInsn(ALOAD, 5)
+                    mv.visitLdcInsn(t.name)
+                    mv.visitMethodInsn(INVOKESTATIC, MAIN_CLASS, "rule", RULE_DESC, false)
+                }
+                mv.visitMethodInsn(INVOKEVIRTUAL, STATEMENT, "evaluate", "()V", false)
+            }
         }
 
         mv.visitLabel(report)
@@ -524,23 +571,265 @@ object TestRunnerGenerator {
         mv.visitEnd()
     }
 
-    /** No throw → fail with "expected X"; a throw that is an X → pass; any other throw stays the failure. */
-    private fun checkExpected(mv: MethodVisitor, expected: String) {
-        val threw = Label(); val done = Label()
+    /**
+     * The before-hooks (the enclosing classes' first) and the test, the expected-exception check, then the
+     * after-hooks, leaving the first failure in [failureLocal]. [instanceLocal] holds the test instance,
+     * [argsLocal] a parameterized run's arguments, [outerLocal] gives a nesting level's enclosing instance.
+     */
+    private fun writeBody(
+        mv: MethodVisitor, c: TestClass, t: TestMethod,
+        instanceLocal: Int, argsLocal: Int, failureLocal: Int, caughtLocal: Int, outerLocal: (Int) -> Int,
+    ) {
+        // The first throw ends the before-hooks and the test, as in JUnit.
+        guarded(mv, failureLocal) {
+            c.outer.forEachIndexed { level, o -> for (h in o.beforeEach) callHook(mv, o.internalName, h, outerLocal(level)) }
+            for (h in c.beforeEach) callHook(mv, c.internalName, h, receiverLocal = instanceLocal)
+            mv.visitVarInsn(ALOAD, instanceLocal)
+            mv.visitTypeInsn(CHECKCAST, c.internalName)
+            if (t.parameterized) Type.getArgumentTypes(t.descriptor).forEachIndexed { i, p -> unpack(mv, argsLocal, i, p) }
+            mv.visitMethodInsn(INVOKEVIRTUAL, c.internalName, t.name, t.descriptor, false)
+            popReturn(mv, Type.getReturnType(t.descriptor))
+        }
+        t.expected?.let { expected -> checkExpected(mv, expected, failureLocal) }
+        // After-hooks always run, the class's own then its enclosing classes'; each one's failure counts only
+        // when the test had not already failed.
+        val after = c.afterEach.map { c.internalName to (it to instanceLocal) } +
+            c.outer.indices.reversed().flatMap { level -> c.outer[level].afterEach.map { c.outer[level].internalName to (it to outerLocal(level)) } }
+        for ((cls, hookAndReceiver) in after) {
+            val (h, receiver) = hookAndReceiver
+            val start = Label(); val end = Label(); val handler = Label(); val done = Label()
+            mv.visitTryCatchBlock(start, end, handler, "java/lang/Throwable")
+            mv.visitLabel(start)
+            callHook(mv, cls, h, receiver)
+            mv.visitLabel(end)
+            mv.visitJumpInsn(GOTO, done)
+            mv.visitLabel(handler)
+            mv.visitVarInsn(ASTORE, caughtLocal)
+            mv.visitVarInsn(ALOAD, failureLocal)
+            mv.visitJumpInsn(IFNONNULL, done)
+            mv.visitVarInsn(ALOAD, caughtLocal)
+            mv.visitVarInsn(ASTORE, failureLocal)
+            mv.visitLabel(done)
+        }
+    }
+
+    /** `static void bN_M(Object instance, Object[] args)`: [writeBody] for a test under rules, throwing its failure
+     *  so the rules around it see it (an `ExpectedException` rule catches it; `TemporaryFolder` cleans up after it).
+     *  Locals: 0 instance, 1 args, 2 failure, 3 caught. */
+    private fun writeBodyMethod(cw: ClassWriter, ci: Int, ti: Int, c: TestClass, t: TestMethod) {
+        val mv = cw.visitMethod(ACC_STATIC, "b${ci}_$ti", "(Ljava/lang/Object;[Ljava/lang/Object;)V", null, null)
+        mv.visitCode()
+        mv.visitInsn(ACONST_NULL); mv.visitVarInsn(ASTORE, 2)
+        writeBody(mv, c, t, instanceLocal = 0, argsLocal = 1, failureLocal = 2, caughtLocal = 3, outerLocal = { error("rules are JUnit 4; @Nested is JUnit 5") })
+        val ok = Label()
+        mv.visitVarInsn(ALOAD, 2)
+        mv.visitJumpInsn(IFNULL, ok)
+        mv.visitVarInsn(ALOAD, 2)
+        mv.visitTypeInsn(CHECKCAST, "java/lang/Throwable")
+        mv.visitInsn(ATHROW)
+        mv.visitLabel(ok)
+        mv.visitInsn(RETURN)
+        mv.visitMaxs(0, 0)
+        mv.visitEnd()
+    }
+
+    /**
+     * `static int cN()` for a class under `@ClassRule`s: the class's own run (`cbN`, its hooks and tests) as a
+     * statement the class rules wrap. When a rule fails before the tests ran, each test fails with it; when it
+     * fails after (a teardown), the class does. Locals: 2 caught.
+     */
+    private fun writeClassRuleWrapper(cw: ClassWriter, ci: Int, c: TestClass) {
+        val mv = cw.visitMethod(ACC_STATIC, "c$ci", "()I", null, null)
+        mv.visitCode()
+        pushInt(mv, -1)
+        mv.visitFieldInsn(PUTSTATIC, MAIN_CLASS, "r$ci", "I")
+        mv.visitInsn(ACONST_NULL); mv.visitVarInsn(ASTORE, 2)
+        guarded(mv, failureLocal = 2) {
+            mv.visitTypeInsn(NEW, BODY_CLASS)
+            mv.visitInsn(DUP)
+            pushInt(mv, classBodyId(ci))
+            mv.visitInsn(ACONST_NULL)
+            mv.visitInsn(ACONST_NULL)
+            mv.visitMethodInsn(INVOKESPECIAL, BODY_CLASS, "<init>", BODY_DESC, false)
+            for (r in c.classRules) {
+                if (r.isMethod) mv.visitMethodInsn(INVOKESTATIC, r.owner, r.name, r.descriptor, false)
+                else mv.visitFieldInsn(GETSTATIC, r.owner, r.name, r.descriptor)
+                mv.visitLdcInsn(c.fqn)
+                mv.visitInsn(ICONST_0)
+                mv.visitTypeInsn(ANEWARRAY, "java/lang/annotation/Annotation")
+                mv.visitMethodInsn(INVOKESTATIC, DESCRIPTION, "createSuiteDescription",
+                    "(Ljava/lang/String;[Ljava/lang/annotation/Annotation;)L$DESCRIPTION;", false)
+                mv.visitLdcInsn(r.name)
+                mv.visitInsn(ACONST_NULL) // a class rule has no target or method: it must be a TestRule
+                mv.visitInsn(ACONST_NULL)
+                mv.visitMethodInsn(INVOKESTATIC, MAIN_CLASS, "rule", RULE_DESC, false)
+            }
+            mv.visitMethodInsn(INVOKEVIRTUAL, STATEMENT, "evaluate", "()V", false)
+        }
+        val failed = Label(); val ran = Label()
+        mv.visitVarInsn(ALOAD, 2)
+        mv.visitJumpInsn(IFNONNULL, failed)
+        mv.visitFieldInsn(GETSTATIC, MAIN_CLASS, "r$ci", "I")
+        mv.visitInsn(IRETURN)
+        mv.visitLabel(failed)
+        mv.visitFieldInsn(GETSTATIC, MAIN_CLASS, "r$ci", "I")
+        pushInt(mv, -1)
+        mv.visitJumpInsn(IF_ICMPNE, ran)
+        for (t in c.tests) {
+            if (t.skipReason != null) emit(mv, TestProtocol.SKIPPED, c.fqn, t.name, message = t.skipReason)
+            else emitWithThrowable(mv, TestProtocol.FAILED, c.fqn, t.name, prefix = "Class rule failed: ", throwableLocal = 2)
+        }
+        pushInt(mv, c.tests.count { it.skipReason == null })
+        mv.visitInsn(IRETURN)
+        mv.visitLabel(ran)
+        emitWithThrowable(mv, TestProtocol.CLASS_FAILED, c.fqn, "", prefix = "Class rule failed: ", throwableLocal = 2)
+        mv.visitFieldInsn(GETSTATIC, MAIN_CLASS, "r$ci", "I")
+        mv.visitInsn(ICONST_1)
+        mv.visitInsn(IADD)
+        mv.visitInsn(IRETURN)
+        mv.visitMaxs(0, 0)
+        mv.visitEnd()
+    }
+
+    /**
+     * `static Statement rule(Statement inner, Object rule, Description d, String name, Object target, String method)`:
+     * `rule.apply(inner, d)` for a `TestRule`, as JUnit prefers it when a rule is both; else, for a `MethodRule` of a
+     * test, `rule.apply(inner, new FrameworkMethod(target.getClass().getMethod(method)), target)`. Anything else (null,
+     * or a `MethodRule` used as a `@ClassRule`) fails, naming the member.
+     */
+    private fun writeRule(cw: ClassWriter) {
+        val mv = cw.visitMethod(ACC_STATIC, "rule", RULE_DESC, null, null)
+        mv.visitCode()
+        val notRule = Label()
+        mv.visitVarInsn(ALOAD, 1)
+        mv.visitTypeInsn(INSTANCEOF, "org/junit/rules/TestRule")
+        mv.visitJumpInsn(IFEQ, notRule)
+        mv.visitVarInsn(ALOAD, 1)
+        mv.visitTypeInsn(CHECKCAST, "org/junit/rules/TestRule")
+        mv.visitVarInsn(ALOAD, 0)
+        mv.visitVarInsn(ALOAD, 2)
+        mv.visitMethodInsn(INVOKEINTERFACE, "org/junit/rules/TestRule", "apply", "(L$STATEMENT;L$DESCRIPTION;)L$STATEMENT;", true)
+        mv.visitInsn(ARETURN)
+        mv.visitLabel(notRule)
+        val notMethodRule = Label()
         mv.visitVarInsn(ALOAD, 4)
+        mv.visitJumpInsn(IFNULL, notMethodRule)
+        mv.visitVarInsn(ALOAD, 1)
+        mv.visitTypeInsn(INSTANCEOF, METHOD_RULE)
+        mv.visitJumpInsn(IFEQ, notMethodRule)
+        mv.visitVarInsn(ALOAD, 1)
+        mv.visitTypeInsn(CHECKCAST, METHOD_RULE)
+        mv.visitVarInsn(ALOAD, 0)
+        mv.visitTypeInsn(NEW, FRAMEWORK_METHOD)
+        mv.visitInsn(DUP)
+        mv.visitVarInsn(ALOAD, 4)
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Object", "getClass", "()Ljava/lang/Class;", false)
+        mv.visitVarInsn(ALOAD, 5)
+        mv.visitInsn(ICONST_0)
+        mv.visitTypeInsn(ANEWARRAY, "java/lang/Class")
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Class", "getMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false)
+        mv.visitMethodInsn(INVOKESPECIAL, FRAMEWORK_METHOD, "<init>", "(Ljava/lang/reflect/Method;)V", false)
+        mv.visitVarInsn(ALOAD, 4)
+        mv.visitMethodInsn(INVOKEINTERFACE, METHOD_RULE, "apply", "(L$STATEMENT;L$FRAMEWORK_METHOD;Ljava/lang/Object;)L$STATEMENT;", true)
+        mv.visitInsn(ARETURN)
+        mv.visitLabel(notMethodRule)
+        mv.visitTypeInsn(NEW, "java/lang/IllegalStateException")
+        mv.visitInsn(DUP)
+        newBuilder(mv, "The rule '")
+        mv.visitVarInsn(ALOAD, 3); append(mv, "Ljava/lang/String;")
+        mv.visitLdcInsn("' is not a TestRule (nor, outside a @ClassRule, a MethodRule): "); append(mv, "Ljava/lang/String;")
+        mv.visitVarInsn(ALOAD, 1); append(mv, "Ljava/lang/Object;")
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false)
+        mv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalStateException", "<init>", "(Ljava/lang/String;)V", false)
+        mv.visitInsn(ATHROW)
+        mv.visitMaxs(0, 0)
+        mv.visitEnd()
+    }
+
+    /** `static void body(int id, Object instance, Object[] args)`: what a [BODY_CLASS] statement runs, by id. */
+    private fun writeBodyDispatch(cw: ClassWriter, classes: List<TestClass>) {
+        val mv = cw.visitMethod(ACC_STATIC, "body", BODY_DESC, null, null)
+        mv.visitCode()
+        val cases = sortedMapOf<Int, () -> Unit>()
+        classes.forEachIndexed { ci, c ->
+            if (!c.usesRules) return@forEachIndexed
+            if (c.classRules.isNotEmpty()) cases[classBodyId(ci)] = {
+                mv.visitMethodInsn(INVOKESTATIC, MAIN_CLASS, "cb$ci", "()I", false)
+                mv.visitFieldInsn(PUTSTATIC, MAIN_CLASS, "r$ci", "I")
+            }
+            if (c.rules.isNotEmpty()) c.tests.forEachIndexed { ti, t ->
+                if (t.skipReason == null) cases[bodyId(ci, ti)] = {
+                    mv.visitVarInsn(ALOAD, 1)
+                    mv.visitVarInsn(ALOAD, 2)
+                    mv.visitMethodInsn(INVOKESTATIC, MAIN_CLASS, "b${ci}_$ti", "(Ljava/lang/Object;[Ljava/lang/Object;)V", false)
+                }
+            }
+        }
+        val dflt = Label()
+        val labels = cases.keys.map { Label() }
+        mv.visitVarInsn(ILOAD, 0)
+        mv.visitLookupSwitchInsn(dflt, cases.keys.toIntArray(), labels.toTypedArray())
+        cases.values.forEachIndexed { i, body ->
+            mv.visitLabel(labels[i])
+            body()
+            mv.visitInsn(RETURN)
+        }
+        mv.visitLabel(dflt)
+        mv.visitTypeInsn(NEW, "java/lang/IllegalStateException")
+        mv.visitInsn(DUP)
+        mv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalStateException", "<init>", "()V", false)
+        mv.visitInsn(ATHROW)
+        mv.visitMaxs(0, 0)
+        mv.visitEnd()
+    }
+
+    /** [BODY_CLASS]: a `Statement` holding a body id, the test instance and its arguments; `evaluate` runs that body. */
+    private fun generateBody(): ByteArray {
+        val cw = ClassWriter(ClassWriter.COMPUTE_MAXS)
+        cw.visit(V1_6, ACC_PUBLIC or ACC_FINAL, BODY_CLASS, null, STATEMENT, null)
+        cw.visitField(ACC_FINAL, "id", "I", null, null).visitEnd()
+        cw.visitField(ACC_FINAL, "instance", "Ljava/lang/Object;", null, null).visitEnd()
+        cw.visitField(ACC_FINAL, "args", "[Ljava/lang/Object;", null, null).visitEnd()
+        cw.visitMethod(ACC_PUBLIC, "<init>", BODY_DESC, null, null).apply {
+            visitCode()
+            visitVarInsn(ALOAD, 0)
+            visitMethodInsn(INVOKESPECIAL, STATEMENT, "<init>", "()V", false)
+            visitVarInsn(ALOAD, 0); visitVarInsn(ILOAD, 1); visitFieldInsn(PUTFIELD, BODY_CLASS, "id", "I")
+            visitVarInsn(ALOAD, 0); visitVarInsn(ALOAD, 2); visitFieldInsn(PUTFIELD, BODY_CLASS, "instance", "Ljava/lang/Object;")
+            visitVarInsn(ALOAD, 0); visitVarInsn(ALOAD, 3); visitFieldInsn(PUTFIELD, BODY_CLASS, "args", "[Ljava/lang/Object;")
+            visitInsn(RETURN)
+            visitMaxs(0, 0); visitEnd()
+        }
+        cw.visitMethod(ACC_PUBLIC, "evaluate", "()V", null, arrayOf("java/lang/Throwable")).apply {
+            visitCode()
+            visitVarInsn(ALOAD, 0); visitFieldInsn(GETFIELD, BODY_CLASS, "id", "I")
+            visitVarInsn(ALOAD, 0); visitFieldInsn(GETFIELD, BODY_CLASS, "instance", "Ljava/lang/Object;")
+            visitVarInsn(ALOAD, 0); visitFieldInsn(GETFIELD, BODY_CLASS, "args", "[Ljava/lang/Object;")
+            visitMethodInsn(INVOKESTATIC, MAIN_CLASS, "body", BODY_DESC, false)
+            visitInsn(RETURN)
+            visitMaxs(0, 0); visitEnd()
+        }
+        cw.visitEnd()
+        return cw.toByteArray()
+    }
+
+    /** No throw → fail with "expected X"; a throw that is an X → pass; any other throw stays the failure. */
+    private fun checkExpected(mv: MethodVisitor, expected: String, failureLocal: Int) {
+        val threw = Label(); val done = Label()
+        mv.visitVarInsn(ALOAD, failureLocal)
         mv.visitJumpInsn(IFNONNULL, threw)
         mv.visitTypeInsn(NEW, "java/lang/AssertionError")
         mv.visitInsn(DUP)
         mv.visitLdcInsn("Expected exception: " + expected.replace('/', '.'))
         mv.visitMethodInsn(INVOKESPECIAL, "java/lang/AssertionError", "<init>", "(Ljava/lang/Object;)V", false)
-        mv.visitVarInsn(ASTORE, 4)
+        mv.visitVarInsn(ASTORE, failureLocal)
         mv.visitJumpInsn(GOTO, done)
         mv.visitLabel(threw)
-        mv.visitVarInsn(ALOAD, 4)
+        mv.visitVarInsn(ALOAD, failureLocal)
         mv.visitTypeInsn(INSTANCEOF, expected)
         mv.visitJumpInsn(IFEQ, done)
         mv.visitInsn(ACONST_NULL)
-        mv.visitVarInsn(ASTORE, 4)
+        mv.visitVarInsn(ASTORE, failureLocal)
         mv.visitLabel(done)
     }
 

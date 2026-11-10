@@ -9,6 +9,8 @@ import dev.ide.jvm.fixtures.Lambdas
 import dev.ide.jvm.fixtures.Objects
 import dev.ide.jvm.fixtures.Recover
 import dev.ide.jvm.fixtures.ReflectArray
+import dev.ide.jvm.fixtures.ReflectMembers
+import dev.ide.jvm.fixtures.ReflectMethods
 import dev.ide.jvm.fixtures.Statics
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -135,6 +137,38 @@ class VmInterpreterTest {
         // sameClass returns Z; invokeStatic yields a boolean in the interpreter's computational form (1 = true),
         // proving loadClass(name) and the class literal resolve to the SAME reflection Class.
         assertEquals(1, vm.invokeStatic(RI, "sameClass", "(Ljava/lang/ClassLoader;Ljava/lang/String;)Z", listOf(cl, dog)))
+    }
+
+    @Test fun reflectionSeesAnInterpretedClassesMethodsAndSupertypes() {
+        // Reported as `Cannot determine correct type for matchesSafely() method.` from every hamcrest
+        // TypeSafeMatcher (and so JUnit 4's ExpectedException): the stand-in Class for an interpreted type declared
+        // only constructors and its superclass was Object, so the walk hamcrest does found nothing.
+        val RM = "dev/ide/jvm/fixtures/ReflectMethods"
+        val str = "()Ljava/lang/String;"
+        assertEquals(ReflectMethods.expectedTypes(), vm.invokeStatic(RM, "expectedTypes", str))
+        assertEquals(ReflectMethods.superChain(), vm.invokeStatic(RM, "superChain", str))
+        assertEquals(ReflectMethods.invokeVirtual(), vm.invokeStatic(RM, "invokeVirtual", str))
+        assertEquals(ReflectMethods.invokeStatic(), vm.invokeStatic(RM, "invokeStatic", "()I"))
+        assertEquals(ReflectMethods.invokeWrapsFailure(), vm.invokeStatic(RM, "invokeWrapsFailure", str))
+        assertEquals(ReflectMethods.missingMethod(), vm.invokeStatic(RM, "missingMethod", str))
+    }
+
+    @Test fun reflectionOverFieldsInheritedMethodsGenericsAndAnnotations() {
+        val RM = "dev/ide/jvm/fixtures/ReflectMembers"
+        val str = "()Ljava/lang/String;"
+        for (probe in listOf("fields", "methods", "generics", "annotations")) {
+            val real = ReflectMembers::class.java.getMethod(probe).invoke(null)
+            assertEquals(real, vm.invokeStatic(RM, probe, str), probe)
+        }
+    }
+
+    @Test fun platformCodeSeesTheStandInAsBefore() {
+        // The members are mirrored for INTERPRETED callers only: a library that is not interpreted, reflecting over
+        // the class literal it was handed, still finds no methods (so a NoSuchMethodException fallback still runs).
+        val standIn = vm.classForInterpreted("dev/ide/jvm/fixtures/ReflectMethods\$Greeter")!!
+        vm.invokeStatic("dev/ide/jvm/fixtures/ReflectMethods", "invokeVirtual", "()Ljava/lang/String;")
+        assertEquals(0, standIn.declaredMethods.size)
+        assertEquals(0, standIn.declaredFields.size)
     }
 
     @Test fun staticFinalConstantsHonorConstantValueAttribute() {
