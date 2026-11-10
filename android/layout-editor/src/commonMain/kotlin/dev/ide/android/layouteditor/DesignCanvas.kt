@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -110,7 +111,12 @@ internal fun DesignCanvas(
     }
     // Keep the selection in view above a sheet: pan just enough to centre it in what is left, and give the pan
     // back when the sheet closes, so opening and closing the sheet leaves the canvas where the user had it.
-    LaunchedEffect(selectedNode, obscuredPx > 0f, canvasSize) {
+    // The part of the canvas the selection can be seen in: under the top bar and the selection chip, above
+    // whatever covers the bottom (the toolbar row, and the strip or sheet on a phone). The action bar and the
+    // auto-pan below both use it, so the bar is never placed where the pan does not show.
+    val visibleTop = with(density) { 112.dp.toPx() }
+    val visibleBottom = canvasSize.height - obscuredPx - with(density) { if (obscuredPx > 0f) 12.dp.toPx() else 84.dp.toPx() }
+    LaunchedEffect(selectedNode, (obscuredPx / 16f).toInt(), canvasSize) {
         if (obscuredPx <= 0f) {
             if (state.sheetPan != 0f) {
                 state.pan = state.pan.copy(y = state.pan.y - state.sheetPan)
@@ -118,15 +124,19 @@ internal fun DesignCanvas(
             }
             return@LaunchedEffect
         }
+        // The strip grows and shrinks animated, which relaunches this; act once it has settled.
+        delay(220)
         val node = selectedNode ?: return@LaunchedEffect
         if (canvasSize == IntSize.Zero) return@LaunchedEffect
         val r = node.rect(k)
         val top = canvasSize.height / 2f + state.pan.y + (r.top - cardH / 2f) * scale
         val bottom = canvasSize.height / 2f + state.pan.y + (r.bottom - cardH / 2f) * scale
-        val margin = with(density) { 72.dp.toPx() }
-        val visibleBottom = canvasSize.height - obscuredPx - with(density) { 64.dp.toPx() }
-        if (top >= margin && bottom <= visibleBottom) return@LaunchedEffect
-        val delta = (margin + visibleBottom) / 2f - (top + bottom) / 2f
+        val barRoom = with(density) { 64.dp.toPx() }
+        if (top >= visibleTop && bottom + barRoom <= visibleBottom) return@LaunchedEffect
+        // Put the view just under the chips with room for its action bar beneath; a view too tall for that is
+        // centred instead.
+        val delta = if (bottom - top + barRoom <= visibleBottom - visibleTop) visibleTop + with(density) { 8.dp.toPx() } - top
+        else (visibleTop + visibleBottom) / 2f - (top + bottom) / 2f
         state.pan = state.pan.copy(y = state.pan.y + delta)
         state.sheetPan += delta
     }
@@ -212,8 +222,8 @@ internal fun DesignCanvas(
             val gap = with(density) { 10.dp.toPx() }
             // Under the view when it fits, else over it; a view too big for either (the root) gets the bar at the
             // bottom of the visible area, clear of the top bar, the chip under it, and the bottom toolbar.
-            val minY = with(density) { 108.dp.toPx() }
-            val maxY = canvasSize.height - obscuredPx - barH - with(density) { 84.dp.toPx() }
+            val minY = visibleTop
+            val maxY = visibleBottom - barH
             val anchorY = when {
                 bottom.y + gap <= maxY -> bottom.y + gap
                 top.y - gap - barH >= minY -> top.y - gap - barH

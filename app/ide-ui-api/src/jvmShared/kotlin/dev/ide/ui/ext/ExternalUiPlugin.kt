@@ -263,6 +263,7 @@ private class BridgedRegistration(
                 id = preview.id,
                 title = preview.title,
                 appliesTo = preview.appliesTo,
+                fullScreen = preview.fullScreen,
             ) { ctx ->
                 // Not remembered on the context alone: unlike a tool window, a preview context changes on
                 // every keystroke (it carries the buffer), so remembering it per instance would allocate a

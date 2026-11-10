@@ -28,6 +28,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.unit.dp
 import dev.ide.android.layout.ANDROID_LAYOUT_MODEL
 import dev.ide.android.layout.AndroidLayoutModel
@@ -180,9 +183,40 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         showInCode = { el -> lastCaretWrite = el.start; currentCtx.select(el.start, el.startTagEnd) },
     )
 
+    // ---- The selected view's catalog, and the project's strings (for text previews) ------------------------
+    val parentTag = selected?.parent?.tag
+    var catalog by remember(selected?.tag, parentTag) { mutableStateOf<Map<String, dev.ide.android.layout.LayoutAttributeInfo>>(emptyMap()) }
+    LaunchedEffect(selected?.tag, parentTag) {
+        val el = selected ?: return@LaunchedEffect
+        catalog = runCatching { model.attributes(path, el.tag, el.parent?.tag) }.getOrDefault(emptyList()).associateBy { it.name }
+    }
+    var strings by remember(path) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // Re-read when a render lands: a new or changed string resource shows up in the next render's inputs.
+    LaunchedEffect(path, render) {
+        strings = runCatching { model.resources(path, "string") }.getOrDefault(emptyList())
+            .associate { it.name to (it.value ?: "") }
+    }
+    // The strip is shown for every new selection until closed; tapping the view again brings it back.
+    var stripClosed by remember(path, state.selection) { mutableStateOf(false) }
+    var stripHeight by remember { mutableStateOf(0) }
+
+    fun writeAttributes(writes: List<Pair<String, String?>>) {
+        val ref = selected?.ref ?: return
+        if (writes.isEmpty()) return
+        // All computed against one buffer and applied together: one undo step for a margin split into four.
+        edit { text ->
+            writes.flatMap { (name, value) ->
+                if (value == null) model.removeAttribute(path, text, ref, name)
+                else model.setAttribute(path, text, ref, name, value)
+            }
+        }
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
         val docked = maxWidth >= DOCKED_MIN_WIDTH
         val paneHeight = maxHeight
+        val density = LocalDensity.current
+        val showStrip = !docked && selected != null && state.sheet == null && !stripClosed
         val tree: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
             ComponentTreePanel(
                 document = document,
@@ -224,9 +258,15 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     selected = selected,
                     onSelect = { select(it) },
                     actions = actions,
-                    onOpenAttributes = { if (!docked) state.sheet = DesignPanel.Attributes else state.attributesDocked = true },
-                    // On a phone the sheet covers the lower part of the canvas; the canvas keeps the selection above it.
-                    obscuredBottom = if (!docked && state.sheet != null) paneHeight * state.sheetFraction else 0.dp,
+                    onOpenAttributes = { if (!docked) stripClosed = false else state.attributesDocked = true },
+                    // On a phone the sheet (or the strip) covers the lower part of the canvas; the canvas keeps the
+                    // selection above it.
+                    obscuredBottom = when {
+                        docked -> 0.dp
+                        state.sheet != null -> paneHeight * state.sheetFraction
+                        showStrip -> with(density) { stripHeight.toDp() }
+                        else -> 0.dp
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 DesignTopBar(state, Modifier.align(Alignment.TopCenter).padding(12.dp))
@@ -236,12 +276,36 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 if (progress != null || !rendered) {
                     RenderStatusChip(progress, Modifier.align(Alignment.TopEnd).padding(top = 64.dp, end = 12.dp))
                 }
-                DesignToolbar(
-                    state = state,
-                    docked = docked,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-                )
-                ZoomControls(state, Modifier.align(Alignment.BottomEnd).padding(16.dp))
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { stripHeight = it.height },
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (showStrip) 8.dp else 16.dp), verticalAlignment = Alignment.Bottom) {
+                        DesignToolbar(state = state, docked = docked, modifier = Modifier)
+                        Box(Modifier.weight(1f))
+                        ZoomControls(state, Modifier)
+                    }
+                    val el = selected
+                    if (showStrip && el != null) {
+                        PropertyStrip(
+                            document = document,
+                            element = el,
+                            pc = PropertyContext(
+                                element = el,
+                                catalog = catalog,
+                                canEdit = ctx.canEdit,
+                                write = ::writeAttributes,
+                                complete = { a, f, c -> model.completeValue(path, currentCtx.text, el.ref, a, f, c) },
+                                resources = { type -> model.resources(path, type) },
+                                themeColors = { model.themeColors(path) },
+                            ),
+                            strings = strings,
+                            onSelect = { select(it) },
+                            onExpand = { state.sheet = DesignPanel.Attributes },
+                            onClose = { stripClosed = true },
+                            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                        )
+                    }
+                }
                 val r = render
                 if (resourceErrors.isNotEmpty()) {
                     ResourceErrorsCard(resourceErrors, lastRender = r != null && r.resourceErrors.isEmpty(), ctx, Modifier.align(Alignment.Center).padding(24.dp))

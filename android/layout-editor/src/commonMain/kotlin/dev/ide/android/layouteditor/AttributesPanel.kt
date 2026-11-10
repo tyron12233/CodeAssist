@@ -304,14 +304,14 @@ private fun AttributeRow(
     }
 }
 
-private fun shortKeyword(k: String): String = when (k) {
+internal fun shortKeyword(k: String): String = when (k) {
     "wrap_content" -> "wrap"
     "match_parent", "fill_parent" -> "match"
     else -> k
 }
 
 @Composable
-private fun SegmentedChoice(options: List<String>, selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
+internal fun SegmentedChoice(options: List<String>, selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEachIndexed { i, label ->
             val on = i == selected
@@ -340,7 +340,7 @@ private fun SegmentedChoice(options: List<String>, selected: Int, enabled: Boole
 }
 
 @Composable
-private fun ChoiceChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun ChoiceChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
     Row(
         Modifier.height(34.dp).clip(RoundedCornerShape(10.dp)).background(bg)
@@ -359,7 +359,7 @@ private fun ChoiceChip(label: String, selected: Boolean, enabled: Boolean, onCli
  * committed on Done, on focus loss or on a pick. Only a real change is committed.
  */
 @Composable
-private fun ValueField(
+internal fun ValueField(
     initial: String,
     enabled: Boolean,
     placeholder: String,
@@ -444,7 +444,7 @@ private fun ValueField(
 }
 
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit, hint: String) {
+internal fun SearchField(query: String, onQuery: (String) -> Unit, hint: String) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -467,7 +467,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, hint: String) 
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
 }
 

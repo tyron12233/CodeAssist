@@ -723,6 +723,11 @@ internal fun CompactLayout(
     // focus on the code being typed (the nav is one swipe/back away). The IME inset is read raw — directly,
     // not via a consuming modifier — so the app's `safeDrawing` padding doesn't zero it. Always 0 on desktop.
     val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // A plugin preview pane that asked for the whole screen, showing as the tab's only surface (Preview, not Split).
+    val fullScreenPreview = state.active?.let { a ->
+        a.viewMode == dev.ide.ui.EditorViewMode.Preview &&
+            dev.ide.ui.ext.EditorPreviewRegistry.forPath(a.path)?.fullScreen == true
+    } == true
     // The drawer's live open fraction, mirrored by the top bar's sidebar icon (its divider tracks the
     // drawer edge through a swipe). Float state written per frame; read deferred in the icon's draw.
     var navProgress by remember { mutableFloatStateOf(0f) }
@@ -835,7 +840,7 @@ internal fun CompactLayout(
                     // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it. Zen mode hides
                     // the bar, unless the console is pulled up.
                     // Room for the dock's bar, which a lesson hides (see the BuildDock below).
-                    if (!keyboardOpen && !state.zenMode && !(LocalLessonBanner.current != null && state.learnFocus)) {
+                    if (!keyboardOpen && !state.zenMode && !(LocalLessonBanner.current != null && state.learnFocus) && !fullScreenPreview) {
                         androidx.compose.foundation.layout.Spacer(Modifier.height(DockBarHeight))
                     }
                 }
@@ -847,7 +852,8 @@ internal fun CompactLayout(
                     buildState = buildState,
                     // Hidden during a lesson too: Search / Source / AI are distractions there (and the AI would
                     // do the exercise). The console still opens for a run; Files and Run stay in the top bar.
-                    hidden = (keyboardOpen || state.zenMode || (LocalLessonBanner.current != null && state.learnFocus)) && !state.consoleOpen,
+                    // And while a full-screen preview pane (the layout editor's canvas) is the whole surface.
+                    hidden = (keyboardOpen || state.zenMode || (LocalLessonBanner.current != null && state.learnFocus) || fullScreenPreview) && !state.consoleOpen,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     hint = dockHint,
                     onHintShown = {

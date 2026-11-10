@@ -317,6 +317,8 @@ class EditorPreviewContribution(
     val id: String,
     val title: String,
     val appliesTo: (String) -> Boolean,
+    /** Hide the phone bottom bar while this pane is the editor's only surface (see the published `fullScreen`). */
+    val fullScreen: Boolean = false,
     val content: @Composable (EditorPreviewContext) -> Unit,
 )
 

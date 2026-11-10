@@ -113,6 +113,13 @@ class DesignerSnapshotTest {
             LayoutValueCompletion(emptyList(), 0, 0)
         override suspend fun setAttribute(path: String, text: String, element: ElementRef, attribute: String, value: String) = emptyList<LayoutEdit>()
         override suspend fun removeAttribute(path: String, text: String, element: ElementRef, attribute: String) = emptyList<LayoutEdit>()
+        override suspend fun resources(path: String, type: String) = when (type) {
+            "string" -> listOf(dev.ide.android.layout.LayoutResource("string", "sign_in", "@string/sign_in", value = "Sign in"))
+            "color" -> listOf(0xFF6750A4, 0xFF625B71, 0xFFB3261E).mapIndexed { i, c -> dev.ide.android.layout.LayoutResource("color", "brand_$i", "@color/brand_$i", argb = c.toInt()) }
+            else -> emptyList()
+        }
+        override suspend fun themeColors(path: String) = listOf("colorPrimary" to 0xFF006A6A, "colorSecondary" to 0xFF4A6363, "colorSurface" to 0xFFF4FBFA)
+            .map { (n, c) -> dev.ide.android.layout.LayoutResource("attr", n, "?attr/$n", argb = c.toInt()) }
     }
 
     private inner class FakeContext(override val isSplit: Boolean, override val caretOffset: Int) : EditorPreviewContext {
@@ -179,6 +186,21 @@ class DesignerSnapshotTest {
     fun phoneWithTheTreeSheet() {
         val caret = xml.indexOf("<Button")
         val f = snap("phone-tree", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(46f, 892f - 46f)))
+        assertTrue(f.length() > 0)
+    }
+
+    @Test
+    fun phoneStripWithTheSizeEditor() {
+        val caret = xml.indexOf("<Button")
+        // The strip's third tile (Enabled) is at 20 + 2 * 120 + 56; Size starts past the edge, so open Enabled's neighbour.
+        val f = snap("phone-strip-size", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(316f, 892f - 66f)))
+        assertTrue(f.length() > 0)
+    }
+
+    @Test
+    fun phoneStripWithTheColorEditor() {
+        val caret = xml.indexOf("<Button")
+        val f = snap("phone-strip-color", 412, 892, dark = true, FakeContext(isSplit = true, caretOffset = caret), taps = listOf(Offset(196f, 892f - 66f)))
         assertTrue(f.length() > 0)
     }
 

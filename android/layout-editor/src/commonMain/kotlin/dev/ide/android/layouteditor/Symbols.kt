@@ -104,6 +104,28 @@ internal object Sym {
     const val noteStack = '\uf562' // note_stack
     const val dataObject = '\uead3' // data_object
     const val info = '\ue88e' // info
+    const val margin = '\ue9bb' // margin
+    const val padding = '\ue9c8' // padding
+    const val controlCamera = '\ue074' // control_camera
+    const val balance = '\ueaf6' // balance
+    const val aspectRatio = '\ue85b' // aspect_ratio
+    const val title = '\ue264' // title
+    const val formatSize = '\ue245' // format_size
+    const val formatColorText = '\ue23c' // format_color_text
+    const val formatColorFill = '\ue23a' // format_color_fill
+    const val swapHoriz = '\ue8d4' // swap_horiz
+    const val tag = '\ue9ef' // tag
+    const val width = '\uf730' // width
+    const val height = '\uea16' // height
+    const val formatBold = '\ue238' // format_bold
+    const val shortText = '\ue261' // short_text
+    const val keyboard = '\ue312' // keyboard
+    const val opacity = '\ue91c' // opacity
+    const val colorize = '\ue3b8' // colorize
+    const val accessibilityNew = '\ue92c' // accessibility_new
+    const val history = '\ue8b3' // history
+    const val expandLess = '\ue5ce' // expand_less
+    const val photoLibrary = '\ue413' // photo_library
 }
 
 /**

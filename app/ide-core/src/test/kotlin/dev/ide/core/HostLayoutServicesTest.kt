@@ -119,6 +119,27 @@ class HostLayoutServicesTest {
         assertTrue("android:text" !in removed.substring(removed.indexOf("<TextView"), removed.indexOf("<Button")), removed)
     }
 
+    @Test
+    fun modelListsResourcesWithResolvedColors() {
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        backend = IdeServicesBackend(initial = s)
+        val values = root.resolve("app/src/main/res/values")
+        Files.createDirectories(values)
+        Files.writeString(values.resolve("probe_colors.xml"), "<resources><color name=\"probe_red\">#FFFF0000</color></resources>")
+        Files.writeString(values.resolve("probe_strings.xml"), "<resources><string name=\"probe_hi\">Hi there</string></resources>")
+        val layout = root.resolve("app/src/main/res/layout/probe.xml")
+        Files.createDirectories(layout.parent)
+        Files.writeString(layout, layoutText)
+        val model = s.store.workspaceContainer.getService(ANDROID_LAYOUT_MODEL)
+
+        val red = runBlocking { model.resources(layout.toString(), "color") }.firstOrNull { it.name == "probe_red" }
+        assertNotNull(red)
+        assertEquals("@color/probe_red", red.reference)
+        assertEquals(0xFFFF0000.toInt(), red.argb)
+        val hi = runBlocking { model.resources(layout.toString(), "string") }.firstOrNull { it.name == "probe_hi" }
+        assertEquals("Hi there", hi?.value)
+    }
+
     private fun apply(text: String, edits: List<LayoutEdit>): String {
         var out = text
         for (e in edits.sortedByDescending { it.start }) out = out.substring(0, e.start) + e.newText + out.substring(e.end)

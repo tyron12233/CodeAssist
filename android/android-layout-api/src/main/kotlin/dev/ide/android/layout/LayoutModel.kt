@@ -52,7 +52,35 @@ interface AndroidLayoutModel {
 
     /** Edits that remove [attribute] from [element]. Empty when it is not set. */
     suspend fun removeAttribute(path: String, text: String, element: ElementRef, attribute: String): List<LayoutEdit>
+
+    /**
+     * The project's resources of [type] (an R class name: `drawable`, `color`, `string`, `dimen`, ...) visible
+     * to the module [path] belongs to, by name, each with its default-configuration value or file. Colors come
+     * resolved ([LayoutResource.argb]), so a picker can show swatches without parsing values itself.
+     */
+    suspend fun resources(path: String, type: String): List<LayoutResource> = emptyList()
+
+    /**
+     * The color attributes of the module's app theme that resolve to a color (`colorPrimary`, `colorSurface`,
+     * ...), named as a layout references them (`?attr/colorPrimary`), each with its [LayoutResource.argb]. What a
+     * color picker offers first: theme colors follow the theme and dark mode, where a hard-coded one does not.
+     */
+    suspend fun themeColors(path: String): List<LayoutResource> = emptyList()
 }
+
+/**
+ * One resource: [reference] is how a layout names it (`@drawable/logo`, `?attr/colorPrimary`). [value] is a
+ * values-resource's default value as written, [file] a file resource's path, [argb] the resolved color for a
+ * color.
+ */
+class LayoutResource(
+    val type: String,
+    val name: String,
+    val reference: String,
+    val value: String? = null,
+    val file: String? = null,
+    val argb: Int? = null,
+)
 
 /** The project's layout model. See [AndroidLayoutModel]. */
 val ANDROID_LAYOUT_MODEL: ServiceKey<AndroidLayoutModel> = ServiceKey("android.layoutModel")

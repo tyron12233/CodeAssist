@@ -4935,6 +4935,41 @@ class IdeServices private constructor(
         return contributor.allowedAttributes(tag, parentTag)
     }
 
+    /** One resource for the layout services: its name, default-config value or file, and resolved color. */
+    internal class LayoutResourceInfo(val name: String, val value: String?, val file: String?, val argb: Int?)
+
+    /**
+     * The module's resources of the R class [rClass] for [file]'s module, default configuration first, with
+     * colors resolved against the app theme. Null when [file] is not in an Android module.
+     */
+    internal fun layoutResources(file: Path, rClass: String): List<LayoutResourceInfo>? {
+        val module = moduleForResourceFile(file) ?: return null
+        val type = ResourceType.byRClass(rClass) ?: return emptyList()
+        val repo = resourceRepository(module)?.repo ?: return null
+        val theme = manifestThemeAndLabel(module, repo).first
+        val values = dev.ide.preview.impl.ProjectPreviewResources(repo, 1f, themeName = theme)
+        return repo.names(type).sorted().map { name ->
+            val defs = repo.definitions(type, name)
+            val def = defs.firstOrNull { it.qualifier.isEmpty() } ?: defs.first()
+            val argb = if (type == ResourceType.COLOR) {
+                (values.resolve("@color/$name", dev.ide.preview.ValueFormat.COLOR) as? dev.ide.preview.ResolvedValue.Color)?.argb
+            } else null
+            LayoutResourceInfo(name, def.value, def.source?.toString(), argb)
+        }
+    }
+
+    /** The app theme's color attributes that resolve to a color, as (attr name, argb). */
+    internal fun layoutThemeColors(file: Path): List<Pair<String, Int>>? {
+        val module = moduleForResourceFile(file) ?: return null
+        val repo = resourceRepository(module)?.repo ?: return null
+        val theme = manifestThemeAndLabel(module, repo).first ?: return emptyList()
+        val values = dev.ide.preview.impl.ProjectPreviewResources(repo, 1f, themeName = theme)
+        return THEME_COLOR_ATTRS.mapNotNull { a ->
+            (values.resolve("?attr/$a", dev.ide.preview.ValueFormat.COLOR) as? dev.ide.preview.ResolvedValue.Color)
+                ?.let { a to it.argb }
+        }
+    }
+
     /**
      * Value completion for [attrName] on the layout element at [sourceOffset], as if [fieldText] (caret at
      * [caret]) were typed into the attribute's value — the exact candidates the XML editor offers, since it runs
@@ -6369,3 +6404,13 @@ private val sharedIndexDispatcher: CoroutineDispatcher by lazy {
 private val sharedIndexDispatcher1: CoroutineDispatcher by lazy {
     BackgroundThreads.single("ide-index").asCoroutineDispatcher()
 }
+
+/** The theme color attributes a layout color picker offers, Material 3 roles first, then the AppCompat ones. */
+private val THEME_COLOR_ATTRS = listOf(
+    "colorPrimary", "colorOnPrimary", "colorPrimaryContainer", "colorOnPrimaryContainer",
+    "colorSecondary", "colorOnSecondary", "colorSecondaryContainer", "colorOnSecondaryContainer",
+    "colorTertiary", "colorOnTertiary", "colorTertiaryContainer", "colorOnTertiaryContainer",
+    "colorSurface", "colorOnSurface", "colorSurfaceVariant", "colorOnSurfaceVariant",
+    "colorSurfaceContainer", "colorSurfaceContainerHigh", "colorOutline", "colorOutlineVariant",
+    "colorError", "colorOnError", "colorAccent", "colorPrimaryDark", "colorControlNormal",
+)

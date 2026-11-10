@@ -72,8 +72,23 @@ class EditorPreview(
     val id: String,
     val title: String,
     val appliesTo: (path: String) -> Boolean,
+    /**
+     * Whether the pane wants the whole screen when it is the editor's only surface (Preview mode, not Split): the
+     * host then hides its phone bottom bar (Search, Source, AI, More) so a canvas the user works in, a design
+     * surface or a scene editor, gets that room. The editor's own top bar and toggle stay, so leaving is one tap.
+     * Since SPI 3.5.0.
+     */
+    val fullScreen: Boolean,
     val content: @Composable (EditorPreviewContext) -> Unit,
-)
+) {
+    /** The pre-3.5.0 shape, kept so a plugin compiled against it still links. */
+    constructor(
+        id: String,
+        title: String,
+        appliesTo: (path: String) -> Boolean,
+        content: @Composable (EditorPreviewContext) -> Unit,
+    ) : this(id, title, appliesTo, false, content)
+}
 
 /**
  * What an [EditorPreview] body is handed: the file being previewed, its live text, and the way to report what

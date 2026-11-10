@@ -1984,6 +1984,10 @@ Since SPI 3.5.0 a pane can also **edit** what it shows, which is what turns a pr
 | `isSplit` | Whether the pane sits beside the code editor, the case where following the caret matters |
 | `reportRendering(busy)` | Say when an asynchronous render is in flight, so a frame is only captured once drawn |
 
+A pane the user works in rather than glances at can pass `fullScreen = true` to `EditorPreview`: while it is the
+tab's only surface (Preview, not Split), the host hides its phone bottom bar (Search, Source, AI, More) so the
+canvas gets that room. The editor's own toggle stays, so leaving is one tap.
+
 Edit ranges are in the `text` the context carries. Compute them against that buffer and apply them before the
 next recomposition hands you a new one; the layout editor serializes its edits behind a mutex for this.
 
@@ -1993,7 +1997,9 @@ A pane over Android layout XML gets the host's own machinery through two service
 `ctx.service(...)`: `LAYOUT_RENDERER` renders a buffer to an image plus the view tree that produced it (each
 view's bounds, and the offset of the element it came from, so a tap maps back to the XML), and
 `ANDROID_LAYOUT_MODEL` parses the buffer with the editor's tolerant parser, lists the attributes a view accepts
-inside its parent, completes attribute values, and computes attribute edits in the element's own style. Both
+inside its parent, completes attribute values, computes attribute edits in the element's own style, and lists
+the project's resources by type (`resources(path, "drawable")`, colors resolved to ARGB) and the app theme's
+color roles (`themeColors(path)`, as `?attr/colorPrimary`), which is what pickers are built from. Both
 are what the editor itself uses. The module is in-tree only for now (not in `plugin-bom`); it is published
 once the layout editor has settled its shape.
 

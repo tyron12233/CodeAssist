@@ -185,6 +185,16 @@ internal class HostAndroidLayoutModel(
         services.removeLayoutAttributeEdits(Paths.get(path), text, element.offset, element.id, attribute)
     }.map { LayoutEdit(it.range.start, it.range.end, it.newText) }
 
+    override suspend fun resources(path: String, type: String): List<dev.ide.android.layout.LayoutResource> =
+        ctx.background("layoutResources") { services.layoutResources(Paths.get(path), type) }.orEmpty().map {
+            dev.ide.android.layout.LayoutResource(type, it.name, "@$type/${it.name}", it.value, it.file, it.argb)
+        }
+
+    override suspend fun themeColors(path: String): List<dev.ide.android.layout.LayoutResource> =
+        ctx.background("layoutThemeColors") { services.layoutThemeColors(Paths.get(path)) }.orEmpty().map { (name, argb) ->
+            dev.ide.android.layout.LayoutResource("attr", name, "?attr/$name", argb = argb)
+        }
+
     private fun toInfo(a: AttributeSpec): LayoutAttributeInfo {
         val types = a.resourceTypes.map { it.rClass }
         val formats = buildSet {

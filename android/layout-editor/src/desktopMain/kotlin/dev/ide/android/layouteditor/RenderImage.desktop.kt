@@ -31,3 +31,6 @@ internal actual fun LayoutImage.toImageBitmap(): ImageBitmap? {
 }
 
 private fun Bitmap.asComposeImageBitmapCompat(): ImageBitmap = Image.makeFromBitmap(this).toComposeImageBitmap()
+
+internal actual fun decodeImageFile(path: String, maxPx: Int): ImageBitmap? =
+    runCatching { Image.makeFromEncoded(java.io.File(path).readBytes()).toComposeImageBitmap() }.getOrNull()

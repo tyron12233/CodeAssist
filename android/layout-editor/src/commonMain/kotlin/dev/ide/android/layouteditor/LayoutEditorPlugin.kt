@@ -44,6 +44,8 @@ object LayoutEditorUiPlugin : UiPlugin {
                 id = "$id.design",
                 title = "Design",
                 appliesTo = ::isLayoutFile,
+                // A design surface is worked in, not glanced at: take the phone's bottom bar too.
+                fullScreen = true,
                 content = { ctx -> LayoutDesigner(ctx) },
             ),
         )
