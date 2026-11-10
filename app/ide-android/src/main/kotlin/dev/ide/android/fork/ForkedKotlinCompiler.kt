@@ -238,8 +238,15 @@ class ForkedKotlinCompiler(
         val requested = (maxHeapMbProvider() ?: DEFAULT_XMX_MB).coerceAtLeast(MIN_XMX_MB)
         // Drop the heaps this device's RAM visibly cannot back before trying any: a VM that cannot reserve its
         // region space ABORTS, and the OS files that abort under this package as a native crash.
+        // Where ART's JIT crashes in the compiler ([ART_JIT_CRASHES]), compiling in-process is not a fallback but
+        // the failure itself: the app's own JIT inlines through the compiler's polymorphic call sites and takes
+        // the build process down (#1748). So a device too small for the usual heaps still forks, at a heap that
+        // fits (the in-process compiler manages under the app's own ~512MB cap), because only a fork can turn
+        // JIT inlining off. A project too big for that heap fails its module with the worker-death explanation
+        // below instead of crashing the build process.
+        val ladder = if (ART_JIT_CRASHES) FALLBACK_LADDER + LOW_RAM_LADDER else FALLBACK_LADDER
         val candidates = R8ForkSupport.affordableHeaps(
-            appContext, (listOf(requested) + FALLBACK_LADDER.filter { it < requested }).distinct(),
+            appContext, (listOf(requested) + ladder.filter { it < requested }).distinct(),
         )
         if (candidates.isEmpty()) {
             disable("${R8ForkSupport.totalMemMb(appContext)}MB of device RAM can't back a Kotlin compiler VM")
@@ -457,6 +464,9 @@ class ForkedKotlinCompiler(
         const val DEFAULT_XMX_MB = 1536
         const val MIN_XMX_MB = 768
         val FALLBACK_LADDER = listOf(2048, 1536, 1024, 768)
+
+        /** The extra rungs a 2-3 GB device on Android 11 or older can back (see [ART_JIT_CRASHES] in startWorker). */
+        val LOW_RAM_LADDER = listOf(512, 448, 384)
 
         /**
          * One worker by default. The win here is the warm environment, not parallelism, and a worker is
