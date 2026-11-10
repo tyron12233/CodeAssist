@@ -137,6 +137,91 @@ class HeadlessEngine private constructor(private val ide: IdeServices) : AutoClo
         return candidates.filter { Files.isRegularFile(it) }
     }
 
+    /**
+     * Add [coordinate] (`group:artifact:version`) to [module] as an `implementation` dependency and resolve it,
+     * returning an error message, or null when it resolved.
+     */
+    suspend fun addDependency(module: String, coordinate: String): String? {
+        val r = ide.dependencies.addDependency(module, coordinate, "implementation")
+        return if (r.success) null else (r.message.ifBlank { "could not resolve $coordinate" })
+    }
+
+    /**
+     * Whether the dex and index repository at [repoRoot] already holds every library version this workspace's
+     * Android app uses (its dexed jars, its editor's jars and `res/` folders), for this IDE's D8 and indexers: a
+     * publisher skips the workspace then, without dexing or indexing anything.
+     */
+    fun alreadyPublished(repoRoot: Path): Boolean {
+        val app = ide.modules().firstOrNull { it.facets.get(dev.ide.android.support.AndroidFacet.KEY)?.isApplication == true } ?: return false
+        val androidJar = dev.ide.core.sdk.BundledAndroidToolchain.androidJar() ?: return false
+        val sdk = dev.ide.android.support.tools.AndroidSdk(androidJar = androidJar, buildToolsDir = androidJar.parent, aapt2 = androidJar)
+        val system = AndroidBuildSystem.inProcess(sdk, dev.ide.android.support.tools.SigningConfig(androidJar, "", "", ""))
+        val indexes = ide.indexExtensions().associate { it.id.value to it.version }
+        return dev.ide.android.support.pack.DexRepository.isPublished(system.libraryDexJars(app, "debug"), repoRoot) &&
+            dev.ide.core.index.LibraryIndexRepository.isPublished(ide.librarySegmentKeys(ide.libraryIndexScope()), repoRoot, indexes)
+    }
+
+    /** What [predexLibraries] dexed: the cache tag directory it filled and the library jars it covered. */
+    class Predexed(val tagDir: Path, val jars: List<Path>)
+
+    /**
+     * Dex [module]'s external libraries (the first Android application module when null) into the shared dex
+     * cache layout under [cacheRoot], exactly as a phone's debug build would: the D8 the app bundles, run
+     * in-process, keyed by library content. Used to publish the dex repository
+     * ([dev.ide.android.support.pack.DexRepository]) that lets a device skip dexing those libraries itself.
+     *
+     * Null when there is nothing the repository could hold: no Android application module, no android.jar, or
+     * a minSdk below 26 (whose cache key covers the whole library set).
+     */
+    suspend fun predexLibraries(cacheRoot: Path, module: String? = null, log: (String) -> Unit = {}): Predexed? {
+        val app = ide.modules().firstOrNull { m ->
+            (module == null || m.name == module) &&
+                m.facets.get(dev.ide.android.support.AndroidFacet.KEY)?.isApplication == true
+        } ?: return null
+        val facet = app.facets.get(dev.ide.android.support.AndroidFacet.KEY) ?: return null
+        if (!dev.ide.android.support.tasks.SharedLibraryDexer.cacheKeyIsOwnContentOnly(facet.minSdk, null)) return null
+        val androidJar = dev.ide.core.sdk.BundledAndroidToolchain.androidJar() ?: return null
+        val sdk = dev.ide.android.support.tools.AndroidSdk(androidJar = androidJar, buildToolsDir = androidJar.parent, aapt2 = androidJar)
+        val unusedSigning = dev.ide.android.support.tools.SigningConfig(androidJar, "", "", "")
+        val system = AndroidBuildSystem.inProcess(sdk, unusedSigning, dexCacheRoot = cacheRoot)
+        val warmRoot = Files.createTempDirectory("predex")
+        try {
+            system.warmLibraryDexCache(app, "debug", warmRoot, log)
+        } finally {
+            warmRoot.toFile().deleteRecursively()
+        }
+        return Predexed(
+            cacheRoot.resolve(dev.ide.android.support.tasks.SharedLibraryDexer.cacheTag(facet.minSdk, false, "")),
+            system.libraryDexJars(app, "debug"),
+        )
+    }
+
+    /**
+     * Build the index segments of the workspace's libraries (what its editor index covers: the compile classpath
+     * jars and the AARs' `res/` folders) with its indexers into [cacheRoot], keyed by content as on a phone, then
+     * archive them per library version under [repoRoot] for the index repository
+     * ([dev.ide.core.index.LibraryIndexRepository]). Returns the coordinates written.
+     */
+    suspend fun publishIndexes(cacheRoot: Path, repoRoot: Path, key: java.security.PrivateKey): List<dev.ide.android.support.pack.LibraryCoordinate> {
+        // What the editor indexes (the compile classpath and the AARs' res folders), keyed by content as on a phone.
+        val full = ide.libraryIndexScope()
+        val scope = dev.ide.index.IndexScope(
+            libraryJars = full.libraryJars, stableJarIds = full.stableJarIds,
+            libraryResourceRoots = full.libraryResourceRoots,
+        )
+        val extensions = ide.indexExtensions()
+        val service = dev.ide.index.impl.IndexServiceImpl(extensions, cacheRoot)
+        try {
+            service.ensureUpToDate(scope)
+            check(service.status.ready) { "index build incomplete: ${service.status.message}" }
+        } finally {
+            service.close()
+        }
+        return dev.ide.core.index.LibraryIndexRepository.publish(
+            ide.librarySegmentKeys(scope), cacheRoot, repoRoot, key, extensions.associate { it.id.value to it.version },
+        )
+    }
+
     /** The jars a JVM module packages under `build/libs` — the `build:<module>` task's deliverable. */
     private fun jarsOf(module: Module): List<Path> {
         val libs = buildDir(module).resolve("libs")

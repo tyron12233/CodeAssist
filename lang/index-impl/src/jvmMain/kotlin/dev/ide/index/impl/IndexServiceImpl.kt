@@ -402,7 +402,7 @@ class IndexServiceImpl(
                 scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it)) }
                 // Immutable dependency/AAR res dirs index to content-addressed disk segments (parsed once,
                 // reopened thereafter), not into the resident source side.
-                scope.libraryResourceRoots.forEach { if (Files.isDirectory(it)) add(Artifact.ResourceDir(it)) }
+                scope.libraryResourceRoots.forEach { if (Files.isDirectory(it)) add(Artifact.ResourceDir(it, scope.stableJarIds[it])) }
             }.map { a -> a.contentHash().let { h -> Keyed(a, h, sanitize(h.value)) } }
             // Library SOURCE archives feed only the source-doc indexes (parameter names, javadoc). When deferred,
             // they build in the background after this pass, never holding up readiness or the next pass. One
@@ -1430,11 +1430,14 @@ class IndexServiceImpl(
         /** An immutable dependency/AAR `res/` dir: yields its `.xml` resource files as [IndexOrigin.LIBRARY]
          *  units, segment-cached by the dir's content. So a large merged dependency `values.xml` is parsed once
          *  and reopened from disk thereafter, not re-scanned into the resident source side every launch. */
-        class ResourceDir(val path: Path) : Artifact() {
+        class ResourceDir(val path: Path, val stableId: String? = null) : Artifact() {
             override val kind get() = BuiltArtifact.Kind.RESOURCE_DIR
             override val location get() = path
             override val label get() = "res: ${path.parent?.fileName?.let { "$it/" } ?: ""}${path.fileName}"
             override fun contentHash(): ContentHash {
+                // A caller-supplied path-free id (see [IndexScope.stableJarIds]) keys the folder by what it
+                // came from, so its segments are shared and can be prebuilt; else the path + size key below.
+                stableId?.let { return ContentHash("res-$it") }
                 // FNV-1a over each `.xml` file's path + size (no read) - re-extraction invalidates it, and
                 // identical dependency res across projects hashes to (and shares) one segment.
                 var h = -3750763034362895579L // FNV offset basis

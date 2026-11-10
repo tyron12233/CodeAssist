@@ -53,6 +53,7 @@ private fun dispatch(args: Array<String>): Int {
     }
     val command = args.firstOrNull()?.takeUnless { it.startsWith("-") } ?: "assemble"
     val rest = if (args.firstOrNull() == command) args.drop(1) else args.toList()
+    if (command == "dexrepo") return DexRepoCommand.run(rest)
     val options = Options.parse(rest)
     return when (command) {
         "assemble", "build" -> assemble(options)
