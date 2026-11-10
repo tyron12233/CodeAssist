@@ -77,7 +77,15 @@ class AndroidBuildTest : E2eTest() {
 
     /** Waits for Android's install confirmation, accepts it, and checks the package really landed. */
     private fun installThroughSystemInstaller(pkg: String) {
-        val install = await(By.pkg(Pattern.compile(".*packageinstaller.*")).text(Pattern.compile("(?i)install")), BUILD_TIMEOUT)
+        val installer = By.pkg(Pattern.compile(".*packageinstaller.*")).text(Pattern.compile("(?i)install"))
+        // Either the build hands the APK to the installer, or it fails: then report why (awaitBuildSucceeded reads
+        // the Problems, Log and Steps tabs) instead of waiting out the timeout for an installer that never comes.
+        val install = poll(BUILD_TIMEOUT, 1_000) {
+            device.findObject(installer) ?: run {
+                if (findNow(Regex("^(Build failed|Failed)$")) != null) awaitBuildSucceeded()
+                null
+            }
+        } ?: failWithScreen("the system installer never appeared")
         install.click()
         val installed = poll(120_000) { shell("pm list packages $pkg").takeIf { "package:$pkg" in it } }
         assertTrue("$pkg was not installed after the system installer accepted it", installed != null)
