@@ -44,6 +44,11 @@ class AndroidDeviceTools(
     /** Whether app-log forwarding is enabled (the "Forward app logs" setting; read per build so a toggle
      *  applies on the next build). Default on. Only consulted when [appLogRuntimeJar] is present. */
     val appLogEnabled: () -> Boolean = { true },
+    /** Where debug builds download pre-dexed libraries from (read per build); null turns the download off. */
+    val dexPackUrl: () -> String? = { dev.ide.android.support.pack.LibraryPack.DEFAULT_BASE_URL },
+    /** The app's pre-dexed copies of the jars it adds to user apps itself, by name (`kotlin-stdlib`,
+     *  `applog-runtime`): each a zip of D8's merged `classes*.dex`. See [dev.ide.android.support.pack.BundledDex]. */
+    val predexedJars: Map<String, java.nio.file.Path> = emptyMap(),
 )
 
 /**

@@ -61,6 +61,14 @@ object BuiltInSettingsPages {
      *  forwards its logs to the Logcat tab. Read per build (device only); default on. */
     const val INJECT_APP_LOG = "injectAppLog"
 
+    /** Choice key on the [BUILD_RUNTIME] page: whether a debug build may download libraries already converted to
+     *  dex from the public dex repository instead of dexing them on the device. [PREBUILT_AUTO] (default) always,
+     *  [PREBUILT_WIFI] only on an unmetered connection, [PREBUILT_OFF] never. Read per build (device only). */
+    const val PREBUILT_LIBRARIES = "prebuiltLibraries"
+    const val PREBUILT_AUTO = "auto"
+    const val PREBUILT_WIFI = "wifi"
+    const val PREBUILT_OFF = "off"
+
     /** Action key on the [BUILD_RUNTIME] page (separate-process-capable hosts only): re-request the runtime
      *  notification permission the isolated build process needs. Handled UI-side (needs the platform permission
      *  launcher) — the SettingsScreen mirrors this key; there's no engine-side effect here. */
@@ -365,6 +373,16 @@ object BuiltInSettingsPages {
                 SEPARATE_PROCESS, "Build in a separate process",
                 "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
                 default = true,
+            ),
+            SettingControl.Choice(
+                PREBUILT_LIBRARIES, "Download prebuilt libraries",
+                "Download libraries that are already converted for Android and indexed for the editor, instead of doing both on this device. A new project builds several times faster and its code completion is ready sooner. Wi-Fi only does that work on this device while you're on mobile data. Applies on the next build.",
+                default = PREBUILT_AUTO,
+                options = listOf(
+                    SettingControl.Choice.Option(PREBUILT_AUTO, "Automatically"),
+                    SettingControl.Choice.Option(PREBUILT_WIFI, "Wi-Fi only"),
+                    SettingControl.Choice.Option(PREBUILT_OFF, "Off"),
+                ),
             ),
             SettingControl.Toggle(
                 INJECT_APP_LOG, "Forward app logs",

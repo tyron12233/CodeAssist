@@ -87,3 +87,35 @@ class DexMergePassthroughTest {
         }
     }
 }
+
+/**
+ * A library that arrived from the dex repository is already merged: the ext merge copies its dex through as its
+ * own group instead of running D8 on it, and still merges the per-class libraries next to it.
+ */
+class DexMergePreMergedLibraryTest {
+    @Test
+    fun aPreMergedBucketPassesThroughUntouched() = withTempDir("premerged") { tmp ->
+        runBlocking {
+            val ext = tmp.resolve("ext")
+            val merged = ext.resolve("aaaaaaaaaaaaaaaaaaaaaaaa"); Files.createDirectories(merged)
+            Files.write(merged.resolve("classes.dex"), byteArrayOf(7, 7, 7))
+            Files.write(merged.resolve(DexArchives.MERGED_MARKER), byteArrayOf())
+            val perClass = ext.resolve("bbbbbbbbbbbbbbbbbbbbbbbb").resolve("p"); Files.createDirectories(perClass)
+            Files.write(perClass.resolve("Q.dex"), byteArrayOf(1))
+            val merges = java.util.concurrent.atomic.AtomicInteger()
+            val dexer = object : Dexer {
+                override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?): ToolResult {
+                    merges.incrementAndGet()
+                    assertTrue(inputs.none { "aaaaaaaa" in it.toString() }, "the pre-merged library was handed to D8: $inputs")
+                    Files.createDirectories(outDir); Files.write(outDir.resolve("classes.dex"), byteArrayOf(1)); return ToolResult.ok(emptyList())
+                }
+                override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?) = ToolResult.ok(emptyList())
+            }
+            val out = tmp.resolve("out")
+            val task = DexMergeTask(TaskName("mergeExtDex"), listOf(ext), tmp.resolve("android.jar"), 26, false, out, dexer, groupPerBucket = true)
+            assertEquals(TaskResult.Success, task.execute(SimpleTaskContext()))
+            assertTrue(Files.readAllBytes(out.resolve("maaaaaaaaaaaaaaaaaaaaaaaa/classes.dex")).contentEquals(byteArrayOf(7, 7, 7)))
+            assertEquals(1, merges.get(), "only the per-class library was merged")
+        }
+    }
+}

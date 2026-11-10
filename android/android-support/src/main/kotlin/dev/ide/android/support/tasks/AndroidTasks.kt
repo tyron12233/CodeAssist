@@ -984,6 +984,8 @@ internal class DexArchiveBuilderTask(
     // classpath in one forked big-heap pass instead (the fast fresh path for desugaring builds). True keeps the
     // per-library archive + [DexMergeTask] merge (cross-project per-lib reuse; used when no desugaring applies).
     private val archiveExternalScope: Boolean = true,
+    // Pre-dexed libraries installed into the shared cache before any library is dexed here (see DexPackSource).
+    private val dexPack: dev.ide.android.support.pack.DexPackSource? = null,
 ) : Task {
     /** The first recognized dex error of a run, so the task's failure summary names the actual cause (e.g. a
      *  duplicate class) instead of a generic "dexBuilder failed". Set from the humanized dexer output. */
@@ -1029,6 +1031,7 @@ internal class DexArchiveBuilderTask(
             checkCanceled = { ctx.checkCanceled() },
             reportDiagnostics = { ctx.reportTool("d8", it, DiagnosticKind.DEX) },
             onFailure = { firstFailure.compareAndSet(null, it) },
+            dexPack = dexPack,
         )
         val hashCacheDir = subDexRoot.parent ?: subDexRoot
         // External scope: universe = external libs alone. R.jar rides along as an [extraDexJars] entry so it gets a
@@ -1134,9 +1137,12 @@ internal class DexArchiveBuilderTask(
         }
         // relpath -> content hash, suffixed with the desugaring-config key so enabling/disabling it re-dexes
         // every class (its dex depends on the config). Empty suffix when disabled = identical to before.
+        // When desugaring applies, the classpath rules ([SharedLibraryDexer.DESUGAR_CLASSPATH_RULES]) ride along
+        // too, so classes desugared against an older, incomplete classpath re-dex once.
         val cfg = desugarConfigKey()
+        val rules = if (universe.desugaringNeeded) ":r${SharedLibraryDexer.DESUGAR_CLASSPATH_RULES}" else ""
         val current =
-            byRel.mapValues { (_, f) -> DexArchives.fileHash(f) + if (cfg.isEmpty()) "" else ":$cfg" }
+            byRel.mapValues { (_, f) -> DexArchives.fileHash(f) + (if (cfg.isEmpty()) "" else ":$cfg") + rules }
         val previous = DexArchives.readClassManifest(projectDexRoot)
         val changed = current.keys.filter { previous[it] != current[it] }      // new or modified
         val removed = previous.keys - current.keys
@@ -1399,20 +1405,40 @@ internal object DexArchives {
      * dropped whole; a partial overlap is also dropped, at worst reviving a benign "Type not found" desugaring
      * warning for its unique classes — never a hard failure. A class-less jar (a resource-only AAR's
      * classes.jar) adds no types and can't be opened on ART when empty (zero-entry zip), so it is excluded.
+     *
+     * Only entries D8 reads as types count ([definesType]). `module-info.class` and anything under `META-INF/`
+     * are not types to D8, and every multi-release jar carries `META-INF/versions/9/module-info.class`: counted,
+     * that one shared entry made kotlin-stdlib, kotlinx-coroutines and the rest "overlap" the first such jar and
+     * fall off the classpath, so every library desugared without them.
      */
     fun classpathFor(
         candidates: Collection<Path>, classesOf: Map<Path, Set<String>>, exclude: Set<String>,
     ): List<Path> {
-        val seen = HashSet(exclude)
+        val seen = exclude.filterTo(HashSet()) { definesType(it) }
         val kept = ArrayList<Path>()
         for (jar in candidates) {
-            val cs = classesOf[jar] ?: emptySet()
+            val cs = (classesOf[jar] ?: emptySet()).filter { definesType(it) }
             if (cs.isNotEmpty() && cs.none { it in seen }) {
                 kept.add(jar); seen.addAll(cs)
             }
         }
         return kept
     }
+
+    /**
+     * Marks a bucket that holds a library's final, MERGED dex (`classes.dex`, …) instead of one `.dex` per class:
+     * what the dex repository ships ([dev.ide.android.support.pack.DexRepository]), so a downloaded library is a
+     * file or two rather than thousands, and [DexMergeTask] passes it through instead of merging it again. Such a
+     * bucket is trusted by its [markBucketVerified] sentinel only; [bucketComplete]'s per-class scan can't see it.
+     */
+    const val MERGED_MARKER = ".merged"
+
+    fun isMergedBucket(bucket: Path): Boolean = Files.isRegularFile(bucket.resolve(MERGED_MARKER))
+
+    /** Whether a jar's `.class` entry is a type D8 loads from a classpath jar (it skips `META-INF/` and
+     *  `module-info.class`, like `ArchiveClassFileProvider`). `package-info` stays: D8 reads it as a type. */
+    fun definesType(classRel: String): Boolean =
+        !classRel.startsWith("META-INF/") && classRel.substringAfterLast('/') != "module-info.class"
 
     private const val CLASS_MANIFEST = ".classmanifest"
 
@@ -1900,7 +1926,15 @@ internal class DexMergeTask(
             // serial flood on a phone) and runs a few at once. The in-process default leaves one group per bucket
             // and bounds concurrency by the app heap (`DexConcurrency`) — i.e. desktop behaviour is unchanged.
             DexArchives.clearDir(outDexDir); Files.createDirectories(outDexDir)
-            val plan = resolveMergePlan(buckets.size)
+            // A library that arrived already merged (the dex repository) is its own finished group: copy it
+            // through rather than hand D8 a merge it has nothing to do in.
+            val merged = buckets.indices.filter { DexArchives.isMergedBucket(buckets[it]) }.toSet()
+            for (bi in merged) {
+                val group = outDexDir.resolve("m" + buckets[bi].fileName); Files.createDirectories(group)
+                perBucketDexes[bi].forEach { Files.copy(it, group.resolve(it.fileName.toString())) }
+            }
+            if (merged.isNotEmpty()) ctx.debug("${name.value}: ${merged.size} pre-merged librar(ies) passed through")
+            val plan = resolveMergePlan(buckets.size - merged.size)
             // Per-library mode historically tolerated the SAME class arriving from two libraries (a shaded /
             // duplicated dependency the resolver can't coordinate-dedup): each library was its own indexed group,
             // so ART resolved the duplicate first-wins across dex files at runtime. Batching collapses libraries
@@ -1911,7 +1945,7 @@ internal class DexMergeTask(
             // DexMergePassthroughTest.)
             val seen = HashSet<String>()
             var dropped = 0
-            val deduped = buckets.indices.map { bi ->
+            val deduped = buckets.indices.filter { it !in merged }.map { bi ->
                 val bucket = buckets[bi]
                 perBucketDexes[bi].filter { dex ->
                     seen.add(bucket.relativize(dex).toString().replace('\\', '/')).also { if (!it) dropped++ }

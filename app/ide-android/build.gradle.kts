@@ -347,6 +347,29 @@ val r8DexTool: Configuration by configurations.creating {
 }
 dependencies { r8DexTool(libs.android.r8) { isTransitive = false } }
 
+// --- Pre-dexed bundled jars -------------------------------------------------------------------------
+// Two jars go into every user app the IDE builds without coming from Maven: the bundled kotlin-stdlib and the
+// app-log bridge. The dex repository (DexRepository) finds libraries by Maven coordinate, so these two were dexed
+// on the phone in every project's first build (~5 s on a 2 GB device). They are dexed here instead, with the
+// same pinned D8 and the repository's settings (debug, min-api 26), into `predexed/<jar>.dex.zip`; the app
+// installs them as merged dex buckets the first time a build needs them (BundledDex).
+fun predexBundledJar(taskName: String, jars: Configuration, outName: String) = tasks.register<JavaExec>(taskName) {
+    description = "D8-dex the bundled $outName jar into a predexed/$outName.dex.zip asset."
+    val outZip = layout.buildDirectory.file("predexed-asset/predexed/$outName.dex.zip")
+    classpath = r8DexTool
+    mainClass.set("com.android.tools.r8.D8")
+    inputs.files(jars).withPropertyName("jar").withNormalizer(ClasspathNormalizer::class)
+    outputs.file(outZip).withPropertyName("dexZip")
+    outputs.cacheIf("a pure function of the pinned D8 and one jar") { true }
+    doFirst {
+        val out = outZip.get().asFile
+        out.parentFile.mkdirs(); out.delete()
+        args = listOf("--debug", "--min-api", "26", "--output", out.absolutePath, jars.singleFile.absolutePath)
+    }
+}
+val predexKotlinStdlib = predexBundledJar("predexKotlinStdlib", kotlinStdlibArtifact, "kotlin-stdlib")
+val predexAppLogRuntime = predexBundledJar("predexAppLogRuntime", appLogRuntimeArtifact, "applog-runtime")
+
 val r8StaxRuntime: Configuration by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -632,6 +655,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("predexed-asset").get().asFile)
     sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("vm-spike-asset").get().asFile)
     sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("moshi-libs-asset").get().asFile)
     // The Kotlin-analysis parity corpus and its goldens, staged as test assets so the instrumented suite
@@ -869,7 +893,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, predexKotlinStdlib, predexAppLogRuntime, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui-resources'

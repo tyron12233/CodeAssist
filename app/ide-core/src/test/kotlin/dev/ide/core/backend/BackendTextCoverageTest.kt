@@ -171,6 +171,26 @@ class BackendTextCoverageTest {
             "Heap for R8's forked VM. This device's limit is 2048 MB. ⚠ Your saved value (3072 MB) is above the device limit; R8 will use 2048 MB.",
             "Moves large dexing steps off the IDE's heap into a separate VM on a clean build. Inactive while R8 execution is In-process (or the device can't fork a VM) — everything dexes in-process then.",
             "Caps how many separate dexing VMs run at once. Inactive while R8 execution is In-process (or the device can't fork a VM) — everything dexes in-process then.",
+            // The Build Runtime page's own descriptors, listed on a device only (SettingsBackend.buildRuntimeControls).
+            "Low memory mode",
+            "Use smaller caches, skip background warm-ups, and free memory whenever the IDE leaves the screen, so the system is less likely to close it. Auto turns this on for devices with little memory. Takes effect the next time you open a project.",
+            "Auto",
+            "On",
+            "Off",
+            "Download prebuilt libraries",
+            "Download libraries that are already converted for Android and indexed for the editor, instead of doing both on this device. A new project builds several times faster and its code completion is ready sooner. Wi-Fi only does that work on this device while you're on mobile data. Applies on the next build.",
+            "Automatically",
+            "Wi-Fi only",
+            "Forward app logs",
+            "On a debug build, inject a small log bridge into your app so its logs (logcat, println, crashes) stream to the Logcat tab. Debug builds only — release builds are never modified. Applies on the next build.",
+            "Kotlin compiler execution",
+            "Keep a Kotlin compiler VM running alongside the IDE so compiles get more memory than the app is allowed and don't compete with the editor. Off = compile inside the IDE process. Applies on the next build.",
+            "Compiler VM",
+            "In-process",
+            "Kotlin compiler VM heap",
+            "Memory the Kotlin compiler VM may use. The device may grant less, in which case the largest heap it can back is used.",
+            "Kotlin compiler VMs",
+            "How many Kotlin compiler VMs run at once. Each stays resident for the session, so raise this only for a project whose modules compile in parallel.",
         )
     }
 }
