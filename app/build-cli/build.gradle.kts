@@ -13,6 +13,7 @@ plugins {
 // docs/github-action.md and .github/workflows/cli.yml.
 dependencies {
     implementation(project(":ide-core")) // HeadlessEngine + the build DTOs it reports
+    implementation(project(":android-support")) // `dexrepo`: the dex repository format + signing
 
     implementation(libs.kotlinx.coroutines.core)
 
@@ -20,6 +21,9 @@ dependencies {
     // host bundles for itself — exactly as :ide-desktop does. bundletool builds the `.aab` in-process, and
     // Bouncy Castle backs in-process keystore creation, which a first build needs to mint the debug key.
     implementation(libs.android.bundletool)
+    // D8 in-process: `codeassist dexrepo` dexes libraries with the exact D8 the app bundles (android-support keeps
+    // it compileOnly), so the pack's buckets are the ones a phone's build would make.
+    implementation(libs.android.r8)
     implementation(libs.bouncycastle.pkix)
 
     testImplementation(libs.kotlinx.coroutines.test)

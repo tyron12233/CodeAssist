@@ -33,10 +33,11 @@ object PrebuiltIndexSegments {
     private val log by lazy { Log.logger("index.prebuilt") }
 
     /**
-     * The path-free cache id of a bundled jar: its file name and size. Shared with the scope the IDE builds, so
-     * a segment generated on the build host and one looked up on device agree on the key.
+     * The path-free cache id of a bundled jar: its content id ([dev.ide.core.index.JarContentIds]), the key every
+     * library jar's segments use, so a segment generated on the build host and the one a device looks up agree,
+     * whatever path the device extracts the jar to.
      */
-    fun stableId(jar: Path): String = "${jar.fileName}-${runCatching { Files.size(jar) }.getOrDefault(0L)}"
+    fun stableId(jar: Path): String = requireNotNull(dev.ide.core.index.JarContentIds.compute(jar)) { "unreadable jar $jar" }
 
     /** Index [jars] with the IDE's own extensions and zip the resulting segment store into [out]. */
     fun generate(jars: List<Path>, out: Path) {

@@ -402,6 +402,7 @@ class IdeServices private constructor(
     internal var lastOpenPeak: MemSample? = null
     private val memLog = Log.logger("ide.mem")
     private val decorationLog by lazy { Log.logger("ide.editorDecorations") }
+    private val indexLog by lazy { Log.logger("index.repo") }
 
     // Platform ports resolved from the application service container the host ([ProjectManager]) registered
     // them on — not constructor-injected. Absent (desktop / a standalone test with no host) → null → the
@@ -519,6 +520,35 @@ class IdeServices private constructor(
 
     /** The shared library/SDK segment store (see [indexService]). */
     private val indexCacheRoot: Path = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("index")
+
+    /** The editor index's scope (library jars, library res folders and their content ids), for a publisher. */
+    internal fun libraryIndexScope(): IndexScope = buildIndexScope()
+
+    /** Each library jar and `res/` folder in [scope] that has a content id, to its segment key. */
+    internal fun librarySegmentKeys(scope: IndexScope): Map<Path, String> =
+        scope.stableJarIds.filterKeys { it in scope.libraryJars }.mapValues { dev.ide.core.index.LibraryIndexRepository.jarKey(it.value) } +
+            scope.stableJarIds.filterKeys { it in scope.libraryResourceRoots }.mapValues { dev.ide.core.index.LibraryIndexRepository.resKey(it.value) }
+
+    /** The index extensions this workspace runs (built-in and plugin-contributed), each with its version. */
+    internal fun indexExtensions() = platform.extensions.extensions(INDEX_EP)
+
+    /** Library jars' content ids, the path-free key of their index segments (cached beside the segments). */
+    private val jarContentIds by lazy { dev.ide.core.index.JarContentIds(indexCacheRoot.resolve(".jar-ids")) }
+
+    /** One index repository client per repository URL, so each remembers what it found missing. */
+    private val indexRepositories = java.util.concurrent.ConcurrentHashMap<String, dev.ide.core.index.LibraryIndexRepository>()
+
+    /**
+     * Download the prebuilt index segments of [scope]'s library jars that this cache lacks, before the pass would
+     * build them on the device. Only where the host allows prebuilt downloads (the "Download prebuilt libraries"
+     * setting, on a device); a failure just leaves them to be built here.
+     */
+    private fun prefetchLibraryIndexes(scope: IndexScope) {
+        val url = runCatching { androidTools?.dexPackUrl?.invoke() }.getOrNull() ?: return
+        val indexes = platform.extensions.extensions(INDEX_EP).associate { it.id.value to it.version }
+        indexRepositories.computeIfAbsent(url) { dev.ide.core.index.LibraryIndexRepository(baseUrl = it) }
+            .fetch(librarySegmentKeys(scope), indexCacheRoot, indexes) { indexLog.info(it) }
+    }
 
     /** The workspace index (class names, packages, members, source symbols). Built in the background. The index
      *  extensions are contributed app-global (see [registerStaticPlugins]); this just queries them. */
@@ -1035,19 +1065,27 @@ class IdeServices private constructor(
         val jdt = modules().map { analyzerFor(it) }.filterIsInstance<JvmIndexScopeProvider>()
         val libraryJars =
             (jdt.flatMap { it.classpathJarPaths } + listOfNotNull(BundledKotlinStdlib.jar())).distinct()
+        val libraryResourceRoots = modules().flatMap { m ->
+            if (m.facets.get(AndroidFacet.KEY) != null) runCatching {
+                AndroidResources.libraryResourceDirs(m, store.workspace)
+            }.getOrDefault(emptyList())
+            else emptyList()
+        }.distinct()
         return IndexScope(
             sourceRoots = jdt.flatMap { it.sourceRootPaths }.distinct(),
             // The bundled kotlin-stdlib is always in scope (even for an editor-only Kotlin project that never
             // declared the dependency) so the Kotlin backend's callable/type-shape indexes carry `println`/
             // `listOf`/`String.trim`/… — the backend is a pure index consumer with no live stdlib jar scan.
             libraryJars = libraryJars,
-            // Bundled/SDK jars (android.jar + desugar stubs, the bundled kotlin-stdlib) are re-extracted from
-            // app assets, so their on-disk mtime is not stable across launches and the default path+size+mtime
-            // key re-indexes them every cold start (android.jar alone is ~90% of all index entries). Give them a
-            // PATH-free `<name>-<size>` key so the segment is reused across launches (and later matches a prebuilt
-            // segment shipped under the same id). Keyed by the same Path objects that appear in [libraryJars].
-            stableJarIds = libraryJars.mapNotNull { p -> bundledStableJarId(p)?.let { p to it } }
-                .toMap(),
+            // Every jar is keyed by its CONTENT ([JarContentIds]), not its path and modified time: the bundled jars
+            // are re-extracted from app assets (unstable mtime), the bundled kotlin-stdlib exists at more than one
+            // path, and a segment built for the same jar anywhere (another project, the APK's prebuilt segments,
+            // the index repository via [prefetchLibraryIndexes]) has to be the one looked up here.
+            stableJarIds = (libraryJars.mapNotNull { p -> jarContentIds.idOf(p)?.let { p to it } } +
+                // A Maven AAR's res/ folder is keyed by the AAR's content, like its jars (the same map keys both;
+                // see IndexScope), so its segments are shared and can be prebuilt. Other res roots keep their key.
+                libraryResourceRoots.mapNotNull { r -> aarOf(r)?.let { jarContentIds.idOf(it) }?.let { r to it } })
+                .toMap().also { jarContentIds.flush() },
             jdkHome = jdt.firstNotNullOfOrNull { it.jdkHome },
             // Attached library/SDK SOURCE archives (incl. the downloaded JDK src.zip, folded in by the JDT
             // branch of analyzerFor) → the source-doc index: real param names + javadoc/KDoc.
@@ -1064,15 +1102,15 @@ class IdeServices private constructor(
                 }.getOrDefault(emptyList())
                 else resourceRoots(m)
             }.distinct(),
-            libraryResourceRoots = modules().flatMap { m ->
-                if (m.facets.get(AndroidFacet.KEY) != null) runCatching {
-                    AndroidResources.libraryResourceDirs(
-                        m, store.workspace
-                    )
-                }.getOrDefault(emptyList())
-                else emptyList()
-            }.distinct(),
+            libraryResourceRoots = libraryResourceRoots,
         )
+    }
+
+    /** The `.aar` a dependency `res/` folder was exploded from (`<a>-<v>.aar` beside `<a>-<v>-exploded/res`). */
+    private fun aarOf(res: Path): Path? {
+        val exploded = res.parent ?: return null
+        val name = exploded.fileName?.toString()?.takeIf { it.endsWith("-exploded") } ?: return null
+        return exploded.resolveSibling(name.removeSuffix("-exploded") + ".aar").takeIf { Files.isRegularFile(it) }
     }
 
     /** How long a resync waits before starting, so a burst of commits (a reconcile loop) becomes one pass. */
@@ -1115,6 +1153,12 @@ class IdeServices private constructor(
             if (!DeviceMemory.isLow) prewarmResourceRepositories()
             runCatching {
                 if (invalidate) indexService.invalidate()
+                // Every pass, not only the project-open one, waits for the app's prebuilt segments to be fully
+                // unpacked (once per app version; a marker check after that). A pass that started while they were
+                // still being copied found some of android.jar's segments missing and rebuilt them on the phone
+                // (~100 s on a 2 GB device). Synchronized, so a second engine in the process waits for the first.
+                if (androidTools != null) PrebuiltIndexSegments.ensureInstalled(indexCacheRoot)
+                prefetchLibraryIndexes(scope)
                 indexService.ensureUpToDate(scope)
             }
             if (DeviceMemory.isLow) prewarmResourceRepositories()
@@ -1918,16 +1962,6 @@ class IdeServices private constructor(
             isKotlinPath(path) -> kotlinLightGeneration.incrementAndGet()
             path.toString().endsWith(".java") -> javaBufferGeneration.incrementAndGet()
         }
-    }
-
-    /** The IDE's stable, path-free index-segment key for a BUNDLED jar (android.jar / desugar stubs / the
-     *  bundled kotlin-stdlib; re-extracted from assets, so mtime is unstable), or null for a normal jar. */
-    private fun bundledStableJarId(p: Path): String? {
-        val norm = p.toAbsolutePath().normalize().toString()
-        val bundled = (compileBootClasspath + listOfNotNull(BundledKotlinStdlib.jar()))
-            .map { it.toAbsolutePath().normalize().toString() }
-        if (norm !in bundled) return null
-        return PrebuiltIndexSegments.stableId(p)
     }
 
     private fun fqcnOf(path: Path, text: String): String? {
