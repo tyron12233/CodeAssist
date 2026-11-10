@@ -112,4 +112,8 @@
     <string name="le_palette_project">Project</string>
     <string name="le_tree_drag">Drag to move</string>
     <string name="le_problems">Render problems</string>
+    <string name="le_compact_menu">Design options</string>
+    <string name="le_compact_problems">Render problems (%1$d)</string>
+    <string name="le_compact_resource_errors">Resource errors (%1$d)</string>
+    <string name="le_compact_prepare">Prepare libraries</string>
 </resources>

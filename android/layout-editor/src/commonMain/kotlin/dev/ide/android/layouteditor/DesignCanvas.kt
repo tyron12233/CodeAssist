@@ -105,6 +105,8 @@ internal fun DesignCanvas(
     /** A drag (from the palette, or a long-pressed view here) was released. */
     onDrop: (DragPayload, DropTarget?) -> Unit,
     modifier: Modifier,
+    /** The pane has no chrome around the card (a narrow Split): fit it to the whole pane. */
+    compact: Boolean = false,
 ) {
     val density = LocalDensity.current
     val obscuredPx = with(density) { obscuredBottom.toPx() }
@@ -113,13 +115,14 @@ internal fun DesignCanvas(
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val cardW = with(density) { state.wdp.dp.toPx() }
     val cardH = with(density) { state.hdp.dp.toPx() }
-    // Leave room for the top bar and the bottom toolbar when fitting.
-    val reservedV = with(density) { 150.dp.toPx() }
+    // Leave room for the top bar and the bottom toolbar when fitting; compact has neither.
+    val reservedV = with(density) { (if (compact) 16.dp else 150.dp).toPx() }
     val fit = if (canvasSize == IntSize.Zero) 1f else min(
         canvasSize.width * 0.9f / cardW,
         (canvasSize.height - reservedV).coerceAtLeast(canvasSize.height * 0.4f) / cardH,
     ).coerceIn(0.05f, 4f)
     val scale = if (state.zoom <= 0f) fit else state.zoom
+    state.fitScale = fit
     val fitNow by rememberUpdatedState(fit)
     // The tree's bounds are in the screen's pixels; the image may have been drawn smaller than the screen.
     val frameW = render?.widthPx?.takeIf { it > 0 } ?: state.widthPx
@@ -166,8 +169,8 @@ internal fun DesignCanvas(
     // The part of the canvas the selection can be seen in: under the top bar and the selection chip, above
     // whatever covers the bottom (the toolbar row, and the strip or sheet on a phone). The action bar and the
     // auto-pan below both use it, so the bar is never placed where the pan does not show.
-    val visibleTop = with(density) { (if (chipShown) 112.dp else 68.dp).toPx() }
-    val visibleBottom = canvasSize.height - obscuredPx - with(density) { if (obscuredPx > 0f) 12.dp.toPx() else 84.dp.toPx() }
+    val visibleTop = with(density) { (if (compact) 8.dp else if (chipShown) 112.dp else 68.dp).toPx() }
+    val visibleBottom = canvasSize.height - obscuredPx - with(density) { if (compact || obscuredPx > 0f) 12.dp.toPx() else 84.dp.toPx() }
     LaunchedEffect(selectedNode, (obscuredPx / 16f).toInt(), canvasSize) {
         if (obscuredPx <= 0f) {
             if (state.sheetPan != 0f) {

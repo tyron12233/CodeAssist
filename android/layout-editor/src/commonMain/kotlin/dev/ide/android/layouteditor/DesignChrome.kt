@@ -233,9 +233,7 @@ internal fun DesignToolbar(state: DesignerState, docked: Boolean, modifier: Modi
 internal fun ZoomControls(state: DesignerState, modifier: Modifier) {
     Floating(modifier) {
         Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            BarButton(Sym.zoomOut, stringResource(Res.string.le_zoom_out), size = 40.dp) {
-                state.zoom = ((if (state.zoom <= 0f) 1f else state.zoom) / 1.25f).coerceIn(0.1f, 6f)
-            }
+            BarButton(Sym.zoomOut, stringResource(Res.string.le_zoom_out), size = 40.dp) { state.zoomBy(1 / 1.25f) }
             Text(
                 if (state.zoom <= 0f) stringResource(Res.string.le_zoom_fit) else "${(state.zoom * 100).roundToInt()}%",
                 Modifier.width(48.dp).clickable { state.resetView() },
@@ -243,9 +241,7 @@ internal fun ZoomControls(state: DesignerState, modifier: Modifier) {
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            BarButton(Sym.zoomIn, stringResource(Res.string.le_zoom_in), size = 40.dp) {
-                state.zoom = ((if (state.zoom <= 0f) 1f else state.zoom) * 1.25f).coerceIn(0.1f, 6f)
-            }
+            BarButton(Sym.zoomIn, stringResource(Res.string.le_zoom_in), size = 40.dp) { state.zoomBy(1.25f) }
         }
     }
 }
@@ -492,5 +488,98 @@ internal fun ProblemsChip(problems: List<String>) {
                 for (p in problems) Text(p, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+/** What the compact menu can open besides the panels. */
+internal enum class CompactDialog { Problems, ResourceErrors, PrepareLibraries }
+
+/**
+ * The designer's only chrome in a narrow Split, where the pane is a strip above the code (often ~200dp with the
+ * keyboard up) and the full chrome covered all of it. One button in the canvas's corner; everything the full
+ * chrome offers is in its menu. A ring circles it while a render runs, and a dot marks problems or errors.
+ */
+@Composable
+internal fun CompactMenu(
+    state: DesignerState,
+    rendering: Boolean,
+    problems: Int,
+    resourceErrors: Int,
+    librariesNeedPreparing: Boolean,
+    onPanel: (DesignPanel) -> Unit,
+    onDialog: (CompactDialog) -> Unit,
+    modifier: Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    val alert = problems > 0 || resourceErrors > 0 || librariesNeedPreparing
+    Box(modifier) {
+        Floating(Modifier.size(40.dp), shape = CircleShape) {
+            Box(contentAlignment = Alignment.Center) {
+                BarButton(Sym.moreVert, stringResource(Res.string.le_compact_menu), size = 40.dp) { open = true }
+                if (rendering) CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 2.dp)
+            }
+        }
+        if (alert) Box(
+            Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape)
+                .background(if (resourceErrors > 0 || problems > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            fun close(then: () -> Unit) { open = false; then() }
+            @Composable
+            fun item(glyph: Char, label: String, checked: Boolean = false, onClick: () -> Unit) = DropdownMenuItem(
+                text = { Text(label) },
+                leadingIcon = { Symbol(glyph, null, size = 18.dp) },
+                trailingIcon = { if (checked) Symbol(Sym.check, null, size = 18.dp) },
+                onClick = onClick,
+            )
+            if (resourceErrors > 0) item(Sym.error, stringResource(Res.string.le_compact_resource_errors, resourceErrors)) { close { onDialog(CompactDialog.ResourceErrors) } }
+            if (problems > 0) item(Sym.warning, stringResource(Res.string.le_compact_problems, problems)) { close { onDialog(CompactDialog.Problems) } }
+            if (librariesNeedPreparing) item(Sym.build, stringResource(Res.string.le_compact_prepare)) { close { onDialog(CompactDialog.PrepareLibraries) } }
+            if (alert) HorizontalDivider()
+            item(Sym.designServices, stringResource(Res.string.le_mode_design), checked = !state.blueprint) { close { state.blueprint = false } }
+            item(Sym.architecture, stringResource(Res.string.le_mode_blueprint), checked = state.blueprint) { close { state.blueprint = true } }
+            HorizontalDivider()
+            DESIGN_DEVICES.forEachIndexed { i, d ->
+                item(if (i == 3) Sym.tablet else Sym.smartphone, stringResource(d.label), checked = i == state.deviceIndex) { close { state.deviceIndex = i } }
+            }
+            item(Sym.screenRotation, stringResource(Res.string.le_rotate), checked = state.landscape) { close { state.landscape = !state.landscape } }
+            item(if (state.night) Sym.darkMode else Sym.lightMode, stringResource(Res.string.le_night), checked = state.night) { close { state.night = !state.night } }
+            HorizontalDivider()
+            item(Sym.zoomIn, stringResource(Res.string.le_zoom_in)) { close { state.zoomBy(1.25f) } }
+            item(Sym.zoomOut, stringResource(Res.string.le_zoom_out)) { close { state.zoomBy(1 / 1.25f) } }
+            item(Sym.fitScreen, stringResource(Res.string.le_zoom_fit), checked = state.zoom <= 0f) { close { state.resetView() } }
+            HorizontalDivider()
+            item(Sym.widgets, stringResource(Res.string.le_panel_palette)) { close { onPanel(DesignPanel.Palette) } }
+            item(Sym.accountTree, stringResource(Res.string.le_panel_tree)) { close { onPanel(DesignPanel.Tree) } }
+            item(Sym.tune, stringResource(Res.string.le_panel_attributes)) { close { onPanel(DesignPanel.Attributes) } }
+        }
+    }
+}
+
+/** The render's problems, as a dialog (the compact designer has no room for the chip's list). */
+@Composable
+internal fun ProblemsDialog(problems: List<String>, onDismiss: () -> Unit) {
+    EditorDialog(Sym.warning, stringResource(Res.string.le_problems), null, onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (p in problems) Text(p, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** One of the designer's cards, shown as a dialog over the window instead of inside a pane too small for it. */
+@Composable
+internal fun CardDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) { content() }
+}
+
+/** A panel (palette, tree, attributes) in a sheet over the whole window, for the compact designer. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun CompactPanelSheet(onDismiss: () -> Unit, content: @Composable (Modifier) -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        content(Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 560.dp))
     }
 }

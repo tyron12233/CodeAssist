@@ -81,6 +81,18 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
     val widthPx: Int get() = (wdp * device.density).toInt()
     val heightPx: Int get() = (hdp * device.density).toInt()
 
+    /**
+     * The scale "fit" shows the card at, as the canvas last computed it. Zooming from fit starts here, so the
+     * first step in or out is relative to what is on screen (in a short Split pane fit can be 15%, and zooming
+     * "out" from it to 80% made the card five times larger).
+     */
+    var fitScale: Float = 1f
+
+    /** Zoom by [factor] from the scale shown now. */
+    fun zoomBy(factor: Float) {
+        zoom = ((if (zoom <= 0f) fitScale else zoom) * factor).coerceIn(0.05f, 6f)
+    }
+
     fun resetView() {
         zoom = 0f
         pan = Offset.Zero

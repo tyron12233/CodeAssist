@@ -226,6 +226,22 @@ class DesignerSnapshotTest {
     }
 
     @Test
+    fun phoneSplitIsCompact() {
+        // A phone in Split with the keyboard up: the designer pane is a ~240dp strip. Only the card and one menu
+        // button; the selection is drawn but has no chip, action bar or strip.
+        val caret = xml.indexOf("<Button")
+        val f = snap("phone-split-compact", 412, 240, dark = true, FakeContext(isSplit = true, caretOffset = caret))
+        assertTrue(f.length() > 0)
+    }
+
+    @Test
+    fun phoneSplitCompactMenu() {
+        // The menu button sits 8dp in from the top-right corner.
+        val f = snap("phone-split-menu", 412, 480, dark = true, FakeContext(isSplit = true, caretOffset = 0), taps = listOf(Offset(384f, 28f)))
+        assertTrue(f.length() > 0)
+    }
+
+    @Test
     fun wideDocked() {
         val caret = xml.indexOf("<Button")
         val f = snap("wide-docked", 1280, 800, dark = true, FakeContext(isSplit = true, caretOffset = caret))
