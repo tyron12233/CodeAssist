@@ -263,9 +263,11 @@ internal fun treeDropTarget(
     if (moving != null && moving.walk().any { it === el }) return null
     val parent = el.parent
     val f = (p.y - r.top) / r.height.coerceAtLeast(1f)
-    return when {
+    val target = when {
         parent == null || (isViewGroup(el) && f in 0.3f..0.7f) -> DropTarget(el, el.children.size, null, null, 0f, 0f)
         f < 0.5f -> DropTarget(parent, parent.children.indexOf(el), null, null, 0f, 0f)
         else -> DropTarget(parent, parent.children.indexOf(el) + 1, null, null, 0f, 0f)
     }
+    // A single-child container that already has its child takes no other (inside it, or beside its child).
+    return target.takeIf { acceptsChild(it.parent, moving) }
 }

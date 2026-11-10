@@ -137,4 +137,42 @@ class StructureTest {
         assertEquals("40dp", attrs["android:layout_marginTop"])
         assertEquals("vertical", defaultAttributes("LinearLayout", true, null, emptySet(), 2f).toMap()["android:orientation"])
     }
+
+    @Test
+    fun aFullSingleChildContainerTakesNoSecondChild() {
+        val text = """
+            <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical">
+                <HorizontalScrollView android:id="@+id/scroll">
+                    <TextView android:id="@+id/content" />
+                </HorizontalScrollView>
+                <TextView android:id="@+id/other" />
+            </LinearLayout>
+        """.trimIndent()
+        val doc = parseTestLayout(text)
+        val root = doc.root!!
+        val scroll = root.children[0]
+        val content = scroll.children[0]
+        val other = root.children[1]
+        val tree = LayoutViewNode(
+            "LinearLayout", null, 0, 0, 100, 300, root.start,
+            children = listOf(
+                LayoutViewNode("HorizontalScrollView", "scroll", 0, 0, 100, 100, scroll.start,
+                    children = listOf(LayoutViewNode("TextView", "content", 0, 0, 100, 40, content.start))),
+                LayoutViewNode("TextView", "other", 0, 100, 100, 150, other.start),
+            ),
+        )
+        val groups = setOf("LinearLayout", "HorizontalScrollView")
+        // Over the scroll view's empty area: not into it (it has its child), so into the LinearLayout around it.
+        val t = dropTargetAt(tree, doc, 50f, 70f, { it.tag in groups })!!
+        assertEquals(root, t.parent)
+        assertTrue(!acceptsChild(scroll))
+        // Moving its own child within it is fine, and an empty one takes a child.
+        assertTrue(acceptsChild(scroll, moving = content))
+        val empty = parseTestLayout("<ScrollView/>").root!!
+        assertTrue(acceptsChild(empty))
+        // Moving the other view in through the tree: refused.
+        val rows = mapOf(scroll to androidx.compose.ui.geometry.Rect(0f, 0f, 100f, 44f), content to androidx.compose.ui.geometry.Rect(0f, 44f, 100f, 88f))
+        assertNull(treeDropTarget(doc, rows, androidx.compose.ui.geometry.Offset(50f, 22f), { it.tag in groups }, other), "inside the scroll view")
+        assertNull(treeDropTarget(doc, rows, androidx.compose.ui.geometry.Offset(50f, 84f), { it.tag in groups }, other), "beside its child")
+    }
 }

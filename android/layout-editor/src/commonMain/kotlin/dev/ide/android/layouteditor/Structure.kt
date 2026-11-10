@@ -11,6 +11,21 @@ import kotlin.math.roundToInt
  * existing one there. Pure functions of the parsed buffer and the rendered tree, like DesignEdits.
  */
 
+/**
+ * Containers that hold exactly one child: the framework throws ("ScrollView can host only one direct child")
+ * when given a second, so a drop that would add one is refused.
+ */
+private val SINGLE_CHILD = setOf("ScrollView", "HorizontalScrollView", "NestedScrollView", "SwipeRefreshLayout")
+
+internal fun isSingleChildContainer(element: LayoutElement): Boolean = element.simpleName in SINGLE_CHILD
+
+/**
+ * Whether [parent] can take one more child, not counting [moving] (a view being moved that is already one of its
+ * children, so moving it around inside does not add one).
+ */
+internal fun acceptsChild(parent: LayoutElement, moving: LayoutElement? = null): Boolean =
+    !isSingleChildContainer(parent) || parent.children.none { it !== moving }
+
 /** How a container arranges its children, which decides what a drop inside it means. */
 internal enum class ContainerKind { VERTICAL, HORIZONTAL, CONSTRAINT, FREE }
 
@@ -67,7 +82,9 @@ internal fun dropTargetAt(
         }
     }
     visit(root)
-    val (area, parent) = chain.lastOrNull { (_, el) -> isViewGroup(el) && el !in inside } ?: return null
+    // The deepest container that can take the view: a full single-child one (a ScrollView with its content) is
+    // passed over for the one around it, so a drop over its padding lands beside it, not as a second child.
+    val (area, parent) = chain.lastOrNull { (_, el) -> isViewGroup(el) && el !in inside && acceptsChild(el, moving) } ?: return null
     val kind = containerKind(parent)
     val children = parent.children.filter { it !in inside || it === moving }
     var index = parent.children.size

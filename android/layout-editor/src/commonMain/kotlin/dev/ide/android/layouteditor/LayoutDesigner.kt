@@ -265,12 +265,21 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     fun addFromPalette(cls: dev.ide.android.layout.LayoutViewClass) {
         val root = document.root ?: return
         val sel = selected
-        val parent = when {
+        var parent = when {
             sel != null && isViewGroup(sel) -> sel
             sel?.parent != null -> sel.parent!!
             else -> root
         }
-        val index = if (sel != null && parent !== sel) parent.children.indexOf(sel) + 1 else parent.children.size
+        var after: LayoutElement? = if (sel != null && parent !== sel) sel else null
+        // A full single-child container (a ScrollView with its content): into that content when it holds
+        // children, else beside the container. Walk out until something can take the view.
+        while (!acceptsChild(parent)) {
+            val only = parent.children.first()
+            if (after == null && isViewGroup(only) && acceptsChild(only)) { parent = only; break }
+            after = parent
+            parent = parent.parent ?: return
+        }
+        val index = after?.let { parent.children.indexOf(it) + 1 } ?: parent.children.size
         val inset = 16f * state.device.density
         drop(DragPayload.New(cls), DropTarget(parent, index, null, null, inset, inset))
     }
