@@ -595,42 +595,43 @@ class IdeServicesBackend(
                 dev.ide.platform.BuildActivity.set(false)
             }
         }
-        // Emit build_result (the performance signal) when a build/run reaches a terminal status, watched off
-        // the live buildState so it captures every trigger (Run button, task picker, android run). Re-subscribes
-        // per project (collectLatest on the epoch) since a project swap re-points services.buildState. track()
-        // no-ops while consent is absent, so this is harmless when analytics is off.
+        // Emit build_result (the performance signal) when a build/run reaches a terminal status, watched off the
+        // live buildState so it captures every trigger (Run button, task picker, android run). `build` is this
+        // backend's BuildBackend, which follows the ACTIVE runner and re-points on a project swap: an engine's own
+        // BuildService never hears about a build in the `:build` daemon (Android's default), so builds there went
+        // unreported. track() no-ops while consent is absent, so this is harmless when analytics is off.
         analyticsScope.launch {
-            projectEpoch.collectLatest {
-                val svc = activeServices ?: return@collectLatest
-                var prev = dev.ide.ui.backend.RunStatus.Idle
-                svc.build.buildState.collectLatest { bs ->
-                    val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
-                    if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
-                        // Attach this build's heap peak (Phase-0 build-isolation instrumentation): the signal
-                        // for whether a build/run is the dominant OOM driver vs. the project-open warm-up storm.
-                        val peak = svc.build.lastBuildPeak
-                        track(
-                            dev.ide.analytics.Events.BUILD_RESULT,
+            var prev = dev.ide.ui.backend.RunStatus.Idle
+            build.buildState.collect { bs ->
+                val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
+                if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
+                    // Attach this build's heap peak (Phase-0 build-isolation instrumentation) when it ran in this
+                    // process: the in-process service measured it. A daemon build's peak is the daemon's, and the
+                    // in-process value would be an earlier build's.
+                    val svc = activeServices
+                    val peak = svc?.takeIf { buildRunnerFor(it) === it.buildRunner }?.build?.lastBuildPeak
+                    track(
+                        dev.ide.analytics.Events.BUILD_RESULT,
+                        mapOf(
+                            "ok" to (bs.status == dev.ide.ui.backend.RunStatus.Succeeded).toString(),
+                            "duration_ms" to bs.elapsedMs.toString(),
+                            "steps" to bs.steps.size.toString(),
+                            "process" to (if (peak != null || svc?.let { buildRunnerFor(it) === it.buildRunner } == true) "in-process" else "daemon"),
+                        ) + (peak?.let {
                             mapOf(
-                                "ok" to (bs.status == dev.ide.ui.backend.RunStatus.Succeeded).toString(),
-                                "duration_ms" to bs.elapsedMs.toString(),
-                                "steps" to bs.steps.size.toString(),
-                            ) + (peak?.let {
-                                mapOf(
-                                    "peak_heap_mb" to it.usedMb.toString(),
-                                    "min_headroom_mb" to it.headroomMb.toString(),
-                                    "heap_max_mb" to it.maxMb.toString(),
-                                )
-                            } ?: emptyMap())
-                            // On failure, categorize WHY (compile vs resource vs tool vs oom vs no-diagnostic):
-                            // the ok=false bit alone can't tell a user's compile error from our pipeline throwing.
-                            + (if (bs.status == dev.ide.ui.backend.RunStatus.Failed)
-                                mapOf("failure_kind" to BuildFailureKind.classify(bs.diagnostics, bs.log))
-                              else emptyMap()),
-                        )
-                    }
-                    prev = bs.status
+                                "peak_heap_mb" to it.usedMb.toString(),
+                                "min_headroom_mb" to it.headroomMb.toString(),
+                                "heap_max_mb" to it.maxMb.toString(),
+                            )
+                        } ?: emptyMap())
+                        // On failure, categorize WHY (compile vs resource vs tool vs oom vs no-diagnostic):
+                        // the ok=false bit alone can't tell a user's compile error from our pipeline throwing.
+                        + (if (bs.status == dev.ide.ui.backend.RunStatus.Failed)
+                            mapOf("failure_kind" to BuildFailureKind.classify(bs.diagnostics, bs.log))
+                          else emptyMap()),
+                    )
                 }
+                prev = bs.status
             }
         }
     }
