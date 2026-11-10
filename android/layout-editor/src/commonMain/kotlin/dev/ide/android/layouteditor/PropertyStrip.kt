@@ -77,6 +77,7 @@ internal fun PropertyStrip(
     pc: PropertyContext,
     strings: Map<String, String>,
     onSelect: (LayoutElement) -> Unit,
+    actions: DesignActions,
     onExpand: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier,
@@ -123,10 +124,17 @@ internal fun PropertyStrip(
             }
 
             // Which view: its kind and id, with a switcher to any element of the layout.
-            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ElementSwitcher(document, element, onSelect, Modifier.weight(1f))
-                BarButton(Sym.openInFull, stringResource(Res.string.le_strip_all_attributes), size = 40.dp, onClick = onExpand)
-                BarButton(Sym.close, stringResource(Res.string.le_close), size = 40.dp, onClick = onClose)
+                // The selection's actions, here rather than floating over the canvas where they hid the view.
+                val isRoot = element.parent == null
+                BarButton(Sym.contentCopy, stringResource(Res.string.le_action_duplicate), enabled = actions.canEdit && !isRoot, size = 36.dp) { actions.duplicate(element) }
+                BarButton(Sym.delete, stringResource(Res.string.le_action_delete), enabled = actions.canEdit && !isRoot, size = 36.dp) { actions.delete(element) }
+                BarButton(Sym.northWest, stringResource(Res.string.le_action_select_parent), enabled = !isRoot, size = 36.dp) { actions.selectParent(element) }
+                MoreActions(element, actions)
+                Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                BarButton(Sym.openInFull, stringResource(Res.string.le_strip_all_attributes), size = 36.dp, onClick = onExpand)
+                BarButton(Sym.close, stringResource(Res.string.le_close), size = 36.dp, onClick = onClose)
             }
 
             // Tabs.
@@ -228,7 +236,7 @@ private fun ElementSwitcher(document: LayoutDocument, element: LayoutElement, on
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
                 Symbol(glyphFor(element.tag), null, size = 18.dp, tint = MaterialTheme.colorScheme.onPrimaryContainer, filled = true)
             }
             Column(Modifier.weight(1f, fill = false)) {
@@ -251,6 +259,22 @@ private fun ElementSwitcher(document: LayoutDocument, element: LayoutElement, on
                     onClick = { open = false; onSelect(el) },
                 )
             }
+        }
+    }
+}
+
+/** The overflow of the selection's actions: what does not earn a button of its own. */
+@Composable
+private fun MoreActions(element: LayoutElement, actions: DesignActions) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        BarButton(Sym.moreVert, stringResource(Res.string.le_action_more), size = 36.dp) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(Res.string.le_action_show_in_code)) },
+                leadingIcon = { Symbol(Sym.code, null, size = 18.dp) },
+                onClick = { open = false; actions.showInCode(element) },
+            )
         }
     }
 }

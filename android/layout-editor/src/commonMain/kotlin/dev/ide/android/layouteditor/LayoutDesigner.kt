@@ -263,6 +263,8 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     // On a phone the sheet (or the strip) covers the lower part of the canvas; the canvas keeps the
                     // selection above it.
                     chipShown = showChip,
+                    // On a phone with the strip open, its header carries these; the floating bar would cover the view.
+                    showActionBar = !showStrip,
                     obscuredBottom = when {
                         docked -> 0.dp
                         state.sheet != null -> paneHeight * state.sheetFraction
@@ -304,6 +306,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                             ),
                             strings = strings,
                             onSelect = { select(it) },
+                            actions = actions,
                             onExpand = { state.sheet = DesignPanel.Attributes },
                             onClose = { stripClosed = true },
                             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),

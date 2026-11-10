@@ -83,6 +83,8 @@ internal fun DesignCanvas(
     obscuredBottom: Dp,
     /** Whether the selection chip sits under the top bar, which the visible area then starts below. */
     chipShown: Boolean,
+    /** Whether the floating action bar shows; false where the property strip carries the actions instead. */
+    showActionBar: Boolean,
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
@@ -133,7 +135,7 @@ internal fun DesignCanvas(
         val r = node.rect(k)
         val top = canvasSize.height / 2f + state.pan.y + (r.top - cardH / 2f) * scale
         val bottom = canvasSize.height / 2f + state.pan.y + (r.bottom - cardH / 2f) * scale
-        val barRoom = with(density) { 64.dp.toPx() }
+        val barRoom = with(density) { (if (showActionBar) 64.dp else 16.dp).toPx() }
         if (top >= visibleTop && bottom + barRoom <= visibleBottom) return@LaunchedEffect
         // Put the view just under the chips with room for its action bar beneath; a view too tall for that is
         // centred instead.
@@ -212,7 +214,7 @@ internal fun DesignCanvas(
 
         // The action bar: canvas pixels, constant size, under the selection (above it when there is no room).
         val node = selectedNode
-        if (node != null && selected != null && canvasSize != IntSize.Zero) {
+        if (showActionBar && node != null && selected != null && canvasSize != IntSize.Zero) {
             val r = node.rect(k)
             fun toCanvas(p: Offset) = Offset(
                 canvasSize.width / 2f + state.pan.x + (p.x - cardW / 2f) * scale,
