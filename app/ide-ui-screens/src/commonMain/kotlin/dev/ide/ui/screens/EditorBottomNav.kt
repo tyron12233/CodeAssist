@@ -29,6 +29,13 @@ import dev.ide.ui.generated.resources.search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 
 /** The phone-only bottom navigation items (the compact counterpart to the desktop side rail). Files has no
  *  tab here — the file tree is the left push drawer (edge swipe or the top-bar toggle), not a destination.
@@ -81,9 +88,18 @@ private fun BottomNavItem(
     busy: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    // The whole item is the tap target: the label sat under the icon button's bounds, so tapping the word ("AI",
+    // "Source") did nothing. One accessibility node too (the label), instead of a button plus a stray text.
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Tab, onClick = onClick)
+            .semantics(mergeDescendants = true) { selected = active },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Box {
-            IconButtonCa(icon, label, onClick, Modifier.busyRing(busy), active = active, iconSize = 22, boxSize = 40)
+            IconButtonCa(icon, label, onClick, Modifier.busyRing(busy).clearAndSetSemantics { }, active = active, iconSize = 22, boxSize = 40)
             if (badge > 0) dev.ide.ui.components.CountBadge(badge, Modifier.align(Alignment.TopEnd))
         }
         Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, fontSize = 10.5f.sp)
