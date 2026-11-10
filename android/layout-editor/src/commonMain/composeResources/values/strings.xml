@@ -118,4 +118,5 @@
     <string name="le_compact_prepare">Prepare libraries</string>
     <string name="le_res_library_colors">Library colors (%1$d)</string>
     <string name="le_res_library_images">Library images (%1$d)</string>
+    <string name="le_panel_tree_short">Tree</string>
 </resources>

@@ -148,8 +148,8 @@ internal fun DesignCanvas(
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val cardW = with(density) { state.wdp.dp.toPx() }
     val cardH = with(density) { state.hdp.dp.toPx() }
-    // Leave room for the top bar and the bottom toolbar when fitting; compact has neither.
-    val reservedV = with(density) { (if (compact) 16.dp else 150.dp).toPx() }
+    // The chrome is docked outside the canvas now: fit leaves a margin, and room for the selection's tab.
+    val reservedV = with(density) { (if (compact) 16.dp else 40.dp).toPx() }
     val fit = if (canvasSize == IntSize.Zero) 1f else min(
         canvasSize.width * 0.9f / cardW,
         (canvasSize.height - reservedV).coerceAtLeast(canvasSize.height * 0.4f) / cardH,
@@ -202,8 +202,8 @@ internal fun DesignCanvas(
     // The part of the canvas the selection can be seen in: under the top bar and the selection chip, above
     // whatever covers the bottom (the toolbar row, and the strip or sheet on a phone). The action bar and the
     // auto-pan below both use it, so the bar is never placed where the pan does not show.
-    val visibleTop = with(density) { (if (compact) 8.dp else if (chipShown) 112.dp else 68.dp).toPx() }
-    val visibleBottom = canvasSize.height - obscuredPx - with(density) { if (compact || obscuredPx > 0f) 12.dp.toPx() else 84.dp.toPx() }
+    val visibleTop = with(density) { (if (compact) 8.dp else 28.dp).toPx() }
+    val visibleBottom = canvasSize.height - obscuredPx - with(density) { 12.dp.toPx() }
     LaunchedEffect(selectedNode, (obscuredPx / 16f).toInt(), canvasSize) {
         if (obscuredPx <= 0f) {
             if (state.sheetPan != 0f) {
@@ -219,12 +219,15 @@ internal fun DesignCanvas(
         val r = node.rect(k)
         val top = canvasSize.height / 2f + state.pan.y + (r.top - cardH / 2f) * scale
         val bottom = canvasSize.height / 2f + state.pan.y + (r.bottom - cardH / 2f) * scale
-        val barRoom = with(density) { (if (showActionBar) 64.dp else 16.dp).toPx() }
+        val barRoom = with(density) { 16.dp.toPx() }
         if (top >= visibleTop && bottom + barRoom <= visibleBottom) return@LaunchedEffect
-        // Put the view just under the chips with room for its action bar beneath; a view too tall for that is
-        // centred instead.
-        val delta = if (bottom - top + barRoom <= visibleBottom - visibleTop) visibleTop + with(density) { 8.dp.toPx() } - top
-        else (visibleTop + visibleBottom) / 2f - (top + bottom) / 2f
+        // Move the canvas only as far as it takes to show the view (keeping as much of the layout around it in
+        // sight as before); a view too tall for the space is centred in it.
+        val delta = when {
+            bottom - top + barRoom > visibleBottom - visibleTop -> (visibleTop + visibleBottom) / 2f - (top + bottom) / 2f
+            bottom + barRoom > visibleBottom -> visibleBottom - barRoom - bottom
+            else -> visibleTop - top
+        }
         state.pan = state.pan.copy(y = state.pan.y + delta)
         state.sheetPan += delta
     }
@@ -388,50 +391,44 @@ internal fun DesignCanvas(
             }
         }
 
-        // The action bar: canvas pixels, constant size, under the selection (above it when there is no room).
+        // The selection's tab: canvas pixels, constant size, on the outline's top edge (its bottom edge when the
+        // view reaches the top of the canvas), so it never covers the views around the selection.
         val node = selectedNode
         if (showActionBar && drag.payload == null && node != null && selected != null && canvasSize != IntSize.Zero) {
             val r = node.rect(k)
-            // Placed from the transform as drawn, so the bar travels with the card while it animates.
+            // Placed from the transform as drawn, so the tab travels with the card while it animates.
             val sc = shownScale.value
             val sp = shownPan.value
             fun toCanvas(p: Offset) = Offset(
                 canvasSize.width / 2f + sp.x + (p.x - cardW / 2f) * sc,
                 canvasSize.height / 2f + sp.y + (p.y - cardH / 2f) * sc,
             )
-            val bottom = toCanvas(Offset(r.center.x, r.bottom))
-            val top = toCanvas(Offset(r.center.x, r.top))
-            val barH = with(density) { 48.dp.toPx() }
-            val gap = with(density) { 10.dp.toPx() }
-            // Under the view when it fits, else over it; a view too big for either (the root) gets the bar at the
-            // bottom of the visible area, clear of the top bar, the chip under it, and the bottom toolbar.
-            val minY = visibleTop
-            val maxY = visibleBottom - barH
-            val anchorY = when {
-                bottom.y + gap <= maxY -> bottom.y + gap
-                top.y - gap - barH >= minY -> top.y - gap - barH
-                else -> maxY.coerceAtLeast(minY)
-            }
-            SelectionActionBar(
+            val topLeft = toCanvas(Offset(r.left, r.top))
+            val bottomLeft = toCanvas(Offset(r.left, r.bottom))
+            val tabH = with(density) { SELECTION_TAB_HEIGHT.toPx() }
+            val below = topLeft.y - tabH < 0f
+            val y = if (below) bottomLeft.y else topLeft.y - tabH
+            SelectionTab(
                 element = selected,
                 actions = actions,
+                below = below,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .offset { IntOffset(0, anchorY.roundToInt()) }
-                    .centeredAt(bottom.x, canvasSize.width),
+                    .offset { IntOffset(0, y.roundToInt()) }
+                    .startingAt(topLeft.x, canvasSize.width),
             )
         }
     }
 }
 
-/** Centre a child horizontally on [x] within [containerWidth], kept inside it. */
-private fun Modifier.centeredAt(x: Float, containerWidth: Int): Modifier = layout { measurable, constraints ->
+/** Place a child with its left edge at [x], kept inside [containerWidth]. */
+private fun Modifier.startingAt(x: Float, containerWidth: Int): Modifier = layout { measurable, constraints ->
     val p = measurable.measure(constraints.copy(minWidth = 0))
     layout(p.width, p.height) {
-        val left = (x - p.width / 2f).roundToInt().coerceIn(0, (containerWidth - p.width).coerceAtLeast(0))
-        p.place(left, 0)
+        p.place(x.roundToInt().coerceIn(0, (containerWidth - p.width).coerceAtLeast(0)), 0)
     }
 }
+
 
 private fun LayoutViewNode.rect(k: Float) = Rect(left * k, top * k, right * k, bottom * k)
 

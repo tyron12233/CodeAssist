@@ -401,7 +401,6 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         val paneHeight = maxHeight
         val density = LocalDensity.current
         val showStrip = !docked && !compact && selected != null && state.sheet == null && !stripClosed
-        val showChip = !compact && selected != null && !showStrip && state.sheet != DesignPanel.Attributes && !(docked && state.attributesDocked)
         var compactDialog by remember { mutableStateOf<CompactDialog?>(null) }
         val tree: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
             ComponentTreePanel(
@@ -458,31 +457,28 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 }
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                DesignCanvas(
-                    state = state,
-                    document = document,
-                    render = render,
-                    selected = selected,
-                    onSelect = { select(it) },
-                    actions = actions,
-                    onOpenAttributes = { if (compact) Unit else if (!docked) stripClosed = false else state.attributesDocked = true },
-                    // On a phone the sheet (or the strip) covers the lower part of the canvas; the canvas keeps the
-                    // selection above it.
-                    chipShown = showChip,
-                    // On a phone with the strip open, its header carries these; the floating bar would cover the view.
-                    showActionBar = !showStrip && !compact,
-                    isViewGroup = ::isViewGroup,
-                    onDrop = ::drop,
-                    obscuredBottom = when {
-                        docked || compact -> 0.dp
-                        state.sheet != null -> paneHeight * state.sheetFraction
-                        showStrip -> with(density) { stripHeight.toDp() }
-                        else -> 0.dp
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    compact = compact,
-                )
+                // The canvas, sized by whatever chrome is docked around it: nothing floats over the layout.
+                val canvas: @Composable (Modifier, androidx.compose.ui.unit.Dp) -> Unit = { mod, obscured ->
+                    DesignCanvas(
+                        state = state,
+                        document = document,
+                        render = render,
+                        selected = selected,
+                        onSelect = { select(it) },
+                        actions = actions,
+                        onOpenAttributes = { if (compact) Unit else if (!docked) stripClosed = false else state.attributesDocked = true },
+                        chipShown = false,
+                        // The selection's tab; a compact Split selects for the code and shows no actions.
+                        showActionBar = !compact,
+                        isViewGroup = ::isViewGroup,
+                        onDrop = ::drop,
+                        obscuredBottom = obscured,
+                        modifier = mod,
+                        compact = compact,
+                    )
+                }
                 if (compact) {
+                    canvas(Modifier.fillMaxSize(), 0.dp)
                     val r = render
                     CompactMenu(
                         state = state,
@@ -509,74 +505,68 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                         }
                         null -> {}
                     }
-                } else {
-                    DesignTopBar(state, Modifier.align(Alignment.TopCenter).padding(12.dp))
-                    // The chip names the selection only where nothing else does: the strip, the attributes sheet and
-                    // the docked attributes pane all lead with it.
-                    if (showChip) Column(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 64.dp)) {
-                        selected?.let { SelectionChip(it) }
-                    }
-                    Column(Modifier.align(Alignment.TopEnd).padding(top = 64.dp, end = 12.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (progress != null || !rendered) RenderStatusChip(progress, Modifier)
-                        if (problems.isNotEmpty()) ProblemsChip(problems)
-                    }
-                    Column(
-                        Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { stripHeight = it.height },
-                    ) {
-                        val rowGap by androidx.compose.animation.core.animateDpAsState(if (showStrip) 8.dp else 16.dp, label = "toolbarGap")
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = rowGap), verticalAlignment = Alignment.Bottom) {
-                            DesignToolbar(state = state, docked = docked, modifier = Modifier)
-                            Box(Modifier.weight(1f))
-                            ZoomControls(state, Modifier)
+                } else Column(Modifier.fillMaxSize()) {
+                    DesignTopRow(state, stage = progress, rendering = progress != null || !rendered, problems = problems, modifier = Modifier.fillMaxWidth())
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        // A phone's properties strip and panel sheets rise over the bottom of the canvas (refitting the card
+                        // to the space left would shrink the whole layout on every selection); the canvas keeps the
+                        // selection above them.
+                        val sheetCover = when {
+                            !docked && state.sheet != null -> (paneHeight * state.sheetFraction - 44.dp).coerceAtLeast(0.dp)
+                            showStrip -> with(density) { stripHeight.toDp() }
+                            else -> 0.dp
                         }
-                        // The strip slides up from the bottom edge and the toolbar row rides up on it. The last
-                        // selection is kept so the strip still has content while it slides away.
-                        val lastSelected = remember { mutableStateOf<LayoutElement?>(null) }
-                        if (selected != null) lastSelected.value = selected
-                        val el = selected ?: lastSelected.value
-                        AnimatedVisibility(
-                            visible = showStrip && el != null,
-                            enter = expandVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow), expandFrom = Alignment.Top) +
-                                slideInVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) { it / 3 } +
-                                fadeIn(tween(180)),
-                            exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) +
-                                slideOutVertically(tween(200)) { it / 3 } + fadeOut(tween(150)),
-                        ) {
-                            if (el != null) PropertyStrip(
-                                document = document,
-                                element = el,
-                                pc = PropertyContext(
-                                    element = el,
-                                    catalog = catalog,
-                                    canEdit = ctx.canEdit,
-                                    write = ::writeAttributes,
-                                    complete = { a, f, c ->
-                                        val doc = currentDocument()
-                                        model.completeValue(path, doc.text, el.within(doc)?.ref ?: el.ref, a, f, c)
-                                    },
-                                    resources = { type -> model.resources(path, type) },
-                                    themeColors = { model.themeColors(path) },
-                                ),
-                                strings = strings,
-                                onSelect = { select(it) },
-                                actions = actions,
-                                onExpand = { state.sheet = DesignPanel.Attributes },
-                                onClose = { stripClosed = true },
-                                modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                        canvas(Modifier.fillMaxSize(), sheetCover)
+                        val r = render
+                        if (resourceErrors.isNotEmpty()) {
+                            ResourceErrorsCard(resourceErrors, lastRender = r != null && r.resourceErrors.isEmpty(), ctx, Modifier.align(Alignment.Center).padding(24.dp))
+                        } else if (r != null && r.librariesNeedPreparing) {
+                            PrepareLibrariesCard(
+                                count = r.unpreparedLibraryCount,
+                                preparing = preparing,
+                                onPrepare = { if (renderer.prepareLibraries(path)) preparing = true },
+                                modifier = Modifier.align(Alignment.Center).padding(24.dp),
                             )
                         }
+                        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { stripHeight = it.height }) {
+                            // The last selection is kept so the strip still has content while it closes.
+                            val lastSelected = remember { mutableStateOf<LayoutElement?>(null) }
+                            if (selected != null) lastSelected.value = selected
+                            val el = selected ?: lastSelected.value
+                            AnimatedVisibility(
+                                visible = showStrip && el != null,
+                                enter = expandVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow), expandFrom = Alignment.Top) +
+                                    slideInVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) { it / 3 } +
+                                    fadeIn(tween(180)),
+                                exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) +
+                                    slideOutVertically(tween(200)) { it / 3 } + fadeOut(tween(150)),
+                            ) {
+                                if (el != null) PropertyStrip(
+                                    document = document,
+                                    element = el,
+                                    pc = PropertyContext(
+                                        element = el,
+                                        catalog = catalog,
+                                        canEdit = ctx.canEdit,
+                                        write = ::writeAttributes,
+                                        complete = { a, f, c ->
+                                            val doc = currentDocument()
+                                            model.completeValue(path, doc.text, el.within(doc)?.ref ?: el.ref, a, f, c)
+                                        },
+                                        resources = { type -> model.resources(path, type) },
+                                        themeColors = { model.themeColors(path) },
+                                    ),
+                                    strings = strings,
+                                    onSelect = { select(it) },
+                                    actions = actions,
+                                    onExpand = { state.sheet = DesignPanel.Attributes },
+                                    onClose = { stripClosed = true },
+                                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                                )
+                            }
+                        }
                     }
-                    val r = render
-                    if (resourceErrors.isNotEmpty()) {
-                        ResourceErrorsCard(resourceErrors, lastRender = r != null && r.resourceErrors.isEmpty(), ctx, Modifier.align(Alignment.Center).padding(24.dp))
-                    } else if (r != null && r.librariesNeedPreparing) {
-                        PrepareLibrariesCard(
-                            count = r.unpreparedLibraryCount,
-                            preparing = preparing,
-                            onPrepare = { if (renderer.prepareLibraries(path)) preparing = true },
-                            modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                        )
-                    }
+                    DesignBottomRow(state, docked, Modifier.fillMaxWidth())
                 }
             }
             if (docked && state.attributesDocked) {

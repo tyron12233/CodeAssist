@@ -49,7 +49,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.ide.android.layout.LayoutElement
 import dev.ide.android.layout.LayoutResourceError
 import dev.ide.android.layouteditor.generated.resources.Res
@@ -80,6 +83,7 @@ internal fun BarButton(
     selected: Boolean = false,
     enabled: Boolean = true,
     size: Dp = 40.dp,
+    iconSize: Dp = 20.dp,
     onClick: () -> Unit,
 ) {
     val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
@@ -92,56 +96,28 @@ internal fun BarButton(
         Modifier.size(size).clip(CircleShape).background(bg).clickable(enabled = enabled, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Symbol(glyph, label, size = 20.dp, tint = fg, filled = selected)
-    }
-}
-
-/**
- * The top bar: the Design / Blueprint switch on the left, the screen picker on the right. The code view and the
- * Split view are the editor's own toggle, a tap away, so they are not repeated here.
- */
-@Composable
-internal fun DesignTopBar(state: DesignerState, modifier: Modifier) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Floating {
-            Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                ModeSegment(Sym.designServices, stringResource(Res.string.le_mode_design), !state.blueprint) { state.blueprint = false }
-                ModeSegment(Sym.architecture, stringResource(Res.string.le_mode_blueprint), state.blueprint) { state.blueprint = true }
-            }
-        }
-        Box(Modifier.weight(1f))
-        DevicePicker(state)
+        Symbol(glyph, label, size = iconSize, tint = fg, filled = selected)
     }
 }
 
 @Composable
-private fun ModeSegment(glyph: Char, label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        Modifier.height(36.dp).clip(PillShape).background(bg).clickable(onClick = onClick).padding(horizontal = if (selected) 14.dp else 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Symbol(glyph, if (selected) null else label, size = 18.dp, tint = fg, filled = selected)
-        if (selected) Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
-    }
-}
-
-@Composable
-private fun DevicePicker(state: DesignerState) {
+private fun DevicePicker(state: DesignerState, flat: Boolean = false) {
     var open by remember { mutableStateOf(false) }
     Box {
-        Floating(Modifier.clip(PillShape).clickable { open = true }) {
+        val container: @Composable (@Composable () -> Unit) -> Unit = { content ->
+            if (flat) Box(Modifier.clip(PillShape).clickable { open = true }) { content() }
+            else Floating(Modifier.clip(PillShape).clickable { open = true }) { content() }
+        }
+        container {
             Row(
-                Modifier.height(44.dp).padding(start = 12.dp, end = 8.dp),
+                Modifier.height(if (flat) 32.dp else 44.dp).padding(start = if (flat) 8.dp else 12.dp, end = if (flat) 4.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (flat) 4.dp else 6.dp),
             ) {
-                Symbol(if (state.deviceIndex == 3) Sym.tablet else Sym.smartphone, null, size = 18.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(state.device.label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
-                if (state.night) Symbol(Sym.darkMode, null, size = 16.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Symbol(Sym.arrowDropDown, stringResource(Res.string.le_device_menu), size = 20.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Symbol(if (state.deviceIndex == 3) Sym.tablet else Sym.smartphone, null, size = if (flat) 16.dp else 18.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(state.device.label), style = if (flat) ChromeText else MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                if (state.night) Symbol(Sym.darkMode, null, size = 14.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Symbol(Sym.arrowDropDown, stringResource(Res.string.le_device_menu), size = if (flat) 18.dp else 20.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -168,121 +144,6 @@ private fun DevicePicker(state: DesignerState) {
             )
         }
     }
-}
-
-/** The selected view, named the way the design names it: its kind and, in code type, its id. */
-@Composable
-internal fun SelectionChip(element: LayoutElement) {
-    Floating {
-        Row(
-            Modifier.height(34.dp).padding(start = 10.dp, end = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Symbol(glyphFor(element.tag), null, size = 16.dp, tint = MaterialTheme.colorScheme.primary)
-            Text(element.simpleName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
-            element.id?.let {
-                Text(it, style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-/** The render pipeline's current stage, while one runs. */
-@Composable
-internal fun RenderStatusChip(stage: String?, modifier: Modifier) {
-    Floating(modifier) {
-        Row(
-            Modifier.height(32.dp).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-            Text(stage ?: stringResource(Res.string.le_rendering), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-/** The bottom toolbar: the panels. On a phone they open as sheets; docked, they toggle their pane. */
-@Composable
-internal fun DesignToolbar(state: DesignerState, docked: Boolean, modifier: Modifier) {
-    Floating(modifier) {
-        // 40dp buttons in 4dp of padding: 48dp tall, the same as the zoom controls beside it.
-        Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            val paletteOn = if (docked) state.paletteDocked else state.sheet == DesignPanel.Palette
-            BarButton(Sym.widgets, stringResource(Res.string.le_panel_palette), selected = paletteOn, size = 40.dp) {
-                if (docked) state.paletteDocked = !state.paletteDocked
-                else state.sheet = if (state.sheet == DesignPanel.Palette) null else DesignPanel.Palette
-            }
-            val treeOn = if (docked) state.treeDocked else state.sheet == DesignPanel.Tree
-            val attrsOn = if (docked) state.attributesDocked else state.sheet == DesignPanel.Attributes
-            BarButton(Sym.accountTree, stringResource(Res.string.le_panel_tree), selected = treeOn, size = 40.dp) {
-                if (docked) state.treeDocked = !state.treeDocked
-                else state.sheet = if (state.sheet == DesignPanel.Tree) null else DesignPanel.Tree
-            }
-            BarButton(Sym.tune, stringResource(Res.string.le_panel_attributes), selected = attrsOn, size = 40.dp) {
-                if (docked) state.attributesDocked = !state.attributesDocked
-                else state.sheet = if (state.sheet == DesignPanel.Attributes) null else DesignPanel.Attributes
-            }
-        }
-    }
-}
-
-/** Zoom out / in and fit. The percentage resets to fit on tap. */
-@Composable
-internal fun ZoomControls(state: DesignerState, modifier: Modifier) {
-    Floating(modifier) {
-        Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            BarButton(Sym.zoomOut, stringResource(Res.string.le_zoom_out), size = 40.dp) { state.zoomBy(1 / 1.25f) }
-            Text(
-                if (state.zoom <= 0f) stringResource(Res.string.le_zoom_fit) else "${(state.zoom * 100).roundToInt()}%",
-                Modifier.width(48.dp).clickable { state.resetView() },
-                style = MaterialTheme.typography.labelMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            BarButton(Sym.zoomIn, stringResource(Res.string.le_zoom_in), size = 40.dp) { state.zoomBy(1.25f) }
-        }
-    }
-}
-
-/** The contextual actions for the selected view, floating beside it. */
-@Composable
-internal fun SelectionActionBar(element: LayoutElement, actions: DesignActions, modifier: Modifier) {
-    var more by remember { mutableStateOf(false) }
-    val isRoot = element.parent == null
-    Box(modifier) {
-        Surface(
-            modifier = Modifier.shadow(8.dp, PillShape).pointerInput(Unit) { detectTapGestures { } },
-            shape = PillShape,
-            color = MaterialTheme.colorScheme.inverseSurface,
-            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        ) {
-            Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                InverseButton(Sym.contentCopy, stringResource(Res.string.le_action_duplicate), enabled = actions.canEdit && !isRoot) { actions.duplicate(element) }
-                InverseButton(Sym.delete, stringResource(Res.string.le_action_delete), enabled = actions.canEdit && !isRoot) { actions.delete(element) }
-                InverseButton(Sym.northWest, stringResource(Res.string.le_action_select_parent), enabled = !isRoot) { actions.selectParent(element) }
-                Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.25f)))
-                InverseButton(Sym.moreHoriz, stringResource(Res.string.le_action_more)) { more = true }
-            }
-        }
-        DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(Res.string.le_action_show_in_code)) },
-                leadingIcon = { Symbol(Sym.code, null, size = 18.dp) },
-                onClick = { more = false; actions.showInCode(element) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun InverseButton(glyph: Char, label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    val tint = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = if (enabled) 1f else 0.38f)
-    Box(
-        Modifier.size(40.dp).clip(CircleShape).clickable(enabled = enabled, onClickLabel = label, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Symbol(glyph, label, size = 20.dp, tint = tint) }
 }
 
 /** A bottom sheet over the canvas, with a handle to drag its height. */
@@ -467,30 +328,6 @@ internal fun EditorDialog(
     }
 }
 
-/** The render's problems: a count that opens the list. */
-@Composable
-internal fun ProblemsChip(problems: List<String>) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Floating(Modifier.clip(PillShape).clickable { open = !open }) {
-            Row(
-                Modifier.height(32.dp).padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Symbol(Sym.warning, stringResource(Res.string.le_problems), size = 16.dp, tint = MaterialTheme.colorScheme.error)
-                Text(problems.size.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
-            }
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Column(Modifier.widthIn(max = 320.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.le_problems), style = MaterialTheme.typography.titleSmall)
-                for (p in problems) Text(p, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
 /** What the compact menu can open besides the panels. */
 internal enum class CompactDialog { Problems, ResourceErrors, PrepareLibraries }
 
@@ -583,3 +420,171 @@ internal fun CompactPanelSheet(onDismiss: () -> Unit, content: @Composable (Modi
         content(Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 560.dp))
     }
 }
+
+/**
+ * The design surface's top row, docked above the canvas so nothing covers the layout: Design / Blueprint, the
+ * screen, the render's progress and problems, and zoom.
+ */
+@Composable
+internal fun DesignTopRow(state: DesignerState, stage: String?, rendering: Boolean, problems: List<String>, modifier: Modifier) {
+    Surface(modifier, color = MaterialTheme.colorScheme.surfaceContainer) {
+        // A phone's row has room for the controls only: the render stage is then just its spinner (and named for
+        // accessibility), so it never pushes zoom off the edge.
+        androidx.compose.foundation.layout.BoxWithConstraints {
+        val roomy = maxWidth >= 560.dp
+        Row(Modifier.height(40.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                CompactSegment(Sym.designServices, stringResource(Res.string.le_mode_design), !state.blueprint) { state.blueprint = false }
+                CompactSegment(Sym.architecture, stringResource(Res.string.le_mode_blueprint), state.blueprint) { state.blueprint = true }
+            }
+            DevicePicker(state, flat = true)
+            Box(Modifier.weight(1f))
+            if (rendering) {
+                CircularProgressIndicator(
+                    Modifier.padding(horizontal = 6.dp).size(16.dp)
+                        .then(if (stage != null) Modifier.semantics { contentDescription = stage } else Modifier),
+                    strokeWidth = 2.dp,
+                )
+                if (stage != null && roomy) Text(
+                    stage, Modifier.padding(start = 6.dp, end = 4.dp).widthIn(max = 120.dp),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (problems.isNotEmpty()) ProblemsBadge(problems)
+            BarButton(Sym.zoomOut, stringResource(Res.string.le_zoom_out), size = 32.dp, iconSize = 18.dp) { state.zoomBy(1 / 1.25f) }
+            Text(
+                if (state.zoom <= 0f) stringResource(Res.string.le_zoom_fit) else "${(state.zoom * 100).roundToInt()}%",
+                Modifier.width(36.dp).clip(PillShape).clickable { state.resetView() },
+                style = ChromeText, textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            BarButton(Sym.zoomIn, stringResource(Res.string.le_zoom_in), size = 32.dp, iconSize = 18.dp) { state.zoomBy(1.25f) }
+        }
+        }
+    }
+}
+
+/** A mode of the top row's switch: an icon, and its name while it is the one shown. */
+@Composable
+private fun CompactSegment(glyph: Char, label: String, selected: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.height(28.dp).clip(PillShape).background(bg).clickable(onClick = onClick).padding(horizontal = if (selected) 10.dp else 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Symbol(glyph, if (selected) null else label, size = 15.dp, tint = fg, filled = selected)
+        if (selected) Text(label, style = ChromeText, color = fg)
+    }
+}
+
+/** The render's problems in the top row: a warning and a count that opens the list. */
+@Composable
+private fun ProblemsBadge(problems: List<String>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.height(32.dp).clip(PillShape).clickable { open = !open }.padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Symbol(Sym.warning, stringResource(Res.string.le_problems), size = 16.dp, tint = MaterialTheme.colorScheme.error)
+            Text(problems.size.toString(), style = ChromeText, color = MaterialTheme.colorScheme.error)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Column(Modifier.widthIn(max = 320.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.le_problems), style = MaterialTheme.typography.titleSmall)
+                for (p in problems) Text(p, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/**
+ * The design surface's bottom row, docked below the canvas: the panels. On a phone each opens as a sheet;
+ * docked, each toggles its pane.
+ */
+@Composable
+internal fun DesignBottomRow(state: DesignerState, docked: Boolean, modifier: Modifier) {
+    Surface(modifier, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Row(Modifier.height(44.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            @Composable
+            fun panel(p: DesignPanel, glyph: Char, label: String, on: Boolean, toggleDocked: () -> Unit) = PanelTab(glyph, label, on, Modifier.weight(1f)) {
+                if (docked) toggleDocked() else state.sheet = if (state.sheet == p) null else p
+            }
+            panel(DesignPanel.Palette, Sym.widgets, stringResource(Res.string.le_panel_palette),
+                if (docked) state.paletteDocked else state.sheet == DesignPanel.Palette) { state.paletteDocked = !state.paletteDocked }
+            panel(DesignPanel.Tree, Sym.accountTree, stringResource(Res.string.le_panel_tree_short),
+                if (docked) state.treeDocked else state.sheet == DesignPanel.Tree) { state.treeDocked = !state.treeDocked }
+            panel(DesignPanel.Attributes, Sym.tune, stringResource(Res.string.le_panel_attributes),
+                if (docked) state.attributesDocked else state.sheet == DesignPanel.Attributes) { state.attributesDocked = !state.attributesDocked }
+        }
+    }
+}
+
+@Composable
+private fun PanelTab(glyph: Char, label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+    val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier.height(32.dp).padding(horizontal = 4.dp).clip(PillShape).background(bg).clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Symbol(glyph, null, size = 16.dp, tint = fg, filled = selected)
+        Text(label, Modifier.padding(start = 6.dp), style = ChromeText, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * The selected view's name, on a small tab stuck to its outline, with a menu of what can be done with it. It
+ * replaces a floating chip and action bar that covered the views around the selection, which are the ones the
+ * user is looking at.
+ */
+@Composable
+internal fun SelectionTab(element: LayoutElement, actions: DesignActions, below: Boolean, modifier: Modifier) {
+    var more by remember { mutableStateOf(false) }
+    val isRoot = element.parent == null
+    val shape = if (below) RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp) else RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+    Box(modifier) {
+        Row(
+            Modifier.height(SELECTION_TAB_HEIGHT).clip(shape).background(MaterialTheme.colorScheme.primary)
+                .clickable(onClickLabel = stringResource(Res.string.le_action_more)) { more = true }
+                .padding(start = 5.dp, end = 1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                element.id ?: element.simpleName,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                color = MaterialTheme.colorScheme.onPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 140.dp),
+            )
+            Symbol(Sym.expandMore, null, size = 12.dp, tint = MaterialTheme.colorScheme.onPrimary)
+        }
+        DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+            @Composable
+            fun item(glyph: Char, label: String, enabled: Boolean = true, onClick: () -> Unit) = DropdownMenuItem(
+                text = { Text(label) }, leadingIcon = { Symbol(glyph, null, size = 18.dp) }, enabled = enabled,
+                onClick = { more = false; onClick() },
+            )
+            item(Sym.contentCopy, stringResource(Res.string.le_action_duplicate), actions.canEdit && !isRoot) { actions.duplicate(element) }
+            item(Sym.delete, stringResource(Res.string.le_action_delete), actions.canEdit && !isRoot) { actions.delete(element) }
+            item(Sym.northWest, stringResource(Res.string.le_action_select_parent), !isRoot) { actions.selectParent(element) }
+            item(Sym.code, stringResource(Res.string.le_action_show_in_code)) { actions.showInCode(element) }
+        }
+    }
+}
+
+/** The selection tab's height: small, since it sits over whatever is drawn above the selection. */
+internal val SELECTION_TAB_HEIGHT = 18.dp
+
+/**
+ * The text of the design surface's docked rows: the size of the IDE's own chrome around it (the breadcrumb, the
+ * tabs), so the rows read as part of the editor rather than louder than it.
+ */
+private val ChromeText = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium)
