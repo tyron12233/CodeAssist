@@ -587,4 +587,7 @@ internal val SELECTION_TAB_HEIGHT = 18.dp
  * The text of the design surface's docked rows: the size of the IDE's own chrome around it (the breadcrumb, the
  * tabs), so the rows read as part of the editor rather than louder than it.
  */
-private val ChromeText = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium)
+internal val ChromeText = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium)
+
+/** The secondary line beside [ChromeText] (a value under its label, a class under an id). */
+internal val ChromeTextSmall = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, lineHeight = 14.sp)
