@@ -52,6 +52,11 @@ class BuildLoggingTest {
         assertEquals(BuildLogLevel.WARN, ToolLog.levelOf("w: unused parameter"))
         assertEquals(BuildLogLevel.WARN, ToolLog.levelOf("/a/Main.java:4: warning: deprecated"))
         assertEquals(BuildLogLevel.ERROR, ToolLog.levelOf("1. ERROR in /a/Main.java (at line 4)"))
+        // A source generator names itself first. These were DEBUG, so a failed KSP run showed no reason at all.
+        assertEquals(BuildLogLevel.ERROR, ToolLog.levelOf("ksp error: Cannot find setter for field 'x'"))
+        assertEquals(BuildLogLevel.ERROR, ToolLog.levelOf("ksp exception: java.lang.OutOfMemoryError"))
+        assertEquals(BuildLogLevel.WARN, ToolLog.levelOf("ksp warning: schema not exported"))
+        assertEquals(BuildLogLevel.DEBUG, ToolLog.levelOf("ksp: building"))
         // The chatter a tool prints around its problems is real but not news.
         assertEquals(BuildLogLevel.DEBUG, ToolLog.levelOf("D8 (in-process) dexed 41 input(s) -> ext"))
         assertEquals(BuildLogLevel.DEBUG, ToolLog.levelOf("processing /home/me/project/errors/Foo.kt"))

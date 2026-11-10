@@ -110,7 +110,7 @@ class KspSourceGenerator(
         // read the descriptor from the original jars instead (the same split the kotlinc-plugin loader uses).
         val providers = loadProviders(processorJars, cl)
         if (providers.isEmpty()) {
-            val m = "ksp: no SymbolProcessorProvider found on the processor classpath for ${request.moduleName}"
+            val m = "ksp error: no SymbolProcessorProvider found on the processor classpath for ${request.moduleName}"
             log(m)
             // Carry `messages` (the accepted-mismatch warnings) rather than replacing it: a second problem must
             // not make the first one disappear from the console.
@@ -161,7 +161,9 @@ class KspSourceGenerator(
                     // + message (the type alone is informative when the message is null, e.g. a bare NPE).
                     val root = unwrapReflection(e)
                     val detail = root.message?.takeIf { it.isNotBlank() } ?: "(${root.javaClass.name}; no message)"
-                    val m = "ksp: crashed for ${request.moduleName}: $detail"
+                    // `ksp error:` so the console files it under Errors and the failed step names it; `ksp:` lines
+                    // read as chatter, which left a crashed KSP run as a bare "Failed" with no reason shown.
+                    val m = "ksp error: crashed for ${request.moduleName}: $detail"
                     log(m)
                     // Dump the FULL cause chain, ONE line per log() call. Two reasons this is not
                     // `log(root.stackTrace…joinToString("\n"))`: (1) the build console renders a newline-carrying
@@ -178,7 +180,7 @@ class KspSourceGenerator(
                     // project error, and the (declared) processor's code generation isn't supported on-device yet.
                     val hints = listOfNotNull(
                         if (needsUnavailableNativeLibrary(root))
-                            "ksp: a bundled processor needs a native library not available on this device; its code generation isn't supported on-device yet"
+                            "ksp error: a bundled processor needs a native library not available on this device; its code generation isn't supported on-device yet"
                         else null,
                         staleRuntimeHint((listOf(detail) + chain).joinToString("\n")),
                     )

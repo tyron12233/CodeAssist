@@ -477,6 +477,9 @@ private class KotlinSupportPlugin : Plugin {
  * + `symbol-processing-api`, so the thin runner + processors resolve those parent-first. `jdkHome` is a real
  * JDK on desktop and null on ART (where android.jar on the module's compile classpath supplies `java.*`).
  */
+/** KSP runs' own diagnostics, mirrored into the app log. */
+private val kspLog = dev.ide.platform.log.Log.logger("ksp")
+
 private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin {
     override val manifest = PluginManifest(
         id = "ksp-support", name = "KSP Source Generation",
@@ -510,6 +513,9 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
                 processorOptions = { req -> catalog.optionsFor(req.classpath, req.declaredDependencies) },
                 loader = loader,
                 jdkHome = jdkHome,
+                // Also into the app log (logcat, the in-app log viewer, crash reports): a processor crash's cause
+                // chain only went to the build console, where its frames are folded away as detail.
+                log = { kspLog.info(it) },
             ),
         )
     }
