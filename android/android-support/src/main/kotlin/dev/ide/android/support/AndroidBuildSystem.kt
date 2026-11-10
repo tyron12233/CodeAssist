@@ -1483,6 +1483,22 @@ class AndroidBuildSystem(
         return AndroidLibraries.resolve(app, Layout(app, variantName).explodedAar, variant?.configurations).dexJars
     }
 
+    /**
+     * Download [app]'s prebuilt library dex for [variantName] into the shared cache ahead of a build, dexing
+     * nothing ([SharedLibraryDexer.prefetch]). A no-op without a [dexPack], without a shared cache, or below
+     * minSdk 26 (whose cache key covers the whole library set). Returns how many libraries it installed.
+     */
+    fun prefetchLibraryDex(app: Module, variantName: String, hashCacheDir: Path, log: (String) -> Unit = {}, checkCanceled: () -> Unit = {}): Int {
+        val facet = app.facets.get(AndroidFacet.KEY) ?: return 0
+        val cache = dexCacheRoot ?: return 0
+        if (dexPack == null || !SharedLibraryDexer.cacheKeyIsOwnContentOnly(facet.minSdk, null) || facet.coreLibraryDesugaringEnabled) return 0
+        val jars = libraryDexJars(app, variantName)
+        if (jars.isEmpty()) return 0
+        val universe = SharedLibraryDexer.computeUniverse(jars, hashCacheDir, facet.minSdk, null)
+        return SharedLibraryDexer(dexer, sdk.androidJar, facet.minSdk, false, cache, null, log = log, checkCanceled = checkCanceled, dexPack = dexPack)
+            .prefetch(jars, universe)
+    }
+
     suspend fun warmLibraryDexCache(
         app: Module,
         variantName: String,

@@ -399,7 +399,7 @@ class IndexServiceImpl(
             val all = buildList {
                 scope.jdkHome?.let { add(Artifact.Jrt(it)) }
                 scope.libraryJars.forEach { add(Artifact.Jar(it, scope.stableJarIds[it])) }
-                scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it)) }
+                scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it, scope.stableJarIds[it])) }
                 // Immutable dependency/AAR res dirs index to content-addressed disk segments (parsed once,
                 // reopened thereafter), not into the resident source side.
                 scope.libraryResourceRoots.forEach { if (Files.isDirectory(it)) add(Artifact.ResourceDir(it, scope.stableJarIds[it])) }
@@ -699,6 +699,9 @@ class IndexServiceImpl(
             val gate = kotlinx.coroutines.sync.Semaphore(1)
             var built = 0
             for (k in docs) {
+                // Nice-to-have work: it waits while one of the app's builds compiles, which it otherwise slows
+                // several times over on a small device (see BuildActivity).
+                dev.ide.platform.BuildActivity.awaitIdle()
                 try {
                     if (!indexArtifact(k.art, gate, null, k.hash).isHit) built++
                 } catch (c: kotlinx.coroutines.CancellationException) {
@@ -1347,12 +1350,15 @@ class IndexServiceImpl(
 
         /** A library/SDK SOURCE archive (`-sources.jar`, JDK `src.zip`) or sources DIR (Android `sources/`):
          *  yields its `.java`/`.kt` entries as immutable [IndexOrigin.LIBRARY_SOURCE] units (segment-cached). */
-        class SourceArchive(val path: Path) : Artifact() {
+        class SourceArchive(val path: Path, val stableId: String? = null) : Artifact() {
             override val kind get() = BuiltArtifact.Kind.SOURCE_ARCHIVE
             override val location get() = path
             private val isDir get() = Files.isDirectory(path)
             override val label get() = "sources: ${path.fileName}"
             override fun contentHash(): ContentHash {
+                // A caller-supplied path-free id (see [IndexScope.stableJarIds]) keys a library's sources jar by
+                // content, so its segments are shared and can be prebuilt; else the name + size + mtime key below.
+                stableId?.let { return ContentHash("src-$it") }
                 // A dir's sources are immutable once installed (SDK), so key by path; a zip by size+mtime.
                 if (isDir) return ContentHash("srcdir-$path")
                 val attrs = runCatching {

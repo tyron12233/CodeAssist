@@ -182,6 +182,23 @@ class DexRepositoryTest {
         assertTrue(DexArchives.bucketVerified(tagDir.resolve(DexArchives.contentHash(lib))))
     }
 
+    /** Prefetch: once dependencies are known, published libraries land in the shared cache before any build. */
+    @Test
+    fun prefetchFillsTheSharedCacheWithoutDexingAndOnlyAtMinSdk26Plus() {
+        val dir = tmp()
+        val lib = resolvedJar(dir, "p/lib/1.0/lib-1.0.jar", "p/Lib.class")
+        val counting = CountingDexer()
+        val net = MapNet(publish(lib))
+        fun dexer(minApi: Int) = SharedLibraryDexer(counting, dir.resolve("android.jar"), minApi, false, dir.resolve("cache"), dexPack = repository(net))
+        val d28 = dexer(28)
+        assertEquals(1, d28.prefetch(listOf(lib), d28.computeUniverse(listOf(lib), dir.resolve("h28"))))
+        assertTrue(DexArchives.bucketVerified(dir.resolve("cache").resolve(SharedLibraryDexer.cacheTag(28, false, "")).resolve(DexArchives.contentHash(lib))))
+        assertEquals(0, d28.prefetch(listOf(lib), d28.computeUniverse(listOf(lib), dir.resolve("h28"))), "already there: nothing to fetch")
+        val d24 = dexer(24)
+        assertEquals(0, d24.prefetch(listOf(lib), d24.computeUniverse(listOf(lib), dir.resolve("h24"))), "below 26 the key covers the whole set")
+        assertEquals(0, counting.archived.get(), "prefetch never runs D8")
+    }
+
     /** The build asks the repository before running D8, only at minSdk 26+, and dexes nothing it provided. */
     @Test
     fun theDexerTakesPublishedLibrariesInsteadOfDexingThem() {

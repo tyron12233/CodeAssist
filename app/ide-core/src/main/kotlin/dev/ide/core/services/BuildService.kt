@@ -342,7 +342,41 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     private val dexWarmConnection: MessageBusConnection = ctx.store.bus.connect().also { conn ->
         // A throwing subscriber aborts the model commit that published the event (the bus rethrows), so this must
         // do nothing but arm a timer, and must not throw doing it.
-        conn.subscribe(ProjectModelTopics.CHANGES, ProjectModelListener { runCatching { scheduleDexWarm() } })
+        conn.subscribe(ProjectModelTopics.CHANGES, ProjectModelListener { runCatching { scheduleDexWarm(); scheduleDexPrefetch() } })
+    }
+
+    /**
+     * Download-only counterpart of the warm: once a project's dependencies are known (a resolution finished, or the
+     * project opened), install its libraries' prebuilt dex from the dex repository into the shared cache, so the
+     * first build doesn't wait for the download. No D8, so none of the warm's cost; the "Download prebuilt
+     * libraries" setting decides whether anything is fetched (the build system's repository source reads it). Skips
+     * while a build runs: that build fetches what it needs itself.
+     */
+    private var dexPrefetchJob: Job? = null
+
+    private fun scheduleDexPrefetch() {
+        val previous = dexPrefetchJob
+        dexPrefetchJob = buildScope.launch {
+            previous?.cancelAndJoin()
+            delay(DEX_PREFETCH_DELAY_MS)      // coalesce a burst of model commits into one pass
+            if (buildJob?.isActive == true || dev.ide.platform.BuildActivity.active.value) return@launch
+            val android = androidBuild ?: return@launch
+            val hashes = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex-prefetch")
+            for (module in ctx.modules()) {
+                if (module.facets.get(AndroidFacet.KEY)?.isApplication != true) continue
+                if (unresolvedBlocker(module) != null) continue
+                val n = runCatching {
+                    kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) {
+                        android.prefetchLibraryDex(
+                            module, ctx.activeVariant(module), hashes.resolve(module.name),
+                            log = { memLog.info("dex prefetch ${module.name}: $it") },
+                            checkCanceled = { if (dev.ide.platform.BuildActivity.active.value) throw kotlinx.coroutines.CancellationException("build started") },
+                        )
+                    }
+                }.getOrDefault(0)
+                if (n > 0) memLog.info("dex prefetch: ${module.name} — $n library(ies) ready before the build")
+            }
+        }
     }
 
     init {
@@ -350,6 +384,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // dependency resolution already published — so arm once here too, or the project-open warm, the one that
         // matters most, would wait for some later model change.
         runCatching { scheduleDexWarm() }
+        runCatching { scheduleDexPrefetch() }
     }
 
     private val buildCache = BuildCache(ctx.store.rootPath.resolve(".platform/caches/build"))
@@ -1841,6 +1876,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
          *  commits, then the finished resolution) arms it once, and that a user who immediately hits Run gets the
          *  machine to themselves. */
         private const val DEX_WARM_DELAY_MS = 15_000L
+
+        /** Short: the point of prefetching is to finish before a build the user may start right after resolving. */
+        private const val DEX_PREFETCH_DELAY_MS = 2_000L
 
         /** Coalesce console output into chunks up to this size; cap the retained transcript so an interactive
          *  program's output is otherwise unbounded. */

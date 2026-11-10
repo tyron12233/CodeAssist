@@ -150,6 +150,10 @@ class DexRepository(
     }.getOrDefault(0)
 
     private fun installArtifact(coordinate: LibraryCoordinate, jars: List<DexPackSource.Wanted>, tagDir: Path): Int {
+        // A download started ahead of a build (the prefetch) steps aside between libraries while one compiles in
+        // this app; the build fetches what it still needs itself. Never set inside the build process, so a build's
+        // own fetch doesn't wait.
+        kotlinx.coroutines.runBlocking { dev.ide.platform.BuildActivity.awaitIdle() }
         val url = "${baseUrl.trimEnd('/')}/${pathOf(coordinate)}"
         missing[url]?.let { at -> if (clock() - at < retryAfterMs) return 0 }
         val opened = net.get(url)?.let { SignedArchive.open(it, publicKey) }

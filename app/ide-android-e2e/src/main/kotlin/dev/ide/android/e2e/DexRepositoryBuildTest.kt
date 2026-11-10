@@ -20,6 +20,9 @@ import org.junit.runner.RunWith
 class DexRepositoryBuildTest : E2eTest() {
     private val packUrl: String? = InstrumentationRegistry.getArguments().getString("dexPackUrl")
 
+    // Fresh caches: what an earlier test (or run) downloaded would leave nothing to fetch.
+    override val clearAppData = true
+
     override fun seed() = DEFAULT_SEED + (packUrl?.let { mapOf("settings.buildRuntime.dexPackUrl" to it) } ?: emptyMap())
 
     @Test
@@ -37,9 +40,12 @@ class DexRepositoryBuildTest : E2eTest() {
         awaitBuildSucceeded()
 
         val log = shell("logcat -d -s System.out:I")
-        val arrived = Regex("""dex repository: (\d+) of (\d+) library jar\(s\) arrived pre-dexed in (\d+)ms""").find(log)
-            ?: failWithScreen("the build never consulted the dex repository")
+        // The UI process may already have prefetched them once the dependencies resolved (then the build finds them
+        // in the cache and asks for nothing); either way one fetch brought the template's libraries.
+        val arrived = Regex("""dex repository: (\d+) of (\d+) library jar\(s\) arrived pre-dexed in (\d+)ms""").findAll(log)
+            .maxByOrNull { it.groupValues[1].toInt() } ?: failWithScreen("nothing consulted the dex repository")
         val (got, wanted, ms) = arrived.destructured
+        android.util.Log.i("E2E", "prefetched before the build: ${Regex("dex prefetch: \\S+ — (\\d+)").find(log)?.groupValues?.get(1) ?: "0"}; build ${buildSeconds(log)}s")
         android.util.Log.i("E2E", "dex repository: $got of $wanted in ${ms}ms; ${dexBuilderSeconds(log)}s dexBuilder")
         // Libraries the producer didn't see (the app-log bridge, anything version-skewed) still dex locally; the
         // template's own libraries must come from the repository.
@@ -57,11 +63,24 @@ class DexRepositoryBuildTest : E2eTest() {
         val resBuilt = Regex("""index\.perf: built res: (\S+)""").findAll(shell("logcat -d -s System.out:I")).map { it.groupValues[1] }.toList()
         android.util.Log.i("E2E", "res folders indexed on the phone: ${resBuilt.size} ${resBuilt.take(5)}")
         assertTrue("library res folders were indexed on the phone: $resBuilt", resBuilt.size <= 2)
+        // The libraries' sources jars (parameter names, javadoc) arrive prebuilt too.
+        val docsBuilt = Regex("""source docs: built (\d+) of (\d+)""").findAll(shell("logcat -d -s System.out:I")).sumOf { it.groupValues[1].toInt() }
+        android.util.Log.i("E2E", "source-doc archives indexed on the phone: $docsBuilt")
+        assertTrue("$docsBuilt source archives were indexed on the phone", docsBuilt <= 2)
+    }
+
+    /** The bundle build's wall time, from the build process's own start and end lines. */
+    private fun buildSeconds(log: String): Long {
+        fun at(pattern: String) = Regex("""(\d\d):(\d\d):(\d\d)\.(\d\d\d).*$pattern""").findAll(log).lastOrNull()
+            ?.destructured?.let { (h, m, s, ms) -> ((h.toLong() * 60 + m.toLong()) * 60 + s.toLong()) * 1000 + ms.toLong() }
+        val start = at("ide.mem: build '.*' start") ?: return -1
+        val end = at("ide.mem: build '.*' peak") ?: return -1
+        return (end - start) / 1000
     }
 
     /** dexBuilder's wall time from the build process's task-start lines, for the report. */
     private fun dexBuilderSeconds(log: String): Long {
-        fun at(task: String) = Regex("""(\d\d):(\d\d):(\d\d)\.(\d\d\d).*ide\.mem: task :app:$task""").find(log)
+        fun at(task: String) = Regex("""(\d\d):(\d\d):(\d\d)\.(\d\d\d).*ide\.mem: task :app:$task""").findAll(log).lastOrNull()
             ?.destructured?.let { (h, m, s, ms) -> ((h.toLong() * 60 + m.toLong()) * 60 + s.toLong()) * 1000 + ms.toLong() }
         val start = at("dexBuilderDebug") ?: return -1
         val end = at("mergeProjectDexDebug") ?: at("mergeExtDexDebug") ?: return -1

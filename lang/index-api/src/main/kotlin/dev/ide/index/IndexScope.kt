@@ -25,9 +25,9 @@ data class IndexScope(
      *  match a prebuilt segment shipped under the same id (the device path differs from the build host's, so the
      *  key must not encode the path). Jars absent from this map keep the default `path+size+mtime` key. */
     //
-    // The same map also keys designated [libraryResourceRoots] (by the same Path): a path-free id, such as the
-    // content id of the AAR a `res/` folder was exploded from, replaces the folder's default key (built from its
-    // absolute file paths), so its segments are shared across projects and can be prebuilt. One map rather than a
+    // The same map also keys designated [libraryResourceRoots] and [sourceArchives] (by the same Path): a path-free
+    // id, such as the content id of the AAR a `res/` folder was exploded from or of a `-sources.jar`, replaces their
+    // default key (built from absolute paths or modified times), so their segments are shared and can be prebuilt. One map rather than a
     // second field keeps this class's constructor, which plugins link against, unchanged.
     val stableJarIds: Map<Path, String> = emptyMap(),
 )
