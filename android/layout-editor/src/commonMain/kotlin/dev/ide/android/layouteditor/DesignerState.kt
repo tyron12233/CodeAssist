@@ -49,6 +49,15 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
      */
     var gesturing by mutableStateOf(false)
 
+    /**
+     * The image scale the canvas can show at its current zoom ([quantizeRenderScale]); the next render asks for
+     * it. Plain field, not state: zooming out alone should not render again, the next edit picks it up.
+     */
+    var renderScale: Float = 0.5f
+
+    /** Bumped when the canvas is shown sharper than the last render was drawn, to render again at [renderScale]. */
+    var sharpenTick by mutableStateOf(0)
+
     var selection by mutableStateOf<SelectionKey?>(null)
 
     /** A view being dragged from the palette or moved, across every surface of the editor. */
@@ -78,6 +87,12 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
     }
 
     companion object {
+        /** Render scales in steps, so a pinch does not ask for a new render at every intermediate zoom. */
+        private val RENDER_SCALES = floatArrayOf(0.25f, 0.375f, 0.5f, 0.75f, 1f)
+
+        /** The smallest step that still gives at least one image pixel per screen pixel at [needed]. */
+        fun quantizeRenderScale(needed: Float): Float = RENDER_SCALES.firstOrNull { it >= needed - 0.01f } ?: 1f
+
         /** Seed from the file's folder: `layout-land` opens rotated, `layout-night` opens dark. */
         fun forPath(path: String): DesignerState {
             val folder = path.replace('\\', '/').substringBeforeLast('/').substringAfterLast('/')

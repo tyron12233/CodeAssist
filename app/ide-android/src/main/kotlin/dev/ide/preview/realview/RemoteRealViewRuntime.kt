@@ -3,15 +3,14 @@ package dev.ide.preview.realview
 import android.content.Context
 import android.graphics.Bitmap
 import dev.ide.android.AndroidIde
+import dev.ide.android.preview.MappedFrame
 import dev.ide.android.preview.PreviewRenderClient
 import dev.ide.preview.impl.PreviewViewTreeCodec
 import dev.ide.preview.impl.RealViewRequest
 import dev.ide.preview.impl.RealViewResult
 import dev.ide.preview.impl.RealViewRuntime
 import java.io.File
-import java.nio.ByteBuffer
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicInteger
 import androidx.core.graphics.createBitmap
 
 /**
@@ -22,8 +21,10 @@ import androidx.core.graphics.createBitmap
  * and hasn't restarted yet). A genuine render failure reported by the daemon ("err\t…") is returned as-is (no
  * in-process retry — it would fail the same way and double the work).
  *
- * The daemon returns the bitmap as raw ARGB_8888 pixels in a file under the shared app cache (no large payload
- * over Binder, no PNG); this maps them back into a [Bitmap] returned as [RealViewResult.nativeBitmap].
+ * The daemon returns the bitmap as raw ARGB_8888 pixels in a file under the shared app cache that both
+ * processes map ([MappedFrame]: no large payload over Binder, no PNG, no heap buffer); this copies them out of
+ * the mapping into a [Bitmap] returned as [RealViewResult.nativeBitmap]. One file serves every render, so
+ * renders are serialized: a frame is read before the next one is asked for.
  */
 class RemoteRealViewRuntime(
     context: Context,
@@ -46,7 +47,17 @@ class RemoteRealViewRuntime(
         dexCacheRoot
     )
     private val handoffDir = File(cacheDir, "io")
-    private val counter = AtomicInteger(0)
+    private val frameFile = File(handoffDir, "frame.argb")
+    private val frame = MappedFrame(frameFile, writable = false)
+    private val renderLock = Any()
+
+    /**
+     * Whether [local] has rendered since `:preview` last did. The first render of a session often lands here:
+     * the daemon is still starting when it asks (forking + initializing it can take longer than the bind wait
+     * on a busy device), and that leaves a whole interpreter with every decoded library class in the IDE's own
+     * heap for good. It is released once `:preview` answers again.
+     */
+    @Volatile private var localHoldsCaches = false
 
     // Fine stages streamed from :preview are relayed to the current render's listener (→ the status chip).
     @Volatile
@@ -59,12 +70,11 @@ class RemoteRealViewRuntime(
         // paying the fork once, when a preview actually needs the process.
     }
 
-    override fun render(request: RealViewRequest): RealViewResult {
+    override fun render(request: RealViewRequest): RealViewResult = synchronized(renderLock) { renderRemote(request) }
+
+    private fun renderRemote(request: RealViewRequest): RealViewResult {
         if (!separateProcessEnabled()) return local.render(request)
-        val outFile = File(
-            handoffDir,
-            "render-${counter.incrementAndGet()}.argb"
-        ).apply { parentFile?.mkdirs() }
+        val outFile = frameFile.apply { parentFile?.mkdirs() }
         currentStageListener = request.stageListener
         val res = try {
             client.render(
@@ -84,13 +94,18 @@ class RemoteRealViewRuntime(
                 request.screenHeightDp,
                 request.smallestWidthDp,
                 request.rtl,
+                request.renderScale,
             )
         } finally {
             currentStageListener = null
         } ?: run {
-            outFile.delete()
             // :preview unreachable (not bound / died) → render in-process
+            localHoldsCaches = true
             return local.render(request)
+        }
+        if (localHoldsCaches) {
+            localHoldsCaches = false
+            local.release()
         }
         return parseResult(res, outFile)
     }
@@ -111,13 +126,13 @@ class RemoteRealViewRuntime(
                 null,
                 error = "bad render result: $res"
             )
-            val bytes = outFile.readBytes()
-            if (bytes.size < w * h * 4) return RealViewResult(
+            if (outFile.length() < w.toLong() * h * 4) return RealViewResult(
                 null,
                 error = "truncated render pixels"
             )
+            // A fresh bitmap per frame: the one before may still be on screen, and Compose draws it unsynchronized.
             val bmp = createBitmap(w, h)
-            bmp.copyPixelsFromBuffer(ByteBuffer.wrap(bytes))
+            bmp.copyPixelsFromBuffer(frame.buffer(w * h * 4))
             // The captured hierarchy, written by the daemon as a sidecar next to the pixels (best-effort — a
             // missing/garbled tree just omits the inspector; the render still shows).
             val tree = runCatching {
@@ -140,7 +155,6 @@ class RemoteRealViewRuntime(
                 error = "read preview pixels: ${t.message ?: t.javaClass.simpleName}"
             )
         } finally {
-            runCatching { outFile.delete() }
             runCatching { treeFile.delete() }
             runCatching { problemsFile.delete() }
         }

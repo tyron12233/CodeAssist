@@ -90,6 +90,14 @@ class PreviewResourceLinker(
     private val baseErrors = ConcurrentHashMap<Path, Pair<String, List<ResourceError>>>()
 
     /**
+     * Res dirs known never to change in place (dependency AAR `res/`, unpacked per artifact version): [fileSigs]
+     * signs each by the directory alone instead of statting every file under it. Those trees hold thousands of
+     * files (Material, AppCompat, ...) on a FUSE-backed /sdcard, and walking them was most of every edit's
+     * "base" time even when nothing had changed. Only grows: a dir that is immutable stays immutable.
+     */
+    private val immutableDirs: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
      * Relink [editedLayout] (rendered from [liveText], not its on-disk content) over the project's live
      * resources [resDirs] (ascending priority, as [dev.ide.android.support.resources.AndroidResources.resourceDirs]
      * returns them), under [packageName]. Returns the preview `resources.ap_`, or an error to fall back on.
@@ -104,7 +112,11 @@ class PreviewResourceLinker(
         minSdk: Int,
         targetSdk: Int,
         progress: (String) -> Unit = {},
-    ): Result = runCatching { linkInternal(module, variant, resDirs, editedLayout, liveText, packageName, minSdk, targetSdk, progress) }
+        /** The subset of [resDirs] that never changes in place (library AAR res); see [immutableDirs]. */
+        libraryResDirs: Collection<Path> = emptyList(),
+    ): Result = runCatching {
+        libraryResDirs.mapTo(immutableDirs) { normalized(it) }
+        linkInternal(module, variant, resDirs, editedLayout, liveText, packageName, minSdk, targetSdk, progress) }
         .getOrElse { Result(null, "${it.javaClass.simpleName}: ${it.message ?: ""}".trim()) }
 
     private fun linkInternal(
@@ -499,6 +511,12 @@ class PreviewResourceLinker(
     private fun fileSigs(resDirs: List<Path>): Map<String, String> {
         val out = java.util.TreeMap<String, String>()
         resDirs.filter { Files.isDirectory(it) }.forEach { dir ->
+            val key = normalized(dir)
+            if (key in immutableDirs) {
+                // An immutable library tree: its path (which names the artifact version) is its signature.
+                out["$key/"] = "lib:" + runCatching { Files.getLastModifiedTime(dir).toMillis() }.getOrDefault(0L)
+                return@forEach
+            }
             Files.walk(dir).use { s ->
                 s.filter { Files.isRegularFile(it) }.forEach { f ->
                     val mtime = runCatching { Files.getLastModifiedTime(f).toMillis() }.getOrDefault(0L)

@@ -15,7 +15,6 @@ import dev.ide.preview.impl.PreviewViewTreeCodec
 import dev.ide.preview.impl.RealViewRequest
 import dev.ide.preview.realview.AndroidRealViewRuntime
 import java.io.File
-import java.nio.ByteBuffer
 import java.nio.file.Paths
 
 /**
@@ -46,12 +45,32 @@ class PreviewRenderService : Service() {
             androidJar,
             File(cacheDir, "preview-render-rt"),
             Build.VERSION.SDK_INT,
-            dexCacheRoot
+            dexCacheRoot,
+            // The frame is copied out (writePixels) before render() returns, so one bitmap serves every render.
+            reuseBitmap = true,
         )
     }
 
+    /** The frame file the caller maps, kept mapped here across renders (see [MappedFrame]). */
+    private var frame: Pair<String, MappedFrame>? = null
+
     @Volatile
     private var stageCallback: IPreviewStageCallback? = null
+
+    /**
+     * The runtime holds a whole interpreter's worth of decoded library classes plus a resources context. Nobody
+     * needs them once no layout has rendered for [IDLE_RELEASE_MS] (the designer was closed, or the user went
+     * back to code), so they are dropped then; the next render is a cold one.
+     */
+    private val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val idleRelease = Runnable { releaseRuntime("idle ${IDLE_RELEASE_MS / 1000}s") }
+    @Volatile private var runtimeBuilt = false
+
+    private fun releaseRuntime(why: String) {
+        if (!runtimeBuilt) return
+        log.info(":preview(pid=${Process.myPid()}): $why -> releasing the render runtime")
+        runtime.release()
+    }
 
     private val binder = object : IPreviewRenderer.Stub() {
         override fun pid(): Int = Process.myPid()
@@ -77,6 +96,7 @@ class PreviewRenderService : Service() {
             screenHeightDp: Int,
             smallestWidthDp: Int,
             rtl: Boolean,
+            renderScale: Float,
         ): String {
             return runCatching {
                 val req = RealViewRequest(
@@ -93,10 +113,17 @@ class PreviewRenderService : Service() {
                     screenHeightDp = screenHeightDp,
                     smallestWidthDp = smallestWidthDp,
                     rtl = rtl,
+                    renderScale = renderScale,
                 ).apply {
                     stageListener = { stage -> runCatching { stageCallback?.onStage(stage) } }
                 }
-                val result = runtime.render(req)
+                idleHandler.removeCallbacks(idleRelease)
+                runtimeBuilt = true
+                val result = try {
+                    runtime.render(req)
+                } finally {
+                    idleHandler.postDelayed(idleRelease, IDLE_RELEASE_MS)
+                }
                 val bmp = result.nativeBitmap as? Bitmap
                     ?: return@runCatching "err\t${result.error ?: "no image"}"
                 writePixels(bmp, File(outFile!!))
@@ -113,15 +140,19 @@ class PreviewRenderService : Service() {
         }
     }
 
-    /** Write the bitmap's raw ARGB_8888 pixels (width*height*4 bytes) to [out] for the UI to map back. */
+    /** Copy the bitmap's raw ARGB_8888 pixels (width*height*4 bytes) into the mapped [out] for the UI to read. */
+    @Synchronized
     private fun writePixels(bmp: Bitmap, out: File) {
-        val buf = ByteBuffer.allocate(bmp.width * bmp.height * 4)
-        bmp.copyPixelsToBuffer(buf)
-        out.parentFile?.mkdirs()
-        out.outputStream().use { it.write(buf.array()) }
+        val f = frame?.takeIf { it.first == out.path }?.second
+            ?: MappedFrame(out, writable = true).also { frame?.second?.close(); frame = out.path to it }
+        bmp.copyPixelsToBuffer(f.buffer(bmp.width * bmp.height * 4))
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    private companion object {
+        const val IDLE_RELEASE_MS = 120_000L
+    }
 
     /**
      * Release the process-wide shared dex classpath cache (open archive handles + descriptor indexes for
@@ -132,6 +163,8 @@ class PreviewRenderService : Service() {
      */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        // The interpreter and context are rebuilt by the next render; under pressure they go first.
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) releaseRuntime("onTrimMemory($level)")
         if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && InProcessDexGate.isIdle()) {
             log.info(":preview(pid=${Process.myPid()}): onTrimMemory($level) idle → releasing dex caches")
             runCatching { AndroidSupport.releaseDexCaches() }

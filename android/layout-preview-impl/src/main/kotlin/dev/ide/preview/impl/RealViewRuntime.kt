@@ -1,6 +1,7 @@
 package dev.ide.preview.impl
 
 import java.nio.file.Path
+import kotlin.math.roundToInt
 
 /**
  * Inputs to render a layout with the REAL Android view stack on device — the "layoutlib-on-device" path. The
@@ -56,11 +57,19 @@ class RealViewRequest(
     val smallestWidthDp: Int = 0,
     /** Layout direction the resources resolve under, for `-ldrtl` variants. */
     val rtl: Boolean = false,
+    /** The drawn image's size relative to [widthPx] x [heightPx]; see [scaledPx]. Layout always runs at full size. */
+    val renderScale: Float = 1f,
 ) {
     /** Transient in-process callback for fine render stages ("Dexing"/"Inflating"/"Drawing"), for the status
      *  chip. NOT serialized across the `:preview` IPC — each side sets its own (the daemon forwards over the
      *  AIDL stage callback; the caller relays those onto this). */
     var stageListener: ((String) -> Unit)? = null
+
+    companion object {
+        /** The image size, in pixels, of a [px]-pixel frame drawn at [scale]; both ends of the IPC agree on it. */
+        fun scaledPx(px: Int, scale: Float): Int =
+            if (scale >= 1f || scale <= 0f) px.coerceAtLeast(1) else (px * scale).roundToInt().coerceAtLeast(1)
+    }
 }
 
 /**

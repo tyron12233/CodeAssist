@@ -108,6 +108,7 @@ class PreviewRenderClient(context: Context) {
         screenHeightDp: Int,
         smallestWidthDp: Int,
         rtl: Boolean,
+        renderScale: Float,
     ): String? {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
         return runCatching {
@@ -128,6 +129,7 @@ class PreviewRenderClient(context: Context) {
                 screenHeightDp,
                 smallestWidthDp,
                 rtl,
+                renderScale,
             )
         }.getOrNull()
     }

@@ -110,6 +110,12 @@ data class PreviewRequest(
     val night: Boolean = false,
     /** Request the on-device real-view ("layoutlib") render; the backend falls back to owned rendering if it can't. */
     val realViews: Boolean = false,
+    /**
+     * The real-view image's size relative to [widthPx] x [heightPx] (0 < scale <= 1): the layout is measured and
+     * laid out at the full size, and only drawn smaller, so a design surface showing it zoomed out does not pay
+     * for pixels it cannot show. The captured view bounds stay in full-size pixels.
+     */
+    val renderScale: Float = 1f,
 )
 
 /**

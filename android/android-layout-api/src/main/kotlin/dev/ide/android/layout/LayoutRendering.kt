@@ -61,6 +61,13 @@ class LayoutRenderRequest(
     val density: Float,
     val night: Boolean = false,
     val showSystemUi: Boolean = true,
+    /**
+     * How large to draw the image relative to the screen (0 < scale <= 1). The layout is still measured at
+     * [widthPx] x [heightPx] and the tree's bounds stay in those pixels; only the picture is smaller. A surface
+     * showing the screen zoomed out asks for about what it can show, and asks again when the user zooms in.
+     * A host may ignore it and draw at full size.
+     */
+    val scale: Float = 1f,
 )
 
 /**
@@ -86,6 +93,9 @@ class LayoutRenderResult(
     val librariesNeedPreparing: Boolean = false,
     val unpreparedLibraryCount: Int = 0,
     val approximate: Boolean = false,
+    /** The screen the tree's bounds are in, in pixels; [image] may be smaller (see [LayoutRenderRequest.scale]). */
+    val widthPx: Int = image?.width ?: 0,
+    val heightPx: Int = image?.height ?: 0,
 )
 
 /**

@@ -73,6 +73,21 @@ internal class VmViewFactory(
         log.info("VM view factory: ${jarFiles.size} library jars, ${classDirs.size} class dirs on the interpret classpath")
     }
 
+    /** The classes the VM read from the project's class DIRECTORIES, forgotten by [projectClassesChanged]. */
+    private val projectClasses: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * The project's compiled classes changed on disk (a compile finished): forget the ones the VM loaded from
+     * them, so the next render reads the new bytes, and keep every library class decoded. Rebuilding the whole
+     * VM for this re-read and re-decoded every AppCompat/Material class, a cold render for a one-line edit to a
+     * custom view. Safe between renders: each render inflates a fresh tree, so nothing still runs old code.
+     */
+    fun projectClassesChanged() {
+        val stale = HashSet(projectClasses)
+        projectClasses.clear()
+        vm.forgetClasses { it in stale }
+    }
+
     /** `com/example/app/R`, the class every library `R` resolves to. */
     private val appR: String? = appPackage?.replace('.', '/')?.plus("/R")
 
@@ -89,7 +104,7 @@ internal class VmViewFactory(
             classDirs.firstNotNullOfOrNull { d ->
                 d.resolve("$internalName.class").takeIf { Files.isRegularFile(it) }
                     ?.let { runCatching { Files.readAllBytes(it) }.getOrNull() }
-            } ?: jarFiles.firstNotNullOfOrNull { jar ->
+            }?.also { projectClasses += internalName } ?: jarFiles.firstNotNullOfOrNull { jar ->
                 jar.getJarEntry("$internalName.class")
                     ?.let { e -> jar.getInputStream(e).use { it.readBytes() } }
             }

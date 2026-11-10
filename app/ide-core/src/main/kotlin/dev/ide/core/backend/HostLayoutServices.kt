@@ -94,6 +94,7 @@ internal class HostLayoutRenderer(
             showChrome = request.showSystemUi,
             night = request.night,
             realViews = true,
+            renderScale = request.scale,
         )
         val r = ctx.preview("layoutRender") { services.layoutPreview(Paths.get(request.path), request.text, preview) }
             ?: return LayoutRenderResult(image = null, root = null, problems = listOf(LayoutProblem(null, "This file is not a layout of an Android module.")))
@@ -102,8 +103,16 @@ internal class HostLayoutRenderer(
         val nativeImage = r.renderedNativeImage
         val png = r.renderedImage
         if (nativeImage != null || png != null) {
+            // A native bitmap was drawn at the requested scale; a PNG (the portable form) at full size.
+            val scale = if (nativeImage != null) request.scale else 1f
             return LayoutRenderResult(
-                image = LayoutImage(request.widthPx, request.heightPx, bitmap = nativeImage, png = png),
+                image = LayoutImage(
+                    dev.ide.preview.impl.RealViewRequest.scaledPx(request.widthPx, scale),
+                    dev.ide.preview.impl.RealViewRequest.scaledPx(request.heightPx, scale),
+                    bitmap = nativeImage, png = png,
+                ),
+                widthPx = request.widthPx,
+                heightPx = request.heightPx,
                 root = r.viewTree?.let(::fromCaptured),
                 problems = problems,
                 resourceErrors = errors,
@@ -122,6 +131,8 @@ internal class HostLayoutRenderer(
             librariesNeedPreparing = r.buildRequired,
             unpreparedLibraryCount = r.undexedCount,
             approximate = true,
+            widthPx = request.widthPx,
+            heightPx = request.heightPx,
         )
     }
 

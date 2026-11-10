@@ -110,7 +110,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     LaunchedEffect(pending) { currentCtx.reportRendering(pending) }
     // What the render reads besides the buffer (compiled project views, prepared libraries): a change renders again.
     val inputs by renderer.inputs.collectAsState()
-    LaunchedEffect(path, ctx.text, state.deviceIndex, state.landscape, state.night, renderTick, inputs) {
+    LaunchedEffect(path, ctx.text, state.deviceIndex, state.landscape, state.night, renderTick, inputs, state.sharpenTick) {
         pending = true
         delay(RENDER_DEBOUNCE_MS)
         val request = LayoutRenderRequest(
@@ -120,6 +120,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
             heightPx = state.heightPx,
             density = state.device.density,
             night = state.night,
+            scale = state.renderScale,
         )
         val next = runCatching { renderer.render(request) }.getOrNull()
         pending = false

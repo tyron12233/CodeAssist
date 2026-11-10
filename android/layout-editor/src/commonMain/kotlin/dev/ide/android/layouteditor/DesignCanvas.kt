@@ -121,8 +121,21 @@ internal fun DesignCanvas(
     ).coerceIn(0.05f, 4f)
     val scale = if (state.zoom <= 0f) fit else state.zoom
     val fitNow by rememberUpdatedState(fit)
-    val imageW = render?.image?.width ?: state.widthPx
-    val k = cardW / imageW.coerceAtLeast(1)
+    // The tree's bounds are in the screen's pixels; the image may have been drawn smaller than the screen.
+    val frameW = render?.widthPx?.takeIf { it > 0 } ?: state.widthPx
+    val k = cardW / frameW.coerceAtLeast(1)
+
+    // Ask the renderer for about the pixels the card shows on screen, once a gesture settles; render again at
+    // once when the card is now shown sharper than the frame was drawn (zooming in), not when zooming out.
+    LaunchedEffect(scale, cardW, state.widthPx, state.gesturing, render) {
+        if (state.gesturing || canvasSize == IntSize.Zero) return@LaunchedEffect
+        val needed = DesignerState.quantizeRenderScale(cardW * scale / state.widthPx.coerceAtLeast(1))
+        state.renderScale = needed
+        val r = render ?: return@LaunchedEffect
+        val img = r.image ?: return@LaunchedEffect
+        val drawn = img.width.toFloat() / (r.widthPx.takeIf { it > 0 } ?: img.width)
+        if (needed > drawn + 0.01f) state.sharpenTick++
+    }
 
     // What is drawn trails the target transform: a gesture moves it exactly, anything else springs to it. The
     // first placement (before the canvas has a size there is nothing to fit to) snaps rather than zooming in.

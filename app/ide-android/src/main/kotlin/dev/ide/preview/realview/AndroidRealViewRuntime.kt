@@ -48,12 +48,23 @@ class AndroidRealViewRuntime(
     private val cacheDir: File,
     @Suppress("unused") private val deviceApiLevel: Int,
     @Suppress("unused") private val dexCacheRoot: Path? = null,
+    /**
+     * Draw every render into the same [Bitmap] (while its size holds) instead of a new one. Only for a caller
+     * that copies the frame out before the next render, as the `:preview` service does; an in-process caller
+     * keeps showing the bitmap it was handed, so it must get a new one each time.
+     */
+    private val reuseBitmap: Boolean = false,
 ) : RealViewRuntime {
+
+    private var lastBitmap: Bitmap? = null
 
     private val log = Log.logger("ide.preview")
     private val lock = Any()
     private var contextCache: Pair<String, ResourceContextFactory.PreviewContext>? = null
     private var vmFactoryCache: Pair<String, VmViewFactory>? = null
+
+    /** [classDirSig] of the project class dirs the cached VM last rendered with. */
+    private var projectDirContents: String? = null
 
     // One peer factory for the runtime's lifetime, shared across VM rebuilds so a generated peer class (an
     // interpreted view's real subclass) is dexed + defined ONCE and reused when the classpath changes but the
@@ -129,6 +140,7 @@ class AndroidRealViewRuntime(
     }
 
     private fun renderInternal(request: RealViewRequest, resourcesAp: File): RealViewResult {
+        holdsCaches = true
         val notify = request.stageListener
         val t0 = System.nanoTime()
         // The classpath is INTERPRETED by the bytecode VM — nothing is dexed or loaded into ART (no
@@ -140,12 +152,21 @@ class AndroidRealViewRuntime(
         val (rJars, classpath) = request.classpath.partition { it.fileName?.toString() in R_JAR_NAMES }
         val jars = classpath.filter { it.toString().endsWith(".jar") }
         val dirs = classpath.filter { Files.isDirectory(it) }
+        // The VM (and the context that carries it) is keyed by the LIBRARY jars and the class-dir LIST; the
+        // contents of the project's class dirs change with every compile and only make the VM forget the
+        // project classes it loaded (VmViewFactory.projectClassesChanged), keeping the decoded libraries.
         val sig: String
+        val dirContents: String
         synchronized(lock) {
-            sig = "${classpathSig(jars)}|dirs:${classDirSig(dirs)}|api${request.minApi}|${request.packageName}"
+            sig = "${classpathSig(jars)}|dirs:${dirs.sorted().joinToString(",")}|api${request.minApi}|${request.packageName}"
+            dirContents = classDirSig(dirs)
         }
         val vmFactory: VmViewFactory = cachedVmFactory(classpath, request.packageName, sig, notify)
         vmFactory.useResourceClasses(rJars.firstOrNull())
+        synchronized(lock) {
+            if (projectDirContents != null && projectDirContents != dirContents) vmFactory.projectClassesChanged()
+            projectDirContents = dirContents
+        }
         val classLoader: ClassLoader = View::class.java.classLoader ?: javaClass.classLoader!!
         val tLoader = System.nanoTime()
         val pc = cachedContext(request, resourcesAp, classLoader, sig, vmFactory)
@@ -206,8 +227,13 @@ class AndroidRealViewRuntime(
         val tInflate = System.nanoTime()
 
         notify?.invoke("Drawing")
-        val bmp = createBitmap(w, h)
+        // Laid out at full size; drawn at the requested scale, so a zoomed-out design surface gets about the
+        // pixels it shows. The captured bounds below stay in full-size pixels.
+        val bw = RealViewRequest.scaledPx(w, request.renderScale)
+        val bh = RealViewRequest.scaledPx(h, request.renderScale)
+        val bmp = frameBitmap(bw, bh)
         val canvas = Canvas(bmp)
+        if (bw != w || bh != h) canvas.scale(bw.toFloat() / w, bh.toFloat() / h)
         root.draw(canvas)
         // A view whose own code failed mid-frame drew with the framework's fallback; mark it so the gap is seen.
         for ((view, why) in vmFactory.brokenViews()) runCatching { drawBrokenOverlay(canvas, root, view, why) }
@@ -218,6 +244,7 @@ class AndroidRealViewRuntime(
         val viewTree = runCatching { ViewHierarchyCapture.capture(root) }.getOrElse {
             log.warn("real-view hierarchy capture failed: ${it.message}"); null
         }
+        val tCapture = System.nanoTime()
         WindowLifecycleReplay.detach(attached)
 
         fun ms(a: Long, b: Long) = (b - a) / 1_000_000
@@ -230,12 +257,48 @@ class AndroidRealViewRuntime(
             ms(
                 tCtx, tInflate
             )
-        }ms draw=${ms(tInflate, tDraw)}ms${vmFactory?.let { " interpret-steps=${it.steps - stepsBefore}" } ?: ""}")
+        }ms draw=${ms(tInflate, tDraw)}ms capture=${ms(tDraw, tCapture)}ms image=${bw}x$bh${vmFactory?.let { " interpret-steps=${it.steps - stepsBefore}" } ?: ""}")
 
         return RealViewResult(
-            pngBytes = null, width = w, height = h, nativeBitmap = bmp, viewTree = viewTree,
+            pngBytes = null, width = bw, height = bh, nativeBitmap = bmp, viewTree = viewTree,
             problems = vmFactory.problems().map { "${it.className}\t${it.message}" }.distinct(),
         )
+    }
+
+    /** The bitmap to draw a [w] x [h] frame into: cleared and reused when [reuseBitmap] allows, else new. */
+    private fun frameBitmap(w: Int, h: Int): Bitmap {
+        if (!reuseBitmap) return createBitmap(w, h)
+        lastBitmap?.takeIf { !it.isRecycled && it.width == w && it.height == h }?.let {
+            it.eraseColor(android.graphics.Color.TRANSPARENT)
+            return it
+        }
+        lastBitmap?.recycle()
+        return createBitmap(w, h).also { lastBitmap = it }
+    }
+
+    /** Whether anything is cached for [release] to drop (set by the first render). */
+    @Volatile private var holdsCaches = false
+
+    /**
+     * Drop the cached preview context, the VM view factory (every decoded library class) and the frame bitmap;
+     * the next render rebuilds them, a cold render. Queued on the render thread, so it never runs under a render
+     * in flight; returns at once.
+     */
+    fun release() {
+        if (!holdsCaches) return
+        renderHandler.post {
+            synchronized(lock) {
+                contextCache?.second?.let { runCatching { it.close() } }
+                contextCache = null
+                vmFactoryCache?.second?.let { runCatching { it.close() } }
+                vmFactoryCache = null
+                projectDirContents = null
+            }
+            lastBitmap?.recycle()
+            lastBitmap = null
+            holdsCaches = false
+            log.info("real-view: released the preview VM and context")
+        }
     }
 
     /** A red outline and a short label over [view], whose interpreted code failed while drawing this frame. */
@@ -344,6 +407,7 @@ class AndroidRealViewRuntime(
             vmFactoryCache?.takeIf { it.first == sig }?.second ?: run {
                 notify?.invoke("Interpreting")
                 vmFactoryCache?.second?.let { old -> runCatching { old.close() } }
+                projectDirContents = null
                 VmViewFactory(classpath, peerFactory, appPackage = appPackage).also { vmFactoryCache = sig to it }
             }
         }

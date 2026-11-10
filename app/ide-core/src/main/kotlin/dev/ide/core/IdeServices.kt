@@ -4723,6 +4723,7 @@ class IdeServices private constructor(
             facet.minSdk,
             facet.targetSdk,
             progress = { _realViewProgress.value = PreviewProgress(it) },
+            libraryResDirs = runCatching { AndroidResources.libraryResourceDirs(module, store.workspace) }.getOrDefault(emptyList()),
         )
         val tLinked = System.nanoTime()
         // Broken project resources: report them. Rendering the build's last resources.ap_ (or owned rendering)
@@ -4810,6 +4811,7 @@ class IdeServices private constructor(
             screenHeightDp = config.screenHeightDp,
             smallestWidthDp = config.smallestWidthDp,
             rtl = config.rtl,
+            renderScale = request.renderScale,
         ).apply {
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
@@ -4949,7 +4951,9 @@ class IdeServices private constructor(
     internal fun layoutResources(file: Path, rClass: String): List<LayoutResourceInfo>? {
         val module = moduleForResourceFile(file) ?: return null
         val type = ResourceType.byRClass(rClass) ?: return emptyList()
-        val repo = resourceRepository(module)?.repo ?: return null
+        // Ids and layout names come from layout files, the open buffer included; every other type is a value.
+        val cached = if (type == ResourceType.ID || type == ResourceType.LAYOUT) resourceRepository(module) else resourceRepositoryForValues(module)
+        val repo = cached?.repo ?: return null
         val theme = manifestThemeAndLabel(module, repo).first
         val values = dev.ide.preview.impl.ProjectPreviewResources(repo, 1f, themeName = theme)
         return repo.names(type).sorted().map { name ->
@@ -5015,7 +5019,7 @@ class IdeServices private constructor(
     /** The app theme's color attributes that resolve to a color, as (attr name, argb). */
     internal fun layoutThemeColors(file: Path): List<Pair<String, Int>>? {
         val module = moduleForResourceFile(file) ?: return null
-        val repo = resourceRepository(module)?.repo ?: return null
+        val repo = resourceRepositoryForValues(module)?.repo ?: return null
         val theme = manifestThemeAndLabel(module, repo).first ?: return emptyList()
         val values = dev.ide.preview.impl.ProjectPreviewResources(repo, 1f, themeName = theme)
         return THEME_COLOR_ATTRS.mapNotNull { a ->
@@ -5289,8 +5293,9 @@ class IdeServices private constructor(
     // the layout buffer being typed, so a content fingerprint over those files is the cache key — typing in
     // a layout hits the cache; saving a res or .java file changes the fingerprint and rebuilds.
 
+    /** [valuesFingerprint] is [fingerprint] without the open LAYOUT buffers (see [resourceRepositoryForValues]). */
     private class CachedRepo(
-        val fingerprint: String, val repo: ResourceRepository
+        val fingerprint: String, val repo: ResourceRepository, val valuesFingerprint: String = fingerprint,
     )
 
     private val repoCache = ConcurrentHashMap<String, CachedRepo>()
@@ -5416,14 +5421,36 @@ class IdeServices private constructor(
         // Fingerprint the res FILES on disk PLUS any open editor buffer of a res `.xml` under those dirs — so an
         // UNSAVED edit (a just-typed `<string>`) produces a fresh fingerprint and rebuilds the repository, and
         // the synthetic `R` sees the new resource before the file is saved (matching the live XML `@string/` path).
-        val fp = resDiskFingerprint(key, resDirs) + resourceBufferFingerprint(resDirs)
+        val disk = resDiskFingerprint(key, resDirs)
+        val fp = disk + resourceBufferFingerprint(resDirs)
         repoCache[key]?.let { if (it.fingerprint == fp) return it }
         return synchronized(repoBuildLock) {
             val cur = repoCache[key]
             if (cur != null && cur.fingerprint == fp) cur
             else runCatching { AndroidResources.repository(module, store.workspace, resourceModel, textOverride = ::resourceBufferText) }
-                .getOrNull()?.let { CachedRepo(fp, it).also { c -> repoCache[key] = c } }
+                .getOrNull()?.let {
+                    CachedRepo(fp, it, disk + resourceBufferFingerprint(resDirs, layouts = false)).also { c -> repoCache[key] = c }
+                }
         }
+    }
+
+    /**
+     * The repository for questions about resource VALUES (strings, colors, the theme), which an open layout's
+     * unsaved buffer cannot change: a layout contributes only its own name and the ids it declares. So a cached
+     * repository that differs from the live state only in open layout buffers answers as well as a fresh one.
+     * The layout editor asks for the project's strings after every render: warm, a rebuild re-parses only the
+     * edited buffer and is cheap, but while the first index pass runs it measured 3 s to 22 s on an emulator per
+     * ask, each one queued on the background lane in front of the preview's next render.
+     */
+    private fun resourceRepositoryForValues(module: Module): CachedRepo? {
+        val key = module.id.value
+        repoCache[key]?.let { cached ->
+            val resDirs = runCatching { AndroidResources.resourceDirs(module, store.workspace) }.getOrDefault(emptyList())
+            if (cached.valuesFingerprint == resDiskFingerprint(key, resDirs) + resourceBufferFingerprint(resDirs, layouts = false)) {
+                return cached
+            }
+        }
+        return resourceRepository(module)
     }
 
     /** The live editor-buffer text of an open `res/` file, or null (the parser then reads disk). */
@@ -5431,11 +5458,12 @@ class IdeServices private constructor(
 
     /** A fingerprint fragment for every open `.xml` buffer under [resDirs] (path + content hash), so an unsaved
      *  resource edit invalidates the repository cache. Empty when nothing under res/ is open. */
-    private fun resourceBufferFingerprint(resDirs: List<Path>): String {
+    private fun resourceBufferFingerprint(resDirs: List<Path>, layouts: Boolean = true): String {
         if (resDirs.isEmpty() || openDocuments.isEmpty()) return ""
         val norm = resDirs.map { it.toAbsolutePath().normalize() }
         return openDocuments.entries.asSequence()
             .filter { (p, _) -> p.toString().endsWith(".xml") && norm.any { p.startsWith(it) } }
+            .filter { (p, _) -> layouts || p.parent?.fileName?.toString()?.startsWith("layout") != true }
             .map { (p, text) -> "$p:${bufferHash(p, text)}" }
             .sorted().joinToString("|", prefix = "|buf:")
             .takeIf { it != "|buf:" } ?: ""

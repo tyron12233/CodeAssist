@@ -21,9 +21,12 @@ interface IPreviewRenderer {
     // [screenWidthDp]/[screenHeightDp]/[smallestWidthDp]/[rtl] are the configuration the resources resolve
     // under (the previewed device frame folded with the previewed file's own folder qualifiers), so a
     // `-land` / `-swNNNdp` / `-ldrtl` variant is the one the resource table selects.
+    // [renderScale] (0 < s <= 1) draws the frame smaller than [widthPx]x[heightPx] (layout stays full size); the
+    // pixels written are RealViewRequest.scaledPx of each side. [outFile] is reused across renders and mapped by
+    // both processes: the daemon writes into the mapping, the caller reads it before its next render.
     String render(
         String layoutName, int widthPx, int heightPx, float density, boolean night,
         String resourcesAp, in String[] classpath, String packageName, String themeName, int minApi,
         boolean interpretClasses, String outFile,
-        int screenWidthDp, int screenHeightDp, int smallestWidthDp, boolean rtl);
+        int screenWidthDp, int screenHeightDp, int smallestWidthDp, boolean rtl, float renderScale);
 }
