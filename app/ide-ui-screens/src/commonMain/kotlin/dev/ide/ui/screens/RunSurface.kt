@@ -30,6 +30,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.run_program_window
+import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.backend.RunFrameUi
 import dev.ide.ui.editor.preview.imageFromRgba
 import dev.ide.ui.editor.preview.readRunFrame
@@ -126,7 +129,7 @@ fun RunSurface(
         val shown = image ?: return@Box
         Image(
             bitmap = shown,
-            contentDescription = null,
+            contentDescription = stringResource(Res.string.run_program_window),
             // Fit, not Crop: while the program is still repainting at the new size, a frame of the OLD size is
             // shown whole and letterboxed rather than silently cropped.
             contentScale = ContentScale.Fit,

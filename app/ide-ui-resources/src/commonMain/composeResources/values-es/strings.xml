@@ -646,6 +646,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
 
     <!-- Run -->
     <string name="run_no_active_run">No hay ninguna ejecución activa.</string>
+    <string name="run_program_window">Ventana del programa</string>
     <string name="run_back">Atrás</string>
     <string name="run_run_again">Ejecutar de nuevo</string>
     <string name="run_building">Compilando…</string>
