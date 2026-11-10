@@ -97,6 +97,7 @@ class RemoteRealViewRuntime(
 
     private fun parseResult(res: String, outFile: File): RealViewResult {
         val treeFile = File(outFile.absolutePath + ".tree")
+        val problemsFile = File(outFile.absolutePath + ".problems")
         val parts = res.split('\t')
         try {
             if (parts.firstOrNull() != "ok") {
@@ -122,12 +123,16 @@ class RemoteRealViewRuntime(
             val tree = runCatching {
                 if (treeFile.exists()) PreviewViewTreeCodec.decode(treeFile.readText()) else null
             }.getOrNull()
+            val problems = runCatching {
+                if (problemsFile.exists()) problemsFile.readLines().filter { it.isNotBlank() } else emptyList()
+            }.getOrDefault(emptyList())
             return RealViewResult(
                 pngBytes = null,
                 width = w,
                 height = h,
                 nativeBitmap = bmp,
-                viewTree = tree
+                viewTree = tree,
+                problems = problems,
             )
         } catch (t: Throwable) {
             return RealViewResult(
@@ -137,6 +142,7 @@ class RemoteRealViewRuntime(
         } finally {
             runCatching { outFile.delete() }
             runCatching { treeFile.delete() }
+            runCatching { problemsFile.delete() }
         }
     }
 }

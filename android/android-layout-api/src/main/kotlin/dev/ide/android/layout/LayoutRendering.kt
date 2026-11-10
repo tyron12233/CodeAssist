@@ -22,6 +22,13 @@ interface LayoutRenderer {
     val progress: StateFlow<String?>
 
     /**
+     * Changes whenever something the render depends on, other than the buffer, changes: the project's own views
+     * were compiled, a build finished, its libraries were prepared. A surface that renders on every edit also
+     * renders when this changes, or it keeps showing a frame made from inputs that are gone.
+     */
+    val inputs: StateFlow<Any?> get() = NO_INPUT_CHANGES
+
+    /**
      * Render [request]. Runs off the caller's thread; a newer request does not cancel an older one, so a caller
      * rendering on every keystroke debounces and cancels its own coroutine.
      */
@@ -34,6 +41,8 @@ interface LayoutRenderer {
      */
     fun prepareLibraries(path: String): Boolean
 }
+
+private val NO_INPUT_CHANGES: StateFlow<Any?> = kotlinx.coroutines.flow.MutableStateFlow(null)
 
 /** The project's layout renderer. See [LayoutRenderer]. */
 val LAYOUT_RENDERER: ServiceKey<LayoutRenderer> = ServiceKey("android.layoutRenderer")

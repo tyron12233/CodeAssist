@@ -43,6 +43,11 @@ fun interface InterpretPolicy {
  * `actual` on the host lives in a differently-named facade. Returns the host owner's internal name, or null to
  * keep the normal resolution. Consulted on every `invokestatic`, so it must reject cheaply.
  */
+/** Told when a contained peer override failed; see [Vm]'s `peerFailure`. [className] is the interpreted class. */
+fun interface PeerFailurePolicy {
+    fun onFailure(peer: Any, className: String, method: String, error: Throwable)
+}
+
 fun interface StaticRedirect {
     fun hostOwner(owner: String, name: String, descriptor: String): String?
 }
@@ -88,6 +93,22 @@ class Vm(
     internal val staticRedirect: StaticRedirect? = null,
     /** See [ClassAlias]; null (the default) aliases nothing. */
     private val classAlias: ClassAlias? = null,
+    /**
+     * Fixed results for platform (bridged) instance methods, keyed `name + descriptor`: a call interpreted code
+     * makes to one of these on a real object returns the value instead of running the method. A preview sets
+     * `isInEditMode()Z` to true, the convention custom views use to skip what cannot run in a design tool.
+     * Empty (the default) changes nothing and costs one check per bridged call.
+     */
+    internal val constantMethods: Map<String, Any?> = emptyMap(),
+    /**
+     * When set, an interpreted override that platform code invokes through a peer (a custom view's `onMeasure`,
+     * `onDraw`, ...) is CONTAINED: a throw, or running past [peerStepBudget], is reported here and the peer falls
+     * back to the real superclass implementation (or a zero for an abstract one), so one broken view degrades
+     * instead of failing the whole frame. Null (the default) lets failures propagate.
+     */
+    private val peerFailure: PeerFailurePolicy? = null,
+    /** Instructions one contained peer call may run (0 = unlimited); only with [peerFailure]. */
+    private val peerStepBudget: Long = 0,
 ) {
     private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
@@ -152,7 +173,17 @@ class Vm(
         // peer-under-construction, not a second, no-argument peer built before initPeer records this one.
         if (obj.peer == null) obj.peer = peer
         val sink = peerFactory.peerExceptionSink
-        if (sink == null) {
+        val contain = peerFailure
+        if (contain != null) {
+            try {
+                if (peerStepBudget > 0) interpreter.withStepBudget(peerStepBudget) { runInterpretedOverride(obj, name, descriptor, args) }
+                else runInterpretedOverride(obj, name, descriptor, args)
+            } catch (t: Throwable) {
+                if (t is VmInterruptedException) throw t
+                contain.onFailure(peer, obj.vmClass.name.replace('/', '.'), name, t)
+                superOrZero(peer, name, descriptor, args)
+            }
+        } else if (sink == null) {
             runInterpretedOverride(obj, name, descriptor, args)
         } else {
             // A concrete-class peer is a GENERATED subclass whose overridden methods dispatch here with no
@@ -169,6 +200,20 @@ class Vm(
             }
         }
     }
+
+    /** The real superclass implementation of [name] on [peer] (its generated `super$` trampoline), else a zero. */
+    private fun superOrZero(peer: Any, name: String, descriptor: String, args: Array<Any?>): Any? {
+        val trampoline = peer.javaClass.methods.firstOrNull {
+            it.name == "super$" + name && it.parameterCount == args.size &&
+                org.objectweb.asm.Type.getMethodDescriptor(it) == descriptor
+        }
+        return if (trampoline != null) runCatching { trampoline.invoke(peer, *args) }.getOrElse { zeroForReturn(Descriptors.returnType(descriptor)) }
+        else zeroForReturn(Descriptors.returnType(descriptor))
+    }
+
+    /** Run [body] with at most [budget] more interpreted instructions on this thread; past it, interpreted code
+     *  throws [VmStepBudgetException]. Nested budgets keep the tighter one. */
+    fun <T> withStepBudget(budget: Long, body: () -> T): T = interpreter.withStepBudget(budget, body)
 
     /** A type-correct zero for a method whose return descriptor is [retDesc], handed back to platform code when
      *  a guarded peer override fails (see [peerDispatch]). Boxed to match the primitive the generated peer

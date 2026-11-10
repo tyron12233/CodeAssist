@@ -4857,6 +4857,10 @@ class IdeServices private constructor(
             renderedImage = png,
             renderedNativeImage = nativeImage,
             viewTree = viewTree,
+            // The views that rendered as a stand-in or failed mid-frame (the rest of the frame rendered).
+            problems = result.problems.map { line ->
+                dev.ide.preview.PreviewProblem(line.substringBefore('\t'), line.substringAfter('\t', line))
+            },
         )
     }
 
@@ -4956,6 +4960,39 @@ class IdeServices private constructor(
             } else null
             LayoutResourceInfo(name, def.value, def.source?.toString(), argb)
         }
+    }
+
+    /**
+     * The module to compile so the preview of layout [file] ([text]) shows the project's own views as they are
+     * now, with its active variant, or null when none is needed: every project view the layout names has a
+     * compiled class no older than its source. The preview interprets compiled classes, so a view never built, or
+     * edited since, would otherwise render as a stand-in or stale.
+     */
+    internal fun projectViewsToCompile(file: Path, text: String): Triple<String, String, Long>? {
+        // Only the real-view runtime reads compiled classes; the approximate renderer compiles its own.
+        if (realViewRuntime == null) return null
+        val module = moduleForResourceFile(file) ?: return null
+        val refs = projectCustomViewRefs(text)
+        val fqns = refs.javaTags + refs.kotlinOnlyTags
+        if (fqns.isEmpty()) return null
+        val variant = activeVariant(module)
+        val closure = listOf(module) + modules().filter { it !== module }
+        for (fqn in fqns) {
+            val rel = fqn.replace('.', '/')
+            for (m in closure) {
+                val source = sourceRoots(m).asSequence().flatMap { r -> sequenceOf(r.resolve("$rel.java"), r.resolve("$rel.kt")) }
+                    .firstOrNull { Files.isRegularFile(it) } ?: continue
+                val compiled = listOf(AndroidBuildSystem.classesPath(m, variant), AndroidBuildSystem.kotlinClassesPath(m, variant))
+                    .map { it.resolve("$rel.class") }.firstOrNull { Files.isRegularFile(it) }
+                val sourceTime = Files.getLastModifiedTime(source).toMillis()
+                val stale = compiled == null || sourceTime > Files.getLastModifiedTime(compiled).toMillis()
+                // Compiling the layout's module compiles the modules it depends on first. The source time keys
+                // the attempt, so a compile that fails is not retried until the source changes again.
+                if (stale) return Triple(module.name, variant, sourceTime)
+                break
+            }
+        }
+        return null
     }
 
     /** A view class for the layout palette: tag, holds children, and 0 = framework, 1 = library, 2 = project. */

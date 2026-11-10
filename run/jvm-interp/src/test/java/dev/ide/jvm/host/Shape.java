@@ -19,4 +19,14 @@ public abstract class Shape implements Sized {
     public String kind() {
         return "shape:" + sides();
     }
+
+    /** Real code calling an overridable method, as the framework calls onDraw: the call crosses the peer. */
+    public String label() {
+        return "[" + kind() + "]";
+    }
+
+    /** Stands in for android.view.View#isInEditMode: a platform method a host can answer with a constant. */
+    public boolean isInEditMode() {
+        return false;
+    }
 }

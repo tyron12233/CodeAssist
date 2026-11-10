@@ -38,6 +38,27 @@ public final class Peers {
         @Override public int sides() { throw new RuntimeException("boom-sides"); }
     }
 
+    /** An override that never returns: a step budget must stop it. */
+    static class Spinner extends Shape {
+        @Override public int sides() { int n = 0; while (true) { n++; } }
+    }
+
+    /** A working sides() and a broken kind(): containment falls back to the real kind(). */
+    static class BrokenKind extends Shape {
+        @Override public int sides() { return 3; }
+        @Override public String kind() { throw new IllegalStateException("boom-kind"); }
+    }
+
+    /** Asks the platform whether it runs in a design tool. */
+    static class EditModeProbe extends Shape {
+        @Override public int sides() { return isInEditMode() ? 1 : 2; }
+    }
+
+    public static int describeSpinner() { return new Spinner().describe(); }
+    public static String labelOfBrokenKind() { return new BrokenKind().label(); }
+    public static int describeEditModeProbe() { return new EditModeProbe().describe(); }
+    public static int spinForever() { int n = 0; while (true) { n++; } }
+
     /** Implements an interface method its real abstract super left unimplemented, without naming the
      *  interface itself — the peer must still carry {@code weight()}. */
     static class Heavy extends WeightedBase {

@@ -1107,6 +1107,29 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                     }
                 }
 
+                // Compile a module's sources (no dex, no packaging) so the layout preview, which interprets the
+                // compiled classes, shows the project's own views as they are now. Started by the preview when a
+                // layout uses a project view whose source is newer than its classes.
+                id.startsWith("compileViews:") -> {
+                    val parts = id.removePrefix("compileViews:").split(":")
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val android = androidBuild
+                        ?: return fail("Android SDK (platform + build-tools) not found — install one to compile the preview's views.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val graph = android.createBuildGraph(
+                        project,
+                        BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.COMPILE_ONLY),
+                        buildContext(),
+                    )
+                    launch(module.name, graph, "> compile project views for the layout preview $variant · ${module.name}", null) { log ->
+                        log("Project views compiled — the layout preview shows them as they are now.")
+                    }
+                }
+
                 // Build (assemble the jar of) a plain Java/Kotlin module — a library has no `main`, so this is
                 // the only way to build it from the Run picker.
                 id.startsWith("build:") -> {

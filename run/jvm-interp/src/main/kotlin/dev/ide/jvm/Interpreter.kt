@@ -138,6 +138,10 @@ internal class Interpreter(private val vm: Vm) {
         /** Bytecode instructions this thread has executed; drives the cancel-check cadence and [steps]. */
         var localSteps = 0L
 
+        /** [localSteps] past which this thread's interpretation throws [VmStepBudgetException]; see [withStepBudget]. */
+        var stepLimit = Long.MAX_VALUE
+        var stepBudget = 0L
+
         /** Reified-type substitution for a running reified inline function on this thread: type-parameter name
          *  (`R`) → the JVM internal name of the concrete type argument. Set by [withReifiedTypes], empty
          *  otherwise. */
@@ -159,6 +163,24 @@ internal class Interpreter(private val vm: Vm) {
     @Volatile
     @JvmField
     var cancelRequested: Boolean = false
+
+    /** Run [body] with at most [budget] more instructions on this thread (nested budgets keep the tighter). */
+    internal fun <T> withStepBudget(budget: Long, body: () -> T): T {
+        val exec = execLocal.get()
+        val prevLimit = exec.stepLimit
+        val prevBudget = exec.stepBudget
+        val limit = exec.localSteps + budget
+        if (limit < prevLimit) {
+            exec.stepLimit = limit
+            exec.stepBudget = budget
+        }
+        return try {
+            body()
+        } finally {
+            exec.stepLimit = prevLimit
+            exec.stepBudget = prevBudget
+        }
+    }
 
     /** Run [body] applying reified [types] to this thread's reified operations; see [Vm.withReifiedTypes]. */
     internal fun <T> withReifiedTypes(types: Map<String, String>, body: () -> T): T {
@@ -489,7 +511,10 @@ internal class Interpreter(private val vm: Vm) {
                 pc++; continue
             } // LabelNode, FrameNode, or LineNumberNode
             exec.localSteps++
-            if (exec.localSteps and CANCEL_CHECK_INTERVAL == 0L && cancelRequested) throw VmInterruptedException()
+            if (exec.localSteps and CANCEL_CHECK_INTERVAL == 0L) {
+                if (cancelRequested) throw VmInterruptedException()
+                if (exec.localSteps > exec.stepLimit) throw VmStepBudgetException(exec.stepBudget)
+            }
             frame.mode = MODE_NEXT
             try {
                 step(insn, op, pc, block, frame, caller, exec)
@@ -1256,6 +1281,16 @@ internal class Interpreter(private val vm: Vm) {
         }
         val args = popBoxedArgs(sh, frame)
         frame.popAny() // the receiver entry (already read)
+        // A host-fixed answer for a platform method (a preview's View.isInEditMode), checked only when set.
+        val constants = vm.constantMethods
+        if (constants.isNotEmpty()) {
+            val key = insn.name + insn.desc
+            if (constants.containsKey(key)) {
+                // The frame keeps booleans (and chars) as ints, as the JVM does.
+                val v = when (val c = constants[key]) { is Boolean -> if (c) 1 else 0; is Char -> c.code; else -> c }
+                pushResult(sh, v, frame); return
+            }
+        }
         pushResult(sh, dispatchVirtual(insn.name, insn.desc, receiver, args), frame)
     }
 

@@ -62,9 +62,31 @@ internal class HostLayoutRenderer(
     private val rasterizer: () -> OwnedLayoutRasterizer?,
 ) : LayoutRenderer {
 
-    override val progress: StateFlow<String?> = MappedStateFlow(services.realViewProgress) { it?.stage }
+    private val runner get() = ctx.buildRunnerFor(services)
+
+    /** The `compileViews:` task last started, keyed with the source time it was for (see [render]). */
+    @Volatile private var compileAttempt: String? = null
+
+    /** The render's own stage, or the project-views compile while that runs. */
+    override val progress: StateFlow<String?> = CombinedStateFlow(services.realViewProgress, runner.buildState) { stage, build ->
+        stage?.stage ?: if (build.status == dev.ide.ui.backend.RunStatus.Running && compileAttempt != null) COMPILING_VIEWS else null
+    }
+
+    /** A build starting or finishing changes what the render reads (compiled views, prepared libraries). */
+    override val inputs: StateFlow<Any?> = MappedStateFlow(runner.buildState) { it.status }
 
     override suspend fun render(request: LayoutRenderRequest): LayoutRenderResult {
+        // Project views newer than their classes: compile them (no dex, no packaging) and render meanwhile with
+        // what there is; the build finishing changes [inputs], and the surface renders again.
+        runCatching {
+            services.projectViewsToCompile(Paths.get(request.path), request.text)?.let { (module, variant, stamp) ->
+                val key = "$module:$variant@$stamp"
+                if (key != compileAttempt && runner.buildState.value.status != dev.ide.ui.backend.RunStatus.Running) {
+                    compileAttempt = key
+                    runner.runTask("compileViews:$module:$variant")
+                }
+            }
+        }
         val preview = PreviewRequest(
             widthPx = request.widthPx,
             heightPx = request.heightPx,
@@ -280,6 +302,23 @@ private fun startTagEnd(tag: XmlNode, text: String): Int {
         i++
     }
     return limit
+}
+
+private const val COMPILING_VIEWS = "Compiling project views"
+
+/** A read-only [StateFlow] combining two others through [transform], recomputed on read. */
+@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
+private class CombinedStateFlow<A, B, C>(
+    private val a: StateFlow<A>,
+    private val b: StateFlow<B>,
+    private val transform: (A, B) -> C,
+) : StateFlow<C> {
+    override val value: C get() = transform(a.value, b.value)
+    override val replayCache: List<C> get() = listOf(value)
+    override suspend fun collect(collector: FlowCollector<C>): Nothing {
+        kotlinx.coroutines.flow.combine(a, b, transform).distinctUntilChanged().collect(collector)
+        awaitCancellation()
+    }
 }
 
 /**

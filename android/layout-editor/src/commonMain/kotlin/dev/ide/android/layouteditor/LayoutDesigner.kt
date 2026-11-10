@@ -108,7 +108,9 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     // Whether a render is pending or in flight, reported to the host so a frame is only taken once drawn.
     var pending by remember(path) { mutableStateOf(true) }
     LaunchedEffect(pending) { currentCtx.reportRendering(pending) }
-    LaunchedEffect(path, ctx.text, state.deviceIndex, state.landscape, state.night, renderTick) {
+    // What the render reads besides the buffer (compiled project views, prepared libraries): a change renders again.
+    val inputs by renderer.inputs.collectAsState()
+    LaunchedEffect(path, ctx.text, state.deviceIndex, state.landscape, state.night, renderTick, inputs) {
         pending = true
         delay(RENDER_DEBOUNCE_MS)
         val request = LayoutRenderRequest(

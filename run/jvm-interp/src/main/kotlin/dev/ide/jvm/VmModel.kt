@@ -267,3 +267,10 @@ class VmUnsupportedException(message: String) : RuntimeException(message)
  * way out, even through an interpreted `catch (Throwable)`.
  */
 class VmInterruptedException : RuntimeException("run cancelled")
+
+/**
+ * Thrown when interpreted code runs past a step budget set with [Vm.withStepBudget]: a runaway loop in code the
+ * host only wanted to run briefly (a custom view's constructor or `onDraw` in a preview). Like
+ * [VmInterruptedException] it is not an interpreted exception, so interpreted `catch` blocks never swallow it.
+ */
+class VmStepBudgetException(val budget: Long) : RuntimeException("ran more than $budget bytecode instructions")

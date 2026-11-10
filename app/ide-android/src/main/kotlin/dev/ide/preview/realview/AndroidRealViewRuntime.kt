@@ -166,6 +166,7 @@ class AndroidRealViewRuntime(
         // (hidden-API exemptions are unreliable on device). Falls back to inflating the content alone if the
         // windowed path isn't usable here.
         notify?.invoke("Inflating")
+        vmFactory.beginRender()
         val stepsBefore = vmFactory?.steps ?: 0L
         var usedDecor = true
         var decorError: String? = null
@@ -206,7 +207,10 @@ class AndroidRealViewRuntime(
 
         notify?.invoke("Drawing")
         val bmp = createBitmap(w, h)
-        root.draw(Canvas(bmp))
+        val canvas = Canvas(bmp)
+        root.draw(canvas)
+        // A view whose own code failed mid-frame drew with the framework's fallback; mark it so the gap is seen.
+        for ((view, why) in vmFactory.brokenViews()) runCatching { drawBrokenOverlay(canvas, root, view, why) }
         val tDraw = System.nanoTime()
 
         // Snapshot the inflated tree (class/id/bounds/attributes) for the Preview view's hierarchy +
@@ -229,8 +233,38 @@ class AndroidRealViewRuntime(
         }ms draw=${ms(tInflate, tDraw)}ms${vmFactory?.let { " interpret-steps=${it.steps - stepsBefore}" } ?: ""}")
 
         return RealViewResult(
-            pngBytes = null, width = w, height = h, nativeBitmap = bmp, viewTree = viewTree
+            pngBytes = null, width = w, height = h, nativeBitmap = bmp, viewTree = viewTree,
+            problems = vmFactory.problems().map { "${it.className}\t${it.message}" }.distinct(),
         )
+    }
+
+    /** A red outline and a short label over [view], whose interpreted code failed while drawing this frame. */
+    private fun drawBrokenOverlay(canvas: Canvas, root: View, view: View, why: String) {
+        var x = 0f
+        var y = 0f
+        var v: View? = view
+        while (v != null && v !== root) {
+            x += v.left - v.scrollX + v.translationX
+            y += v.top - v.scrollY + v.translationY
+            v = v.parent as? View
+        }
+        if (v == null) return
+        val d = view.resources.displayMetrics.density
+        val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            color = android.graphics.Color.rgb(211, 47, 47)
+            strokeWidth = 2f * d
+        }
+        val wash = android.graphics.Paint().apply { color = android.graphics.Color.argb(36, 211, 47, 47) }
+        val rect = android.graphics.RectF(x, y, x + view.width, y + view.height)
+        canvas.drawRect(rect, wash)
+        canvas.drawRect(rect, stroke)
+        val text = android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(183, 28, 28)
+            textSize = 10f * d
+        }
+        val label = android.text.TextUtils.ellipsize(why, text, (view.width - 8 * d).coerceAtLeast(0f), android.text.TextUtils.TruncateAt.END)
+        canvas.drawText(label, 0, label.length, x + 4 * d, y + 4 * d - text.ascent(), text)
     }
 
     /**

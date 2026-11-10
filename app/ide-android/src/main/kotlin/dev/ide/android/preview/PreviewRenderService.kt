@@ -104,6 +104,10 @@ class PreviewRenderService : Service() {
                 result.viewTree?.let { tree ->
                     runCatching { File("$outFile.tree").writeText(PreviewViewTreeCodec.encode(tree)) }
                 }
+                // The views that rendered as stand-ins or failed mid-frame, one `class\tmessage` per line.
+                if (result.problems.isNotEmpty()) runCatching {
+                    File("$outFile.problems").writeText(result.problems.joinToString("\n") { it.replace('\n', ' ') })
+                }
                 "ok\t${bmp.width}\t${bmp.height}"
             }.getOrElse { "err\t${it.javaClass.simpleName}: ${it.message ?: ""}".trim() }
         }

@@ -79,6 +79,12 @@ class RealViewResult(
      *  when the runtime didn't snapshot it. Carried up to [dev.ide.preview.LayoutPreviewResult.viewTree] so
      *  the Preview view can show the hierarchy + a tap-to-inspect panel over the real-view render. */
     val viewTree: dev.ide.preview.PreviewViewNode? = null,
+    /**
+     * Views that rendered as a stand-in or failed mid-frame, as `className\tmessage`: a class that is not on the
+     * classpath, a constructor that threw, an `onDraw` that threw or ran too long. The rest of the frame still
+     * rendered; these explain the gaps.
+     */
+    val problems: List<String> = emptyList(),
 )
 
 /**

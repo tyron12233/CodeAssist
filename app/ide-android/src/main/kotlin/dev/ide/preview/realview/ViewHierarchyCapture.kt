@@ -63,7 +63,7 @@ object ViewHierarchyCapture {
         return PreviewViewNode(
             // An interpreted view is a generated peer whose Class name is synthetic (dev.ide.jvm.peers.*); report
             // the interpreted class it stands for so the hierarchy shows the real tag (com.example.MyView).
-            className = interpretedClassNameOf(v) ?: v.javaClass.name,
+            className = (v as? PreviewPlaceholderView)?.originalTag ?: interpretedClassNameOf(v) ?: v.javaClass.name,
             id = resourceId(v),
             left = absL, top = absT, right = absR, bottom = absB,
             properties = properties(v, density, scaledDensity),
