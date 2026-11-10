@@ -1950,9 +1950,10 @@ carries `backend`, `filePath`, and the live `text`.
 
 ### 10.6b Editor preview panes
 
-The Preview (and Split) surface for a file kind the IDE has no pane for. The four built-in panes are the
-Compose `@Preview`, Android XML layouts, resources and Markdown; a plugin adds a fifth for something else
-entirely, such as a game scene or a shader.
+The Preview (and Split) surface for a file kind the IDE has no pane for. The three built-in panes are the
+Compose `@Preview`, drawable/color resources and Markdown; a plugin adds another for something else entirely,
+such as a game scene or a shader. Android layouts have no built-in pane: the layout editor is a plugin
+(`:layout-editor`), written against this SPI only, which makes it the largest worked example of one.
 
 ```kotlin
 ui.editorPreview(
@@ -1966,11 +1967,35 @@ ui.editorPreview(
 ```
 
 `appliesTo` is asked per open file during composition, so keep it cheap. The built-in panes are consulted
-first, which is what stops a plugin taking `.xml` away from the layout preview.
+first, which is what stops a plugin taking a drawable or a Markdown file away from them.
 
 `EditorPreviewContext` carries `path`, the live `text` (the editor buffer, not the file on disk, so the body
 recomposes as the user types), `dark` for the surface's scheme, and `reportProblems`. Problems go into the
 same chip the built-in previews use; report on every pass, since an empty list is what clears it.
+
+Since SPI 3.5.0 a pane can also **edit** what it shows, which is what turns a preview into a design surface:
+
+| Member | What it is for |
+| --- | --- |
+| `canEdit` | False where no editor is behind the pane (a headless render); show yourself read-only |
+| `applyEdits(edits)` | Replace ranges of the buffer as ONE undo step; the code view follows |
+| `caretOffset`, `selectionEnd` | Where the code editor's selection is, so a pane can follow it |
+| `select(start, end)` | Move the code editor's selection, e.g. to the element the user tapped |
+| `isSplit` | Whether the pane sits beside the code editor, the case where following the caret matters |
+| `reportRendering(busy)` | Say when an asynchronous render is in flight, so a frame is only captured once drawn |
+
+Edit ranges are in the `text` the context carries. Compute them against that buffer and apply them before the
+next recomposition hands you a new one; the layout editor serializes its edits behind a mutex for this.
+
+#### Android layouts: `android-layout-api`
+
+A pane over Android layout XML gets the host's own machinery through two services, resolved with
+`ctx.service(...)`: `LAYOUT_RENDERER` renders a buffer to an image plus the view tree that produced it (each
+view's bounds, and the offset of the element it came from, so a tap maps back to the XML), and
+`ANDROID_LAYOUT_MODEL` parses the buffer with the editor's tolerant parser, lists the attributes a view accepts
+inside its parent, completes attribute values, and computes attribute edits in the element's own style. Both
+are what the editor itself uses. The module is in-tree only for now (not in `plugin-bom`); it is published
+once the layout editor has settled its shape.
 
 Combined with the interpreter (section 16), this is how a plugin renders what the user's code actually
 produces rather than a description of it.

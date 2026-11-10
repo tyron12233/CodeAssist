@@ -137,6 +137,7 @@ include(
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
+    ":android-layout-api", // plugin-facing layout SPI (in-tree, unpublished): render image + view tree, layout model, attribute catalog
     // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
     // Multiplatform, because a model that cannot be named from common code cannot be built there.
     ":model-api",
@@ -189,6 +190,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
+        ":layout-editor", // the Android layout editor: a built-in plugin written against the plugin SPI only (engine + UI facet)
         ":ide-core",
         ":ide-desktop",
         // The iOS shell: a Compose `UIViewController` over :ide-ui, the third host beside desktop and
@@ -251,7 +253,7 @@ val layers = mapOf(
     // preview, and the ART compatibility shims.
     "android" to listOf(
         "android-support", "android-sdk-metadata", "art-compat",
-        "layout-preview-api", "layout-preview-impl", "applog-runtime",
+        "layout-preview-api", "layout-preview-impl", "applog-runtime", "android-layout-api", "layout-editor",
     ),
     // Cross-cutting services, each an api/impl pair (plus its own Compose UI where it has one):
     // dependency resolution, version control, the Projects Store, analytics, the AI agent.

@@ -1,0 +1,14 @@
+Material Symbols Rounded
+Copyright (C) Google LLC
+Licensed under the Apache License, Version 2.0
+https://github.com/google/material-design-icons
+
+The two bundled files are subsets of the Material Symbols Rounded variable font, instanced at
+wght 400 / GRAD 0 / opsz 24 and split by the FILL axis:
+
+  material_symbols_rounded.ttf         FILL 0 (outline)  — the default icon state
+  material_symbols_rounded_filled.ttf  FILL 1 (filled)   — selected / active states
+
+Only the glyphs the UI actually references are kept, and layout features are dropped: glyphs are
+addressed by codepoint (see CaSymbols.kt), not by the ligature spelling of their name. Regenerate with
+the recipe in CaSymbols.kt if a new glyph is needed.

@@ -680,6 +680,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("agent-ui-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("vcs-ui-strings-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("layout-editor-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
@@ -921,7 +922,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, predexKotlinStdlib, predexAppLogRuntime, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleLayoutEditorComposeAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, predexKotlinStdlib, predexAppLogRuntime, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui-resources'
@@ -966,6 +967,22 @@ val bundleVcsUiComposeStringAsset = tasks.register<Copy>("bundleVcsUiComposeStri
         include("values*/**/*.cvr")
     }
     into(layout.buildDirectory.dir("vcs-ui-strings-asset/composeResources/dev.ide.vcs.ui.generated.resources"))
+}
+
+// The SAME Android packaging gap, for :layout-editor (the built-in layout editor plugin). It carries its own
+// strings AND its own fonts (the Material Symbols subset it draws its icons with, since a plugin cannot use the
+// IDE's), so both are staged: the compiled `.cvr` strings and the verbatim `.ttf` files, under its resClass
+// package dev.ide.android.layouteditor.generated.resources. Without this the Design view crashes on device.
+val bundleLayoutEditorComposeAsset = tasks.register<Copy>("bundleLayoutEditorComposeAsset") {
+    description = "Stage :layout-editor's compose-resource strings + fonts into the APK assets (Android packaging gap)."
+    dependsOn(":layout-editor:desktopProcessResources")
+    from(project(":layout-editor").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.android.layouteditor.generated.resources")) {
+        include("values*/**/*.cvr")
+    }
+    from(project(":layout-editor").file("src/commonMain/composeResources")) {
+        include("font/*.ttf")
+    }
+    into(layout.buildDirectory.dir("layout-editor-asset/composeResources/dev.ide.android.layouteditor.generated.resources"))
 }
 
 // The staging tasks above are easy to forget, and forgetting one is invisible until the app runs on a device:

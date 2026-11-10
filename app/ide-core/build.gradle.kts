@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":android-support")) // android-app/-lib module types + AndroidFacet codec
     api(project(":layout-preview-api")) // owned XML-layout preview contracts; `api` because IdeServicesBackend implements LayoutPreviewBackend (public supertype, must be on consumers' classpath)
     implementation(project(":layout-preview-impl")) // the preview engine (inflater + resolver + chrome)
+    api(project(":android-layout-api")) // the plugin-facing layout services this module implements (HostLayoutServices); api so launchers can name OwnedLayoutRasterizer's world
     implementation(project(":deps-api"))
     implementation(project(":deps-impl")) // Maven dependency resolver (download/transitive/conflict)
     implementation(project(":agent-impl")) // the AI coding agent engine (providers, loop, tools)
@@ -53,6 +54,7 @@ dependencies {
     implementation(project(":agent-ui")) // the agent's Compose UI plugin (AgentUiPlugin) — paired with AgentPlugin in BuiltInPlugins
     implementation(project(":vcs-impl")) // the Git engine (JGit working copy + the GitHub client + the account store)
     implementation(project(":vcs-ui")) // the version-control Compose UI plugin (VcsUiPlugin) — paired with VcsPlugin in BuiltInPlugins
+    implementation(project(":layout-editor")) // the Android layout editor: a built-in written against the plugin SPI only (both facets)
     // Opt-in usage analytics. `api` because AnalyticsService appears in IdeServicesBackend's (public)
     // constructor signature, so a host wiring it (ide-android) needs the type on its compile classpath.
     api(project(":analytics-api"))

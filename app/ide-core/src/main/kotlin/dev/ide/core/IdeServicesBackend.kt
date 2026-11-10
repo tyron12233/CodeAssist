@@ -542,9 +542,37 @@ class IdeServicesBackend(
     override fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = manager?.env?.enabledUiPlugins ?: emptyList()
     override val diagnostics: DiagnosticsService = DiagnosticsBackend(this)
 
+    /**
+     * Draws the owned layout renderer's output into pixels for [HostLayoutRenderer]. Set by the launcher, which
+     * has the Compose text and paint backend the engine tier does not; null leaves owned renders as a view tree
+     * with no image (headless tests).
+     */
+    @Volatile
+    var ownedLayoutRasterizer: dev.ide.core.backend.OwnedLayoutRasterizer? = null
+
+    /**
+     * Publish the Android layout services (`dev.ide.android.layout`) on [s]'s workspace container, where a
+     * plugin resolves them (an installed plugin's engine facet, or a UI facet through `UiContext.service`). They
+     * live here rather than on the engine because rendering runs on this backend's preview lane and preparing
+     * libraries goes through its build runner (the `:build` daemon on a device).
+     */
+    private fun publishLayoutServices(s: IdeServices) {
+        val backend = this
+        runCatching {
+            val container = s.store.workspaceContainer
+            container.registerServiceIfAbsent(dev.ide.android.layout.LAYOUT_RENDERER) {
+                dev.ide.core.backend.HostLayoutRenderer(backend, s) { backend.ownedLayoutRasterizer }
+            }
+            container.registerServiceIfAbsent(dev.ide.android.layout.ANDROID_LAYOUT_MODEL) {
+                dev.ide.core.backend.HostAndroidLayoutModel(backend, s)
+            }
+        }.onFailure { Log.logger("ide.preview").warn("could not publish the layout services", it) }
+    }
+
     init {
         Log.addSink(errorDialogSink)
         followFileSystem(activeServices)
+        activeServices?.let(::publishLayoutServices)
 
         // The index-in-flight crash breadcrumb follows the status edges: a native crash this session is then
         // attributed to concurrent index churn (the leading hypothesis for the residual SIGSEGV).
@@ -1059,6 +1087,7 @@ class IdeServicesBackend(
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */
     override fun swapEngine(next: IdeServices) {
         val prev = activeServices
+        publishLayoutServices(next)
         activeServices = next
         // Point the shared application environment at the now-active engine, for app-level extension callbacks
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.

@@ -54,14 +54,16 @@ class Overlay(
  * A preview pane for the editor: the right-hand half of the split, or the whole surface in Preview mode, for
  * files this plugin can show something better than text for.
  *
- * The IDE has four of these built in (Compose `@Preview`, Android XML layouts, resources, Markdown) and they
- * are what this is modelled on. It exists because a framework's preview is not a variation on any of them: a
- * game's scene, a shader, a diagram, a state machine. Combined with the interpreter (`:interp-api`), a plugin
- * can render what the user's own code actually produces rather than a picture of what it says.
+ * The IDE has three of these built in (Compose `@Preview`, drawable/color resources, Markdown); the Android
+ * layout editor is itself a plugin built on this, so a pane can be a whole design surface and not only a
+ * picture: with [EditorPreviewContext.applyEdits] it edits the buffer it shows. It exists because a framework's
+ * preview is not a variation on any of the built-ins: a game's scene, a shader, a diagram, a state machine.
+ * Combined with the interpreter (`:interp-api`), a plugin can render what the user's own code actually
+ * produces rather than a picture of what it says.
  *
  * [appliesTo] is asked for each open file's path and should be cheap; it is called during composition. Return
  * false for anything the plugin cannot show, since claiming a file hides the pane the user expected. The
- * built-in panes are consulted first, so a plugin cannot take `.xml` away from the layout preview.
+ * built-in panes are consulted first, so a plugin cannot take a drawable or a Markdown file away from them.
  *
  * [content] is composed while the pane is visible, and re-composed as the user types (the context carries the
  * live buffer). [title] labels the pane.
@@ -98,4 +100,48 @@ interface EditorPreviewContext : UiContext {
      * Call it on every pass, including the clean ones: a stale problem nobody cleared is worse than none.
      */
     fun reportProblems(problems: List<String>)
+
+    // ---- Editing (since SPI 3.5.0) ----------------------------------------------------------------------
+    // A preview can be a design surface, not only a picture: the same shared buffer the code editor edits,
+    // written through the editor so an edit made in the pane is undoable, analysed and marks the tab dirty
+    // exactly as typing does. On a host older than 3.5.0 these throw `AbstractMethodError`; the defaults
+    // below are what a host with no editor answers (a headless render, a test).
+
+    /** The caret in the shared buffer (the selection's start when there is one). Since SPI 3.5.0. */
+    val caretOffset: Int get() = 0
+
+    /** The selection's end; equal to [caretOffset] when nothing is selected. Since SPI 3.5.0. */
+    val selectionEnd: Int get() = caretOffset
+
+    /**
+     * Whether the pane is the half of a Split view, beside the code editor, rather than the whole surface.
+     * A pane that edits structurally can then keep its selection and the caret in step. Since SPI 3.5.0.
+     */
+    val isSplit: Boolean get() = false
+
+    /**
+     * Whether edits are possible at all. False on a host with no editor behind the pane, where [applyEdits]
+     * does nothing; a design surface then shows itself read-only. Since SPI 3.5.0.
+     */
+    val canEdit: Boolean get() = false
+
+    /**
+     * Apply [edits] to the shared buffer as ONE undo step. Ranges are in the buffer as it is now (the [text]
+     * this context carries), must not overlap, and may come in any order. Since SPI 3.5.0.
+     */
+    fun applyEdits(edits: List<TextReplacement>) {}
+
+    /** Move the code editor's selection to `[start, end)`; a caret when they are equal. Since SPI 3.5.0. */
+    fun select(start: Int, end: Int = start) {}
+
+    /**
+     * Say whether the pane is still working on what it will show (a render in flight, a debounce pending).
+     * A pane that renders asynchronously reports `true` while it does and `false` once it has drawn; a pane that
+     * never reports is taken to be settled as soon as it composes. The host uses it to know when a frame is
+     * worth taking, as the IDE's agent does when it looks at a preview the user has not opened. Since SPI 3.5.0.
+     */
+    fun reportRendering(rendering: Boolean) {}
 }
+
+/** Replace `[start, end)` of a buffer with [newText]. Since SPI 3.5.0. */
+class TextReplacement(val start: Int, val end: Int, val newText: String)

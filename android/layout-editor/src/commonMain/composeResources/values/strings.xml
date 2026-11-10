@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="le_unavailable">Layout design needs an open Android project.</string>
+    <string name="le_device_phone">Phone</string>
+    <string name="le_device_small_phone">Small phone</string>
+    <string name="le_device_foldable">Foldable</string>
+    <string name="le_device_tablet">Tablet</string>
+    <string name="le_device_menu">Screen</string>
+    <string name="le_rotate">Landscape</string>
+    <string name="le_night">Dark theme</string>
+    <string name="le_mode_design">Design</string>
+    <string name="le_mode_blueprint">Blueprint</string>
+    <string name="le_rendering">Rendering</string>
+    <string name="le_empty_hint">This layout has no views yet</string>
+    <string name="le_panel_tree">Component tree</string>
+    <string name="le_panel_attributes">Attributes</string>
+    <string name="le_zoom_out">Zoom out</string>
+    <string name="le_zoom_in">Zoom in</string>
+    <string name="le_zoom_fit">Fit</string>
+    <string name="le_action_duplicate">Duplicate</string>
+    <string name="le_action_delete">Delete</string>
+    <string name="le_action_select_parent">Select parent</string>
+    <string name="le_action_more">More</string>
+    <string name="le_action_show_in_code">Select in code</string>
+    <string name="le_nothing_selected">Select a view on the canvas or in the component tree to see its attributes.</string>
+    <plurals name="le_resource_errors">
+        <item quantity="one">%1$d error in your resources</item>
+        <item quantity="other">%1$d errors in your resources</item>
+    </plurals>
+    <string name="le_resource_errors_last">Showing the last layout that rendered. Fix these to update it.</string>
+    <string name="le_prepare_title">Prepare the preview</string>
+    <string name="le_prepare_body">Layouts render with your project's real libraries, which have to be prepared once. After that, editing and rendering are fast.</string>
+    <plurals name="le_prepare_count">
+        <item quantity="one">%1$d library needs preparing.</item>
+        <item quantity="other">%1$d libraries need preparing.</item>
+    </plurals>
+    <string name="le_prepare_action">Prepare libraries</string>
+    <string name="le_preparing">Preparing libraries…</string>
+    <string name="le_close">Close</string>
+    <string name="le_tree_title">Component tree</string>
+    <string name="le_tree_root">root</string>
+    <string name="le_tree_collapse_all">Collapse all</string>
+    <string name="le_tree_expand">Expand or collapse</string>
+    <string name="le_tree_search">Search</string>
+    <string name="le_tree_search_hint">Find a view by type or id</string>
+    <string name="le_tree_empty">This layout has no views yet.</string>
+    <string name="le_attrs_common">Common attributes</string>
+    <string name="le_attrs_loading">Loading attributes…</string>
+    <string name="le_attrs_all">All attributes</string>
+    <string name="le_attrs_search">Search attributes</string>
+    <string name="le_attrs_add">Add</string>
+    <string name="le_attr_remove">Remove</string>
+    <string name="le_attr_id_hint">view_id</string>
+    <string name="le_attr_custom">value</string>
+    <string name="le_attr_dimension_hint">16dp</string>
+    <string name="le_attr_color_hint">#RRGGBB or @color/…</string>
+</resources>

@@ -10,6 +10,13 @@ class RenderNode(val host: ViewHost? = null) {
     /** The XML tag or fully-qualified class name this node came from (placeholder labels, debugging). */
     var tag: String = ""
 
+    /**
+     * Start offset of the `<Tag` in the previewed buffer this node was inflated from, or null for a node that
+     * is not an element of that buffer (system chrome, the body of an `<include>`d layout). It is what lets a
+     * design surface map a tapped node back to the XML.
+     */
+    var sourceOffset: Int? = null
+
     val props: Props = Props()
     val children: MutableList<RenderNode> = ArrayList()
     var renderer: Renderer = Renderer.FALLBACK

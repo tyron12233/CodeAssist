@@ -7,8 +7,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.editor.core.EditorSession
-import dev.ide.ui.editor.languageFor
 import dev.ide.ui.ext.HeadlessPreview
 import dev.ide.ui.ext.HeadlessPreviewRenderer
 import dev.ide.ui.ext.PreviewSnapshot
@@ -55,7 +53,7 @@ class OffscreenPreviewRenderer(
 
     override suspend fun render(path: String, text: String, preview: String?): HeadlessPreview = oneAtATime.withLock {
         val name = path.substringAfterLast('/')
-        val layout = isLayoutPreviewable(path)
+        val layout = path.replace('\\', '/').let { it.contains("/res/layout") && it.endsWith(".xml") }
         var selected: String? = null
         if (!layout) {
             val previews = runCatching { backend.preview.composePreviews(path, text) }.getOrDefault(emptyList())
@@ -74,8 +72,17 @@ class OffscreenPreviewRenderer(
             CodeAssistTheme(dark = false) {
                 Box(Modifier.fillMaxSize()) {
                     if (layout) {
-                        val session = remember(path, text) { EditorSession(text, languageFor(name)) }
-                        LayoutPreviewPane(path, text, backend, session, Modifier.fillMaxSize(), onStatus = probe::update)
+                        // Layouts are drawn by the layout editor plugin's pane, the same one the editor shows.
+                        val pane = dev.ide.ui.ext.EditorPreviewRegistry.forPath(path)
+                        if (pane == null) {
+                            probe.update(PreviewPaneStatus(settled = true, failed = true, problems = listOf(NO_LAYOUT_PANE)))
+                        } else {
+                            PluginPreviewPane(
+                                preview = pane, path = path, text = text, backend = backend, dark = false,
+                                onOpenFile = { _, _ -> }, onOpenScreen = {}, modifier = Modifier.fillMaxSize(),
+                                onStatus = probe::update,
+                            )
+                        }
                     } else {
                         ComposePreviewPane(
                             path, text, backend, host, Modifier.fillMaxSize(),
@@ -132,6 +139,9 @@ class OffscreenPreviewRenderer(
     }
 
     private companion object {
+        const val NO_LAYOUT_PANE = "Layouts are previewed by the Layout Editor plugin, which is turned off. " +
+            "Turn it on in Settings > Plugins to see this layout."
+
         // A phone-sized surface: the pane lays its chrome out in it, and the device card renders at its own size.
         const val SURFACE_WIDTH_PX = 1080
         const val SURFACE_HEIGHT_PX = 2160

@@ -32,22 +32,33 @@ class LayoutInflater(
         problems.clear()
         val (document, _) = XmlTreeParser(TextDocument(xml, path)).parse()
         val rootEl = document.childTags.firstOrNull() ?: return placeholder("empty")
-        return build(rootEl, ctx, depth = 0)
+        return build(rootEl, ctx, depth = 0, mapped = true)
     }
 
-    private fun build(element: XmlNode, ctx: RenderContext, depth: Int): RenderNode {
+    /**
+     * Inflate [element]. [mapped] is true for elements of the previewed buffer itself, whose nodes are stamped
+     * with their source offset; an `<include>`d layout's body is another file, so its nodes are not (the
+     * include element itself is).
+     */
+    private fun build(element: XmlNode, ctx: RenderContext, depth: Int, mapped: Boolean): RenderNode {
         val tag = element.name ?: "view"
         val attrs = styled(XmlAttrReader(element), ctx)
+        val offset = if (mapped) element.startOffset else null
         when (tag) {
-            "include" -> return buildInclude(attrs, ctx, depth)
-            "ViewStub" -> return buildViewStub(attrs, ctx, depth)
-            "fragment" -> return placeholder("fragment").also { CommonAttrs.apply(it, attrs, ctx); problem("fragment", "Fragments aren't rendered in preview") }
+            "include" -> return buildInclude(attrs, ctx, depth).also { it.sourceOffset = offset }
+            "ViewStub" -> return buildViewStub(attrs, ctx, depth).also { it.sourceOffset = offset }
+            "fragment" -> return placeholder("fragment").also {
+                it.sourceOffset = offset
+                CommonAttrs.apply(it, attrs, ctx)
+                problem("fragment", "Fragments aren't rendered in preview")
+            }
         }
         val node = nodeFor(tag, attrs, ctx)
         node.tag = tag
+        node.sourceOffset = offset
         runCatching { node.renderer.applyAttrs(node, attrs, ctx) }
         CommonAttrs.apply(node, attrs, ctx)
-        for (childEl in element.childTags) node.children.add(build(childEl, ctx, depth + 1))
+        for (childEl in element.childTags) node.children.add(build(childEl, ctx, depth + 1, mapped))
         return node
     }
 
@@ -82,7 +93,7 @@ class LayoutInflater(
         val xml = layoutProvider(name) ?: return null
         val (document, _) = XmlTreeParser(TextDocument(xml, "$name.xml")).parse()
         val rootEl = document.childTags.firstOrNull() ?: return null
-        return build(rootEl, ctx, depth + 1)
+        return build(rootEl, ctx, depth + 1, mapped = false)
     }
 
     private fun customNode(fqName: String, attrs: AttrReader, ctx: RenderContext): RenderNode {

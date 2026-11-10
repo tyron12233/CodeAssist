@@ -53,7 +53,7 @@ interface UiContributionScope {
     fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration
 
     /** Add a preview pane for a file kind ([EditorPreviewContribution]): the Preview/Split surface for
-     *  something the IDE's four built-in panes do not cover. */
+     *  something the IDE's built-in panes do not cover. */
     fun editorPreview(preview: EditorPreviewContribution): Registration
 
     /** Place composables at document positions in the code editor ([EditorLayerContribution]): a hover card,

@@ -1783,42 +1783,6 @@ data class UiCompletionResult(
     val isIncomplete: Boolean = false,
 )
 
-/**
- * How an editable layout attribute's value should be entered — picks the touch control the attribute editor
- * shows (a completion-backed text field is always the fallback). [DIMENSION] carries the size keywords
- * (`wrap_content`/`match_parent`) in [UiLayoutAttribute.enumValues] alongside a dp field.
- */
-enum class UiAttrKind { ENUM, FLAGS, BOOLEAN, DIMENSION, COLOR, REFERENCE, STRING, INTEGER, PLAIN }
-
-/**
- * One attribute in the real-view layout attribute editor. [name] is the attribute as written in the layout
- * (`android:text`, `app:srcCompat`, or an unprefixed `layout_width`); [value] is the current value, or null for
- * an addable-but-unset attribute. [kind] + [enumValues]/[flagValues]/[resourceRClasses] describe what it accepts
- * so the sheet renders chips / a switch / a dp field / a color-or-reference field.
- */
-data class UiLayoutAttribute(
-    val name: String,
-    val value: String?,
-    val kind: UiAttrKind,
-    val enumValues: List<String> = emptyList(),
-    val flagValues: List<String> = emptyList(),
-    /** Accepted `@type/…` reference classes (`color`, `drawable`, `string`, `id`, …). */
-    val resourceRClasses: List<String> = emptyList(),
-)
-
-/**
- * The tapped layout view's editable model: its [tag] + optional [id], the [sourceOffset] anchoring it in the
- * live buffer, the attributes currently [setAttributes] on it (source order), and the allowed-but-unset
- * [addable] attributes (the "only valid attributes" add list).
- */
-data class UiLayoutElement(
-    val tag: String,
-    val id: String?,
-    val sourceOffset: Int,
-    val setAttributes: List<UiLayoutAttribute>,
-    val addable: List<UiLayoutAttribute>,
-)
-
 /** A go-to-definition target: open [path] and move the caret to [offset]. */
 data class UiDefinition(val path: String, val offset: Int)
 

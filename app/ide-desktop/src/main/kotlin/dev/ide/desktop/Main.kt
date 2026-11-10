@@ -57,6 +57,11 @@ fun main(args: Array<String>) {
     // creates that project's IdeServices on demand. The download cache is still shared across projects via
     // the ProjectManager (sharedCachesRoot = projects-root parent), so deps resolve once.
     val backend = IdeServicesBackend(initial = null, manager = manager)
+    // The owned layout renderer draws through Compose; the layout services hand its output to plugins as pixels.
+    val layoutFonts = androidx.compose.ui.text.font.createFontFamilyResolver()
+    backend.ownedLayoutRasterizer = dev.ide.core.backend.OwnedLayoutRasterizer { r, w, h ->
+        dev.ide.ui.editor.preview.rasterizeOwnedLayout(r, w, h, layoutFonts)
+    }
     storeSignIn?.onRedirect = { redirect ->
         backend.store.completeSignIn(redirect)
         // The browser has the focus now; bring the IDE back, where the sign-in shows up.

@@ -411,6 +411,14 @@ private class PreviewUiContext(private val ctx: EditorPreviewContext, private va
     override fun reportProblems(problems: List<String>) = ctx.reportProblems(problems)
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
+    override val caretOffset: Int get() = ctx.caretOffset
+    override val selectionEnd: Int get() = ctx.selectionEnd
+    override val isSplit: Boolean get() = ctx.isSplit
+    override val canEdit: Boolean get() = ctx.canEdit
+    override fun applyEdits(edits: List<dev.ide.plugin.ui.TextReplacement>) =
+        ctx.applyEdits(edits.map { dev.ide.ui.backend.UiTextEdit(it.start, it.end, it.newText) })
+    override fun select(start: Int, end: Int) = ctx.select(start, end)
+    override fun reportRendering(rendering: Boolean) = ctx.reportRendering(rendering)
 
     override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }

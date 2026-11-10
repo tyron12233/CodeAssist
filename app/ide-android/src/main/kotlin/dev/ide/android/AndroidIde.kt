@@ -195,6 +195,11 @@ object AndroidIde {
                 NotificationManagerCompat.from(appContext).areNotificationsEnabled()
             },
         )
+        // The owned layout renderer draws through Compose; the layout services hand its output to plugins as pixels.
+        val layoutFonts = androidx.compose.ui.text.font.createFontFamilyResolver(appContext)
+        backend.ownedLayoutRasterizer = dev.ide.core.backend.OwnedLayoutRasterizer { r, w, h ->
+            dev.ide.ui.editor.preview.rasterizeOwnedLayout(r, w, h, layoutFonts)
+        }
         // Process-wide uncaught-exception handler: report app_crash, keep the app alive behind the non-fatal
         // dialog for a worker-thread crash, and let the system kill the process for a main-thread one (its looper
         // is gone; swallowing it left a frozen process that Play counted as an ANR). See IdeServicesBackend.

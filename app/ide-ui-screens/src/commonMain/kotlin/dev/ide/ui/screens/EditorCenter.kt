@@ -65,14 +65,12 @@ import dev.ide.ui.editor.core.isLarge
 import dev.ide.ui.editor.engine.EditorEngineDaemon
 import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.preview.ComposePreviewPane
-import dev.ide.ui.editor.preview.LayoutPreviewPane
 import dev.ide.ui.editor.preview.MarkdownPreviewPane
 import dev.ide.ui.editor.preview.PluginPreviewPane
 import dev.ide.ui.editor.preview.ResourcePreviewPane
 import dev.ide.ui.ext.EditorPreviewRegistry
 import dev.ide.ui.ext.ViewModeContext
 import dev.ide.ui.ext.ViewModeRegistry
-import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.ext.ToolWindowAnchor
@@ -499,15 +497,6 @@ internal fun EditorCenter(
                                     modifier = mod,
                                 )
 
-                                isLayoutPreviewable(active.path) -> LayoutPreviewPane(
-                                    path = active.path,
-                                    text = active.text,
-                                    backend = state.backend,
-                                    session = active.session,
-                                    modifier = mod,
-                                    onOpenFile = { file, line -> state.openAtLine(file, line, 1) },
-                                )
-
                                 isPreviewable(active.path) -> ResourcePreviewPane(
                                     path = active.path,
                                     text = active.text,
@@ -515,9 +504,9 @@ internal fun EditorCenter(
                                     modifier = mod,
                                 )
 
-                                // A plugin's own pane, for a file kind the four built-ins do not cover (a game
-                                // scene, a shader, a diagram). Consulted AFTER them on purpose: a plugin cannot take
-                                // `.xml` away from the layout preview by claiming it.
+                                // A plugin's own pane, for a file kind the built-ins do not cover: a game scene, a
+                                // shader, and the Android layout editor (itself a plugin). Consulted AFTER the
+                                // built-ins on purpose, so a plugin cannot take a drawable or Markdown away from them.
                                 pluginPreview != null -> PluginPreviewPane(
                                     preview = pluginPreview,
                                     path = active.path,
@@ -527,6 +516,8 @@ internal fun EditorCenter(
                                     onOpenFile = pluginFileOpener,
                                     onOpenScreen = pluginNavigator,
                                     modifier = mod,
+                                    session = active.session,
+                                    split = split,
                                 )
 
                                 else -> ComposePreviewPane(

@@ -285,11 +285,32 @@ interface EditorPreviewContext {
 
     /** Navigate to a contributed [ScreenContribution] by id. */
     fun openScreen(id: String) {}
+
+    /** The caret in the shared buffer (the selection's start). */
+    val caretOffset: Int get() = 0
+
+    /** The selection's end; equal to [caretOffset] with no selection. */
+    val selectionEnd: Int get() = caretOffset
+
+    /** Whether the pane is the preview half of the Split view. */
+    val isSplit: Boolean get() = false
+
+    /** Whether [applyEdits] reaches an editor session (false for a headless render). */
+    val canEdit: Boolean get() = false
+
+    /** Apply [edits] (ranges in [text], non-overlapping, any order) to the shared buffer as one undo step. */
+    fun applyEdits(edits: List<dev.ide.ui.backend.UiTextEdit>) {}
+
+    /** Move the code editor's selection to `[start, end)`. */
+    fun select(start: Int, end: Int = start) {}
+
+    /** Whether the pane is still working on what it will show (see the published context's KDoc). */
+    fun reportRendering(rendering: Boolean) {}
 }
 
 /**
- * A preview pane for the files [appliesTo] claims. The built-in panes (Compose, layout, resource, Markdown)
- * are still chosen first; this is what the editor falls back to before defaulting to the Compose pane, and
+ * A preview pane for the files [appliesTo] claims. The built-in panes (Compose, resource, Markdown) are still
+ * chosen first (Android layouts have none: the layout editor plugin claims them through this); this is what the editor falls back to before defaulting to the Compose pane, and
  * what makes "preview" available for a file kind the IDE itself knows nothing about.
  */
 class EditorPreviewContribution(

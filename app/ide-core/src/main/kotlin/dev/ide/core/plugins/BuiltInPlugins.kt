@@ -1,5 +1,6 @@
 package dev.ide.core.plugins
 
+import dev.ide.ui.ext.asUiPlugin
 import dev.ide.agent.ui.AgentUiPlugin
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
@@ -243,6 +244,16 @@ object BuiltInPlugins {
         BuiltInPlugin(AgentPlugin(), ui = AgentUiPlugin),
         // Version control: engine facet (settings page + VcsBackend wiring) + its Compose Git UI.
         BuiltInPlugin(VcsPlugin(), ui = VcsUiPlugin),
+        // The Android layout editor: written as an INSTALLED plugin would be (engine + UI facet, the plugin SPI
+        // only), so its UI facet is the published `dev.ide.plugin.ui.UiPlugin`, adapted exactly as an installed
+        // plugin's is and resolving the host's layout services through the same lookup.
+        BuiltInPlugin(
+            dev.ide.android.layouteditor.LayoutEditorPlugin(),
+            ui = dev.ide.android.layouteditor.LayoutEditorUiPlugin.asUiPlugin(
+                dev.ide.android.layouteditor.LayoutEditorPlugin.ID,
+                env.uiServices,
+            ),
+        ),
     )
 }
 

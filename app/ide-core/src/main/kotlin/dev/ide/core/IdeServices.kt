@@ -4921,6 +4921,21 @@ class IdeServices private constructor(
     }
 
     /**
+     * The attributes a layout element [tag] may carry inside [parentTag] (null for the root), for the module [file]
+     * belongs to: the same hierarchy-aware SDK + library + project set the XML editor completes from. Null when
+     * [file] is not an Android resource of a module with XML support.
+     */
+    internal fun layoutAttributeSpecs(
+        file: Path,
+        tag: String,
+        parentTag: String?,
+    ): List<dev.ide.android.support.metadata.AttributeSpec>? {
+        val module = moduleForResourceFile(file) ?: return null
+        val contributor = androidXmlContributor(module) ?: return null
+        return contributor.allowedAttributes(tag, parentTag)
+    }
+
+    /**
      * Value completion for [attrName] on the layout element at [sourceOffset], as if [fieldText] (caret at
      * [caret]) were typed into the attribute's value — the exact candidates the XML editor offers, since it runs
      * the same [XmlContextScanner] + [AndroidXmlContributor] over a synthetic buffer that carries the in-progress
