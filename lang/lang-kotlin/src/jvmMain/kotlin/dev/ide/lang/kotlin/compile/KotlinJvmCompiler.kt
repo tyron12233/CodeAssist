@@ -116,7 +116,7 @@ class KotlinJvmCompiler : KotlinCompilerBackend {
         val collector = RecordingMessageCollector()
         val exit = runCatching { K2JVMCompiler().exec(collector, Services.EMPTY, args) }
             .getOrElse {
-                val threw = "error: kotlinc threw: ${it.javaClass.name}: ${it.message}"
+                val threw = "error: kotlinc threw: ${describeThrow(it)}"
                 return KotlinCompileResult(
                     false, collector.messages + threw, emptyMap(), collector.diagnostics + internalError(threw),
                 )
@@ -273,4 +273,16 @@ class KotlinJvmCompiler : KotlinCompilerBackend {
         fun outputs(): Map<Path, List<Path>> =
             sourceToOut.entries.associate { (src, outs) -> src.normalize() to outs.map { it.normalize() } }
     }
+}
+
+/**
+ * A compiler crash in one line the user (and a bug report) can act on: every exception in the cause chain, then
+ * where the innermost one was thrown. An `ExceptionInInitializerError` alone says nothing; its cause names the
+ * class whose static initializer failed and why.
+ */
+internal fun describeThrow(t: Throwable): String {
+    val chain = generateSequence(t) { it.cause.takeIf { c -> c !== it } }.take(8).toList()
+    val causes = chain.joinToString(" <- ") { "${it.javaClass.name}: ${it.message}" }
+    val frames = chain.last().stackTrace.take(4).joinToString(" | ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
+    return if (frames.isEmpty()) causes else "$causes at $frames"
 }
