@@ -206,6 +206,9 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         // script for why that is worth a module.
         ":art-compat",
         ":ide-android",
+        // Black-box feature tests against the shipping (R8) build of :ide-android, driven from their own
+        // process through UI Automator: they link nothing of the app's, so they need no keep rules.
+        ":ide-android-e2e",
         // A plugin packaged as its own app, built here so it cannot drift from the SPI it compiles against.
         ":samples:hello-plugin",
         ":samples:ndk-plugin",
@@ -263,7 +266,7 @@ val layers = mapOf(
     "app" to listOf(
         "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",
         "ide-ui-screens", "ide-ui-testing", "ide-ui", "model-bridge", "ide-core", "ide-desktop",
-        "ide-android", "ide-ios",
+        "ide-android", "ide-android-e2e", "ide-ios",
         "build-cli",
     ),
     // Test-only harnesses, consumed via testImplementation.

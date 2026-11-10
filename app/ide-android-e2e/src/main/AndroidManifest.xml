@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- AgentTest serves a mock LLM + MCP server on 127.0.0.1 from this process. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Reads the app's launch intent through the package manager (Android 11+ package visibility). -->
+    <queries>
+        <package android:name="com.tyron.code" />
+    </queries>
+</manifest>
