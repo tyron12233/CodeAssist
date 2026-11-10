@@ -11,6 +11,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -589,6 +591,11 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
             }
         } else if (!docked) {
             val sheet = state.sheet
+            // Behind an open sheet, a tap anywhere else closes it (and does not also select the view under it).
+            // A drag that starts in the sheet (a palette view onto the canvas) is the sheet's, so it still works.
+            if (sheet != null) Box(
+                Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { state.sheet = null } },
+            )
             AnimatedVisibility(
                 visible = sheet != null,
                 modifier = Modifier.align(Alignment.BottomCenter),
