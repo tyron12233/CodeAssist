@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.android.layout.AndroidLayoutModel
 import dev.ide.android.layout.LayoutAttributeInfo
+import dev.ide.android.layout.ElementRef
 import dev.ide.android.layout.LayoutEdit
 import dev.ide.android.layout.LayoutElement
 import dev.ide.android.layout.LayoutValueCandidate
@@ -69,7 +70,8 @@ internal fun AttributesPanel(
     model: AndroidLayoutModel,
     canEdit: Boolean,
     textProvider: () -> String,
-    onEdit: (compute: suspend (text: String) -> List<LayoutEdit>) -> Unit,
+    /** Applies an edit to [element]; the compute gets the buffer and where [element] is in it now. */
+    onEdit: (compute: suspend (text: String, ref: ElementRef) -> List<LayoutEdit>) -> Unit,
     onClose: (() -> Unit)?,
     modifier: Modifier,
 ) {
@@ -86,8 +88,8 @@ internal fun AttributesPanel(
     var query by remember { mutableStateOf("") }
     val ref = element.ref
 
-    fun set(name: String, value: String) = onEdit { text -> model.setAttribute(path, text, ref, name, value) }
-    fun remove(name: String) = onEdit { text -> model.removeAttribute(path, text, ref, name) }
+    fun set(name: String, value: String) = onEdit { text, at -> model.setAttribute(path, text, at, name, value) }
+    fun remove(name: String) = onEdit { text, at -> model.removeAttribute(path, text, at, name) }
     suspend fun complete(name: String, field: String, caret: Int) =
         model.completeValue(path, textProvider(), ref, name, field, caret)
 

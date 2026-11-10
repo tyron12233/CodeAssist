@@ -52,7 +52,11 @@ import dev.ide.android.layouteditor.generated.resources.Res
 import dev.ide.android.layouteditor.generated.resources.le_unavailable
 import dev.ide.plugin.ui.EditorPreviewContext
 import dev.ide.plugin.ui.TextReplacement
+import dev.ide.android.layout.ElementRef
+import dev.ide.android.layout.LayoutDocument
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -93,8 +97,20 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     val path = ctx.path
     val state = remember(path) { DesignerState.forPath(path) }
     val scope = rememberCoroutineScope()
-    val document = remember(ctx.text) { model.parse(ctx.text) }
     val currentCtx by rememberUpdatedState(ctx)
+
+    // ---- The parsed buffer -------------------------------------------------------------------------------
+    // Parsed off the UI thread. The host parses with the IDE's XML PSI under one lock it shares with the code
+    // editor's own parses (highlighting, folding, indexing), so a parse in composition made every keystroke wait
+    // on the UI thread for whichever parse held that lock: 37-148 ms a keystroke on an emulator. What is drawn
+    // may now trail the buffer by one parse; edits never use it, they take [currentDocument].
+    var parsed by remember(path) { mutableStateOf<LayoutDocument?>(null) }
+    LaunchedEffect(model, ctx.text) {
+        val text = ctx.text
+        if (parsed?.text == text) return@LaunchedEffect
+        parsed = withContext(Dispatchers.Default) { model.parse(text) }
+    }
+    val document = parsed ?: EMPTY_DOCUMENT
 
     // ---- Rendering ---------------------------------------------------------------------------------------
     var render by remember(path) { mutableStateOf<LayoutRenderResult?>(null) }
@@ -148,23 +164,42 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     // The caret offset this pane last moved the code editor to, so following the caret back does not re-select.
     var lastCaretWrite by remember(path) { mutableIntStateOf(-1) }
 
-    fun select(element: LayoutElement?) {
-        state.selection = element?.let(SelectionKey::of)
-        if (element != null && currentCtx.isSplit) {
-            lastCaretWrite = element.start
-            currentCtx.select(element.start)
+    /**
+     * The buffer as it is now, parsed: the last parse when it is still current, else a parse of it made here
+     * (off the UI thread). Every edit is computed against this, not against what is on screen, which can trail
+     * the buffer by a parse; offsets taken from a stale tree would land in the wrong place.
+     */
+    suspend fun currentDocument(): LayoutDocument {
+        val text = currentCtx.text
+        parsed?.let { if (it.text == text) return it }
+        return withContext(Dispatchers.Default) { model.parse(text) }.also { if (currentCtx.text == text) parsed = it }
+    }
+
+    /** Put the code editor's caret on [element] (selecting through [toEnd] of its start tag): where it is NOW. */
+    fun revealInCode(element: LayoutElement, toEnd: Boolean) {
+        scope.launch {
+            val now = element.within(currentDocument()) ?: return@launch
+            lastCaretWrite = now.start
+            if (toEnd) currentCtx.select(now.start, now.startTagEnd) else currentCtx.select(now.start)
         }
     }
 
-    // In Split, follow the code editor: moving the caret into an element selects it here.
+    fun select(element: LayoutElement?) {
+        state.selection = element?.let(SelectionKey::of)
+        if (element != null && currentCtx.isSplit) revealInCode(element, toEnd = false)
+    }
+
+    // In Split, follow the code editor: moving the caret into an element selects it here. Only against a parse
+    // of the text the caret is in: an offset into newer text means nothing in an older tree.
     LaunchedEffect(ctx.caretOffset, ctx.isSplit, document) {
-        if (!ctx.isSplit || ctx.caretOffset == lastCaretWrite) return@LaunchedEffect
+        if (!ctx.isSplit || ctx.caretOffset == lastCaretWrite || document.text != ctx.text) return@LaunchedEffect
         document.elementAt(ctx.caretOffset)?.let { state.selection = SelectionKey.of(it) }
     }
 
     // ---- Edits -------------------------------------------------------------------------------------------
     // Serialized: each edit is computed against the buffer the previous one produced.
     val editLock = remember(path) { Mutex() }
+
     fun apply(edits: List<LayoutEdit>) {
         if (edits.isEmpty()) return
         // Applying moves the code editor's caret to the first edit; that is not the user pointing at a view.
@@ -172,11 +207,32 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         currentCtx.applyEdits(edits.map { TextReplacement(it.start, it.end, it.newText) })
     }
 
-    fun edit(compute: suspend (text: String) -> List<LayoutEdit>) {
+    /**
+     * A change to the tree, computed by [compute] against [currentDocument]: it finds the elements it works on
+     * again in that document ([within]) and returns the edits with the selection to make after them, or null
+     * when what the user acted on is gone. Under [editLock], so a second action sees the first one's result.
+     */
+    fun restructure(compute: (doc: LayoutDocument) -> Pair<List<LayoutEdit>, SelectionKey?>?) {
         scope.launch {
             editLock.withLock {
-                val edits = compute(currentCtx.text)
+                val (edits, selection) = compute(currentDocument()) ?: return@withLock
+                if (edits.isEmpty()) return@withLock
                 apply(edits)
+                state.selection = selection
+            }
+        }
+    }
+
+    /**
+     * Attribute edits on [element]: [compute] gets the buffer and where [element] is in it now, which can differ
+     * from where it was drawn (an edit before it moved it). Dropped when the element is gone.
+     */
+    fun editElement(element: LayoutElement, compute: suspend (text: String, ref: ElementRef) -> List<LayoutEdit>) {
+        scope.launch {
+            editLock.withLock {
+                val doc = currentDocument()
+                val now = element.within(doc) ?: return@withLock
+                apply(compute(doc.text, now.ref))
             }
         }
     }
@@ -184,17 +240,21 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     val actions = DesignActions(
         canEdit = ctx.canEdit,
         duplicate = { el ->
-            val newId = el.id?.let { freshId(it, document.elements().mapNotNull { e -> e.id }.toSet()) }
-            apply(listOf(duplicateElementEdit(document, el)))
-            val key = SelectionKey.of(el)
-            state.selection = SelectionKey(newId, key.path.dropLast(1) + ((key.path.lastOrNull() ?: 0) + 1))
+            restructure { doc ->
+                val e = el.within(doc) ?: return@restructure null
+                val newId = e.id?.let { freshId(it, doc.elements().mapNotNull { x -> x.id }.toSet()) }
+                val key = SelectionKey.of(e)
+                listOf(duplicateElementEdit(doc, e)) to SelectionKey(newId, key.path.dropLast(1) + ((key.path.lastOrNull() ?: 0) + 1))
+            }
         },
         delete = { el ->
-            state.selection = el.parent?.let(SelectionKey::of)
-            apply(listOf(deleteElementEdit(document.text, el)))
+            restructure { doc ->
+                val e = el.within(doc) ?: return@restructure null
+                listOf(deleteElementEdit(doc.text, e)) to e.parent?.let(SelectionKey::of)
+            }
         },
         selectParent = { el -> el.parent?.let(::select) },
-        showInCode = { el -> lastCaretWrite = el.start; currentCtx.select(el.start, el.startTagEnd) },
+        showInCode = { el -> revealInCode(el, toEnd = true) },
     )
 
     // ---- The selected view's catalog, and the project's strings (for text previews) ------------------------
@@ -215,10 +275,10 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     var stripHeight by remember { mutableStateOf(0) }
 
     fun writeAttributes(writes: List<Pair<String, String?>>) {
-        val ref = selected?.ref ?: return
+        val el = selected ?: return
         if (writes.isEmpty()) return
         // All computed against one buffer and applied together: one undo step for a margin split into four.
-        edit { text ->
+        editElement(el) { text, ref ->
             writes.flatMap { (name, value) ->
                 if (value == null) model.removeAttribute(path, text, ref, name)
                 else model.setAttribute(path, text, ref, name, value)
@@ -236,28 +296,30 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
 
     fun pathOf(el: LayoutElement): List<Int> = SelectionKey.of(el).path
 
-    /** Insert a new view, or move one, to [target]; then select it where it landed. */
-    fun drop(payload: DragPayload, target: DropTarget?) {
-        if (target == null || !ctx.canEdit) return
+    /** Insert a new view, or move one, to [dropped]; then select it where it landed. */
+    fun drop(payload: DragPayload, dropped: DropTarget?) {
+        if (dropped == null || !ctx.canEdit) return
         val density = state.device.density
-        when (payload) {
-            is DragPayload.New -> {
-                val taken = document.elements().mapNotNull { it.id }.toSet()
-                val attrs = defaultAttributes(payload.cls.tag, payload.cls.isViewGroup, target, taken, density)
-                apply(insertElementEdits(document, target.parent, target.index, payload.cls.tag, attrs))
-                val id = attrs.firstOrNull { it.first == "android:id" }?.second?.substringAfter('/')
-                state.selection = SelectionKey(id, pathOf(target.parent) + target.index)
-            }
-            is DragPayload.Move -> {
-                val el = payload.element
-                val edits = moveElementEdits(document, el, target.parent, target.index, target, density)
-                if (edits.isEmpty()) return
-                val sameParent = el.parent === target.parent
-                val oldIndex = el.parent?.children?.indexOf(el) ?: 0
-                val newIndex = if (sameParent && oldIndex < target.index) target.index - 1 else target.index
-                // The parent's own path shifts when the element leaves from before it among its siblings.
-                apply(edits)
-                state.selection = SelectionKey(el.id, if (el.id == null) pathOf(target.parent) + newIndex else emptyList())
+        restructure { doc ->
+            val parent = dropped.parent.within(doc) ?: return@restructure null
+            val target = DropTarget(parent, dropped.index, dropped.area, dropped.line, dropped.x, dropped.y)
+            when (payload) {
+                is DragPayload.New -> {
+                    val taken = doc.elements().mapNotNull { it.id }.toSet()
+                    val attrs = defaultAttributes(payload.cls.tag, payload.cls.isViewGroup, target, taken, density)
+                    val id = attrs.firstOrNull { it.first == "android:id" }?.second?.substringAfter('/')
+                    insertElementEdits(doc, parent, target.index, payload.cls.tag, attrs) to
+                        SelectionKey(id, pathOf(parent) + target.index)
+                }
+                is DragPayload.Move -> {
+                    val el = payload.element.within(doc) ?: return@restructure null
+                    val edits = moveElementEdits(doc, el, parent, target.index, target, density)
+                    val sameParent = el.parent === parent
+                    val oldIndex = el.parent?.children?.indexOf(el) ?: 0
+                    val newIndex = if (sameParent && oldIndex < target.index) target.index - 1 else target.index
+                    // The parent's own path shifts when the element leaves from before it among its siblings.
+                    edits to SelectionKey(el.id, if (el.id == null) pathOf(parent) + newIndex else emptyList())
+                }
             }
         }
     }
@@ -331,7 +393,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     model = model,
                     canEdit = ctx.canEdit,
                     textProvider = { currentCtx.text },
-                    onEdit = { compute -> edit(compute) },
+                    onEdit = { compute -> editElement(el, compute) },
                     onClose = onClose,
                     modifier = mod,
                 )
@@ -413,7 +475,10 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                                 catalog = catalog,
                                 canEdit = ctx.canEdit,
                                 write = ::writeAttributes,
-                                complete = { a, f, c -> model.completeValue(path, currentCtx.text, el.ref, a, f, c) },
+                                complete = { a, f, c ->
+                                    val doc = currentDocument()
+                                    model.completeValue(path, doc.text, el.within(doc)?.ref ?: el.ref, a, f, c)
+                                },
                                 resources = { type -> model.resources(path, type) },
                                 themeColors = { model.themeColors(path) },
                             ),
@@ -475,6 +540,16 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         DragGhost(state.drag, designerOrigin)
     }
 }
+
+/** Shown until the first parse lands: nothing to select or edit yet. */
+private val EMPTY_DOCUMENT = LayoutDocument("", null)
+
+/**
+ * This element in [doc]: itself when [doc] is the tree it came from, else the element at the same place there
+ * ([SelectionKey]: by id, then by position), or null when there is none.
+ */
+internal fun LayoutElement.within(doc: LayoutDocument): LayoutElement? =
+    if (doc.elements().any { it === this }) this else SelectionKey.of(this).resolve(doc)
 
 /** What the selection's action bar can do; each closes over the current document and buffer. */
 internal class DesignActions(
