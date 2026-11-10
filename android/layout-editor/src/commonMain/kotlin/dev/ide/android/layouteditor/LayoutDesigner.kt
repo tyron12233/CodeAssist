@@ -321,6 +321,11 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
 
     // ---- Palette and structure ----------------------------------------------------------------------------
     var viewClasses by remember(path) { mutableStateOf<List<dev.ide.android.layout.LayoutViewClass>?>(null) }
+    // The app theme's colours, so the palette draws its previews the way the app will.
+    var appColors by remember(path) { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    LaunchedEffect(path) {
+        appColors = runCatching { model.themeColors(path) }.getOrDefault(emptyList()).mapNotNull { r -> r.argb?.let { r.name to it } }.toMap()
+    }
     LaunchedEffect(path) { viewClasses = runCatching { model.viewClasses(path) }.getOrDefault(emptyList()) }
     val groupTags = remember(viewClasses) { viewClasses.orEmpty().associate { it.tag to it.isViewGroup } }
     fun isViewGroup(el: LayoutElement): Boolean =
@@ -427,6 +432,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                 },
                 onClose = onClose,
                 modifier = mod,
+                themeColors = appColors,
             )
         }
         val attributes: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->

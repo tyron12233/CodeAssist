@@ -188,15 +188,15 @@ class DesignerSnapshotTest {
     @Test
     fun phoneWithTheAttributesSheet() {
         val caret = xml.indexOf("<Button")
-        // The Attributes button on the bottom toolbar: 16dp inset, 6dp padding, the second 48dp button.
-        val f = snap("phone-attributes", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(98f, 892f - 46f)))
+        // The bottom row: Palette, Tree, Attributes, each a third of the width.
+        val f = snap("phone-attributes", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(343f, 892f - 22f)))
         assertTrue(f.length() > 0)
     }
 
     @Test
     fun phoneWithTheTreeSheet() {
         val caret = xml.indexOf("<Button")
-        val f = snap("phone-tree", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(46f, 892f - 46f)))
+        val f = snap("phone-tree", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = caret), select = BUTTON, taps = listOf(Offset(206f, 892f - 22f)))
         assertTrue(f.length() > 0)
     }
 
@@ -217,8 +217,8 @@ class DesignerSnapshotTest {
 
     @Test
     fun phonePaletteSheet() {
-        // Nothing selected (no strip): the toolbar's first button, Palette, at the bottom-left.
-        val f = snap("phone-palette", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = 0), taps = listOf(Offset(40f, 892f - 40f)))
+        // Nothing selected (no strip): the bottom row's first tab, Palette.
+        val f = snap("phone-palette", 412, 892, dark = true, FakeContext(isSplit = false, caretOffset = 0), taps = listOf(Offset(70f, 892f - 22f)))
         assertTrue(f.length() > 0)
     }
 

@@ -123,7 +123,10 @@ internal fun PalettePanel(
     dragSource: @Composable (LayoutViewClass) -> Modifier,
     onClose: (() -> Unit)?,
     modifier: Modifier,
+    /** The app theme's colours by attribute name (`colorPrimary`), for the tiles' previews. */
+    themeColors: Map<String, Int> = emptyMap(),
 ) {
+    val mini = MiniColors.of(themeColors)
     val byTag = remember(classes) { classes.orEmpty().associateBy { it.tag } }
     val project = remember(classes) { classes.orEmpty().filter { it.origin == ViewOrigin.PROJECT } }
     var category by remember { mutableStateOf("common") }
@@ -172,34 +175,43 @@ internal fun PalettePanel(
             Text(stringResource(Res.string.le_palette_empty), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
         }
         LazyVerticalGrid(
-            GridCells.Adaptive(84.dp),
+            GridCells.Adaptive(80.dp),
             Modifier.weight(1f, fill = true),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(shown, key = { it.tag }) { cls ->
-                PaletteTile(cls, Modifier.then(dragSource(cls)).clickable { onAdd(cls) })
+                PaletteTile(cls, mini, Modifier.then(dragSource(cls)).clickable { onAdd(cls) })
             }
         }
     }
 }
 
+/**
+ * A palette tile: a small drawing of the view in the app's colours ([MiniWidget]) over its name, which wraps at
+ * its words (`Constraint` / `Layout`) rather than being cut off.
+ */
 @Composable
-private fun PaletteTile(cls: LayoutViewClass, modifier: Modifier) {
+private fun PaletteTile(cls: LayoutViewClass, colors: MiniColors, modifier: Modifier) {
     Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .height(80.dp).padding(horizontal = 6.dp, vertical = 10.dp),
+        modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .height(92.dp).padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Symbol(glyphFor(cls.tag), null, size = 24.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            cls.displayName(),
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
+        MiniWidget(cls.tag, colors, Modifier.fillMaxWidth().height(48.dp))
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text(
+                cls.displayName().replace(CAMEL_HUMP, "\u200B"),
+                style = ChromeTextSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
+
+/** Between a lower-case letter and the capital after it: where a class name may wrap. */
+private val CAMEL_HUMP = Regex("(?<=[a-z])(?=[A-Z])")

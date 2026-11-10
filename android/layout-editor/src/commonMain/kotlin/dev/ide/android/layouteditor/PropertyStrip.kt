@@ -38,6 +38,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.unit.sp
 import dev.ide.android.layout.LayoutDocument
 import dev.ide.android.layout.LayoutElement
@@ -228,23 +234,48 @@ private fun ElementSwitcher(document: LayoutDocument, element: LayoutElement, on
             }
             Symbol(Sym.arrowDropDown, stringResource(Res.string.le_strip_switch), size = 18.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            for (el in document.elements()) {
-                DropdownMenuItem(
-                    text = {
-                        Row(Modifier.padding(start = (el.depth * 14).dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Symbol(glyphFor(el.tag), null, size = 16.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(el.simpleName, style = MaterialTheme.typography.bodyMedium)
-                            el.id?.let { Text(it, style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        }
-                    },
-                    trailingIcon = { if (el === element) Symbol(Sym.check, null, size = 16.dp) },
-                    onClick = { open = false; onSelect(el) },
-                )
+        // Every element, compact and capped to a scrolling list (a full-height row per element filled the
+        // screen), opened at the current one.
+        val all = remember(document) { document.elements().toList() }
+        val scroll = rememberScrollState()
+        val rowPx = with(LocalDensity.current) { SWITCHER_ROW.toPx() }
+        LaunchedEffect(open) {
+            if (!open) return@LaunchedEffect
+            withFrameNanos { }
+            scroll.scrollTo(((all.indexOf(element) - 3) * rowPx).toInt().coerceAtLeast(0))
+        }
+        DropdownMenu(
+            expanded = open, onDismissRequest = { open = false },
+            modifier = Modifier.heightIn(max = 320.dp).widthIn(min = 220.dp, max = 300.dp),
+            scrollState = scroll,
+        ) {
+            for (el in all) {
+                val current = el === element
+                Row(
+                    Modifier.fillMaxWidth().height(SWITCHER_ROW)
+                        .background(if (current) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                        .clickable { open = false; onSelect(el) }
+                        .padding(start = (12 + el.depth * 12).dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Symbol(glyphFor(el.tag), null, size = 14.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(el.simpleName, style = ChromeText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    el.id?.let {
+                        Text(
+                            it, style = ChromeTextSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+/** A row of the element switcher's list. */
+private val SWITCHER_ROW = 32.dp
 
 /** The overflow of the selection's actions: what does not earn a button of its own. */
 @Composable
