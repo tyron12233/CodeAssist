@@ -243,9 +243,11 @@ object ToolLog {
         """^(?:Exception in thread\s+"[^"]*"\s+|Caused by:\s+)([\w.$]+(?:Exception|Error|Throwable))(?::\s*(.*))?$"""
     )
 
-    // A bare "error:" prefix, or one after a "file:line:col:" location; kotlinc's "e:" shorthand.
-    private val ERROR_PREFIX = Regex("""^(e:|error:|.+?:\d+(?::\d+)?:\s*error:)""", RegexOption.IGNORE_CASE)
-    private val WARNING_PREFIX = Regex("""^(w:|warning:|.+?:\d+(?::\d+)?:\s*warning:)""", RegexOption.IGNORE_CASE)
+    // A bare "error:" prefix, or one after a "file:line:col:" location; kotlinc's "e:" shorthand; or a tool's
+    // own name in front ("ksp error: ...", "ksp exception: ..."), which is how a source generator reports. Without
+    // that last form a KSP failure was DEBUG-level noise: the build said Failed and the console showed no reason.
+    private val ERROR_PREFIX = Regex("""^(e:|error:|.+?:\d+(?::\d+)?:\s*error:|[a-z][\w-]* (?:error|exception):)""", RegexOption.IGNORE_CASE)
+    private val WARNING_PREFIX = Regex("""^(w:|warning:|.+?:\d+(?::\d+)?:\s*warning:|[a-z][\w-]* warning:)""", RegexOption.IGNORE_CASE)
     private val ECJ_ERROR = Regex("""^\d+\.\s*ERROR\s+in\s+""")
     private val ECJ_WARNING = Regex("""^\d+\.\s*WARNING\s+in\s+""")
 }
