@@ -303,6 +303,7 @@ class AmperProjectImporter : ProjectImporter {
             .firstOrNull { Files.isRegularFile(dir.resolve(it)) } ?: "src/AndroidManifest.xml"
         val minSdk = int("minSdk") ?: DEFAULT_MIN_SDK
         return AndroidFacet(
+            nonTransitiveRClass = true,   // Amper builds on AGP 8+, whose default this is
             namespace = (a["namespace"] as? String) ?: (a["applicationId"] as? String) ?: "com.example.${identifierOf(name.lowercase())}",
             compileSdk = int("compileSdk") ?: AndroidApiLevelsDefault,
             minSdk = minSdk,

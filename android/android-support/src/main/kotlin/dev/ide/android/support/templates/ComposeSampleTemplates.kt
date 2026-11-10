@@ -71,6 +71,7 @@ internal object ComposeSampleSupport {
                 languageLevel = scaffold.languageLevel
                 putFacet(
                     AndroidFacet(
+                        nonTransitiveRClass = true,   // AGP 8's default for new projects
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = dev.ide.android.support.AndroidApiLevels.DEFAULT_MIN_SDK,

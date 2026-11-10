@@ -138,6 +138,8 @@ object GradleImport {
         val kotlinBuildConfig: KotlinBuildConfigSpec? = null,
         /** `defaultConfig.applicationId`, when the script sets one. */
         val applicationId: String? = null,
+        /** `android.nonTransitiveRClass` from `gradle.properties`; null when unset (AGP 8's default: on). */
+        val nonTransitiveRClass: Boolean? = null,
     )
 
     /** gmazzo's Kotlin `BuildConfig` object: where it goes and its constants (Kotlin type, name, Kotlin expression). */
@@ -470,6 +472,7 @@ object GradleImport {
             versionCode = defaultConfig?.let { firstGroup(it, """versionCode\s*=?\s*\(?\s*(\d+)""")?.toIntOrNull() },
             versionName = defaultConfig?.let { firstGroup(it, """versionName\s*=?\s*['"]([^'"]+)['"]""") },
             applicationId = defaultConfig?.let { firstGroup(it, """applicationId\s*=?\s*['"]([\w.]+)['"]""") },
+            nonTransitiveRClass = vars["android.nonTransitiveRClass"]?.trim()?.toBooleanStrictOrNull(),
             manifestPlaceholders = placeholders,
             isKotlin = isKotlin,
             isCompose = isCompose,

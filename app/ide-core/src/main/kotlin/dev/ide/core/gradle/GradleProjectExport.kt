@@ -899,7 +899,8 @@ object GradleProjectExport {
         appendLine("kotlin.code.style=official")
         if (android) {
             appendLine("android.useAndroidX=true")
-            appendLine("android.nonTransitiveRClass=true")
+            // AGP's default is non-transitive; a project that kept transitive R classes says so.
+            appendLine("android.nonTransitiveRClass=" + modules.none { it.android?.nonTransitiveRClass == false })
             // R8 full mode is AGP's default; only a project that turned it off needs the line.
             if (modules.any { it.android?.r8FullMode == false }) appendLine("android.enableR8.fullMode=false")
         }

@@ -100,7 +100,8 @@ class ModuleConfigBridge(
         UiFacetConfig(
             data.tomlTable,
             titleCase(data.tomlTable),
-            data.values.filterKeys { it !in hiddenFacetKeys }.map { (k, v) -> fieldFor(k, v) },
+            ((FACET_KEY_DEFAULTS[data.tomlTable] ?: emptyMap()) + data.values)
+                .filterKeys { it !in hiddenFacetKeys }.map { (k, v) -> fieldFor(k, v) },
         )
     }
 
@@ -458,6 +459,13 @@ class ModuleConfigBridge(
     }
 
     companion object {
+        /**
+         * Switches a facet panel shows even when the module's table predates them, with the value an absent key
+         * means: a module made before `nonTransitiveRClass` existed builds transitive R classes, and needs the
+         * switch to opt in. A save writes the key.
+         */
+        val FACET_KEY_DEFAULTS: Map<String, Map<String, Any?>> = mapOf("android" to mapOf("nonTransitiveRClass" to false))
+
         /** Where a module created with no type-declared layout puts its sources. */
         const val DEFAULT_SOURCE_DIR = "src/main/kotlin"
 

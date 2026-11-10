@@ -153,7 +153,8 @@ class ModelBridgeTest {
         }
 
         val panel = hiding.facetPanels(assertNotNull(hiding.module("app"))).single()
-        assertEquals(listOf("namespace"), panel.fields.map { it.key })
+        // nonTransitiveRClass shows with its default although the table predates it (FACET_KEY_DEFAULTS).
+        assertEquals(listOf("nonTransitiveRClass", "namespace"), panel.fields.map { it.key })
 
         hiding.updateModuleConfig(
             "app",

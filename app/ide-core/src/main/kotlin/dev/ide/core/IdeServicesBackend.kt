@@ -580,17 +580,19 @@ class IdeServicesBackend(
         // Tell background work (source-doc indexing, prebuilt downloads) when a build is compiling, wherever it runs:
         // the live buildState covers the in-process and the `:build`-process runner alike. A user program that is
         // running after its build doesn't count (the console's Running phase). See BuildActivity.
+        // `build` here is this backend's BuildBackend, whose flows follow the ACTIVE runner (the `:build` daemon's
+        // when builds run there); an engine's own BuildService never hears about a daemon build.
         analyticsScope.launch {
-            projectEpoch.collectLatest {
-                val svc = activeServices
-                if (svc == null) { dev.ide.platform.BuildActivity.set(false); return@collectLatest }
-                try {
-                    kotlinx.coroutines.flow.combine(svc.build.buildState, svc.build.runConsole) { bs, console ->
-                        bs.status == dev.ide.ui.backend.RunStatus.Running && console?.phase != dev.ide.ui.backend.RunPhase.Running
-                    }.distinctUntilChanged().collect { dev.ide.platform.BuildActivity.set(it) }
-                } finally {
-                    dev.ide.platform.BuildActivity.set(false)
+            val activityLog = dev.ide.platform.log.Log.logger("build.activity")
+            try {
+                kotlinx.coroutines.flow.combine(build.buildState, build.runConsole) { bs, console ->
+                    bs.status == dev.ide.ui.backend.RunStatus.Running && console?.phase != dev.ide.ui.backend.RunPhase.Running
+                }.distinctUntilChanged().collect {
+                    dev.ide.platform.BuildActivity.set(it)
+                    activityLog.info(if (it) "build compiling: background work waits" else "build idle: background work resumes")
                 }
+            } finally {
+                dev.ide.platform.BuildActivity.set(false)
             }
         }
         // Emit build_result (the performance signal) when a build/run reaches a terminal status, watched off

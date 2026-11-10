@@ -69,6 +69,14 @@ data class AndroidFacet(
      * native API level, and the desugared runtime is L8-compiled into the APK. Build-wide.
      */
     val coreLibraryDesugaringEnabled: Boolean = false,
+    /**
+     * Non-transitive R classes (AGP's `android.nonTransitiveRClass`, its default since AGP 8): a dependency
+     * library's `R` holds only the resources that library declares (its `R.txt`), so code reads another library's
+     * resource through that library's package (`androidx.appcompat.R.attr.x`). Off, every dependency package's
+     * `R` repeats the app's whole resource table, which made a Compose app's R classes take seconds to dex. The
+     * app's own `R` stays complete either way. Off for projects made before this setting existed.
+     */
+    val nonTransitiveRClass: Boolean = false,
     /** AGP's `android { buildFeatures { … } }`: per-module toggles for generated-code/compiler features. */
     val buildFeatures: BuildFeatures = BuildFeatures(),
     /** AGP's `android { packaging { … } }`: how Java resources + native libs are merged into the APK. */
