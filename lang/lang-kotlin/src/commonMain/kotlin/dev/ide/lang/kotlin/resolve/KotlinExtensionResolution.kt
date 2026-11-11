@@ -237,8 +237,20 @@ internal fun KotlinResolver.importedSingletonMembers(
                 if (member != namePrefix) continue
             } else if (!member.startsWith(namePrefix, ignoreCase = true)) continue
         }
+        // A Java class Kotlin maps to a built-in (`java.lang.Integer`, `java.lang.String`, `java.lang.Math` is
+        // not one): every lookup below would answer for the BUILT-IN (`kotlin.Int`), which has none of the JVM
+        // statics, so `import java.lang.Integer.*` reached `MAX_VALUE` through Int's companion and nothing
+        // else. The import names the Java class, so its real statics are what it brings in.
+        val mappedStatics = service.mappedTypeStatics(container)
         val candidates =
-            if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+            if (mappedStatics.isNotEmpty()) {
+                val wanted = member ?: namePrefix
+                mappedStatics.filter {
+                    if (member != null || exactName) wanted.isEmpty() || it.name == wanted
+                    else it.name.startsWith(wanted, ignoreCase = true)
+                }
+            }
+            else if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
             // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`),
             // or, for a Java container, its statics.
             else service.companionMembersFor(container, member ?: namePrefix)

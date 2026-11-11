@@ -93,6 +93,38 @@ class KotlinStaticMemberImportCallTest {
         assertEquals(KotlinDiagnosticCodes.UNRESOLVED, errors.single().code, "got $errors")
     }
 
+    /**
+     * `java.lang.Integer`, `Long`, `Boolean`, `Character` and `String` are the classes Kotlin maps to a
+     * built-in, and every member lookup answers for the built-in, which has none of the JVM statics. A star
+     * import of one names the JAVA class, so its statics come in, typed as the Java class declares them.
+     */
+    @Test
+    fun aStarImportOfAMappedJavaClassBringsItsStatics() = runBlocking {
+        val jdk = TestJars.jdkBaseJar(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "codeassist-jdk-jar"))
+            ?: return@runBlocking
+        fun errorsFor(import: String, body: String) = runBlocking {
+            val src = tempProject(mapOf("Use.kt" to "package demo\nimport $import\nfun check() {\n    $body\n}\n"))
+            KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath(), jdk))).errorsOf(src, "Use.kt")
+        }
+        for ((import, body) in listOf(
+            "java.lang.Integer.*" to "val s: String = toHexString(3)",
+            "java.lang.Integer.*" to "val n: Int = parseInt(\"3\") + MAX_VALUE",
+            "java.lang.Long.*" to "val n: Long = parseLong(\"3\")",
+            "java.lang.Boolean.*" to "val b: Boolean = parseBoolean(\"x\")",
+            "java.lang.Character.*" to "val b: Boolean = isDigit('3')",
+            "java.lang.String.*" to "val s: String = valueOf(3)",
+        )) {
+            val errors = errorsFor(import, body)
+            assertTrue(errors.isEmpty(), "import $import; $body: expected a clean file, got $errors")
+        }
+        // Resolved for real, not waved through: the static's own return type is checked.
+        val mismatch = errorsFor("java.lang.Integer.*", "val n: Int = toHexString(3)")
+        assertEquals(1, mismatch.size, "expected exactly the type mismatch, got $mismatch")
+        assertTrue("mismatch" in mismatch.single().message.lowercase(), "got $mismatch")
+        val missing = errorsFor("java.lang.Integer.*", "val n = nothingHere(3)")
+        assertEquals(KotlinDiagnosticCodes.UNRESOLVED, missing.single().code, "got $missing")
+    }
+
     @Test
     fun aKotlinObjectMemberImportedByNameIsCallable() = runBlocking {
         val src = tempProject(
