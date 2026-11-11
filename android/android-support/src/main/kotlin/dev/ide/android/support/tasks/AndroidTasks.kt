@@ -623,6 +623,11 @@ internal class Aapt2LinkTask(
      * the R classes that gained a field change. Not a task input: it is this task's own previous output.
      */
     private val idsFile: Path? = null,
+    /**
+     * Gives the table to link against for an `android.jar`, when there is a faster form of it than the jar
+     * ([dev.ide.android.support.tools.FrameworkTable]). Called when the task runs. The link's output is the same.
+     */
+    private val frameworkTable: ((Path) -> Path)? = null,
 ) : Task {
     private fun archivesIn(dir: Path): List<Path> =
         if (Files.isDirectory(dir)) Files.list(dir).use { s ->
@@ -664,10 +669,11 @@ internal class Aapt2LinkTask(
         ctx.checkCanceled()
         val (base, overlays) = linkInputs()
         val newIds = idsFile?.resolveSibling(idsFile.fileName.toString() + ".new")
+        val framework = frameworkTable?.let { runCatching { it(androidJar) }.getOrNull() } ?: androidJar
         fun link(stable: Path?) = aapt2.link(
             base,
             manifest,
-            androidJar,
+            framework,
             customPackage,
             extraPackages,
             minSdk,

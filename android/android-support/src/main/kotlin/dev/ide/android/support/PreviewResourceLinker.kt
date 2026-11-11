@@ -376,34 +376,11 @@ class PreviewResourceLinker(
     }
 
     /**
-     * The framework resource table the per-edit link includes (`-I`): [androidJar]'s `resources.arsc` and
-     * manifest copied once into an UNCOMPRESSED jar. In the SDK's jar the 18 MB table is deflated, so every link
-     * inflated it before doing anything else, about a fifth of the link. Falls back to [androidJar] itself.
+     * The framework resource table the per-edit link includes (`-I`): [androidJar]'s table, stored uncompressed and
+     * with its name pool sorted so aapt2 binary-searches it ([dev.ide.android.support.tools.FrameworkTable]).
+     * Falls back to [androidJar] itself.
      */
-    private fun frameworkTable(): Path = runCatching {
-        val key = digest { putFileSig(androidJar) }.take(12)
-        val stored = cacheRoot.resolve("framework-res-$key.jar")
-        if (Files.isRegularFile(stored)) return@runCatching stored
-        Files.createDirectories(cacheRoot)
-        val tmp = cacheRoot.resolve("framework-res-$key.jar.tmp")
-        java.util.zip.ZipFile(androidJar.toFile()).use { jar ->
-            java.util.zip.ZipOutputStream(Files.newOutputStream(tmp).buffered(1 shl 16)).use { out ->
-                for (name in listOf("AndroidManifest.xml", "resources.arsc")) {
-                    val entry = jar.getEntry(name) ?: continue
-                    val bytes = jar.getInputStream(entry).use { it.readBytes() }
-                    out.putNextEntry(java.util.zip.ZipEntry(name).apply {
-                        method = java.util.zip.ZipEntry.STORED
-                        size = bytes.size.toLong(); compressedSize = size
-                        crc = java.util.zip.CRC32().apply { update(bytes) }.value
-                    })
-                    out.write(bytes)
-                    out.closeEntry()
-                }
-            }
-        }
-        Files.move(tmp, stored, StandardCopyOption.REPLACE_EXISTING)
-        stored
-    }.getOrElse { androidJar }
+    private fun frameworkTable(): Path = dev.ide.android.support.tools.FrameworkTable.forLinking(androidJar, cacheRoot)
 
     /** The outcome of [selfBuildBase]: the compiled archives, or the resource errors the compile stopped on. */
     private sealed interface Base {

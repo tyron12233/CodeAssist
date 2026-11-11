@@ -669,6 +669,12 @@ class AndroidBuildSystem(
                 lowerMergedRes = lowerResTiers.map { it.first },
                 rTxt = appRTxt,
                 idsFile = layout.resIds,
+                // Shared by every project when the host has a shared cache; else kept with this module's build.
+                frameworkTable = { jar ->
+                    dev.ide.android.support.tools.FrameworkTable.forLinking(
+                        jar, dexCacheRoot?.resolveSibling("framework-res") ?: layout.frameworkRes,
+                    )
+                },
             )
         }
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
@@ -1785,6 +1791,7 @@ class AndroidBuildSystem(
         val appRJar: Path = rJar.resolveSibling("R-app.jar")           // the app's R alone, for dexing
         val libraryRJar: Path = rJar.resolveSibling("R-libraries.jar") // every library's R, for dexing
         val resIds: Path = inter.resolve("resource-ids.txt")           // aapt2 ids, kept from one link to the next
+        val frameworkRes: Path = buildDir.resolve("intermediates").resolve("framework-res") // see FrameworkTable
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
         val buildConfigGen: Path = inter.resolve("gen-build-config")  // <namespace>.BuildConfig
         val aidlGen: Path = inter.resolve("gen-aidl")  // compileAidl output: the Binder interface/Stub/Proxy .java
