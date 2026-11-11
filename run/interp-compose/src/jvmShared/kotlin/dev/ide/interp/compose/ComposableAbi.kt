@@ -56,6 +56,15 @@ object ComposableAbi {
         c.name == COMPOSER_CLASS || c.simpleName == "Composer"
 
     private fun loadClassNoInit(fqn: String, loader: ClassLoader? = null): Class<*>? {
+        // Asked for the owner of EVERY composable call. With no project loader the answer comes from the host
+        // chain and a loaded class is stable, so keep it (a miss is not kept: the class may load later).
+        if (loader == null) hostOwnerClasses[fqn]?.let { return it }
+        return loadClassNoInitUncached(fqn, loader)?.also { if (loader == null) hostOwnerClasses[fqn] = it }
+    }
+
+    private val hostOwnerClasses = ConcurrentHashMap<String, Class<*>>()
+
+    private fun loadClassNoInitUncached(fqn: String, loader: ClassLoader?): Class<*>? {
         val loaders = listOfNotNull(
             loader, // the project library loader (device preview); parent = app loader, so it covers the rest too
             javaClass.classLoader,
@@ -173,7 +182,7 @@ object ComposableAbi {
             // keeps its identity stable for `remember(key)`.
             val raw = when {
                 a is InterpretedLambda && !paramTypes[slot].isInterface -> a
-                a is InterpretedLambda -> lambdaProxy(a, paramTypes[slot], valueClassLambdaReturn(m.genericParameterTypes.getOrNull(slot)))
+                a is InterpretedLambda -> lambdaProxy(a, paramTypes[slot], lambdaReturnClasses(m).getOrNull(slot))
                 else -> boxValueClassIfNeeded(a, paramTypes[slot])
             }
             // A NON-FUNCTION value bound to an EVENT-HANDLER parameter (`onClick: () -> Unit`, `onValueChange:
@@ -320,8 +329,18 @@ object ComposableAbi {
         return if (cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) cls else null
     }
 
+    /** [valueClassLambdaReturn] for each parameter of [m], computed once: `genericParameterTypes` re-parses the
+     *  signature on every call on ART, and this is asked per lambda argument of every composable call. */
+    private fun lambdaReturnClasses(m: Method): Array<Class<*>?> =
+        lambdaReturnCache.getOrPut(m) { Array(m.parameterCount) { i -> valueClassLambdaReturn(m.genericParameterTypes.getOrNull(i)) } }
+
+    private val lambdaReturnCache = ConcurrentHashMap<Method, Array<Class<*>?>>()
+
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
-        if (value == null || paramType.isInstance(value)) return value
+        // The second test is the common case of a primitive parameter fed its own wrapper (every unboxed
+        // `Dp`/`Color`/`Float` argument); without it each such argument fell through to [unboxToUnderlying], which
+        // lists `java.lang.Float`'s declared methods (a fresh array per call) only to find it is not a value class.
+        if (value == null || paramType.isInstance(value) || boxed(paramType).isInstance(value)) return value
         // Inverse of boxing: a BOXED value-class instance reaching a parameter typed as its UNBOXED underlying —
         // a mangled `RecordColor-…(long, …)` / `padding-…(…, float)` wants the primitive, not the boxed value
         // class. `colorResource`/`dimensionResource` hand back pre-built boxed `Color`/`Dp`, so unbox to fit the

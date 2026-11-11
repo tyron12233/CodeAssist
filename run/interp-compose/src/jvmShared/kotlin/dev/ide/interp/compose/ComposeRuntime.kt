@@ -22,7 +22,12 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
     // ROOT (the renderer's direct call); a nested composable is deeper. Used to decide containment on a throw.
     private var depth = 0
 
-    override fun invokeComposable(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, body: () -> Any?): Any? {
+    override fun invokeComposable(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, body: () -> Any?): Any? =
+        invoke(callSiteKey, restartable, force, args, longArrayOf(System.nanoTime(), 0L), body)
+
+    /** [window] is this scope's own recomposition counter (see [recomposeStorm]), handed on to each restart of the
+     *  SAME scope; a call from the call site (the parent re-running) starts a fresh one. */
+    private fun invoke(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, window: LongArray, body: () -> Any?): Any? {
         val outer = dispatcher.composer ?: return body() // no composition in progress → just run it
         val depthNow = ++depth
         // The composer-op driver for this composer — host reflection for a bridged host composer, the VM-backed
@@ -97,7 +102,7 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
             // loop guard never sees (it isn't an interpreted loop). Bound recompositions per scope per rolling
             // window; on a storm, stop re-running (the last content stands) and surface it through the partial-error
             // channel instead of freezing the UI thread.
-            if (recomposeStorm(callSiteKey)) {
+            if (recomposeStorm(window)) {
                 dispatcher.contentLambdaError = dispatcher.contentLambdaError
                     ?: InterpreterException("preview stopped: a composable recomposed over $MAX_RECOMPOSITIONS_PER_WINDOW times in ${RECOMPOSE_WINDOW_NANOS / 1_000_000}ms (a state written while composing keeps invalidating it)")
                 return@updateScope
@@ -109,7 +114,7 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
             // child composables it re-runs synchronously are counted within the trace.
             try {
                 InterpProfile.trace("interp.recompose", "recompose") {
-                    invokeComposable(callSiteKey, restartable, force = true, args, body)
+                    invoke(callSiteKey, restartable, force = true, args, window, body)
                 }
             } catch (c: kotlin.coroutines.cancellation.CancellationException) {
                 throw c // recomposition cancellation is control flow — never swallow it
@@ -120,16 +125,13 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
         return result
     }
 
-    // Per-callSiteKey recomposition counters for the storm breaker (see the updateScope callback). Touched only on
-    // the single Recomposer thread that drives updateScope callbacks, so it needs no synchronization.
-    private val recomposeWindows = HashMap<Int, LongArray>()
-
-    /** True once [callSiteKey] has recomposed more than [MAX_RECOMPOSITIONS_PER_WINDOW] times within the current
-     *  rolling [RECOMPOSE_WINDOW_NANOS] window — the signature of a self-invalidation storm. */
-    private fun recomposeStorm(callSiteKey: Int): Boolean {
+    /** True once the scope owning window [w] (`[windowStart, count]`) has recomposed ITSELF more than
+     *  [MAX_RECOMPOSITIONS_PER_WINDOW] times within the current rolling [RECOMPOSE_WINDOW_NANOS] window — the
+     *  signature of a self-invalidation storm. Per scope, not per call site: every row of a list shares one call
+     *  site, so a few dozen rows each animating at frame rate summed past the bound and stopped the preview.
+     *  Touched only on the composition thread, so it needs no synchronization. */
+    private fun recomposeStorm(w: LongArray): Boolean {
         val now = System.nanoTime()
-        if (recomposeWindows.size > STORM_KEY_CAP) recomposeWindows.clear() // safety valve across long edit sessions
-        val w = recomposeWindows.getOrPut(callSiteKey) { longArrayOf(now, 0L) }
         if (now - w[0] > RECOMPOSE_WINDOW_NANOS) { w[0] = now; w[1] = 0L }
         w[1] = w[1] + 1
         return w[1] > MAX_RECOMPOSITIONS_PER_WINDOW
@@ -141,6 +143,5 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
         // stays well under this — so the bound catches storms without tripping legitimate high-frequency updates.
         const val MAX_RECOMPOSITIONS_PER_WINDOW = 1000L
         const val RECOMPOSE_WINDOW_NANOS = 1_000_000_000L // 1s
-        const val STORM_KEY_CAP = 8192
     }
 }

@@ -70,6 +70,13 @@ class ComposePreviewRenderer(
     private val runtime = ComposeRuntime(dispatcher)
     private val log = Logger.getLogger("ComposePreviewRenderer")
 
+    /** [Render] calls currently in composition (several for a `@PreviewParameter` preview). */
+    private val activeRenders = java.util.concurrent.atomic.AtomicInteger()
+
+    /** Cancel the coroutines interpreted ViewModels left running. [Render] does this itself when it leaves
+     *  composition; a host that drives the renderer some other way calls it when discarding the renderer. */
+    fun dispose() = dispatcher.cancelPreviewScopes()
+
     /**
      * Compose the preview [entry] (looked-up source calls resolved against [program]) into the current slot.
      * If the interpreter fails at runtime (an unsupported construct, an unresolved call, a dispatch error),
@@ -191,10 +198,17 @@ class ComposePreviewRenderer(
         // the interpreter subtree — removing (disposing) the offending composable so its effects/state-writes
         // stop and the loop ends. Reset per program so an edit retries. The render then reports the failure.
         val aborted = remember(program) { mutableStateOf(false) }
-        DisposableEffect(dispatcher) {
+        // Keyed on [aborted] too: it is re-minted per program, and a listener registered once would keep flipping
+        // the FIRST program's state, which nothing reads after an edit (the breaker then never aborted).
+        DisposableEffect(dispatcher, aborted) {
             val listener = { aborted.value = true }
             dispatcher.addRunawayListener(listener)
             onDispose { dispatcher.removeRunawayListener(listener) }
+        }
+        // When the last Render on this renderer leaves composition, cancel what its ViewModels launched.
+        DisposableEffect(dispatcher) {
+            activeRenders.incrementAndGet()
+            onDispose { if (activeRenders.decrementAndGet() == 0) dispatcher.cancelPreviewScopes() }
         }
         if (aborted.value) {
             onError(InterpreterException("preview stopped: runaway recomposition (a library kept invalidating the composition, e.g. by writing state it reads while composing). Remove or guard that composable."))
@@ -261,8 +275,25 @@ class ComposePreviewRenderer(
             }
             onPartialError(partial)
         }
+        LambdaErrorDrain(onPartialError)
         val f = failure
         if (f != null) onError(f)
+    }
+
+    /**
+     * Reports a content-lambda error recorded BETWEEN [Render] passes. Its own restart scope reads the dispatcher's
+     * error tick, so only this drain recomposes (never the preview). It reports only an error, never "cleared":
+     * clearing is the full pass's job, and this also runs right after that pass has already drained.
+     */
+    @Composable
+    private fun LambdaErrorDrain(onPartialError: (Throwable?) -> Unit) {
+        dispatcher.observeLambdaErrors()
+        SideEffect {
+            val partial = dispatcher.contentLambdaError?.let { unwrapInvocationTarget(it) } ?: return@SideEffect
+            log.warning("Compose preview partial render error: ${partial::class.simpleName}: ${partial.message}")
+            dispatcher.contentLambdaError = null
+            onPartialError(partial)
+        }
     }
 }
 

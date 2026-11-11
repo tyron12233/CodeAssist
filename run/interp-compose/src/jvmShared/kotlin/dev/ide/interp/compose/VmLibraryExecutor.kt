@@ -252,7 +252,13 @@ class VmLibraryExecutor(
     /** Whether interpreted [ownerFqn] declares a transformed composable for Kotlin [method] — a method with a
      *  `Composer` parameter. The VM-side ground truth, mirroring `ComposableAbi.isComposableCall`. */
     fun isComposableCallable(ownerFqn: String, method: String): Boolean =
-        vm.interpretedMethods(ownerFqn).any { kotlinNames.matches(it, method) && composerIndex(it) >= 0 }
+        composableCallable.getOrPut("$ownerFqn#$method") {
+            vm.interpretedMethods(ownerFqn).any { kotlinNames.matches(it, method) && composerIndex(it) >= 0 }
+        }
+
+    /** [isComposableCallable] answers: asked for every library call during composition, and stable for a class
+     *  whose bytes this executor holds. */
+    private val composableCallable = ConcurrentHashMap<String, Boolean>()
 
     /**
      * Invoke a transformed library composable INTERPRETED in the VM, threading [composer] plus the trailing

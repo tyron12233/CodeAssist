@@ -38,4 +38,16 @@ class RunawayRecompositionGuardTest {
         // A different content lambda has its own counter — a busy sibling must not trip an innocent one.
         assertFalse(d.contentLambdaStorm(b), "a distinct content lambda must not inherit another's storm count")
     }
+
+    @Test
+    fun oneItemLambdaInvokedOncePerCellIsNotAStorm() {
+        val d = ComposeDispatcher()
+        val item = lambda()
+        val scope = Any()
+        // A lazy grid composing 5000 cells calls ONE item lambda with a different index each time.
+        repeat(5000) { assertFalse(d.contentLambdaStorm(item, listOf(scope, it)), "cell $it is a distinct invocation") }
+        // The same cell re-invoked nonstop is still a storm (the index is re-boxed per call, so it counts by value).
+        repeat(1000) { d.contentLambdaStorm(item, listOf(scope, 4999)) }
+        assertTrue(d.contentLambdaStorm(item, listOf(scope, 4999)), "one cell re-invoked past the bound is a storm")
+    }
 }

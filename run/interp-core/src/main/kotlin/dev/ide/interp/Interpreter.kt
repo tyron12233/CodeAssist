@@ -2402,8 +2402,7 @@ class Interpreter(
         libraryFallback?.takeIf { it.hasClass(fqn) }?.let { return it.objectInstance(fqn) }
         val cls = loadInitialized(fqn)
             ?: throw InterpreterException("cannot load `$fqn` (a project-source object isn't available to the interpreter)")
-        runCatching { cls.getField("INSTANCE") }.getOrNull()
-            ?.let { return it.get(null) } // a Kotlin `object`
+        instanceField(cls)?.let { return it.get(null) } // a Kotlin `object`
         // A type's companion — `Companion` by default, but a NAMED companion (`kotlin.random.Random.Default`)
         // uses its own name, so find it by pattern rather than by the literal name `Companion`.
         companionField(cls)?.let { f ->
@@ -2419,11 +2418,10 @@ class Interpreter(
      *  — `Companion` by default, but a NAMED companion (`kotlin.random.Random.Default`) uses its own name. Null
      *  when [cls] has no companion. Lets `Random.nextInt(…)` reach the `Default` companion instance instead of
      *  being mistaken for a bare static holder. */
-    private fun companionField(cls: Class<*>): java.lang.reflect.Field? =
-        cls.declaredFields.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) &&
-                    it.type.enclosingClass == cls && it.type.simpleName == it.name
-        }
+    private fun companionField(cls: Class<*>): java.lang.reflect.Field? = singletonFields(cls).companion
+
+    /** A Kotlin `object`'s public static `INSTANCE` field, or null. */
+    private fun instanceField(cls: Class<*>): java.lang.reflect.Field? = singletonFields(cls).instance
 
     // --- source types (classes / data classes / objects / companions / enums) ---
 
@@ -2941,8 +2939,7 @@ class Interpreter(
         // Kotlin type as an object.
         primitiveCompanionHolder(ref.fqn)?.let { return it }
         val cls = loadInitialized(ref.fqn) ?: return null
-        val hasSingleton =
-            runCatching { cls.getField("INSTANCE") }.getOrNull() != null || companionField(cls) != null
+        val hasSingleton = instanceField(cls) != null || companionField(cls) != null
         return if (hasSingleton) null else cls
     }
 
@@ -4057,4 +4054,28 @@ class SourceObject(val cls: ResolvedClass, val fields: MutableMap<String, Any?> 
         cls.isData -> "${cls.simpleName}(" + cls.componentNames.joinToString(", ") { "$it=${fields[it]}" } + ")"
         else -> "${cls.simpleName}@" + Integer.toHexString(System.identityHashCode(this))
     }
+}
+
+/**
+ * A class's singleton-bearing fields, looked up once. Every `Type.member` read asks whether `Type` is an object,
+ * has a companion, or is a bare static holder; asked fresh, the "no `INSTANCE`" answer is a thrown
+ * `NoSuchFieldException` and the companion scan a fresh copy of every declared field, on every pass. Weak on the
+ * class; a found `Field` keeps its (host library) class reachable, which lives as long as the process anyway.
+ */
+private class SingletonFields(val instance: java.lang.reflect.Field?, val companion: java.lang.reflect.Field?)
+
+private val singletonFieldCache = java.util.WeakHashMap<Class<*>, SingletonFields>()
+
+private fun singletonFields(cls: Class<*>): SingletonFields {
+    synchronized(singletonFieldCache) { singletonFieldCache[cls] }?.let { return it }
+    val found = SingletonFields(
+        instance = runCatching { cls.getField("INSTANCE") }.getOrNull(),
+        companion = runCatching {
+            cls.declaredFields.firstOrNull {
+                java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type.enclosingClass == cls && it.type.simpleName == it.name
+            }
+        }.getOrNull(),
+    )
+    synchronized(singletonFieldCache) { singletonFieldCache[cls] = found }
+    return found
 }

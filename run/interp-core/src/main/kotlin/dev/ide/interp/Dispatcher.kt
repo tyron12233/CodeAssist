@@ -14,6 +14,40 @@ import java.lang.reflect.Modifier
  *  loader. [initialize] controls whether static initializers run (needed before reading an `INSTANCE`/
  *  `Companion` field). Null if none can load it. */
 internal fun loadClassAcross(fqn: String, initialize: Boolean, preferred: ClassLoader? = null): Class<*>? {
+    // A project-specific loader keeps the uncached path: its classes must not be pinned by a process-wide cache.
+    if (preferred != null && preferred !== OWN_LOADER) return loadClassAcrossUncached(fqn, initialize, preferred)
+    val cache = classLookups(Thread.currentThread().contextClassLoader).let { if (initialize) it.initialized else it.plain }
+    val hit = cache[fqn]
+    if (hit != null && (hit.cls != null || System.nanoTime() - hit.at < CLASS_MISS_TTL_NANOS)) return hit.cls
+    return loadClassAcrossUncached(fqn, initialize, preferred).also { cache[fqn] = ClassLookup(it, System.nanoTime()) }
+}
+
+/**
+ * Remembered [loadClassAcross] answers for the host loader chain. The interpreter asks for the same names on
+ * every pass, and a name that does not load costs one `ClassNotFoundException` (a filled-in stack trace) per
+ * loader per candidate: measured at about half of all allocation while a preview recomposes. A hit is kept for
+ * good (a loaded class is stable); a MISS only for [CLASS_MISS_TTL_NANOS], because a class can become loadable
+ * later (the project's dependencies still attaching), so a miss is re-asked at most once per interval.
+ */
+private class ClassLookup(val cls: Class<*>?, val at: Long)
+
+private class ClassLookups {
+    val plain = java.util.concurrent.ConcurrentHashMap<String, ClassLookup>()
+    val initialized = java.util.concurrent.ConcurrentHashMap<String, ClassLookup>()
+}
+
+/** Per context loader (it is one of the loaders tried, so it is part of the answer). In the hosts that loader
+ *  lives as long as the process; the cached classes keep it reachable, which is fine for exactly that reason. */
+private val lookupsByContext = java.util.WeakHashMap<ClassLoader, ClassLookups>()
+private val lookupsNoContext = ClassLookups()
+private val OWN_LOADER: ClassLoader? = ReflectiveDispatcher::class.java.classLoader
+private const val CLASS_MISS_TTL_NANOS = 2_000_000_000L
+
+private fun classLookups(context: ClassLoader?): ClassLookups =
+    if (context == null) lookupsNoContext
+    else synchronized(lookupsByContext) { lookupsByContext.getOrPut(context) { ClassLookups() } }
+
+private fun loadClassAcrossUncached(fqn: String, initialize: Boolean, preferred: ClassLoader?): Class<*>? {
     val loaders = listOfNotNull(
         preferred,
         Thread.currentThread().contextClassLoader,
@@ -606,7 +640,7 @@ class ReflectiveDispatcher(
     private fun boxedValueClassMember(receiver: Any, name: String, args: List<Any?>, composable: List<Boolean>): Invoked? {
         val cls = receiver.javaClass
         if (args.any { it === OmittedArg }) return null
-        if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return null
+        if (boxImplOf(cls) == null) return null
         val all = listOf(receiver) + args
         val m = findMethod(cls, name, all, static = true) ?: findByArity(cls, name, all, static = true) ?: return null
         runCatching { m.isAccessible = true }
@@ -1088,21 +1122,20 @@ class ReflectiveDispatcher(
     private fun resolvedValueClass(t: KotlinType?): Class<*>? {
         val fqn = t?.qualifiedName ?: return null
         val cls = runCatching { loadClass(jvmName(fqn)) }.getOrNull() ?: return null
-        return if (cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) cls else null
+        return if (boxImplOf(cls) != null) cls else null
     }
 
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
-        if (value == null || paramType.isInstance(value)) return value
+        // The last test is a primitive parameter fed its own wrapper (every unboxed `Dp`/`Color`/`Float`): nothing
+        // to box or unbox.
+        if (value == null || paramType.isInstance(value) || wrap(paramType).isInstance(value)) return value
         // Inverse of boxing: a BOXED value-class instance (a `Dp`, `Color`, `TextUnit`, …) reaching a parameter
         // typed as its UNBOXED underlying — a mangled `offset-<hash>(…, float, float)` wants the `Dp`'s float, not
         // the boxed `Dp`. The interpreter normally keeps value classes unboxed, but some library calls hand one
         // back boxed; unbox it here so the reflective invoke doesn't fail with "argument N has type float, got Dp".
         unboxToUnderlying(value, paramType)?.let { return it }
         if (paramType.isPrimitive) return value
-        val box = paramType.methods.firstOrNull {
-            it.name == "box-impl" && Modifier.isStatic(it.modifiers) &&
-                it.parameterCount == 1 && wrap(it.parameterTypes[0]).isInstance(value)
-        } ?: return value
+        val box = boxImplOf(paramType)?.takeIf { wrap(it.parameterTypes[0]).isInstance(value) } ?: return value
         runCatching { box.isAccessible = true }
         return box.invoke(null, value)
     }
@@ -1133,10 +1166,8 @@ class ReflectiveDispatcher(
         var current: Any = value
         repeat(MAX_VALUE_CLASS_NESTING) {
             val cls = current.javaClass
-            if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return null
-            val unbox = cls.methods.firstOrNull {
-                it.name == "unbox-impl" && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers)
-            } ?: return null
+            if (boxImplOf(cls) == null) return null
+            val unbox = unboxImplOf(cls) ?: return null
             runCatching { unbox.isAccessible = true }
             current = runCatching { unbox.invoke(current) }.getOrNull() ?: return null
             if (wrap(paramType).isInstance(current)) return current
@@ -1268,7 +1299,7 @@ class ReflectiveDispatcher(
             is java.lang.reflect.WildcardType -> t.upperBounds.firstOrNull() as? Class<*>
             else -> null
         } ?: return null
-        return if (c.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) c else null
+        return if (boxImplOf(c) != null) c else null
     }
 
     /** When [callee] is a value-class member invoked with the UNBOXED underlying receiver (a `Long` for
@@ -1279,7 +1310,7 @@ class ReflectiveDispatcher(
         val ownerJvm = libraryOwner(callee) ?: return null
         val cls = runCatching { loadClass(ownerJvm) }.getOrNull() ?: return null
         if (cls.isInstance(receiver)) return null
-        val isValueClass = cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }
+        val isValueClass = boxImplOf(cls) != null
         return if (isValueClass) ownerJvm else null
     }
 
@@ -1302,9 +1333,7 @@ class ReflectiveDispatcher(
     override fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? {
         val jvm = ownerFqn?.let { jvmName(it) } ?: return NotValueClassMember
         val cls = loadClassOrNull(jvm) ?: return NotValueClassMember
-        val boxImpl = cls.declaredMethods.firstOrNull {
-            it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
-        } ?: return NotValueClassMember
+        val boxImpl = boxImplOf(cls) ?: return NotValueClassMember
         // Every member of a value class compiles to a STATIC `name-impl(underlying, …)`; the box carries no
         // instance getter at all (`Color` has `getAlpha-impl(long)` and `unbox-impl()`, and nothing else). So
         // what this needs is the UNDERLYING value, which reaches it in either of two shapes:
@@ -1342,8 +1371,7 @@ class ReflectiveDispatcher(
     /** The underlying value inside a BOXED inline value-class instance, via its synthetic `unbox-impl()`.
      *  Null when [cls] carries no such method (so the caller keeps its existing path). */
     private fun unboxValueClass(cls: Class<*>, boxed: Any): Any? = runCatching {
-        val unbox = cls.declaredMethods.firstOrNull { it.name == "unbox-impl" && it.parameterCount == 0 }
-            ?: return null
+        val unbox = unboxImplOf(cls) ?: return null
         runCatching { unbox.isAccessible = true }
         unbox.invoke(boxed)
     }.getOrNull()
@@ -1351,9 +1379,7 @@ class ReflectiveDispatcher(
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
      *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
     private fun acceptsValueClassUnderlying(paramType: Class<*>, value: Any?): Boolean {
-        val box = paramType.methods.firstOrNull {
-            it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
-        } ?: return false
+        val box = boxImplOf(paramType) ?: return false
         return wrap(box.parameterTypes[0]).isInstance(value)
     }
 
@@ -1396,7 +1422,7 @@ class ReflectiveDispatcher(
         } ?: return null
         return java.lang.reflect.Proxy.newProxyInstance(
             funInterface.classLoader ?: loader, arrayOf(funInterface),
-        ) { _, method, callArgs ->
+        LambdaProxyHandler(lambda) { proxy, method, callArgs ->
             when {
                 method.name == sam.name && method.parameterCount == sam.parameterCount -> {
                     val a = callArgs?.toList() ?: emptyList()
@@ -1406,10 +1432,10 @@ class ReflectiveDispatcher(
                 }
                 method.name == "toString" -> "InterpretedSam(${funInterface.simpleName})"
                 method.name == "hashCode" -> System.identityHashCode(lambda)
-                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "equals" -> lambdaProxyEquals(proxy, lambda, callArgs?.getOrNull(0))
                 else -> null
             }
-        }
+        })
     }
 
     /**
@@ -1441,7 +1467,7 @@ class ReflectiveDispatcher(
         val sam = samMethod(functionalInterface)
         return java.lang.reflect.Proxy.newProxyInstance(
             functionalInterface.classLoader ?: loader, arrayOf(functionalInterface),
-        ) { _, method, callArgs ->
+        LambdaProxyHandler(lambda) { proxy, method, callArgs ->
             when {
                 method.name == "invoke" || (sam != null && method.name == sam.name && method.parameterCount == sam.parameterCount) -> {
                     val a = callArgs?.toList() ?: emptyList()
@@ -1453,10 +1479,10 @@ class ReflectiveDispatcher(
                 }
                 method.name == "toString" -> "InterpretedLambda"
                 method.name == "hashCode" -> System.identityHashCode(lambda)
-                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "equals" -> lambdaProxyEquals(proxy, lambda, callArgs?.getOrNull(0))
                 else -> null
             }
-        }
+        })
     }
 
     /** Wrap an interpreted [obj] (an `object : Foo { }` literal or a source-class instance) in a JVM Proxy of the
@@ -1818,4 +1844,54 @@ class ReflectiveDispatcher(
  *  Null when [iface] declares no such method (not a functional interface). */
 fun samMethod(iface: Class<*>): java.lang.reflect.Method? = iface.methods.firstOrNull {
     Modifier.isAbstract(it.modifiers) && !it.isDefault && !Modifier.isStatic(it.modifiers)
+}
+
+/**
+ * The [java.lang.reflect.InvocationHandler] of a proxy standing for an interpreted lambda. It names the [lambda]
+ * so two proxies of the SAME lambda can recognise each other (see [lambdaProxyEquals]).
+ */
+class LambdaProxyHandler(
+    val lambda: InterpretedLambda,
+    private val body: (proxy: Any, method: java.lang.reflect.Method, args: Array<out Any?>?) -> Any?,
+) : java.lang.reflect.InvocationHandler {
+    override fun invoke(proxy: Any, method: java.lang.reflect.Method, args: Array<out Any?>?): Any? = body(proxy, method, args)
+}
+
+/**
+ * `equals` for a lambda proxy: itself, or another proxy of the same interpreted [lambda]. The second half is what
+ * Kotlin's own SAM wrappers do, and what `addListener(l)` / `removeListener(l)` needs: each call wraps `l` in a
+ * fresh proxy, and a list-backed registry finds the first only through `equals`. (Comparing the argument to the
+ * raw lambda, as this once did, is never true: the argument is always a proxy.)
+ */
+fun lambdaProxyEquals(proxy: Any, lambda: InterpretedLambda, other: Any?): Boolean {
+    if (other === proxy) return true
+    if (other == null || !java.lang.reflect.Proxy.isProxyClass(other.javaClass)) return false
+    return (java.lang.reflect.Proxy.getInvocationHandler(other) as? LambdaProxyHandler)?.lambda === lambda
+}
+
+/**
+ * An inline value class's synthetic static `box-impl(underlying)`, or null when [cls] is not one. Asked for
+ * nearly every argument of every reflective call, and `getDeclaredMethods` hands back fresh `Method` copies each
+ * time, so the answer is kept per class. Weak on the class: the common answer is "not a value class" (a wrapper,
+ * a `String`, a generated peer), which holds nothing; a real value class's `Method` does keep its class
+ * reachable, and those are host library classes that live as long as the process anyway.
+ */
+internal fun boxImplOf(cls: Class<*>): Method? = valueClassMethod(boxImplCache, cls) {
+    cls.declaredMethods.firstOrNull { it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1 }
+}
+
+/** The instance `unbox-impl()` of an inline value class, or null. Cached like [boxImplOf]. */
+internal fun unboxImplOf(cls: Class<*>): Method? = valueClassMethod(unboxImplCache, cls) {
+    cls.declaredMethods.firstOrNull { it.name == "unbox-impl" && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers) }
+}
+
+private val NO_METHOD = Any()
+private val boxImplCache = java.util.WeakHashMap<Class<*>, Any>()
+private val unboxImplCache = java.util.WeakHashMap<Class<*>, Any>()
+
+private inline fun valueClassMethod(cache: java.util.WeakHashMap<Class<*>, Any>, cls: Class<*>, find: () -> Method?): Method? {
+    synchronized(cache) { cache[cls] }?.let { return it as? Method }
+    val found = runCatching(find).getOrNull()
+    synchronized(cache) { cache[cls] = found ?: NO_METHOD }
+    return found
 }

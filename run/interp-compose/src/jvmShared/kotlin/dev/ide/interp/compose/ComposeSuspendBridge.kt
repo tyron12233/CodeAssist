@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
@@ -19,7 +20,7 @@ import kotlin.coroutines.resume
  * a REAL, cancellable coroutine — the recomposition/coroutine half of the interpreter's Compose bridge.
  *
  * The block is invoked by the real Compose runtime with a trailing [Continuation] (the caller coroutine's). We
- * run the block on [Dispatchers.Default] as a CHILD of the caller's `Job` (taken from that continuation's
+ * run the block on a blocking-friendly dispatcher ([BLOCKING]) as a CHILD of the caller's `Job` (taken from that continuation's
  * context), so structured concurrency ties its whole lifecycle to the effect: when Compose cancels the effect
  * (a `LaunchedEffect` key change, or the preview being disposed / recomposed with a new program) the caller
  * `Job` is cancelled, the child coroutine with it, and [runInterruptible] interrupts the interpreter thread so
@@ -32,7 +33,11 @@ import kotlin.coroutines.resume
  * (never on the caller/main thread). Suspend calls the interpreter can't model still fail, but now abort only
  * this one effect (degrading to no-op) instead of hanging.
  */
-class ComposeSuspendBridge : SuspendBridge {
+class ComposeSuspendBridge(
+    /** Told about a block that FAILED (not one that was cancelled), so an effect that died is reported as a
+     *  partial render instead of silently doing nothing. */
+    private val onError: (Throwable) -> Unit = {},
+) : SuspendBridge {
 
     /** Absorbs anything that escapes a bridge coroutine's own try/catch, so it never reaches the thread's default
      *  uncaught-exception handler (which crashes the process). A cancellation is normal teardown and ignored. */
@@ -46,9 +51,9 @@ class ComposeSuspendBridge : SuspendBridge {
         // [CoroutineExceptionHandler] guarantees nothing from this scope reaches the thread's default uncaught
         // handler (which would crash the whole IDE — the preview runs in-process); the inner catch already
         // degrades the common cases, this covers anything that escapes it.
-        CoroutineScope(continuation.context + uncaught).launch(Dispatchers.Default) {
+        CoroutineScope(continuation.context + uncaught).launch(BLOCKING) {
             try {
-                runInterruptible(Dispatchers.Default) {
+                runInterruptible(BLOCKING) {
                     // `invokeFromLibrary`, not `invoke`: this coroutine IS the library caller, so a
                     // non-local `return` inside the effect body ends the body instead of unwinding into a
                     // bare coroutine (where it was caught below and reported as a partial-render failure).
@@ -64,7 +69,9 @@ class ComposeSuspendBridge : SuspendBridge {
                 // user code inside the effect: degrade — complete the effect normally so the (partial) preview
                 // stands, rather than crashing the app off a bare coroutine with no handler. Contain Error too
                 // (previously a VirtualMachineError was rethrown here, which killed the IDE). Guarded against a
-                // resume race with a just-fired cancellation.
+                // resume race with a just-fired cancellation. Reported only while still active: a cancelled block's
+                // interrupted sleep can surface as an interpreter failure, and teardown is not an error.
+                if (isActive) runCatching { onError(t) }
                 runCatching { continuation.resume(Unit) }
             }
         }
@@ -80,5 +87,16 @@ class ComposeSuspendBridge : SuspendBridge {
         // collector runs synchronously per emission (its own `delay`/state writes work as in any bridge block).
         runBlocking { (flow as Flow<Any?>).collect { value -> action.invokeFromLibrary(listOf(value)) } }
         return Unit
+    }
+
+    private companion object {
+        /**
+         * Where interpreted suspend blocks run. They BLOCK their thread (`delay` is an interruptible sleep, an
+         * endless `collect` a `runBlocking`), so they must not sit on [Dispatchers.Default]: its pool is one thread
+         * per core, and that many live timer loops or collectors stalled every other Default user in the process
+         * (the IDE itself, when the preview runs in-process). A limited view of [Dispatchers.IO] is elastic (it
+         * does not count against IO's own limit) and its blocked workers are compensated for by the scheduler.
+         */
+        val BLOCKING = Dispatchers.IO.limitedParallelism(64)
     }
 }

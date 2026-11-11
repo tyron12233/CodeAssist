@@ -5,6 +5,8 @@ import dev.ide.interp.Dispatcher
 import dev.ide.interp.ExtensionPropertyValue
 import dev.ide.jvm.AsmPeerFactory
 import dev.ide.interp.InterpretedLambda
+import dev.ide.interp.LambdaProxyHandler
+import dev.ide.interp.lambdaProxyEquals
 import dev.ide.interp.samMethod
 import dev.ide.interp.InterpreterException
 import dev.ide.interp.LambdaProxyStrategy
@@ -52,7 +54,7 @@ class ComposeDispatcher(
     private val libraryExecutor: LibraryExecutor? = null,
 ) : Dispatcher {
 
-    private val suspendBridge = ComposeSuspendBridge()
+    private val suspendBridge = ComposeSuspendBridge { t -> contentLambdaError = contentLambdaError ?: t }
 
     private val fallback: Dispatcher = fallback ?: ReflectiveDispatcher(
         loader = loader ?: ReflectiveDispatcher::class.java.classLoader,
@@ -118,19 +120,32 @@ class ComposeDispatcher(
 
     /**
      * True once a single interpreted content lambda has been (re)invoked more than [MAX_RECOMPOSITIONS_PER_WINDOW]
-     * times within the rolling [RECOMPOSE_WINDOW_NANOS] window — the signature of a LIBRARY composable that
+     * times WITH THE SAME ARGUMENTS within the rolling [RECOMPOSE_WINDOW_NANOS] window — the signature of a LIBRARY composable that
      * recomposes itself nonstop (e.g. one that writes a state it reads during composition, like a preview-overlay
      * library walking the host view's semantics). [ComposeRuntime] guards the SOURCE-composable path the same way;
      * this covers the library path, whose recomposition is driven by the real runtime re-invoking this proxy, not
      * by [ComposeRuntime]. No legitimate animation re-invokes ONE content lambda a thousand times a second.
      */
-    internal fun contentLambdaStorm(lambda: InterpretedLambda): Boolean {
+    internal fun contentLambdaStorm(lambda: InterpretedLambda, args: List<Any?> = emptyList()): Boolean {
         val now = System.nanoTime()
         if (contentLambdaWindows.size > STORM_KEY_CAP) contentLambdaWindows.clear()
-        val w = contentLambdaWindows.getOrPut(System.identityHashCode(lambda)) { longArrayOf(now, 0L) }
+        // Counted per lambda AND arguments: a self-invalidating library composable re-invokes its content with the
+        // SAME arguments, while a lazy grid legitimately invokes one item lambda once per visible cell (a new index
+        // or item each time), which a per-lambda count mistook for a storm past 1000 cells.
+        var key = System.identityHashCode(lambda)
+        for (a in args) key = key * 31 + stormArgHash(a)
+        val w = contentLambdaWindows.getOrPut(key) { longArrayOf(now, 0L) }
         if (now - w[0] > RECOMPOSE_WINDOW_NANOS) { w[0] = now; w[1] = 0L }
         w[1] = w[1] + 1
         return w[1] > MAX_RECOMPOSITIONS_PER_WINDOW
+    }
+
+    /** An argument's contribution to the storm key: by value for the boxed scalars and strings an item lambda is
+     *  handed (an index is re-boxed per call), by identity otherwise (never the user's own `hashCode`). */
+    private fun stormArgHash(a: Any?): Int = when (a) {
+        null -> 0
+        is Number, is String, is Boolean, is Char -> a.hashCode()
+        else -> System.identityHashCode(a)
     }
 
     /**
@@ -140,8 +155,23 @@ class ComposeDispatcher(
      * (LazyColumn items, Scaffold body) composes during Compose's measure pass, outside `Render`'s try/catch.
      * The host should read it after composing and reset it before the next pass.
      */
+    var contentLambdaError: Throwable?
+        get() = lambdaError
+        set(value) {
+            val was = lambdaError
+            lambdaError = value
+            // A first error may be recorded when no Render pass is running to drain it (a click handler, a draw
+            // block, a child scope's own recomposition, an effect on a bridge thread); the tick wakes the
+            // renderer's drain so it is reported now, not on whatever pass happens next.
+            if (was == null && value != null) runCatching { errorTick.intValue++ }
+        }
+
     @Volatile
-    var contentLambdaError: Throwable? = null
+    private var lambdaError: Throwable? = null
+    private val errorTick = androidx.compose.runtime.mutableIntStateOf(0)
+
+    /** Read inside a composable to be recomposed whenever a first [contentLambdaError] is recorded. */
+    internal fun observeLambdaErrors(): Int = errorTick.intValue
 
     /** Set while an interpreted NON-composable lambda (a [guardedLambdaProxy] body — a `LazyListScope.() ->
      *  Unit` list builder, a `Modifier.drawBehind`, an `onClick`) is running, so a `@Composable` call made
@@ -213,9 +243,13 @@ class ComposeDispatcher(
             // truth, independent of the resolver's decoded `@Composable` flag (which is resolved against the
             // project's classpath and can disagree with the runtime, or be stale). The decoded flag is only a
             // fast-path hint.
-            if (callee.isComposable || ComposableAbi.isComposableCall(callee.ownerFqn!!, callee.methodName, loader) ||
-                vmComposables?.isComposableCallable(callee.ownerFqn!!, callee.methodName) == true
-            ) {
+            // A class the VM interprets is answered by the VM alone (that is where the call would run): asking the
+            // host first costs failed `Class.forName`s, uncached, on every call to a project-jar-only class.
+            val owner = callee.ownerFqn!!
+            val composable = callee.isComposable ||
+                if (vmComposables != null && vmComposables.hasClass(owner)) vmComposables.isComposableCallable(owner, callee.methodName)
+                else ComposableAbi.isComposableCall(owner, callee.methodName, loader)
+            if (composable) {
                 // A composable called directly inside a NON-composable lambda (`LazyColumn { Text(…) }`, a
                 // composable in a list builder instead of an `item { }`) is illegal — composing it here threads
                 // the stale composer and hangs the IDE with endless recomposition. Skip it (it returns Unit).
@@ -247,7 +281,7 @@ class ComposeDispatcher(
         // A `fun interface` parameter (`Layout`'s `MeasurePolicy`) runs the lambda through its OWN abstract
         // method, not `invoke`: answering `invoke` only returned null from `measure`, i.e. no MeasureResult.
         val sam = samMethod(functionalInterface)
-        return Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface)) { _, method, callArgs ->
+        return Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface), LambdaProxyHandler(lambda) { proxy, method, callArgs ->
             when {
                 method.name == "invoke" || (sam != null && method.name == sam.name && method.parameterCount == sam.parameterCount) -> {
                     val a = callArgs?.toList() ?: emptyList()
@@ -272,10 +306,10 @@ class ComposeDispatcher(
                 }
                 method.name == "toString" -> "InterpretedLambda"
                 method.name == "hashCode" -> System.identityHashCode(lambda)
-                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "equals" -> lambdaProxyEquals(proxy, lambda, callArgs?.getOrNull(0))
                 else -> null
             }
-        }
+        })
     }
 
     /** Run an interpreted SUSPEND lambda the real runtime invoked with a trailing `Continuation`. A `pointerInput
@@ -374,7 +408,8 @@ class ComposeDispatcher(
      * dispatcher for (it throws `IllegalStateException`). A static `@Preview` only CONSTRUCTS the ViewModel
      * (e.g. `remember { OrderViewModel() }`) — it never drives the scope's flows — so hand it a plain,
      * Main-free scope: construction and any `…​.stateIn(scope = viewModelScope, …)` property initializer then
-     * complete without crashing. One scope per dispatcher (per render); the preview never launches on it.
+     * complete without crashing. One scope per dispatcher, cancelled when its renders leave composition ([cancelPreviewScopes]) since a
+     * ViewModel's `init` may well launch on it.
      */
     override fun readExtensionPropertyOverride(receiver: Any, ownerFqn: String, name: String): ExtensionPropertyValue? {
         if (name == "viewModelScope" && ownerFqn.startsWith("androidx.lifecycle")) {
@@ -383,8 +418,25 @@ class ComposeDispatcher(
         return null
     }
 
-    private val previewViewModelScope: Any by lazy {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+    private val viewModelScopeLock = Any()
+    private var viewModelScope: kotlinx.coroutines.CoroutineScope? = null
+
+    /** The current preview `viewModelScope`, re-minted after [cancelPreviewScopes] so a later render's
+     *  ViewModels get a live scope. */
+    private val previewViewModelScope: Any
+        get() = synchronized(viewModelScopeLock) {
+            viewModelScope ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()).also { viewModelScope = it }
+        }
+
+    /**
+     * Cancel everything interpreted ViewModels launched on the preview `viewModelScope` (an `init { viewModelScope
+     * .launch { flow.collect { } } }` otherwise parks a bridge thread forever and pins the interpreter + program
+     * it captured). Called when the last render using this dispatcher leaves composition; the scope is re-created
+     * on the next read.
+     */
+    fun cancelPreviewScopes() {
+        val scope = synchronized(viewModelScopeLock) { viewModelScope.also { viewModelScope = null } }
+        scope?.let { runCatching { it.coroutineContext[kotlinx.coroutines.Job]?.cancel() } }
     }
 
     /** Drive the caller-side group the plugin would emit (keyed by call site), then invoke the composable with
@@ -513,7 +565,7 @@ class ComposeDispatcher(
         val sam = samMethod(functionalInterface)
         return Proxy.newProxyInstance(
             functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface),
-        ) { _, method, callArgs ->
+        LambdaProxyHandler(lambda) { proxy, method, callArgs ->
             when {
                 // Runaway-recomposition breaker (library-composable path): a library composable that keeps
                 // invalidating itself re-invokes this content lambda every pass with no frame boundary — an IDE
@@ -531,7 +583,7 @@ class ComposeDispatcher(
                     // composition thread and throwing "delay outside an interpreted coroutine". A genuine composable
                     // content lambda is invoked with a Composer, never a Continuation, so it never takes this branch.
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) suspendBridge.runSuspending(lambda, a)
-                    else if (contentLambdaStorm(lambda)) {
+                    else if (contentLambdaStorm(lambda, a.takeWhile { !isComposer(it) })) {
                         // Runaway-recomposition breaker (library-composable path): a library composable that keeps
                         // invalidating itself re-invokes this content lambda every pass with no frame boundary — an
                         // IDE freeze the interpreter's per-pass guards never see. On a storm, stop re-running the
@@ -584,10 +636,10 @@ class ComposeDispatcher(
                 }
                 method.name == "toString" -> "InterpretedComposableLambda"
                 method.name == "hashCode" -> System.identityHashCode(lambda)
-                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "equals" -> lambdaProxyEquals(proxy, lambda, callArgs?.getOrNull(0))
                 else -> null
             }
-        }
+        })
     }
 
     /**
