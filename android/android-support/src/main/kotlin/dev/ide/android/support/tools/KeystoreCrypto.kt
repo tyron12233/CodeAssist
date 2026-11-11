@@ -155,12 +155,32 @@ object KeystoreCrypto {
      * one written by another tool) still signs. Null when the store cannot be opened or the alias holds no key.
      */
     fun signingKey(file: Path, storePass: String, alias: String, keyPass: String = storePass): KeystoreKey? {
+        // Unlocking a PKCS12 runs its password through tens of thousands of hash rounds, for the store and again
+        // for the key: 2 s on a phone, four times what signing the APK then takes. The same file under the same
+        // passwords unlocks to the same key, so one unlock serves every build this process runs.
+        val id = runCatching {
+            SigningKeyId(file.toAbsolutePath().toString(), Files.size(file), Files.getLastModifiedTime(file).toMillis(), alias, storePass, keyPass)
+        }.getOrNull()
+        synchronized(signingKeys) { signingKeys[id]?.let { return it } }
         val ks = open(file, storePass).store ?: return null
         val key = privateKey(ks, alias, keyPass, storePass) ?: return null
         val chain = ks.getCertificateChain(alias)?.mapNotNull { it as? X509Certificate }.orEmpty()
         if (chain.isEmpty()) return null
-        return KeystoreKey(key, chain)
+        return KeystoreKey(key, chain).also { unlocked ->
+            if (id != null) synchronized(signingKeys) {
+                if (signingKeys.size >= MAX_UNLOCKED_KEYS) signingKeys.clear()
+                signingKeys[id] = unlocked
+            }
+        }
     }
+
+    /** A keystore file as it is now, an alias in it and the passwords that opened it. */
+    private data class SigningKeyId(
+        val file: String, val size: Long, val modified: Long, val alias: String, val storePass: String, val keyPass: String,
+    )
+
+    private const val MAX_UNLOCKED_KEYS = 8
+    private val signingKeys = HashMap<SigningKeyId, KeystoreKey>()
 
     /**
      * Stage [source] at [dest] in a form the signer can read: a straight copy when the stock provider already

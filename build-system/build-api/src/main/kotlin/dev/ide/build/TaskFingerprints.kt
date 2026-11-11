@@ -9,7 +9,6 @@ import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import java.util.stream.Collectors
 
 /*
  * The implementations of [TaskInputs] and [TaskOutputs] every task uses. They live here, beside the
@@ -54,8 +53,8 @@ private object FileDigests {
     private val entries = ConcurrentHashMap<String, Entry>()
 
     /** The content digest of the regular file at [path], or null when it is missing or not a regular file. */
-    fun digestOf(path: Path): ByteArray? {
-        val attrs = runCatching { Files.readAttributes(path, BasicFileAttributes::class.java) }.getOrNull()
+    fun digestOf(path: Path, known: BasicFileAttributes? = null): ByteArray? {
+        val attrs = known ?: runCatching { Files.readAttributes(path, BasicFileAttributes::class.java) }.getOrNull()
         if (attrs == null || !attrs.isRegularFile) return null
         val key = path.toAbsolutePath().normalize().toString()
         val size = attrs.size()
@@ -87,12 +86,30 @@ private object FileDigests {
     }.getOrNull()
 }
 
+/**
+ * Every regular file under [dir], in path order. The walk hands over each file's attributes as it lists it, and
+ * the digest lookup reuses them: one stat per file where listing, filtering and looking up each took their own.
+ * On a phone's storage that is most of what an up-to-date check of a few thousand files costs.
+ */
 private fun MessageDigest.putDirContent(dir: Path) {
     if (!Files.isDirectory(dir)) return
-    val files = runCatching {
-        Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.sorted().collect(Collectors.toList()) }
-    }.getOrDefault(emptyList())
-    for (f in files) putFileContent(f)
+    val files = ArrayList<Pair<Path, BasicFileAttributes?>>()
+    runCatching {
+        Files.walkFileTree(dir, object : java.nio.file.SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): java.nio.file.FileVisitResult {
+                // A link is listed with its own attributes, not its target's: leave those to the lookup.
+                if (attrs.isRegularFile) files.add(file to attrs) else if (attrs.isSymbolicLink) files.add(file to null)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+            override fun visitFileFailed(file: Path, exc: java.io.IOException) = java.nio.file.FileVisitResult.CONTINUE
+        })
+    }.onFailure { files.clear() }
+    files.sortBy { it.first }
+    for ((file, attrs) in files) {
+        val digest = FileDigests.digestOf(file, attrs) ?: continue
+        put(file.toString())
+        update(digest)
+    }
 }
 
 /**

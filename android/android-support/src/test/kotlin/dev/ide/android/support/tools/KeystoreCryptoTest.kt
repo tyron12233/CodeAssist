@@ -48,6 +48,22 @@ class KeystoreCryptoTest {
         }
     }
 
+    /** A keystore is unlocked once per file and password; a replaced file or a wrong password never gets the kept key. */
+    @Test
+    fun `an unlocked signing key is kept until the keystore file changes`(): Unit =
+        withTempDir("ks-kept") { dir ->
+            val file = dir.resolve("k.p12")
+            assertTrue(KeystoreCrypto.create(file, KeystoreCreateSpec("secretpw", "k0", "Test")).success)
+            val first = assertNotNull(KeystoreCrypto.signingKey(file, "secretpw", "k0"))
+            assertTrue(first === KeystoreCrypto.signingKey(file, "secretpw", "k0"), "the second read unlocks nothing")
+            assertEquals(null, KeystoreCrypto.signingKey(file, "wrong", "k0"), "a wrong password is still refused")
+
+            assertTrue(KeystoreCrypto.create(file, KeystoreCreateSpec("secretpw", "k0", "Other")).success)
+            Files.setLastModifiedTime(file, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 5_000))
+            val replaced = assertNotNull(KeystoreCrypto.signingKey(file, "secretpw", "k0"))
+            assertFalse(replaced.chain.first() == first.chain.first(), "a new keystore at the same path signs with its own key")
+        }
+
     @Test
     fun `created keystore is consumable by the signer PKCS12 path`() {
         withTempDir("ks-signer") { dir ->
