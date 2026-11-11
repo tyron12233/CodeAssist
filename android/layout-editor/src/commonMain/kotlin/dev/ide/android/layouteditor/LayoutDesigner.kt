@@ -67,6 +67,10 @@ import org.jetbrains.compose.resources.stringResource
 /** Debounce before a render, so a burst of typing in the code view becomes one render. */
 private const val RENDER_DEBOUNCE_MS = 200L
 
+/** How often a designer with no project services yet asks for them again, and how many asks before it says so. */
+private const val SERVICE_RETRY_MS = 300L
+private const val SERVICE_RETRIES_BEFORE_MESSAGE = 10
+
 /** Width from which the panels dock beside the canvas instead of sliding up as sheets. */
 private val DOCKED_MIN_WIDTH = 720.dp
 
@@ -83,15 +87,27 @@ internal fun LayoutDesigner(
     /** What starts selected; a test seam (the editor selects by caret or tap). */
     initialSelection: SelectionKey? = null,
 ) {
-    val renderer = ctx.service(LAYOUT_RENDERER)
-    val model = ctx.service(ANDROID_LAYOUT_MODEL)
+    // The services belong to the open project. A layout restored with the app is composed before its project has
+    // opened, and nothing recomposes this when it does, so keep asking: the message is for a file that really
+    // has no Android project behind it, which a few seconds of asking settles.
+    var attempt by remember(ctx.path) { mutableStateOf(0) }
+    val renderer = remember(ctx, attempt) { ctx.service(LAYOUT_RENDERER) }
+    val model = remember(ctx, attempt) { ctx.service(ANDROID_LAYOUT_MODEL) }
     if (renderer == null || model == null) {
+        LaunchedEffect(ctx.path) {
+            while (true) {
+                kotlinx.coroutines.delay(SERVICE_RETRY_MS)
+                attempt++
+            }
+        }
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
-            Text(
-                stringResource(Res.string.le_unavailable),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (attempt >= SERVICE_RETRIES_BEFORE_MESSAGE) {
+                Text(
+                    stringResource(Res.string.le_unavailable),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         return
     }

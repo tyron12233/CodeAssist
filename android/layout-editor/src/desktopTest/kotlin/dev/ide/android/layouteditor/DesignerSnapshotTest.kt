@@ -224,6 +224,42 @@ class DesignerSnapshotTest {
         }
     }
 
+    /**
+     * A layout restored with the app is shown before its project has opened, when the project's services are not
+     * there to be found yet. The designer keeps asking and starts once they are, instead of settling on
+     * "needs an open Android project" for good.
+     */
+    @Test
+    fun aDesignerShownBeforeItsProjectOpensStartsOnceItHas() {
+        val ready = FakeContext(isSplit = false, caretOffset = 0)
+        var projectOpen = false
+        val ctx = object : EditorPreviewContext by ready {
+            override fun <T : Any> service(key: ServiceKey<T>): T? = if (projectOpen) ready.service(key) else null
+        }
+        val scene = ImageComposeScene(412 * 2, 892 * 2, Density(2f)) {
+            MaterialTheme(colorScheme = darkColorScheme()) { LayoutDesigner(ctx) }
+        }
+        try {
+            var t = 0L
+            fun light(): Int {
+                val bitmap = org.jetbrains.skia.Bitmap.makeFromImage(scene.render(t))
+                var n = 0
+                for (y in 0 until bitmap.height step 8) for (x in 0 until bitmap.width step 8) {
+                    val c = bitmap.getColor(x, y)
+                    if ((c shr 16 and 0xFF) > 0xE0 && (c shr 8 and 0xFF) > 0xE0 && (c and 0xFF) > 0xE0) n++
+                }
+                return n
+            }
+            repeat(30) { scene.render(t); t += 16_000_000L; Thread.sleep(10) }
+            assertTrue(light() < 200, "nothing is drawn while the project is still opening")
+            projectOpen = true
+            repeat(120) { scene.render(t); t += 16_000_000L; Thread.sleep(10) }
+            assertTrue(light() > 2000, "the layout's card is drawn once the project's services exist")
+        } finally {
+            scene.close()
+        }
+    }
+
     /** The sign-in button, selected from the start (in Preview mode the caret does not select). */
     private val BUTTON = SelectionKey("btn_sign_in", emptyList())
 
