@@ -3,7 +3,10 @@ package dev.ide.android
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.Text
@@ -50,20 +53,8 @@ internal fun SandboxBand() {
             .fillMaxWidth()
             .windowInsetsTopHeight(WindowInsets.statusBars)
             .background(SANDBOX_BAND),
-        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = name?.let { "Plugin sandbox · $it" } ?: "Plugin sandbox",
-            color = Color.White,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            // The middle of the bar only: the clock sits at one end and the system icons at the other, and on a
-            // narrow phone (360dp) the full label ran under the icons.
-            modifier = Modifier.fillMaxWidth(0.42f),
-        )
+        BandLabel(name?.let { "Plugin sandbox · $it" } ?: "Plugin sandbox")
     }
 }
 
@@ -79,14 +70,59 @@ internal fun McpBand(agent: dev.ide.ui.backend.AgentService) {
     val (label, color) = mcpBandContent(relay, host.running) ?: return
     Box(
         Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(color),
-        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(0.42f), // clear of the clock and the system icons, as in SandboxBand
-        )
+        BandLabel(label)
     }
+}
+
+/**
+ * A status-bar band's label, where it can be read. The middle of the bar when nothing is there: the clock sits
+ * at one end and the system icons at the other, and on a narrow phone (360dp) a full-width label ran under the
+ * icons. A camera cutout in the middle hides a centred label, so with one the label goes in the wider of the two
+ * gaps beside it.
+ */
+@androidx.compose.runtime.Composable
+private fun androidx.compose.foundation.layout.BoxScope.BandLabel(text: String) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.matchParentSize()) {
+        val width = constraints.maxWidth.toFloat()
+        val (start, end) = bandLabelSpan(width, topCutout(view, width))
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .offset { androidx.compose.ui.unit.IntOffset(start.toInt(), 0) }
+                .width(with(density) { (end - start).toDp() }),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** The horizontal extent, in px, of a display cutout that lies across the middle of the top edge; null for none. */
+private fun topCutout(view: android.view.View, width: Float): Pair<Float, Float>? {
+    if (android.os.Build.VERSION.SDK_INT < 28 || width <= 0f) return null
+    // The window handle Android draws there on a device with desktop windowing is not reported as an inset, so
+    // a label can still sit under that one.
+    val rect = view.rootWindowInsets?.displayCutout?.boundingRects
+        ?.firstOrNull { it.top <= 0 && it.left < width * 0.71f && it.right > width * 0.29f } ?: return null
+    return rect.left.toFloat() to rect.right.toFloat()
+}
+
+/**
+ * Where a band's label goes across a bar [width] px wide: the middle 42% with no [cutout], else the wider gap
+ * between the cutout and the clock (the first fifth of the bar) or the system icons (the last fifth).
+ */
+internal fun bandLabelSpan(width: Float, cutout: Pair<Float, Float>?): Pair<Float, Float> {
+    if (cutout == null) return width * 0.29f to width * 0.71f
+    val margin = width * 0.02f
+    val left = width * 0.20f to cutout.first - margin
+    val right = cutout.second + margin to width * 0.80f
+    return if (right.second - right.first > left.second - left.first) right else left
 }
 
 /** What the band says and its colour, or null when nothing outside is connected. The relay outranks the local server. */
