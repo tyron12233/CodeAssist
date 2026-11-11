@@ -1773,6 +1773,11 @@ class IdeServices private constructor(
     // the symbol service — which caches by list identity — picks up resource changes.
     private val kotlinSyntheticCache = ConcurrentHashMap<String, List<SyntheticClass>>()
 
+    /** The `R` classes [module]'s code can name: its own and one per library package, each holding what that
+     *  package declares. For the fix that points a resource read through the wrong `R` at the right one. */
+    internal fun rClassesFor(module: Module): List<SyntheticClass> =
+        runCatching { kotlinSyntheticClasses(module) }.getOrDefault(emptyList()).filter { it.fqName.endsWith(".R") }
+
     /**
      * The synthetic ("light") classes a Kotlin file in [module] should resolve — Android `R`/`BuildConfig`,
      * ViewBinding, etc. — but NOT the Kotlin `<File>Kt` facades: those are Java-visible shapes of this

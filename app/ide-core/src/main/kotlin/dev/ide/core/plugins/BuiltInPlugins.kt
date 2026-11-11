@@ -828,6 +828,14 @@ private class MissingLibraryPlugin(private val env: ApplicationEnvironment) : Pl
                 diagnosticsOf = { file -> env.activeEngine?.publishedDiagnostics(file).orEmpty() },
             ),
         )
+        // A resource read through a library's R that does not declare it: point at the R that does.
+        reg.register(
+            QUICK_FIX_PROVIDER_EP,
+            dev.ide.core.analysis.LibraryRReferenceFixProvider(
+                rClasses = { module -> env.activeEngine?.rClassesFor(module).orEmpty() },
+                ownNamespace = { module -> module.facets.get(dev.ide.android.support.AndroidFacet.KEY)?.namespace?.takeIf { it.isNotBlank() } },
+            ),
+        )
     }
 }
 

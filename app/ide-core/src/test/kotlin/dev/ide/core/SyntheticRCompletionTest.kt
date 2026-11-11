@@ -99,6 +99,35 @@ class SyntheticRCompletionTest {
         assertTrue("feature_title" in imported, "dependency module R (imported) expected: $imported")
     }
 
+    /**
+     * A resource read through an R that does not declare it: `greeting` is the app's own, so the dependency
+     * module's R lacks it. The error gets a fix that points at the R that has it, in Java and in Kotlin, through
+     * the real analysis engine (diagnostic, fix provider, edit).
+     */
+    @Test
+    fun aResourceReadThroughTheWrongRGetsAFixNamingTheRightOne() {
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        awaitIndexed(s)
+        val wrong = "com.example.feature.R.string.greeting"
+        for ((name, text) in listOf(
+            "app/src/main/java/com/example/app/Probe.java" to "package com.example.app;\nclass Probe { int x = $wrong; }",
+            "app/src/main/kotlin/com/example/app/Probe.kt" to "package com.example.app\nval x = $wrong",
+        )) {
+            val probe = root.resolve(name)
+            val diagnostics = runBlocking { s.analyzeDiagnostics(probe, text) }
+            val at = text.indexOf("greeting")
+            assertTrue(diagnostics.any { it.range.start <= at && at < it.range.end }, "$name: greeting should be unresolved there, got $diagnostics")
+            val actions = s.editorActions(probe, text, at, at)
+            val fix = actions.firstOrNull { it.title.startsWith("Use com.example.app.R.string.greeting") }
+            assertNotNull(fix, "$name: the fix should be offered, got ${actions.map { it.title }}")
+        }
+        // The dependency's own resource through its own R is fine, and gets no such fix.
+        val fine = "package com.example.app\nval x = com.example.feature.R.string.feature_title"
+        val kt = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
+        val at = fine.indexOf("feature_title")
+        assertTrue(s.editorActions(kt, fine, at, at).none { it.title.startsWith("Use ") && ".R.string." in it.title })
+    }
+
     @Test
     fun kotlinResolvesFrameworkAndroidR() {
         // `android.R` is the FRAMEWORK R from android.jar (distinct from the app's synthetic `com.example.app.R`).
