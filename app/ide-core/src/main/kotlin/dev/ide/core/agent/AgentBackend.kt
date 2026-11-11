@@ -181,7 +181,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     /** Module management ([ModuleTools]): shared by the chat and the MCP server, like [ftpControlTool]. */
-    private val moduleTools: List<AgentTool> = ModuleTools.tools({ ctx.servicesOrNull }) { ctx.bumpFileSystemEpoch() }
+    private val moduleTools: List<AgentTool> = ModuleTools.tools({ ctx.servicesOrNull }) { ctx.bumpFileSystemEpoch() } +
+        TestTools.tools({ ctx.servicesOrNull }) { ctx.buildRunnerFor(it) }
 
     // --- ask_user: the agent's multiple-choice questions, answered in the chat ---
 
@@ -359,6 +360,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             port = CodeAssistMcpServer.DEFAULT_HTTP_PORT,
             tools = mcpTools,
             gate = AllowAllGate,
+            notes = listOf(ModuleTools.PROMPT),
         )
     } catch (e: Exception) {
         // WARN, not ERROR: an ERROR carrying a throwable is what raises the app's critical-error dialog, and
@@ -443,7 +445,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         if (relayClient != null) return
         val base = relayBaseUrl() ?: return
         val server = try {
-            CodeAssistMcpServer.startHttpServer(workspace = workspace, port = 0, tools = mcpTools, gate = AllowAllGate)
+            CodeAssistMcpServer.startHttpServer(
+                workspace = workspace, port = 0, tools = mcpTools, gate = AllowAllGate, notes = listOf(ModuleTools.PROMPT),
+            )
         } catch (e: Exception) {
             log.warn("The relay's MCP server did not start: ${e.message}")
             return

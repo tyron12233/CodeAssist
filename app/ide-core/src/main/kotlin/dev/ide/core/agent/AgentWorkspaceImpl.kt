@@ -219,8 +219,33 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
         return ok
     }
 
-    override suspend fun addDependency(module: String, coordinate: String): String {
-        val result = ctx.background { engine().dependencies.addDependency(module, coordinate, "implementation") }
+    override suspend fun addDependency(module: String, coordinate: String): String = addDependency(module, coordinate, "implementation")
+
+    override suspend fun removeDependency(module: String, coordinate: String): String {
+        val e = engine()
+        val target = e.modules().firstOrNull { it.name == module } ?: throw IllegalStateException("No module \"$module\".")
+        val wanted = coordinate.trim()
+        // As declared, or by group:name alone, so the agent need not know the resolved version.
+        val declared = target.dependencies.filterIsInstance<dev.ide.model.LibraryDependency>().map { it.library.name }
+        val match = declared.firstOrNull { it == wanted }
+            ?: declared.filter { it.startsWith("$wanted:") || it.substringBeforeLast(':') == wanted }.let { hits ->
+                when (hits.size) {
+                    1 -> hits.single()
+                    0 -> null
+                    else -> throw IllegalStateException("\"$wanted\" matches several dependencies of $module: ${hits.joinToString()}. Name one in full.")
+                }
+            }
+            ?: throw IllegalStateException(
+                "$module does not declare \"$wanted\". Its dependencies: ${declared.joinToString().ifEmpty { "(none)" }}.",
+            )
+        val removed = ctx.background { e.dependencies.removeDependency(module, match) }
+        ctx.bumpFileSystemEpoch()
+        if (!removed) throw IllegalStateException("Could not remove $match from $module.")
+        return "Removed $match from $module."
+    }
+
+    override suspend fun addDependency(module: String, coordinate: String, scope: String): String {
+        val result = ctx.background { engine().dependencies.addDependency(module, coordinate, scope) }
         ctx.bumpFileSystemEpoch()
         // The resolve can fail (offline, a wrong coordinate, an artifact the module cannot use). Saying "added"
         // then sends the agent off to fix compile errors that are really a missing library.

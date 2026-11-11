@@ -64,6 +64,16 @@ interface AgentWorkspace {
     /** Adds a Maven-coordinate dependency to a module, returning a human-readable confirmation. */
     suspend fun addDependency(module: String, coordinate: String): String
 
+    /**
+     * [addDependency] into a named configuration: `implementation`, `api`, `compileOnly`, `runtimeOnly` or
+     * `testImplementation`. A workspace that knows only one configuration adds it there.
+     */
+    suspend fun addDependency(module: String, coordinate: String, scope: String): String = addDependency(module, coordinate)
+
+    /** Remove a declared dependency from [module]; [coordinate] may leave the version off. Returns what was done. */
+    suspend fun removeDependency(module: String, coordinate: String): String =
+        throw UnsupportedOperationException("Removing a dependency is not available in this workspace.")
+
     // Build / run.
 
     /** Compiles [module] (defaulting to the project's main module when null) and runs its `main` on the

@@ -21,6 +21,8 @@ import dev.ide.agent.toolSchema
  * [AgentTool.mutating] so the loop gates them through the permission policy. Output is formatted to be
  * compact and readable to the model.
  */
+private val DEPENDENCY_SCOPES = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
+
 fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
     tool(
         name = "read_file",
@@ -195,14 +197,39 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
 
     tool(
         name = "add_dependency",
-        description = "Add a Maven-coordinate dependency (group:name:version) to a module.",
+        description = "Add a Maven-coordinate dependency (group:name:version) to a module. A library only the tests " +
+            "use (JUnit, a mocking library) belongs in testImplementation.",
         parameters = toolSchema {
             string("module", "Module name.")
             string("coordinate", "Maven coordinate, for example com.squareup.okhttp3:okhttp:4.12.0.")
+            string(
+                "scope", "Where it is used: implementation (default), api (also exposed to modules that depend on this one), " +
+                    "compileOnly, runtimeOnly, or testImplementation (tests only).",
+                required = false, enum = DEPENDENCY_SCOPES,
+            )
         },
         mutating = true,
         summary = { "add ${it.optString("coordinate").orEmpty()} to ${it.optString("module").orEmpty()}" },
-    ) { args -> ToolExecutionResult.ok(ws.addDependency(args.string("module"), args.string("coordinate"))) },
+    ) { args ->
+        val scope = args.optString("scope")?.takeIf { it.isNotBlank() } ?: "implementation"
+        if (scope !in DEPENDENCY_SCOPES) {
+            ToolExecutionResult.error("Unknown scope \"$scope\". Use one of: ${DEPENDENCY_SCOPES.joinToString()}.")
+        } else {
+            ToolExecutionResult.ok(ws.addDependency(args.string("module"), args.string("coordinate"), scope))
+        }
+    },
+
+    tool(
+        name = "remove_dependency",
+        description = "Remove a library dependency from a module. To change a dependency's version or scope, remove it " +
+            "and add it again.",
+        parameters = toolSchema {
+            string("module", "Module name.")
+            string("coordinate", "The dependency as declared, group:name or group:name:version.")
+        },
+        mutating = true,
+        summary = { "remove ${it.optString("coordinate").orEmpty()} from ${it.optString("module").orEmpty()}" },
+    ) { args -> ToolExecutionResult.ok(ws.removeDependency(args.string("module"), args.string("coordinate"))) },
 
     tool(
         name = "run_program",
