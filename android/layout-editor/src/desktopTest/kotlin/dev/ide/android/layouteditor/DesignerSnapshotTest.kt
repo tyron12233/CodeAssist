@@ -175,6 +175,55 @@ class DesignerSnapshotTest {
         return file
     }
 
+    /**
+     * A long press picks a view up, and the drag that follows moves the view, not the canvas under it: the card
+     * stays where it was for as long as the view is held.
+     */
+    @Test
+    fun aLongPressDragDoesNotSlideTheCanvas() {
+        val density = 2f
+        val scene = ImageComposeScene(412 * 2, 892 * 2, Density(density)) {
+            MaterialTheme(colorScheme = darkColorScheme()) { LayoutDesigner(FakeContext(isSplit = false, caretOffset = 0)) }
+        }
+        try {
+            var t = 0L
+            fun frames(n: Int) = repeat(n) { scene.render(t); t += 16_000_000L; Thread.sleep(5) }
+            /** The card's left edge: the first column that is mostly the fake render's light ground. */
+            fun cardLeft(): Int {
+                val bitmap = org.jetbrains.skia.Bitmap.makeFromImage(scene.render(t))
+                for (x in 0 until bitmap.width) {
+                    var white = 0
+                    for (y in 0 until bitmap.height step 4) {
+                        val c = bitmap.getColor(x, y)
+                        // Light, not exactly white: the card is tinted while a view is held over it.
+                        if ((c shr 16 and 0xFF) > 0xE0 && (c shr 8 and 0xFF) > 0xE0 && (c and 0xFF) > 0xE0) white++
+                    }
+                    if (white > 40) return x
+                }
+                return -1
+            }
+            frames(40)
+            val before = cardLeft()
+            assertTrue(before > 0, "the card is on screen")
+
+            // Onto the first child (the fake render stacks them from the top of the card), held, then dragged.
+            var at = Offset(before + 60f, 892f * density * 0.25f)
+            scene.sendPointerEvent(PointerEventType.Press, at)
+            frames(50)                                                   // 800 ms: past the long-press timeout
+            repeat(12) {
+                at += Offset(18f, 6f)
+                scene.sendPointerEvent(PointerEventType.Move, at)
+                frames(2)
+            }
+            val during = cardLeft()
+            scene.sendPointerEvent(PointerEventType.Release, at)
+            frames(30)
+            kotlin.test.assertEquals(before, during, "the canvas did not move while the view was dragged")
+        } finally {
+            scene.close()
+        }
+    }
+
     /** The sign-in button, selected from the start (in Preview mode the caret does not select). */
     private val BUTTON = SelectionKey("btn_sign_in", emptyList())
 

@@ -291,6 +291,14 @@ internal fun DesignCanvas(
                     try {
                         do {
                             val event = awaitPointerEvent()
+                            // A view picked up by a long press is what the finger moves now, not the canvas: the
+                            // card sees each event first and takes it, and a pan computed from positions alone
+                            // would not notice. Sliding the canvas under the drag also moved the drop targets.
+                            if (drag.payload != null) {
+                                if (engaged) { engaged = false; state.gesturing = false }
+                                travel = Offset.Zero
+                                continue
+                            }
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
                             if (!engaged) {
