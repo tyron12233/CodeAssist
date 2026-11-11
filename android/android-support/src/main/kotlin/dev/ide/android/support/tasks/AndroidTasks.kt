@@ -614,6 +614,15 @@ internal class Aapt2LinkTask(
     private val lowerTiers: List<Path> = emptyList(),
     /** The merged dirs [lowerTiers] were compiled from, for the same error mapping as [mergedRes]. */
     private val lowerMergedRes: List<Path> = emptyList(),
+    /**
+     * Where each resource's id is kept from one link to the next, or null to let aapt2 assign them afresh.
+     *
+     * aapt2 numbers a type's resources in name order, so adding one string renumbers every string after it,
+     * the libraries' included. Every library's R then changes, and R is regenerated and dexed again whole,
+     * for one new name. Carried over, an existing resource keeps its id and a new one takes a free id, so only
+     * the R classes that gained a field change. Not a task input: it is this task's own previous output.
+     */
+    private val idsFile: Path? = null,
 ) : Task {
     private fun archivesIn(dir: Path): List<Path> =
         if (Files.isDirectory(dir)) Files.list(dir).use { s ->
@@ -654,7 +663,8 @@ internal class Aapt2LinkTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         val (base, overlays) = linkInputs()
-        val r = aapt2.link(
+        val newIds = idsFile?.resolveSibling(idsFile.fileName.toString() + ".new")
+        fun link(stable: Path?) = aapt2.link(
             base,
             manifest,
             androidJar,
@@ -670,7 +680,21 @@ internal class Aapt2LinkTask(
             protoFormat = protoFormat,
             overlays = overlays,
             rTxt = rTxt,
+            stableIds = stable,
+            emitIds = newIds,
         )
+        val kept = idsFile?.takeIf { Files.isRegularFile(it) }
+        var r = link(kept)
+        // Ids that no longer fit (a resource that changed type, a package renamed) fail the link; they are a
+        // convenience, so the link is done again without them rather than failing the build.
+        if (!r.success && kept != null) {
+            runCatching { Files.deleteIfExists(kept) }
+            val fresh = link(null)
+            if (fresh.success) r = fresh
+        }
+        if (r.success && idsFile != null && newIds != null && Files.isRegularFile(newIds)) {
+            runCatching { Files.move(newIds, idsFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+        }
         ctx.reportTool("aapt2", ResourceMergeMap.remapped(r, listOfNotNull(mergedRes) + lowerMergedRes), DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
@@ -776,6 +800,12 @@ internal class GenerateRJarTask(
     private val librarySymbols: List<Pair<String, Path>> = emptyList(),
     /** Library packages with no `R.txt`, which get the app's whole table (see [RBytecodeGenerator.writeAppJar]). */
     private val wholeTablePackages: List<String> = emptyList(),
+    /**
+     * The same classes again as two jars, the app's R and the libraries', for dexing. A jar is dexed whole, and
+     * the libraries' R does not change when the app gains a resource, so apart it is dexed once and found in
+     * the cache after that. [outJar] stays the one jar the compiler and the preview read.
+     */
+    private val dexJars: RBytecodeGenerator.SplitJars? = null,
 ) : Task {
     private fun rSources(): List<Path> =
         if (!Files.isDirectory(genJavaDir)) emptyList()
@@ -790,13 +820,16 @@ internal class GenerateRJarTask(
         property("wholeTable", wholeTablePackages.joinToString(":"))
         filePaths("libraryRTxt", librarySymbols.map { it.second }.filter { Files.exists(it) })
     }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("rJar", outJar) }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
+        filePath("rJar", outJar)
+        dexJars?.let { filePath("appRJar", it.app); filePath("libraryRJar", it.libraries) }
+    }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         val res = withContext(Dispatchers.IO) {
             runCatching {
-                if (appRTxt != null) RBytecodeGenerator.writeAppJar(rSources(), appRTxt, librarySymbols, outJar, wholeTablePackages)
+                if (appRTxt != null) RBytecodeGenerator.writeAppJar(rSources(), appRTxt, librarySymbols, outJar, wholeTablePackages, dexJars)
                 else RBytecodeGenerator.writeJar(rSources(), outJar)
             }
         }

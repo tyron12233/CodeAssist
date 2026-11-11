@@ -668,13 +668,17 @@ class AndroidBuildSystem(
                 lowerTiers = lowerResTiers.map { it.second },
                 lowerMergedRes = lowerResTiers.map { it.first },
                 rTxt = appRTxt,
+                idsFile = layout.resIds,
             )
         }
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
         tasks.task(generateRFile, listOf(aapt2Link) + depAndroidLibs.map { TaskName(":${it.name}:generateR") }) {
             // An AAR without an R.txt names no resources of its own: its package gets the whole table.
             val listed = librarySymbols.mapTo(HashSet()) { it.first }
-            GenerateRJarTask(generateRFile, layout.genJava, layout.rJar, appRTxt, librarySymbols, libs.aarPackages.filter { it !in listed })
+            GenerateRJarTask(
+                generateRFile, layout.genJava, layout.rJar, appRTxt, librarySymbols, libs.aarPackages.filter { it !in listed },
+                dexJars = dev.ide.android.support.tasks.RBytecodeGenerator.SplitJars(layout.appRJar, layout.libraryRJar),
+            )
         }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + aidlDep + listOfNotNull(generateSources)) {
@@ -780,7 +784,9 @@ class AndroidBuildSystem(
         // The app's R.jar (generateRFile): dexed in its OWN scope (rArchives) and merged into the PROJECT dex layer,
         // where AGP keeps R — NOT the external scope. Content-hashed, so it re-dexes only when resources change,
         // and being out of the external scope means a resource edit never re-dexes or re-merges the stable libraries.
-        val rJars = listOf(layout.rJar)
+        // What is dexed: the app's R and the libraries' as two jars, so the libraries' is dexed once. R8 takes
+        // the one jar, since it reads the whole program anyway.
+        val rJars = listOf(layout.appRJar, layout.libraryRJar)
 
         // Packaging merges (AGP's merge<Variant>NativeLibs / merge<Variant>JavaResource). Native libs come from
         // the app's own `src/*/jniLibs`, each dep android-lib's jniLibs, exploded-AAR `jni/`, and `lib/<abi>/*.so`
@@ -864,7 +870,7 @@ class AndroidBuildSystem(
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
             tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 R8MinifyTask(
-                    minifyTask, dexProjectClasses + subProjectJars + externalJars + rJars, androidJar, facet.minSdk,
+                    minifyTask, dexProjectClasses + subProjectJars + externalJars + listOf(layout.rJar), androidJar, facet.minSdk,
                     keepRuleFiles, inlineRules, facet.r8FullMode,
                     layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker,
                     mappingOutput = layout.mappingTxt,
@@ -1776,6 +1782,9 @@ class AndroidBuildSystem(
         val genJava: Path = inter.resolve("gen")
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
         val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
+        val appRJar: Path = rJar.resolveSibling("R-app.jar")           // the app's R alone, for dexing
+        val libraryRJar: Path = rJar.resolveSibling("R-libraries.jar") // every library's R, for dexing
+        val resIds: Path = inter.resolve("resource-ids.txt")           // aapt2 ids, kept from one link to the next
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
         val buildConfigGen: Path = inter.resolve("gen-build-config")  // <namespace>.BuildConfig
         val aidlGen: Path = inter.resolve("gen-aidl")  // compileAidl output: the Binder interface/Stub/Proxy .java

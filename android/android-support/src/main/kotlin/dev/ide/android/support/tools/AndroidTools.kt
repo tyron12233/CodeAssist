@@ -253,6 +253,8 @@ interface Aapt2 {
         rTxt: Path? = null,             // aapt2 `--output-text-symbols`: the R symbol table (`R.txt`) for an AAR
         includes: List<Path> = emptyList(), // more `-I` tables after [androidJar], to resolve references against
         packageId: Int? = null,         // aapt2 `--package-id`; null keeps the app id 0x7f
+        stableIds: Path? = null,        // aapt2 `--stable-ids`: ids to keep, as an earlier link's [emitIds] wrote them
+        emitIds: Path? = null,          // aapt2 `--emit-ids`: write every resource's id here
     ): ToolResult
 
     /**

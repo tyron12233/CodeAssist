@@ -69,6 +69,8 @@ class Aapt2Subprocess(
         rTxt: Path?,
         includes: List<Path>,
         packageId: Int?,
+        stableIds: Path?,
+        emitIds: Path?,
     ): ToolResult {
         Files.createDirectories(genJavaDir)
         outApk.parent?.let { Files.createDirectories(it) }
@@ -97,6 +99,9 @@ class Aapt2Subprocess(
             if (protoFormat) add("--proto-format")
             // `--output-text-symbols` writes the R symbol table (`R.txt`) an AAR ships for its consumers.
             rTxt?.let { add("--output-text-symbols"); add(it.toString()) }
+            // Ids carried from one link to the next: a resource keeps the id it had, and a new one takes a free id.
+            stableIds?.let { add("--stable-ids"); add(it.toString()) }
+            emitIds?.let { add("--emit-ids"); add(it.toString()) }
             add("--min-sdk-version"); add(minSdk.toString())
             add("--target-sdk-version"); add(targetSdk.toString())
             add("--auto-add-overlay")

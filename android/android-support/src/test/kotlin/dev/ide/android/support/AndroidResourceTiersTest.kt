@@ -58,6 +58,8 @@ class AndroidResourceTiersTest {
                 <?xml version="1.0" encoding="utf-8"?>
                 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.example.widgets"><application/></manifest>
             """)
+            // Its symbol table, as a real AAR ships one: the library's R holds these and nothing of the app's.
+            Files.writeString(exploded.resolve("R.txt"), "int string lib_only 0x0\nint string shared 0x0\n")
             // A code-free AAR's classes.jar: a manifest and nothing else.
             val classesJar = exploded.resolve("classes.jar")
             java.util.jar.JarOutputStream(Files.newOutputStream(classesJar), java.util.jar.Manifest().apply {
@@ -85,11 +87,12 @@ class AndroidResourceTiersTest {
                     <application android:label="@string/shared"><activity android:name=".MainActivity" android:exported="true"/></application>
                 </manifest>
             """)
-            fun appStrings(own: String) = dir.writeSource("app/src/main/res/values/strings.xml", """
+            fun appStrings(own: String, extra: String = "") = dir.writeSource("app/src/main/res/values/strings.xml", """
                 <?xml version="1.0" encoding="utf-8"?>
                 <resources>
                     <string name="shared">from the app</string>
                     <string name="app_only">$own</string>
+                    $extra
                 </resources>
             """)
             appStrings("first value")
@@ -137,6 +140,30 @@ class AndroidResourceTiersTest {
             table().let { arsc ->
                 assertTrue("second value" in arsc && "first value" !in arsc, "the edit is in the table")
                 assertTrue("from the app" in arsc && "from the library" !in arsc && "only in the library" in arsc, "and the rest is as it was")
+            }
+
+            // A NEW resource, named to sort before every other string: numbered afresh it would take the first id
+            // and push the rest along. The ids are carried over instead, so nothing that existed is renumbered,
+            // and the libraries' R, which has no new field, is byte for byte the jar it was.
+            val inter = dir.resolve("app/build/intermediates/android/debug")
+            fun ids() = Files.readAllLines(inter.resolve("compile_and_runtime_not_namespaced_r_class_jar/R.txt"))
+                .mapNotNull { Regex("""int string (\w+) (0x[0-9a-fA-F]+)""").find(it)?.destructured?.let { (n, v) -> n to v } }.toMap()
+            val libraryR = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar/R-libraries.jar")
+            val idsBefore = ids()
+            val libraryRBefore = Files.readAllBytes(libraryR)
+            assertTrue(Files.isRegularFile(inter.resolve("resource-ids.txt")), "the link keeps the ids it assigned")
+
+            appStrings("second value", extra = """<string name="aaa_new">new</string>""")
+            val third = build()
+            val idsAfter = ids()
+            assertTrue("aaa_new" in idsAfter && "aaa_new" !in idsBefore, "the new string has an id: $idsAfter")
+            assertEquals(idsBefore, idsAfter - "aaa_new", "no existing string is renumbered")
+            assertTrue(Files.readAllBytes(libraryR).contentEquals(libraryRBefore), "the libraries' R jar is unchanged")
+            assertEquals(TaskStatus.Succeeded, third[":app:generateRFileDebug"], "R was regenerated for the new name")
+            ZipFile(inter.resolve("compile_and_runtime_not_namespaced_r_class_jar/R-app.jar").toFile()).use { z ->
+                val strings = z.getInputStream(z.getEntry("com/example/app/R\$string.class")).readBytes().toString(Charsets.ISO_8859_1)
+                assertTrue("aaa_new" in strings, "and the app's R has it")
+                assertTrue(z.getEntry("io/example/widgets/R\$string.class") == null, "the app's R jar holds no library's R")
             }
         }
     }
