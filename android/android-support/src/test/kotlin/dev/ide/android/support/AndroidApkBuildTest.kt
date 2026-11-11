@@ -74,8 +74,7 @@ class AndroidApkBuildTest {
             assertTrue("AndroidManifest.xml" in entries, "APK lacks AndroidManifest.xml: $entries")
             assertTrue("resources.arsc" in entries, "APK lacks resources.arsc: $entries")
             assertTrue("classes.dex" in entries, "APK lacks classes.dex: $entries")
-            assertTrue(entries.any { it.startsWith("META-INF/") && (it.endsWith(".RSA") || it.endsWith(".SF")) },
-                "APK is not v1-signed (no META-INF signature): $entries")
+            assertTrue(verifiedSignatureSchemes(apk, 24).second, "APK is not v2-signed")
 
             val again = runBlocking { TaskExecutorImpl(cache).execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "rebuild should do no work, ran=${again.ranTasks.map { it.value }}")

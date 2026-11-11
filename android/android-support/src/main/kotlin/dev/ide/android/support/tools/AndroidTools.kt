@@ -461,6 +461,14 @@ interface Shrinker {
 /** zipalign + apksigner: produce an aligned, signed APK. */
 fun interface ApkSigner {
     fun sign(unsigned: Path, signed: Path, config: SigningConfig): ToolResult
+
+    /**
+     * [sign] for an APK that will only be installed on [minSdk] and above. From API 24 the APK Signature Scheme
+     * v2 is all a device checks, so a signer that can leave the v1 (JAR) signature out there does: v1 digests
+     * every entry one by one and writes a manifest of them, most of the time signing takes. A signer that
+     * cannot choose signs as it always did.
+     */
+    fun sign(unsigned: Path, signed: Path, config: SigningConfig, minSdk: Int): ToolResult = sign(unsigned, signed, config)
 }
 
 /** A keystore + alias/passwords used to sign. A debug build uses [DebugKeystore.getOrCreate]. */

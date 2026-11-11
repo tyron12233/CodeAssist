@@ -15,3 +15,10 @@ fun assumeAndroidSdk(): AndroidSdk {
     assumeTrue(sdk != null && sdk.isComplete(), "Android SDK (platform + build-tools) not installed; skipping")
     return sdk!!
 }
+
+/** Which signature schemes [apk] verifies under, as a device would check it: (v1, v2). Fails on an APK that does not verify. */
+fun verifiedSignatureSchemes(apk: java.nio.file.Path, minSdk: Int): Pair<Boolean, Boolean> {
+    val result = com.android.apksig.ApkVerifier.Builder(apk.toFile()).setMinCheckedPlatformVersion(minSdk).build().verify()
+    org.junit.jupiter.api.Assertions.assertTrue(result.isVerified, "the APK does not verify on API $minSdk and up: ${result.errors}")
+    return result.isVerifiedUsingV1Scheme to result.isVerifiedUsingV2Scheme
+}

@@ -59,7 +59,7 @@ class AndroidDeviceToolsTest {
     /**
      * The on-device dex/sign path produces a valid signed APK with no native `zipalign` at all: build a real
      * one-module APK via `inProcess` (which wires [dev.ide.android.support.tools.ApksigSigner], aligning the
-     * archive itself via apksig's `setAlignmentPreserved(false)`) and assert it is v1-signed. Also exercises
+     * archive itself via apksig's `setAlignmentPreserved(false)`) and assert it is signed. Also exercises
      * the legacy-PKCS12 debug keystore [DebugKeystore.getOrCreate] mints (the format Android's BouncyCastle
      * can read on-device). Skipped (not failed) without an installed SDK.
      */
@@ -90,8 +90,7 @@ class AndroidDeviceToolsTest {
             assertTrue(Files.isRegularFile(apk), "signed APK missing at $apk\n$log")
             val entries = ZipFile(apk.toFile()).use { z -> z.entries().toList().map { it.name }.toSet() }
             assertTrue("classes.dex" in entries, "APK lacks classes.dex: $entries")
-            assertTrue(entries.any { it.startsWith("META-INF/") && (it.endsWith(".RSA") || it.endsWith(".SF")) },
-                "APK is not v1-signed: $entries")
+            assertTrue(verifiedSignatureSchemes(apk, 24).second, "APK is not v2-signed")
         }
     }
 

@@ -248,6 +248,12 @@ class TaskExecutorImpl(
 ) : TaskExecutor {
 
     private val log = Log.logger("build")
+    private val perfLog = Log.logger("build.perf")
+
+    private companion object {
+        /** A task quicker than this, all told, is not worth a log line. */
+        const val PERF_LOG_FLOOR_MS = 100L
+    }
 
     override suspend fun execute(graph: TaskGraph, ctx: TaskContext, maxParallel: Int): BuildOutcome = coroutineScope {
         val ran = Collections.synchronizedList(ArrayList<TaskName>())
@@ -280,14 +286,18 @@ class TaskExecutorImpl(
             skipped.add(t.name); banner(ctx, t.name, "NO-SOURCE", BuildLogLevel.DEBUG)
             onEvent(t.name, TaskStatus.NoSource); return
         }
+        val t0 = System.nanoTime()
         val inFp = t.inputs.fingerprint().value
+        val tIn = System.nanoTime()
         if (t !is AlwaysRun) {
             val cached = cache.get(t.name)
             if (cached != null && cached.inputFp == inFp && cached.outputFp == t.outputs.fingerprint().value) {
                 skipped.add(t.name); banner(ctx, t.name, "UP-TO-DATE")
+                perf(t.name, "UP-TO-DATE", tIn - t0, System.nanoTime() - tIn, 0, 0)
                 onEvent(t.name, TaskStatus.UpToDate); return
             }
         }
+        val tChecked = System.nanoTime()
         onEvent(t.name, TaskStatus.Running)
         banner(ctx, t.name)
         // A task is expected to signal failure by returning TaskResult.Failed. An *unexpected* throwable
@@ -305,6 +315,7 @@ class TaskExecutorImpl(
             onEvent(t.name, TaskStatus.Failed)
             return
         }
+        val tRan = System.nanoTime()
         when (r) {
             is TaskResult.Failed -> {
                 failed.add(t.name)
@@ -323,9 +334,25 @@ class TaskExecutorImpl(
             }
             TaskResult.Success -> {
                 ran.add(t.name); if (t !is AlwaysRun) cache.put(t.name, inFp, t.outputs.fingerprint().value)
+                perf(t.name, "ran", tIn - t0, tChecked - tIn, tRan - tChecked, System.nanoTime() - tRan)
                 onEvent(t.name, TaskStatus.Succeeded)
             }
         }
+    }
+
+    /**
+     * Where one task's time went, to the app log: fingerprinting its inputs, checking its outputs against the
+     * last run, doing the work, fingerprinting what it wrote. The build console shows a task's start, so the
+     * checking around a task (and every up-to-date task between two that ran) is otherwise invisible, and gets
+     * read as the previous task being slow. Only tasks that took long enough to matter are logged.
+     */
+    private fun perf(name: TaskName, status: String, inputsNs: Long, checkNs: Long, runNs: Long, outputsNs: Long) {
+        val totalMs = (inputsNs + checkNs + runNs + outputsNs) / 1_000_000
+        if (totalMs < PERF_LOG_FLOOR_MS) return
+        perfLog.info(
+            "task ${name.value} $status: inputs=${inputsNs / 1_000_000}ms check=${checkNs / 1_000_000}ms " +
+                "run=${runNs / 1_000_000}ms outputs=${outputsNs / 1_000_000}ms",
+        )
     }
 
     /**

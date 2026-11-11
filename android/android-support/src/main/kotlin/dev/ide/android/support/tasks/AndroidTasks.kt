@@ -240,9 +240,17 @@ internal class ResourceMergeMap(copies: Map<Path, Path>, values: Map<Path, List<
             return ResourceMergeMap(copies, values)
         }
 
-        /** [result] with its log [remap]ped through the merge maps of [mergedDirs], if any were saved. */
-        fun remapped(result: ToolResult, mergedDirs: List<Path>): ToolResult =
-            mergedDirs.mapNotNull { load(fileFor(it)) }.fold(result) { r, map -> r.copy(log = map.remap(r.log)) }
+        /**
+         * [result] with its log [remap]ped through the merge maps of [mergedDirs], if any were saved.
+         *
+         * The maps are read only when the log has a line they could change, one that locates an error or a
+         * warning in a file. A link that says nothing, which is every link that works, used to read them all the
+         * same: the libraries' map is 7 MB and 17,000 lines for a Material app, 1.6 s of a 4.8 s link on a phone.
+         */
+        fun remapped(result: ToolResult, mergedDirs: List<Path>): ToolResult {
+            if (result.log.none { LOCATED.matches(it.trim()) }) return result
+            return mergedDirs.mapNotNull { load(fileFor(it)) }.fold(result) { r, map -> r.copy(log = map.remap(r.log)) }
+        }
     }
 }
 
@@ -582,6 +590,9 @@ internal class Aapt2CompileTask(
     }
 }
 
+/** Link timing to the app log (logcat on device), where a device measurement reads it. */
+private val linkPerf by lazy { dev.ide.platform.log.Log.logger("build.perf") }
+
 /** `aapt2 link`: merge compiled archives + manifest into `resources.ap_` and emit `R.java`. */
 internal class Aapt2LinkTask(
     override val name: TaskName,
@@ -690,7 +701,9 @@ internal class Aapt2LinkTask(
             emitIds = newIds,
         )
         val kept = idsFile?.takeIf { Files.isRegularFile(it) }
+        val t0 = System.nanoTime()
         var r = link(kept)
+        val tLinked = System.nanoTime()
         // Ids that no longer fit (a resource that changed type, a package renamed) fail the link; they are a
         // convenience, so the link is done again without them rather than failing the build.
         if (!r.success && kept != null) {
@@ -701,7 +714,13 @@ internal class Aapt2LinkTask(
         if (r.success && idsFile != null && newIds != null && Files.isRegularFile(newIds)) {
             runCatching { Files.move(newIds, idsFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
         }
+        val tIds = System.nanoTime()
         ctx.reportTool("aapt2", ResourceMergeMap.remapped(r, listOfNotNull(mergedRes) + lowerMergedRes), DiagnosticKind.RESOURCE)
+        val tReported = System.nanoTime()
+        linkPerf.info(
+            "aapt2Link: aapt2=${(tLinked - t0) / 1_000_000}ms ids=${(tIds - tLinked) / 1_000_000}ms " +
+                "report=${(tReported - tIds) / 1_000_000}ms framework=${framework.fileName} overlays=${overlays.size}",
+        )
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
 }
@@ -2564,6 +2583,8 @@ internal class SignApkTask(
     private val signedApk: Path,
     private val config: SigningConfig,
     private val signer: ApkSigner,
+    /** The lowest API level this APK will be installed on, which decides whether it needs a v1 signature. */
+    private val minSdk: Int = 1,
 ) : Task {
     // Whether the APK at the output path is one this build recorded (BuiltApks). An unrecorded one (it came with a
     // clone or an import, or predates the record) flips this input, so the task re-signs and records a fresh APK
@@ -2575,13 +2596,14 @@ internal class SignApkTask(
             filePaths("unsigned", listOf(unsignedApk))
             property("keystore", config.keystore.toString())
             property("alias", config.keyAlias)
+            property("minSdk", minSdk)
             if (dev.ide.android.support.BuiltApks.enabled) property("recorded", recorded)
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", signedApk) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        val r = signer.sign(unsignedApk, signedApk, config)
+        val r = signer.sign(unsignedApk, signedApk, config, minSdk)
         ctx.reportTool("apksigner", r, DiagnosticKind.PACKAGING)
         // The install points only accept an APK the build recorded (see BuiltApks).
         if (r.success) dev.ide.android.support.BuiltApks.record(signedApk)

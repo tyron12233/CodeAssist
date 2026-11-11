@@ -1061,7 +1061,8 @@ class AndroidBuildSystem(
         }
 
         tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging, compressionLevel = if (release) java.util.zip.Deflater.BEST_COMPRESSION else java.util.zip.Deflater.BEST_SPEED) }
-        tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer) }
+        // `dexApi`: the minSdk, or this device's level for a Run, whose APK goes nowhere else (see dexApiFor).
+        tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer, minSdk = dexApi) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
         val assemble = step("assemble")
         tasks.task(assemble, listOf(sign)) { LifecycleTask(assemble, trackedFiles = listOf(layout.signedApk)) }

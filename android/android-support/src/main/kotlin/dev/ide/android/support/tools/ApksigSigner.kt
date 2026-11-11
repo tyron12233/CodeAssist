@@ -19,26 +19,40 @@ import java.nio.file.Path
  * optimization.
  */
 class ApksigSigner : ApkSigner {
+    private val perfLog by lazy { dev.ide.platform.log.Log.logger("build.perf") }
+
+    override fun sign(unsigned: Path, signed: Path, config: SigningConfig): ToolResult = sign(unsigned, signed, config, v1 = true)
+
+    override fun sign(unsigned: Path, signed: Path, config: SigningConfig, minSdk: Int): ToolResult =
+        sign(unsigned, signed, config, v1 = minSdk < V2_ONLY_FROM_API)
 
     @Suppress("DEPRECATION") // SignerConfig.Builder(name, key, certs) is the stable, widely-supported form
-    override fun sign(unsigned: Path, signed: Path, config: SigningConfig): ToolResult {
+    private fun sign(unsigned: Path, signed: Path, config: SigningConfig, v1: Boolean): ToolResult {
         signed.parent?.let { Files.createDirectories(it) }
         return try {
+            val t0 = System.nanoTime()
             val material = KeystoreCrypto.signingKey(config.keystore, config.storePass, config.keyAlias, config.keyPass)
                 ?: return ToolResult(false, listOf("apksig in-process failed: could not read the key '${config.keyAlias}' from ${config.keystore.fileName}"))
+            val tKey = System.nanoTime()
             val signer = ApksigApkSigner.SignerConfig.Builder("CERT", material.privateKey, material.chain).build()
             ApksigApkSigner.Builder(listOf(signer))
                 .setInputApk(unsigned.toFile())
                 .setOutputApk(signed.toFile())
-                .setV1SigningEnabled(true)
+                .setV1SigningEnabled(v1)
                 .setV2SigningEnabled(true)
                 // Align uncompressed entries (4-byte; .so to page size); no native zipalign needed.
                 .setAlignmentPreserved(false)
                 .build()
                 .sign()
+            perfLog.info("sign: key=${(tKey - t0) / 1_000_000}ms sign=${(System.nanoTime() - tKey) / 1_000_000}ms v1=$v1 size=${Files.size(signed) / 1024}KB")
             ToolResult.ok(listOf("apksig (in-process) signed + aligned -> ${signed.fileName}"))
         } catch (t: Throwable) {
             ToolResult(false, listOf("apksig in-process failed: ${t.message}"))
         }
+    }
+
+    private companion object {
+        /** The first API level that verifies an APK by its v2 signature alone. */
+        const val V2_ONLY_FROM_API = 24
     }
 }

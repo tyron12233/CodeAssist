@@ -93,10 +93,12 @@ class AndroidRunDexApiTest {
             assertEquals("038", dexVersion(apk), "a Run's dex is made for API 26, the first with dex version 038")
             assertTrue(Files.isDirectory(inter.resolve("dex-archives-api26/project")), "device dex has directories of its own")
             assertFalse(Files.exists(inter.resolve("dex-archives")), "and writes nothing where an Assemble's dex goes")
+            assertEquals(false to true, verifiedSignatureSchemes(apk, 26), "a Run's APK, for API 26 only, carries no v1 signature")
 
             assertTrue(execute(run = false).succeeded, "the Assemble build failed:\n$log")
             assertEquals("035", dexVersion(apk), "an Assemble after a Run is dexed for the minSdk, not left with the Run's dex")
             assertTrue(Files.isDirectory(inter.resolve("dex-archives/project")))
+            assertEquals(true to true, verifiedSignatureSchemes(apk, 23), "an Assemble for minSdk 23 is v1-signed too: API 23 reads nothing else")
 
             assertTrue(execute(run = true).succeeded, "the second Run build failed:\n$log")
             assertEquals("038", dexVersion(apk), "and a Run after that is the device's again")
