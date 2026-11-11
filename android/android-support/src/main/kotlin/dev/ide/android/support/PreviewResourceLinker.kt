@@ -273,8 +273,11 @@ class PreviewResourceLinker(
         val fullSize = record.getOrNull(1)?.toLongOrNull() ?: return null
         if (Files.size(previewAp) > fullSize + MAX_PATCH_GROWTH) return null
         val full = previewAp
+        val q0 = System.nanoTime()
         val ids = declaredIds(outDir, packageName) ?: return null
+        val qIds = System.nanoTime()
         val (referenced, aliases) = withSpareIds(text, ids) ?: return null
+        val qSpare = System.nanoTime()
 
         val qualifier = edited.parent?.fileName?.toString() ?: "layout"
         val name = edited.fileName.toString()
@@ -284,11 +287,14 @@ class PreviewResourceLinker(
         compiled.toFile().deleteRecursively()
         Files.createDirectories(src.resolve(qualifier))
         Files.write(src.resolve(qualifier).resolve(name), referenced.toByteArray())
+        val q1 = System.nanoTime()
         val c = aapt2.compile(listOf(src), compiled)
         if (!c.result.success) return null
+        val q2 = System.nanoTime()
         val scratch = outDir.resolve("quick.ap_")
         val linked = aapt2.linkAgainst(c.archives, manifest, listOf(frameworkTable(), full), 0x80, minSdk, targetSdk, scratch)
         if (!linked.success) return null
+        val q3 = System.nanoTime()
 
         // The compiled layout (and any API-versioned copies aapt2 made of it) must be exactly the entries the
         // table already holds for it; anything else needs the table itself to change.
@@ -305,17 +311,27 @@ class PreviewResourceLinker(
         val tmp = outDir.resolve("resources.ap_.tmp")
         if (!ApkEntryPatcher.replace(full, tmp, produced)) return null
         Files.move(tmp, previewAp, StandardCopyOption.REPLACE_EXISTING)
+        fun ms(a: Long, b: Long) = (b - a) / 1_000_000
+        log.info("preview quick relink: ids=${ms(q0, qIds)}ms spareIds=${ms(qIds, qSpare)}ms files=${ms(qSpare, q1)}ms compile=${ms(q1, q2)}ms link=${ms(q2, q3)}ms patch=${ms(q3, System.nanoTime())}ms")
         return aliases
     }
 
     /** The id names the last full link's `R` declares (`R.id`), or null without one. */
     private fun declaredIds(outDir: Path, packageName: String): Set<String>? {
         val rJava = outDir.resolve("gen").resolve(packageName.replace('.', '/')).resolve("R.java")
+        // `R.java` for a Material project is megabytes, and it only changes with a full link: reading and
+        // scanning it on every edit was most of what a quick relink cost.
+        val sig = "$rJava:${runCatching { Files.getLastModifiedTime(rJava).toMillis() }.getOrDefault(0L)}:${runCatching { Files.size(rJava) }.getOrDefault(-1L)}"
+        declaredIdsCache?.let { (cachedSig, ids) -> if (cachedSig == sig) return ids }
         val text = readTextOrNull(rJava) ?: return null
-        val start = text.indexOf("class id {").takeIf { it >= 0 } ?: return emptySet()
+        val start = text.indexOf("class id {").takeIf { it >= 0 } ?: return emptySet<String>().also { declaredIdsCache = sig to it }
         val end = text.indexOf('}', start)
         return Regex("""int\s+(\w+)\s*=""").findAll(text.substring(start, end)).map { it.groupValues[1] }.toSet()
+            .also { declaredIdsCache = sig to it }
     }
+
+    /** The last [declaredIds] answer and the `R.java` (path, mtime, size) it was read from. */
+    @Volatile private var declaredIdsCache: Pair<String, Set<String>>? = null
 
     /** What a full link's output depends on besides the edited layout's text: [quickRelink] patches it only
      *  while these are unchanged. */

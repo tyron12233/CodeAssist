@@ -44,13 +44,16 @@ class RealViewInterpretPerfSpike {
             val text = layout.readText()
             val req = PreviewRequest(widthPx = 1080, heightPx = 2140, density = 2.75f, realViews = true)
 
-            // A handful of renders: #1 cold, the rest warm. Wall-clock includes the host-side relink + the
-            // (possibly cross-process) render; the PERF logcat line isolates the in-runtime phases.
-            repeat(6) { i ->
+            // #1 is cold. #2-#3 repeat the same text (every cache hits). #4 on each render an EDITED buffer (a
+            // changed attribute value, as a keystroke would), so the relink runs: that is the per-edit cost.
+            // Wall-clock includes the host-side relink + the (possibly cross-process) render; the `ide.preview`
+            // logcat lines isolate the phases on each side.
+            repeat(12) { i ->
+                val edited = if (i < 3) text else text.replaceFirst("android:layout_width=\"match_parent\"", "android:layout_width=\"match_parent\" android:alpha=\"0.${90 + i}\"")
                 val t0 = System.nanoTime()
-                val r = services.layoutPreview(layout.toPath(), text, req)
+                val r = services.layoutPreview(layout.toPath(), edited, req)
                 val ms = (System.nanoTime() - t0) / 1_000_000
-                log("render #${i + 1} wall=${ms}ms rendered=${r?.renderedNativeImage != null} problems=${r?.problems?.size}")
+                log("render #${i + 1} ${if (i == 0) "cold" else if (i < 3) "same" else "edit"} wall=${ms}ms rendered=${r?.renderedNativeImage != null} problems=${r?.problems?.size}")
             }
         } finally {
             runCatching { services.close() }

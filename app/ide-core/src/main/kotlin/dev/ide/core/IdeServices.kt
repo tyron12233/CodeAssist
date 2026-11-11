@@ -1826,6 +1826,7 @@ class IdeServices private constructor(
         resDiskFingerprints.clear()
         resourceModel.clear()
         customViewCache.clear()
+        runtimeLibsCache.clear()
         frameworkResCache.clear()
     }
 
@@ -2748,6 +2749,7 @@ class IdeServices private constructor(
         repoCache.clear()
         resDiskFingerprints.clear() // the res dir set itself can change with the dependencies
         customViewCache.clear()
+        runtimeLibsCache.clear()
         // A dependency/facet change can add or drop library View subclasses (and the seed hierarchy), so the
         // source-view snapshot must recompute on next use, not just on a source save.
         bumpSourceIndexGeneration()
@@ -4646,6 +4648,8 @@ class IdeServices private constructor(
         )
     }
 
+    @Volatile private var previewAapt2Daemon: dev.ide.android.support.tools.Aapt2Daemon? = null
+
     /** Relinks the build's compiled resources with the live editor buffer for the real-view preview, so the
      *  edited (or newly added) layout renders. Null when no Android tooling is wired (desktop). */
     private val previewResourceLinker: PreviewResourceLinker? by lazy {
@@ -4654,8 +4658,31 @@ class IdeServices private constructor(
             .takeIf { it.hasNativeTools() } ?: return@lazy null
         val cache = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-res")
         PreviewResourceLinker(
-            Aapt2Subprocess(sdk.aapt2), t.androidJar, cache,
+            // A long-lived aapt2: the preview relinks one layout per edit, and two process launches were most of that.
+            Aapt2Subprocess(sdk.aapt2, dev.ide.android.support.tools.Aapt2Daemon(sdk.aapt2).also { previewAapt2Daemon = it }), t.androidJar, cache,
         )
+    }
+
+    /** The runtime library jars last resolved for a module's real-view render; see [previewRuntimeLibs]. */
+    private class CachedRuntimeLibs(val key: String, val dexJars: List<Path>)
+
+    private val runtimeLibsCache = ConcurrentHashMap<String, CachedRuntimeLibs>()
+
+    /**
+     * [AndroidLibraries.resolve]'s runtime jars for the real-view render, resolved once per model state instead
+     * of on every render: it classifies every library and checks each exploded AAR (about 12ms for a Material
+     * project, a quarter of a render that changed nothing), for an answer no keystroke in a layout changes. Dropped
+     * with the other preview caches on any model or variant change ([invalidateAnalyzers]), and not reused once
+     * a jar has gone from disk (a clean removes the exploded AARs).
+     */
+    private fun previewRuntimeLibs(module: Module, explodeRoot: Path, configurations: Set<String>?): List<Path>? {
+        val key = "$explodeRoot|$configurations"
+        runtimeLibsCache[module.id.value]?.let { c ->
+            if (c.key == key && c.dexJars.all { Files.exists(it) }) return c.dexJars
+        }
+        val resolved = runCatching { AndroidLibraries.resolve(module, explodeRoot, configurations) }.getOrNull() ?: return null
+        runtimeLibsCache[module.id.value] = CachedRuntimeLibs(key, resolved.dexJars)
+        return resolved.dexJars
     }
 
     /** The logical dp of a pixel size at [density]: the preview frame is authored in dp and sent as pixels. */
@@ -4699,7 +4726,9 @@ class IdeServices private constructor(
         val selectedVariant = AndroidVariants.select(module, activeVariant(module))
             ?: AndroidVariants.defaultVariant(module)
         val variant = selectedVariant?.name ?: "debug"
+        val tVariant = System.nanoTime()
         val resDirs = AndroidResources.resourceDirs(module, store.workspace)
+        val tResDirs = System.nanoTime()
 
         // The runtime library set + the AAR package names, resolved once. Must be the RUNTIME set (what the APK
         // packages), NOT the compile classpath: a Material widget's `implementation` transitives (e.g.
@@ -4709,13 +4738,7 @@ class IdeServices private constructor(
         // + user custom views. The VM interprets these jars directly (no dexing).
         val explodeRoot =
             AndroidBuildSystem.explodedAarPath(module, variant)
-        val resolved = runCatching {
-            AndroidLibraries.resolve(
-                module,
-                explodeRoot,
-                selectedVariant?.configurations
-            )
-        }.getOrNull()
+        val resolvedDexJars = previewRuntimeLibs(module, explodeRoot, selectedVariant?.configurations)
         val tResolved = System.nanoTime()
         // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
         // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
@@ -4760,7 +4783,7 @@ class IdeServices private constructor(
         val rJar = linked?.rJar?.takeIf { Files.exists(it) }
             ?: AndroidBuildSystem.rJarPath(module, variant)
                 .takeIf { Files.exists(it) }
-        val runtimeLibs = resolved?.dexJars ?: emptyList()
+        val runtimeLibs = resolvedDexJars ?: emptyList()
         // The real-view runtime always INTERPRETS the library + project view classes with the bytecode VM
         // instead of dexing them onto a DexClassLoader. Nothing downloaded or user-built is loaded into ART,
         // which sidesteps Google Play's Device-and-Network-Abuse "DDL" scorer — and a project-SOURCE custom view
@@ -4789,7 +4812,7 @@ class IdeServices private constructor(
         // the preview R.jar — no dexing, no DexClassLoader.
         val classpath = externalJars + projectClassDirs + listOfNotNull(rJar, linked?.toolsJar)
         Log.logger("ide.preview").info(
-            "real-view (interpret) resolved=${resolved != null} runtimeLibs=${runtimeLibs.size} " +
+            "real-view (interpret) resolved=${resolvedDexJars != null} runtimeLibs=${runtimeLibs.size} " +
                 "externalJars=${externalJars.size} projectDirs=${projectClassDirs.size} rJar=${rJar != null} " +
                 "classpath=${classpath.size}"
         )
@@ -4859,9 +4882,10 @@ class IdeServices private constructor(
         }
         fun ms(a: Long, b: Long) = (b - a) / 1_000_000
         Log.logger("ide.preview").info(
-            "real-view host '${req.layoutName}': repo=${previewRepoNanos / 1_000_000}ms resolve=${ms(t0, tResolved)}ms " +
+            "real-view host '${req.layoutName}': repo=${previewRepoNanos / 1_000_000}ms resolve=${ms(t0, tResolved)}ms (variant=${ms(t0, tVariant)} resDirs=${ms(tVariant, tResDirs)} libs=${ms(tResDirs, tResolved)}) " +
                 "link=${ms(tResolved, tLinked)}ms classpath=${ms(tLinked, tRender)}ms render=${ms(tRender, tRendered)}ms " +
-                "stamp=${ms(tRendered, System.nanoTime())}ms"
+                "stamp=${ms(tRendered, System.nanoTime())}ms" +
+                (previewAapt2Daemon?.let { " aapt2-daemon=${it.served} served/${it.declined} declined" } ?: "")
         )
         return LayoutPreviewResult(
             root,
