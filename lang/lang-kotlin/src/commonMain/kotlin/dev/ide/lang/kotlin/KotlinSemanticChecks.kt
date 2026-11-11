@@ -2218,7 +2218,14 @@ internal class KotlinSemanticChecks(
         }
         var distinct = applicable
             .filter { it.paramTypes.size == n && it.varargParamIndex < 0 }
-            .distinctBy { c -> c.paramTypes.joinToString(",") { (it as? KotlinType)?.qualifiedName ?: "?" } }
+            // By the KOTLIN type of each parameter: Java's `int` and `Integer` are both `Int` to a Kotlin caller,
+            // so JUnit 5's `assertEquals(int, int)` / `(int, Integer)` / `(Integer, int)` / `(Integer, Integer)`
+            // are one signature here, not four rivals. kotlinc picks among them without complaint.
+            .distinctBy { c ->
+                c.paramTypes.joinToString(",") { p ->
+                    (p as? KotlinType)?.qualifiedName?.let { Builtins.kotlinTypeFor(it) ?: it } ?: "?"
+                }
+            }
         if (distinct.size < 2) return null
         // Every compared parameter must be precisely comparable, else specificity isn't decidable → back off.
         if (distinct.any { c -> c.paramTypes.any { p -> p !is KotlinType || p.isTypeParameter || isFunctional(p) || !service.isKnownType(p.qualifiedName) } }) return null

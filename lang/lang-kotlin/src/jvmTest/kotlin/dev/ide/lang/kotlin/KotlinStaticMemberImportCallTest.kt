@@ -37,6 +37,62 @@ class KotlinStaticMemberImportCallTest {
         assertTrue(errors.isEmpty(), "expected a clean file, got $errors")
     }
 
+    /**
+     * `import org.junit.Assert.*` is the other spelling of the same import, and the one a test file usually
+     * has. Every `assertEquals`/`assertTrue`/`assertNull` under it was "Unresolved reference": the by-name
+     * import is trusted without a lookup, and a star import names nothing to trust.
+     */
+    @Test
+    fun javaStaticsUnderAStarImportAreCallable() = runBlocking {
+        val junit = TestJars.onClasspath("org/junit/jupiter/api/Assertions.class")
+        val jdk = TestJars.jdkBaseJar(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "codeassist-jdk-jar"))
+        val src = tempProject(
+            mapOf(
+                "Use.kt" to """
+                    package demo
+                    import org.junit.jupiter.api.Assertions.*
+                    import java.lang.Math.*
+                    class Info(val outputType: String?, val flag: Boolean)
+                    fun check(read: Info) {
+                        assertEquals("Exe", read.outputType)
+                        assertEquals(1L, 1L, "same")
+                        // `int` and `Integer` overloads are one Kotlin signature, not an ambiguity.
+                        assertEquals(1, 2)
+                        assertTrue(read.flag)
+                        assertFalse(!read.flag)
+                        assertNull(null)
+                        assertNotNull(read.outputType)
+                        val area: Double = PI * floorMod(7, 2)
+                    }
+                """.trimIndent(),
+            ),
+        )
+        val analyzer = KotlinSourceAnalyzer(fakeContext(src, listOfNotNull(stdlibJarPath(), junit, jdk)))
+        val errors = analyzer.errorsOf(src, "Use.kt")
+        assertTrue(errors.isEmpty(), "expected a clean file, got $errors")
+    }
+
+    /** A star import of a class is not a licence: a name the class has no static for is still unresolved. */
+    @Test
+    fun aNameTheStarImportedClassLacksIsStillUnresolved() = runBlocking {
+        val junit = TestJars.onClasspath("org/junit/jupiter/api/Assertions.class")
+        val src = tempProject(
+            mapOf(
+                "Use.kt" to """
+                    package demo
+                    import org.junit.jupiter.api.Assertions.*
+                    fun check() {
+                        assertNothing(1)
+                    }
+                """.trimIndent(),
+            ),
+        )
+        val analyzer = KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath(), junit)))
+        val errors = analyzer.errorsOf(src, "Use.kt")
+        assertEquals(1, errors.size, "expected exactly the unresolved name, got $errors")
+        assertEquals(KotlinDiagnosticCodes.UNRESOLVED, errors.single().code, "got $errors")
+    }
+
     @Test
     fun aKotlinObjectMemberImportedByNameIsCallable() = runBlocking {
         val src = tempProject(

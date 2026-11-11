@@ -733,7 +733,13 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // bare only same-package), so an unimported same-module type is flagged by the bare-reference diagnostic. The
     // ENCLOSING class is passed so a NESTED-class constructor (`Plan(1)` inside `class Game { private class Plan }`)
     // resolves by simple name.
-    return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.let { service.isKnownType(it) } == true
+    if (service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.let { service.isKnownType(it) } == true) return true
+    // A STAR import of a class puts its bare-callable members in scope: `import org.junit.Assert.*` makes
+    // `assertEquals(…)` a call to a Java static. The by-name spelling (`import org.junit.Assert.assertEquals`)
+    // was settled by the explicit-import rule above, which never looks the member up; a star import names
+    // nothing, so only the container's own members can answer. Last, because it is the one probe here that
+    // reads a container's members, and everything commoner has already had its say.
+    return importedSingletonMembers(name, exactName = true).any { it.name == name }
 }
 
 /**
