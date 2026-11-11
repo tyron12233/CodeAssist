@@ -13,7 +13,7 @@ import kotlin.io.path.writeText
 /**
  * `java.util.zip`, which both the JVM and ART have.
  *
- * Alongside the `classes.jar`, the AAR's `res/`, `assets/`, `jni/`, `AndroidManifest.xml` and
+ * Alongside the `classes.jar`, the AAR's `res/`, `assets/`, `jni/`, `AndroidManifest.xml`, `R.txt` and
  * `baseline-prof.txt` are unpacked into the same exploded dir — so a consumer (the IDE's resource model /
  * the Android build) finds a library's resources as a `res/` sibling of its `classes.jar`, and its package
  * name in the sibling manifest, with no further unzip at use time.
@@ -62,7 +62,9 @@ private fun explode(aar: Path, dir: Path): Path {
                 name.startsWith("res/") || name.startsWith("assets/") ||
                     name.startsWith("jni/") || name == "AndroidManifest.xml" ||
                     // Baseline Profile rules: a release build compiles them into the app's profile.
-                    name == "baseline-prof.txt" -> {
+                    name == "baseline-prof.txt" ||
+                    // The library's symbol table: the R class a consumer generates for it holds exactly these.
+                    name == "R.txt" -> {
                     val target = dir.resolve(name).normalize()
                     if (target.startsWith(dir)) { // zip-slip guard
                         Files.createDirectories(target.parent)

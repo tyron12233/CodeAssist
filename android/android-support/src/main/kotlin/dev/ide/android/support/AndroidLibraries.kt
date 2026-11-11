@@ -150,7 +150,7 @@ object AndroidLibraries {
                     dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
                     dir.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
                     dir.resolve(AarMetadata.ENTRY_PATH).takeIf { Files.isRegularFile(it) },
-                    dir.resolve("R.txt").takeIf { Files.isRegularFile(it) },
+                    symbolTableOf(dir),
                     dir.fileName?.toString() ?: root.toString())
             }
         }
@@ -254,6 +254,35 @@ object AndroidLibraries {
         Files.isRegularFile(dir.resolve(".extracted")) || Files.isDirectory(dir.resolve("res")) ||
             Files.isRegularFile(dir.resolve("AndroidManifest.xml"))
     } == true
+
+    /**
+     * The `R.txt` of a Maven-resolved AAR exploded at [dir], or null when there is none to find.
+     *
+     * The resolver's exploder did not unpack `R.txt` until now, so every exploded library on a device lacks
+     * it, and without it a library's R cannot be made from its own symbols. The `.aar` it was exploded from
+     * still sits beside the directory (`<artifact>-<version>.aar` next to `<artifact>-<version>-exploded/`), so
+     * the table is taken from there once and kept. An AAR with no `R.txt` declares no resources: an empty
+     * table is left in its place, so the archive is not reopened on every build.
+     */
+    private fun symbolTableOf(dir: Path): Path? {
+        val rTxt = dir.resolve("R.txt")
+        if (Files.isRegularFile(rTxt)) return rTxt
+        val name = dir.fileName?.toString()?.removeSuffix("-exploded") ?: return null
+        val aar = dir.resolveSibling("$name.aar").takeIf { Files.isRegularFile(it) } ?: return null
+        return runCatching {
+            java.util.zip.ZipFile(aar.toFile()).use { zip ->
+                val entry = zip.getEntry("R.txt")
+                val tmp = Files.createTempFile(dir, "R", ".txt.tmp")
+                try {
+                    if (entry != null) zip.getInputStream(entry).use { Files.copy(it, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+                    Files.move(tmp, rTxt, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                } finally {
+                    Files.deleteIfExists(tmp)
+                }
+            }
+            rTxt
+        }.getOrNull()
+    }
 
     private fun dirOrNull(parent: Path, name: String): Path? = parent.resolve(name).takeIf { Files.isDirectory(it) }
 

@@ -39,14 +39,31 @@ import dev.ide.vfs.local.fileFor
 class AndroidAarAttributeTest {
 
     @Test
-    fun resolvesCustomAttributeFromExplodedAar() {
+    fun resolvesCustomAttributeFromExplodedAar() = build(siblingAar = false)
+
+    /**
+     * The same library as the resolver leaves it on a device: exploded without its `R.txt`, the `.aar` beside
+     * the directory. Its symbol table is taken from the archive, so its R holds its own resources and not a
+     * copy of the app's.
+     */
+    @Test
+    fun aLibrarysRIsMadeFromTheSymbolTableInTheAarBesideIt() = build(siblingAar = true)
+
+    private fun build(siblingAar: Boolean) {
         val sdk = assumeAndroidSdk()
 
         testEnv("android-aar-attr") { env ->
             val dir = env.dir
             val platform = env.platform
             // The exploded-AAR layout the Maven resolver produces: classes.jar + res/ + manifest + .extracted.
-            val exploded = explodeAar(dir.resolve("exploded/customview"), sdk.androidJar)
+            val exploded = explodeAar(dir.resolve("exploded/customview-1.0-exploded"), sdk.androidJar)
+            if (siblingAar) {
+                java.util.zip.ZipOutputStream(Files.newOutputStream(dir.resolve("exploded/customview-1.0.aar"))).use { zip ->
+                    zip.putNextEntry(java.util.zip.ZipEntry("R.txt"))
+                    zip.write("int attr customText 0x0\nint[] styleable CustomView { 0x0 }\nint styleable CustomView_customText 0\n".toByteArray())
+                    zip.closeEntry()
+                }
+            }
 
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
@@ -90,6 +107,12 @@ class AndroidAarAttributeTest {
                 val attrs = zf.getEntry("io/example/customview/R\$attr.class")
                 assertTrue(attrs != null, "the AAR package has no R in $rJar: ${zf.entries().asSequence().map { it.name }.toList()}")
                 assertTrue("customText" in zf.getInputStream(attrs).readBytes().toString(Charsets.ISO_8859_1), "its attr is not in it")
+                // The app's own layout: in the library's R only when the library got the whole table.
+                val appLayout = zf.getEntry("io/example/customview/R\$layout.class") != null
+                assertTrue(appLayout == !siblingAar, "the app's layout in the library's R: $appLayout (symbol table beside it: $siblingAar)")
+            }
+            if (siblingAar) {
+                assertTrue(Files.isRegularFile(dir.resolve("exploded/customview-1.0-exploded/R.txt")), "the table is kept once taken from the archive")
             }
         }
     }
