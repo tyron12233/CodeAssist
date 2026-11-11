@@ -90,6 +90,18 @@ import dev.ide.agent.ui.generated.resources.conn_status_shadowed
 import dev.ide.agent.ui.generated.resources.conn_status_unsupported
 import dev.ide.agent.ui.generated.resources.conn_status_untrusted
 import dev.ide.agent.ui.generated.resources.conn_title
+import dev.ide.agent.ui.generated.resources.conn_relay_toggle
+import dev.ide.agent.ui.generated.resources.conn_relay_intro
+import dev.ide.agent.ui.generated.resources.conn_relay_sign_in
+import dev.ide.agent.ui.generated.resources.conn_relay_warning
+import dev.ide.agent.ui.generated.resources.conn_relay_status_connecting
+import dev.ide.agent.ui.generated.resources.conn_relay_status_connected
+import dev.ide.agent.ui.generated.resources.conn_relay_status_offline
+import dev.ide.agent.ui.generated.resources.conn_relay_status_signed_out
+import dev.ide.agent.ui.generated.resources.conn_relay_status_in_use
+import dev.ide.agent.ui.generated.resources.conn_relay_status_replaced
+import dev.ide.agent.ui.generated.resources.conn_relay_step
+import dev.ide.agent.ui.generated.resources.conn_relay_new_link
 import dev.ide.agent.ui.generated.resources.conn_claude_title
 import dev.ide.agent.ui.generated.resources.conn_claude_toggle
 import dev.ide.agent.ui.generated.resources.conn_claude_intro
@@ -106,6 +118,7 @@ import dev.ide.agent.ui.generated.resources.conn_waiting
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentConnections
 import dev.ide.ui.backend.UiAgentSkill
+import dev.ide.ui.backend.UiMcpRelayStatus
 import dev.ide.ui.backend.UiMcpScope
 import dev.ide.ui.backend.UiMcpServer
 import dev.ide.ui.backend.UiMcpServerConfig
@@ -215,6 +228,48 @@ private fun ClaudeLinkSection(backend: IdeBackend) {
             CommandBlock(stringResource(Res.string.conn_claude_step_code), ClaudeLink.claudeCodeCommand(host.url))
             CommandBlock(stringResource(Res.string.conn_claude_step_desktop), ClaudeLink.claudeDesktopConfig(host.url))
             Hint(stringResource(Res.string.conn_claude_desktop_note))
+        }
+    }
+    ClaudeRelaySection(backend)
+}
+
+/**
+ * The hosted relay: the same tools at a public address, which is what Claude on the web and on a phone need,
+ * because their connectors call from Anthropic's servers. The address is a secret and is shown only while on.
+ */
+@Composable
+private fun ClaudeRelaySection(backend: IdeBackend) {
+    val relay by backend.agent.mcpRelay.collectAsState()
+    if (!relay.supported) return
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(Res.string.conn_relay_toggle),
+                color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            // Turning it on needs an account; turning it off never does.
+            CaSwitch(relay.enabled, { if (relay.signedIn || !it) backend.agent.setMcpRelayEnabled(it) })
+        }
+        Hint(stringResource(Res.string.conn_relay_intro))
+        if (!relay.signedIn) Hint(stringResource(Res.string.conn_relay_sign_in))
+        Text(stringResource(Res.string.conn_relay_warning), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        if (relay.enabled) {
+            val (status, good) = when (relay.status) {
+                UiMcpRelayStatus.CONNECTED -> Res.string.conn_relay_status_connected to true
+                UiMcpRelayStatus.OFFLINE -> Res.string.conn_relay_status_offline to false
+                UiMcpRelayStatus.SIGNED_OUT -> Res.string.conn_relay_status_signed_out to false
+                UiMcpRelayStatus.IN_USE -> Res.string.conn_relay_status_in_use to false
+                UiMcpRelayStatus.REPLACED -> Res.string.conn_relay_status_replaced to false
+                UiMcpRelayStatus.CONNECTING, UiMcpRelayStatus.OFF -> Res.string.conn_relay_status_connecting to false
+            }
+            Text(
+                stringResource(status),
+                color = if (good) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            CommandBlock(stringResource(Res.string.conn_relay_step), relay.url)
+            TextAction(stringResource(Res.string.conn_relay_new_link)) { backend.agent.resetMcpRelayLink() }
         }
     }
 }

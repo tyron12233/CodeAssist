@@ -19,6 +19,8 @@ import dev.ide.ui.backend.UiAgentPermissionMode
 import dev.ide.ui.backend.UiAgentPermissionRequest
 import dev.ide.ui.backend.UiAgentSkill
 import dev.ide.ui.backend.UiMcpHost
+import dev.ide.ui.backend.UiMcpRelay
+import dev.ide.ui.backend.UiMcpRelayStatus
 import dev.ide.ui.backend.UiMcpScope
 import dev.ide.ui.backend.UiMcpServer
 import dev.ide.ui.backend.UiMcpServerConfig
@@ -75,6 +77,12 @@ class ConnectionsSnapshot {
     private fun backend(state: UiAgentConnections, host: UiMcpHost = UiMcpHost(supported = true, port = 8765)) = object : StubBackend() {
         override val agent: AgentService = object : AgentService {
             override val mcpHost: StateFlow<UiMcpHost> = MutableStateFlow(host)
+            override val mcpRelay: StateFlow<UiMcpRelay> = MutableStateFlow(
+                UiMcpRelay(
+                    supported = true, signedIn = true, enabled = host.running, status = UiMcpRelayStatus.CONNECTED,
+                    url = "https://codeassist-mcp-relay.example.workers.dev/c/HQaW0Nj6zbeHFwNMRM5wI_pcay8xr-eLlCmPs5sxUtA/mcp",
+                ),
+            )
             override val connections: StateFlow<UiAgentConnections> = MutableStateFlow(state)
             override val chatState: StateFlow<UiAgentChatState> = MutableStateFlow(UiAgentChatState())
             override val permissionRequest: StateFlow<UiAgentPermissionRequest?> = MutableStateFlow(null)
@@ -106,7 +114,7 @@ class ConnectionsSnapshot {
     }
 
     @Test
-    fun renderClaudeLinkDark() = snapshot("connections-claude-dark.png", dark = true) {
+    fun renderClaudeLinkDark() = snapshot("connections-claude-dark.png", dark = true, height = 3400) {
         AgentConnectionsSheet(backend(UiAgentConnections(mcpSupported = true, projectOpen = true, appSkillsDir = "/a/skills"), hosting), onOpenFile = {}) {}
     }
 
@@ -115,8 +123,8 @@ class ConnectionsSnapshot {
         ServerEditor(backend(sample), sample, sample.servers[3]) {}
     }
 
-    private fun snapshot(name: String, dark: Boolean, content: @Composable () -> Unit) {
-        val scene = ImageComposeScene(width = 822, height = 1780, density = Density(2f)) {
+    private fun snapshot(name: String, dark: Boolean, height: Int = 1780, content: @Composable () -> Unit) {
+        val scene = ImageComposeScene(width = 822, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) { content() }
             }

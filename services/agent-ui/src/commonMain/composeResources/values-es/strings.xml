@@ -291,4 +291,16 @@
     <string name="conn_claude_step_code">Claude Code: ejecuta esto una vez</string>
     <string name="conn_claude_step_desktop">Claude Desktop: añade esto a claude_desktop_config.json</string>
     <string name="conn_claude_desktop_note">Claude Desktop necesita Node.js para esto y luego reiniciarse. Mantén CodeAssist abierto con el proyecto en el que quieres que trabaje Claude.</string>
+    <string name="conn_relay_toggle">Claude en la web y el teléfono</string>
+    <string name="conn_relay_intro">Da a este proyecto una dirección web privada a través del relé de CodeAssist, para que Claude en claude.ai y en la app de Claude pueda trabajar en él. CodeAssist debe seguir abierto.</string>
+    <string name="conn_relay_sign_in">Inicia sesión en tu cuenta de CodeAssist para usar esto.</string>
+    <string name="conn_relay_warning">Cualquiera que tenga la dirección puede cambiar el proyecto abierto sin preguntar. No la compartas con nadie y crea un enlace nuevo si se filtra.</string>
+    <string name="conn_relay_status_connecting">Conectando…</string>
+    <string name="conn_relay_status_connected">Conectado. Claude puede acceder a este proyecto.</string>
+    <string name="conn_relay_status_offline">Sin conexión con el relé. Reintentando…</string>
+    <string name="conn_relay_status_signed_out">Tu sesión caducó. Inicia sesión de nuevo.</string>
+    <string name="conn_relay_status_in_use">Este enlace pertenece a otra cuenta. Crea un enlace nuevo.</string>
+    <string name="conn_relay_status_replaced">Este enlace se abrió en otro CodeAssist. Actívalo aquí de nuevo para recuperarlo.</string>
+    <string name="conn_relay_step">En Claude: Ajustes, Conectores, Añadir conector personalizado. Pega esta dirección y elige sin inicio de sesión.</string>
+    <string name="conn_relay_new_link">Crear un enlace nuevo</string>
 </resources>

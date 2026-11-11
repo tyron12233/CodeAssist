@@ -279,4 +279,16 @@
     <string name="conn_claude_step_code">Claude Code: jalankan ini sekali</string>
     <string name="conn_claude_step_desktop">Claude Desktop: tambahkan ini ke claude_desktop_config.json</string>
     <string name="conn_claude_desktop_note">Claude Desktop memerlukan Node.js untuk ini, lalu dimulai ulang. Biarkan CodeAssist terbuka dengan proyek yang ingin dikerjakan Claude.</string>
+    <string name="conn_relay_toggle">Claude di web dan ponsel</string>
+    <string name="conn_relay_intro">Memberi proyek ini alamat web pribadi melalui relay CodeAssist, sehingga Claude di claude.ai dan di aplikasi Claude dapat mengerjakannya. CodeAssist harus tetap terbuka.</string>
+    <string name="conn_relay_sign_in">Masuk ke akun CodeAssist Anda untuk menggunakan ini.</string>
+    <string name="conn_relay_warning">Siapa pun yang memiliki alamat ini bisa mengubah proyek yang terbuka tanpa bertanya. Jangan bagikan kepada siapa pun, dan buat tautan baru jika bocor.</string>
+    <string name="conn_relay_status_connecting">Menghubungkan…</string>
+    <string name="conn_relay_status_connected">Terhubung. Claude dapat menjangkau proyek ini.</string>
+    <string name="conn_relay_status_offline">Tidak ada koneksi ke relay. Mencoba lagi…</string>
+    <string name="conn_relay_status_signed_out">Sesi masuk Anda berakhir. Masuk lagi.</string>
+    <string name="conn_relay_status_in_use">Tautan ini milik akun lain. Buat tautan baru.</string>
+    <string name="conn_relay_status_replaced">Tautan ini dibuka di CodeAssist lain. Aktifkan lagi di sini untuk mengambilnya kembali.</string>
+    <string name="conn_relay_step">Di Claude: Setelan, Konektor, Tambahkan konektor kustom. Tempel alamat ini dan pilih tanpa masuk.</string>
+    <string name="conn_relay_new_link">Buat tautan baru</string>
 </resources>

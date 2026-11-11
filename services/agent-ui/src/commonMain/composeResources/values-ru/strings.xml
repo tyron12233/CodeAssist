@@ -297,4 +297,16 @@
     <string name="conn_claude_step_code">Claude Code: выполните один раз</string>
     <string name="conn_claude_step_desktop">Claude Desktop: добавьте это в claude_desktop_config.json</string>
     <string name="conn_claude_desktop_note">Для этого Claude Desktop нужен Node.js, после чего его надо перезапустить. Держите CodeAssist открытым с проектом, над которым должен работать Claude.</string>
+    <string name="conn_relay_toggle">Claude в браузере и на телефоне</string>
+    <string name="conn_relay_intro">Даёт этому проекту закрытый веб-адрес через ретранслятор CodeAssist, чтобы Claude на claude.ai и в приложении Claude мог с ним работать. CodeAssist должен оставаться открытым.</string>
+    <string name="conn_relay_sign_in">Войдите в аккаунт CodeAssist, чтобы пользоваться этим.</string>
+    <string name="conn_relay_warning">Любой, у кого есть адрес, может менять открытый проект без запроса. Никому его не передавайте и создайте новую ссылку, если он утёк.</string>
+    <string name="conn_relay_status_connecting">Подключение…</string>
+    <string name="conn_relay_status_connected">Подключено. Claude может работать с этим проектом.</string>
+    <string name="conn_relay_status_offline">Нет связи с ретранслятором. Повторная попытка…</string>
+    <string name="conn_relay_status_signed_out">Срок входа истёк. Войдите снова.</string>
+    <string name="conn_relay_status_in_use">Эта ссылка принадлежит другому аккаунту. Создайте новую ссылку.</string>
+    <string name="conn_relay_status_replaced">Эта ссылка открыта в другом CodeAssist. Включите её здесь снова, чтобы вернуть.</string>
+    <string name="conn_relay_step">В Claude: Настройки, Коннекторы, Добавить свой коннектор. Вставьте этот адрес и выберите «без входа».</string>
+    <string name="conn_relay_new_link">Создать новую ссылку</string>
 </resources>

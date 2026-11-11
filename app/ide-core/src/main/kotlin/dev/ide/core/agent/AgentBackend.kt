@@ -296,6 +296,10 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private val _mcpHost = MutableStateFlow(dev.ide.ui.backend.UiMcpHost(supported = true, port = MCP_PORT))
 
+    @Volatile private var relayClient: dev.ide.agent.mcp.McpRelayClient? = null
+    @Volatile private var relayServer: HttpMcpServer? = null
+    private val _mcpRelay = MutableStateFlow(dev.ide.ui.backend.UiMcpRelay())
+
     /** The local FTP asset server, started when the AI settings "FTP server" toggle (or the `ftp_server`
      *  tool) is on. Anonymous and bound to 127.0.0.1 only; uploads land in `<project>/assets`. */
     @Volatile
@@ -307,6 +311,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             mcpServer = startMcpServer()
         }
         publishMcpHost(wanted = prefBool("mcpServer", default = false))
+        if (prefBool(RELAY_PREF, default = false)) startRelay()
+        publishRelay()
         if (prefBool(FTP_PREF, default = false)) {
             ftpServer = startFtpServer()
         }
@@ -399,6 +405,86 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             port = MCP_PORT,
             url = "http://127.0.0.1:$MCP_PORT/mcp",
             error = if (wanted && !running) "Port $MCP_PORT is in use, so the server could not start." else null,
+        )
+    }
+
+    // --- the hosted relay: the same tools at a public address, for Claude on the web and on a phone ---
+
+    /** The relay's address, when this build has one: next to the Free AI proxy, on the same account. */
+    private fun relayBaseUrl(): String? =
+        System.getProperty("codeassist.mcpRelayUrl")?.takeIf { it.isNotBlank() }
+            ?: freeAiCredits.proxyBaseUrl()?.takeIf { AI_PROXY_HOST in it }?.replace(AI_PROXY_HOST, MCP_RELAY_HOST)
+
+    override val mcpRelay: StateFlow<dev.ide.ui.backend.UiMcpRelay> get() = _mcpRelay.asStateFlow()
+
+    override fun setMcpRelayEnabled(enabled: Boolean) {
+        ctx.manager?.setPreference("settings.$AI_PAGE.$RELAY_PREF", enabled.toString())
+        if (enabled) startRelay() else stopRelay()
+        publishRelay()
+    }
+
+    override fun resetMcpRelayLink() {
+        ctx.manager?.setPreference("settings.$AI_PAGE.$RELAY_SECRET_PREF", dev.ide.agent.mcp.McpRelayClient.newSecret())
+        if (relayClient != null) { stopRelay(); startRelay() }
+        publishRelay()
+    }
+
+    private fun relaySecret(): String =
+        pref(RELAY_SECRET_PREF) ?: dev.ide.agent.mcp.McpRelayClient.newSecret().also {
+            ctx.manager?.setPreference("settings.$AI_PAGE.$RELAY_SECRET_PREF", it)
+        }
+
+    /**
+     * The relay answers from an MCP server of its own, on a port the system picks, rather than from [mcpServer]:
+     * turning the relay on should not also open the well-known local port to every app on the device.
+     */
+    @Synchronized
+    private fun startRelay() {
+        if (relayClient != null) return
+        val base = relayBaseUrl() ?: return
+        val server = try {
+            CodeAssistMcpServer.startHttpServer(workspace = workspace, port = 0, tools = mcpTools, gate = AllowAllGate)
+        } catch (e: Exception) {
+            log.warn("The relay's MCP server did not start: ${e.message}")
+            return
+        }
+        relayServer = server
+        relayClient = dev.ide.agent.mcp.McpRelayClient(
+            relayBaseUrl = base,
+            secret = relaySecret(),
+            localUrl = "http://127.0.0.1:${server.port}/mcp",
+            token = { freeAiCredits.accessToken() },
+            refreshToken = { stale -> freeAiCredits.refreshAccessToken(stale) },
+            onState = { publishRelay() },
+        ).start()
+    }
+
+    @Synchronized
+    private fun stopRelay() {
+        relayClient?.close()
+        relayClient = null
+        relayServer?.close()
+        relayServer = null
+    }
+
+    private fun publishRelay() {
+        val base = relayBaseUrl()
+        val client = relayClient
+        val status = when (client?.state) {
+            null, dev.ide.agent.mcp.McpRelayClient.State.CLOSED -> dev.ide.ui.backend.UiMcpRelayStatus.OFF
+            dev.ide.agent.mcp.McpRelayClient.State.CONNECTING -> dev.ide.ui.backend.UiMcpRelayStatus.CONNECTING
+            dev.ide.agent.mcp.McpRelayClient.State.CONNECTED -> dev.ide.ui.backend.UiMcpRelayStatus.CONNECTED
+            dev.ide.agent.mcp.McpRelayClient.State.OFFLINE -> dev.ide.ui.backend.UiMcpRelayStatus.OFFLINE
+            dev.ide.agent.mcp.McpRelayClient.State.SIGNED_OUT -> dev.ide.ui.backend.UiMcpRelayStatus.SIGNED_OUT
+            dev.ide.agent.mcp.McpRelayClient.State.IN_USE -> dev.ide.ui.backend.UiMcpRelayStatus.IN_USE
+            dev.ide.agent.mcp.McpRelayClient.State.REPLACED -> dev.ide.ui.backend.UiMcpRelayStatus.REPLACED
+        }
+        _mcpRelay.value = dev.ide.ui.backend.UiMcpRelay(
+            supported = base != null,
+            signedIn = freeAiCredits.signedIn(),
+            enabled = client != null,
+            status = status,
+            url = if (client != null) client.publicUrl else "",
         )
     }
 
@@ -1406,7 +1492,10 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     override val connections: StateFlow<dev.ide.ui.backend.UiAgentConnections> get() = agentConnections.state
 
-    override fun refreshConnections() = agentConnections.refresh()
+    override fun refreshConnections() {
+        agentConnections.refresh()
+        publishRelay() // the page shows whether an account is signed in, which changes outside this class
+    }
 
     override fun saveMcpServer(
         config: dev.ide.ui.backend.UiMcpServerConfig,
@@ -1561,6 +1650,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
         /** The port the in-app MCP server listens on (see the "MCP server" AI setting). */
         const val MCP_PORT = CodeAssistMcpServer.DEFAULT_HTTP_PORT
+
+        /** Prefs of the hosted relay: whether it is on, and this install's link secret. */
+        const val RELAY_PREF = "claudeRelay"
+        const val RELAY_SECRET_PREF = "claudeRelaySecret"
+        private const val AI_PROXY_HOST = "codeassist-ai-proxy"
+        private const val MCP_RELAY_HOST = "codeassist-mcp-relay"
 
         /** The "leave it to the provider" reasoning-effort choice: nothing is sent on the request. */
         const val REASONING_EFFORT_DEFAULT = "default"

@@ -281,4 +281,16 @@
     <string name="conn_claude_step_code">Claude Code：运行一次此命令</string>
     <string name="conn_claude_step_desktop">Claude Desktop：将以下内容添加到 claude_desktop_config.json</string>
     <string name="conn_claude_desktop_note">Claude Desktop 需要先安装 Node.js，然后重新启动。请保持 CodeAssist 打开，并打开希望 Claude 处理的项目。</string>
+    <string name="conn_relay_toggle">网页版和手机版 Claude</string>
+    <string name="conn_relay_intro">通过 CodeAssist 中继为此项目提供一个私有网址，让 claude.ai 和 Claude 应用中的 Claude 可以处理它。CodeAssist 必须保持打开。</string>
+    <string name="conn_relay_sign_in">请登录你的 CodeAssist 账号以使用此功能。</string>
+    <string name="conn_relay_warning">任何拥有该地址的人都可以不经询问地修改当前打开的项目。不要分享给任何人，若泄露请生成新链接。</string>
+    <string name="conn_relay_status_connecting">正在连接…</string>
+    <string name="conn_relay_status_connected">已连接。Claude 可以访问此项目。</string>
+    <string name="conn_relay_status_offline">无法连接中继，正在重试…</string>
+    <string name="conn_relay_status_signed_out">登录已过期，请重新登录。</string>
+    <string name="conn_relay_status_in_use">此链接属于另一个账号，请生成新链接。</string>
+    <string name="conn_relay_status_replaced">此链接已在另一个 CodeAssist 中打开。在此重新开启即可收回。</string>
+    <string name="conn_relay_step">在 Claude 中：设置、连接器、添加自定义连接器。粘贴此地址并选择无需登录。</string>
+    <string name="conn_relay_new_link">生成新链接</string>
 </resources>

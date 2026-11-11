@@ -2398,6 +2398,19 @@ interface AgentService {
     /** Start or stop the hosted MCP server now, and remember the choice (`settings.ai.mcpServer`). */
     fun setMcpHostEnabled(enabled: Boolean) {}
 
+    /**
+     * The hosted relay: a public address for [mcpHost]'s tools, so Claude on the web and on a phone (whose
+     * connectors call from Anthropic's servers, and so cannot reach a device's loopback) can work on the open
+     * project too. Needs a signed-in CodeAssist account.
+     */
+    val mcpRelay: StateFlow<UiMcpRelay> get() = MCP_RELAY_NONE
+
+    /** Connect to or leave the relay now, and remember the choice. */
+    fun setMcpRelayEnabled(enabled: Boolean) {}
+
+    /** Replace the link with a new one. The old address stops working at once, wherever it was pasted. */
+    fun resetMcpRelayLink() {}
+
     /** A no-op agent for backends that wire none. */
     object Unsupported : AgentService {
         override val chatState: StateFlow<UiAgentChatState> =
@@ -2507,6 +2520,24 @@ data class UiMcpHost(
 )
 
 private val MCP_HOST_NONE: StateFlow<UiMcpHost> = MutableStateFlow(UiMcpHost())
+
+/** Where the relay's connection stands. [REPLACED]: this account opened the same link in another CodeAssist. */
+enum class UiMcpRelayStatus { OFF, CONNECTING, CONNECTED, OFFLINE, SIGNED_OUT, IN_USE, REPLACED }
+
+/**
+ * The hosted relay (see [AgentService.mcpRelay]). [url] is the address to add to Claude as a custom connector
+ * with no sign-in; it is a secret, since holding it is all it takes to use the link. Empty until turned on.
+ */
+data class UiMcpRelay(
+    /** This build knows a relay to connect to. */
+    val supported: Boolean = false,
+    val signedIn: Boolean = false,
+    val enabled: Boolean = false,
+    val status: UiMcpRelayStatus = UiMcpRelayStatus.OFF,
+    val url: String = "",
+)
+
+private val MCP_RELAY_NONE: StateFlow<UiMcpRelay> = MutableStateFlow(UiMcpRelay())
 
 data class UiAgentConnections(
     /** Whether this build can connect to MCP servers at all. */

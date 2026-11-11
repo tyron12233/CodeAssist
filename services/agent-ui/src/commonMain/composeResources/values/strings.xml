@@ -287,4 +287,16 @@
     <string name="conn_claude_step_code">Claude Code: run this once</string>
     <string name="conn_claude_step_desktop">Claude Desktop: add this to claude_desktop_config.json</string>
     <string name="conn_claude_desktop_note">Claude Desktop needs Node.js for this, then a restart. Keep CodeAssist open with the project you want Claude to work on.</string>
+    <string name="conn_relay_toggle">Claude on the web and phone</string>
+    <string name="conn_relay_intro">Gives this project a private web address through the CodeAssist relay, so Claude on claude.ai and in the Claude app can work on it. CodeAssist must stay open.</string>
+    <string name="conn_relay_sign_in">Sign in to your CodeAssist account to use this.</string>
+    <string name="conn_relay_warning">Anyone who has the address can change the open project without asking. Share it with no one, and make a new link if it leaks.</string>
+    <string name="conn_relay_status_connecting">Connecting…</string>
+    <string name="conn_relay_status_connected">Connected. Claude can reach this project.</string>
+    <string name="conn_relay_status_offline">No connection to the relay. Retrying…</string>
+    <string name="conn_relay_status_signed_out">Your sign-in expired. Sign in again.</string>
+    <string name="conn_relay_status_in_use">This link belongs to another account. Make a new link.</string>
+    <string name="conn_relay_status_replaced">This link was opened in another CodeAssist. Turn it on here again to take it back.</string>
+    <string name="conn_relay_step">In Claude: Settings, Connectors, Add custom connector. Paste this address and choose no sign-in.</string>
+    <string name="conn_relay_new_link">Make a new link</string>
 </resources>

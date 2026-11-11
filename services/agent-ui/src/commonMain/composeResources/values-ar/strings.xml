@@ -311,4 +311,16 @@
     <string name="conn_claude_step_code">Claude Code: شغّل هذا الأمر مرة واحدة</string>
     <string name="conn_claude_step_desktop">Claude Desktop: أضف هذا إلى claude_desktop_config.json</string>
     <string name="conn_claude_desktop_note">يحتاج Claude Desktop إلى Node.js لهذا، ثم إلى إعادة التشغيل. أبقِ CodeAssist مفتوحًا على المشروع الذي تريد أن يعمل عليه Claude.</string>
+    <string name="conn_relay_toggle">Claude على الويب والهاتف</string>
+    <string name="conn_relay_intro">يمنح هذا المشروع عنوان ويب خاصًا عبر مرحّل CodeAssist، ليتمكن Claude على claude.ai وفي تطبيق Claude من العمل عليه. يجب أن يبقى CodeAssist مفتوحًا.</string>
+    <string name="conn_relay_sign_in">سجّل الدخول إلى حسابك في CodeAssist لاستخدام هذا.</string>
+    <string name="conn_relay_warning">أي شخص لديه العنوان يستطيع تغيير المشروع المفتوح دون أن يسأل. لا تشاركه مع أحد، وأنشئ رابطًا جديدًا إن تسرّب.</string>
+    <string name="conn_relay_status_connecting">جارٍ الاتصال…</string>
+    <string name="conn_relay_status_connected">متصل. يستطيع Claude الوصول إلى هذا المشروع.</string>
+    <string name="conn_relay_status_offline">لا اتصال بالمرحّل. تُعاد المحاولة…</string>
+    <string name="conn_relay_status_signed_out">انتهت صلاحية تسجيل الدخول. سجّل الدخول مجددًا.</string>
+    <string name="conn_relay_status_in_use">هذا الرابط يخص حسابًا آخر. أنشئ رابطًا جديدًا.</string>
+    <string name="conn_relay_status_replaced">فُتح هذا الرابط في CodeAssist آخر. فعّله هنا مجددًا لاستعادته.</string>
+    <string name="conn_relay_step">في Claude: الإعدادات، الموصلات، إضافة موصل مخصص. الصق هذا العنوان واختر بدون تسجيل دخول.</string>
+    <string name="conn_relay_new_link">إنشاء رابط جديد</string>
 </resources>
