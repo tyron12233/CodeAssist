@@ -216,8 +216,11 @@ class PreviewResourceLinker(
                 // base archives first, the live layout as an `-R` overlay → it overrides the saved copy (and
                 // `--auto-add-overlay` lets a newly added layout in), without recompiling the whole project. NO
                 // --extra-packages: a library's `R` is the app's under another name, resolved by the renderer.
+                // The base's first archive is the table and the rest go on top of it: the build compiles the
+                // libraries' resources apart from the project's, and two archives that define one resource can
+                // only be linked as a base and its overlay.
                 val linkRes = aapt2.link(
-                    compiled = base,
+                    compiled = base.take(1),
                     manifest = manifest,
                     androidJar = frameworkTable(),
                     customPackage = packageName,
@@ -226,7 +229,7 @@ class PreviewResourceLinker(
                     targetSdk = targetSdk,
                     genJavaDir = outDir.resolve("gen"),
                     outApk = previewAp,
-                    overlays = overlay.archives,
+                    overlays = base.drop(1) + overlay.archives,
                 )
                 if (!linkRes.success) {
                     locate(linkRes.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
@@ -563,7 +566,7 @@ class PreviewResourceLinker(
 
     /** The build's compiled resource flats, if a prior build produced them — a stale-but-valid fallback base. */
     private fun fallbackBase(module: Module, variant: String): List<Path>? =
-        listZips(AndroidBuildSystem.compiledResPath(module, variant)).takeIf { it.isNotEmpty() }
+        AndroidBuildSystem.compiledResArchives(module, variant).takeIf { it.isNotEmpty() }
 
     private fun listZips(dir: Path): List<Path> =
         if (Files.isDirectory(dir)) Files.list(dir).use { s -> s.filter { it.toString().endsWith(".zip") }.sorted().collect(Collectors.toList()) }

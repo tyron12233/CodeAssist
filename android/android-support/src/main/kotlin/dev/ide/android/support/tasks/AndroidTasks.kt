@@ -606,16 +606,32 @@ internal class Aapt2LinkTask(
     /** When set, aapt2 also writes the app's symbol table (`R.txt`, final ids) here: the source of non-transitive
      *  library R classes (see [GenerateRJarTask]). */
     private val rTxt: Path? = null,
+    /**
+     * Compiled resources of lower priority than [compiledDir], lowest first (dependency modules', libraries'),
+     * when they are compiled apart from the project's own. Linked as the base, with every tier above the first
+     * an aapt2 overlay, so a higher tier's resource replaces a lower one's of the same name.
+     */
+    private val lowerTiers: List<Path> = emptyList(),
+    /** The merged dirs [lowerTiers] were compiled from, for the same error mapping as [mergedRes]. */
+    private val lowerMergedRes: List<Path> = emptyList(),
 ) : Task {
-    private fun archives(): List<Path> =
-        if (Files.isDirectory(compiledDir)) Files.list(compiledDir).use { s ->
+    private fun archivesIn(dir: Path): List<Path> =
+        if (Files.isDirectory(dir)) Files.list(dir).use { s ->
             s.filter { it.toString().endsWith(".zip") }.sorted().collect(Collectors.toList())
         }
         else emptyList()
 
+    /** The base archives and the overlays above them: the lowest tier that compiled anything is the base. */
+    private fun linkInputs(): Pair<List<Path>, List<Path>> {
+        // listOf(): a Path is an Iterable of its own name elements, so `list + path` would add those instead.
+        val tiers = (lowerTiers + listOf(compiledDir)).map { archivesIn(it) }.filter { it.isNotEmpty() }
+        return (tiers.firstOrNull() ?: emptyList()) to tiers.drop(1).flatten()
+    }
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             dirPaths("compiled", listOf(compiledDir))
+            dirPaths("lowerTiers", lowerTiers)
             filePaths("manifest", listOf(manifest))
             property("package", customPackage)
             property("extraPackages", extraPackages.joinToString(":"))
@@ -637,8 +653,9 @@ internal class Aapt2LinkTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
+        val (base, overlays) = linkInputs()
         val r = aapt2.link(
-            archives(),
+            base,
             manifest,
             androidJar,
             customPackage,
@@ -651,9 +668,10 @@ internal class Aapt2LinkTask(
             versionName,
             proguardRules = proguardRules,
             protoFormat = protoFormat,
+            overlays = overlays,
             rTxt = rTxt,
         )
-        ctx.reportTool("aapt2", ResourceMergeMap.remapped(r, listOfNotNull(mergedRes)), DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", ResourceMergeMap.remapped(r, listOfNotNull(mergedRes) + lowerMergedRes), DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
 }

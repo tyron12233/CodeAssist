@@ -434,8 +434,18 @@ class AndroidBuildSystem(
         // all its source sets, so a debug-only or flavor-only resource doesn't leak into the wrong variant.
         fun depRoots(dep: Module, role: ContentRole): List<Path> =
             contentRoots(dep, AndroidVariants.matchLibraryVariant(dep, variant, facet), role)
-        val mergeResInputs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) } +
-            libs.resDirs + gmsRes + crashlyticsRes + contentRoots(app, variant, ContentRole.ANDROID_RES)
+        // Resources in ascending priority: dependency modules, downloaded libraries, then the app's own (with
+        // what is generated for it). A later one overrides an earlier one's resource of the same name.
+        val moduleRes = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) }
+        val projectRes = gmsRes + crashlyticsRes + contentRoots(app, variant, ContentRole.ANDROID_RES)
+        // The libraries' resources are merged and compiled by themselves, apart from the project's. They are
+        // most of the table (Material alone is some two thousand files) and never change between builds, yet
+        // merged into one tree with the app's they were re-merged and recompiled for every edited string: 7 s
+        // of a 15 s build on a phone. Apart, those two tasks stay up to date, and an edit compiles only the
+        // project's own resources. The link takes the tiers in the same order, each above the first as an
+        // overlay, so what overrides what is unchanged. With no library resources there is one tier, as before.
+        val splitRes = libs.resDirs.isNotEmpty()
+        val mergeResInputs = if (splitRes) projectRes else moduleRes + libs.resDirs + projectRes
         // SOURCE plus the module's declared GENERATED roots, so a generated root is compiled here exactly as
         // it is on the Java pipeline. Nested roots are collapsed: a project that declares `build/generated`
         // would otherwise present the pipeline's own generated directories twice.
@@ -589,6 +599,20 @@ class AndroidBuildSystem(
             }
         }
         tasks.task(mergeRes, mergeResDeps) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
+        // The lower tiers, lowest first: (merged dir, compiled dir, the task that compiles it).
+        val lowerResTiers = ArrayList<Triple<Path, Path, TaskName>>()
+        if (splitRes) {
+            fun tier(label: String, inputs: List<Path>, merged: Path, compiled: Path) {
+                if (inputs.isEmpty()) return
+                val merge = step("merge${label}Resources")
+                val compile = step("compile${label}Resources")
+                tasks.task(merge) { MergeResourcesTask(merge, inputs, merged) }
+                tasks.task(compile, listOf(merge)) { Aapt2CompileTask(compile, listOf(merged), compiled, aapt2) }
+                lowerResTiers += Triple(merged, compiled, compile)
+            }
+            tier("Module", moduleRes, layout.mergedModuleRes, layout.compiledModuleRes)
+            tier("Library", libs.resDirs, layout.mergedLibRes, layout.compiledLibRes)
+        }
         // Fail early (before compilation) if a dependency AAR requires a higher compileSdk than the app has
         // (AGP's checkAarMetadata). Gates processManifest so a violation stops the build with a clear message.
         val checkAarMeta = step("checkAarMetadata")
@@ -623,7 +647,7 @@ class AndroidBuildSystem(
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
         // a shrinkResources build additionally links proto resources (R8's resource-shrinker input form).
-        tasks.task(aapt2Link, listOf(aapt2Compile, manifestDep)) {
+        tasks.task(aapt2Link, listOf(aapt2Compile, manifestDep) + lowerResTiers.map { it.third }) {
             Aapt2LinkTask(
                 aapt2Link,
                 layout.compiledRes,
@@ -641,6 +665,8 @@ class AndroidBuildSystem(
                 proguardRules = if (minify) layout.aaptProguardRules else null,
                 protoFormat = protoResources,
                 mergedRes = layout.mergedRes,
+                lowerTiers = lowerResTiers.map { it.second },
+                lowerMergedRes = lowerResTiers.map { it.first },
                 rTxt = appRTxt,
             )
         }
@@ -1734,6 +1760,11 @@ class AndroidBuildSystem(
 
         val mergedRes: Path = inter.resolve("merged-res")
         val compiledRes: Path = inter.resolve("res")
+        // The tiers below the project's own, when its resources are compiled apart from the libraries'.
+        val mergedModuleRes: Path = inter.resolve("merged-res-modules")
+        val compiledModuleRes: Path = inter.resolve(COMPILED_MODULE_RES)
+        val mergedLibRes: Path = inter.resolve("merged-res-libs")
+        val compiledLibRes: Path = inter.resolve(COMPILED_LIB_RES)
         val explodedAar: Path = inter.resolve("exploded-aar")
         val aarMetadataCheck: Path = inter.resolve("aar-metadata-check").resolve("check.stamp") // checkAarMetadata marker
         val mergedManifest: Path = inter.resolve("merged-manifest").resolve("AndroidManifest.xml")
@@ -1878,6 +1909,24 @@ class AndroidBuildSystem(
          *  the per-directory `res-*.zip` flats the link consumes. Reused as the base for the real-view preview's
          *  live relink (overlay the edited layout, skip recompiling the whole project). */
         fun compiledResPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("res")
+
+        private const val COMPILED_MODULE_RES = "res-modules"
+        private const val COMPILED_LIB_RES = "res-libs"
+
+        /**
+         * Every compiled resource archive of [module]+[variantName], lowest priority first: dependency modules',
+         * libraries', then the project's own ([compiledResPath]). To link them, the first is the base and each
+         * later one an overlay (`-R`); given all together as plain inputs, a resource two of them define is a
+         * conflict. Empty before a build has compiled any.
+         */
+        fun compiledResArchives(module: Module, variantName: String): List<Path> {
+            val inter = interDir(module, variantName)
+            return listOf(COMPILED_MODULE_RES, COMPILED_LIB_RES, "res").flatMap { dir ->
+                val d = inter.resolve(dir)
+                if (!Files.isDirectory(d)) emptyList()
+                else Files.list(d).use { s -> s.filter { it.toString().endsWith(".zip") }.sorted().collect(java.util.stream.Collectors.toList()) }
+            }
+        }
 
         /** The merged (app + library) `AndroidManifest.xml` for [module]+[variantName] (matches
          *  [Layout.mergedManifest]) — the manifest the link uses; reused by the real-view preview relink. */
