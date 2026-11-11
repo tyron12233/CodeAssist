@@ -1929,6 +1929,7 @@ private fun BoxScope.EditorDialogsLayer(
                 onSelect = { acts.selectSheet(it) },
                 onPick = { acts.applySheetFix(it) },
                 onDismiss = { acts.closeSheet() },
+                onReport = { acts.reportSheetDiagnostic() },
                 position = rememberLinePosition(
                     anchor.coerceIn(0, editorSession.doc.length), { geometry.caretGeometry(it) },
                     metrics.lineHeight, gutterWidthPx,
@@ -1943,6 +1944,7 @@ private fun BoxScope.EditorDialogsLayer(
                 onSelect = { acts.selectSheet(it) },
                 onPick = { acts.applySheetFix(it) },
                 onDismiss = { acts.closeSheet() },
+                onReport = { acts.reportSheetDiagnostic() },
             )
         }
     }

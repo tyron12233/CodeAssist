@@ -2140,6 +2140,19 @@ interface DiagnosticsService {
     /** Write the current logs to a shareable text file and return its path, or null. */
     suspend fun exportLogs(): String? = null
 
+    /**
+     * The report a user shares when the editor flags correct code: the diagnostic ([message], [severity], its
+     * range in [text]), the flagged file, and what the editor resolved it against (module, platform, classpath,
+     * and which entries declare the classes the file imports). Markdown, meant to be read before it is sent.
+     * Null when the host cannot build one.
+     */
+    suspend fun falseErrorReport(
+        path: String, text: String, startOffset: Int, endOffset: Int, message: String, severity: UiSeverity,
+    ): String? = null
+
+    /** Write [report] to a file the host can share (see [FileActions.share]) and return its path, or null. */
+    suspend fun saveFalseErrorReport(report: String): String? = null
+
     /** Whether this backend actually has analytics wired (a transport is configured). */
     fun analyticsAvailable(): Boolean = false
 

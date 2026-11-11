@@ -322,6 +322,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="codeaction_severity_info">Informação</string>
     <string name="codeaction_severity_hint">Dica</string>
     <string name="codeaction_quick_fixes">Correções rápidas</string>
+    <string name="codeaction_report_false_error">Relatar um erro falso</string>
+    <string name="false_error_title">Relatório de erro falso</string>
+    <string name="false_error_intro">Isto é o que será compartilhado: o problema, este arquivo e contra o que o editor o resolveu. Revise antes de enviar.</string>
+    <string name="false_error_building">Criando o relatório…</string>
+    <string name="false_error_failed">Não foi possível criar o relatório.</string>
     <string name="completion_no_suggestions">Nenhuma sugestão</string>
     <string name="completion_back_to_suggestions">Voltar às sugestões</string>
     <string name="completion_show_documentation">Mostrar documentação</string>

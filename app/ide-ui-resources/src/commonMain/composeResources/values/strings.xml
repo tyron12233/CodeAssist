@@ -442,6 +442,11 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="codeaction_severity_info">Info</string>
     <string name="codeaction_severity_hint">Hint</string>
     <string name="codeaction_quick_fixes">Quick fixes</string>
+    <string name="codeaction_report_false_error">Report a false error</string>
+    <string name="false_error_title">False error report</string>
+    <string name="false_error_intro">This is what will be shared: the problem, this file, and what the editor resolved it against. Review it before you send it.</string>
+    <string name="false_error_building">Building the report…</string>
+    <string name="false_error_failed">The report could not be built.</string>
     <string name="codeaction_same_span">%1$d on the same span</string>
     <plurals name="codeaction_problems_here">
         <item quantity="one">%1$d problem here</item>

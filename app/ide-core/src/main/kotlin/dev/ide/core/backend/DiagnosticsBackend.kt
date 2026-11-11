@@ -53,6 +53,24 @@ internal class DiagnosticsBackend(private val ctx: BackendContext) : Diagnostics
         }.getOrNull()
     }
 
+    override suspend fun falseErrorReport(
+        path: String, text: String, startOffset: Int, endOffset: Int, message: String, severity: dev.ide.ui.backend.UiSeverity,
+    ): String? = withContext(ctx.engineDispatcher) {
+        runCatching {
+            ctx.servicesOrNull?.falseErrorReport(java.nio.file.Paths.get(path), text, startOffset, endOffset, message, severity.name)
+        }.onFailure { Log.logger("ide.report").warn("false error report failed: ${it.message}", it) }.getOrNull()
+    }
+
+    override suspend fun saveFalseErrorReport(report: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = ctx.manager?.storageRoot ?: ctx.servicesOrNull?.workspaceRoot ?: return@runCatching null
+            Files.createDirectories(dir)
+            val file = dir.resolve("codeassist-false-error-${System.currentTimeMillis()}.md")
+            file.toFile().writeText(report)
+            file.toString()
+        }.getOrNull()
+    }
+
     /** Local time-of-day label (HH:mm:ss.SSS) for a log record's epoch-millis timestamp. */
     private fun logTimeLabel(ms: Long): String = runCatching {
         java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalTime()

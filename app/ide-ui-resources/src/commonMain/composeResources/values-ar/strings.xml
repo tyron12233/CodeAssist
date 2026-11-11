@@ -496,6 +496,11 @@
     <string name="codeaction_severity_info">معلومة</string>
     <string name="codeaction_severity_hint">تلميح</string>
     <string name="codeaction_quick_fixes">إصلاحات سريعة</string>
+    <string name="codeaction_report_false_error">الإبلاغ عن خطأ غير صحيح</string>
+    <string name="false_error_title">تقرير خطأ غير صحيح</string>
+    <string name="false_error_intro">هذا ما ستتم مشاركته: المشكلة، وهذا الملف، وما اعتمد عليه المحرر في تحليله. راجعه قبل إرساله.</string>
+    <string name="false_error_building">جارٍ إنشاء التقرير…</string>
+    <string name="false_error_failed">تعذّر إنشاء التقرير.</string>
     <string name="codeaction_same_span">‏%1$d على النطاق نفسه</string>
     <plurals name="codeaction_problems_here">
         <item quantity="one">مشكلة واحدة هنا</item>

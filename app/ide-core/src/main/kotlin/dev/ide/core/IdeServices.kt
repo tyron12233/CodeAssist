@@ -4663,6 +4663,68 @@ class IdeServices private constructor(
         )
     }
 
+    /**
+     * The shareable report for a diagnostic the user says is wrong: the diagnostic, the flagged file, and what
+     * the editor resolved it against (the module, its platform, its classpath and which entries declare the
+     * classes the file imports). See [FalseErrorReport].
+     */
+    fun falseErrorReport(file: Path, text: String, startOffset: Int, endOffset: Int, message: String, severity: String): String {
+        val module = moduleForFile(file) ?: moduleForEditableFile(file)
+        val language = languageFor(file)
+        val context = module?.let { m -> runCatching { compilationContext(m, language) }.getOrNull() }
+        val target = file.toAbsolutePath().normalize()
+        val sourceSet = module?.sourceSets?.firstOrNull { set ->
+            set.contentRoots.any { target.startsWith(Paths.get(it.dir.path).toAbsolutePath().normalize()) }
+        }
+        val sdk = module?.let { runCatching { dev.ide.model.SdkResolution.sdkFor(store.workspace, it) }.getOrNull() }
+        val facts = ArrayList<Pair<String, String>>()
+        module?.facets?.get(AndroidFacet.KEY)?.let { f ->
+            facts += "compileSdk" to f.compileSdk.toString()
+            facts += "minSdk" to f.minSdk.toString()
+            facts += "targetSdk" to f.targetSdk.toString()
+            facts += "Active variant" to runCatching { activeVariant(module) }.getOrDefault("unknown")
+        }
+        fun entries(list: List<dev.ide.model.ClasspathEntry>) =
+            list.map { FalseErrorReport.Entry(Paths.get(it.root.path), it.kind.toString()) }
+        val index = _indexStatus.value
+        return FalseErrorReport.render(
+            FalseErrorReport.Input(
+                appVersion = env.hostVersion,
+                host = FalseErrorReports.hostDescription(),
+                severity = severity,
+                message = message,
+                file = file,
+                text = text,
+                startOffset = startOffset,
+                endOffset = endOffset,
+                language = language.id,
+                projectRoot = runCatching { workspaceRoot }.getOrNull(),
+                moduleName = module?.name,
+                moduleType = module?.type?.id,
+                languageLevel = module?.languageLevel?.toString(),
+                sourceSet = sourceSet?.let { "${it.name} (${it.scope})" },
+                platformSdk = sdk?.let { "${it.name} (${it.kind})" },
+                moduleFacts = facts,
+                indexState = if (index.building) "building (${index.phase.ifEmpty { index.message }})" else "ready",
+                boot = context?.let { entries(it.bootClasspath.entries) }.orEmpty(),
+                classpath = context?.let { entries(it.classpath.entries) }.orEmpty(),
+                dependencies = module?.dependencies.orEmpty().map { d ->
+                    val name = when (d) {
+                        is LibraryDependency -> d.library.name
+                        is ModuleDependency -> "module ${d.target.value}"
+                        is dev.ide.model.SdkDependency -> "sdk ${d.sdk}"
+                        is dev.ide.model.PlatformDependency -> "bom ${d.bom}"
+                        else -> d.toString()
+                    }
+                    FalseErrorReport.Dependency(d.scope.toString(), name, d.exported)
+                },
+                recentLog = dev.ide.platform.log.Log.recent().takeLast(FalseErrorReports.LOG_LINES).map { r ->
+                    "[${r.level}] ${r.tag}: ${r.message}" + (r.throwable?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: "")
+                },
+            ),
+        )
+    }
+
     /** The runtime library jars last resolved for a module's real-view render; see [previewRuntimeLibs]. */
     private class CachedRuntimeLibs(val key: String, val dexJars: List<Path>)
 

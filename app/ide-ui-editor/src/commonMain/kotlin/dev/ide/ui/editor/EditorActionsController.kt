@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.backend.FalseErrorReportAction
 import dev.ide.ui.backend.UiFeatures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -319,6 +320,13 @@ internal class EditorActionsController(
                 session.setSelectionRange(start, end)
             }
         }
+    }
+
+    /** "Report a false error" on the sheet's diagnostic: hands the host the report action for it. */
+    fun reportSheetDiagnostic() {
+        val d = sheet ?: return
+        closeSheet()
+        scope.launch { runCatching { onPluginAction(FalseErrorReportAction.actionId(d), d.startOffset, d.endOffset) } }
     }
 
     fun applySheetFix(index: Int) {

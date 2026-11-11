@@ -121,6 +121,20 @@ internal fun EditorCenter(
     }
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
+    // "Report a false error" on a diagnostic: the report is built, shown in full, then shared or copied.
+    var falseErrorReport by remember { mutableStateOf<FalseErrorReportState?>(null) }
+    falseErrorReport?.let { report ->
+        val hostFiles = dev.ide.ui.LocalHostFileActions.current
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        FalseErrorReportDialog(
+            state = report,
+            onShare = if (hostFiles.canShare) ({ text ->
+                depsScope.launch { state.backend.diagnostics.saveFalseErrorReport(text)?.let(hostFiles::share) }
+            }) else null,
+            onCopy = { text -> clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) },
+            onDismiss = { falseErrorReport = null },
+        )
+    }
     val pluginNavigator = LocalPluginNavigator.current
     val pluginFileOpener = LocalPluginFileOpener.current
     // Gradle compatibility mode: non-null only for a project imported from Gradle. Drives the top-bar compat
@@ -465,7 +479,19 @@ internal fun EditorCenter(
                                         actionId.startsWith(RunGutter.ACTION_PREFIX) -> actionId.removePrefix(RunGutter.ACTION_PREFIX)
                                         else -> null
                                     }
-                                    if (runTask != null) state.startRun(RunGutter.option(runTask))
+                                    val falseError = dev.ide.ui.backend.FalseErrorReportAction.parse(actionId)
+                                    if (falseError != null) {
+                                        falseErrorReport = FalseErrorReportState.Building
+                                        val built = runCatching {
+                                            state.backend.diagnostics.falseErrorReport(
+                                                active.path, active.session.doc.text, selStart, selEnd, falseError.second, falseError.first,
+                                            )
+                                        }.getOrNull()
+                                        // Closed while it was building: leave it closed.
+                                        if (falseErrorReport != null) {
+                                            falseErrorReport = built?.let { FalseErrorReportState.Ready(it) } ?: FalseErrorReportState.Failed
+                                        }
+                                    } else if (runTask != null) state.startRun(RunGutter.option(runTask))
                                     else state.dispatchAction(
                                         actionId,
                                         UiActionContext(

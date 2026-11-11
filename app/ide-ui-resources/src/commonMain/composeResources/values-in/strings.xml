@@ -311,6 +311,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="codeaction_severity_info">Info</string>
     <string name="codeaction_severity_hint">Petunjuk</string>
     <string name="codeaction_quick_fixes">Perbaikan cepat</string>
+    <string name="codeaction_report_false_error">Laporkan kesalahan palsu</string>
+    <string name="false_error_title">Laporan kesalahan palsu</string>
+    <string name="false_error_intro">Inilah yang akan dibagikan: masalahnya, file ini, dan apa yang digunakan editor untuk menganalisisnya. Periksa sebelum mengirimnya.</string>
+    <string name="false_error_building">Membuat laporan…</string>
+    <string name="false_error_failed">Laporan tidak dapat dibuat.</string>
     <string name="completion_no_suggestions">Tidak ada saran</string>
     <string name="completion_back_to_suggestions">Kembali ke saran</string>
     <string name="completion_show_documentation">Tampilkan dokumentasi</string>

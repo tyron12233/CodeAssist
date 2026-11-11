@@ -430,6 +430,11 @@
     <string name="codeaction_severity_info">信息</string>
     <string name="codeaction_severity_hint">提示</string>
     <string name="codeaction_quick_fixes">快速修复</string>
+    <string name="codeaction_report_false_error">报告误报的错误</string>
+    <string name="false_error_title">误报错误报告</string>
+    <string name="false_error_intro">将分享以下内容：该问题、此文件，以及编辑器解析它时所依据的环境。发送前请先检查。</string>
+    <string name="false_error_building">正在生成报告…</string>
+    <string name="false_error_failed">无法生成报告。</string>
     <string name="codeaction_same_span">同一区间还有 %1$d 个</string>
     <plurals name="codeaction_problems_here">
         <item quantity="one">此处有 %1$d 个问题</item>

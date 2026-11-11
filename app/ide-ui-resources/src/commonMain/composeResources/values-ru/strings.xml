@@ -299,6 +299,11 @@
     <string name="codeaction_severity_info">Информация</string>
     <string name="codeaction_severity_hint">Подсказка</string>
     <string name="codeaction_quick_fixes">Быстрые исправления</string>
+    <string name="codeaction_report_false_error">Сообщить о ложной ошибке</string>
+    <string name="false_error_title">Отчёт о ложной ошибке</string>
+    <string name="false_error_intro">Вот чем вы поделитесь: проблема, этот файл и то, относительно чего редактор его анализировал. Проверьте перед отправкой.</string>
+    <string name="false_error_building">Создание отчёта…</string>
+    <string name="false_error_failed">Не удалось создать отчёт.</string>
     <string name="completion_no_suggestions">Нет предложений</string>
     <string name="completion_back_to_suggestions">Назад к предложениям</string>
     <string name="completion_show_documentation">Показать документацию</string>

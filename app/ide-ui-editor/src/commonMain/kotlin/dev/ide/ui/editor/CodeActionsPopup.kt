@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.FalseErrorReportAction
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiDiagnostic
@@ -71,6 +72,7 @@ import dev.ide.ui.generated.resources.codeaction_dismiss
 import dev.ide.ui.generated.resources.codeaction_preview_composable
 import dev.ide.ui.generated.resources.codeaction_problems_here
 import dev.ide.ui.generated.resources.codeaction_quick_fixes
+import dev.ide.ui.generated.resources.codeaction_report_false_error
 import dev.ide.ui.generated.resources.codeaction_same_span
 import dev.ide.ui.generated.resources.codeaction_severity_error
 import dev.ide.ui.generated.resources.codeaction_severity_hint
@@ -315,6 +317,8 @@ fun DiagnosticSheet(
     onSelect: (Int) -> Unit,
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
+    /** Opens the false-error report for the selected diagnostic; null hides the entry. */
+    onReport: (() -> Unit)? = null,
 ) {
     val d = diagnostics.getOrNull(selected) ?: return
     val sheetShape = RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)
@@ -334,7 +338,7 @@ fun DiagnosticSheet(
                 .pointerInput(Unit) { detectTapGestures { } } // swallow taps so the panel itself doesn't dismiss
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            DiagnosticDetails(diagnostics, d, selected, actions, onSelect, onPick, onDismiss, compact = false)
+            DiagnosticDetails(diagnostics, d, selected, actions, onSelect, onPick, onDismiss, compact = false, onReport = onReport)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -356,6 +360,8 @@ fun DiagnosticPopup(
     onDismiss: () -> Unit,
     position: PopupPositionProvider,
     modifier: Modifier = Modifier,
+    /** Opens the false-error report for the selected diagnostic; null hides the entry. */
+    onReport: (() -> Unit)? = null,
 ) {
     val d = diagnostics.getOrNull(selected) ?: return
     val shape = RoundedCornerShape(Ca.radius.lg)
@@ -367,7 +373,7 @@ fun DiagnosticPopup(
                 .border(1.dp, Ide.colors.glassEdge, shape)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
-            DiagnosticDetails(diagnostics, d, selected, actions, onSelect, onPick, onDismiss, compact = true)
+            DiagnosticDetails(diagnostics, d, selected, actions, onSelect, onPick, onDismiss, compact = true, onReport = onReport)
         }
     }
 }
@@ -387,6 +393,7 @@ private fun DiagnosticDetails(
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
     compact: Boolean,
+    onReport: (() -> Unit)? = null,
 ) {
     val severity = d.severity
     val unused = d.unused
@@ -439,6 +446,16 @@ private fun DiagnosticDetails(
         Text(stringResource(Res.string.codeaction_quick_fixes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
         val compactions = remember(actions) { importCompactions(actions) }
         actions.forEachIndexed { i, a -> ActionRow(a, compactions[i], selected = false, onPick = { onPick(i) }, height = if (compact) 36.dp else 48.dp) }
+    }
+    // For a problem that claims the code is wrong: a way to say the claim is wrong, with what is needed to see why.
+    if (onReport != null && FalseErrorReportAction.offeredFor(d)) {
+        Spacer(Modifier.height(if (compact) 6.dp else 10.dp))
+        Text(
+            stringResource(Res.string.codeaction_report_false_error),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.clip(RoundedCornerShape(Ca.radius.sm)).clickable(onClick = onReport).padding(horizontal = 4.dp, vertical = if (compact) 4.dp else 8.dp),
+        )
     }
 }
 
