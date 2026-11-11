@@ -288,6 +288,14 @@ object AndroidIde {
             )
         }
 
+        // The agent outlives the screen (a long turn, the Claude link): keep the process alive and say so.
+        if (!sandbox) {
+            AgentForeground.attach(
+                appContext, backend.agent,
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main),
+            )
+        }
+
         return Session(backend)
     }
 

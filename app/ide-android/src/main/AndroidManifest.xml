@@ -253,6 +253,18 @@
                     android:value="Compiling and running the user's on-device software project — a long-running, user-initiated build that must continue if the user navigates away from the IDE." />
         </service>
 
+        <!-- The AI agent, kept running while the app is not on screen: a turn that is still calling the model and
+             editing files, or the Claude link holding its connection open. Runs in the app's own process (it only
+             raises the process's priority and shows what the agent is doing, with a Stop button). -->
+        <service
+                android:name=".AgentForegroundService"
+                android:exported="false"
+                android:foregroundServiceType="specialUse">
+            <property
+                    android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                    android:value="Running the user's AI coding assistant task on their on-device software project: a long-running, user-initiated task (the assistant reading and editing project files, or a user-enabled link that lets their own AI client work on the project) that must continue if the user navigates away from the IDE, with an ongoing notification and a Stop action." />
+        </service>
+
         <!-- Real-view layout-preview renderer in its own ":preview" OS process (layout-preview Step 3): it
              inflates + draws arbitrary library/user View code off the IDE's heap, so a render crash/OOM kills
              only this process (the client falls back to in-process rendering). A plain bound service. -->
