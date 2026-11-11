@@ -393,9 +393,10 @@ class SwingRunSessionService : Service() {
          * unlikely enough to accept, and the alternative (probing the app class loader per name) costs a
          * reflective lookup on every class the VM resolves.
          */
-        val INTERPRET_USER_CODE = InterpretPolicy { name ->
-            TOOLKIT_PREFIXES.none { name.startsWith(it) } && InterpretPolicy.DEFAULT.interpret(name)
-        }
+        val INTERPRET_USER_CODE = InterpretPolicy.withHostFallback(
+            SwingRunSessionService::class.java.classLoader!!,
+            InterpretPolicy { name -> TOOLKIT_PREFIXES.none { name.startsWith(it) } && InterpretPolicy.DEFAULT.interpret(name) },
+        )
 
         val TOOLKIT_PREFIXES = listOf("dev/ide/awt/", "dev/ide/swing/", "dev/ide/preview/")
     }

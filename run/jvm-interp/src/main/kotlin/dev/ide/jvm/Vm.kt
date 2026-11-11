@@ -34,6 +34,37 @@ fun interface InterpretPolicy {
             "java/", "javax/", "jdk/", "sun/", "com/sun/", "kotlin/", "kotlinx/",
             "android/", "androidx/", "com/android/", "dalvik/", "org/jetbrains/",
         )
+
+        /**
+         * [base], except that a class in a bridged LIBRARY namespace that [host] cannot load is interpreted from
+         * the classpath instead of being bridged to a class that isn't there.
+         *
+         * Bridging `kotlinx/`, `androidx/` and the rest assumes the IDE ships each class under its own name, and
+         * it doesn't always: a library it doesn't bundle at all (kotlinx-datetime), and, on the R8-minified
+         * Android build, one it bundles under another name. kotlinx-collections-immutable comes in with the
+         * Kotlin compiler and R8 renames every class of it (`ExtensionsKt` -> `nm6` in 3.44.0), so a console
+         * program calling `persistentListOf()` died in the bridge. Interpreting the project's own copy works for
+         * both. A class the host does load still bridges, so the IDE's types keep their identity, and the
+         * platform namespaces never fall back: java.* and android.* are not the classpath's to supply.
+         *
+         * The VM asks a policy once per class name, so the probe is one `Class.forName` per library class.
+         */
+        fun withHostFallback(host: ClassLoader, base: InterpretPolicy = DEFAULT): InterpretPolicy =
+            InterpretPolicy { name ->
+                base.interpret(name) || (LIBRARY_PREFIXES.any { name.startsWith(it) } && !hostLoads(host, name))
+            }
+
+        private val LIBRARY_PREFIXES = listOf("kotlin/", "kotlinx/", "androidx/", "com/android/", "org/jetbrains/")
+
+        private fun hostLoads(host: ClassLoader, internalName: String): Boolean =
+            try {
+                Class.forName(internalName.replace('/', '.'), false, host)
+                true
+            } catch (_: ClassNotFoundException) {
+                false
+            } catch (_: LinkageError) {
+                false
+            }
     }
 }
 

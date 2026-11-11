@@ -64,11 +64,13 @@ class VmProgramInterpreter(
     private val peerFactory: PeerFactory = AsmPeerFactory(),
 ) : ProgramInterpreter {
 
-    /** [InterpretPolicy.DEFAULT], also interpreting the request's [InterpretRunRequest.interpretPrefixes]. */
+    /** [InterpretPolicy.DEFAULT], also interpreting the request's [InterpretRunRequest.interpretPrefixes] and any
+     *  library class the IDE can't supply by name ([InterpretPolicy.withHostFallback]). */
     private fun policyFor(request: InterpretRunRequest): InterpretPolicy {
         val extra = request.interpretPrefixes
-        if (extra.isEmpty()) return InterpretPolicy.DEFAULT
-        return InterpretPolicy { name -> extra.any { name.startsWith(it) } || InterpretPolicy.DEFAULT.interpret(name) }
+        val base = if (extra.isEmpty()) InterpretPolicy.DEFAULT
+        else InterpretPolicy { name -> extra.any { name.startsWith(it) } || InterpretPolicy.DEFAULT.interpret(name) }
+        return InterpretPolicy.withHostFallback(javaClass.classLoader, base)
     }
 
     override suspend fun run(request: InterpretRunRequest, io: ProgramIo): Int = withContext(Dispatchers.IO) {

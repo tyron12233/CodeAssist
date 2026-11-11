@@ -46,10 +46,12 @@ internal class BytecodeSessionImpl(
 
     private val jars = ArrayList<JarFile>()
 
+    private val hostLoader: ClassLoader = config.libraryLoader ?: javaClass.classLoader
+
     private val vm = Vm(
         classpathSource(config.classpath, jars),
-        policyFor(config),
-        ReflectiveBridge(loader = config.libraryLoader ?: javaClass.classLoader),
+        policyFor(config, hostLoader),
+        ReflectiveBridge(loader = hostLoader),
         peerFactory ?: AsmPeerFactory(),
         config.threadStackSize,
     )
@@ -116,14 +118,16 @@ internal class BytecodeSessionImpl(
  * plugin means to interpret, which is both faster (nothing else is ever parsed) and safer (the framework is
  * definitely the real one). [BytecodeConfig.bridgePrefixes] wins over both, for carving a package out.
  */
-private fun policyFor(config: BytecodeConfig): InterpretPolicy {
+private fun policyFor(config: BytecodeConfig, host: ClassLoader): InterpretPolicy {
     val bridge = config.bridgePrefixes.map { it.internalPrefix() }
     val interpret = config.interpretPrefixes.map { it.internalPrefix() }
-    if (bridge.isEmpty() && interpret.isEmpty()) return InterpretPolicy.DEFAULT
+    // The console default also interprets a library class the host can't supply by name (see withHostFallback).
+    val default = InterpretPolicy.withHostFallback(host)
+    if (bridge.isEmpty() && interpret.isEmpty()) return default
     return InterpretPolicy { name ->
         when {
             bridge.any { name.startsWith(it) } -> false
-            interpret.isEmpty() -> InterpretPolicy.DEFAULT.interpret(name)
+            interpret.isEmpty() -> default.interpret(name)
             else -> interpret.any { name.startsWith(it) }
         }
     }
