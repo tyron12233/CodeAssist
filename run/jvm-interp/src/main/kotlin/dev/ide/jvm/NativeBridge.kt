@@ -369,11 +369,24 @@ class ReflectiveBridge(
         publicMethod(cls, name, paramTypes, returnType)?.let { return it }
         var c: Class<*>? = cls
         while (c != null) {
-            c.declaredMethods.firstOrNull { matches(it, name, paramTypes, returnType) }?.let { return it }
+            declared(c, name).firstOrNull { matches(it, name, paramTypes, returnType) }?.let { return it }
             c = c.superclass
         }
         return cls.methods.firstOrNull { matches(it, name, paramTypes, returnType) }
     }
+
+    /**
+     * [cls]'s declared methods called [name]. `Class.getDeclaredMethods` builds every `Method` of the class anew
+     * on each call, and a lookup asks it of each class up the hierarchy: for `android.view.View`, a thousand
+     * objects per ask. A layout's first inflate resolves a couple of thousand distinct methods, which made that
+     * most of its time on a phone. One listing per class, grouped by name, serves them all.
+     */
+    private fun declared(cls: Class<*>, name: String): List<Method> =
+        declaredByName.getOrPut(cls) {
+            runCatching { cls.declaredMethods.groupBy { it.name } }.getOrDefault(emptyMap())
+        }[name].orEmpty()
+
+    private val declaredByName = ConcurrentHashMap<Class<*>, Map<String, List<Method>>>()
 
     /** A matching method declared on a public, reachable type in [cls]'s hierarchy (superclasses and
      *  interfaces), or null. */
@@ -385,7 +398,7 @@ class ReflectiveBridge(
             val c = queue.removeFirst()
             if (!seen.add(c)) continue
             if (Modifier.isPublic(c.modifiers)) {
-                c.declaredMethods.firstOrNull {
+                declared(c, name).firstOrNull {
                     Modifier.isPublic(it.modifiers) && matches(it, name, paramTypes, returnType) && openable(it)
                 }?.let { return it }
             }
