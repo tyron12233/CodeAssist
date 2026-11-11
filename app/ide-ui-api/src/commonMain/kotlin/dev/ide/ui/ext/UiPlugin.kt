@@ -103,12 +103,19 @@ object UiPluginHost {
     private val plugins = mutableListOf<UiPlugin>(BuiltInUiPlugin)
     private var loaded = false
 
-    /** Register an additional UI plugin. Call before [ensureLoaded]; a plugin added after is loaded on the
-     *  next (still-once) load only if nothing has loaded yet. The shell registers `IdeBackend.uiPlugins`, which
+    /** Register an additional UI plugin. Call before [ensureLoaded]; a NEW id added after is loaded on the
+     *  next (still-once) load only if nothing has loaded yet, while a new facet for a known id replaces it now. The shell registers `IdeBackend.uiPlugins`, which
      *  is already filtered to enabled plugins by the engine's `PluginCatalog` — so a disabled plugin never
      *  reaches here. */
     fun register(plugin: UiPlugin) {
-        if (plugins.none { it.id == plugin.id }) plugins.add(plugin)
+        val known = plugins.firstOrNull { it.id == plugin.id }
+        if (known == null) { plugins.add(plugin); return }
+        // The same id from a NEW facet takes the old one's place. This host lives as long as the process, and
+        // the app's window does not: on Android the activity can be closed and opened again while a foreground
+        // service keeps the process, and the backend made for the new window hands out new facets, bound to
+        // its own services. Keeping the first facet left every panel resolving services through a backend
+        // that had closed its project (the layout designer then said there was no Android project open).
+        if (known !== plugin) replace(plugin.id, plugin)
     }
 
     private val failed = LinkedHashMap<String, Throwable>()

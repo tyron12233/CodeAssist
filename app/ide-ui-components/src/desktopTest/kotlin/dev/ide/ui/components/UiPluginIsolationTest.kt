@@ -57,6 +57,26 @@ class UiPluginIsolationTest {
         }
     }
 
+    /**
+     * The app's window can be closed and opened again in one process, and the backend made for the new window
+     * hands out new facets bound to its own services. Those take the place of the first window's, which would
+     * otherwise go on answering from a backend that has closed its project.
+     */
+    @Test
+    fun aNewFacetForAKnownPluginTakesTheOldOnesPlace() {
+        UiPluginHost.ensureLoaded()
+        val first = plugin("test.reopened", "test.reopened.first")
+        UiPluginHost.register(first)
+        assertTrue(UiPluginHost.contribute(first))
+
+        UiPluginHost.register(first)
+        assertEquals(1, ids().count { it == "test.reopened.first" }, "the same facet again changes nothing")
+
+        UiPluginHost.register(plugin("test.reopened", "test.reopened.second"))
+        assertFalse("test.reopened.first" in ids(), "the first window's facet is withdrawn")
+        assertEquals(1, ids().count { it == "test.reopened.second" }, "the new window's facet is the one in use")
+    }
+
     @Test
     fun replacingAPluginSwapsItsUiLive() {
         UiPluginHost.ensureLoaded()
