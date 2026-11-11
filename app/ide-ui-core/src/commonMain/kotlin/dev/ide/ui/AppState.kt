@@ -321,6 +321,7 @@ class IdeUiState(
         launch { persistTreeExpansion() }
         launch { syncExternalWrites() }
         launch { reanalyzeWhenInspectionsReturn() }
+        launch { reanalyzeOnRequest() }
         launch { syncBookmarks() }
     }
 
@@ -403,6 +404,14 @@ class IdeUiState(
             if ((previous - ids).isNotEmpty()) reanalyzeOpenFiles()
             previous = ids
         }
+    }
+
+    // Something the engine cannot see a file change for asked for the open files to be analyzed again (a plugin
+    // whose findings hang off its own settings or tooling). One generation of [analysisEpoch] covers it: the
+    // focused tab's daemon and the background-tab sweep both run again. `drop(1)` skips the value collection
+    // starts on, which is not a request.
+    private suspend fun reanalyzeOnRequest() {
+        backend.editor.reanalysisRequests.drop(1).collect { analysisEpoch++ }
     }
 
     // Reopen the tabs from the last session with this project. A first open starts on the empty editor, which

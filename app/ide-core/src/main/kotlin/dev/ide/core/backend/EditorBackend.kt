@@ -75,6 +75,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
@@ -363,6 +364,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         log.info("rename: waited ${(started - t0) / 1_000_000} ms for the engine, ${(System.nanoTime() - started) / 1_000_000} ms on it")
         return UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
     }
+
+    // Follows the live engine across project swaps, so an editor collecting it never holds a closed one's.
+    override val reanalysisRequests: StateFlow<Int> = ctx.engineFlow(0) { it.reanalysisEpoch }
 
     override fun updateDocument(path: String, text: String) =
         ctx.services.updateDocument(Paths.get(path), text)

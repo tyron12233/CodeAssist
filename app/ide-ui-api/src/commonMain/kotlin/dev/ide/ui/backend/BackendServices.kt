@@ -146,6 +146,14 @@ interface EditorService {
     /** Persist the buffer [text] for [path] to disk (and keep it as the live buffer). */
     fun saveFile(path: String, text: String)
 
+    /**
+     * Bumped when the engine was asked to analyze the open files again (a plugin's findings depend on state
+     * that changed outside any file: `dev.ide.analysis.Reanalysis`). The editor answers each change with one
+     * pass over its tabs. Conflating, so a burst of requests is one pass. A backend with no such requests
+     * never bumps it.
+     */
+    val reanalysisRequests: StateFlow<Int> get() = MutableStateFlow(0)
+
     // --- Editor-session lifecycle notifications (fire-and-forget; default no-op like completionAccepted) -----
     // Pure notifications the UI pushes so the engine can publish editor-lifecycle events on the message bus for
     // plugins; nothing is awaited. A backend that doesn't care (test fakes, previews) inherits the no-op default.

@@ -328,6 +328,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -706,6 +707,7 @@ class IdeServices private constructor(
 
         override fun invalidateAnalyzers() = this@IdeServices.invalidateAnalyzers()
         override fun resyncIndex() = this@IdeServices.resyncIndex(IndexPassTrigger.MODULE)
+        override fun requestReanalysis(paths: Collection<Path>?) = this@IdeServices.requestReanalysis(paths)
         override val events get() = this@IdeServices.events
     }
 
@@ -1460,6 +1462,25 @@ class IdeServices private constructor(
         openDocuments[norm] = text
         diskBaselines[norm] = text
         overlayChanged(norm)
+    }
+
+    private val _reanalysisEpoch = MutableStateFlow(0)
+
+    /**
+     * Bumped each time something asked for the open files to be analyzed again ([requestReanalysis]). The editor
+     * collects it and runs a pass over its tabs. A flow rather than a call into the UI because the engine holds
+     * no reference to the editor, and a conflating one because several requests in a row need only one pass.
+     */
+    val reanalysisEpoch: StateFlow<Int> get() = _reanalysisEpoch
+
+    /**
+     * Ask the editor to re-analyze the open files among [paths], or all of them when [paths] is null. A request
+     * naming no open file does nothing: a closed file shows no diagnostics, and is analyzed when it opens.
+     * "Open" is what holds a live buffer here, which is every editor tab.
+     */
+    fun requestReanalysis(paths: Collection<Path>?) {
+        if (paths != null && paths.none { openDocuments.containsKey(it.toAbsolutePath().normalize()) }) return
+        _reanalysisEpoch.update { it + 1 }
     }
 
     /** Called by the editor on every change so cross-file analysis sees the latest text. */

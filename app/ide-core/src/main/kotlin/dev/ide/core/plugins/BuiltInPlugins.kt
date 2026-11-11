@@ -6,6 +6,7 @@ import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.MODULE_ANALYSIS
 import dev.ide.analysis.QUICK_FIX_PROVIDER_EP
+import dev.ide.analysis.REANALYSIS
 import dev.ide.android.support.ANDROID_RESOURCE_REPOSITORY
 import dev.ide.android.support.AndroidAidlProvider
 import dev.ide.android.support.AndroidBuildConfigProvider
@@ -978,6 +979,10 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(ANDROID_MODULES, ServiceScopeLevel.WORKSPACE) {
             dev.ide.core.services.AndroidModulesService(getService(ENGINE_CONTEXT))
+        }
+        // Published only, like the two above: the engine's own callers ask the engine directly.
+        reg.service(REANALYSIS, ServiceScopeLevel.WORKSPACE) {
+            dev.ide.core.services.ReanalysisService(getService(ENGINE_CONTEXT))
         }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
             RefactorService(getService(ENGINE_CONTEXT), getService(KOTLIN_EDITOR_SERVICE))

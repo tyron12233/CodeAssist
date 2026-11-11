@@ -37,7 +37,7 @@ plugins {
 
 subprojects {
     group = "dev.ide"
-    version = "3.4.0"
+    version = "3.5.0"
 
     // Applies to EVERY test task in every module — including the multiplatform modules' `desktopTest`, which
     // the `kotlin.jvm`-gated block below never sees.

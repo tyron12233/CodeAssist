@@ -400,8 +400,15 @@ const val PLUGIN_API_VERSION: Int = 4
  * (`platform.kotlinGeneratedMembers`) in `language-api`: the editor half of a Kotlin compiler plugin, the
  * members it generates, so they complete and resolve. The engine's own point spoke the Kotlin backend's
  * internal source model; this one speaks a read-only class view and plain member descriptions.
+ *
+ * `3.5.0` adds `dev.ide.analysis.Reanalysis` on `REANALYSIS` (`platform.reanalysis`, WORKSPACE) in
+ * `analysis-api`: a plugin asks for the open files, or some of them, to be analyzed again. The editor re-ran
+ * analysis only on an edit, an index or build settling, or a file changing on disk, so a plugin whose findings
+ * hang off state of its own (its settings, a compile database, a daemon) left stale diagnostics on screen until
+ * the user typed, and the only way round it was to fake a file change. It drops no cache, the IDE's or the
+ * plugin's. Additive, so [PLUGIN_API_VERSION] stays at `4`; on an older host the key resolves to nothing.
  */
-const val PLUGIN_SPI_VERSION: String = "3.4.0"
+const val PLUGIN_SPI_VERSION: String = "3.5.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

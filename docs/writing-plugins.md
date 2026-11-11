@@ -1415,14 +1415,15 @@ A key is usable only if you can name its type, and that differs by tier:
 Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
 `Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Nine engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+Ten engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
 Five are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`,
 `MODULE_RESOURCES`), each declared in the api module whose types it already speaks, and each typed to a
 *narrowed* interface rather than to the engine class behind it. The seventh is `CODE_INTERPRETER`
 (`interp-api`), the only one at APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
 than being scoped to one (see section 14b). The eighth, `ANDROID_MODULES` (`project-model-api`), is a
 read-only view over the Android module settings with no engine service behind it (section 14d), and the ninth,
-`MODULE_DEPENDENCIES`, an adapter over the engine's dependency service, which speaks the UI's types (section 14e). `:ide-core` registers the narrow key
+`MODULE_DEPENDENCIES`, an adapter over the engine's dependency service, which speaks the UI's types (section 14e).
+The tenth, `REANALYSIS` (`analysis-api`), asks the editor to analyze the open files again (section 14f). `:ide-core` registers the narrow key
 alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
 index, and the same module model.
 
@@ -2114,7 +2115,8 @@ Three constraints come with the slot:
 `diagnostics` is the tab's last analysis result. Every open tab is analyzed, not just the focused one
 ([`OpenTabDiagnostics.kt`](../ide-ui/src/commonMain/kotlin/dev/ide/ui/editor/engine/OpenTabDiagnostics.kt)
 sweeps the rest when a tab opens and again whenever indexing or a build settles), but a background tab is not
-re-analyzed while it sits there, so its diagnostics are as old as the last of those events. A decoration that
+re-analyzed while it sits there, so its diagnostics are as old as the last of those events. A plugin whose own
+state changed can start a new sweep with `REANALYSIS` (section 14f). A decoration that
 needs more than that reads a source with it, the way the built-in build dot reads
 `backend.build.buildState`.
 
@@ -2862,6 +2864,36 @@ SDK and local jars are in the model already.
 Declare `PluginCapabilities.MODEL_DEPENDENCIES` (`model.dependencies`) if you add anything: it changes the
 user's build files and what their code compiles against, and the consent screen says so.
 
+## 14f. Ask for the open files to be analyzed again
+
+`REANALYSIS` (`dev.ide.analysis.Reanalysis`, WORKSPACE, since SPI 3.5.0) re-runs analysis on the files open in
+the editor. The editor re-analyzes a file when the user edits it, when indexing or a build settles, and when a
+file changes on disk. It cannot see your plugin's own state change: a setting your analyzer reads, a compile
+database it parses, a daemon it asks. Without this call, the diagnostics your analyzer produced from the old
+state stay on screen until the user next types in that file.
+
+```kotlin
+settings.onChanged { _, _ ->
+    myAnalyzerCache.clear()                                   // first drop what you derived from the old state
+    workspace.service(REANALYSIS).reanalyzeOpenFiles()        // then ask for a pass
+}
+
+// Or only the files the change touches; a path that is not open is ignored.
+workspace.service(REANALYSIS).reanalyze(listOf("/path/to/app/src/main/cpp/native-lib.cpp"))
+```
+
+The call returns at once and is safe from any thread. Requests coalesce, so a burst of them costs one pass: the
+focused editor runs every pass at once, and the other tabs are analyzed one at a time behind it. The results go
+out on `AnalysisTopics.ANALYSIS` like any others. A file that is not open shows no diagnostics, and it is
+analyzed when the user opens it, so naming one does nothing.
+
+It drops no cache. The IDE's analyzers drop theirs when the IDE calls `SourceAnalyzer.invalidateCaches`, which
+it does for the changes it can see (a file, the model, a synthetic class). Clear your own caches before you
+ask, or the pass will give the same answer as before. On a host older than 3.5.0 the key resolves to nothing,
+so use `serviceOrNull` if you support one.
+
+No capability: asking for analysis to run again shows the user nothing new.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -3401,6 +3433,7 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.model.ANDROID_MODULES` | WORKSPACE | `AndroidModules` | Each Android module's configuration as the build resolves it: SDK levels, namespace and application id, build features, build types, flavors, variants with their application ids, and the active variant (section 14d) |
 | `dev.ide.model.MODULE_RESOURCES` | WORKSPACE | `ModuleResources` | A module's resources: generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model (query `@type/name`, write `res/values` entries and file resources) |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
+| `dev.ide.analysis.REANALYSIS` | WORKSPACE | `Reanalysis` | Analyze the open files again, all of them or the ones named, after state your analyzer reads changed outside any file (section 14f) |
 | `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |
 | `dev.ide.platform.settings.SETTINGS_ACCESS` | APPLICATION | `SettingsAccess` | Read your own settings page's stored values at any time, not only inside `onChanged` / `onAction` |
 | `dev.ide.platform.notify.USER_MESSAGES` | APPLICATION | `UserMessages` | Tell the user something from an engine facet, and show long work while it runs |

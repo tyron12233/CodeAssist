@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.4.0.
+# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.5.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/plugin/ui/AppTheme
@@ -140,8 +140,10 @@ dev/ide/plugin/ui/EditorPreview
 	kind class
 	super java/lang/Object
 	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ZLkotlin/jvm/functions/Function3;)V
 	method getAppliesTo()Lkotlin/jvm/functions/Function1;
 	method getContent()Lkotlin/jvm/functions/Function3;
+	method getFullScreen()Z
 	method getId()Ljava/lang/String;
 	method getTitle()Ljava/lang/String;
 dev/ide/plugin/ui/EditorPreviewContext
@@ -151,9 +153,25 @@ dev/ide/plugin/ui/EditorPreviewContext
 	method abstract getPath()Ljava/lang/String;
 	method abstract getText()Ljava/lang/String;
 	method abstract reportProblems(Ljava/util/List;)V
+	method applyEdits(Ljava/util/List;)V
+	method getCanEdit()Z
+	method getCaretOffset()I
+	method getSelectionEnd()I
+	method isSplit()Z
+	method reportRendering(Z)V
+	method select(II)V
+	method static select$default(Ldev/ide/plugin/ui/EditorPreviewContext;IIILjava/lang/Object;)V
 dev/ide/plugin/ui/EditorPreviewContext$DefaultImpls
 	kind class
 	super java/lang/Object
+	method static applyEdits(Ldev/ide/plugin/ui/EditorPreviewContext;Ljava/util/List;)V
+	method static getCanEdit(Ldev/ide/plugin/ui/EditorPreviewContext;)Z
+	method static getCaretOffset(Ldev/ide/plugin/ui/EditorPreviewContext;)I
+	method static getSelectionEnd(Ldev/ide/plugin/ui/EditorPreviewContext;)I
+	method static isSplit(Ldev/ide/plugin/ui/EditorPreviewContext;)Z
+	method static reportRendering(Ldev/ide/plugin/ui/EditorPreviewContext;Z)V
+	method static select$default(Ldev/ide/plugin/ui/EditorPreviewContext;IIILjava/lang/Object;)V
+	method static select(Ldev/ide/plugin/ui/EditorPreviewContext;II)V
 	method static service(Ldev/ide/plugin/ui/EditorPreviewContext;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
 dev/ide/plugin/ui/EditorViewMode
 	kind class
@@ -248,6 +266,13 @@ dev/ide/plugin/ui/SyntaxStyle
 	method static getEntries()Lkotlin/enums/EnumEntries;
 	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/ui/SyntaxStyle;
 	method static values()[Ldev/ide/plugin/ui/SyntaxStyle;
+dev/ide/plugin/ui/TextReplacement
+	kind class
+	super java/lang/Object
+	ctor (IILjava/lang/String;)V
+	method getEnd()I
+	method getNewText()Ljava/lang/String;
+	method getStart()I
 dev/ide/plugin/ui/ToolWindow
 	kind class
 	super java/lang/Object
