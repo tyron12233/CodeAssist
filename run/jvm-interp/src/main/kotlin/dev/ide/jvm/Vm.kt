@@ -1156,12 +1156,18 @@ class Vm(
             }
         }
         var ok = false
+        val depth = initDepth.get()
+        val initT0 = System.nanoTime()
+        val initSteps = interpreter.steps
+        depth[0]++
         try {
             cls.superName?.let { resolve(it) }?.let { ensureInitialized(it) }
             cls.declaredMethod("<clinit>", "()V")
                 ?.let { interpreter.execute(cls, it, receiver = null, args = emptyList()) }
             ok = true
         } finally {
+            depth[0]--
+            VmProfile.classInitialized(cls.name, System.nanoTime() - initT0, interpreter.steps - initSteps, outermost = depth[0] == 0)
             synchronized(cls.initLock) {
                 cls.initState = if (ok) INIT_DONE else INIT_FAILED
                 cls.initThread = null
@@ -1169,6 +1175,9 @@ class Vm(
             }
         }
     }
+
+    /** How many class initializations this thread is inside, so [VmProfile] counts nested time once. */
+    private val initDepth = ThreadLocal.withInitial { IntArray(1) }
 
     private class Resolved(val target: Pair<VmClass, org.objectweb.asm.tree.MethodNode>?)
 

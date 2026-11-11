@@ -96,6 +96,28 @@ internal class VmViewFactory(
     @Volatile private var rJar: JarFile? = null
     private var rJarKey: String? = null
 
+    /**
+     * Whether `androidx.graphics.shapes` runs as the app's own copy instead of being interpreted. It is pure
+     * geometry with no views or resources in it, and Material builds every one of its shapes and the morphs
+     * between them in a static initializer: 11 million instructions the first time a layout holds a
+     * `LoadingIndicator`, which interpreted was 22 s of a first render on a phone.
+     *
+     * Only when the app's copy has every class the project's does. A project on a newer library than the app
+     * bundles keeps its own, interpreted: slower, never a missing method.
+     */
+    private val hostShapes: Boolean by lazy {
+        runCatching {
+            val wanted = jarFiles.flatMap { jar ->
+                jar.entries().asSequence().map { it.name }
+                    .filter { it.startsWith(SHAPES_PACKAGE) && it.endsWith(".class") }.toList()
+            }
+            wanted.isNotEmpty() && wanted.all { entry ->
+                val name = entry.removeSuffix(".class").replace('/', '.')
+                runCatching { Class.forName(name, false, VmViewFactory::class.java.classLoader) }.isSuccess
+            }
+        }.getOrDefault(false).also { log.info("VM view factory: androidx.graphics.shapes runs ${if (it) "as the app's copy" else "interpreted"}") }
+    }
+
     private val vm = Vm(
         source = source ?: ClassBytesSource { internalName ->
             if (isResourceClass(internalName)) return@ClassBytesSource rJar?.let { jar ->
@@ -111,7 +133,8 @@ internal class VmViewFactory(
         },
         policy = InterpretPolicy { internalName ->
             !isBootLoadable(internalName.replace('/', '.')) &&
-                !internalName.startsWith("kotlin/") && !internalName.startsWith("kotlinx/")
+                !internalName.startsWith("kotlin/") && !internalName.startsWith("kotlinx/") &&
+                !(internalName.startsWith(SHAPES_PACKAGE) && hostShapes)
         },
         // A view can post an interpreted callback (a Runnable / offset listener) to the render Looper that runs
         // AFTER the snapshot is drawn, outside the render's error boundary. Guard those proxy invocations so a
@@ -263,6 +286,9 @@ internal class VmViewFactory(
     }
 
     private companion object {
+        /** See [hostShapes]. */
+        private const val SHAPES_PACKAGE = "androidx/graphics/shapes/"
+
         const val CONTEXT = "Landroid/content/Context;"
         const val ATTRS = "Landroid/util/AttributeSet;"
         const val RECYCLER_VIEW = "androidx.recyclerview.widget.RecyclerView"

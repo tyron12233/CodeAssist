@@ -1073,6 +1073,9 @@ dependencies {
     // Installs src/main/baseline-prof.txt (compiled into assets/dexopt/baseline.prof) on first launch when the
     // APK was not installed by Play, so sideloaded installs AOT-compile the startup and editing hot paths too.
     implementation(libs.androidx.profileinstaller)
+    // The real-view preview runs a project's androidx.graphics.shapes as this copy instead of interpreting it
+    // (VmViewFactory.hostShapes): Material's shape morphs are 11M interpreted instructions otherwise.
+    implementation("androidx.graphics:graphics-shapes:1.0.1")
 
     // The real on-device IDE engine, shared with :ide-desktop. ide-core pulls in lang-jdt (jdt.core +
     // ecj) transitively along with the Eclipse platform runtime jars (org.eclipse.core.runtime, etc.).

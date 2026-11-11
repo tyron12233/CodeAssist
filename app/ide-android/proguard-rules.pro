@@ -191,6 +191,8 @@
 #     R8 had removed ~9.1k androidx.compose and ~1.7k kotlin/kotlinx entries. --------------------------------------
 -keep class androidx.compose.** { public protected *; <init>(...); volatile <fields>; }
 -keep class kotlin.** { public protected *; <init>(...); volatile <fields>; }
+# The real-view preview calls into this by name from interpreted Material code (VmViewFactory.hostShapes).
+-keep class androidx.graphics.shapes.** { *; }
 -keep class kotlinx.coroutines.** { public protected *; <init>(...); volatile <fields>; }
 -keep class androidx.lifecycle.** { public protected *; <init>(...); volatile <fields>; }
 -keep class androidx.activity.** { public protected *; <init>(...); volatile <fields>; }

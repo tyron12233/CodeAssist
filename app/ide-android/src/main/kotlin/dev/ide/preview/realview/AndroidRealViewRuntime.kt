@@ -69,7 +69,9 @@ class AndroidRealViewRuntime(
     // One peer factory for the runtime's lifetime, shared across VM rebuilds so a generated peer class (an
     // interpreted view's real subclass) is dexed + defined ONCE and reused when the classpath changes but the
     // peer shape doesn't. Interpret mode only; built lazily so the dex-mode path never touches it.
-    private val peerFactory: PeerFactory by lazy { DexPeerFactory() }
+    // The dexed peers are kept on disk: a peer's shape depends on the view class, not the project, and dexing the
+    // 39 a Material layout needs took 8.5 s in every new preview process.
+    private val peerFactory: PeerFactory by lazy { DexPeerFactory(File(cacheDir, "vm-peer-dex").toPath()) }
 
     /** Root of the real-view dex cache; the `.hashcache` sidecar under it is shared by [classpathSig] and the
      *  library dexer, so a jar is content-hashed once per (path, size, mtime) across both the signature and the dex. */
@@ -261,6 +263,13 @@ class AndroidRealViewRuntime(
                 tCtx, tInflate
             )
         }ms draw=${ms(tInflate, tDraw)}ms capture=${ms(tDraw, tCapture)}ms image=${bw}x$bh${vmFactory?.let { " interpret-steps=${it.steps - stepsBefore}" } ?: ""}")
+
+        // A slow inflate is nearly always a first one: say what the VM did for the first time in it.
+        if (vmFactory != null && ms(tCtx, tInflate) >= 1_000) {
+            log.info("real-view '${request.layoutName}' slow inflate: ${dev.ide.jvm.VmProfile.snapshot()}; ${dev.ide.android.DexPeerFactory.snapshot()}; slowest static-init: ${dev.ide.jvm.VmProfile.slowestInits()}")
+        }
+        dev.ide.jvm.VmProfile.reset()
+        dev.ide.android.DexPeerFactory.reset()
 
         return RealViewResult(
             pngBytes = null, width = bw, height = bh, nativeBitmap = bmp, viewTree = viewTree,
