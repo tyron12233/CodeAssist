@@ -47,6 +47,8 @@ class McpRelayClient(
     private val token: () -> String?,
     private val refreshToken: (stale: String?) -> String? = { null },
     private val onState: (State) -> Unit = {},
+    /** Called as relayed requests start and finish, with how many are being answered now. */
+    private val onActivity: (inFlight: Int) -> Unit = {},
     private val http: OkHttpClient = defaultClient(),
 ) : AutoCloseable {
 
@@ -57,6 +59,7 @@ class McpRelayClient(
     private val workers = Executors.newCachedThreadPool { r -> Thread(r, "mcp-relay-call").apply { isDaemon = true } }
     private val incoming = ConcurrentHashMap<String, Incoming>()
 
+    private val inFlight = java.util.concurrent.atomic.AtomicInteger()
     @Volatile private var socket: WebSocket? = null
     @Volatile private var closed = false
     @Volatile private var retry: ScheduledFuture<*>? = null
@@ -184,6 +187,15 @@ class McpRelayClient(
 
     /** Replay one relayed request against the local MCP server and send what it said. */
     private fun answer(webSocket: WebSocket, id: String, method: String, headers: Map<String, String>, body: String) {
+        runCatching { onActivity(inFlight.incrementAndGet()) }
+        try {
+            replay(webSocket, id, method, headers, body)
+        } finally {
+            runCatching { onActivity(inFlight.decrementAndGet()) }
+        }
+    }
+
+    private fun replay(webSocket: WebSocket, id: String, method: String, headers: Map<String, String>, body: String) {
         var status = 502
         var responseHeaders = emptyMap<String, String>()
         var text: String

@@ -398,7 +398,7 @@ open class MainActivity : ComponentActivity() {
                         onProjectOpenChange = { projectOpen.value = it },
                     )
                     // The sandbox looks exactly like the IDE it was started from; say which one this is.
-                    if (inSandbox) SandboxBand()
+                    if (inSandbox) SandboxBand() else McpBand(b.agent)
                 }
 
                 error != null -> Splash("Failed to start: $error")

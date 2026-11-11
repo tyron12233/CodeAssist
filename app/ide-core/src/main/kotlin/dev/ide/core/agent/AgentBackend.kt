@@ -299,6 +299,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     @Volatile private var relayClient: dev.ide.agent.mcp.McpRelayClient? = null
     @Volatile private var relayServer: HttpMcpServer? = null
+    @Volatile private var relayInFlight = 0
     private val _mcpRelay = MutableStateFlow(dev.ide.ui.backend.UiMcpRelay())
 
     /** The local FTP asset server, started when the AI settings "FTP server" toggle (or the `ftp_server`
@@ -460,6 +461,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             token = { freeAiCredits.accessToken() },
             refreshToken = { stale -> freeAiCredits.refreshAccessToken(stale) },
             onState = { publishRelay() },
+            onActivity = { count -> relayInFlight = count; publishRelay() },
         ).start()
     }
 
@@ -489,6 +491,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             enabled = client != null,
             status = status,
             url = if (client != null) client.publicUrl else "",
+            inFlight = if (client != null) relayInFlight else 0,
         )
     }
 

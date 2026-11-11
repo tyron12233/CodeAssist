@@ -2535,6 +2535,8 @@ data class UiMcpRelay(
     val enabled: Boolean = false,
     val status: UiMcpRelayStatus = UiMcpRelayStatus.OFF,
     val url: String = "",
+    /** Requests from Claude being answered right now: above zero, Claude is working on the project. */
+    val inFlight: Int = 0,
 )
 
 private val MCP_RELAY_NONE: StateFlow<UiMcpRelay> = MutableStateFlow(UiMcpRelay())

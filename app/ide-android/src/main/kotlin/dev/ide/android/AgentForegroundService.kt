@@ -177,7 +177,8 @@ object AgentForeground {
         }
         if (relay.enabled) {
             val text = when (relay.status) {
-                UiMcpRelayStatus.CONNECTED -> "Claude can reach the open project."
+                UiMcpRelayStatus.CONNECTED ->
+                    if (relay.inFlight > 0) "Claude is working on the open project." else "Claude can reach the open project."
                 UiMcpRelayStatus.OFFLINE -> "No connection. Retrying…"
                 UiMcpRelayStatus.SIGNED_OUT -> "Sign in to CodeAssist again to reconnect."
                 UiMcpRelayStatus.IN_USE -> "This link belongs to another account."
