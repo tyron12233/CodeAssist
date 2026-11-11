@@ -200,7 +200,20 @@ class SharedLibraryDexer(
     private fun fetchFromPack(todo: List<Miss>, u: Universe) {
         val pack = dexPack ?: return
         val cache = dexCacheRoot ?: return
-        if (release || !cacheKeyIsOwnContentOnly(minApi, desugaredLibConfig)) return
+        if (release) return
+        if (!cacheKeyIsOwnContentOnly(minApi, desugaredLibConfig)) {
+            // Said once per cold build, so "why did it convert everything on my phone" has an answer in the log.
+            log(
+                if (minApi < DESUGAR_FREE_MIN_API) {
+                    "Prebuilt libraries are not used for this build: it is made for Android API $minApi, and below " +
+                        "$DESUGAR_FREE_MIN_API each library has to be converted together with the others. " +
+                        "A Run on this device uses them."
+                } else {
+                    "Prebuilt libraries are not used for this build: core-library desugaring converts each library against its own configuration."
+                },
+            )
+            return
+        }
         val tagDir = cache.resolve(cacheTag(u.desugarDigest))
         val wanted = todo.filter { m ->
             val shared = tagDir.resolve(m.hash)

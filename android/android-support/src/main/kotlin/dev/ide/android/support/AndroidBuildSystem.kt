@@ -171,6 +171,12 @@ class AndroidBuildSystem(
     private val dexCacheRoot: Path? = null,
     /** Pre-dexed libraries a debug build installs into [dexCacheRoot] before dexing the rest itself; null = none. */
     private val dexPack: dev.ide.android.support.pack.DexPackSource? = null,
+    /**
+     * The API level of the device this build system runs ON, when it runs on one (the phone); null on a desktop.
+     * A Run installs onto that same device, so its dex can be made for it rather than for the project's minSdk
+     * (see [dexApiFor]).
+     */
+    private val localDeviceApi: Int? = HostDevice.apiLevel(),
     /** Core-library-desugaring artifacts (desugar runtime + config jar); null = host ships none, so a module's
      *  `coreLibraryDesugaringEnabled` is a no-op. See [DesugarLib]. */
     private val desugarLib: DesugarLib? = null,
@@ -247,6 +253,36 @@ class AndroidBuildSystem(
         buildGraph(project, request, ctx, test = null)
 
     /**
+     * [createBuildGraph] for a build whose APK is about to be installed on THIS device and nowhere else: a Run.
+     * Its dex is made for the device ([dexApiFor]); the graph is otherwise the same, and so is the APK's path.
+     */
+    fun createRunGraph(project: Project, request: BuildRequest, ctx: BuildContext): TaskGraph =
+        buildGraph(project, request, ctx, test = null, deviceApi = localDeviceApi)
+
+    /**
+     * The API level a variant's code is dexed for: the project's minSdk, except for a debug build headed for a
+     * device ([deviceApi]) whose minSdk is below [SharedLibraryDexer.DESUGAR_FREE_MIN_API], which is dexed for
+     * that level instead.
+     *
+     * Below it D8 desugars each library against the others, so a library's dex depends on the whole library set:
+     * it cannot be shared between projects or published, and a minSdk 23 project converted every library on the
+     * phone. A Run's APK only ever lands on the phone that built it, which is at least that level (so is the IDE
+     * itself), so nothing is lost by dexing for it, and the prebuilt libraries then apply. Android Studio does
+     * the same for a Run. The manifest keeps the real minSdk.
+     *
+     * Not for a release or minified build, nor one with core-library desugaring (whose library dex is keyed on
+     * the desugaring config either way): those keep the real minSdk, as does every build that is not a Run,
+     * because their APK may be installed anywhere.
+     */
+    internal fun dexApiFor(facet: AndroidFacet, buildTypeName: String, deviceApi: Int?): Int {
+        val floor = SharedLibraryDexer.DESUGAR_FREE_MIN_API
+        if (deviceApi == null || deviceApi < floor || facet.minSdk >= floor || facet.coreLibraryDesugaringEnabled) return facet.minSdk
+        val bt = facet.buildType(buildTypeName)
+        if (bt?.debuggable == false || bt?.minifyEnabled == true) return facet.minSdk
+        return floor
+    }
+
+    /**
      * Build an Android [module]'s local unit tests (`src/test`, a KMP module's `commonTest`) against its
      * [variantName] variant and run them: the module compiles as for any build, then its tests compile against
      * that output and its classpath, and run on the bytecode VM like a plain JVM module's
@@ -284,7 +320,10 @@ class AndroidBuildSystem(
     /** A test run riding a compile-only graph: whose tests, which of them, and what runs them. */
     private class TestPlan(val module: ModuleId, val selector: TestSelector, val interpreter: ProgramInterpreter, val io: ProgramIo?)
 
-    private fun buildGraph(project: Project, request: BuildRequest, ctx: BuildContext, test: TestPlan?, androidTest: ModuleId? = null): TaskGraph {
+    private fun buildGraph(
+        project: Project, request: BuildRequest, ctx: BuildContext, test: TestPlan?, androidTest: ModuleId? = null,
+        deviceApi: Int? = null,
+    ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val targets = (if (request.targets.isEmpty()) project.modules.map { it.id } else request.targets)
             .mapNotNull { byId[it] }
@@ -318,7 +357,7 @@ class AndroidBuildSystem(
                 if (registered.add(target.id)) registerAndroidLibrary(tasks, target, byId, withJar = test == null, variant, targetFacet, test)
                 if (test == null) appendAar(tasks, target, variant, targetFacet, config)
             } else {
-                appendApp(tasks, target, variant, request.goal, byId, config, test, androidTest)
+                appendApp(tasks, target, variant, request.goal, byId, config, test, androidTest, deviceApi)
             }
         }
         // Contributed build logic (BUILD_PLUGIN_EP) lands after every android/java task is registered, so it
@@ -341,6 +380,7 @@ class AndroidBuildSystem(
         config: BuildConfiguration,
         test: TestPlan? = null,
         androidTest: ModuleId? = null,
+        deviceApi: Int? = null,
     ) {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return
         // The module's compileSdk platform when one is installed, else the build's default android.jar, for
@@ -349,7 +389,10 @@ class AndroidBuildSystem(
         val androidJar = androidJarFor(facet)
         val compileBootclasspath = compileBootclasspathFor(androidJar)
         val bootClasspath = bootClasspathFor(androidJar)
-        val layout = Layout(app, variant.name)
+        // What the code is dexed for: the minSdk, or this device for a Run (see dexApiFor). Device dex is kept in
+        // directories of its own, so an Assemble after a Run can never package dex made for a newer Android.
+        val dexApi = dexApiFor(facet, variant.buildTypeName, deviceApi)
+        val layout = Layout(app, variant.name, dexFlavor = if (dexApi == facet.minSdk) "" else "-api$dexApi")
         val v = variant.name.cap()
         fun step(s: String) = TaskName(":${app.name}:$s$v")
 
@@ -772,7 +815,7 @@ class AndroidBuildSystem(
         // Keyed on the REAL external libraries (libs.dexJars), not the log-bridge runtime we may have appended:
         // a dep-less app shouldn't flip to the forked one-pass just because instrumentation added one tiny jar.
         val dexExtOnePass =
-            facet.minSdk in 21..25 && libs.dexJars.isNotEmpty() && !minify && goal != BuildGoal.DEX && mergeDexer.runsOffHeap()
+            dexApi in 21..25 && libs.dexJars.isNotEmpty() && !minify && goal != BuildGoal.DEX && mergeDexer.runsOffHeap()
 
         // The merged dex layers the packager assembles (renumbered into one classes*.dex set) + packageApk's deps.
         var dexDirs: List<Path>
@@ -827,7 +870,7 @@ class AndroidBuildSystem(
             val dexBuilder = step("dexBuilder")
             tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, dexProjectClasses, subProjectJars, externalJars, sdk.androidJar,
-                    facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
+                    dexApi, release, layout.dexArchives.resolve("project.jar"),
                     layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
                     desugaredLibConfig = desugarJson,
                     rJars = if (forkedR) emptyList() else rJars, rDexRoot = if (forkedR) null else layout.rArchives,
@@ -838,20 +881,20 @@ class AndroidBuildSystem(
             }
             // The "Dex merge batch size" setting, read once for this build (chunks a very large scope merge).
             val mergeBatch = mergeChunk()
-            if (facet.minSdk >= 21) {
+            if (dexApi >= 21) {
                 // Native multidex: ART loads many dex, so keep the scopes split for the best incrementality.
                 val mergeProjectDex = step("mergeProjectDex")
                 // R.jar merges into the PROJECT layer (AGP's scope for R) unless it's forked into its own layer.
                 val projectMergeInputs = if (forkedR) listOf(layout.projectArchives) else listOf(layout.projectArchives, layout.rArchives)
                 tasks.task(mergeProjectDex, listOf(dexBuilder)) {
-                    DexMergeTask(mergeProjectDex, projectMergeInputs, sdk.androidJar, facet.minSdk, release, layout.projectDex, mergeDexer, mergeChunk = mergeBatch)
+                    DexMergeTask(mergeProjectDex, projectMergeInputs, sdk.androidJar, dexApi, release, layout.projectDex, mergeDexer, mergeChunk = mergeBatch)
                 }
                 val dirs = arrayListOf(layout.projectDex)
                 val deps = arrayListOf(aapt2Link, mergeProjectDex)
                 if (subProjectJars.isNotEmpty()) {
                     val mergeLibDex = step("mergeLibDex")
                     tasks.task(mergeLibDex, listOf(dexBuilder)) {
-                        DexMergeTask(mergeLibDex, listOf(layout.subArchives), sdk.androidJar, facet.minSdk, release, layout.libDex, mergeDexer, mergeChunk = mergeBatch)
+                        DexMergeTask(mergeLibDex, listOf(layout.subArchives), sdk.androidJar, dexApi, release, layout.libDex, mergeDexer, mergeChunk = mergeBatch)
                     }
                     dirs.add(layout.libDex); deps.add(mergeLibDex)
                 }
@@ -863,7 +906,7 @@ class AndroidBuildSystem(
                     // machine (~6s vs ~15s contended).
                     val dexExtLibs = step("dexExtLibs")
                     tasks.task(dexExtLibs, deps.toList()) {
-                        DexExternalLibsTask(dexExtLibs, externalJars, sdk.androidJar, facet.minSdk, release, layout.extDex, mergeDexer, desugarJson, dexCacheRoot?.resolve("ext-indexed"))
+                        DexExternalLibsTask(dexExtLibs, externalJars, sdk.androidJar, dexApi, release, layout.extDex, mergeDexer, desugarJson, dexCacheRoot?.resolve("ext-indexed"))
                     }
                     dirs.add(layout.extDex); deps.add(dexExtLibs)
                 }
@@ -876,18 +919,18 @@ class AndroidBuildSystem(
                     // library. R is the app's FINAL R for every lib package (--extra-packages), so it is not tiny.
                     val dexRDex = step("dexRDex")
                     tasks.task(dexRDex, listOf(generateRFile) + deps.toList()) {
-                        DexExternalLibsTask(dexRDex, rJars, sdk.androidJar, facet.minSdk, release, layout.rDex, mergeDexer, desugarJson, dexCacheRoot?.resolve("r-indexed"))
+                        DexExternalLibsTask(dexRDex, rJars, sdk.androidJar, dexApi, release, layout.rDex, mergeDexer, desugarJson, dexCacheRoot?.resolve("r-indexed"))
                     }
                     dirs.add(layout.rDex); deps.add(dexRDex)
                 }
                 if (externalJars.isNotEmpty() && !dexExtOnePass) {
                     val mergeExtDex = step("mergeExtDex")
                     // Below AGP's LIBRARIES_MERGING_THRESHOLD: merge per-library (more dex files, finer isolation).
-                    val perLib = externalJars.size <= extMergeThreshold(facet.minSdk)
+                    val perLib = externalJars.size <= extMergeThreshold(dexApi)
                     tasks.task(mergeExtDex, listOf(dexBuilder)) {
                         // External libs are immutable + pinned, so their MERGED dex is content-addressable and
                         // reused across builds/cleans/projects (mergeCacheRoot) — not just the per-lib archives.
-                        DexMergeTask(mergeExtDex, listOf(layout.extArchives), sdk.androidJar, facet.minSdk, release, layout.extDex, mergeDexer, groupPerBucket = perLib, mergeChunk = mergeBatch, mergeCacheRoot = dexCacheRoot?.resolve("merged-ext"))
+                        DexMergeTask(mergeExtDex, listOf(layout.extArchives), sdk.androidJar, dexApi, release, layout.extDex, mergeDexer, groupPerBucket = perLib, mergeChunk = mergeBatch, mergeCacheRoot = dexCacheRoot?.resolve("merged-ext"))
                     }
                     dirs.add(layout.extDex); deps.add(mergeExtDex)
                 }
@@ -897,7 +940,7 @@ class AndroidBuildSystem(
                 val mergeDex = step("mergeDex")
                 tasks.task(mergeDex, listOf(dexBuilder)) {
                     DexMergeTask(mergeDex, listOf(layout.projectArchives, layout.subArchives, layout.extArchives, layout.rArchives),
-                        sdk.androidJar, facet.minSdk, release, layout.dex, mergeDexer, mergeChunk = mergeBatch)
+                        sdk.androidJar, dexApi, release, layout.dex, mergeDexer, mergeChunk = mergeBatch)
                 }
                 dexDirs = listOf(layout.dex); pkgDeps = listOf(aapt2Link, mergeDex)
             }
@@ -1497,18 +1540,20 @@ class AndroidBuildSystem(
 
     /**
      * Download [app]'s prebuilt library dex for [variantName] into the shared cache ahead of a build, dexing
-     * nothing ([SharedLibraryDexer.prefetch]). A no-op without a [dexPack], without a shared cache, or below
-     * minSdk 26 (whose cache key covers the whole library set). Returns how many libraries it installed.
+     * nothing ([SharedLibraryDexer.prefetch]). A no-op without a [dexPack], without a shared cache, or where the
+     * dex is made for an API below 26 (whose cache key covers the whole library set). Returns how many it installed.
      */
     fun prefetchLibraryDex(app: Module, variantName: String, log: (String) -> Unit = {}, checkCanceled: () -> Unit = {}): Int {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return 0
         val cache = dexCacheRoot ?: return 0
-        if (dexPack == null || !SharedLibraryDexer.cacheKeyIsOwnContentOnly(facet.minSdk, null) || facet.coreLibraryDesugaringEnabled) return 0
+        // A Run on this device dexes for it (dexApiFor), so that is the level worth fetching for.
+        val dexApi = dexApiFor(facet, AndroidVariants.select(app, variantName)?.buildTypeName ?: "debug", localDeviceApi)
+        if (dexPack == null || !SharedLibraryDexer.cacheKeyIsOwnContentOnly(dexApi, null) || facet.coreLibraryDesugaringEnabled) return 0
         val jars = libraryDexJars(app, variantName)
         if (jars.isEmpty()) return 0
         // The build's own hash cache, so the build finds these jars already hashed.
-        val universe = SharedLibraryDexer.computeUniverse(jars, cache.resolve(SharedLibraryDexer.SHARED_HASHES), facet.minSdk, null)
-        return SharedLibraryDexer(dexer, sdk.androidJar, facet.minSdk, false, cache, null, log = log, checkCanceled = checkCanceled, dexPack = dexPack)
+        val universe = SharedLibraryDexer.computeUniverse(jars, cache.resolve(SharedLibraryDexer.SHARED_HASHES), dexApi, null)
+        return SharedLibraryDexer(dexer, sdk.androidJar, dexApi, false, cache, null, log = log, checkCanceled = checkCanceled, dexPack = dexPack)
             .prefetch(jars, universe)
     }
 
@@ -1681,7 +1726,7 @@ class AndroidBuildSystem(
     }
 
     /** Per-(module, variant) build paths under `<module>/build/`. */
-    private inner class Layout(module: Module, variantName: String) {
+    private inner class Layout(module: Module, variantName: String, dexFlavor: String = "") {
         private val classesOut: Path = outputDir(module)   // <module>/build/classes
         private val buildDir: Path = classesOut.parent                  // <module>/build
         private val moduleDirField: Path = buildDir.parent              // <module>
@@ -1714,7 +1759,7 @@ class AndroidBuildSystem(
 
         /** Staging root for contributed [ClassTransform]s (see `InstrumentClassesTask`). */
         val instrumented: Path = inter.resolve("instrumented")
-        val dexArchives: Path = inter.resolve("dex-archives")   // dexBuilder scope roots + the project staging jar
+        val dexArchives: Path = inter.resolve("dex-archives$dexFlavor")   // dexBuilder scope roots + the project staging jar
         val projectArchives: Path = dexArchives.resolve("project")  // dexBuilder: app classes, per content hash
         val subArchives: Path = dexArchives.resolve("sub")          // dexBuilder: sub-module jars, per content hash
         val extArchives: Path = dexArchives.resolve("ext")          // dexBuilder: external libs, per content hash
@@ -1722,14 +1767,14 @@ class AndroidBuildSystem(
         // dex layer (mergeProjectDex) — AGP keeps R in the project scope. This keeps `extArchives` pure external
         // libraries, so mergeExtDex is stable across resource edits (only the project layer re-merges when R shifts).
         val rArchives: Path = dexArchives.resolve("r")              // dexBuilder: the app's R.jar, per content hash
-        val projectDex: Path = inter.resolve("project-dex")     // mergeProjectDex output (app code)
-        val libDex: Path = inter.resolve("lib-dex")             // mergeLibDex output (sub-module code)
-        val extDex: Path = inter.resolve("ext-dex")             // mergeExtDex / dexExtLibs output (external library code)
-        val rDex: Path = inter.resolve("r-dex")                 // dexRDex output (the app's R.jar as its own dex layer)
+        val projectDex: Path = inter.resolve("project-dex$dexFlavor")     // mergeProjectDex output (app code)
+        val libDex: Path = inter.resolve("lib-dex$dexFlavor")             // mergeLibDex output (sub-module code)
+        val extDex: Path = inter.resolve("ext-dex$dexFlavor")             // mergeExtDex / dexExtLibs output (external library code)
+        val rDex: Path = inter.resolve("r-dex$dexFlavor")                 // dexRDex output (the app's R.jar as its own dex layer)
         val resourcesAp: Path = inter.resolve("resources.ap_")
         val aaptProguardRules: Path = inter.resolve("aapt_rules.txt") // keep rules aapt2 derives from the manifest
         val proguardDefaults: Path = inter.resolve("proguard-defaults") // bundled default proguard files, extracted
-        val dex: Path = inter.resolve("dex")                    // mergeDex / R8 output (mono-/legacy-multidex)
+        val dex: Path = inter.resolve("dex$dexFlavor")                    // mergeDex / R8 output (mono-/legacy-multidex)
         val desugarLibDex: Path = inter.resolve("desugar-lib-dex") // L8 output: the core-library desugaring runtime
         val desugarConfigJson: Path = inter.resolve("desugar.json")  // extracted from the desugar config jar
         val desugarKeepRules: Path = inter.resolve("l8-keep.pro")    // keep rules R8 emits for the L8 runtime shrink
@@ -1868,7 +1913,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }, platformFor: (Int) -> Path? = { null }, dexPack: dev.ide.android.support.pack.DexPackSource? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }, platformFor: (Int) -> Path? = { null }, dexPack: dev.ide.android.support.pack.DexPackSource? = null, localDeviceApi: Int? = HostDevice.apiLevel()): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 // The dexBuilder ARCHIVE dexer. The host can inject a forked-VM D8 (an [OffHeapArchiveDexer]) so a
@@ -1888,6 +1933,7 @@ class AndroidBuildSystem(
                 classTransforms = classTransforms,
                 dexCacheRoot = dexCacheRoot,
                 dexPack = dexPack,
+                localDeviceApi = localDeviceApi,
                 desugarLib = desugarLib,
                 signingResolver = signingResolver,
                 mergeChunk = mergeChunk,

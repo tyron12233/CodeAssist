@@ -1205,13 +1205,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         ?.let { AndroidVariants.applicationId(facet, it) } ?: facet.namespace
                     val project = ctx.projectOf(module)
                         ?: return fail("Internal error: no project for module '${module.name}'.")
-                    val graph = android.createBuildGraph(
-                        project,
-                        BuildRequest(
-                            listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        ),
-                        buildContext(),
-                    )
+                    // Installed on this device when the installer has no other to pick: dex for it, not for the minSdk.
+                    val request = BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE)
+                    val graph =
+                        if (installer.choosesTarget) android.createBuildGraph(project, request, buildContext())
+                        else android.createRunGraph(project, request, buildContext())
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
                     // A plugin module installs like any app, but what happens next is different: the IDE
                     // reads installed plugins once at startup, so the newly installed code is not live until
