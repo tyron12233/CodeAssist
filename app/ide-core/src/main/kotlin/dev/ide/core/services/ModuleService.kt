@@ -21,6 +21,7 @@ import dev.ide.model.FacetData
 import dev.ide.model.LanguageLevel
 import dev.ide.model.BuildSystemId
 import dev.ide.model.impl.ExternalModelApplier
+import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.rootPath
 import dev.ide.model.sync.ExternalProjectModel
 import dev.ide.lang.kotlin.build.KotlinFacet
@@ -823,6 +824,115 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         return true
     }
 
+    /** What [reloadModulesFromDisk] found: module names, and for [failed] the name with the reason. */
+    class DiskReload(
+        val added: List<String>,
+        val updated: List<String>,
+        val removed: List<String>,
+        val failed: List<String>,
+    ) {
+        val changed: Boolean get() = added.isNotEmpty() || updated.isNotEmpty() || removed.isNotEmpty()
+    }
+
+    /**
+     * Bring the open model in line with the `module.toml` files on disk: re-read every module's manifest, adopt
+     * a manifest in a directory the project does not list yet as a new module (named after its directory), and
+     * drop a module whose directory is gone. Then save, and refresh analyzers and the index when anything changed.
+     *
+     * Nothing else does this. The model is read from disk once, at open, and every later change goes through a
+     * model transaction, so a manifest written or edited as a plain file (by the AI agent, by a file copied in)
+     * was invisible until the project was closed and reopened. A manifest that cannot be read leaves its module
+     * as the model already has it, and is reported in [DiskReload.failed].
+     *
+     * Model and persistence only: the caller re-resolves libraries a manifest newly declares.
+     */
+    fun reloadModulesFromDisk(): DiskReload {
+        val store = ctx.store
+        val project = store.data.projects.firstOrNull() ?: return DiskReload(emptyList(), emptyList(), emptyList(), listOf("No project is open."))
+        val projectRoot = store.rootPath.resolve(project.rootRelPath).normalize()
+        val added = ArrayList<String>()
+        val updated = ArrayList<String>()
+        val removed = ArrayList<String>()
+        val failed = ArrayList<String>()
+        val modules = ArrayList<dev.ide.model.impl.ModuleData>()
+        for (m in project.modules) {
+            val dir = projectRoot.resolve(m.dirRelPath)
+            if (!Files.isDirectory(dir)) { removed += m.name; continue }
+            val read = runCatching { ModelPersistence.readModule(projectRoot.toString(), m.id, m.name, m.dirRelPath) }
+            val fresh = read.getOrNull()
+            if (fresh == null) {
+                failed += "${m.name}: ${read.exceptionOrNull()?.message ?: "module.toml could not be read"}"
+                modules += m
+            } else {
+                if (fresh != m) updated += m.name
+                modules += fresh
+            }
+        }
+        val knownDirs = project.modules.mapTo(HashSet()) { it.dirRelPath.trim('/').lowercase() }
+        val knownNames = project.modules.mapTo(HashSet()) { it.name }
+        for (dirRel in unlistedModuleDirs(projectRoot, knownDirs)) {
+            val name = dirRel.substringAfterLast('/')
+            when {
+                !isValidModuleName(name) ->
+                    failed += "$dirRel: '$name' is not a valid module name (start with a letter; letters, digits, '-' or '_')."
+                !knownNames.add(name) -> failed += "$dirRel: a module named '$name' already exists."
+                else -> runCatching { ModelPersistence.readModule(projectRoot.toString(), name, name, dirRel) }
+                    .onSuccess { modules += it; added += name }
+                    .onFailure { knownNames.remove(name); failed += "$dirRel: ${it.message ?: "module.toml could not be read"}" }
+            }
+        }
+        if (added.isEmpty() && updated.isEmpty() && removed.isEmpty()) return DiskReload(added, updated, removed, failed)
+
+        val pid = dev.ide.model.ProjectId(project.id)
+        val events = ArrayList<dev.ide.model.event.ProjectModelEvent>()
+        removed.forEach { name ->
+            project.modules.firstOrNull { it.name == name }?.let { events += dev.ide.model.event.ModuleRemoved(pid, dev.ide.model.ModuleId(it.id)) }
+        }
+        added.forEach { events += dev.ide.model.event.ModuleAdded(pid, dev.ide.model.ModuleId(it)) }
+        updated.forEach { name ->
+            val id = dev.ide.model.ModuleId(project.modules.first { it.name == name }.id)
+            events += dev.ide.model.event.ModuleSettingsChanged(pid, id)
+            events += dev.ide.model.event.SourceSetsChanged(pid, id)
+            events += dev.ide.model.event.FacetsChanged(pid, id)
+            events += dev.ide.model.event.DependenciesChanged(pid, id)
+        }
+        val current = store.data
+        store.commit(
+            current.copy(projects = current.projects.map { if (it.id == project.id) it.copy(modules = modules) else it }),
+            events,
+        )
+        store.save()
+        ctx.invalidateAnalyzers()
+        ctx.invalidateSyntheticClasses()
+        ctx.resyncIndex()
+        return DiskReload(added, updated, removed, failed)
+    }
+
+    /**
+     * Directories under [projectRoot] holding a `module.toml` that no listed module uses, as `/`-separated paths
+     * relative to it. Build output, hidden directories and the insides of a module (its sources cannot hold
+     * another module) are not searched.
+     */
+    private fun unlistedModuleDirs(projectRoot: Path, knownDirs: Set<String>): List<String> {
+        val found = ArrayList<String>()
+        fun walk(dir: Path, rel: String, depth: Int) {
+            val children = runCatching { Files.newDirectoryStream(dir).use { it.toList() } }.getOrDefault(emptyList())
+            if (rel.isNotEmpty() && children.any { it.fileName.toString() == "module.toml" && Files.isRegularFile(it) }) {
+                if (rel.lowercase() !in knownDirs) found += rel
+                return
+            }
+            if (rel.isNotEmpty() && rel.lowercase() in knownDirs) return
+            if (depth >= MAX_MODULE_DEPTH) return
+            for (child in children) {
+                val name = child.fileName.toString()
+                if (name.startsWith(".") || name in SKIPPED_MODULE_DIRS || !Files.isDirectory(child)) continue
+                walk(child, if (rel.isEmpty()) name else "$rel/$name", depth + 1)
+            }
+        }
+        walk(projectRoot, "", 0)
+        return found.sorted()
+    }
+
     /** Conventional source-set leaf-folder name → the [ContentRole] it implies. Drives both explicit
      *  "Add source root" presets and the folder-name auto-detect in [maybeRegisterSourceRoot]. */
     private val conventionRoles: Map<String, ContentRole> = mapOf(
@@ -981,5 +1091,11 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         /** [UiToolchainWarning.id] prefix for a bundled-KSP-processor runtime mismatch; the suffix is the
          *  catalog processor id, which is what the acceptance is persisted under. */
         const val KSP_RUNTIME_WARNING_PREFIX = "ksp-runtime:"
+
+        /** How deep below the project root a hand-written module is looked for (`features/home/ui`). */
+        const val MAX_MODULE_DEPTH = 4
+
+        /** Directories [unlistedModuleDirs] does not descend into. */
+        val SKIPPED_MODULE_DIRS = setOf("build", "node_modules", "out", "bin", "src")
     }
 }

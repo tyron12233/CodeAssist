@@ -315,6 +315,17 @@ object ModelPersistence {
         }.getOrNull()
     }
 
+    /**
+     * The module whose manifest is at [projectRoot]`/`[dirRelPath]`/module.toml`, as [id] and [name]. Throws
+     * when the manifest is missing, unreadable or malformed.
+     *
+     * For re-reading a manifest into an OPEN model: one that was edited behind the model's back, or one
+     * written by hand in a new directory that `workspace.json` does not list yet. [load] is the whole-workspace
+     * read and skips what it cannot parse; a caller of this wants the reason.
+     */
+    fun readModule(projectRoot: String, id: String, name: String, dirRelPath: String): ModuleData =
+        tomlToModule(id, name, dirRelPath, Toml.parse(readTextAt(resolvePath(resolveRel(projectRoot, dirRelPath), MODULE_FILE))))
+
     /** A module listed in `workspace.json` that did not load, and whether its directory is gone entirely. */
     private class MissingModule(val name: String, val cause: Throwable, val vanished: Boolean)
 

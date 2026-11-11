@@ -180,6 +180,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
     }
 
+    /** Module management ([ModuleTools]): shared by the chat and the MCP server, like [ftpControlTool]. */
+    private val moduleTools: List<AgentTool> = ModuleTools.tools({ ctx.servicesOrNull }) { ctx.bumpFileSystemEpoch() }
+
     // --- ask_user: the agent's multiple-choice questions, answered in the chat ---
 
     private val _questionRequest = MutableStateFlow<dev.ide.ui.backend.UiAgentQuestionRequest?>(null)
@@ -217,7 +220,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     /** The MCP server's tools write straight to the workspace: an external client's edits are not a chat turn,
      *  and recording them into one would let that turn's Undo revert someone else's work. */
-    private val mcpTools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool)
+    private val mcpTools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool + moduleTools)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Log.logger("ide.agent")
 
@@ -225,7 +228,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private val agentConnections = AgentConnections(ctx, scope)
 
     // ask_user is the chat's alone: an MCP client has no card to answer it with.
-    private val builtinChatTools: List<AgentTool> = builtinTools(checkpoints) + ftpControlTool + askUser
+    private val builtinChatTools: List<AgentTool> = builtinTools(checkpoints) + ftpControlTool + moduleTools + askUser
 
     /**
      * The chat's tools: the built-ins, then whatever the connected MCP servers and installed skills add. Read on
@@ -1367,7 +1370,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             SystemPrompt.grounding(
                 tools.tools.map { it.spec.name },
                 ctx.servicesOrNull?.let { projectInstructions(it) },
-                agentConnections.promptSections(),
+                listOf(ModuleTools.PROMPT) + agentConnections.promptSections(),
             )
         }
 
