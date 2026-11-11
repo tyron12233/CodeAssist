@@ -105,6 +105,12 @@ enum class ApiPlatform(val unit: String) {
  *
  * [enforced] says the build rejects such a call too (a desktop build compiled with `--release`), which makes
  * the editor report it as an error rather than a warning.
+ *
+ * [jdkReference], for an Android module, supplies the JDK's own table. Android's `java.*` is a subset of the
+ * JDK's, so a call to real Java API the platform lacks (`Files.writeString`, Java 11, absent from Android before
+ * API 37) fails to resolve; with the JDK table at hand the editor can say that, in place of a bare "unresolved
+ * reference" that reads as the user's mistake. A supplier, because the table is only worth loading once such a
+ * call turns up.
  */
 data class ApiLevelContext(
     val platform: ApiPlatform,
@@ -112,11 +118,114 @@ data class ApiLevelContext(
     val levels: PlatformApiLevels,
     val enforced: Boolean = false,
 ) {
+    /**
+     * See the class comment. Outside the constructor so the published constructor, `copy` and `componentN`
+     * keep their shapes (plugins link against them); it is therefore not part of equality, and [copy] drops it.
+     */
+    var jdkReference: (() -> PlatformApiLevels?)? = null
+        private set
+
     companion object {
         /** An Android module's minSdk check. */
         fun android(minSdk: Int, levels: PlatformApiLevels) = ApiLevelContext(ApiPlatform.ANDROID, minSdk, levels)
 
+        /** An Android module's minSdk check, with the JDK's table to explain Java API the platform lacks. */
+        fun android(minSdk: Int, levels: PlatformApiLevels, jdkReference: () -> PlatformApiLevels?) =
+            ApiLevelContext(ApiPlatform.ANDROID, minSdk, levels).also { it.jdkReference = jdkReference }
+
         /** A JVM module's check against its Java [release]. */
         fun jdk(release: Int, levels: PlatformApiLevels, enforced: Boolean) = ApiLevelContext(ApiPlatform.JDK, release, levels, enforced)
     }
+}
+
+/**
+ * Why a member of a `java.*` type does not resolve in an Android module, when the reason is that it is real Java
+ * API the Android platform does not have. Android's `java.*` is a subset of the JDK's, so code written from Java
+ * documentation (`Files.writeString`, Java 11) is correct Java that this platform rejects, and a bare
+ * "unresolved" reads as the user's own mistake. Shared by the language backends so they say it the same way.
+ */
+object JavaApiMissingOnAndroid {
+
+    /**
+     * The sentence explaining [member] on [ownerFqn] (`'Files.writeString' is Java 11 API that Android API 36
+     * does not have.`), or null when that is not the reason: not an Android module, not a `java.*`/`javax.*`
+     * type, no JDK table at hand ([ApiLevelContext.jdkReference]), or the JDK does not have the member either.
+     */
+    fun explain(context: ApiLevelContext?, ownerFqn: String, member: String): String? {
+        if (context == null || context.platform != ApiPlatform.ANDROID) return null
+        if (!ownerFqn.startsWith("java.") && !ownerFqn.startsWith("javax.")) return null
+        val jdk = context.jdkReference?.invoke() ?: return null
+        val level = jdk.methodLevel(ownerFqn, member, null) ?: jdk.fieldLevel(ownerFqn, member) ?: return null
+        val java = if (level.since > JDK_BASELINE) "Java ${level.since} API" else "Java API"
+        val platform = context.levels.platformLevel.takeIf { it > 0 }?.let { "Android API $it" } ?: "this Android platform"
+        return "'${ownerFqn.substringAfterLast('.')}.$member' is $java that $platform does not have."
+    }
+
+    /**
+     * [explain] for a whole TYPE that does not resolve (`import java.net.http.HttpClient`), by its qualified
+     * name: the JDK has the class and this platform does not. A package the JDK has and Android leaves out
+     * entirely ([MISSING_PACKAGES]) is explained too, which covers a star import of it. Null otherwise.
+     */
+    fun explainType(context: ApiLevelContext?, typeFqn: String): String? {
+        if (context == null || context.platform != ApiPlatform.ANDROID) return null
+        if (!typeFqn.startsWith("java.") && !typeFqn.startsWith("javax.")) return null
+        val jdk = context.jdkReference?.invoke() ?: return null
+        val level = jdk.classLevel(typeFqn)
+        if (level == null && MISSING_PACKAGES.none { typeFqn == it || typeFqn.startsWith("$it.") }) return null
+        val java = if (level != null && level.since > JDK_BASELINE) "Java ${level.since} API" else "Java API"
+        val platform = context.levels.platformLevel.takeIf { it > 0 }?.let { "Android API $it" } ?: "this Android platform"
+        return "'$typeFqn' is $java that $platform does not have."
+    }
+
+    /**
+     * What to use in place of [name], an `owner.member` or a type's qualified name, when there is something
+     * that works the same on Android; the entry for the nearest enclosing package applies to everything in it.
+     * Worded for either language. A backend with a better answer in its own syntax uses that first.
+     */
+    fun alternative(name: String): String? {
+        ALTERNATIVES[name]?.let { return it }
+        var prefix = name
+        while (true) {
+            prefix = prefix.substringBeforeLast('.', "")
+            if (prefix.isEmpty()) return null
+            PACKAGE_ALTERNATIVES[prefix]?.let { return it }
+        }
+    }
+
+    /**
+     * The members here were read off a comparison of JDK 21's `java.base` with the API 36 `android.jar`: these
+     * are the ones in everyday classes that Android lacks AND that have a straightforward replacement. The rest
+     * of what is missing (modules, class-file constants, foreign memory, hidden classes) gets the explanation
+     * without a suggestion.
+     */
+    private val ALTERNATIVES: Map<String, String> = mapOf(
+        "java.lang.Thread.ofVirtual" to "Android has no virtual threads. Use a thread pool such as 'Executors.newCachedThreadPool()', or Kotlin coroutines.",
+        "java.lang.Thread.startVirtualThread" to "Android has no virtual threads. Use a thread pool such as 'Executors.newCachedThreadPool()', or Kotlin coroutines.",
+        "java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor" to "Android has no virtual threads. Use 'Executors.newCachedThreadPool()'.",
+        "java.util.concurrent.Executors.newThreadPerTaskExecutor" to "Use 'Executors.newCachedThreadPool(threadFactory)'.",
+        "java.lang.Thread.ofPlatform" to "Create the thread with the 'Thread' constructor.",
+        "java.lang.StringBuilder.repeat" to "Append 'text.repeat(count)'.",
+        "java.lang.StringBuffer.repeat" to "Append 'text.repeat(count)'.",
+        "java.lang.Runtime.version" to "For the platform's version use 'android.os.Build.VERSION.SDK_INT'.",
+        "java.lang.System.getLogger" to "Use 'android.util.Log', or 'java.util.logging.Logger'.",
+        "java.lang.Process.pid" to "Android does not expose a child process's id. 'android.os.Process.myPid()' is this app's own.",
+        "java.lang.Process.toHandle" to "Android has no 'ProcessHandle'. 'android.os.Process' covers this app's own process.",
+        "java.lang.ProcessBuilder.Redirect.DISCARD" to "Redirect to the file '/dev/null'.",
+        "java.time.Duration.isPositive" to "Test that it is neither 'isNegative()' nor 'isZero()'.",
+        "java.net.URL.of" to "Use 'uri.toURL()'.",
+        "java.lang.reflect.AccessibleObject.canAccess" to "Use 'isAccessible()'.",
+        "java.lang.reflect.AccessibleObject.trySetAccessible" to "Call 'setAccessible(true)' and catch the exception it throws when access is refused.",
+        "java.text.NumberFormat.getCompactNumberInstance" to "Use 'android.icu.text.CompactDecimalFormat'.",
+        "java.lang.ProcessHandle" to "'android.os.Process' covers this app's own process.",
+    )
+
+    /** Packages the JDK has and Android leaves out, each with what Android offers in its place. */
+    private val PACKAGE_ALTERNATIVES: Map<String, String> = mapOf(
+        "java.net.http" to "Use 'java.net.HttpURLConnection', or a library such as OkHttp.",
+        "java.awt" to "Android has no AWT. Use 'android.graphics' for drawing and Android views or Compose for UI.",
+        "javax.swing" to "Android has no Swing. Build the UI with Android views or Compose.",
+        "javax.imageio" to "Use 'android.graphics.BitmapFactory' to read an image and 'Bitmap.compress' to write one.",
+    )
+
+    private val MISSING_PACKAGES: Set<String> = PACKAGE_ALTERNATIVES.keys
 }

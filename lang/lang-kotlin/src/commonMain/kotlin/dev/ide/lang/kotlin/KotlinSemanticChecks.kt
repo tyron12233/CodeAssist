@@ -102,6 +102,7 @@ import dev.ide.lang.kotlin.symbols.OptInLevel
 import dev.ide.lang.kotlin.symbols.OptInMarker
 import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.ApiLevelContext
+import dev.ide.lang.resolve.JavaApiMissingOnAndroid
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.kotlin.syntax.psi.Variance
@@ -1781,9 +1782,11 @@ internal class KotlinSemanticChecks(
             if (resolves) continue
             val ref = imp.importedReference ?: continue
             val r = ref.textRange
+            // A Java class Android does not have (`java.net.http.HttpClient`) is said to be that, with what to use.
+            val why = JavaApiMissingOnAndroid.explainType(apiContext(), fq)?.let { ". $it" + javaApiAlternative(fq) }.orEmpty()
             out += Diagnostic(
                 TextRange(r.startOffset, r.endOffset), Severity.ERROR,
-                "Unresolved reference: $leaf", KotlinDiagnosticCodes.UNRESOLVED,
+                "Unresolved reference: $leaf$why", KotlinDiagnosticCodes.UNRESOLVED,
             )
         }
         return out
@@ -3737,8 +3740,19 @@ internal class KotlinSemanticChecks(
                 KotlinDiagnosticCodes.INVISIBLE_REFERENCE,
             )
         }
-        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
+        val message = "Unresolved reference: $name" + (javaApiMissingFromAndroid(recvType.qualifiedName, name)?.let { ". $it" } ?: "")
+        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, message, KotlinDiagnosticCodes.UNRESOLVED)
     }
+
+    /** [JavaApiMissingOnAndroid.explain] for [name] on [ownerFqn], with what to write in Kotlin when known. */
+    private fun javaApiMissingFromAndroid(ownerFqn: String, name: String): String? {
+        val why = JavaApiMissingOnAndroid.explain(apiContext(), ownerFqn, name) ?: return null
+        return why + javaApiAlternative("$ownerFqn.$name")
+    }
+
+    /** " Use ..." for a Java API Android lacks: the Kotlin way when there is one, else the shared advice. */
+    private fun javaApiAlternative(name: String): String =
+        (JAVA_API_ALTERNATIVES[name] ?: JavaApiMissingOnAndroid.alternative(name))?.let { " $it" }.orEmpty()
 
     /**
      * Whether an extension [sym] is in scope at the use site. Kotlin resolves an extension only when it is
@@ -3984,3 +3998,15 @@ internal class KotlinSemanticChecks(
         )
     }
 }
+
+/**
+ * What to write IN KOTLIN in place of a Java API that Android lacks, where Kotlin has its own answer; the
+ * advice that reads the same in either language is [JavaApiMissingOnAndroid.alternative].
+ */
+private val JAVA_API_ALTERNATIVES: Map<String, String> = mapOf(
+    "java.nio.file.Files.writeString" to "Use 'path.writeText(text)' (kotlin.io.path) or 'Files.write(path, text.toByteArray())'.",
+    "java.nio.file.Files.readString" to "Use 'path.readText()' (kotlin.io.path) or 'String(Files.readAllBytes(path))'.",
+    "java.lang.StringBuilder.repeat" to "Use 'append(text.repeat(count))', or 'repeat(count) { append(text) }'.",
+    "java.lang.Thread.ofPlatform" to "Use 'kotlin.concurrent.thread { }', or the 'Thread' constructor.",
+    "java.time.Duration.isPositive" to "Use '!duration.isNegative && !duration.isZero'.",
+)

@@ -133,7 +133,7 @@ class JavaParsedFile(
 
     private val fileDiagnostics: List<Diagnostic> by lazy {
         val api = apiContext()
-        collectDiagnostics(javaFile) + dev.ide.lang.java.resolve.JavaSemanticDiagnostics.of(javaFile) +
+        collectDiagnostics(javaFile) + dev.ide.lang.java.resolve.JavaSemanticDiagnostics.of(javaFile, api) +
             dev.ide.lang.java.resolve.JavaLanguageLevelCheck.of(javaFile, languageLevel()) +
             (if (api != null) dev.ide.lang.java.resolve.JavaApiLevelCheck.of(javaFile, api) else emptyList())
     }

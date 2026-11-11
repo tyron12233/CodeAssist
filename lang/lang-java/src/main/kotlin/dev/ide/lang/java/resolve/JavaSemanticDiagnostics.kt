@@ -88,7 +88,8 @@ import dev.ide.psi.IntellijPsiHost
  */
 internal object JavaSemanticDiagnostics {
 
-    fun of(psi: PsiJavaFile): List<Diagnostic> = IntellijPsiHost.withParseLock {
+    /** [api] is the module's API-level context, used to explain Java API the Android platform lacks; null skips that. */
+    fun of(psi: PsiJavaFile, api: dev.ide.lang.resolve.ApiLevelContext? = null): List<Diagnostic> = IntellijPsiHost.withParseLock {
         val out = ArrayList<Diagnostic>()
         psi.accept(object : JavaRecursiveElementVisitor() {
             private var seen = 0
@@ -104,7 +105,7 @@ internal object JavaSemanticDiagnostics {
             // this one catches BOTH plain code references (types/imports) AND reference expressions (names/
             // member access / calls) exactly once.
             override fun visitReferenceElement(reference: PsiJavaCodeReferenceElement) {
-                reportUnresolved(reference, out)
+                reportUnresolved(reference, api, out)
                 checkInstanceMemberAccess(reference, out)
                 super.visitReferenceElement(reference)
             }
@@ -311,7 +312,7 @@ internal object JavaSemanticDiagnostics {
 
     // --- unresolved references ----------------------------------------------------------------------------
 
-    private fun reportUnresolved(ref: PsiJavaCodeReferenceElement, out: MutableList<Diagnostic>) {
+    private fun reportUnresolved(ref: PsiJavaCodeReferenceElement, api: dev.ide.lang.resolve.ApiLevelContext?, out: MutableList<Diagnostic>) {
         if (PsiTreeUtil.getParentOfType(ref, PsiErrorElement::class.java) != null) return
         if (PsiTreeUtil.getParentOfType(ref, PsiPackageStatement::class.java) != null) return
         // Report only the ROOT unresolved reference: if the qualifier itself doesn't resolve / has no type,
@@ -327,8 +328,42 @@ internal object JavaSemanticDiagnostics {
         // PSI core synthesizes no record members (no augment provider) — so suppress the spurious "Cannot
         // resolve" it would otherwise raise on every accessor/component use.
         if (isRecordComponentReference(ref, name)) return
-        out += diag(nameEl, "Cannot resolve symbol '$name'", JavaDiagnosticCodes.UNRESOLVED)
+        out += diag(nameEl, "Cannot resolve symbol '$name'" + (javaApiMissingFromAndroid(ref, name, api)?.let { ". $it" } ?: ""), JavaDiagnosticCodes.UNRESOLVED)
     }
+
+    /**
+     * [dev.ide.lang.resolve.JavaApiMissingOnAndroid.explain] for member [name] of [ref]'s qualifier, with what
+     * to write in Java when known. The qualifier is a class (`Files.writeString`) or an expression of a class
+     * type (`path.someNewMethod()`); an unqualified name has no owner to look it up on.
+     */
+    private fun javaApiMissingFromAndroid(ref: PsiJavaCodeReferenceElement, name: String, api: dev.ide.lang.resolve.ApiLevelContext?): String? {
+        if (api == null) return null
+        val missing = dev.ide.lang.resolve.JavaApiMissingOnAndroid
+        val qualifier = ref.qualifier
+        val owner = ((qualifier as? PsiJavaCodeReferenceElement)?.resolve() as? com.intellij.psi.PsiClass)
+            ?: ((qualifier as? PsiExpression)?.type as? com.intellij.psi.PsiClassType)?.resolve()
+        owner?.qualifiedName?.let { ownerFqn ->
+            missing.explain(api, ownerFqn, name)?.let { return it + alternative("$ownerFqn.$name") }
+        }
+        // Not a member of a class that resolves: the name may be part of a whole type, or package, that Android
+        // does not have (`import java.net.http.HttpClient;` fails at `http`). Ask about the full name written.
+        var top: PsiJavaCodeReferenceElement = ref
+        while (true) top = top.parent as? PsiJavaCodeReferenceElement ?: break
+        val written = top.text.filterNot { it.isWhitespace() }
+        return missing.explainType(api, written)?.let { it + alternative(written) }
+    }
+
+    /** " Use ..." for a Java API Android lacks: the Java way when there is one, else the shared advice. */
+    private fun alternative(name: String): String =
+        (JAVA_API_ALTERNATIVES[name] ?: dev.ide.lang.resolve.JavaApiMissingOnAndroid.alternative(name))?.let { " $it" }.orEmpty()
+
+    /** What to write IN JAVA in place of a Java API Android lacks, where the shared advice would be vaguer. */
+    private val JAVA_API_ALTERNATIVES: Map<String, String> = mapOf(
+        "java.nio.file.Files.writeString" to "Use 'Files.write(path, text.getBytes(StandardCharsets.UTF_8))'.",
+        "java.nio.file.Files.readString" to "Use 'new String(Files.readAllBytes(path), StandardCharsets.UTF_8)'.",
+        "java.lang.Thread.ofPlatform" to "Use 'new Thread(runnable)'.",
+        "java.time.Duration.isPositive" to "Use '!duration.isNegative() && !duration.isZero()'.",
+    )
 
     /** Whether [ref]/[name] names a record's implicit component: `p.x` / `p.x()` where `p`'s type is a record
      *  with a component `x`, or a bare `x` inside an enclosing record's body. Narrow — a matching record

@@ -19,6 +19,23 @@ class JdkApiLevelsTest {
         assertEquals(9, since("java.util.List", "of", null, 0))
         assertEquals(11, since("java.lang.String", "strip", "()Ljava/lang/String;"))
         assertEquals(11, since("java.lang.String", "isBlank", null, 0))
+        // Asked by name alone when a call does not resolve on Android (see lang-kotlin javaApiMissingFromAndroid).
+        assertEquals(11, since("java.nio.file.Files", "writeString", null))
+        assertEquals(11, since("java.nio.file.Files", "readString", null))
+        // The names the shared replacement table (JavaApiMissingOnAndroid) is keyed on must be ones this table
+        // answers for, or the explanation they hang off is never produced. Which release is not the point here
+        // (a preview API counts from its preview), only that the member is known.
+        for ((owner, member) in listOf(
+            "java.lang.Thread" to "ofVirtual", "java.lang.Thread" to "startVirtualThread", "java.lang.Thread" to "ofPlatform",
+            "java.util.concurrent.Executors" to "newVirtualThreadPerTaskExecutor", "java.util.concurrent.Executors" to "newThreadPerTaskExecutor",
+            "java.lang.StringBuilder" to "repeat", "java.lang.StringBuffer" to "repeat", "java.lang.Runtime" to "version",
+            "java.lang.System" to "getLogger", "java.lang.Process" to "pid", "java.lang.Process" to "toHandle",
+            "java.time.Duration" to "isPositive", "java.net.URL" to "of",
+            "java.lang.reflect.AccessibleObject" to "canAccess", "java.lang.reflect.AccessibleObject" to "trySetAccessible",
+            "java.text.NumberFormat" to "getCompactNumberInstance",
+        )) assertNotNull(since(owner, member, null), "$owner.$member")
+        assertNotNull(jdk.fieldLevel("java.lang.ProcessBuilder.Redirect", "DISCARD"), "ProcessBuilder.Redirect.DISCARD")
+        assertNotNull(jdk.classLevel("java.lang.ProcessHandle"), "ProcessHandle")
         assertEquals(16, since("java.util.stream.Stream", "toList", null, 0))
         assertEquals(21, since("java.util.List", "reversed", null, 0))
         assertEquals(9, jdk.classLevel("java.lang.Module")?.since)

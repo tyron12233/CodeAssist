@@ -2496,8 +2496,11 @@ class IdeServices private constructor(
         }
         val platformJar = SdkResolution.sdkFor(store.workspace, module)?.bootClasspath?.firstOrNull()?.let { Paths.get(it.path) }
         val levels = AndroidApiDatabase.forPlatform(platformJar) ?: return null
-        return ApiLevelContext.android(facet.minSdk, levels)
+        return ApiLevelContext.android(facet.minSdk, levels, jdkApiReference)
     }
+
+    /** The JDK's API table for an Android module's context (one instance, so equal contexts stay equal). */
+    private val jdkApiReference: () -> dev.ide.lang.resolve.PlatformApiLevels? = { JdkApiLevels.bundled() }
 
     /** The last [permissionContext] per module and when it was read, so a pass's many calls share one read. */
     private val permissionContexts = ConcurrentHashMap<ModuleId, Pair<Long, PermissionContext?>>()
