@@ -108,6 +108,24 @@ class RunScreenSnapshot {
         snapshot("run-running-light.png", 460, 900, FakeBackend(rc, BuildState(status = RunStatus.Running)), dark = false)
     }
 
+    /**
+     * A program that printed 100,000 lines (the transcript capped at a megabyte, as the backend keeps it): the
+     * console lays out only the lines on screen, follows the tail, and a frame stays far under a second. As one
+     * paragraph it took seconds per frame and froze the app.
+     */
+    @Test
+    fun renderHugeTranscriptFast() {
+        val text = buildString { for (i in 80_001..100_000) append("line $i: the quick brown fox jumps over the dog\n") }
+        val transcript = text.chunked(8192).map { ConsoleChunk(it, ConsoleChunkKind.OUTPUT) } +
+            ConsoleChunk("\nProcess finished with exit code 0\n", ConsoleChunkKind.SYSTEM)
+        val rc = RunConsoleUi(id = 6, moduleName = "app", mainClass = "com.example.MainKt", phase = RunPhase.Finished, exitCode = 0, transcript = transcript)
+        val started = System.nanoTime()
+        snapshot("run-huge.png", 460, 900, FakeBackend(rc, BuildState(status = RunStatus.Succeeded)))
+        val ms = (System.nanoTime() - started) / 1_000_000
+        println("huge transcript rendered in $ms ms")
+        kotlin.test.assertTrue(ms < 3_000, "rendering a megabyte transcript took $ms ms")
+    }
+
     /** A result record as the IDE's test runner prints it (see TestOutput). */
     private fun record(event: String, cls: String = "", method: String = "", ms: Long = 0, message: String = "") =
         "${TestOutput.MARK}$event ${cls.length}:$cls ${method.length}:$method $ms ${message.length}:$message\n"

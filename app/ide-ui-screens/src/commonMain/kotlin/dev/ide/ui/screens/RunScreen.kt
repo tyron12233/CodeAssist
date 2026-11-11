@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -26,16 +29,24 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -95,7 +106,10 @@ import dev.ide.ui.generated.resources.tests_passed
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -120,8 +134,9 @@ fun RunScreen(
     val build by backend.build.buildState.collectAsState()
     val rc = console
     val docked = onHide != null
-    // A test run's result records ride its transcript; split them out once per transcript change.
-    val split = remember(rc?.transcript) { rc?.let { TestOutput.split(it.transcript) } }
+    // A test run's result records ride its transcript; split them out (and cut the rest into lines) off the
+    // main thread, once per transcript change.
+    val split = rememberShownTranscript(rc?.transcript)
     val tests = split?.tests
     var view by remember(rc?.id) { mutableStateOf(RunView.Tests) }
     val scope = rememberCoroutineScope()
@@ -184,7 +199,7 @@ fun RunScreen(
                 modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
             )
         } else {
-            Transcript(split?.transcript.orEmpty(), rc.phase, Modifier.weight(1f).padding(horizontal = 14.dp))
+            Transcript(split?.lines.orEmpty(), rc.phase, Modifier.weight(1f).padding(horizontal = 14.dp))
         }
         when {
             rc.acceptsInput && !showTests -> InputBar(
@@ -335,45 +350,108 @@ private fun ProblemRow(d: BuildDiagnosticUi, onOpen: (BuildDiagnosticUi) -> Unit
     }
 }
 
+/** A run transcript as the console shows it: test records split out of [transcript], the rest cut into [lines]. */
+private class ShownTranscript(
+    val source: List<ConsoleChunk>,
+    val transcript: List<ConsoleChunk>,
+    val tests: UiTestRun?,
+    val lines: List<ConsoleLine>,
+)
+
+private fun shownTranscript(source: List<ConsoleChunk>): ShownTranscript {
+    val split = TestOutput.split(source)
+    return ShownTranscript(source, split.transcript, split.tests, consoleLines(split.transcript))
+}
+
+/**
+ * [transcript] split and cut into lines. The first value is worked out right away so the screen never opens
+ * blank; later ones on a background thread, since a chatty program changes the transcript every frame and a
+ * full one is a megabyte. While one is being worked out, newer transcripts collapse into the latest.
+ */
 @Composable
-private fun Transcript(transcript: List<ConsoleChunk>, phase: RunPhase, modifier: Modifier) {
-    val scroll = rememberScrollState()
-    val total = transcript.sumOf { it.text.length }
-    // Follow the tail as output (and echoed input) arrives.
-    LaunchedEffect(total) { scroll.scrollTo(scroll.maxValue) }
-    // Theme-aware transcript colors so they read on BOTH the dark and the light [consoleBg]. (OUTPUT used to be
-    // a hardcoded near-white — invisible on the light-theme console.) Keyed into the remember so the transcript
-    // re-styles on a theme switch.
-    val outputColor = MaterialTheme.colorScheme.onSurface
-    val inputColor = MaterialTheme.colorScheme.primary
-    val systemColor = MaterialTheme.colorScheme.outline
-    val text = remember(total, transcript.size, outputColor, inputColor, systemColor) {
-        buildAnnotatedString {
-            for (chunk in transcript) {
-                val color = when (chunk.kind) {
-                    ConsoleChunkKind.OUTPUT -> outputColor
-                    ConsoleChunkKind.INPUT -> inputColor
-                    ConsoleChunkKind.SYSTEM -> systemColor
-                }
-                withStyle(SpanStyle(color = color)) { append(chunk.text) }
+private fun rememberShownTranscript(transcript: List<ConsoleChunk>?): ShownTranscript? {
+    val latest = rememberUpdatedState(transcript)
+    val shown = remember { mutableStateOf(transcript?.let(::shownTranscript)) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { latest.value }.conflate().collect { t ->
+            if (t == null) shown.value = null
+            else if (shown.value?.source !== t) shown.value = withContext(Dispatchers.Default) { shownTranscript(t) }
+        }
+    }
+    return shown.value
+}
+
+@Composable
+private fun Transcript(lines: List<ConsoleLine>, phase: RunPhase, modifier: Modifier) {
+    val list = rememberLazyListState()
+    // Follow the tail as output (and echoed input) arrives, until the user scrolls back through it; scrolling
+    // back to the bottom follows again.
+    var follow by remember { mutableStateOf(true) }
+    val userScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0f) follow = false
+                return Offset.Zero
             }
         }
     }
-    Box(
-        modifier.fillMaxWidth()
-            .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
-            .verticalScroll(scroll)
-            .padding(12.dp),
-    ) {
-        if (transcript.isEmpty()) {
+    LaunchedEffect(list) {
+        snapshotFlow { list.canScrollForward }.collect { more -> if (!more) follow = true }
+    }
+    LaunchedEffect(lines) {
+        // An offset past the last line's top lands on the end even when that line wraps taller than the pane.
+        if (follow && lines.isNotEmpty()) list.scrollToItem(lines.lastIndex, 1_000_000)
+    }
+    // Theme-aware transcript colors so they read on BOTH the dark and the light [consoleBg]. (OUTPUT used to be
+    // a hardcoded near-white — invisible on the light-theme console.)
+    val colors = ConsoleColors(
+        output = MaterialTheme.colorScheme.onSurface,
+        input = MaterialTheme.colorScheme.primary,
+        system = MaterialTheme.colorScheme.outline,
+    )
+    val pane = modifier.fillMaxWidth()
+        .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
+    if (lines.isEmpty()) {
+        Box(pane.padding(12.dp)) {
             Text(
                 if (phase == RunPhase.Building) stringResource(Res.string.run_building) else stringResource(Res.string.run_no_output),
                 color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall,
             )
-        } else {
-            SelectionContainer { Text(text, style = Ide.type.codeSmall) }
         }
+        return
+    }
+    // One item per line: only the lines on screen are measured. (The transcript as one Text re-measured all of
+    // it, up to a megabyte, on the main thread on every update.)
+    // The pane modifier (it carries the caller's weight) goes on the container, the Column's direct child.
+    SelectionContainer(pane) {
+        LazyColumn(Modifier.fillMaxSize().nestedScroll(userScroll), state = list, contentPadding = PaddingValues(12.dp)) {
+            items(lines.size) { i -> ConsoleLineText(lines[i], colors) }
+        }
+    }
+}
+
+@Immutable
+private data class ConsoleColors(val output: Color, val input: Color, val system: Color) {
+    fun of(kind: ConsoleChunkKind) = when (kind) {
+        ConsoleChunkKind.OUTPUT -> output
+        ConsoleChunkKind.INPUT -> input
+        ConsoleChunkKind.SYSTEM -> system
+    }
+}
+
+@Composable
+private fun ConsoleLineText(line: ConsoleLine, colors: ConsoleColors) {
+    val parts = line.parts
+    when (parts.size) {
+        0 -> Text("", style = Ide.type.codeSmall)
+        1 -> Text(parts[0].text, color = colors.of(parts[0].kind), style = Ide.type.codeSmall)
+        else -> Text(
+            remember(line, colors) {
+                buildAnnotatedString { for (p in parts) withStyle(SpanStyle(color = colors.of(p.kind))) { append(p.text) } }
+            },
+            style = Ide.type.codeSmall,
+        )
     }
 }
 
