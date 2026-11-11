@@ -756,6 +756,8 @@ internal class GenerateRJarTask(
      *  Null keeps aapt2's own R classes, every `--extra-packages` one included. */
     private val appRTxt: Path? = null,
     private val librarySymbols: List<Pair<String, Path>> = emptyList(),
+    /** Library packages with no `R.txt`, which get the app's whole table (see [RBytecodeGenerator.writeAppJar]). */
+    private val wholeTablePackages: List<String> = emptyList(),
 ) : Task {
     private fun rSources(): List<Path> =
         if (!Files.isDirectory(genJavaDir)) emptyList()
@@ -767,6 +769,7 @@ internal class GenerateRJarTask(
         filePaths("rSources", rSources())
         appRTxt?.let { filePaths("appRTxt", listOf(it)) }
         property("libraries", librarySymbols.joinToString(":") { it.first })
+        property("wholeTable", wholeTablePackages.joinToString(":"))
         filePaths("libraryRTxt", librarySymbols.map { it.second }.filter { Files.exists(it) })
     }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("rJar", outJar) }
@@ -775,7 +778,7 @@ internal class GenerateRJarTask(
         ctx.checkCanceled()
         val res = withContext(Dispatchers.IO) {
             runCatching {
-                if (appRTxt != null) RBytecodeGenerator.writeAppJar(rSources(), appRTxt, librarySymbols, outJar)
+                if (appRTxt != null) RBytecodeGenerator.writeAppJar(rSources(), appRTxt, librarySymbols, outJar, wholeTablePackages)
                 else RBytecodeGenerator.writeJar(rSources(), outJar)
             }
         }

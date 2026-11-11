@@ -402,15 +402,14 @@ class AndroidBuildSystem(
 
         val closure = moduleClosure(app, byId)
         val depAndroidLibs = closure.filter { it.facets.get(AndroidFacet.KEY) != null }
-        // R is generated for every dependency-lib package AND every external AAR package (so an AAR's own
-        // classes + custom-view attrs resolve against the app-linked resource table).
-        val extraPackages = (depAndroidLibs.mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace } +
-            libs.aarPackages).distinct()
-        // Non-transitive R (AGP 8's default, see AndroidFacet.nonTransitiveRClass): aapt2 writes only the app's R,
-        // plus its symbol table, and each library's R is made from that library's own R.txt with the final ids.
-        val nonTransitiveR = facet.nonTransitiveRClass
+        // As AGP builds them, for every project: aapt2 writes only the app's R, plus its symbol table, and each
+        // library's R is made from that library's own R.txt with the final ids. There used to be a second way,
+        // for modules without `nonTransitiveRClass`: aapt2's `--extra-packages`, which gives EVERY library package
+        // a copy of the app's whole table. No Gradle build does that, and a Material app paid for it on every
+        // clean build: 103 MB of R.java for 41 packages, 358,000 fields to generate and dex, 48 s of a 66 s
+        // build on a phone. The app's own R is complete either way (see AndroidFacet.nonTransitiveRClass).
         val appRTxt = layout.rJar.resolveSibling("R.txt")
-        val librarySymbols = if (!nonTransitiveR) emptyList() else
+        val librarySymbols =
             depAndroidLibs.mapNotNull { lib ->
                 lib.facets.get(AndroidFacet.KEY)?.namespace?.let { it to buildDir(lib).resolve("intermediates").resolve("r").resolve("R.txt") }
             } + libs.aarSymbols.map { it.packageName to it.rTxt }
@@ -631,7 +630,7 @@ class AndroidBuildSystem(
                 linkManifest,
                 androidJar,
                 facet.namespace,
-                if (nonTransitiveR) emptyList() else extraPackages,
+                emptyList(), // no --extra-packages: library R classes come from their R.txt (generateRFile)
                 facet.minSdk,
                 facet.targetSdk,
                 versionCode,
@@ -642,13 +641,14 @@ class AndroidBuildSystem(
                 proguardRules = if (minify) layout.aaptProguardRules else null,
                 protoFormat = protoResources,
                 mergedRes = layout.mergedRes,
-                rTxt = if (nonTransitiveR) appRTxt else null,
+                rTxt = appRTxt,
             )
         }
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
-        tasks.task(generateRFile, listOf(aapt2Link) + (if (nonTransitiveR) depAndroidLibs.map { TaskName(":${it.name}:generateR") } else emptyList())) {
-            if (nonTransitiveR) GenerateRJarTask(generateRFile, layout.genJava, layout.rJar, appRTxt, librarySymbols)
-            else GenerateRJarTask(generateRFile, layout.genJava, layout.rJar)
+        tasks.task(generateRFile, listOf(aapt2Link) + depAndroidLibs.map { TaskName(":${it.name}:generateR") }) {
+            // An AAR without an R.txt names no resources of its own: its package gets the whole table.
+            val listed = librarySymbols.mapTo(HashSet()) { it.first }
+            GenerateRJarTask(generateRFile, layout.genJava, layout.rJar, appRTxt, librarySymbols, libs.aarPackages.filter { it !in listed })
         }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + aidlDep + listOfNotNull(generateSources)) {
@@ -866,14 +866,7 @@ class AndroidBuildSystem(
             // its own dex layer) rather than archived in dexBuilder + merged into the project layer: R is ~50
             // dependency-package classes that dex GC-bound + single-threaded in-process (~5s), so the big-heap
             // fork helps it too. Otherwise R stays in dexBuilder + the project merge (AGP's scope for R).
-            //
-            // Also whenever R is the FULL one (a module without non-transitive R classes: one class set per library
-            // package, thousands of fields for a Material app) and a forked dexer exists, whatever the minSdk. In
-            // dexBuilder it shares the build process's heap with the libraries being dexed beside it: on a phone
-            // that R took 56 s of a 106 s build, the heap pinned at its 512 MB cap. Per-library R classes are
-            // small and stay in dexBuilder, where they cost less than starting a VM.
-            val forkedR = dexExtOnePass ||
-                (rJars.isNotEmpty() && !facet.nonTransitiveRClass && goal != BuildGoal.DEX && mergeDexer.runsOffHeap())
+            val forkedR = dexExtOnePass
             val dexBuilder = step("dexBuilder")
             tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, dexProjectClasses, subProjectJars, externalJars, sdk.androidJar,

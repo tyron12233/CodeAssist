@@ -73,7 +73,15 @@ object RBytecodeGenerator {
      * aapt2's `--extra-packages` gave every library package the app's whole table (seconds to dex on a phone).
      * Fields are final, as in any app `R`, so a `switch` on a library id still compiles. Returns the class count.
      */
-    fun writeAppJar(rJavaFiles: List<Path>, appRTxt: Path, libraries: List<Pair<String, Path>>, outJar: Path): Int {
+    fun writeAppJar(
+        rJavaFiles: List<Path>, appRTxt: Path, libraries: List<Pair<String, Path>>, outJar: Path,
+        /**
+         * Library packages that ship no `R.txt` (a hand-made or damaged AAR): nothing says which resources are
+         * theirs, so each gets the app's whole table, as every library package once did. Its code then finds
+         * whatever it references, where leaving the package without an `R` would fail it at run time.
+         */
+        wholeTablePackages: List<String> = emptyList(),
+    ): Int {
         outJar.parent?.let { Files.createDirectories(it) }
         val appSymbols = HashMap<String, String>()
         runCatching { read(appRTxt) }.getOrDefault("").lineSequence().forEach { raw ->
@@ -100,6 +108,14 @@ object RBytecodeGenerator {
                     .mapNotNull { symbolKey(it.trim()) }.distinct().mapNotNull { appSymbols[it] }.joinToString("\n")
                 val model = parseSymbols(pkg, listOf(text), isFinal = true)
                 if (model.types.isNotEmpty()) total += emit(model, sink)
+            }
+            if (wholeTablePackages.isNotEmpty()) {
+                val whole = appSymbols.values.joinToString("\n")
+                for (pkg in wholeTablePackages.distinct()) {
+                    if (pkg.isEmpty() || pkg in appPackages || pkg in merged) continue
+                    val model = parseSymbols(pkg, listOf(whole), isFinal = true)
+                    if (model.types.isNotEmpty()) total += emit(model, sink)
+                }
             }
             if (total == 0) {
                 jos.putNextEntry(java.util.jar.JarEntry("META-INF/MANIFEST.MF"))

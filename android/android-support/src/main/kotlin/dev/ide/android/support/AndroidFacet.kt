@@ -70,11 +70,12 @@ data class AndroidFacet(
      */
     val coreLibraryDesugaringEnabled: Boolean = false,
     /**
-     * Non-transitive R classes (AGP's `android.nonTransitiveRClass`, its default since AGP 8): a dependency
-     * library's `R` holds only the resources that library declares (its `R.txt`), so code reads another library's
-     * resource through that library's package (`androidx.appcompat.R.attr.x`). Off, every dependency package's
-     * `R` repeats the app's whole resource table, which made a Compose app's R classes take seconds to dex. The
-     * app's own `R` stays complete either way. Off for projects made before this setting existed.
+     * AGP's `android.nonTransitiveRClass`, kept so a project round-trips to Gradle with the value it had (import
+     * reads it from `gradle.properties`, export writes it back). It no longer changes how the IDE builds: every
+     * dependency library's `R` is made from that library's own `R.txt` with the app's final ids, as AGP makes
+     * them, and the app's own `R` is complete. It used to select between that and giving every library package
+     * a copy of the app's whole resource table, which no Gradle build does and which was most of a clean
+     * build's time for an app with many libraries.
      */
     val nonTransitiveRClass: Boolean = false,
     /** AGP's `android { buildFeatures { … } }`: per-module toggles for generated-code/compiler features. */

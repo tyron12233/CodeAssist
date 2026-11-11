@@ -33,7 +33,7 @@ import dev.ide.vfs.local.fileFor
  * Proves a custom-view attribute from an external AAR resolves through aapt2. The regression: a Maven
  * dependency that resolves to an AAR is stored in the model as its *exploded* `classes.jar` (with `res/`
  * and `AndroidManifest.xml` siblings), NOT as the `.aar` file — so the build must recognise that layout,
- * merge the AAR's `res/values/attrs.xml`, and pass the AAR's package to aapt2 `--extra-packages`. Without
+ * merge the AAR's `res/values/attrs.xml`, and generate an `R` for the AAR's package. Without
  * the fix, the app layout's `app:customText` attribute is unknown and aapt2 link fails.
  */
 class AndroidAarAttributeTest {
@@ -83,9 +83,14 @@ class AndroidAarAttributeTest {
             }
             assertTrue(outcome.succeeded, "custom-attribute APK build failed (AAR attrs.xml not merged?):\n$log")
 
-            // aapt2 --extra-packages generated the AAR's own R (so its classes + attrs resolve).
-            val aarR = dir.resolve("app/build/intermediates/android/debug/gen/io/example/customview/R.java")
-            assertTrue(Files.isRegularFile(aarR), "AAR package R.java not generated (extra-packages missing): $aarR")
+            // The AAR's package has an R of its own in the app's R.jar, so its classes and attrs resolve. This AAR
+            // ships no R.txt, so nothing says which resources are its own and it gets the app's whole table.
+            val rJar = Files.walk(dir.resolve("app/build")).use { w -> w.filter { it.fileName.toString() == "R.jar" }.findFirst().get() }
+            java.util.zip.ZipFile(rJar.toFile()).use { zf ->
+                val attrs = zf.getEntry("io/example/customview/R\$attr.class")
+                assertTrue(attrs != null, "the AAR package has no R in $rJar: ${zf.entries().asSequence().map { it.name }.toList()}")
+                assertTrue("customText" in zf.getInputStream(attrs).readBytes().toString(Charsets.ISO_8859_1), "its attr is not in it")
+            }
         }
     }
 
