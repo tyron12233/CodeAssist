@@ -273,4 +273,12 @@
     <string name="aihome_new_app">新应用</string>
     <string name="aihome_run">运行</string>
     <string name="aihome_open_editor">在编辑器中打开</string>
+    <string name="conn_claude_title">在 Claude 中使用 CodeAssist</string>
+    <string name="conn_claude_toggle">允许 Claude 处理此项目</string>
+    <string name="conn_claude_intro">启动一个带有智能体工具的本地 MCP 服务器，让 Claude Code 或 Claude Desktop 可以读取、编辑和构建当前打开的项目。</string>
+    <string name="conn_claude_warning">开启期间，任何能访问该端口的应用都可以不经询问地修改当前打开的项目。</string>
+    <string name="conn_claude_step_adb">在电脑上，手机通过 USB 连接后运行：</string>
+    <string name="conn_claude_step_code">Claude Code：运行一次此命令</string>
+    <string name="conn_claude_step_desktop">Claude Desktop：将以下内容添加到 claude_desktop_config.json</string>
+    <string name="conn_claude_desktop_note">Claude Desktop 需要先安装 Node.js，然后重新启动。请保持 CodeAssist 打开，并打开希望 Claude 处理的项目。</string>
 </resources>

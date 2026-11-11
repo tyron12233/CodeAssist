@@ -294,6 +294,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     @Volatile
     private var mcpServer: HttpMcpServer? = null
 
+    private val _mcpHost = MutableStateFlow(dev.ide.ui.backend.UiMcpHost(supported = true, port = MCP_PORT))
+
     /** The local FTP asset server, started when the AI settings "FTP server" toggle (or the `ftp_server`
      *  tool) is on. Anonymous and bound to 127.0.0.1 only; uploads land in `<project>/assets`. */
     @Volatile
@@ -304,6 +306,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         if (prefBool("mcpServer", default = false)) {
             mcpServer = startMcpServer()
         }
+        publishMcpHost(wanted = prefBool("mcpServer", default = false))
         if (prefBool(FTP_PREF, default = false)) {
             ftpServer = startFtpServer()
         }
@@ -372,6 +375,31 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         // a disabled feature, not an error the user has to dismiss.
         log.warn("FTP server not started on port ${CodeAssistMcpServer.DEFAULT_FTP_PORT}: ${e.message}")
         null
+    }
+
+    override val mcpHost: StateFlow<dev.ide.ui.backend.UiMcpHost> get() = _mcpHost.asStateFlow()
+
+    override fun setMcpHostEnabled(enabled: Boolean) {
+        ctx.manager?.setPreference("settings.$AI_PAGE.mcpServer", enabled.toString())
+        if (enabled) {
+            if (mcpServer == null) mcpServer = startMcpServer()
+        } else {
+            mcpServer?.close()
+            mcpServer = null
+        }
+        publishMcpHost(wanted = enabled)
+    }
+
+    /** [wanted] and not running means the start failed, which on a fixed port is nearly always "already in use". */
+    private fun publishMcpHost(wanted: Boolean) {
+        val running = mcpServer != null
+        _mcpHost.value = dev.ide.ui.backend.UiMcpHost(
+            supported = true,
+            running = running,
+            port = MCP_PORT,
+            url = "http://127.0.0.1:$MCP_PORT/mcp",
+            error = if (wanted && !running) "Port $MCP_PORT is in use, so the server could not start." else null,
+        )
     }
 
     override fun ftpServerSupported(): Boolean = true

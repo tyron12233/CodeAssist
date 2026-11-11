@@ -2389,6 +2389,15 @@ interface AgentService {
     /** Start or stop the local FTP asset server (persisted under `settings.ai.ftpServer`). */
     fun setFtpServerEnabled(enabled: Boolean) {}
 
+    /**
+     * The MCP server CodeAssist itself hosts, which gives another AI app (Claude Code, Claude Desktop) the agent's
+     * tools over the open project. Off until the user turns it on: whoever reaches the port can edit the project.
+     */
+    val mcpHost: StateFlow<UiMcpHost> get() = MCP_HOST_NONE
+
+    /** Start or stop the hosted MCP server now, and remember the choice (`settings.ai.mcpServer`). */
+    fun setMcpHostEnabled(enabled: Boolean) {}
+
     /** A no-op agent for backends that wire none. */
     object Unsupported : AgentService {
         override val chatState: StateFlow<UiAgentChatState> =
@@ -2483,6 +2492,21 @@ data class UiAgentSkill(
     val path: String,
     val enabled: Boolean,
 )
+
+/**
+ * The MCP server this app hosts for other AI apps (see [AgentService.mcpHost]). [url] is where a client on the
+ * same machine reaches it; on a phone that is the phone's own loopback, reached from a computer by forwarding
+ * [port] over adb. [error] says why turning it on did not start it (the port is usually taken).
+ */
+data class UiMcpHost(
+    val supported: Boolean = false,
+    val running: Boolean = false,
+    val port: Int = 0,
+    val url: String = "",
+    val error: String? = null,
+)
+
+private val MCP_HOST_NONE: StateFlow<UiMcpHost> = MutableStateFlow(UiMcpHost())
 
 data class UiAgentConnections(
     /** Whether this build can connect to MCP servers at all. */

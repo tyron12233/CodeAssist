@@ -271,4 +271,12 @@
     <string name="aihome_new_app">Aplikasi baru</string>
     <string name="aihome_run">Jalankan</string>
     <string name="aihome_open_editor">Buka di editor</string>
+    <string name="conn_claude_title">Gunakan CodeAssist dari Claude</string>
+    <string name="conn_claude_toggle">Izinkan Claude mengerjakan proyek ini</string>
+    <string name="conn_claude_intro">Menjalankan server MCP lokal dengan alat milik agen, sehingga Claude Code atau Claude Desktop dapat membaca, mengedit, dan membangun proyek yang terbuka.</string>
+    <string name="conn_claude_warning">Selama ini aktif, aplikasi apa pun yang dapat menjangkau port ini bisa mengubah proyek yang terbuka tanpa bertanya.</string>
+    <string name="conn_claude_step_adb">Di komputer Anda, dengan ponsel terhubung lewat USB:</string>
+    <string name="conn_claude_step_code">Claude Code: jalankan ini sekali</string>
+    <string name="conn_claude_step_desktop">Claude Desktop: tambahkan ini ke claude_desktop_config.json</string>
+    <string name="conn_claude_desktop_note">Claude Desktop memerlukan Node.js untuk ini, lalu dimulai ulang. Biarkan CodeAssist terbuka dengan proyek yang ingin dikerjakan Claude.</string>
 </resources>

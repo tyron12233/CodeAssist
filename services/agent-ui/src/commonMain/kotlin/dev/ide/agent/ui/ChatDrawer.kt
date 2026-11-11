@@ -1195,7 +1195,7 @@ private fun aggregateStatus(calls: List<UiAgentToolCall>): UiAgentToolStatus = w
 
 /** One-tap copy of a message's text, flipping to a check for ~1.5s as confirmation. */
 @Composable
-private fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+internal fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) { if (copied) { delay(1500); copied = false } }

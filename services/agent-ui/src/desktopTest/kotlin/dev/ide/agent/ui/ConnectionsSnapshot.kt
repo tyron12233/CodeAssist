@@ -18,6 +18,7 @@ import dev.ide.ui.backend.UiAgentPermissionDecision
 import dev.ide.ui.backend.UiAgentPermissionMode
 import dev.ide.ui.backend.UiAgentPermissionRequest
 import dev.ide.ui.backend.UiAgentSkill
+import dev.ide.ui.backend.UiMcpHost
 import dev.ide.ui.backend.UiMcpScope
 import dev.ide.ui.backend.UiMcpServer
 import dev.ide.ui.backend.UiMcpServerConfig
@@ -69,8 +70,11 @@ class ConnectionsSnapshot {
         appSkillsDir = "/data/user/0/com.tyron.code/files/agent/skills",
     )
 
-    private fun backend(state: UiAgentConnections) = object : StubBackend() {
+    private val hosting = UiMcpHost(supported = true, running = true, port = 8765, url = "http://127.0.0.1:8765/mcp")
+
+    private fun backend(state: UiAgentConnections, host: UiMcpHost = UiMcpHost(supported = true, port = 8765)) = object : StubBackend() {
         override val agent: AgentService = object : AgentService {
+            override val mcpHost: StateFlow<UiMcpHost> = MutableStateFlow(host)
             override val connections: StateFlow<UiAgentConnections> = MutableStateFlow(state)
             override val chatState: StateFlow<UiAgentChatState> = MutableStateFlow(UiAgentChatState())
             override val permissionRequest: StateFlow<UiAgentPermissionRequest?> = MutableStateFlow(null)
@@ -99,6 +103,11 @@ class ConnectionsSnapshot {
     @Test
     fun renderConnectionsEmptyLight() = snapshot("connections-empty-light.png", dark = false) {
         AgentConnectionsSheet(backend(UiAgentConnections(mcpSupported = true, projectOpen = true, appSkillsDir = "/a/skills")), onOpenFile = {}) {}
+    }
+
+    @Test
+    fun renderClaudeLinkDark() = snapshot("connections-claude-dark.png", dark = true) {
+        AgentConnectionsSheet(backend(UiAgentConnections(mcpSupported = true, projectOpen = true, appSkillsDir = "/a/skills"), hosting), onOpenFile = {}) {}
     }
 
     @Test

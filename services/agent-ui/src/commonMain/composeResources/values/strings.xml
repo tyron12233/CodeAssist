@@ -279,4 +279,12 @@
     <string name="aihome_new_app">New app</string>
     <string name="aihome_run">Run</string>
     <string name="aihome_open_editor">Open in editor</string>
+    <string name="conn_claude_title">Use CodeAssist from Claude</string>
+    <string name="conn_claude_toggle">Let Claude work on this project</string>
+    <string name="conn_claude_intro">Starts a local MCP server with the agent's tools, so Claude Code or Claude Desktop can read, edit and build the open project.</string>
+    <string name="conn_claude_warning">While this is on, any app that can reach the port can change the open project without asking.</string>
+    <string name="conn_claude_step_adb">On your computer, with the phone connected over USB:</string>
+    <string name="conn_claude_step_code">Claude Code: run this once</string>
+    <string name="conn_claude_step_desktop">Claude Desktop: add this to claude_desktop_config.json</string>
+    <string name="conn_claude_desktop_note">Claude Desktop needs Node.js for this, then a restart. Keep CodeAssist open with the project you want Claude to work on.</string>
 </resources>

@@ -90,6 +90,14 @@ import dev.ide.agent.ui.generated.resources.conn_status_shadowed
 import dev.ide.agent.ui.generated.resources.conn_status_unsupported
 import dev.ide.agent.ui.generated.resources.conn_status_untrusted
 import dev.ide.agent.ui.generated.resources.conn_title
+import dev.ide.agent.ui.generated.resources.conn_claude_title
+import dev.ide.agent.ui.generated.resources.conn_claude_toggle
+import dev.ide.agent.ui.generated.resources.conn_claude_intro
+import dev.ide.agent.ui.generated.resources.conn_claude_warning
+import dev.ide.agent.ui.generated.resources.conn_claude_step_adb
+import dev.ide.agent.ui.generated.resources.conn_claude_step_code
+import dev.ide.agent.ui.generated.resources.conn_claude_step_desktop
+import dev.ide.agent.ui.generated.resources.conn_claude_desktop_note
 import dev.ide.agent.ui.generated.resources.conn_tools
 import dev.ide.agent.ui.generated.resources.conn_type_http
 import dev.ide.agent.ui.generated.resources.conn_type_sse
@@ -113,6 +121,8 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
 import dev.ide.ui.pluralStringResource
+import dev.ide.ui.platform.isMobilePlatform
+import androidx.compose.foundation.text.selection.SelectionContainer
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -158,6 +168,8 @@ internal fun AgentConnectionsSheet(backend: IdeBackend, onOpenFile: ((String) ->
                             Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
                         }
                     }
+                    Spacer(Modifier.size(4.dp))
+                    ClaudeLinkSection(backend)
                     Spacer(Modifier.size(24.dp))
                 }
             }
@@ -169,6 +181,85 @@ internal fun AgentConnectionsSheet(backend: IdeBackend, onOpenFile: ((String) ->
             NewSkillDialog(backend, state, onOpenFile) { newSkill = false }
         }
     }
+}
+
+/**
+ * The other direction: CodeAssist as a server. Turning it on starts the built-in MCP server, and the commands
+ * below register it with Claude Code and Claude Desktop, which then work on the open project with the agent's
+ * tools. The commands are literal, so they are shown as they are typed and never translated.
+ */
+@Composable
+private fun ClaudeLinkSection(backend: IdeBackend) {
+    val host by backend.agent.mcpHost.collectAsState()
+    if (!host.supported) return
+    Text(
+        stringResource(Res.string.conn_claude_title),
+        color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+    )
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(Res.string.conn_claude_toggle),
+                color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            CaSwitch(host.running, { backend.agent.setMcpHostEnabled(it) })
+        }
+        Hint(stringResource(Res.string.conn_claude_intro))
+        Text(stringResource(Res.string.conn_claude_warning), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        host.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        if (host.running) {
+            if (isMobilePlatform) {
+                CommandBlock(stringResource(Res.string.conn_claude_step_adb), ClaudeLink.adbForward(host.port))
+            }
+            CommandBlock(stringResource(Res.string.conn_claude_step_code), ClaudeLink.claudeCodeCommand(host.url))
+            CommandBlock(stringResource(Res.string.conn_claude_step_desktop), ClaudeLink.claudeDesktopConfig(host.url))
+            Hint(stringResource(Res.string.conn_claude_desktop_note))
+        }
+    }
+}
+
+/** A labelled command, in monospace, with a copy button. */
+@Composable
+private fun CommandBlock(label: String, command: String) {
+    Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge)
+    val shape = RoundedCornerShape(Ca.radius.md)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        SelectionContainer(Modifier.weight(1f)) {
+            Text(command, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        CopyButton(command)
+    }
+}
+
+/** What a user types to connect Claude to the hosted MCP server at a given address. */
+internal object ClaudeLink {
+    /** The name Claude lists the server under. */
+    const val SERVER_NAME = "codeassist"
+
+    /** Makes the phone's port reachable as the same port on the computer it is plugged into. */
+    fun adbForward(port: Int): String = "adb forward tcp:$port tcp:$port"
+
+    /** Claude Code: registers the server for every project of this user. */
+    fun claudeCodeCommand(url: String): String = "claude mcp add --transport http --scope user $SERVER_NAME $url"
+
+    /**
+     * Claude Desktop starts local servers as commands, so the entry runs `mcp-remote`, a bridge from stdio to an
+     * HTTP server. `--allow-http` is what lets it use a plain-http address, which a loopback one is.
+     */
+    fun claudeDesktopConfig(url: String): String = """
+        {
+          "mcpServers": {
+            "$SERVER_NAME": {
+              "command": "npx",
+              "args": ["-y", "mcp-remote", "$url", "--allow-http"]
+            }
+          }
+        }
+    """.trimIndent()
 }
 
 @Composable

@@ -303,4 +303,12 @@
     <string name="aihome_new_app">تطبيق جديد</string>
     <string name="aihome_run">تشغيل</string>
     <string name="aihome_open_editor">فتح في المحرر</string>
+    <string name="conn_claude_title">استخدام CodeAssist من Claude</string>
+    <string name="conn_claude_toggle">السماح لـ Claude بالعمل على هذا المشروع</string>
+    <string name="conn_claude_intro">يشغّل خادم MCP محليًا بأدوات المساعد، ليتمكن Claude Code أو Claude Desktop من قراءة المشروع المفتوح وتعديله وبنائه.</string>
+    <string name="conn_claude_warning">ما دام هذا مفعّلًا، يستطيع أي تطبيق يصل إلى المنفذ تغيير المشروع المفتوح دون أن يسأل.</string>
+    <string name="conn_claude_step_adb">على حاسوبك، والهاتف موصول عبر USB:</string>
+    <string name="conn_claude_step_code">Claude Code: شغّل هذا الأمر مرة واحدة</string>
+    <string name="conn_claude_step_desktop">Claude Desktop: أضف هذا إلى claude_desktop_config.json</string>
+    <string name="conn_claude_desktop_note">يحتاج Claude Desktop إلى Node.js لهذا، ثم إلى إعادة التشغيل. أبقِ CodeAssist مفتوحًا على المشروع الذي تريد أن يعمل عليه Claude.</string>
 </resources>

@@ -283,4 +283,12 @@
     <string name="aihome_new_app">Nueva app</string>
     <string name="aihome_run">Ejecutar</string>
     <string name="aihome_open_editor">Abrir en el editor</string>
+    <string name="conn_claude_title">Usar CodeAssist desde Claude</string>
+    <string name="conn_claude_toggle">Permitir que Claude trabaje en este proyecto</string>
+    <string name="conn_claude_intro">Inicia un servidor MCP local con las herramientas del agente, para que Claude Code o Claude Desktop puedan leer, editar y compilar el proyecto abierto.</string>
+    <string name="conn_claude_warning">Mientras esté activado, cualquier app que alcance el puerto puede cambiar el proyecto abierto sin preguntar.</string>
+    <string name="conn_claude_step_adb">En tu ordenador, con el teléfono conectado por USB:</string>
+    <string name="conn_claude_step_code">Claude Code: ejecuta esto una vez</string>
+    <string name="conn_claude_step_desktop">Claude Desktop: añade esto a claude_desktop_config.json</string>
+    <string name="conn_claude_desktop_note">Claude Desktop necesita Node.js para esto y luego reiniciarse. Mantén CodeAssist abierto con el proyecto en el que quieres que trabaje Claude.</string>
 </resources>
