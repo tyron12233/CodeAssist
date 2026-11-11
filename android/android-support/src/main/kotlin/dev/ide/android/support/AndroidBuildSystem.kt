@@ -866,7 +866,14 @@ class AndroidBuildSystem(
             // its own dex layer) rather than archived in dexBuilder + merged into the project layer: R is ~50
             // dependency-package classes that dex GC-bound + single-threaded in-process (~5s), so the big-heap
             // fork helps it too. Otherwise R stays in dexBuilder + the project merge (AGP's scope for R).
-            val forkedR = dexExtOnePass
+            //
+            // Also whenever R is the FULL one (a module without non-transitive R classes: one class set per library
+            // package, thousands of fields for a Material app) and a forked dexer exists, whatever the minSdk. In
+            // dexBuilder it shares the build process's heap with the libraries being dexed beside it: on a phone
+            // that R took 56 s of a 106 s build, the heap pinned at its 512 MB cap. Per-library R classes are
+            // small and stay in dexBuilder, where they cost less than starting a VM.
+            val forkedR = dexExtOnePass ||
+                (rJars.isNotEmpty() && !facet.nonTransitiveRClass && goal != BuildGoal.DEX && mergeDexer.runsOffHeap())
             val dexBuilder = step("dexBuilder")
             tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, dexProjectClasses, subProjectJars, externalJars, sdk.androidJar,
