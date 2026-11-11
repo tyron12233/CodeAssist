@@ -1,5 +1,6 @@
 package dev.ide.agent.mcp
 
+import dev.ide.agent.AgentTool
 import dev.ide.agent.ToolArgs
 import dev.ide.agent.ToolExecutionResult
 import dev.ide.agent.ToolSpec
@@ -22,6 +23,34 @@ private val MAP_TYPE_REF: TypeRef<Map<String, Any>> = object : TypeRef<Map<Strin
 fun ToolSpec.toMcpTool(mapper: McpJsonMapper): McpSchema.Tool = McpSchema.Tool.builder(name, parseParameters(mapper, this))
     .description(description)
     .build()
+
+/**
+ * An [AgentTool] as an MCP tool, with the hints a client uses to decide what to ask the user about. Without
+ * them `read_file` and `delete_path` look alike, so a client either confirms every call or none.
+ *
+ *  - read-only: the tool is not [AgentTool.mutating], and is not one of the few that change something outside
+ *    the project and so are not gated (a server started, the plan shown to the user).
+ *  - destructive: it can lose work that the tool itself cannot give back.
+ *  - open-world: it reaches the network.
+ */
+fun AgentTool.toMcpTool(mapper: McpJsonMapper): McpSchema.Tool {
+    val name = spec.name
+    val readOnly = !mutating && name !in NOT_READ_ONLY
+    return McpSchema.Tool.builder(name, parseParameters(mapper, spec))
+        .description(spec.description)
+        .annotations(
+            McpSchema.ToolAnnotations.builder()
+                .readOnlyHint(readOnly)
+                .destructiveHint(!readOnly && name in DESTRUCTIVE)
+                .openWorldHint(name in OPEN_WORLD)
+                .build(),
+        )
+        .build()
+}
+
+private val NOT_READ_ONLY = setOf("ftp_server", "todo_write", "ask_user")
+private val DESTRUCTIVE = setOf("delete_path", "write_file", "remove_module", "remove_dependency")
+private val OPEN_WORLD = setOf("web_fetch", "http_request", "search_dependency", "add_dependency")
 
 private fun parseParameters(mapper: McpJsonMapper, spec: ToolSpec): Map<String, Any> {
     if (spec.parameters.isBlank()) return emptyMap()
@@ -92,6 +121,11 @@ class MapToolArgs(
 
 /** Converts an agent [ToolExecutionResult] into an MCP [McpSchema.CallToolResult]. */
 fun ToolExecutionResult.toCallToolResult(): McpSchema.CallToolResult = McpSchema.CallToolResult.builder()
-    .content(listOf(McpSchema.TextContent.builder(content).build()))
+    // A tool's images (a preview screenshot, an opened picture) go along as image content, as the in-IDE agent
+    // gets them; sent as text only, a client's model was told a screenshot was taken and shown nothing.
+    .content(
+        listOf<McpSchema.Content>(McpSchema.TextContent.builder(content).build()) +
+            images.map { McpSchema.ImageContent.builder(it.data, it.mediaType).build() },
+    )
     .isError(isError)
     .build()

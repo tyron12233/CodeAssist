@@ -50,6 +50,39 @@ object CodeAssistMcpServer {
      */
     const val DEFAULT_FTP_PORT = 8021
 
+    /** A call still running after this long is answered with a job to ask about, not held open. */
+    const val DEFAULT_MAX_WAIT_MS = 90_000L
+
+    /**
+     * What a client's model is told on connecting (the MCP `instructions`). The in-IDE agent learns all of this
+     * from its system prompt; a client such as Claude has only the tool descriptions, which say what each tool
+     * does and nothing about the IDE they act on. Kept short: clients cap or drop long server notes.
+     */
+    fun instructions(notes: List<String> = emptyList()): String = buildString {
+        append(INSTRUCTIONS)
+        notes.filter { it.isNotBlank() }.forEach { append("\n\n").append(it.trim()) }
+    }
+
+    private val INSTRUCTIONS = """
+        These tools act on the project open in CodeAssist, an IDE for Android, Java and Kotlin that runs on the
+        user's phone (and on desktop). The user sees every change in their editor as you make it.
+
+        - Start with project_overview: it lists the modules, their types, source roots and dependencies.
+        - Paths are absolute or relative to the project root. read_file returns unsaved editor text too.
+        - Prefer the semantic tools to text edits: go_to_definition, find_references, rename_symbol (updates
+          every reference), list_quick_fixes and apply_quick_fix, format_file, organize_imports.
+        - After editing a file call get_diagnostics on it; project_diagnostics surveys everything. To confirm
+          real behavior use run_program (a console main) or run_task (see list_tasks) to build.
+        - A call that takes longer than about a minute and a half returns a job id instead of a result: call
+          task_status with it until it finishes. Builds, especially a first build, often do.
+        - CodeAssist builds without Gradle and runs programs by interpreting bytecode on its own VM, on Android's
+          runtime. There is no shell. A program runs single-threaded, invokedynamic bootstraps are unsupported,
+          and the device's minimum SDK applies. Do not assume desktop tooling is available.
+        - To add a library use search_dependency, then add_dependency.
+        - read_memory holds this project's conventions and earlier decisions; read it before a non-trivial task.
+        - Keep changes scoped to what was asked. Do not claim something works until a tool has confirmed it.
+    """.trimIndent()
+
     /**
      * Builds a configured [McpServer.McpSyncServer] that serves [tools] over [transportProvider].
      * Defaults the tool registry to the built-in tool set bound to [workspace] (the engine-backed port
@@ -63,10 +96,16 @@ object CodeAssistMcpServer {
         serverName: String = DEFAULT_SERVER_NAME,
         serverVersion: String = DEFAULT_SERVER_VERSION,
         mapper: McpJsonMapper = McpJsonDefaults.getMapper(),
+        /** More guidance for the client's model, after [instructions]'s own: what the host's extra tools are for. */
+        notes: List<String> = emptyList(),
+        /** How long a call may hold its request open before it is handed back as a job (see [LongCalls]). */
+        maxWaitMs: Long = DEFAULT_MAX_WAIT_MS,
     ): McpSyncServer {
-        val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper) }
+        val calls = LongCalls(maxWaitMs)
+        val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper, calls) } + calls.statusTool(mapper)
         return McpServer.sync(transportProvider)
             .serverInfo(serverName, serverVersion)
+            .instructions(instructions(notes))
             .capabilities(
                 McpSchema.ServerCapabilities.builder()
                     .tools(true)
@@ -102,11 +141,17 @@ object CodeAssistMcpServer {
         serverName: String = DEFAULT_SERVER_NAME,
         serverVersion: String = DEFAULT_SERVER_VERSION,
         mapper: McpJsonMapper = McpJsonDefaults.getMapper(),
+        /** More guidance for the client's model, after [instructions]'s own: what the host's extra tools are for. */
+        notes: List<String> = emptyList(),
+        /** How long a call may hold its request open before it is handed back as a job (see [LongCalls]). */
+        maxWaitMs: Long = DEFAULT_MAX_WAIT_MS,
     ): HttpMcpServer {
         val provider = HttpStreamableServerTransportProvider(mapper)
-        val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper) }
+        val calls = LongCalls(maxWaitMs)
+        val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper, calls) } + calls.statusTool(mapper)
         McpServer.sync(provider)
             .serverInfo(serverName, serverVersion)
+            .instructions(instructions(notes))
             .capabilities(
                 McpSchema.ServerCapabilities.builder()
                     .tools(true)
@@ -135,8 +180,9 @@ object CodeAssistMcpServer {
         workspace: AgentWorkspace,
         gate: AgentPermissionGate,
         mapper: McpJsonMapper,
+        calls: LongCalls,
     ): McpServerFeatures.SyncToolSpecification = McpServerFeatures.SyncToolSpecification.builder()
-        .tool(tool.spec.toMcpTool(mapper))
+        .tool(tool.toMcpTool(mapper))
         .callHandler { _, request ->
             val args = MapToolArgs(request.arguments() ?: emptyMap(), mapper)
             if (tool.mutating) {
@@ -149,12 +195,7 @@ object CodeAssistMcpServer {
                     ).toCallToolResult()
                 }
             }
-            val result = try {
-                runBlocking { tool.execute(args) }
-            } catch (t: Throwable) {
-                ToolExecutionResult.error("Tool '${tool.spec.name}' failed: ${t.message ?: t::class.simpleName}")
-            }
-            result.toCallToolResult()
+            calls.run(tool.spec.name, tool.summarize(args)) { tool.execute(args) }.toCallToolResult()
         }
         .build()
 
