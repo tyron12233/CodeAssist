@@ -74,6 +74,22 @@ class FrameworkTableTest {
         assertTrue(plainAp.contentEquals(derivedAp), "the same resources.ap_, byte for byte (${plainAp.size} vs ${derivedAp.size})")
     }
 
+    /** The app unpacks its android.jar anew on every update: the same jar at a new date is the same table. */
+    @Test
+    fun theSameJarUnpackedAgainReusesItsTableAndAnOutdatedOneIsRemoved() = withTempDir("framework-table-key") { dir ->
+        val sdk = assumeAndroidSdk()
+        val cache = Files.createDirectories(dir.resolve("cache"))
+        val outdated = Files.write(cache.resolve("framework-res-s1-0123456789ab.jar"), byteArrayOf(1))
+        val first = FrameworkTable.forLinking(sdk.androidJar, cache)
+        assertTrue(first.startsWith(cache), "a table was derived")
+        assertTrue(!Files.exists(outdated), "a table from an older format is removed")
+
+        val again = Files.copy(sdk.androidJar, dir.resolve("unpacked-again.jar"))
+        Files.setLastModifiedTime(again, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 60_000))
+        assertEquals(first, FrameworkTable.forLinking(again, cache), "the same content is found under the same name")
+        assertEquals(1, Files.list(cache).use { it.count() }.toInt(), "and nothing more was written")
+    }
+
     @Test
     fun theDerivedTablesNamePoolIsSortedAndTheRewriteIsStable() = withTempDir("framework-table-pool") { dir ->
         val sdk = assumeAndroidSdk()

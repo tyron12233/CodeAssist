@@ -33,9 +33,10 @@ object FrameworkTable {
      */
     fun forLinking(androidJar: Path, cacheDir: Path): Path = runCatching {
         val key = signature(androidJar)
-        val derived = cacheDir.resolve("framework-res-$FORMAT-$key.jar")
+        val derived = cacheDir.resolve("$PREFIX$FORMAT-$key.jar")
         if (Files.isRegularFile(derived)) return@runCatching derived
         Files.createDirectories(cacheDir)
+        dropOutdated(cacheDir)
         val tmp = Files.createTempFile(cacheDir, "framework-res", ".tmp")
         try {
             ZipFile(androidJar.toFile()).use { jar ->
@@ -62,13 +63,32 @@ object FrameworkTable {
         derived
     }.getOrDefault(androidJar)
 
-    /** Bumped when what [forLinking] writes changes, so an older derived jar is not reused. */
-    private const val FORMAT = "s1"
+    /** Bumped when what [forLinking] writes, or how it is named, changes, so an older derived jar is not reused. */
+    private const val FORMAT = "s2"
+    private const val PREFIX = "framework-res-"
+    private const val TAIL_BYTES = 64 * 1024
 
-    /** The jar's path, size and modification time: a platform is replaced as a file, not edited in place. */
+    /**
+     * What the jar holds, not where or when it was written: its size and the end of the file, which is the zip's
+     * directory with the checksum of every entry. The app unpacks its `android.jar` again on each update, to a
+     * file with a new date, and a signature that included the date made an 18 MB table again each time.
+     */
     private fun signature(jar: Path): String {
-        val text = "${jar.toAbsolutePath()}|${Files.size(jar)}|${Files.getLastModifiedTime(jar).toMillis()}"
-        return MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).take(6).joinToString("") { "%02x".format(it) }
+        val size = Files.size(jar)
+        val tail = ByteArray(minOf(size, TAIL_BYTES.toLong()).toInt())
+        java.io.RandomAccessFile(jar.toFile(), "r").use { it.seek(size - tail.size); it.readFully(tail) }
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(size.toString().toByteArray())
+        return md.digest(tail).take(8).joinToString("") { "%02x".format(it) }
+    }
+
+    /** Tables an older version of this code left behind: nothing reads them again. */
+    private fun dropOutdated(cacheDir: Path) {
+        runCatching {
+            Files.newDirectoryStream(cacheDir, "$PREFIX*.jar").use { old ->
+                for (f in old) if (!f.fileName.toString().startsWith("$PREFIX$FORMAT-")) runCatching { Files.deleteIfExists(f) }
+            }
+        }
     }
 }
 
