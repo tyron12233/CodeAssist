@@ -251,6 +251,34 @@ val bundleTestRunSpikeAsset = tasks.register<Copy>("bundleTestRunSpikeAsset") {
 }
 tasks.matching { it.name.endsWith("AndroidTestAssets") }.configureEach { dependsOn(bundleTestRunSpikeAsset) }
 
+// --- Java 17 to 21 fixtures (androidTest: Java21ArtSpike) -----------------------------------------
+// Java21ArtSpike interprets :jvm-interp's Java 21 fixtures on ART, where the platform stand-ins, the library
+// backports and the emulated thread API are what actually answer. The fixtures cannot run natively there, so
+// their real results are recorded on the build JVM (Expectations) and staged beside the class files.
+val java21SpikeExpectations = tasks.register<JavaExec>("java21SpikeExpectations") {
+    description = "Record what :jvm-interp's Java 21 fixtures return on a real JVM, for Java21ArtSpike."
+    dependsOn(":jvm-interp:testClasses", ":jvm-interp:classes")
+    val jvmInterp = project(":jvm-interp").layout.buildDirectory
+    val out = layout.buildDirectory.file("vm-spike-asset/java21/expected.properties")
+    classpath = files(jvmInterp.dir("classes/java/test"), jvmInterp.dir("classes/java/main"))
+    mainClass.set("dev.ide.jvm.fixtures.Expectations")
+    inputs.files(classpath)
+    outputs.file(out)
+    argumentProviders.add(CommandLineArgumentProvider { listOf(out.get().asFile.absolutePath) })
+}
+val bundleJava21SpikeAsset = tasks.register<Copy>("bundleJava21SpikeAsset") {
+    description = "Stage :jvm-interp's Java 21 fixtures for Java21ArtSpike."
+    dependsOn(":jvm-interp:testClasses", java21SpikeExpectations)
+    into(layout.buildDirectory.dir("vm-spike-asset/java21/classes"))
+    from(project(":jvm-interp").layout.buildDirectory.dir("classes/java/test")) {
+        include(
+            "dev/ide/jvm/fixtures/Java21*.class", "dev/ide/jvm/fixtures/Structured*.class",
+            "dev/ide/jvm/fixtures/PatternSwitch*.class", "dev/ide/jvm/fixtures/ThreadLoad*.class",
+        )
+    }
+}
+tasks.matching { it.name.endsWith("AndroidTestAssets") }.configureEach { dependsOn(bundleJava21SpikeAsset) }
+
 // --- Full Compose stack, Android variants (androidTest: interpret foundation/ui, milestone A) ------
 // VmTextFieldArtSpike against material3 1.5.0-alpha24 needs foundation classes newer than the app bundles
 // (androidx.compose.foundation.style.MutableStyleState); the flip must interpret those from the project jars,
@@ -1264,6 +1292,9 @@ dependencies {
     // On-device throughput benchmark for the :jvm-interp bytecode interpreter. Not in the app dex, so it is
     // included in the test APK; its asm dependency resolves against the app's dexed copy at runtime.
     androidTestImplementation(project(":jvm-interp"))
+    // McpServerArtSpike starts the in-app MCP server the way the agent backend does. Already in the app through
+    // :ide-core; named here only so the test compiles against it.
+    androidTestImplementation(project(":agent-mcp"))
     // The compiler API (K2JVMCompiler/K2JVMCompilerArguments/MessageCollector/…) to COMPILE the spike
     // against. It arrives in the app only as a transitive `implementation` (via :ide-core → :lang-kotlin),
     // which doesn't leak to the androidTest *compile* classpath — and at runtime the app's dexed copy

@@ -58,6 +58,41 @@ internal object HostBackports {
             "startVirtualThread" -> { a -> EmulatedThreads.newVirtual(a[0] as Runnable, null).also { it.start() } }
             else -> null
         }
+        "java/util/stream/Stream" -> if (name == "iterate" && descriptor == "(Ljava/lang/Object;Ljava/util/function/Predicate;Ljava/util/function/UnaryOperator;)Ljava/util/stream/Stream;") {
+            { a ->
+                @Suppress("UNCHECKED_CAST") val hasNext = a[1] as java.util.function.Predicate<Any?>
+                @Suppress("UNCHECKED_CAST") val next = a[2] as java.util.function.UnaryOperator<Any?>
+                streamOf(object : Iterator<Any?> {
+                    private var current = a[0]
+                    private var started = false
+                    private fun upcoming() = if (started) next.apply(current) else current
+                    private var peeked = false
+                    private var peek: Any? = null
+                    override fun hasNext(): Boolean {
+                        if (!peeked) { peek = upcoming(); peeked = true }
+                        return hasNext.test(peek)
+                    }
+                    override fun next(): Any? {
+                        if (!hasNext()) throw NoSuchElementException()
+                        current = peek; started = true; peeked = false
+                        return current
+                    }
+                })
+            }
+        } else null
+        "java/util/stream/Collectors" -> if (name == "teeing") {
+            { a ->
+                @Suppress("UNCHECKED_CAST") val one = a[0] as java.util.stream.Collector<Any?, Any?, Any?>
+                @Suppress("UNCHECKED_CAST") val two = a[1] as java.util.stream.Collector<Any?, Any?, Any?>
+                @Suppress("UNCHECKED_CAST") val merge = a[2] as java.util.function.BiFunction<Any?, Any?, Any?>
+                java.util.stream.Collector.of<Any?, Array<Any?>, Any?>(
+                    { arrayOf(one.supplier().get(), two.supplier().get()) },
+                    { acc, e -> one.accumulator().accept(acc[0], e); two.accumulator().accept(acc[1], e) },
+                    { x, y -> arrayOf(one.combiner().apply(x[0], y[0]), two.combiner().apply(x[1], y[1])) },
+                    { acc -> merge.apply(one.finisher().apply(acc[0]), two.finisher().apply(acc[1])) },
+                )
+            }
+        } else null
         "java/util/concurrent/Executors" -> when (name) {
             "newVirtualThreadPerTaskExecutor" -> { _ -> EmulatedThreads.PerTaskExecutor { EmulatedThreads.newVirtual(it, null) } }
             "newThreadPerTaskExecutor" -> { a -> EmulatedThreads.PerTaskExecutor(a[0] as java.util.concurrent.ThreadFactory) }
@@ -83,6 +118,10 @@ internal object HostBackports {
                 }
                 "lines()Ljava/util/stream/Stream;" -> { r, _ -> linesOf(r as String).stream() }
                 "stripIndent()Ljava/lang/String;" -> { r, _ -> stripIndent(r as String) }
+                "transform(Ljava/util/function/Function;)Ljava/lang/Object;" -> { r, a ->
+                    @Suppress("UNCHECKED_CAST") (a[0] as java.util.function.Function<Any?, Any?>).apply(r)
+                }
+                "splitWithDelimiters(Ljava/lang/String;I)[Ljava/lang/String;" -> { r, a -> splitWithDelimiters(r as String, a[0] as String, a[1] as Int) }
                 else -> null
             }
             is StringBuilder -> when (key) {
@@ -95,6 +134,37 @@ internal object HostBackports {
             }
             is Stream<*> -> when (key) {
                 "toList()Ljava/util/List;" -> { r, _ -> Collections.unmodifiableList(ArrayList<Any?>((r as Stream<*>).toArray().asList())) }
+                "mapMulti(Ljava/util/function/BiConsumer;)Ljava/util/stream/Stream;" -> { r, a ->
+                    @Suppress("UNCHECKED_CAST") val mapper = a[0] as java.util.function.BiConsumer<Any?, java.util.function.Consumer<Any?>>
+                    (r as Stream<*>).flatMap { element ->
+                        val buffer = ArrayList<Any?>()
+                        mapper.accept(element, java.util.function.Consumer { buffer.add(it) })
+                        buffer.stream()
+                    }
+                }
+                "takeWhile(Ljava/util/function/Predicate;)Ljava/util/stream/Stream;" -> { r, a ->
+                    @Suppress("UNCHECKED_CAST") val keep = a[0] as java.util.function.Predicate<Any?>
+                    // Reads only as far as the first element that fails, so an infinite source still ends.
+                    val taken = ArrayList<Any?>()
+                    val elements = (r as Stream<*>).iterator()
+                    while (elements.hasNext()) {
+                        val e = elements.next()
+                        if (!keep.test(e)) break
+                        taken += e
+                    }
+                    taken.stream()
+                }
+                "dropWhile(Ljava/util/function/Predicate;)Ljava/util/stream/Stream;" -> { r, a ->
+                    @Suppress("UNCHECKED_CAST") val drop = a[0] as java.util.function.Predicate<Any?>
+                    val elements = (r as Stream<*>).iterator()
+                    var first: Any? = null
+                    var any = false
+                    while (elements.hasNext()) {
+                        val e = elements.next()
+                        if (!drop.test(e)) { first = e; any = true; break }
+                    }
+                    if (!any) Stream.empty<Any?>() else Stream.concat(Stream.of(first), streamOf(elements))
+                }
                 else -> null
             }
             is Optional<*> -> when (key) {
@@ -192,6 +262,30 @@ internal object HostBackports {
             out.write(buffer, 0, n)
             total += n
         }
+    }
+
+    private fun streamOf(elements: Iterator<Any?>): Stream<Any?> =
+        java.util.stream.StreamSupport.stream(java.util.Spliterators.spliteratorUnknownSize(elements, java.util.Spliterator.ORDERED), false)
+
+    /** `String.splitWithDelimiters(regex, limit)`: `split`, with each matched delimiter kept between the pieces. */
+    private fun splitWithDelimiters(s: String, regex: String, limit: Int): Array<String> {
+        val matcher = java.util.regex.Pattern.compile(regex).matcher(s)
+        val out = ArrayList<String>()
+        var index = 0
+        var matches = 0
+        while (matcher.find()) {
+            if (limit > 0 && matches >= limit - 1) break
+            // A zero-width match at the very start yields no leading empty piece.
+            if (index == 0 && matcher.start() == 0 && matcher.end() == 0) continue
+            out += s.substring(index, matcher.start())
+            out += matcher.group()
+            index = matcher.end()
+            matches++
+        }
+        if (index == 0) return arrayOf(s)
+        out += s.substring(index)
+        if (limit == 0) while (out.isNotEmpty() && out.last().isEmpty()) out.removeAt(out.size - 1)
+        return out.toTypedArray()
     }
 
     /** `String.lines()`: split at `\n`, `\r` or `\r\n`, with no empty line after a final terminator. */

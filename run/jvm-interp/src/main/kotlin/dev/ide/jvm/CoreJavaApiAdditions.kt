@@ -90,6 +90,13 @@ object CoreJavaApiAdditions {
         return out.filterKeys { entry -> !has(entry.removeSuffix(".class").substringBefore('$') + ".class") || entry.startsWith(BUILDER) && !has(entry) }
     }
 
+    /**
+     * A class file that refers to the source stand-ins by the names they are compiled under
+     * (`dev.ide.jvm.standin.java.lang.ScopedValue`), with those references moved to the platform names a real
+     * program has. For running such a class the way a program compiled against the additions runs.
+     */
+    fun toPlatformNames(classFile: ByteArray): ByteArray = PlatformStandIns.renamedBytes(classFile)
+
     private const val NESTED_INTERFACE = Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC or Opcodes.ACC_INTERFACE or Opcodes.ACC_ABSTRACT
 
     private fun innerClasses(cv: ClassVisitor, already: Set<String> = emptySet()) {
