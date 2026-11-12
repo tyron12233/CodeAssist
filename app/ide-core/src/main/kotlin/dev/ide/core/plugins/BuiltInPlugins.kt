@@ -113,6 +113,7 @@ import dev.ide.lang.java.index.JavaClassNamesIndex
 import dev.ide.lang.java.index.JavaMainIndex
 import dev.ide.lang.java.index.JavaMembersByOwnerIndex
 import dev.ide.lang.java.index.JavaMembersIndex
+import dev.ide.lang.java.index.JavaStaticMembersIndex
 import dev.ide.lang.java.index.JavaPackageTypesIndex
 import dev.ide.lang.java.index.JavaPackagesIndex
 import dev.ide.lang.java.index.JavaSourceAnnotationIndex
@@ -686,6 +687,7 @@ internal val BUILT_IN_INDEX_EXTENSIONS: List<dev.ide.index.IndexExtension<*, *>>
     JavaSourceSymbolsIndex,
     JavaMembersIndex,
     JavaMembersByOwnerIndex,
+    JavaStaticMembersIndex,
     KotlinClassNamesIndex,
     KotlinPackagesIndex,
     KotlinPackageTypesIndex,

@@ -59,6 +59,26 @@ class JavaCompilerFixesTest {
         assertFalse("helper" in out, "the method should be gone:\n$out")
     }
 
+    @Test fun importStaticForAnUndefinedMethod() {
+        val src = "package app;\n\nimport java.util.List;\n\nclass A {\n    void m() {\n        assertEquals(1, 2);\n    }\n}\n"
+        val provider = dev.ide.lang.jdt.analysis.AddStaticImportQuickFixProvider { _, name ->
+            if (name == "assertEquals") listOf("org.junit.Assert", "junit.framework.TestCase") else emptyList()
+        }
+        val out = applyFirstFix(provider, src) { it == JavaProblemCodes.UNDEFINED_METHOD }
+        // Sorted, so the first offer is junit.framework's; the static import lands in the static block.
+        assertTrue("import static junit.framework.TestCase.assertEquals;" in out, "static import expected:\n$out")
+        assertTrue("import java.util.List;" in out && "assertEquals(1, 2);" in out, out)
+    }
+
+    @Test fun noStaticImportForAQualifiedCallOrAnUnknownName() {
+        val provider = dev.ide.lang.jdt.analysis.AddStaticImportQuickFixProvider { _, name ->
+            if (name == "assertEquals") listOf("org.junit.Assert") else emptyList()
+        }
+        assertEquals(0, fixCount(provider, "package app; class A { void m(Object o) { o.assertEquals(1, 2); } }"))
+        assertEquals(0, fixCount(provider, "package app; class A { void m() { nothingNamedThis(1); } }"))
+        assertEquals(1, fixCount(provider, "package app; class A { void m() { assertEquals(1, 2); } }"))
+    }
+
     @Test fun addExceptionToThrows() {
         val src = "package app;\nclass A {\n    void m() {\n        new java.io.FileInputStream(\"x\");\n    }\n}\n"
         val out = applyFirstFix(AddExceptionToThrowsQuickFixProvider(), src) { it == JavaProblemCodes.UNHANDLED_EXCEPTION }
@@ -92,6 +112,20 @@ class JavaCompilerFixesTest {
         val (analyzer, dir) = workspaceWith()
         return try { analyzer.diagnose(StubFile(dir.resolve("app/A.java").toString(), src), src) }
         finally { dir.toFile().deleteRecursively() }
+    }
+
+    /** How many fixes [provider] offers for the first undefined-method diagnostic of [src]. */
+    private fun fixCount(provider: QuickFixProvider, src: String): Int {
+        val (analyzer, dir) = workspaceWith()
+        return try {
+            val file = StubFile(dir.resolve("app/A.java").toString(), src)
+            val parsed = analyzer.parseSyntactic(file, src)
+            val diag = analyzer.diagnose(file, src).first { it.code == JavaProblemCodes.UNDEFINED_METHOD }
+                .let { Diagnostic(it.range, it.severity, it.message, DiagnosticSource.Compiler, it.code) }
+            provider.fixes(diag, FixTarget(file, parsed, analyzer)).size
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
     }
 
     /** Run [provider]'s first fix for the diagnostic whose code matches [codePredicate]; return the edited text. */

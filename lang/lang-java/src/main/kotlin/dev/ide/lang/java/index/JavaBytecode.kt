@@ -16,7 +16,7 @@ import org.objectweb.asm.Opcodes
  */
 object JavaBytecode {
 
-    data class Member(val name: String, val descriptor: String)
+    data class Member(val name: String, val descriptor: String, val access: Int = 0)
     class ClassInfo(val access: Int, val internalName: String, val methods: List<Member>, val fields: List<Member>)
 
     fun read(bytes: ByteArray): ClassInfo? = ClassFile.read(bytes)?.let { read(it) }
@@ -27,8 +27,8 @@ object JavaBytecode {
     fun read(classFile: ClassFile): ClassInfo = ClassInfo(
         access = classFile.accessFlags,
         internalName = classFile.thisClass,
-        methods = classFile.methods.map { Member(it.name, it.descriptor) },
-        fields = classFile.fields.map { Member(it.name, it.descriptor) },
+        methods = classFile.methods.map { Member(it.name, it.descriptor, it.access) },
+        fields = classFile.fields.map { Member(it.name, it.descriptor, it.access) },
     )
 
     fun isPublic(access: Int): Boolean = (access and Opcodes.ACC_PUBLIC) != 0

@@ -219,6 +219,38 @@ object JavaMembersIndex : IndexExtension<String, MemberValue> {
     }
 }
 
+/**
+ * staticMembers: member name -> the FQN of each public top-level library class declaring a PUBLIC STATIC method
+ * or field of that name. What `import static` (and Kotlin's import of a Java static) can name, so an unresolved
+ * bare `assertEquals(…)` can offer `org.junit.Assert.assertEquals`.
+ *
+ * Separate from [JavaMembersIndex], which keys every member of every class with no modifiers: answering "which
+ * of these is an importable static" from it means loading each owner's class, for a name like `get` thousands.
+ */
+object JavaStaticMembersIndex : IndexExtension<String, String> {
+    override val id = IndexId("java.staticMembers")
+    override val version = 1
+    override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+    override val valueExternalizer = StringExternalizer
+    override val matching = MatchingMode.PREFIX_ONLY
+    override val inputFilter = InputFilter { isClassFile(it) }
+
+    private const val PUBLIC_STATIC = 0x0001 or 0x0008
+    private const val SYNTHETIC = 0x1000
+
+    override fun index(input: IndexInput): Map<String, Collection<String>> {
+        val owner = classEntryToFqn(input.unitName ?: return emptyMap())?.first ?: return emptyMap()
+        val info = sharedBytecode(input)?.takeIf { JavaBytecode.isPublic(it.access) } ?: return emptyMap()
+        val names = LinkedHashSet<String>()
+        for (m in info.methods + info.fields) {
+            if (m.access and PUBLIC_STATIC != PUBLIC_STATIC || m.access and SYNTHETIC != 0) continue
+            if (m.name.startsWith("<") || '$' in m.name) continue
+            names += m.name
+        }
+        return names.associateWith { listOf(owner) }
+    }
+}
+
 /** membersByOwner: owner FQN -> its PUBLIC source members (so a Kotlin file can enumerate a same-project
  *  Java SOURCE class's members). `.java` source only, public-only. Each member carries its SHAPE — parameter
  *  types + names, the `static` flag, the return type — encoded into [MemberValue.signature] via

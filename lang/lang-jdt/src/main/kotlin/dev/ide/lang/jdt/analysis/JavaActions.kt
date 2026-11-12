@@ -83,6 +83,58 @@ class AddImportQuickFixProvider : QuickFixProvider {
     }
 }
 
+/**
+ * On an unresolved bare method call or name, offer "Import static <class>.<name>" for each public static of
+ * that name on the classpath: `assertEquals(1, x)` in a test with JUnit present and nothing imported offers
+ * `org.junit.Assert.assertEquals`. The type-name fix above only ever looked for classes, so the first line of
+ * most tests had no import to offer.
+ *
+ * Keyed on both spellings of the problem: ecj's undefined method, and the neutral unresolved reference the
+ * IntelliJ-PSI backend reports for any name. A qualified `x.name` is left alone (a static import cannot fix
+ * it), and so is an Uppercase name, which is the type fix's.
+ */
+class AddStaticImportQuickFixProvider(
+    /** The classes declaring a public static named so. The `java.staticMembers` index, unless a test supplies one. */
+    private val ownersOf: (AnalysisTarget, String) -> List<String> = { target, name ->
+        target.index.exact<String>(STATIC_MEMBERS, name).toList()
+    },
+) : QuickFixProvider {
+    override val forCodes = setOf(Codes.UNRESOLVED_REFERENCE, JavaProblemCodes.UNDEFINED_METHOD)
+    override val languages = setOf(JAVA)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        val text = target.parsed.text()
+        val start = diagnostic.range.start.coerceIn(0, text.length)
+        // The name alone: ecj anchors an undefined method on its name, a backend may cover the whole call.
+        val name = text.subSequence(start, diagnostic.range.end.coerceIn(start, text.length)).toString()
+            .trim().takeWhile { it.isJavaIdentifierPart() }
+        if (name.isEmpty() || !name[0].isJavaIdentifierStart() || name[0].isUpperCase()) return emptyList()
+        var before = start - 1
+        while (before >= 0 && text[before].isWhitespace()) before--
+        if (before >= 0 && text[before] == '.') return emptyList()
+
+        val owners = ownersOf(target, name).distinct()
+        // A name half the classpath declares statically (`valueOf`, `of`) is a list nobody can choose from.
+        if (owners.isEmpty() || owners.size > MAX_STATIC_OWNERS) return emptyList()
+        return owners.sorted().take(8).map { owner ->
+            val fqn = "$owner.$name"
+            object : QuickFix {
+                override val title = "Import static $fqn"
+                override val kind = CodeActionKind.QUICK_FIX
+                override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit {
+                    val plan = JdtImportLayout.planStaticImport(ctx.target.parsed, fqn) ?: return WorkspaceEdit.EMPTY
+                    return WorkspaceEdit.of(ctx.target.file, DocumentEdit(plan.offset, 0, plan.text))
+                }
+            }
+        }
+    }
+
+    private companion object {
+        val STATIC_MEMBERS = dev.ide.index.IndexId("java.staticMembers")
+        const val MAX_STATIC_OWNERS = 40
+    }
+}
+
 /** On the unused-import warning, delete the whole import line. Keyed on [UnusedImportAnalyzer]'s code. */
 class RemoveUnusedImportQuickFixProvider : QuickFixProvider {
     override val forCodes = setOf("java.unusedImport")

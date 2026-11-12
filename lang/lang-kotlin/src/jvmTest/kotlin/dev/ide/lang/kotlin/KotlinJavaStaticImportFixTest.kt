@@ -10,8 +10,7 @@ import dev.ide.index.IndexScope
 import dev.ide.index.InputFilter
 import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
-import dev.ide.index.MemberExternalizer
-import dev.ide.index.MemberValue
+import dev.ide.index.StringExternalizer
 import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.classEntryToFqn
 import dev.ide.index.impl.IndexServiceImpl
@@ -30,7 +29,7 @@ import kotlin.test.assertTrue
  * A Java static is not a Kotlin callable, so the callable indexes the Import fix read never held one, and the
  * lightbulb on the most common first line of a test had no import to offer.
  *
- * The `java.members` and `java.classNames` producers live in `:lang-java`, which this module cannot see, so
+ * The `java.staticMembers` and `java.classNames` producers live in `:lang-java`, which this module cannot see, so
  * their keying is mirrored here (as `KotlinNestedTypeImportTest` does for class names).
  */
 class KotlinJavaStaticImportFixTest {
@@ -87,20 +86,22 @@ class KotlinJavaStaticImportFixTest {
         }
     }
 
-    /** `java.members`' keying: every method of a top-level class under its name, static or not, with its owner. */
-    private object LibraryMembers : IndexExtension<String, MemberValue> {
-        override val id = IndexId("java.members")
+    /** `java.staticMembers`' keying: each public static method name of a public top-level class, to that class. */
+    private object LibraryStatics : IndexExtension<String, String> {
+        override val id = IndexId("java.staticMembers")
         override val version = 1
         override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
-        override val valueExternalizer = MemberExternalizer
-        override val matching = MatchingMode.PREFIX_AND_FUZZY
+        override val valueExternalizer = StringExternalizer
+        override val matching = MatchingMode.PREFIX_ONLY
         override val inputFilter = InputFilter { it.origin == IndexOrigin.LIBRARY && it.unitName?.endsWith(".class") == true }
 
-        override fun index(input: IndexInput): Map<String, Collection<MemberValue>> {
+        override fun index(input: IndexInput): Map<String, Collection<String>> {
             val owner = input.unitName!!.removeSuffix(".class").replace('/', '.').takeIf { '$' !in it } ?: return emptyMap()
-            val methods = runCatching { Class.forName(owner, false, javaClass.classLoader).declaredMethods }.getOrNull()
-                ?: return emptyMap()
-            return methods.map { it.name }.distinct().associateWith { listOf(MemberValue(it, owner, "method", "")) }
+            val cls = runCatching { Class.forName(owner, false, javaClass.classLoader) }.getOrNull() ?: return emptyMap()
+            if (!java.lang.reflect.Modifier.isPublic(cls.modifiers)) return emptyMap()
+            val methods = runCatching { cls.declaredMethods }.getOrNull() ?: return emptyMap()
+            return methods.filter { java.lang.reflect.Modifier.isPublic(it.modifiers) && java.lang.reflect.Modifier.isStatic(it.modifiers) }
+                .map { it.name }.distinct().associateWith { listOf(owner) }
         }
     }
 
@@ -108,7 +109,7 @@ class KotlinJavaStaticImportFixTest {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         private val jars = listOf(stdlibJarPath(), TestJars.onClasspath("org/junit/jupiter/api/Assertions.class"))
         private val index = IndexServiceImpl(
-            listOf(KotlinTypeShapeIndex, KotlinCallableIndex, LibraryClassNames, LibraryMembers),
+            listOf(KotlinTypeShapeIndex, KotlinCallableIndex, LibraryClassNames, LibraryStatics),
             Files.createTempDirectory("static-import-idx"),
         ).also { runBlocking { it.ensureUpToDate(IndexScope(libraryJars = jars)) } }
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir, libJars = jars)).also { it.indexService = index }

@@ -21,6 +21,7 @@ object JdtAnalysisSupport {
         extensions.register(ANALYZER_EP, UnusedImportAnalyzer(), plugin)
         extensions.register(DIAGNOSTIC_PROVIDER_EP, CompilerDiagnosticProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, AddImportQuickFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, AddStaticImportQuickFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, RemoveUnusedImportQuickFixProvider(), plugin)
         // Compiler-keyed quick-fixes, unlocked by carrying ecj's precise problem id as the diagnostic code.
         extensions.register(QUICK_FIX_PROVIDER_EP, RemoveUnusedLocalQuickFixProvider(), plugin)

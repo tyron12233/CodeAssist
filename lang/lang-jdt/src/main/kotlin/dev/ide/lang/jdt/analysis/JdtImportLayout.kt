@@ -39,6 +39,23 @@ internal object JdtImportLayout {
         )
     }
 
+    /** Plan splicing `import static <fqn>;` (a member, `org.junit.Assert.assertEquals`) in sorted position, or
+     *  null when it, or a static on-demand import of its class, is already present. */
+    fun planStaticImport(parsed: ParsedFile, fqn: String): ImportLayout.InsertPlan? {
+        val text = parsed.text()
+        val existing = existingImports(parsed, text)
+        val owner = fqn.substringBeforeLast('.', "")
+        if (existing.any { it.entry.isStatic && (it.entry.fqn == fqn || (it.entry.isWildcard && it.entry.fqn == owner)) }) return null
+        return ImportLayout.planInsert(
+            entry = ImportEntry(fqn, isStatic = true),
+            existing = existing,
+            config = CONFIG,
+            text = text,
+            packageLineEnd = packageLineEnd(parsed, text),
+            render = ::render,
+        )
+    }
+
     private fun existingImports(parsed: ParsedFile, text: CharSequence): List<PositionedImport> {
         val out = ArrayList<PositionedImport>()
         for (n in parsed.nodesIn(parsed.range)) {
