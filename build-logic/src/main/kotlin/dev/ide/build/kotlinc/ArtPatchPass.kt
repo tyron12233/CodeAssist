@@ -84,6 +84,8 @@ object ArtPatchPasses {
                                   // top native crash, api 31/32 only) → shim the calls onto vtable dispatch
         // Same instrumentation reaches the MCP SDK and Jackson 3 jars.
         StringFormattedArtPass(), // String.formatted (API 34) in their exception messages → String.format
+        RecordReflectionArtPass(), // Class.isRecord/isSealed (API 34) in Jackson's introspection → "no": every
+                                  // record in the dex is one D8 desugared, for which the platform says no too
     )
 
     /** True if any registered pass rewrites [classFqn]. */
