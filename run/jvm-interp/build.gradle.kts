@@ -27,3 +27,13 @@ dependencies {
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(17)
 }
+
+// The test fixtures are the bytecode the VM is checked against, so they are compiled at the newest level it
+// supports: a pattern `switch` (Java 21) is what puts a `SwitchBootstraps` call site in a class file. The
+// Kotlin tests beside them stay on the project's target, which the JVM-target check would otherwise reject.
+tasks.named<JavaCompile>("compileTestJava") {
+    options.release.set(21)
+}
+tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
+    jvmTargetValidationMode.set(org.jetbrains.kotlin.gradle.dsl.jvm.JvmTargetValidationMode.WARNING)
+}

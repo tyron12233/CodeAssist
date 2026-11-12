@@ -1,5 +1,6 @@
 package dev.ide.jvm
 
+import org.objectweb.asm.ConstantDynamic
 import org.objectweb.asm.Handle
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.Type
@@ -1476,6 +1477,7 @@ internal class Interpreter(private val vm: Vm) {
             "java/lang/invoke/LambdaMetafactory" -> makeLambda(insn, frame)
             "java/lang/invoke/StringConcatFactory" -> frame.pushRef(makeConcat(insn, frame))
             "java/lang/runtime/ObjectMethods" -> recordMethod(insn, frame)
+            "java/lang/runtime/SwitchBootstraps" -> patternSwitch(insn, frame)
             else -> throw VmUnsupportedException("unsupported invokedynamic bootstrap ${bsm.owner}.${bsm.name}")
         }
     }
@@ -1533,6 +1535,82 @@ internal class Interpreter(private val vm: Vm) {
 
             else -> throw VmUnsupportedException("unsupported record method ${insn.name}")
         }
+    }
+
+    /**
+     * The label index a pattern `switch` dispatches on, linked through `SwitchBootstraps.typeSwitch` (a switch
+     * over a reference type) or `enumSwitch` (over an enum, with patterns or qualified constants). The call
+     * site is `(selector, restartIndex) -> int` and the bootstrap arguments are the case labels in source
+     * order: the answer is the first label at or after `restartIndex` the selector matches, the label count
+     * when none does (the `default` arm), and -1 for a null selector. A guard that fails re-enters with the
+     * next index, which is what `restartIndex` is for.
+     *
+     * A label is a class (`case String s`), a string or integer constant, or an enum constant, which
+     * `typeSwitch` spells as an `EnumDesc` dynamic constant and `enumSwitch` as the constant's bare name.
+     */
+    private fun patternSwitch(insn: InvokeDynamicInsnNode, frame: Frame) {
+        val enumOwner = when (insn.bsm.name) {
+            "typeSwitch" -> null
+            "enumSwitch" -> Type.getArgumentTypes(insn.desc)[0].internalName
+            else -> throw VmUnsupportedException("unsupported invokedynamic bootstrap ${insn.bsm.owner}.${insn.bsm.name}")
+        }
+        val args = popDynamicArgs(insn, frame)
+        val target = deref(args[0])
+        val restart = (args[1] as Number).toInt()
+        val labels = insn.bsmArgs
+        if (target == null) {
+            frame.pushI(-1); return
+        }
+        var index = restart
+        while (index < labels.size && !labelMatches(labels[index], target, enumOwner)) index++
+        frame.pushI(index)
+    }
+
+    private fun labelMatches(label: Any?, target: Any, enumOwner: String?): Boolean = when (label) {
+        is Type -> instanceOf(target, if (label.sort == Type.ARRAY) label.descriptor else label.internalName)
+        is String ->
+            if (enumOwner != null) isEnumConstant(target, enumOwner, label) else target == label
+        // An integer label also stands for a `byte`/`short`/`char` constant; the selector arrives boxed.
+        is Int -> when (target) {
+            is Char -> target.code == label
+            is Byte, is Short, is Int -> (target as Number).toInt() == label
+            else -> false
+        }
+        is ConstantDynamic -> enumDescOf(label).let { (owner, name) -> isEnumConstant(target, owner, name) }
+        else -> target == label
+    }
+
+    /** Whether [target] is the enum constant [owner].[name]; false when the enum declares no such constant. */
+    private fun isEnumConstant(target: Any, owner: String, name: String): Boolean {
+        val constant = try {
+            deref(staticGet(owner, name, "L$owner;"))
+        } catch (e: VmUnsupportedException) {
+            throw e
+        } catch (e: Exception) {
+            return false
+        }
+        return constant === target || (constant != null && constant == target)
+    }
+
+    /**
+     * The enum class and constant name a `typeSwitch` `EnumDesc` label names. It is a dynamic constant built
+     * by `ConstantBootstraps.invoke(EnumDesc.of, <ClassDesc constant>, "NAME")`, whose `ClassDesc` is itself
+     * `ConstantBootstraps.invoke(ClassDesc.of, "pkg.Name")` (or `ofDescriptor` with a descriptor).
+     */
+    private fun enumDescOf(label: ConstantDynamic): Pair<String, String> {
+        fun strings(c: ConstantDynamic) =
+            (0 until c.bootstrapMethodArgumentCount).map { c.getBootstrapMethodArgument(it) }
+        val parts = strings(label)
+        val name = parts.lastOrNull() as? String
+        val classDesc = parts.filterIsInstance<ConstantDynamic>().firstOrNull()
+        val className = classDesc?.let { c -> strings(c).filterIsInstance<String>().joinToString(".").ifEmpty { null } }
+        if (name == null || className == null) {
+            throw VmUnsupportedException("unsupported pattern-switch label constant ${label.name}:${label.descriptor}")
+        }
+        val owner =
+            if (className.startsWith("L") && className.endsWith(";")) className.substring(1, className.length - 1)
+            else className.replace('.', '/')
+        return owner to name
     }
 
     private fun handleRef(h: Handle) =
