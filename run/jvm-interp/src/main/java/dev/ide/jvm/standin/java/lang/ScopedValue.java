@@ -6,7 +6,9 @@ import java.util.concurrent.Callable;
 import java.util.function.Supplier;
 
 /**
- * {@code java.lang.ScopedValue} as Java 21 previews it, for a runtime that has none. The VM interprets this
+ * {@code java.lang.ScopedValue} for a runtime that has none: the API Java 25 made final, plus the members the
+ * Java 21 preview had and 25 dropped ({@code runWhere}, {@code callWhere}, {@code getWhere},
+ * {@code Carrier.get(Supplier)}), so a program written against either compiles. The VM interprets this
  * class under the name {@code java.lang.ScopedValue} (see {@code PlatformStandIns}); it lives in this package
  * only so it can be compiled and tested like any other source.
  *
@@ -42,7 +44,8 @@ public final class ScopedValue<T> {
     }
 
     public static <T, R> R callWhere(ScopedValue<T> key, T value, Callable<? extends R> op) throws Exception {
-        return where(key, value).call(op);
+        Objects.requireNonNull(op);
+        return where(key, value).<R, Exception>call(op::call);
     }
 
     public static <T, R> R getWhere(ScopedValue<T> key, T value, Supplier<? extends R> op) {
@@ -84,6 +87,12 @@ public final class ScopedValue<T> {
         return (T) b.value;
     }
 
+    /** An operation that returns a result and may throw (Java 25's argument to {@link Carrier#call}). */
+    @FunctionalInterface
+    public interface CallableOp<T, X extends Throwable> {
+        T call() throws X;
+    }
+
     /** A set of bindings to run an operation with. */
     public static final class Carrier {
         private final ScopedValue<?> key;
@@ -114,7 +123,7 @@ public final class ScopedValue<T> {
             return new Bindings(key, value, under);
         }
 
-        public <R> R call(Callable<? extends R> op) throws Exception {
+        public <R, X extends Throwable> R call(CallableOp<? extends R, X> op) throws X {
             Objects.requireNonNull(op);
             Bindings before = CURRENT.get();
             CURRENT.set(bound(before));

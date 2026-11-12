@@ -121,8 +121,7 @@ internal object HostBackports {
         }
     }
 
-    /** The `SequencedCollection` members of a `List`. `reversed()` is a reversed COPY here, not the live view the
-     *  platform returns: reading it is the same, writing through it is not reflected in the original. */
+    /** The `SequencedCollection` members of a `List`. `reversed()` is a live view ([Reversed]), as on the platform. */
     @Suppress("UNCHECKED_CAST")
     private fun sequenced(key: String): ((Any, Array<Any?>) -> Any?)? = when (key) {
         "getFirst()Ljava/lang/Object;" -> { r, _ -> (r as List<Any?>).let { if (it.isEmpty()) throw NoSuchElementException() else it[0] } }
@@ -131,8 +130,25 @@ internal object HostBackports {
         "removeLast()Ljava/lang/Object;" -> { r, _ -> (r as MutableList<Any?>).let { if (it.isEmpty()) throw NoSuchElementException() else it.removeAt(it.size - 1) } }
         "addFirst(Ljava/lang/Object;)V" -> { r, a -> (r as MutableList<Any?>).add(0, a[0]); null }
         "addLast(Ljava/lang/Object;)V" -> { r, a -> (r as MutableList<Any?>).add(a[0]); null }
-        "reversed()Ljava/util/List;" -> { r, _ -> ArrayList(r as List<Any?>).also { it.reverse() } }
+        "reversed()Ljava/util/List;" -> { r, _ -> if (r is Reversed) r.base else Reversed(r as MutableList<Any?>) }
         else -> null
+    }
+
+    /** `List.reversed()`: [base] read and written back to front, so a change through either shows in the other. */
+    private class Reversed(val base: MutableList<Any?>) : java.util.AbstractList<Any?>() {
+        override val size: Int get() = base.size
+        override fun get(index: Int): Any? = base[at(index)]
+        override fun set(index: Int, element: Any?): Any? = base.set(at(index), element)
+        override fun add(index: Int, element: Any?) {
+            if (index < 0 || index > base.size) throw IndexOutOfBoundsException("Index: $index, Size: ${base.size}")
+            base.add(base.size - index, element)
+        }
+        override fun removeAt(index: Int): Any? = base.removeAt(at(index))
+
+        private fun at(index: Int): Int {
+            if (index < 0 || index >= base.size) throw IndexOutOfBoundsException("Index: $index, Size: ${base.size}")
+            return base.size - 1 - index
+        }
     }
 
     private fun clampInt(value: Long, min: Int, max: Int): Int {

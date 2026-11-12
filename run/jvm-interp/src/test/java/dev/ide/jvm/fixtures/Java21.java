@@ -307,6 +307,16 @@ public final class Java21 {
         return first + last + l + empty;
     }
 
+    public static String reversedIsALiveView() {
+        List<Integer> list = new ArrayList<>(List.of(1, 2, 3));
+        List<Integer> back = list.reversed();
+        back.add(0);            // the end of the reversed view is the front of the list
+        list.add(9);
+        back.set(1, 8);         // back = [9, 3, 2, 1, 0], so index 1 is the 3
+        Integer removed = back.remove(0);
+        return list + " " + back + " " + removed + " " + back.reversed() + " " + back.getFirst() + back.indexOf(1);
+    }
+
     public static String stripIndentShapes() {
         return ("   a\n     b\n   c".stripIndent() + "|" + "  a\n  b\n".stripIndent() + "|" + " a  \n\n   b\n ".stripIndent() + "|"
             + "\tx\r\n\ty".stripIndent() + "|" + "".stripIndent() + "|" + "one".stripIndent()).replace("\n", "/");

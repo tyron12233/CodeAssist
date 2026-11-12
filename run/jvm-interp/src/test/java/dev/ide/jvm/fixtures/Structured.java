@@ -77,7 +77,7 @@ public final class Structured {
 
     public static String aForkSeesTheOwnersBinding() throws Exception {
         return ScopedValue.callWhere(USER, "ada", () -> {
-            try (var scope = new StructuredTaskScope<String>()) {
+            try (var scope = new StructuredTaskScope<String, Void>()) {
                 var who = scope.fork(() -> USER.get() + Thread.currentThread().isDaemon());
                 scope.join();
                 return who.get();
@@ -86,7 +86,7 @@ public final class Structured {
     }
 
     public static String theOwnerHasToJoinBeforeReading() throws Exception {
-        try (var scope = new StructuredTaskScope<Integer>()) {
+        try (var scope = new StructuredTaskScope<Integer, Void>()) {
             var one = scope.fork(() -> 1);
             String early;
             try { one.get(); early = "no"; } catch (IllegalStateException e) { early = "must join"; }
@@ -95,6 +95,92 @@ public final class Structured {
             String closed;
             try { scope.fork(() -> 2); closed = "no"; } catch (IllegalStateException e) { closed = "closed"; }
             return early + " " + one.get() + " " + closed;
+        }
+    }
+
+    // ---- the Java 25 shapes ---------------------------------------------------------------------------
+
+    public static String openAwaitsEveryFork() throws Exception {
+        try (var scope = StructuredTaskScope.open()) {
+            var a = scope.fork(() -> 20);
+            var b = scope.fork(() -> "x".repeat(2));
+            int[] ran = new int[1];
+            var c = scope.fork(() -> { ran[0] = 7; });
+            Object joined = scope.join();
+            return a.get() + b.get() + " " + ran[0] + " " + c.state() + " " + joined + " " + scope.isCancelled();
+        }
+    }
+
+    public static String openThrowsTheFirstFailure() throws Exception {
+        try (var scope = StructuredTaskScope.open()) {
+            scope.fork(() -> { Thread.sleep(30_000); return "late"; });
+            scope.fork(() -> { throw new IllegalStateException("broken"); });
+            try {
+                scope.join();
+                return "no";
+            } catch (StructuredTaskScope.FailedException e) {
+                return e.getCause().getClass().getSimpleName() + ":" + e.getCause().getMessage() + " " + scope.isCancelled();
+            }
+        }
+    }
+
+    public static String anySuccessfulResult() throws Exception {
+        try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.<String>anySuccessfulResultOrThrow())) {
+            scope.fork(() -> { Thread.sleep(30_000); return "slow"; });
+            scope.fork(() -> "fast");
+            return scope.join();
+        }
+    }
+
+    public static String allSuccessfulResults() throws Exception {
+        try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.<Integer>allSuccessfulOrThrow())) {
+            for (int i = 1; i <= 4; i++) { int n = i; scope.fork(() -> n * n); }
+            return "" + scope.join().mapToInt(StructuredTaskScope.Subtask::get).sum();
+        }
+    }
+
+    public static String theTimeoutCancelsTheScope() throws Exception {
+        try (var scope = StructuredTaskScope.open(
+            StructuredTaskScope.Joiner.<String>awaitAll(), cf -> cf.withName("t").withTimeout(java.time.Duration.ofMillis(60)))) {
+            var slow = scope.fork(() -> { Thread.sleep(30_000); return "slow"; });
+            try {
+                scope.join();
+                return "no";
+            } catch (StructuredTaskScope.TimeoutException e) {
+                return "timeout " + slow.state() + " " + scope.isCancelled();
+            }
+        }
+    }
+
+    public static String allUntilStopsEarly() throws Exception {
+        var done = new java.util.concurrent.atomic.AtomicInteger();
+        try (var scope = StructuredTaskScope.open(
+            StructuredTaskScope.Joiner.<String>allUntil(s -> done.incrementAndGet() >= 2))) {
+            scope.fork(() -> "a");
+            scope.fork(() -> "b");
+            scope.fork(() -> { Thread.sleep(30_000); return "c"; });
+            long finished = scope.join().filter(s -> s.state() == StructuredTaskScope.Subtask.State.SUCCESS).count();
+            return finished + " " + scope.isCancelled();
+        }
+    }
+
+    public static String awaitAllIgnoresFailures() throws Exception {
+        try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.<String>awaitAll())) {
+            var ok = scope.fork(() -> "ok");
+            var bad = scope.fork(() -> { throw new IllegalStateException("x"); });
+            scope.join();
+            return ok.get() + " " + bad.state() + " " + bad.exception().getMessage();
+        }
+    }
+
+    public static String carrierCallWithACheckedException() {
+        try {
+            return ScopedValue.where(USER, "ada").call(() -> {
+                if (USER.get().length() == 3) throw new java.io.IOException("io");
+                return "no";
+            });
+        } catch (java.io.IOException e) {
+            return e.getMessage() + USER.isBound();
         }
     }
 }
