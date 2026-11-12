@@ -65,9 +65,24 @@ fun testKotlinSourceFiles(module: Module): List<Path> = filesUnder(testSourceRoo
 fun hasTestSources(module: Module): Boolean =
     testSourceRootDirs(module).any { root -> filesUnder(listOf(root), ".kt").isNotEmpty() || filesUnder(listOf(root), ".java").isNotEmpty() }
 
-/** The RESOURCE roots of the test source sets. */
-fun testResourceRoots(module: Module): List<Path> = module.sourceSets.filter(::isTestSourceSet)
-    .flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }.map { Paths.get(it.dir.path) }
+/**
+ * The RESOURCE roots of the test source sets: the ones the model declares, plus each set's conventional
+ * `resources` folder (beside its source roots, and `src/<set>/resources`) where that exists on disk. A test set is
+ * usually declared with its source roots alone, so without the convention `src/test/resources` was never staged
+ * and a test's `getResource` found nothing.
+ */
+fun testResourceRoots(module: Module): List<Path> {
+    val out = LinkedHashMap<Path, Path>()
+    fun add(dir: Path) { out.putIfAbsent(dir.toAbsolutePath().normalize(), dir) }
+    for (set in module.sourceSets.filter(::isTestSourceSet)) {
+        set.contentRoots.filter { ContentRole.RESOURCE in it.roles }.forEach { add(Paths.get(it.dir.path)) }
+        val conventional = set.contentRoots.filter { ContentRole.SOURCE in it.roles }
+            .mapNotNull { Paths.get(it.dir.path).parent?.resolve("resources") } +
+            moduleDir(module).resolve("src").resolve(set.name).resolve("resources")
+        conventional.filter { Files.isDirectory(it) }.forEach(::add)
+    }
+    return out.values.toList()
+}
 
 /** Java test classes, beside the main `classes`. */
 fun testOutputDir(module: Module): Path = outputDir(module).resolveSibling("test-classes")

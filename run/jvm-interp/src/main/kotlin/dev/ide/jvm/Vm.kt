@@ -21,6 +21,18 @@ fun interface ClassBytesSource {
     }
 }
 
+/**
+ * The resources on the PROGRAM's classpath, by the `/`-separated name a class loader takes (`assets/test.txt`),
+ * in classpath order; empty when it has none by that name.
+ *
+ * An interpreted class is not defined by a loader that has ever seen the program's classpath: its `Class` is a
+ * stand-in defined in the host, so `getResource` on it (or on its loader, or the thread's context loader)
+ * searched the IDE's own classpath and answered null for every file the project ships.
+ */
+fun interface ProgramResources {
+    fun find(name: String): List<java.net.URL>
+}
+
 /** Decides which classes the interpreter runs; the rest are handled by the [NativeBridge]. */
 fun interface InterpretPolicy {
     fun interpret(internalName: String): Boolean
@@ -141,6 +153,9 @@ class Vm(
     /** Instructions one contained peer call may run (0 = unlimited); only with [peerFailure]. */
     private val peerStepBudget: Long = 0,
 ) {
+    /** See [ProgramResources]; null (the default) leaves every resource lookup to the host. */
+    @Volatile var programResources: ProgramResources? = null
+
     private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
     private val reflection = InterpretedReflection(this)
@@ -529,6 +544,9 @@ class Vm(
             val internal = (args.getOrNull(0) as? String)?.replace('.', '/') ?: return null
             return classForInterpreted(internal)?.let { Reflected(it) }
         }
+        programResources?.let { resources ->
+            programResource(resources, receiver, owner, name, descriptor, args)?.let { return it }
+        }
         // Class.asSubclass(Base.class) on a reflection Class: verify against the interpreted hierarchy.
         if (receiver is Class<*> && name == "asSubclass") {
             val recvName = peerFactory.interpretedNameOf(receiver) ?: return null
@@ -623,6 +641,59 @@ class Vm(
             return Reflected(VmArray.multi("[".repeat(dims.size) + element, dims))
         }
         return null
+    }
+
+    /**
+     * `getResource` / `getResourceAsStream` / `getResources` asked of a `Class` or a `ClassLoader` (and the
+     * `ClassLoader.getSystemResource*` statics), answered from the program's classpath first. Null when the
+     * program has no such resource, which leaves the call to the host as before, so a bridged library's own
+     * files still resolve.
+     */
+    private fun programResource(
+        resources: ProgramResources,
+        receiver: Any?,
+        owner: String,
+        name: String,
+        descriptor: String,
+        args: List<Any?>,
+    ): Reflected? {
+        val system = receiver == null && owner == "java/lang/ClassLoader"
+        val kind = when {
+            !(receiver is Class<*> || receiver is ClassLoader || system) -> return null
+            descriptor == "(Ljava/lang/String;)Ljava/net/URL;" &&
+                name == (if (system) "getSystemResource" else "getResource") -> 0
+            descriptor == "(Ljava/lang/String;)Ljava/io/InputStream;" &&
+                name == (if (system) "getSystemResourceAsStream" else "getResourceAsStream") -> 1
+            descriptor == "(Ljava/lang/String;)Ljava/util/Enumeration;" && receiver !is Class<*> &&
+                name == (if (system) "getSystemResources" else "getResources") -> 2
+            else -> return null
+        }
+        val asked = args.getOrNull(0) as? String ?: return null
+        // A Class resolves a name against its own package unless it starts with `/`; a loader takes it as is.
+        val path = when {
+            receiver !is Class<*> -> asked
+            asked.startsWith("/") -> asked.substring(1)
+            else -> {
+                val self = peerFactory.interpretedNameOf(receiver) ?: receiver.name.replace('.', '/')
+                val pkg = self.substringBeforeLast('/', "")
+                if (pkg.isEmpty()) asked else "$pkg/$asked"
+            }
+        }
+        val found = runCatching { resources.find(path) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        return when (kind) {
+            0 -> Reflected(found.first())
+            // Uncached, so a jar the run closes (or the user rebuilds) is not held open by the URL handler.
+            1 -> runCatching { found.first().openConnection().apply { useCaches = false }.getInputStream() }
+                .getOrNull()?.let { Reflected(it) }
+            else -> {
+                val host = runCatching {
+                    val real = if (system) bridge.invokeStatic(owner, name, descriptor, args)
+                    else bridge.invokeVirtual(receiver!!, name, descriptor, args)
+                    (real as? java.util.Enumeration<*>)?.toList().orEmpty()
+                }.getOrDefault(emptyList())
+                Reflected(java.util.Collections.enumeration((found + host).distinct()))
+            }
+        }
     }
 
     /** The simple name `Class.getSimpleName` reports for interpreted internal name [internalName]: the last

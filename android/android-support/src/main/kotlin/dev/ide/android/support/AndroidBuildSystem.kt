@@ -99,6 +99,7 @@ import dev.ide.build.engine.collapseNestedRoots
 import dev.ide.build.engine.jarPath
 import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.outputDir
+import dev.ide.build.engine.testResourceRoots
 import dev.ide.build.jvm.JavaPlugin
 import dev.ide.build.jvm.compose.ComposeResourcesFacet
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
@@ -1408,7 +1409,9 @@ class AndroidBuildSystem(
                 run, m, test.selector, test.interpreter, test.io,
                 testDirs = { listOf(kotlinOut, javaOut) },
                 runtimeClasspath = {
-                    (listOf(kotlinOut, javaOut) + testClasspath.filter { it.toAbsolutePath().normalize() !in platformSet } +
+                    // The test sets' Java resources are read where they lie, as a local unit test finds them
+                    // on its classpath; nothing packages them, so there is no copy to stage.
+                    (listOf(kotlinOut, javaOut) + testResourceRoots(m) + testClasspath.filter { it.toAbsolutePath().normalize() !in platformSet } +
                         if (hostHasAndroid) emptyList() else platform)
                         .filter { Files.isDirectory(it) || Files.isRegularFile(it) }
                 },

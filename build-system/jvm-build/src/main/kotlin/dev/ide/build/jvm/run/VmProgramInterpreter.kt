@@ -11,6 +11,7 @@ import dev.ide.jvm.InterpretPolicy
 import dev.ide.jvm.PeerDispatch
 import dev.ide.jvm.PeerFactory
 import dev.ide.jvm.PeerSpec
+import dev.ide.jvm.ProgramResources
 import dev.ide.jvm.Vm
 import dev.ide.jvm.VmInterruptedException
 import dev.ide.jvm.VmMethodView
@@ -27,6 +28,7 @@ import java.io.PrintStream
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.lang.reflect.UndeclaredThrowableException
+import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.jar.JarFile
@@ -82,6 +84,7 @@ class VmProgramInterpreter(
         val windows = ProgramWindows()
         val bridge = RunBridge(javaClass.classLoader, windows, request.classpath)
         val vm = Vm(source, policyFor(request), bridge, WindowTrackingPeers(peerFactory, windows), SPAWNED_STACK_BYTES)
+        vm.programResources = classpathResources(request.classpath, jars)
         val outcome = Outcome()
         // A dedicated group so every Thread the program starts (a real host thread, created by the creating
         // thread) inherits it and can be interrupted together on Stop, and so what those threads throw is
@@ -251,6 +254,31 @@ class VmProgramInterpreter(
             val rel = "$internalName.class"
             dirs.firstNotNullOfOrNull { d -> d.resolve(rel).takeIf { Files.isRegularFile(it) }?.let { Files.readAllBytes(it) } }
                 ?: jars.firstNotNullOfOrNull { jar -> jar.getJarEntry(rel)?.let { e -> jar.getInputStream(e).use { it.readBytes() } } }
+        }
+    }
+
+    /**
+     * The program's resources, found on [classpath] in its own order: a file under a directory entry, or an entry
+     * of one of the already-open [jars]. This is what makes `javaClass.getResource("/assets/test.txt")` find
+     * `src/test/resources/assets/test.txt` during a test run (see [ProgramResources]).
+     */
+    private fun classpathResources(classpath: List<Path>, jars: List<JarFile>): ProgramResources {
+        val jarByPath = jars.associateBy { it.name }
+        return ProgramResources { name ->
+            if (name.isEmpty()) return@ProgramResources emptyList()
+            classpath.mapNotNull { entry ->
+                runCatching {
+                    val jar = jarByPath[entry.toFile().path]
+                    if (jar != null) {
+                        jar.getJarEntry(name)?.let { URL("jar:${entry.toUri().toURL()}!/${name.replace(" ", "%20")}") }
+                    } else {
+                        // Never outside the entry: a name with `..` in it is not a resource of this classpath.
+                        val root = entry.toAbsolutePath().normalize()
+                        root.resolve(name).normalize().takeIf { it.startsWith(root) && it != root && Files.exists(it) }
+                            ?.toUri()?.toURL()
+                    }
+                }.getOrNull()
+            }
         }
     }
 

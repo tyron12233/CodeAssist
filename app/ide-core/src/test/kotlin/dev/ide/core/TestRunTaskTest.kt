@@ -124,6 +124,34 @@ class TestRunTaskTest {
         }
     }
 
+    /**
+     * `src/test/resources` is on a test's classpath although the test set declares only its source root, and an
+     * interpreted class finds it through its `Class`, its loader and the thread's context loader alike.
+     */
+    @Test
+    fun aTestReadsItsOwnResources() {
+        withTempDir("test-run-resources") { dir ->
+            createWorkspace(dir)
+            write(dir.resolve("app/src/test/resources/assets/test.txt"), "hello from resources")
+            write(dir.resolve("app/src/test/resources/com/example/beside.txt"), "beside the class")
+            write(dir.resolve("app/src/test/kotlin/com/example/ResourceTest.kt"), RESOURCE_TEST)
+            IdeServices.open(dir).use { ide ->
+                ide.build.runTask(TestOutput.taskId("app", listOf("com.example.ResourceTest")))
+                await(180_000) { ide.build.runConsole.value?.phase == RunPhase.Finished }
+                val rc = assertNotNull(ide.build.runConsole.value)
+                val view = TestOutput.split(rc.transcript)
+                val shown = view.transcript.joinToString("") { it.text }
+                val tests = assertNotNull(view.tests, shown)
+                assertEquals(
+                    listOf("readsResources" to UiTestStatus.Passed),
+                    tests.cases.map { it.name to it.status },
+                    tests.cases.joinToString { it.message } + "\n" + shown,
+                )
+                assertEquals(0, rc.exitCode)
+            }
+        }
+    }
+
     /** The agent's `run_tests`: the same run, answered as text that names each failure and why. */
     @Test
     fun theAgentsRunTestsToolReportsEachFailure() {
@@ -257,6 +285,28 @@ class TestRunTaskTest {
     }
 
     private companion object {
+        const val RESOURCE_TEST = """
+            package com.example
+
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+            import kotlin.test.assertNotNull
+            import kotlin.test.assertNull
+
+            class ResourceTest {
+                @Test fun readsResources() {
+                    val url = assertNotNull(javaClass.getResource("/assets/test.txt"), "Class.getResource")
+                    assertEquals("hello from resources", url.readText())
+                    assertEquals("hello from resources", javaClass.getResourceAsStream("/assets/test.txt")!!.bufferedReader().use { it.readText() })
+                    assertEquals("beside the class", javaClass.getResourceAsStream("beside.txt")!!.bufferedReader().use { it.readText() })
+                    assertNotNull(javaClass.classLoader.getResource("assets/test.txt"), "ClassLoader.getResource")
+                    assertEquals("hello from resources", Thread.currentThread().contextClassLoader.getResourceAsStream("assets/test.txt")!!.bufferedReader().use { it.readText() })
+                    assertEquals(1, javaClass.classLoader.getResources("assets/test.txt").toList().size)
+                    assertNull(javaClass.getResource("/assets/missing.txt"))
+                }
+            }
+        """
+
         const val GREETER = """
             package com.example
 
@@ -291,4 +341,5 @@ class TestRunTaskTest {
             }
         """
     }
+
 }
