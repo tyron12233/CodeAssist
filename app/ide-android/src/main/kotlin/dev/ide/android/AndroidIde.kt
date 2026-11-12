@@ -1045,15 +1045,52 @@ object AndroidIde {
      * treats as a valid home — see `legacyInternalHome` / `importLegacyProjects`).
      */
     fun externalHome(context: Context): File {
+        resolvedExternalHome?.let { return it }
+        precreateExternalFilesDir(context)
         val external = context.getExternalFilesDir(null)
         if (external != null &&
             Environment.getExternalStorageState(external) == Environment.MEDIA_MOUNTED &&
             (external.isDirectory || external.mkdirs()) &&
             external.canWrite()
         ) {
+            resolvedExternalHome = external
             return external
         }
         return context.filesDir
+    }
+
+    /**
+     * The usable external home, once found. Every later caller (there are dozens, some on the main thread)
+     * would otherwise take the context's directory lock and stat the volume again for an answer that does not
+     * change while the process lives. The internal fallback is not kept: storage that was not ready at the
+     * first ask may be by the next.
+     */
+    @Volatile private var resolvedExternalHome: File? = null
+
+    /**
+     * Creates `Android/data/<pkg>/files` before the platform is asked for it.
+     *
+     * `Context.getExternalFilesDir` creates the directory itself when it is missing, and does so while holding
+     * the one lock every directory getter of the context shares. On slow external storage that `mkdir` takes
+     * seconds, so a first launch that resolved the home on a worker thread froze the main thread the moment it
+     * asked the context for any other directory: an ANR with the main thread blocked in `getNoBackupFilesDir`
+     * and the worker inside `mkdirs`. Created here first, outside that lock, the platform's call only finds the
+     * directory there. A failure is left for the platform's own creation, which can also ask the storage
+     * service to make it.
+     */
+    private fun precreateExternalFilesDir(context: Context) {
+        runCatching {
+            val dir = expectedExternalFilesDir(context) ?: return
+            if (!dir.isDirectory) dir.mkdirs()
+        }
+    }
+
+    /** Where `getExternalFilesDir(null)` puts the app's files on the primary volume, worked out without asking
+     *  the context (and so without its lock); null when that volume is not mounted. */
+    internal fun expectedExternalFilesDir(context: Context): File? {
+        if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) return null
+        @Suppress("DEPRECATION") val volume = Environment.getExternalStorageDirectory() ?: return null
+        return File(volume, "Android/data/${context.packageName}/files")
     }
 
     /** The whole CodeAssist app directory (`<external-files>/codeassist`): projects, the SDK `android.jar`,
