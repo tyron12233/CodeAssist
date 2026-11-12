@@ -14,7 +14,13 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * `use` on an `AutoCloseable` that is not a `Closeable` resolves, whichever `use` the file imports. The stdlib
+ * `use` on an `AutoCloseable` that is not a `Closeable` resolves, whichever `use` the file imports.
+ *
+ * The receiver here is a project class written `: AutoCloseable`. With the package-declaration index present
+ * (as in the IDE, and as in this fixture) that bare name is the stdlib's `kotlin.AutoCloseable` TYPEALIAS, not
+ * `java.lang.AutoCloseable`, and a supertype chain that carried only the alias name never reached the extension,
+ * which is keyed under the type the alias expands to. Reported from a device as "Unresolved reference: use".
+ * The stdlib
  * compiles that overload into `kotlin/jdk7/AutoCloseableKt` under `@JvmPackageName`, but it is `kotlin.use`:
  * reading its package off the class entry made `import kotlin.use` an unresolved reference on the indexed path.
  */
@@ -61,7 +67,7 @@ class KotlinAutoCloseableUseImportTest {
             .map { it.resolve("android.jar") }.filter { Files.isRegularFile(it) }
             .maxByOrNull { it.parent.fileName.toString() }
         private val jars = listOfNotNull(stdlibJarPath(), androidJar)
-        private val index = IndexServiceImpl(listOf(KotlinTypeShapeIndex, KotlinBuiltinsIndex, KotlinCallableIndex), Files.createTempDirectory("use-idx"))
+        private val index = IndexServiceImpl(listOf(KotlinTypeShapeIndex, KotlinBuiltinsIndex, KotlinCallableIndex, dev.ide.lang.kotlin.index.KotlinPackageDeclIndex, dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex), Files.createTempDirectory("use-idx"))
             .also { if (androidJar != null) runBlocking { it.ensureUpToDate(IndexScope(libraryJars = jars)) } }
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir, libJars = jars)).also { it.indexService = index }
 

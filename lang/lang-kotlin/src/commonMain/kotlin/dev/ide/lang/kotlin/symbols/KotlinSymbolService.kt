@@ -3094,12 +3094,25 @@ class KotlinSymbolService(
         // Record BOTH names, the JVM one first so "nearest supertype" ordering (overload specificity, common
         // supertype) is unchanged. Only the name is added — the recursion below already walks the mapped
         // type's own supertypes, since it maps its input the same way.
+        //
+        // A LIBRARY TYPEALIAS is the same kind of second name: `class FakeResource : AutoCloseable` resolves the
+        // bare name to the stdlib's `kotlin.AutoCloseable`, an alias of `java.lang.AutoCloseable`, and the alias
+        // name alone is in no receiver key. `AutoCloseable.use` is keyed under the type it expands to, so the
+        // call read as an unresolved reference on any class that named the supertype the Kotlin way. The target
+        // is recorded next to the alias, and walked in its own right.
         val out = LinkedHashSet<String>()
+        val aliasTargets = ArrayList<String>()
         direct.forEach { d ->
             out += d
             Builtins.kotlinTypeFor(d)?.let { out += it }
+            libraryTypeAliasTarget(d)?.takeIf { it != d }?.let { target ->
+                out += target
+                Builtins.kotlinTypeFor(target)?.let { out += it }
+                aliasTargets += target
+            }
         }
         direct.forEach { out += kotlinSupertypes(it, visited) }
+        aliasTargets.forEach { out += kotlinSupertypes(it, visited) }
         return out.toList()
     }
 
