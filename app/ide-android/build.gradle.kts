@@ -437,6 +437,22 @@ dependencies {
     r8StaxRuntime(libs.stax2.api)
 }
 
+// The R8 the forked VM runs is dexed below straight from the R8 jar, so it never passes through the app's
+// bytecode instrumentation, and R8 reads every Android resource with `InputStream.readAllBytes()` (API 33): a
+// release build with shrinking on failed below Android 13. Run the same ART passes over the jar first, and
+// give it the shim they route those calls to (:lang-jdt's InputStreamCompat), which the fork's classpath lacks.
+val patchR8ForArt = tasks.register<dev.ide.build.kotlinc.ArtPatchJarTask>("patchR8ForArt") {
+    description = "Apply the ART bytecode passes to the R8 jar the forked dexer and shrinker run."
+    dependsOn(":lang-jdt:compileJava")
+    inputJar.from(r8DexTool)
+    shims.from(
+        project(":lang-jdt").layout.buildDirectory.dir("classes/java/main").map {
+            fileTree(it) { include("dev/ide/lang/jdt/compat/InputStreamCompat*.class") }
+        },
+    )
+    outputJar.set(layout.buildDirectory.file("r8-art/r8-art.jar"))
+}
+
 val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
     description = "D8-dex the R8 tool jar, with its resources, into a forked-VM-loadable r8.dex.zip asset."
     val outZip = layout.buildDirectory.file("r8-dex-asset/r8.dex.zip")
@@ -448,6 +464,9 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
     // location in the Gradle cache never enters the key. `args` is assembled in doFirst (after Gradle has
     // snapshotted inputs) but is derived entirely from this jar, so it adds nothing to the key.
     inputs.files(r8DexTool).withPropertyName("r8Tool").withNormalizer(ClasspathNormalizer::class)
+    // What gets dexed is the patched jar; the unpatched one above only runs D8 here on the build host.
+    val patchedR8 = patchR8ForArt.flatMap { it.outputJar }
+    inputs.file(patchedR8).withPropertyName("patchedR8").withNormalizer(ClasspathNormalizer::class)
     inputs.files(r8StaxRuntime).withPropertyName("staxRuntime").withNormalizer(ClasspathNormalizer::class)
     outputs.file(outZip).withPropertyName("r8DexZip")
     outputs.cacheIf("r8.dex.zip is a pure function of the pinned r8 + StAX jars") { true }
@@ -460,7 +479,7 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
             "--release",
             "--min-api", "26",
             "--output", dexOnly.absolutePath,
-            r8DexTool.singleFile.absolutePath,
+            patchedR8.get().asFile.absolutePath,
         ) + r8StaxRuntime.files.map { it.absolutePath }
     }
     // Combine D8's `classes*.dex` with every non-class entry of the source jar into one zip. A classloader

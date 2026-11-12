@@ -25,6 +25,8 @@ dependencies {
     // that moves or adds an API-33 stream call site fails the build instead of the device. Keep the version
     // aligned with `jgit` in gradle/libs.versions.toml.
     testImplementation("org.eclipse.jgit:org.eclipse.jgit:6.10.1.202505221210-r")
+    // R8, checked the same way. Keep the version aligned with `r8` in gradle/libs.versions.toml.
+    testImplementation("com.android.tools:r8:8.13.19")
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation(kotlin("test"))

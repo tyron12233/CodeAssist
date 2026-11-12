@@ -134,6 +134,34 @@ class EclipseStreamArtPassTest {
         assertEquals(emptyList(), after, "every API 33 stream call site in JGit must be routed through the shim")
     }
 
+    @Test
+    fun handlesR8() {
+        assertTrue(pass.handles("com.android.tools.r8.R8"))
+        assertTrue(pass.handles("com.android.tools.r8.utils.i"))
+    }
+
+    /** R8 reads every Android resource with `readAllBytes()`: a release build with shrinking on, below API 33. */
+    @Test
+    fun leavesNoApi33StreamCallSiteInTheR8Jar() {
+        val source = Class.forName("com.android.tools.r8.R8").protectionDomain.codeSource
+        val before = ArrayList<Call>()
+        val after = ArrayList<Call>()
+        JarFile(java.io.File(source.location.toURI())).use {
+            for (entry in it.entries()) {
+                if (!entry.name.endsWith(".class")) continue
+                val bytes = it.getInputStream(entry).use { stream -> stream.readBytes() }
+                if (!pass.handles(entry.name.removeSuffix(".class").replace('/', '.'))) continue
+                val calls = callsIn(bytes).filter(::isApi33StreamCall)
+                if (calls.isEmpty()) continue // most of the jar: skip the rewrite, the scan above is the proof
+                before += calls
+                after += callsIn(runPass(bytes)).filter(::isApi33StreamCall)
+            }
+        }
+
+        assertTrue(before.isNotEmpty(), "the jar under test must contain the call sites the pass rewrites")
+        assertEquals(emptyList(), after, "every API 33 stream call site in R8 must be routed through the shim")
+    }
+
     /** A call ART cannot resolve below API 33: one of the six members, on a receiver that inherits it. */
     private fun isApi33StreamCall(call: Call): Boolean = when {
         call.owner == outputStream -> call.name == "nullOutputStream"

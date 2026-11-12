@@ -45,7 +45,13 @@ import org.objectweb.asm.Opcodes
  * call sites in the new jar whose owner is neither `java/io/InputStream` nor a class declaring its own
  * override.
  *
- * Scoped to `org.eclipse.` so only the relocated ecj / jdt.core / Eclipse-runtime / JGit jars are visited;
+ * R8 is the third library. Its Android-resource path (resource shrinking, and copying resources into the
+ * output) reads every resource with `InputStream.readAllBytes()`, so a release build with shrinking on failed
+ * with that [NoSuchMethodError] on any device below API 33. The copy dexed into the app is rewritten here like
+ * the Eclipse jars; the copy a forked VM runs is a separate dex built from the R8 jar, which
+ * [ArtPatchJarTask] passes through the same rewrite and gives the shim.
+ *
+ * Scoped to `org.eclipse.` and `com.android.tools.r8.`, so only those jars are visited;
  * the rest of the app (which is compiled against the project's own API floor) is left untouched. Like the
  * Kotlin-compiler passes this rides AGP instrumentation (scope = ALL), so it reaches the dexed dependency
  * jars during the Android build.
@@ -54,7 +60,7 @@ class EclipseStreamArtPass : ArtPatchPass {
 
     override val name: String = "eclipse-stream-backport"
 
-    override fun handles(classFqn: String): Boolean = classFqn.startsWith("org.eclipse.")
+    override fun handles(classFqn: String): Boolean = PREFIXES.any { classFqn.startsWith(it) }
 
     override fun visitor(classFqn: String, next: ClassVisitor): ClassVisitor = Rewriter(next)
 
@@ -113,6 +119,9 @@ class EclipseStreamArtPass : ArtPatchPass {
     }
 
     private companion object {
+        /** The dexed libraries whose stream calls are rewritten: the Eclipse jars, and R8. */
+        val PREFIXES = listOf("org.eclipse.", "com.android.tools.r8.")
+
         const val INPUT_STREAM = "java/io/InputStream"
         const val OUTPUT_STREAM = "java/io/OutputStream"
         const val SHIM = "dev/ide/lang/jdt/compat/InputStreamCompat"
