@@ -3191,6 +3191,36 @@ class KotlinSymbolService(
     }
 
     /**
+     * The `import` lines that would bring a Java class's STATIC named [name] into scope: `org.junit.Assert.assertEquals`
+     * for a bare `assertEquals(…)`. Kotlin imports a Java static by simple name, as it does an `object`'s member,
+     * and a test written against JUnit has no other way to call one unqualified.
+     *
+     * Read from the `java.members` index, which keys every library member by name without saying whether it is
+     * static or visible, so each owner's member is then checked on its class shape. A name carried by more than
+     * [MAX_STATIC_OWNERS] classes (`get`, `toString`, `valueOf`) is an everyday instance member, where a list of
+     * statics would be noise and the per-owner check is not worth its cost: nothing is offered.
+     *
+     * Only a public top-level library class is an owner; a project `.java` class's statics are not offered yet
+     * (the index names a source member's owner by simple name only).
+     */
+    fun javaStaticImportCandidates(name: String): List<String> {
+        if (name.isEmpty()) return emptyList()
+        val idx = index ?: return emptyList()
+        val owners = idx.exact<MemberValue>(JAVA_MEMBERS, name)
+            .filter { it.name == name && '.' in it.owner }.mapTo(LinkedHashSet()) { it.owner }
+        if (owners.isEmpty() || owners.size > MAX_STATIC_OWNERS) return emptyList()
+        return owners.filter { owner ->
+            excludedTypePrefixes.none { owner.startsWith(it) } &&
+                // `java.classNames` holds public types only, which is the visibility check on the class.
+                idx.exact<ClassNameValue>(JAVA_CLASS_NAMES, owner.substringAfterLast('.')).any { it.fqn == owner } &&
+                membersForCompletion(owner, emptyList(), name, exactName = true).any {
+                    it.name == name && Modifier.STATIC in it.modifiers &&
+                        Modifier.PRIVATE !in it.modifiers && Modifier.PROTECTED !in it.modifiers
+                }
+        }.map { "$it.$name" }.sorted()
+    }
+
+    /**
      * The CALLABLE half of [importCandidates], each candidate paired with its [KotlinSymbol]: every importable
      * function/property named exactly [name] (top-level, extension, or singleton member), with the FQN an
      * `import` line would spell.
@@ -4599,6 +4629,10 @@ class KotlinSymbolService(
         private val PACKAGES = PackagesIndex.ALL
         private val PACKAGE_TYPES = PackageTypesIndex.ALL
         private val MEMBERS_BY_OWNER = IndexId("java.membersByOwner")
+        private val JAVA_MEMBERS = IndexId("java.members")
+
+        /** Past this many classes declaring a member of one name, [javaStaticImportCandidates] offers nothing. */
+        private const val MAX_STATIC_OWNERS = 40
         private val SOURCE = SymbolOrigin(fromSource = true, file = null)
         private val BINARY = SymbolOrigin(fromSource = false, file = null)
 

@@ -424,6 +424,11 @@ class KotlinEditorFeatures(
                 if (candidates.size < 2) emptySet()
                 else deadBareExtensions(name, d.range.start, parsed.ktFile, resolver)
             candidates.forEach { if (it !in dead) offer(it) }
+            // A bare name can also be a Java class's static (`assertEquals` from `org.junit.Assert`), which is
+            // not a Kotlin callable and so is in no callable index. After the Kotlin candidates, so a Kotlin
+            // namesake (`kotlin.test.assertEquals`) is listed first. `x.name` never reaches a static.
+            val ref = parsed.ktFile.findElementAt(d.range.start)?.getParentOfType<KtNameReferenceExpression>()
+            if (ref != null && !isQualifiedSelector(ref)) service.javaStaticImportCandidates(name).forEach(::offer)
         }
         if (delegateOps.isNotEmpty()) {
             for (prop in delegatePropertiesCovering(parsed.ktFile, offset)) {
