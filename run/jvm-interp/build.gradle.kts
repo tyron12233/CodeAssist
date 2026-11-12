@@ -16,6 +16,9 @@ dependencies {
     implementation(libs.ow2.asm.tree)
     // GeneratorAdapter for emitting the real peer subclasses that route platform callbacks into the interpreter.
     implementation(libs.ow2.asm.commons)
+    // The compiler the IDE builds user code with. Its bytecode for the same source differs from javac's (how a
+    // switch over an enum or a pattern is lowered), so the Java fixtures are also compiled with it and run.
+    testImplementation(libs.jdt.ecj)
 
     // The uniform test stack (JUnit 5 + kotlin-test) is added to every Kotlin/JVM module by the root build.
     // The Java fixtures compiled by the test source set become the real bytecode we interpret, with the real
@@ -36,4 +39,26 @@ tasks.named<JavaCompile>("compileTestJava") {
 }
 tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
     jvmTargetValidationMode.set(org.jetbrains.kotlin.gradle.dsl.jvm.JvmTargetValidationMode.WARNING)
+}
+
+// The stand-ins for platform classes a host may lack (dev.ide.jvm.standin, see PlatformStandIns) are ordinary
+// sources here, but the VM needs them as BYTECODE to interpret, and on Android a jar's .class entries become
+// dex. So their class files are also shipped as resources under another extension, with a list of them.
+val standinClassResources = tasks.register<Sync>("standinClassResources") {
+    val out = layout.buildDirectory.dir("standin-resources")
+    from(tasks.named<JavaCompile>("compileJava").flatMap { it.destinationDirectory }) {
+        include("dev/ide/jvm/standin/**/*.class")
+        rename { it.removeSuffix(".class") + ".bin" }
+        into("standin-classes")
+    }
+    into(out)
+    doLast {
+        val root = out.get().asFile.resolve("standin-classes")
+        val names = root.walkTopDown().filter { it.isFile && it.extension == "bin" }
+            .map { it.relativeTo(root).invariantSeparatorsPath.removeSuffix(".bin") }.sorted().toList()
+        root.resolve("index.txt").writeText(names.joinToString("\n"))
+    }
+}
+sourceSets.named("main") {
+    resources.srcDir(files(layout.buildDirectory.dir("standin-resources")).builtBy(standinClassResources))
 }

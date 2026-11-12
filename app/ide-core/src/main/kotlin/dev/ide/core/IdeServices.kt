@@ -6290,8 +6290,17 @@ class IdeServices private constructor(
             return CorePlatformProvider.coreJavaSdk(
                 androidJar,
                 stubs,
-                baseDir.resolve(".platform/caches/core-platform")
+                baseDir.resolve(".platform/caches/core-platform"),
+                // A console program runs in the bytecode VM, which supplies the Java 21 API android.jar lacks
+                // (virtual-thread builders, ScopedValue, StructuredTaskScope): declare it, so it compiles too.
+                VmApiAdditions,
             )
+        }
+
+        private object VmApiAdditions : CorePlatformProvider.ApiAdditions {
+            override val version get() = dev.ide.jvm.CoreJavaApiAdditions.VERSION
+            override fun rewrite(entryName: String, bytes: ByteArray) = dev.ide.jvm.CoreJavaApiAdditions.rewrite(entryName, bytes)
+            override fun additions(has: (String) -> Boolean) = dev.ide.jvm.CoreJavaApiAdditions.additions(has)
         }
 
         /** Open an existing workspace at [root] (used by the "Open Project…" picker). */

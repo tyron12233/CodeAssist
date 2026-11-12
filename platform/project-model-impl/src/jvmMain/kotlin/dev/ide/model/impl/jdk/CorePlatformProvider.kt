@@ -20,6 +20,8 @@ import java.util.zip.ZipOutputStream
  * exactly android.jar minus the `android.*` classes that must never appear in a non-Android module. The
  * result mirrors what Gradle gives a `java-library`: the JDK, not the Android SDK.
  *
+ * The host can add to that surface what its runtime for console programs supplies itself ([ApiAdditions]).
+ *
  * The filtered jar is content-addressed under a cache dir and generated once; core-lambda-stubs
  * (`StringConcatFactory`/`LambdaMetafactory`, which android.jar omits) join the boot classpath separately.
  */
@@ -40,22 +42,41 @@ object CorePlatformProvider {
     )
 
     /**
+     * API the host's runtime for console programs supplies beyond what `android.jar` declares (the bytecode VM's
+     * Java 21 thread API, `ScopedValue`, `StructuredTaskScope`), so a program using it also COMPILES. Kept as an
+     * interface here because the class files come from the module that implements that runtime.
+     */
+    interface ApiAdditions {
+        /** Part of the derived jar's file name: a change invalidates the cached jar. */
+        val version: String
+
+        /** The platform class at [entryName] with members added, or [bytes] as given. */
+        fun rewrite(entryName: String, bytes: ByteArray): ByteArray
+
+        /** Whole classes to append, by entry name; [has] says whether the platform jar already holds an entry. */
+        fun additions(has: (entryName: String) -> Boolean): Map<String, ByteArray>
+    }
+
+    /**
      * Build (or reuse) the core-Java [SdkData] derived from [androidJar]. [extraStubs] (e.g.
      * core-lambda-stubs) join the boot classpath as-is, after the filtered jar. The filtered jar is cached
      * under [cacheDir]. Returns null if [androidJar] can't be read.
      */
-    fun coreJavaSdk(androidJar: Path, extraStubs: List<Path> = emptyList(), cacheDir: Path): SdkData? {
-        val filtered = ensureFiltered(androidJar, cacheDir) ?: return null
+    fun coreJavaSdk(
+        androidJar: Path, extraStubs: List<Path> = emptyList(), cacheDir: Path, additions: ApiAdditions? = null,
+    ): SdkData? {
+        val filtered = ensureFiltered(androidJar, cacheDir, additions) ?: return null
         val boot = listOf(filtered.toAbsolutePath().normalize().toString()) +
             extraStubs.map { it.toAbsolutePath().normalize().toString() }
         return SdkData(SDK_NAME, boot, buildToolsPath = null, kind = PlatformKind.JVM)
     }
 
     /** Filter [androidJar] to a core-Java jar under [cacheDir], reusing a prior result. Null on failure. */
-    fun ensureFiltered(androidJar: Path, cacheDir: Path): Path? {
+    fun ensureFiltered(androidJar: Path, cacheDir: Path, additions: ApiAdditions? = null): Path? {
         if (!Files.isRegularFile(androidJar)) return null
         val size = Files.size(androidJar)
-        val out = cacheDir.resolve("$SDK_NAME-$size-v$FILTER_VERSION.jar")
+        val suffix = additions?.let { "-a${it.version}" } ?: ""
+        val out = cacheDir.resolve("$SDK_NAME-$size-v$FILTER_VERSION$suffix.jar")
         if (Files.isRegularFile(out) && Files.size(out) > 0) return out
 
         Files.createDirectories(cacheDir)
@@ -71,7 +92,13 @@ object CorePlatformProvider {
                         if (name.startsWith("META-INF/")) continue          // no manifest/signatures on a platform stub
                         if (EXCLUDED_PREFIXES.any { name.startsWith(it) }) continue
                         zos.putNextEntry(ZipEntry(name).apply { time = FIXED_TIME })
-                        zip.getInputStream(e).use { it.copyTo(zos) }
+                        val bytes = zip.getInputStream(e).use { it.readBytes() }
+                        zos.write(additions?.rewrite(name, bytes) ?: bytes)
+                        zos.closeEntry()
+                    }
+                    additions?.additions { zip.getEntry(it) != null }?.forEach { (name, bytes) ->
+                        zos.putNextEntry(ZipEntry(name).apply { time = FIXED_TIME })
+                        zos.write(bytes)
                         zos.closeEntry()
                     }
                 }

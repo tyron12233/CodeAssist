@@ -111,11 +111,33 @@ internal class InterpretedReflection(private val vm: Vm) {
             "getModifiers" -> cls.access and Opcodes.ACC_SUPER.inv() and 0xFFFF
             "isInterface" -> Marshalling.realPrimToVm(cls.isInterface)
             "isAnnotation" -> Marshalling.realPrimToVm(cls.access and Opcodes.ACC_ANNOTATION != 0)
+            "isRecord" -> Marshalling.realPrimToVm(cls.isRecord)
+            "isSealed" -> Marshalling.realPrimToVm(cls.permittedSubclasses.isNotEmpty())
+            // Null for a type that is not sealed, as the platform answers.
+            "getPermittedSubclasses" -> cls.permittedSubclasses.takeIf { it.isNotEmpty() }?.map(::classOfName)?.toTypedArray()
+            "getRecordComponents" -> if (cls.isRecord) recordComponents(cls) else null
             else -> annotationQuery(name, descriptor, args, "class:$internal") { classAnnotations(cls) }
         }
     }
 
     private val VmClass.isInterface: Boolean get() = access and Opcodes.ACC_INTERFACE != 0
+
+    private val VmClass.isRecord: Boolean get() = superName == "java/lang/Record"
+
+    /**
+     * `Class.getRecordComponents` for an interpreted record: the real components of its mirror, which is defined
+     * as a record for this (see [PeerFactory.reflectionMirror]). Their accessors are the mirror's methods, so
+     * invoking one runs the interpreted accessor like any other mirrored method. `RecordComponent` cannot be
+     * constructed from outside the platform, so a host without records (below Android 14) has nothing to return.
+     */
+    private fun recordComponents(cls: VmClass): Any? {
+        val real = mirror(cls).cls
+        val components = runCatching { Class::class.java.getMethod("getRecordComponents").invoke(real) as? Array<*> }.getOrNull()
+        if (components == null || components.size != cls.recordComponents.size) {
+            throw UnsupportedOperationException("Class.getRecordComponents is not available for ${cls.name.replace('/', '.')} on this runtime")
+        }
+        return components
+    }
 
     /** [cls]'s declared methods as `getDeclaredMethods` returns them, each with the interpreted method it stands
      *  for (what a proxy over an interpreted interface hands its handler, see [InterpretedProxies]). */
@@ -132,7 +154,9 @@ internal class InterpretedReflection(private val vm: Vm) {
             .sortedBy { if (it.access and Opcodes.ACC_BRIDGE != 0) 1 else 0 }
         val methods = nodes.map { ReflectedMethod(it.name, realizedDescriptor(it.desc), it.access) }
         val fields = cls.fieldNodes.map { ReflectedField(it.name, vm.realizeType(it.desc), it.access) }
-        val real = vm.peerFactory.reflectionMirror(cls.name, methods, fields)
+        val components = if (!cls.isRecord) emptyList()
+        else cls.recordComponents.map { (name, desc) -> ReflectedField(name, vm.realizeType(desc), Opcodes.ACC_PRIVATE or Opcodes.ACC_FINAL) }
+        val real = vm.peerFactory.reflectionMirror(cls.name, methods, fields, components)
         // Map each mirror method back to the interpreted method it was declared for (the factory may have widened
         // a parameter type it cannot load to Object).
         val byMethod = LinkedHashMap<Method, MethodNode>()

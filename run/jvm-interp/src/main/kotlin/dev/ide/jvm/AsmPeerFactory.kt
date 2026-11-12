@@ -168,12 +168,27 @@ open class AsmPeerFactory(
     override fun reflectionClass(className: String, constructorDescriptors: List<String>): Class<*> =
         reflectionClasses.getOrPut(className) { defineReflectionClass(className, constructorDescriptors) }
 
-    override fun reflectionMirror(className: String, methods: List<ReflectedMethod>, fields: List<ReflectedField>): Class<*> {
+    override fun reflectionMirror(
+        className: String,
+        methods: List<ReflectedMethod>,
+        fields: List<ReflectedField>,
+        recordComponents: List<ReflectedField>,
+    ): Class<*> {
         val internalName = "dev/ide/jvm/reflect/${traceableSimpleName(className)}_M${counter.incrementAndGet()}"
         val cw = object : ClassWriter(COMPUTE_FRAMES) {
             override fun getClassLoader(): ClassLoader = parent
         }
-        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT, internalName, null, "java/lang/Object", null)
+        // A record's mirror is a record: `Class.getRecordComponents` only answers for a FINAL class that extends
+        // `Record` and carries the attribute, so it is the one mirror that is not abstract.
+        val asRecord = recordComponents.isNotEmpty() && runCatching { Class.forName("java.lang.Record", false, parent) }.isSuccess
+        if (asRecord) {
+            cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC or Opcodes.ACC_FINAL or Opcodes.ACC_SUPER, internalName, null, "java/lang/Record", null)
+            for (c in recordComponents) {
+                if (dexLegal(c.name)) cw.visitRecordComponent(c.name, loadableType(Type.getType(c.descriptor)).descriptor, null).visitEnd()
+            }
+        } else {
+            cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT, internalName, null, "java/lang/Object", null)
+        }
         val declaredFields = HashSet<String>()
         for (f in fields) {
             if (!dexLegal(f.name) || !declaredFields.add(f.name)) continue

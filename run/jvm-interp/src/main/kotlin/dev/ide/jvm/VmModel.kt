@@ -24,6 +24,10 @@ internal class VmClass(
     /** The generic `Signature` attribute and runtime-visible annotations, for reflection ([InterpretedReflection]). */
     val signature: String? = null,
     val visibleAnnotations: List<AnnotationNode> = emptyList(),
+    /** A sealed type's `PermittedSubclasses` (internal names); empty for any other. */
+    val permittedSubclasses: List<String> = emptyList(),
+    /** A record's components in declaration order, name to descriptor; empty for any other class. */
+    val recordComponents: List<Pair<String, String>> = emptyList(),
 ) {
     /** The declared fields as read, for reflection. */
     val fieldNodes: List<FieldNode> = fields

@@ -222,6 +222,10 @@ class Vm(
         interpreter.withReifiedTypes(types, body)
 
     private val loader: ClassLoader = Vm::class.java.classLoader
+
+    init {
+        installPlatformStandIns()
+    }
     private val peerDispatch = PeerDispatch { peer, vmObject, name, descriptor, args ->
         val obj = vmObject as VmObject
         // Link the peer to its interpreted instance on the first dispatch. A real superclass constructor can
@@ -317,9 +321,24 @@ class Vm(
                 cn.fields ?: emptyList(),
                 cn.signature,
                 cn.visibleAnnotations ?: emptyList(),
+                cn.permittedSubclasses ?: emptyList(),
+                cn.recordComponents?.map { it.name to it.descriptor } ?: emptyList(),
             )
         }
         return resolved.takeIf { it !== notInterpreted }
+    }
+
+    /**
+     * Interprets a stand-in for each platform class newer Java bytecode needs that this host's runtime does not
+     * have: `java.lang.Record` (every record's superclass, Android 14), `java.lang.MatchException` (what an
+     * exhaustive pattern `switch` throws, Android 16), and `ScopedValue` and `StructuredTaskScope`, which Android
+     * has at no API level. Without the first a record could not be constructed at all on an older device. A host that has the class keeps its own, so `instanceof Record` and what a `catch` sees
+     * are the real thing there. [force] installs them regardless, which is how a desktop test runs this path.
+     */
+    internal fun installPlatformStandIns(force: Boolean = false) {
+        for ((name, make) in PlatformStandIns.ALL) {
+            if (force || runCatching { loadReal(name) }.isFailure) make().forEach { defineSynthetic(it) }
+        }
     }
 
     /** Registers [cn], a class the VM generated itself (an annotation's implementation, see
@@ -699,7 +718,7 @@ class Vm(
     /** The simple name `Class.getSimpleName` reports for interpreted internal name [internalName]: the last
      *  `$`-separated segment, empty for an anonymous class (whose segment is all digits) and with a local
      *  class's leading digits stripped. */
-    private fun simpleNameOf(internalName: String): String =
+    internal fun simpleNameOf(internalName: String): String =
         internalName.substringAfterLast('/').substringAfterLast('$').dropWhile { it.isDigit() }
 
     /** What `Class.toString` reports for interpreted internal name [internalName]: `class a.b.C`, or

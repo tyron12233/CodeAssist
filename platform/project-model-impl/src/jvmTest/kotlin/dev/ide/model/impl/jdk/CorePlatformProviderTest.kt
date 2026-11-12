@@ -41,6 +41,33 @@ class CorePlatformProviderTest {
     private fun entryNames(jar: Path): Set<String> =
         ZipFile(jar.toFile()).use { z -> z.entries().asSequence().map { it.name }.toSet() }
 
+    /** What the host adds reaches the jar: an entry it rewrites, a class it appends, and none it already has.
+     *  The additions' version is part of the file name, so the jar without them is not the one served. */
+    @Test
+    fun apiAdditionsRewriteAndAppendEntries() {
+        withTempDir("core-platform") { dir ->
+            val androidJar = fakeAndroidJar(dir)
+            val additions = object : CorePlatformProvider.ApiAdditions {
+                override val version = "7"
+                override fun rewrite(entryName: String, bytes: ByteArray) =
+                    if (entryName == "java/util/List.class") "patched".toByteArray() else bytes
+                override fun additions(has: (String) -> Boolean) = buildMap {
+                    put("java/lang/ScopedValue.class", "new".toByteArray())
+                    if (!has("java/util/List.class")) put("java/util/List.class", "duplicate".toByteArray())
+                }
+            }
+            val cache = dir.resolve("cache")
+            val plain = Path.of(CorePlatformProvider.coreJavaSdk(androidJar, cacheDir = cache)!!.bootClasspath.single())
+            val extended = Path.of(CorePlatformProvider.coreJavaSdk(androidJar, cacheDir = cache, additions = additions)!!.bootClasspath.single())
+            assertTrue(plain != extended && extended.fileName.toString().endsWith("-a7.jar"), "$plain vs $extended")
+            ZipFile(extended.toFile()).use { z ->
+                assertEquals("patched", z.getInputStream(z.getEntry("java/util/List.class")).readBytes().decodeToString())
+                assertEquals("new", z.getInputStream(z.getEntry("java/lang/ScopedValue.class")).readBytes().decodeToString())
+            }
+            assertFalse("java/lang/ScopedValue.class" in entryNames(plain))
+        }
+    }
+
     @Test
     fun stripsAndroidNamespacesKeepsStandardJava() {
         withTempDir("core-platform") { dir ->

@@ -110,7 +110,14 @@ interface PeerFactory {
      * code first reflects over the class's members. Abstract and never instantiated; the VM services every use
      * of its members (invoke, get/set, declaring class, types, annotations). Not cached here: the caller keeps it.
      */
-    fun reflectionMirror(className: String, methods: List<ReflectedMethod>, fields: List<ReflectedField>): Class<*> =
+    fun reflectionMirror(
+        className: String,
+        methods: List<ReflectedMethod>,
+        fields: List<ReflectedField>,
+        /** A record's components (name and realized type), which make the mirror a record itself where the host
+         *  supports one, so its real `getRecordComponents` describes them. Empty for any other class. */
+        recordComponents: List<ReflectedField> = emptyList(),
+    ): Class<*> =
         throw UnsupportedOperationException("this PeerFactory cannot mirror classes for reflection")
 
     /** The interpreted internal name a [reflectionClass] result stands for, or null if [cls] is not one. */

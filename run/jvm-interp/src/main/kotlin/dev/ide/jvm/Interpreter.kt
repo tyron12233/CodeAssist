@@ -1500,41 +1500,56 @@ internal class Interpreter(private val vm: Vm) {
         val recordType = insn.bsmArgs[0] as Type
         val componentNames = (insn.bsmArgs[1] as String).split(";").filter { it.isNotEmpty() }
         val accessors = insn.bsmArgs.drop(2).map { it as Handle }
-        fun component(record: Any?, i: Int) = invokeHandle(handleRef(accessors[i]), listOf(record))
+        fun component(record: Any?, i: Int) = deref(invokeHandle(handleRef(accessors[i]), listOf(record)))
+        // A component's declared type: a getter handle's descriptor is the field's, a method handle's `()T`.
+        fun typeOf(i: Int): Type = accessors[i].desc.let { if (it.startsWith("(")) Type.getReturnType(it) else Type.getType(it) }
         when (insn.name) {
             "toString" -> {
                 val record = args[0]
-                val simpleName =
-                    recordType.internalName.substringAfterLast('/').substringAfterLast('$')
-                val body = componentNames.indices.joinToString(", ") {
-                    "${componentNames[it]}=${
-                        component(
-                            record,
-                            it
-                        )
-                    }"
-                }
-                frame.pushRef("$simpleName[$body]")
+                val body = componentNames.indices.joinToString(", ") { "${componentNames[it]}=${format(component(record, it), typeOf(it))}" }
+                frame.pushRef("${vm.simpleNameOf(recordType.internalName)}[$body]")
             }
 
             "equals" -> {
-                val a = args[0];
+                val a = args[0]
                 val b = args[1]
                 val equal = b is VmObject && a is VmObject && a.vmClass == b.vmClass &&
-                        componentNames.indices.all { component(a, it) == component(b, it) }
+                    componentNames.indices.all { valuesEqual(component(a, it), component(b, it)) }
                 frame.pushI(if (equal) 1 else 0)
             }
 
             "hashCode" -> {
                 val record = args[0]
                 var hash = 0
-                for (i in componentNames.indices) hash =
-                    hash * 31 + (component(record, i)?.hashCode() ?: 0)
+                for (i in componentNames.indices) hash = hash * 31 + hashOf(component(record, i), typeOf(i))
                 frame.pushI(hash)
             }
 
             else -> throw VmUnsupportedException("unsupported record method ${insn.name}")
         }
+    }
+
+    /** `Objects.equals` for two component values: an interpreted object answers through its own `equals` (a
+     *  nested record's is the generated one), since the host only knows such an object by identity. */
+    private fun valuesEqual(a: Any?, b: Any?): Boolean = when {
+        a == null || b == null -> a == null && b == null
+        a is VmObject -> truthy(dispatchVirtual("equals", "(Ljava/lang/Object;)Z", a, listOf(b)))
+        else -> a == b
+    }
+
+    /** `Objects.hashCode` for a component value of declared [type]; `boolean` and `char` are ints in the VM. */
+    private fun hashOf(value: Any?, type: Type): Int = when {
+        value == null -> 0
+        type.sort == Type.BOOLEAN -> truthy(value).hashCode()
+        type.sort == Type.CHAR -> (value as? Int)?.toChar()?.hashCode() ?: value.hashCode()
+        value is VmObject -> (dispatchVirtual("hashCode", "()I", value, emptyList()) as? Number)?.toInt() ?: 0
+        else -> value.hashCode()
+    }
+
+    private fun truthy(v: Any?): Boolean = when (v) {
+        is Boolean -> v
+        is Number -> v.toInt() != 0
+        else -> false
     }
 
     /**

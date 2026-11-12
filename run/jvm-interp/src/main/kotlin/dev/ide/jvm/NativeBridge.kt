@@ -175,7 +175,9 @@ class ReflectiveBridge(
 
     override fun invokeStatic(owner: String, name: String, descriptor: String, args: List<Any?>): Any? {
         rejectVmObjects(args)
-        val m = resolveMethod(loadReferenced(owner), name, descriptor) ?: throw VmUnsupportedException("no static $owner.$name$descriptor")
+        val backport = HostBackports.static(owner, name, descriptor)
+        val m = (if (backport != null && HostBackports.preferBackports) null else resolveMethod(loadReferenced(owner), name, descriptor))
+            ?: return backported(descriptor) { (backport ?: throw VmUnsupportedException("no static $owner.$name$descriptor"))(marshalArgs(descriptor, args)) }
         return marshalOut(invoked { m.invoke(null, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
     }
 
@@ -185,8 +187,11 @@ class ReflectiveBridge(
         // A lambda receiver is a call to a method of its REAL interface other than the abstract one (a default
         // method; the interpreter answers the abstract method and Object's itself): run it on the lambda's proxy.
         val target = if (receiver is VmLambda) realLambda(receiver, "Ljava/lang/Object;") else receiver
-        val m = resolveMethod(target.javaClass, name, descriptor)
-            ?: throw VmUnsupportedException("no method $name$descriptor on ${target.javaClass.name}")
+        val backport = HostBackports.virtual(target, name, descriptor)
+        val m = (if (backport != null && HostBackports.preferBackports) null else resolveMethod(target.javaClass, name, descriptor))
+            ?: return backported(descriptor) {
+                (backport ?: throw VmUnsupportedException("no method $name$descriptor on ${target.javaClass.name}"))(target, marshalArgs(descriptor, args))
+            }
         return marshalOut(invoked { m.invoke(target, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
     }
 
@@ -197,6 +202,21 @@ class ReflectiveBridge(
                 ?: throw VmUnsupportedException("no constructor $owner$descriptor")
         return invoked { ctor.newInstance(*marshalArgs(descriptor, args)) }!!
     }
+
+    /** Run a [HostBackports] stand-in for a method the host lacks. What it throws is what the real method would
+     *  have thrown, so it reaches interpreted code as that exception, like one from a reflective call. */
+    private fun backported(descriptor: String, action: () -> Any?): Any? =
+        try {
+            marshalOut(action(), Descriptors.returnType(descriptor))
+        } catch (e: VmUnsupportedException) {
+            throw e
+        } catch (e: VmException) {
+            throw e
+        } catch (e: RuntimeException) {
+            throw VmException(e)
+        } catch (e: java.io.IOException) {
+            throw VmException(e)
+        }
 
     /** Run a reflective invocation, converting the exception a real method threw into a [VmException] so an
      *  interpreted `try/catch` can match it by its real type. A [VmException] surfacing from nested interpreted
