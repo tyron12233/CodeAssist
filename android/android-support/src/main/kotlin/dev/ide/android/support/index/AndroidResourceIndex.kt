@@ -29,7 +29,45 @@ import javax.xml.parsers.SAXParserFactory
  */
 data class ResourceDeclValue(
     val type: String, val name: String, val filePath: String, val offset: Int, val value: String? = null,
-)
+) {
+    /**
+     * This declaration with [filePath] made a real path on this machine. A declaration from a library `res/`
+     * folder that is keyed by content is stored in the portable form [LibraryResourcePath] writes, since its
+     * segment is shared between projects and devices and may have been built on another machine entirely;
+     * [rootOf] gives the folder this workspace holds for a segment key. One that names no known folder, and any
+     * other declaration, is returned as it is.
+     */
+    fun located(rootOf: (segmentKey: String) -> java.nio.file.Path?): ResourceDeclValue {
+        val (key, relative) = LibraryResourcePath.parse(filePath) ?: return this
+        val root = rootOf(key) ?: return this
+        return copy(filePath = root.resolve(relative).toString())
+    }
+}
+
+/**
+ * How a declaration in a content-keyed library `res/` folder names its file: `<segment key>!/<path under res>`,
+ * for example `res-sha-1f…!/values/values.xml`. The absolute path used before was the path on whichever machine
+ * built the segment, so a segment downloaded from the index repository pointed into the publisher's file system
+ * and nothing that opens the declaring file (go to declaration, a color swatch) could find it.
+ */
+object LibraryResourcePath {
+    private const val SEPARATOR = "!/"
+
+    /** The segment-key prefix of a `res/` folder keyed by content (see `IndexScope.stableJarIds`). */
+    private const val CONTENT_KEY_PREFIX = "res-"
+
+    /** The portable path of [relative] under the folder whose segment key is [segmentKey], or null when that
+     *  folder is keyed by its location, in which case its segments are this machine's own and keep a real path. */
+    fun of(segmentKey: String, relative: String): String? =
+        if (!segmentKey.startsWith(CONTENT_KEY_PREFIX)) null else segmentKey + SEPARATOR + relative.replace('\\', '/')
+
+    /** The segment key and the path under `res/` of a portable [filePath], or null for a real path. */
+    fun parse(filePath: String): Pair<String, String>? {
+        if (!filePath.startsWith(CONTENT_KEY_PREFIX)) return null
+        val at = filePath.indexOf(SEPARATOR)
+        return if (at < 0) null else filePath.substring(0, at) to filePath.substring(at + SEPARATOR.length)
+    }
+}
 
 object ResourceDeclExternalizer : Externalizer<ResourceDeclValue> {
     override fun write(out: DataWriter, value: ResourceDeclValue) {
@@ -74,7 +112,8 @@ object AndroidResourceIndex : IndexExtension<String, ResourceDeclValue> {
     override val id = IndexId("android.resources")
     // v2: SAX scanner replaced the regex one (offsets are line-anchored; library resources now segment-cached).
     // v3: value resources also store their resolved literal value (for the completion hint, index-backed).
-    override val version = 3
+    // v4: a declaration in a content-keyed library res folder stores a portable path ([LibraryResourcePath]).
+    override val version = 4
     override val keyDescriptor: KeyDescriptor<String> = ResourceKeyDescriptor
     override val valueExternalizer: Externalizer<ResourceDeclValue> = ResourceDeclExternalizer
     override val matching = MatchingMode.PREFIX_AND_FUZZY
@@ -91,7 +130,9 @@ object AndroidResourceIndex : IndexExtension<String, ResourceDeclValue> {
     }
 
     override fun index(input: IndexInput): Map<String, Collection<ResourceDeclValue>> {
-        val path = input.sourcePath ?: return emptyMap()
+        val real = input.sourcePath ?: return emptyMap()
+        val path = input.unitName?.takeIf { input.origin == IndexOrigin.LIBRARY }
+            ?.let { LibraryResourcePath.of(input.contentHash.value, it) } ?: real
         val text = input.text() ?: return emptyMap()
         val folder = input.sourcePath?.substringBeforeLast('/', "")?.substringAfterLast('/')?.ifEmpty { null } ?: return emptyMap()
         val out = HashMap<String, MutableList<ResourceDeclValue>>()

@@ -44,6 +44,11 @@ internal interface EngineContext {
      *  all read it too, so it stays engine-owned and is reached through here, not owned by the search service. */
     val indexService: IndexService
 
+    /** The library `res/` folder this workspace holds for index segment key [segmentKey] (`res-<content id>`), or
+     *  null. What turns a library resource declaration's portable path into a file here
+     *  (`ResourceDeclValue.located`). */
+    fun libraryResourceRoot(segmentKey: String): java.nio.file.Path?
+
     /** App-global signing-keystore registry. Shared infrastructure: the Android build's signing resolver
      *  reads it too, so it stays owned by the engine and is reached through here, not by the signing service. */
     val keystoreRegistry: KeystoreRegistry

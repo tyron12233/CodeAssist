@@ -89,7 +89,7 @@ internal class AndroidResourceService(private val ctx: EngineContext) : ModuleRe
     private fun indexDefinition(type: ResourceType, name: String): Pair<Path, Int>? =
         ctx.indexService.exact<ResourceDeclValue>(
             AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, name)
-        ).firstOrNull()?.let { Paths.get(it.filePath) to it.offset }
+        ).firstOrNull()?.located(ctx::libraryResourceRoot)?.let { Paths.get(it.filePath) to it.offset }
 
     /**
      * A render-ready model of the drawable XML in [file] ([text] is the live buffer), with every

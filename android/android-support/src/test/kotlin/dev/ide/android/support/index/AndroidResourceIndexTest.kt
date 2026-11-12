@@ -117,10 +117,44 @@ class AndroidResourceIndexTest {
         assertTrue(!AndroidResourceIndex.inputFilter.accepts(FakeInput(("/p/src/main/foo.xml"), "<x/>")))
     }
 
-    private class FakeInput(override val sourcePath: String?, private val txt: String) : IndexInput {
-        override val origin = IndexOrigin.SOURCE
-        override val contentHash = ContentHash("t")
-        override val unitName: String? = sourcePath?.substringAfterLast('/').orEmpty()
+    /**
+     * A declaration in a library `res/` folder keyed by content names its file by that key and the path under
+     * `res/`, never by where the folder sat when it was indexed: the segment is shared between devices, so the
+     * builder's absolute path is a path on someone else's machine. The reader resolves it against its own folder.
+     */
+    @Test
+    fun aContentKeyedLibraryDeclarationStoresAPortablePath() {
+        val text = "<resources><color name=\"accent\">#FF336699</color></resources>"
+        val built = FakeInput("/home/runner/work/res/values/values.xml", text, IndexOrigin.LIBRARY, "res-sha-1f2e", "values/values.xml")
+        val decl = AndroidResourceIndex.index(built).getValue("color/accent").single()
+        assertEquals("res-sha-1f2e!/values/values.xml", decl.filePath)
+
+        val here = Path.of("/data/caches/aar/material/res")
+        val located = decl.located { key -> here.takeIf { key == "res-sha-1f2e" } }
+        assertEquals(here.resolve("values/values.xml").toString(), located.filePath)
+        assertEquals(decl, decl.located { null }, "a key this workspace has no folder for is left as it is")
+    }
+
+    @Test
+    fun aLocationKeyedLibraryFolderAndAProjectFileKeepTheirRealPath() {
+        val text = "<resources><color name=\"accent\">#FF336699</color></resources>"
+        val local = FakeInput("/p/lib/res/values/values.xml", text, IndexOrigin.LIBRARY, "resdir-res-123", "values/values.xml")
+        assertEquals("/p/lib/res/values/values.xml", AndroidResourceIndex.index(local).getValue("color/accent").single().filePath)
+        val project = FakeInput("/p/res/values/colors.xml", text)
+        val decl = AndroidResourceIndex.index(project).getValue("color/accent").single()
+        assertEquals("/p/res/values/colors.xml", decl.filePath)
+        assertEquals(decl, decl.located { Path.of("/never") })
+    }
+
+    private class FakeInput(
+        override val sourcePath: String?,
+        private val txt: String,
+        override val origin: IndexOrigin = IndexOrigin.SOURCE,
+        hash: String = "t",
+        unit: String? = null,
+    ) : IndexInput {
+        override val contentHash = ContentHash(hash)
+        override val unitName: String? = unit ?: sourcePath?.substringAfterLast('/').orEmpty()
         override fun bytes(): ByteArray = txt.toByteArray()
         override fun text(): String = txt
         override fun dom(): ParsedFile? = null

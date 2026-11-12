@@ -522,6 +522,10 @@ class IdeServices private constructor(
     /** The shared library/SDK segment store (see [indexService]). */
     private val indexCacheRoot: Path = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("index")
 
+    /** Each content-keyed library `res/` folder of the last index scope, by its segment key. Read when a library
+     *  resource declaration's portable path is turned into a file ([EngineContext.libraryResourceRoot]). */
+    @Volatile private var libraryResourceRootsByKey: Map<String, Path> = emptyMap()
+
     /** The editor index's scope (library jars, library res folders and their content ids), for a publisher. */
     internal fun libraryIndexScope(): IndexScope = buildIndexScope()
 
@@ -634,6 +638,7 @@ class IdeServices private constructor(
         override val workspaceRoot get() = this@IdeServices.workspaceRoot
         override val sharedCachesRoot get() = this@IdeServices.sharedCachesRoot
         override val indexService get() = this@IdeServices.indexService
+        override fun libraryResourceRoot(segmentKey: String) = libraryResourceRootsByKey[segmentKey]
         override val keystoreRegistry get() = this@IdeServices.keystoreRegistry
         override val sdkManager get() = this@IdeServices.sdkManager
         override val dependencies get() = this@IdeServices.dependencies
@@ -1078,6 +1083,16 @@ class IdeServices private constructor(
             }.getOrDefault(emptyList())
             else emptyList()
         }.distinct()
+        return buildScope(jdt, libraryJars, sourceArchives, libraryResourceRoots).also { scope ->
+            libraryResourceRootsByKey = scope.libraryResourceRoots.mapNotNull { root ->
+                scope.stableJarIds[root]?.let { dev.ide.core.index.LibraryIndexRepository.resKey(it) to root }
+            }.toMap()
+        }
+    }
+
+    private fun buildScope(
+        jdt: List<JvmIndexScopeProvider>, libraryJars: List<Path>, sourceArchives: List<Path>, libraryResourceRoots: List<Path>,
+    ): IndexScope {
         return IndexScope(
             sourceRoots = jdt.flatMap { it.sourceRootPaths }.distinct(),
             // The bundled kotlin-stdlib is always in scope (even for an editor-only Kotlin project that never

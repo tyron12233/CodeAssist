@@ -103,7 +103,8 @@ internal class AndroidProjectFiles(private val ctx: EngineContext) {
 
     /** Every indexed declaration of a resource, project and library, in index order. */
     fun declarations(type: ResourceType, rName: String): List<ResourceDeclValue> =
-        ctx.indexService.exact<ResourceDeclValue>(AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, rName)).toList()
+        ctx.indexService.exact<ResourceDeclValue>(AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, rName))
+            .map { it.located(ctx::libraryResourceRoot) }.toList()
 
     /** Every layout name the project declares (the index keys under `layout/`). */
     fun projectLayoutNames(): Set<String> =
