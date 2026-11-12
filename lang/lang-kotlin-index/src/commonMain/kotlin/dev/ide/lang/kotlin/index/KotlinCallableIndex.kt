@@ -52,7 +52,8 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
     // Base 9 (v9: + CallableShape.isInfix) + the shared-codec FORMAT (see CallableShapeExternalizer.FORMAT), so a
     // codec format change invalidates this index, kotlin.builtinCallables and kotlin.callables.source together.
     // v10: a regular class's member extensions are no longer keyed by receiver (see Decoded.receiverIndexableExtensions).
-    override val version = 10 + CallableShapeExternalizer.FORMAT
+    // v11: a facade's callables carry its `@JvmPackageName` Kotlin package, not the .class entry's.
+    override val version = 11 + CallableShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = CallableShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried by prefix on a tagged key; no fuzzy
@@ -92,7 +93,9 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
         val extensions = decoded.receiverIndexableExtensions
         if (decoded.topLevel.isEmpty() && extensions.isEmpty()) return emptyMap()
         val unit = input.unitName?.removeSuffix(".class")
-        val pkg = unit?.substringBeforeLast('/', "")?.replace('/', '.')?.ifEmpty { null }
+        // The Kotlin package, which `@JvmPackageName` can make differ from the .class entry's: the stdlib's
+        // `AutoCloseable.use` compiles into `kotlin/jdk7/AutoCloseableKt` but is `kotlin.use` to an import.
+        val pkg = decoded.jvmPackageName ?: unit?.substringBeforeLast('/', "")?.replace('/', '.')?.ifEmpty { null }
         // The .class entry IS the JVM facade these callables compile into (a multi-file part overrides it via
         // the decoded's facadeClassFqn / the symbol's declaringClassFqn) — what the interpreter reflects into.
         val facade = unit?.replace('/', '.')

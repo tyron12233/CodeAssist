@@ -235,7 +235,8 @@ class ClasspathReader(
             if (!entry.name.endsWith(".class")) continue
             val bytes = archive.read(entry) ?: continue
             val decoded = runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: continue
-            val pkg = entry.name.substringBeforeLast('/', "").replace('/', '.').ifEmpty { null }
+            // The Kotlin package (`@JvmPackageName` can move the class elsewhere), as KotlinCallableIndex does.
+            val pkg = decoded.jvmPackageName ?: entry.name.substringBeforeLast('/', "").replace('/', '.').ifEmpty { null }
             // The .class being scanned IS the JVM facade these top-level/extension functions compile into
             // (`kotlin/io/ConsoleKt` for println) — exactly what the interpreter reflects into.
             val facade = entry.name.removeSuffix(".class").replace('/', '.')
@@ -469,7 +470,7 @@ class ClasspathReader(
 
     private companion object {
         const val FORMAT_VERSION =
-            16 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault; v16: no regular-class member extensions
+            17 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault; v16: no regular-class member extensions; v17: a facade's callables carry its @JvmPackageName Kotlin package
 
         // Cap on simultaneously-open jar handles (file descriptors). Small: the hot working set during
         // completion is a handful of jars, and reopening an evicted one is cheap behind the decode caches.
