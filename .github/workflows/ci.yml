@@ -93,6 +93,14 @@ jobs:
           :store-bridge:jvmTest :store-impl:jvmTest
           --console=plain --stacktrace
 
+      # An indexer whose output changed has to change its version: the version is what the segments already on
+      # devices, the ones bundled in the APK and the ones in the public index repository (codeassist-dex, whose
+      # flavor is a digest of the versions) are all regenerated from. :ide-core is a shell, so it is named here.
+      - name: Index format guard (an indexer's output only changes with its version)
+        env:
+          CI_CORE_ONLY: "false"
+        run: ./gradlew :ide-core:test --tests '*IndexFormatFingerprintTest' --console=plain --stacktrace
+
       # 2) The quality gates: deterministic given the pinned JDK (same `jrt` class library + fixed indexes),
       #    so they gate ranking/recall regressions. One unambiguous invocation per module.
       - name: Completion quality (lang-jdt)

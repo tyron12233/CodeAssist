@@ -1,0 +1,34 @@
+# Recorded by IndexFormatFingerprintTest: a hash of what each built-in indexer writes for a fixed set
+# of inputs. Do not edit by hand; see the test for when and how to re-record.
+fixture sha-2226de463d309d4a5500a481320b3dea
+android.resourceRefs v1 9cedd9e89da87ab4
+android.resources v3 9cedd9e89da87ab4
+annotations.binary v1 0b289bf9911abd27
+annotations.javaSource v1 9cedd9e89da87ab4
+annotations.kotlinSource v1 9cedd9e89da87ab4
+java.classLocator v1 623df7a6ba9c110f
+java.classNames v5 884a41339262cb90
+java.mains v1 9cedd9e89da87ab4
+java.members v2 8e36536dd5359a5b
+java.membersByOwner v3 9cedd9e89da87ab4
+java.packageTypes v5 70059bec7ba9e2c3
+java.packages v2 d5db6019d5927e81
+java.sourceDoc v2 02f301a7c4413d58
+java.sourceSymbols v2 9cedd9e89da87ab4
+kotlin.builtinCallables v2 c5c2fa245be6521c
+kotlin.builtins v10 68c2bcab324ef602
+kotlin.callables v11 1f04eb5fb3d4c970
+kotlin.callables.source v1 9cedd9e89da87ab4
+kotlin.classNames v2 9cedd9e89da87ab4
+kotlin.mains v1 9cedd9e89da87ab4
+kotlin.members v1 9cedd9e89da87ab4
+kotlin.packageTypes v1 9cedd9e89da87ab4
+kotlin.packages v1 9cedd9e89da87ab4
+kotlin.pkgDecls v4 309e08dbe3bdcc1c
+kotlin.sourceDoc v5 7da3c292876df129
+kotlin.sourceSymbols v1 9cedd9e89da87ab4
+kotlin.typeShape v27 86e3e1da34f738e6
+source.memberUsage v1 9cedd9e89da87ab4
+subtypes.binary v1 b94aba51a85b4155
+subtypes.javaSource v1 9cedd9e89da87ab4
+subtypes.kotlinSource v1 9cedd9e89da87ab4
