@@ -129,6 +129,22 @@ class StoreFeedWiringTest {
         assertEquals(mapped.items.map { it.id }.distinct().size, mapped.items.size, "ids must be unique")
     }
 
+    /**
+     * Two sections sharing an id map to ONE section.
+     *
+     * The feed screen emits its lazy items per section, keyed on the section id, so a repeated id is the same
+     * key twice in one list: the same measure-pass crash as a repeated row, and one no per-list guard catches.
+     */
+    @Test
+    fun twoSectionsSharingAnIdYieldOneSection() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-populated.json")))
+        val doubled = feed.copy(sections = feed.sections + feed.sections.first())
+        val ui = StoreFeedMapper.toUi(doubled, emptyMap())
+        val plain = StoreFeedMapper.toUi(feed, emptyMap())
+        assertEquals(plain.sections.map { it.id }, ui.sections.map { it.id }, "the repeated section must not reach the UI")
+        assertEquals(ui.sections.map { it.id }.distinct().size, ui.sections.size, "section ids must be unique")
+    }
+
     /** The chart's meta line reads off `metric`, so it has to reach the UI model. */
     @Test
     fun chartMetricReachesTheUiModel() {

@@ -53,7 +53,10 @@ object StoreFeedMapper {
                 recommendations = feed.state.thresholds.recommendations,
             ),
         ),
-        sections = feed.sections.mapNotNull { section -> toUiSection(section, bundledBySlug) },
+        // The feed screen keys each section's lazy items on the section id (`item(section.id)`,
+        // `"head_${section.id}"`), one call per section, so a repeated id is a repeated key across calls: the
+        // per-list key guard cannot see it and the measure pass throws. The first section with an id wins.
+        sections = feed.sections.mapNotNull { section -> toUiSection(section, bundledBySlug) }.distinctBy { it.id },
     )
 
     /**
