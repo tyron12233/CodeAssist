@@ -17,13 +17,36 @@ import kotlin.test.assertTrue
  */
 class JavaStaticMembersIndexTest {
 
-    private class Input(override val unitName: String?, private val b: ByteArray) : IndexInput {
-        override val origin = IndexOrigin.LIBRARY
+    private class Input(
+        override val unitName: String?,
+        private val b: ByteArray,
+        override val origin: IndexOrigin = IndexOrigin.LIBRARY,
+        private val t: String? = null,
+    ) : IndexInput {
         override val sourcePath: String? = null
-        override val contentHash = ContentHash.of(b)
+        override val contentHash = ContentHash.of(t?.toByteArray() ?: b)
         override fun bytes(): ByteArray = b
-        override fun text(): String? = null
+        override fun text(): String? = t
         override fun dom() = null
+    }
+
+    @Test
+    fun aProjectClassContributesItsNonPrivateStatics() {
+        val source = """
+            package app.util;
+            public class Texts {
+                public static String shout(String s) { return s.toUpperCase(); }
+                static int quiet() { return 0; }
+                private static void hidden() {}
+                public String instance() { return ""; }
+                public static final int LIMIT = 3;
+                public static class Nested { public static void deep() {} }
+            }
+        """.trimIndent()
+        val indexed = JavaStaticMembersIndex.index(Input("Texts.java", ByteArray(0), IndexOrigin.SOURCE, source))
+        assertEquals(setOf("shout", "quiet", "LIMIT", "deep"), indexed.keys, "got $indexed")
+        assertEquals(listOf("app.util.Texts"), indexed.getValue("shout").toList())
+        assertEquals(listOf("app.util.Texts.Nested"), indexed.getValue("deep").toList())
     }
 
     private fun index(internalName: String, classAccess: Int = Opcodes.ACC_PUBLIC): Map<String, Collection<String>> {

@@ -15,7 +15,7 @@ java.packageTypes v5 70059bec7ba9e2c3
 java.packages v2 d5db6019d5927e81
 java.sourceDoc v2 02f301a7c4413d58
 java.sourceSymbols v2 9cedd9e89da87ab4
-java.staticMembers v1 73ca8cc7f7e1af37
+java.staticMembers v2 eb69d663f0f6a976
 kotlin.builtinCallables v2 c5c2fa245be6521c
 kotlin.builtins v10 68c2bcab324ef602
 kotlin.callables v11 1f04eb5fb3d4c970
