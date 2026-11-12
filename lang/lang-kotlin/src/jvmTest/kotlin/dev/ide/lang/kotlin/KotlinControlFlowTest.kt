@@ -55,6 +55,34 @@ class KotlinControlFlowTest {
         assertTrue(d.none { it.code == "kt.missingReturn" }, "a trailing return after a partial when is clean; got $d")
     }
 
+    @Test
+    fun aReturnInsideAnInlineLambdaOfAnUnknownCalleeIsNotFlagged() {
+        // `withLock` (kotlinx.coroutines, not on this classpath) has a callsInPlace(EXACTLY_ONCE) contract, so
+        // kotlinc accepts this. Contracts are not read, so any callee handed a returning lambda is undecided.
+        val d = diagnose(
+            "MR6.kt",
+            b("class Mutex { inline fun <T> withLock(block: () -> T): T = block() }\nprivate val mutex = Mutex()\n" +
+                "fun example(): String {\n  mutex.withLock {\n    return \"Done\"\n  }\n}\n" +
+                "inline fun <T> guarded(block: () -> T): T = block()\n" +
+                "fun viaTopLevel(): String {\n  guarded { return \"x\" }\n}\n" +
+                "fun viaThrow(): String {\n  guarded { throw IllegalStateException() }\n}"),
+        )
+        assertTrue(d.none { it.code == "kt.missingReturn" }, "a lambda that leaves the function decides nothing here; got $d")
+    }
+
+    @Test
+    fun aLabeledReturnInAScopeLambdaDoesNotEndTheFunction() {
+        // `return@run` ends the lambda only: the call completes and the statement after it is reachable.
+        val d = diagnose("MR7.kt", b("fun f(): Int {\n  run { return@run 1 }\n  println(1)\n  return 2\n}"))
+        assertTrue(d.none { it.code == "kt.unreachableCode" || it.code == "kt.unreachable" }, "got $d")
+    }
+
+    @Test
+    fun aLambdaThatDoesNotReturnStillLeavesTheMissingReturnFlagged() {
+        val d = diagnose("MR8.kt", b("fun f(xs: List<Int>): Int {\n  xs.forEach { println(it) }\n}"))
+        assertTrue(d.any { it.code == "kt.missingReturn" }, "nothing returns here; got $d")
+    }
+
     // --- branch-level unreachable ---
 
     @Test

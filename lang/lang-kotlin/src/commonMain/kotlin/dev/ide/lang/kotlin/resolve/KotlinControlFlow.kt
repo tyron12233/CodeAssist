@@ -56,7 +56,7 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
     private val BARE_SCOPE_CALLS = setOf("run", "synchronized", "with", "runBlocking")
 
     /** The same, called on a DOT receiver (`x.run { }`); `x?.run { }` is a different node and never matches. */
-    private val DOT_SCOPE_CALLS = setOf("run", "let", "also", "apply", "use")
+    private val DOT_SCOPE_CALLS = setOf("run", "let", "also", "apply", "use", "withLock")
 
     fun liveness(element: KtExpression?): Liveness = when (val e = unwrap(element)) {
         null -> Liveness.LIVE
@@ -153,9 +153,58 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
         //
         // Both shapes in this repository are that one. No inference is involved (the note below explains why
         // that matters here): a name match, then the lambda body's own liveness, which this pass walks anyway.
-        scopeCallLambdaBody(e)?.let { if (liveness(it) == Liveness.DEAD) return Liveness.DEAD }
+        val scopeBody = scopeCallLambdaBody(e)
+        if (scopeBody != null) {
+            if (liveness(scopeBody) != Liveness.DEAD) return Liveness.LIVE
+            // `run { return@run 1 }` ends the LAMBDA, not the function, and the call then completes. Which jump
+            // made the body dead is not tracked, so a labeled return anywhere in it leaves the call undecided.
+            return if (hasReturn(scopeBody, labeled = true)) Liveness.UNKNOWN else Liveness.DEAD
+        }
+        // Any other call handed a lambda that returns from the enclosing function, or ends in a `throw`:
+        //
+        //     suspend fun example(): String {
+        //         mutex.withLock { return "Done" }
+        //     }
+        //
+        // A `return` there is only legal because the callee is inline, and whether the call can still fall
+        // through is decided by the callee's CONTRACT: `withLock`, like every `callsInPlace(EXACTLY_ONCE)`
+        // function, cannot, while `forEach { return x }` can (an empty list). Contracts are not read here, so
+        // the call is undecided, which no consumer flags on. A syntactic scan, never the lambda's liveness: that
+        // would infer the calls inside every builder lambda (see [isNothingReturning]).
+        if (lambdaArgumentBodies(e).any { hasReturn(it, labeled = false) || endsInThrow(it) }) return Liveness.UNKNOWN
         return Liveness.LIVE
     }
+
+    /** The bodies of the lambdas [e] (a call, or a qualified call) is passed. */
+    private fun lambdaArgumentBodies(e: KtExpression): List<KtExpression> {
+        val call = when (e) {
+            is KtCallExpression -> e
+            is KtQualifiedExpression -> e.selectorExpression as? KtCallExpression
+            else -> null
+        } ?: return emptyList()
+        return (call.lambdaArguments.map { it.getLambdaExpression() } +
+            call.valueArguments.map { it.getArgumentExpression() as? KtLambdaExpression })
+            .mapNotNull { it?.bodyExpression }
+    }
+
+    /** Whether [body] holds a `return` that is [labeled] (`return@x`) or not, outside any nested named function
+     *  (whose returns are its own). A nested lambda is searched: an unlabeled return in it still leaves the
+     *  enclosing function. */
+    private fun hasReturn(body: KtExpression, labeled: Boolean): Boolean {
+        var found = false
+        fun rec(p: KtElement) {
+            if (found) return
+            if (p is KtReturnExpression && (p.getLabelName() != null) == labeled) { found = true; return }
+            if (p is KtNamedFunction || p is KtClassOrObject) return
+            var c = p.firstChild
+            while (c != null && !found) { rec(c); c = c.nextSibling }
+        }
+        rec(body)
+        return found
+    }
+
+    private fun endsInThrow(body: KtExpression): Boolean =
+        unwrap((body as? KtBlockExpression)?.statements?.lastOrNull() as? KtExpression ?: body) is KtThrowExpression
 
     /**
      * The lambda body of an inline scope call that is guaranteed to run exactly once — `run`/`synchronized`/
