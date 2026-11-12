@@ -4,7 +4,6 @@ import dev.ide.agent.AgentPermissionGate
 import dev.ide.agent.AllowAllGate
 import dev.ide.agent.PermissionMode
 import dev.ide.agent.WriteRequest
-import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider
 import java.nio.file.Files
 import java.nio.file.Path
@@ -107,7 +106,7 @@ fun main(args: Array<String>) {
     System.err.println("CodeAssist MCP server ready (project: $root)")
     System.err.println("Mutating tools: ${if (autoAccept) "auto-accepted" else "denied"}. Waiting for protocol messages on stdin.")
 
-    val mapper = McpJsonDefaults.getMapper()
+    val mapper = McpJson.mapper
     val transport = StdioServerTransportProvider(mapper, System.`in`, System.out)
     val server = CodeAssistMcpServer.build(transport, workspace, gate = gate, mapper = mapper)
 

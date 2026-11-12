@@ -12,7 +12,6 @@ import dev.ide.agent.ToolExecutionResult
 import dev.ide.agent.WriteRequest
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
-import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.McpServer
 import io.modelcontextprotocol.server.McpServerFeatures
@@ -95,7 +94,7 @@ object CodeAssistMcpServer {
         gate: AgentPermissionGate = AllowAllGate,
         serverName: String = DEFAULT_SERVER_NAME,
         serverVersion: String = DEFAULT_SERVER_VERSION,
-        mapper: McpJsonMapper = McpJsonDefaults.getMapper(),
+        mapper: McpJsonMapper = McpJson.mapper,
         /** More guidance for the client's model, after [instructions]'s own: what the host's extra tools are for. */
         notes: List<String> = emptyList(),
         /** How long a call may hold its request open before it is handed back as a job (see [LongCalls]). */
@@ -105,6 +104,8 @@ object CodeAssistMcpServer {
         val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper, calls) } + calls.statusTool(mapper)
         return McpServer.sync(transportProvider)
             .serverInfo(serverName, serverVersion)
+            .jsonMapper(mapper)
+            .jsonSchemaValidator(McpJson.schemaValidator)
             .instructions(instructions(notes))
             .capabilities(
                 McpSchema.ServerCapabilities.builder()
@@ -140,7 +141,7 @@ object CodeAssistMcpServer {
         gate: AgentPermissionGate = AllowAllGate,
         serverName: String = DEFAULT_SERVER_NAME,
         serverVersion: String = DEFAULT_SERVER_VERSION,
-        mapper: McpJsonMapper = McpJsonDefaults.getMapper(),
+        mapper: McpJsonMapper = McpJson.mapper,
         /** More guidance for the client's model, after [instructions]'s own: what the host's extra tools are for. */
         notes: List<String> = emptyList(),
         /** How long a call may hold its request open before it is handed back as a job (see [LongCalls]). */
@@ -151,6 +152,8 @@ object CodeAssistMcpServer {
         val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper, calls) } + calls.statusTool(mapper)
         McpServer.sync(provider)
             .serverInfo(serverName, serverVersion)
+            .jsonMapper(mapper)
+            .jsonSchemaValidator(McpJson.schemaValidator)
             .instructions(instructions(notes))
             .capabilities(
                 McpSchema.ServerCapabilities.builder()

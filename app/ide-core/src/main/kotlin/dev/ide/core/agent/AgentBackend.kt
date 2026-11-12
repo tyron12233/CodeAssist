@@ -370,6 +370,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         // the user about it with a modal on startup, which is where this runs, is the wrong trade.
         log.warn("MCP server not started on port ${CodeAssistMcpServer.DEFAULT_HTTP_PORT}: ${e.message}")
         null
+    } catch (e: LinkageError) {
+        // A library call the device's runtime lacks (the MCP SDK is built for a desktop JVM). This runs from
+        // the backend's constructor, so letting it escape would stop the whole IDE from starting, on every
+        // launch, over an optional server.
+        log.warn("MCP server not started, unsupported on this device: $e")
+        null
     }
 
     /** Binds the FTP asset server to `<project>/assets` (created on start); null when no project is open or
@@ -451,6 +457,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             )
         } catch (e: Exception) {
             log.warn("The relay's MCP server did not start: ${e.message}")
+            return
+        } catch (e: LinkageError) {
+            log.warn("The relay's MCP server did not start, unsupported on this device: $e")
             return
         }
         relayServer = server

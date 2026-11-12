@@ -82,6 +82,8 @@ object ArtPatchPasses {
         FastutilInterfaceDispatchArtPass(), // Android 12 ART dispatches PsiBuilder's IntSet.contains(int) to
                                   // AbstractIntCollection.removeAll(Collection) -> SIGSEGV in instance-of (the
                                   // top native crash, api 31/32 only) → shim the calls onto vtable dispatch
+        // Same instrumentation reaches the MCP SDK and Jackson 3 jars.
+        StringFormattedArtPass(), // String.formatted (API 34) in their exception messages → String.format
     )
 
     /** True if any registered pass rewrites [classFqn]. */

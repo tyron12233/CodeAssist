@@ -73,6 +73,10 @@ class AndroidApiFloorTest {
             val bare = line.replace("Collectors.toList()", "")
             ".toList()" in bare && listOf("Files.list(", "Files.walk(", "Files.find(").any { it in bare }
         },
+        // Not a JDK method itself: the MCP SDK's default lookup, which goes through ServiceLoader.findFirst().
+        Rule("McpJsonDefaults (ServiceLoader.findFirst)", "API 34", "McpJson.mapper / McpJson.schemaValidator") {
+            "McpJsonDefaults" in it
+        },
     )
 
     @Test

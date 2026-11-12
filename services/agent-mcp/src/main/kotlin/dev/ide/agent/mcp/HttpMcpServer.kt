@@ -1,6 +1,5 @@
 package dev.ide.agent.mcp
 
-import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.json.TypeRef
 import io.modelcontextprotocol.spec.McpSchema
@@ -38,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference
  * sync server never sees interleaved calls.
  */
 class HttpStreamableServerTransportProvider(
-    private val mapper: McpJsonMapper = McpJsonDefaults.getMapper(),
+    private val mapper: McpJsonMapper = McpJson.mapper,
 ) : McpStreamableServerTransportProvider {
 
     private val sessions = ConcurrentHashMap<String, McpStreamableServerSession>()
