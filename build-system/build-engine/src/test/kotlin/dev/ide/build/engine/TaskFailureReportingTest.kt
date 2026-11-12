@@ -105,6 +105,16 @@ class TaskFailureReportingTest {
         )
     }
 
+    /** A long build's transcript names where the time went; a quick task stays the one banner line above. */
+    @Test fun aSlowTaskSaysHowLongItTook() {
+        val log = run { dir -> Fixed(TaskName(":app:dexBuilder"), dir) { kotlinx.coroutines.delay(1_100); TaskResult.Success } }
+
+        val lines = log.filter { it.level == BuildLogLevel.INFO }.map { it.message }
+        assertEquals("> Task :app:dexBuilder", lines.first())
+        assertTrue(lines.last().matches(Regex(""":app:dexBuilder took 1\.\ds""")), "$lines")
+        assertEquals(TaskName(":app:dexBuilder"), log.last { it.level == BuildLogLevel.INFO }.task)
+    }
+
     @Test fun aTaskBlockedByAFailedDependencyReadsAsSkipped() = withTempDir("blocked") { tmp ->
         val failing = Fixed(TaskName(":app:compileKotlin"), tmp) { TaskResult.Failed("nope") }
         val blocked = Fixed(TaskName(":app:dexBuilder"), tmp, dependsOn = listOf(failing.name))

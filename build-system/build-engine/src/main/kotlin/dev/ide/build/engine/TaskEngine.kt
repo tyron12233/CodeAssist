@@ -253,6 +253,9 @@ class TaskExecutorImpl(
     private companion object {
         /** A task quicker than this, all told, is not worth a log line. */
         const val PERF_LOG_FLOOR_MS = 100L
+
+        /** A task quicker than this does not report its duration in the build log (see [took]). */
+        const val TOOK_LOG_FLOOR_MS = 1_000L
     }
 
     override suspend fun execute(graph: TaskGraph, ctx: TaskContext, maxParallel: Int): BuildOutcome = coroutineScope {
@@ -294,6 +297,7 @@ class TaskExecutorImpl(
             if (cached != null && cached.inputFp == inFp && cached.outputFp == t.outputs.fingerprint().value) {
                 skipped.add(t.name); banner(ctx, t.name, "UP-TO-DATE")
                 perf(t.name, "UP-TO-DATE", tIn - t0, System.nanoTime() - tIn, 0, 0)
+                took(ctx, t.name, System.nanoTime() - t0, "checked in")
                 onEvent(t.name, TaskStatus.UpToDate); return
             }
         }
@@ -326,15 +330,18 @@ class TaskExecutorImpl(
                     if (line.isNotBlank()) ctx.buildLog.log(BuildLogEntry(line.trim(), BuildLogLevel.ERROR, t.name))
                 }
                 r.cause?.let { fileTrace(ctx, t.name, it) }
+                took(ctx, t.name, System.nanoTime() - t0)
                 onEvent(t.name, TaskStatus.Failed)
             }
             TaskResult.UpToDate -> {
                 skipped.add(t.name); if (t !is AlwaysRun) cache.put(t.name, inFp, t.outputs.fingerprint().value)
+                took(ctx, t.name, System.nanoTime() - t0)
                 onEvent(t.name, TaskStatus.UpToDate)
             }
             TaskResult.Success -> {
                 ran.add(t.name); if (t !is AlwaysRun) cache.put(t.name, inFp, t.outputs.fingerprint().value)
                 perf(t.name, "ran", tIn - t0, tChecked - tIn, tRan - tChecked, System.nanoTime() - tRan)
+                took(ctx, t.name, System.nanoTime() - t0)
                 onEvent(t.name, TaskStatus.Succeeded)
             }
         }
@@ -353,6 +360,20 @@ class TaskExecutorImpl(
             "task ${name.value} $status: inputs=${inputsNs / 1_000_000}ms check=${checkNs / 1_000_000}ms " +
                 "run=${runNs / 1_000_000}ms outputs=${outputsNs / 1_000_000}ms",
         )
+    }
+
+    /**
+     * How long a task took, into the build log under that task: `:app:dexBuilder took 42.3s`. The banner is
+     * printed when a task STARTS, so the transcript alone could not say which step a long build spent its time
+     * in (a user's screenshot of a 13 minute build showed nothing but task names). It covers the fingerprinting
+     * around the work as well as the work, since that is time the build spent on this task too. A task quicker
+     * than [TOOK_LOG_FLOOR_MS] says nothing, which keeps a build of fast tasks as terse as it was.
+     */
+    private fun took(ctx: TaskContext, name: TaskName, nanos: Long, verb: String = "took") {
+        val ms = nanos / 1_000_000
+        if (ms < TOOK_LOG_FLOOR_MS) return
+        val time = if (ms < 60_000) "${ms / 1000}.${ms % 1000 / 100}s" else "${ms / 60_000}m ${(ms % 60_000 / 1000).toString().padStart(2, '0')}s"
+        ctx.buildLog.log(BuildLogEntry("${name.value} $verb $time", BuildLogLevel.INFO, name))
     }
 
     /**

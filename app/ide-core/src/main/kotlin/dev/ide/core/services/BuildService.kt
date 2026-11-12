@@ -1522,7 +1522,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             }
             Guards.broker = null
             _permissionRequest.value = null
-            if (outcome?.succeeded == true && onSuccess != null) {
+            val succeeded = outcome?.succeeded == true
+            // The build's own time, taken before the post-build step: installing can wait minutes on the user
+            // (the "Install unknown apps" screen), and that read as a 13 minute build of up-to-date tasks.
+            val elapsed = System.currentTimeMillis() - start
+            // The line that tells the user how it went, in the shape every build tool closes with. Without
+            // it a finished build just stops producing output and the verdict lives only in the header pill.
+            _buildState.update { st ->
+                st.copy(log = st.log + buildVerdict(succeeded, elapsed, st.diagnostics))
+            }
+            if (succeeded && onSuccess != null) {
                 runCatching {
                     onSuccess { line ->
                         _buildState.update { st ->
@@ -1540,13 +1549,6 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         )
                     )
                 }
-            }
-            val succeeded = outcome?.succeeded == true
-            val elapsed = System.currentTimeMillis() - start
-            // The line that tells the user how it went, in the shape every build tool closes with. Without
-            // it a finished build just stops producing output and the verdict lives only in the header pill.
-            _buildState.update { st ->
-                st.copy(log = st.log + buildVerdict(succeeded, elapsed, st.diagnostics))
             }
             _buildState.update {
                 it.copy(
