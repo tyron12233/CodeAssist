@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -26,8 +25,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.ide.android.layout.LayoutElement
 import dev.ide.android.layout.LayoutViewClass
@@ -115,7 +114,14 @@ internal fun DragGhost(drag: DragState, origin: Offset) {
     val p = drag.position - origin
     Surface(
         modifier = Modifier
-            .offset { IntOffset((p.x - 40.dp.toPx()).roundToInt(), (p.y - 64.dp.toPx()).roundToInt()) }
+            // Placed in screen coordinates, as the drag position is. `offset` follows the layout direction, so under
+            // a right-to-left language it started the ghost at the far edge and moved it against the finger.
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+                val x = (p.x - 40.dp.toPx()).roundToInt()
+                val y = (p.y - 64.dp.toPx()).roundToInt()
+                layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x, y) }
+            }
             .graphicsLayer { rotationZ = -4f }
             .shadow(12.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),

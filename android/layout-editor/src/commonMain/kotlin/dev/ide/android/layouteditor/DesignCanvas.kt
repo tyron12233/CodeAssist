@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -426,7 +427,8 @@ internal fun DesignCanvas(
                 actions = actions,
                 below = below,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    // The left edge, whatever the language: the tab is placed from canvas coordinates.
+                    .align(AbsoluteAlignment.TopLeft)
                     .offset { IntOffset(0, y.roundToInt()) }
                     .startingAt(topLeft.x, canvasSize.width),
             )
