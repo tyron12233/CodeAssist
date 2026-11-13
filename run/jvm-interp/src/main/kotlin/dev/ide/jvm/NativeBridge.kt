@@ -27,6 +27,14 @@ interface NativeBridge {
     fun getField(receiver: Any, name: String, descriptor: String): Any?
     fun putField(receiver: Any, name: String, descriptor: String, value: Any?)
     fun construct(owner: String, descriptor: String, args: List<Any?>): Any?
+
+    /**
+     * The real value an interpreter value takes as an ELEMENT of a real array of [elementDescriptor]. An array
+     * argument reaches the methods above already real, so what they do for a lone argument has to be done here
+     * for each element: a lambda in a `vararg` of functions (`compareBy({ it.a }, { it.b })`) is stored as the
+     * same proxy of its functional interface it would cross as on its own. Anything else passes through.
+     */
+    fun realElement(value: Any?, elementDescriptor: String): Any? = value
 }
 
 /**
@@ -148,6 +156,9 @@ class ReflectiveBridge(
         '[' -> java.lang.reflect.Array.newInstance(classFor(descriptor.substring(1)), 0).javaClass
         else -> error("bad type descriptor: $descriptor")
     }
+
+    override fun realElement(value: Any?, elementDescriptor: String): Any? =
+        if (value is VmLambda) realLambda(value, elementDescriptor) else value
 
     /** Convert an interpreter value into the form reflection expects for a parameter of [descriptor]. */
     private fun marshalIn(value: Any?, descriptor: String): Any? = when {

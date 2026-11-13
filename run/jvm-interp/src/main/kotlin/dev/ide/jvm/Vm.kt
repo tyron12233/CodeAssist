@@ -480,13 +480,16 @@ class Vm(
                 realComponentType(arr.elementDescriptor),
                 arr.length
             ).also { arr.realMirror = it }
-        for (i in 0 until arr.length) java.lang.reflect.Array.set(
-            mirror,
-            i,
-            Marshalling.toRealArg(toReal(arr.data[i]), arr.elementDescriptor)
-        )
+        for (i in 0 until arr.length) java.lang.reflect.Array.set(mirror, i, realElement(arr.data[i], arr.elementDescriptor))
         return mirror
     }
+
+    /** What an interpreted array's element is in its real mirror: a lambda as the proxy of its functional
+     *  interface the bridge would pass it as on its own (a real `Function1[]` holds nothing else), an
+     *  interpreted object as its peer, a small primitive as its own wrapper. */
+    private fun realElement(element: Any?, elementDescriptor: String): Any? =
+        if (element is VmLambda) bridge.realElement(element, elementDescriptor)
+        else Marshalling.toRealArg(toReal(element), elementDescriptor)
 
     /** Copy each argument array's real mirror back into the interpreted array after a platform call, so an
      *  in-place mutation (sort, fill, arraycopy into it) is visible to interpreted code. Nested arrays recurse. */
@@ -498,9 +501,11 @@ class Vm(
         val mirror = arr.realMirror ?: return
         for (i in 0 until arr.length) {
             val element = arr.data[i]
-            if (element is VmArray) syncBack(element) // the mirror element is this nested array's own mirror
-            else arr.data[i] =
-                Marshalling.realToVm(java.lang.reflect.Array.get(mirror, i), arr.elementDescriptor)
+            if (element is VmArray) { syncBack(element); continue } // the mirror element is this nested array's own mirror
+            val real = java.lang.reflect.Array.get(mirror, i)
+            // A lambda the platform left in place stays the lambda, not the proxy that stood for it over there.
+            if (element is VmLambda && real === bridge.realElement(element, arr.elementDescriptor)) continue
+            arr.data[i] = Marshalling.realToVm(real, arr.elementDescriptor)
         }
     }
 

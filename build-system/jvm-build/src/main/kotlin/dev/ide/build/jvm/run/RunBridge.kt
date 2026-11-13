@@ -85,6 +85,9 @@ internal class RunBridge(
         return explained(owner) { delegate.construct(owner, descriptor, args) }.also { windows.record(it) }
     }
 
+    override fun realElement(value: Any?, elementDescriptor: String): Any? =
+        delegate.realElement(value, elementDescriptor)
+
     // ---- version skew (diagnostics) ----------------------------------------------------------------
 
     /**

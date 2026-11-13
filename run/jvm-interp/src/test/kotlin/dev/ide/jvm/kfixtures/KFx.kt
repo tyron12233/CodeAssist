@@ -205,3 +205,20 @@ fun tierInTemplate(): String {
 
 /** A data class inside a string template renders through its generated toString. */
 fun pointInTemplate(x: Int, y: Int): String = "at ${Point(x, y)}!"
+
+/** A `vararg` of lambdas handed to bridged code: `compareBy` with several selectors takes a `Function1[]`, so
+ *  each interpreted lambda has to arrive as a real `Function1`. A console run died here with "Array has
+ *  incompatible type". */
+fun sortedByTwoSelectors(): String =
+    listOf(Point(2, 1), Point(1, 9), Point(2, 0), Point(1, 3))
+        .sortedWith(compareBy({ it.x }, { it.y }))
+        .joinToString { "${it.x}:${it.y}" }
+
+/** The same array crossing twice, then read back by interpreted code: its lambdas are still callable here. */
+fun selectorsSurviveTheCrossing(): String {
+    val selectors = arrayOf<(Point) -> Comparable<*>?>({ it.y }, { it.x })
+    val points = listOf(Point(3, 1), Point(1, 1), Point(2, 0))
+    val first = points.sortedWith(compareBy(*selectors)).joinToString { "${it.x}:${it.y}" }
+    val again = points.sortedWith(compareBy(*selectors)).joinToString { "${it.x}:${it.y}" }
+    return "$first|$again|${selectors[0](Point(7, 8))}"
+}

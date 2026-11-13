@@ -117,6 +117,15 @@ class KotlinBytecodeTest {
     }
 
     @Test
+    fun aVarargOfLambdasCrossesTheBridgeAsRealFunctions() {
+        assertEquals(dev.ide.jvm.kfixtures.sortedByTwoSelectors(), call("sortedByTwoSelectors", "()Ljava/lang/String;"))
+        assertEquals(
+            dev.ide.jvm.kfixtures.selectorsSurviveTheCrossing(),
+            call("selectorsSurviveTheCrossing", "()Ljava/lang/String;"),
+        )
+    }
+
+    @Test
     fun interpretedObjectsInStringTemplatesUseTheirToString() {
         assertEquals(dev.ide.jvm.kfixtures.tierInTemplate(), call("tierInTemplate", "()Ljava/lang/String;"))
         assertEquals(dev.ide.jvm.kfixtures.pointInTemplate(3, 4), call("pointInTemplate", "(II)Ljava/lang/String;", 3, 4))
