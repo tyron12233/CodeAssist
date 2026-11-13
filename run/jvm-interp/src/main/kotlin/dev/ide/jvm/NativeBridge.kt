@@ -62,7 +62,9 @@ class ReflectiveBridge(
     private val classCache = ConcurrentHashMap<String, Class<*>>()
     private val paramClassCache = ConcurrentHashMap<String, Array<Class<*>>>()
     private val paramDescCache = ConcurrentHashMap<String, List<String>>()
-    private val methodCache = ConcurrentHashMap<Class<*>, ConcurrentHashMap<String, MethodRef>>()
+    // Keyed by class, then descriptor, then name: both strings come from the call instruction, so a lookup
+    // hashes nothing new (a concatenated `name + descriptor` key was built, and hashed, on every bridged call).
+    private val methodCache = ConcurrentHashMap<Class<*>, ConcurrentHashMap<String, ConcurrentHashMap<String, MethodRef>>>()
     private val ctorCache = ConcurrentHashMap<Class<*>, ConcurrentHashMap<String, CtorRef>>()
     private val fieldCache = ConcurrentHashMap<Class<*>, ConcurrentHashMap<String, Field>>()
     private class MethodRef(val m: Method?)
@@ -106,7 +108,7 @@ class ReflectiveBridge(
      *  params-only match when no return-type match exists (a covariant/bridge return the descriptor names more
      *  precisely than the reflected method reports). */
     private fun resolveMethod(cls: Class<*>, name: String, descriptor: String): Method? =
-        methodCache.getOrPut(cls) { ConcurrentHashMap() }.getOrPut(name + descriptor) {
+        methodCache.getOrPut(cls) { ConcurrentHashMap() }.getOrPut(descriptor) { ConcurrentHashMap() }.getOrPut(name) {
             val params = paramClasses(descriptor)
             val ret = returnClass(descriptor)
             // Prefer a return-type match; retry params-only only when the return type was known AND matched nothing.
@@ -162,22 +164,31 @@ class ReflectiveBridge(
      *  as the real object (a peer handed back is resolved to the interpreted instance it stands for). */
     private fun marshalOut(value: Any?, resultDescriptor: String): Any? = Marshalling.realToVm(value, resultDescriptor)
 
-    private fun marshalArgs(descriptor: String, args: List<Any?>): Array<Any?> =
-        paramDescs(descriptor).mapIndexed { i, d -> marshalIn(args[i], d) }.toTypedArray()
+    private fun marshalArgs(descriptor: String, args: List<Any?>): Array<Any?> {
+        val descs = paramDescs(descriptor)
+        val out = arrayOfNulls<Any?>(descs.size)
+        for (i in out.indices) out[i] = marshalIn(args[i], descs[i])
+        return out
+    }
 
     /** Interpreted objects and arrays are converted to their real forms before reaching the bridge; this guards
      *  the invariant so a missed conversion fails clearly instead of reaching reflection as an interpreter type. */
     private fun rejectVmObjects(args: List<Any?>) {
-        require(args.none { it is VmObject || it is VmArray }) {
-            "an interpreted value reached the bridge without conversion"
+        for (i in args.indices) {
+            val a = args[i]
+            require(a !is VmObject && a !is VmArray) { "an interpreted value reached the bridge without conversion" }
         }
     }
 
     override fun invokeStatic(owner: String, name: String, descriptor: String, args: List<Any?>): Any? {
         rejectVmObjects(args)
-        val backport = HostBackports.static(owner, name, descriptor)
-        val m = (if (backport != null && HostBackports.preferBackports) null else resolveMethod(loadReferenced(owner), name, descriptor))
-            ?: return backported(descriptor) { (backport ?: throw VmUnsupportedException("no static $owner.$name$descriptor"))(marshalArgs(descriptor, args)) }
+        // The host's own method wins when it has one, so the backport table is consulted only when it has
+        // none (or a test prefers the stand-ins).
+        val m = (if (HostBackports.preferBackports && HostBackports.static(owner, name, descriptor) != null) null
+        else resolveMethod(loadReferenced(owner), name, descriptor))
+            ?: return backported(descriptor) {
+                (HostBackports.static(owner, name, descriptor) ?: throw VmUnsupportedException("no static $owner.$name$descriptor"))(marshalArgs(descriptor, args))
+            }
         return marshalOut(invoked { m.invoke(null, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
     }
 
@@ -187,10 +198,11 @@ class ReflectiveBridge(
         // A lambda receiver is a call to a method of its REAL interface other than the abstract one (a default
         // method; the interpreter answers the abstract method and Object's itself): run it on the lambda's proxy.
         val target = if (receiver is VmLambda) realLambda(receiver, "Ljava/lang/Object;") else receiver
-        val backport = HostBackports.virtual(target, name, descriptor)
-        val m = (if (backport != null && HostBackports.preferBackports) null else resolveMethod(target.javaClass, name, descriptor))
+        val m = (if (HostBackports.preferBackports && HostBackports.virtual(target, name, descriptor) != null) null
+        else resolveMethod(target.javaClass, name, descriptor))
             ?: return backported(descriptor) {
-                (backport ?: throw VmUnsupportedException("no method $name$descriptor on ${target.javaClass.name}"))(target, marshalArgs(descriptor, args))
+                (HostBackports.virtual(target, name, descriptor)
+                    ?: throw VmUnsupportedException("no method $name$descriptor on ${target.javaClass.name}"))(target, marshalArgs(descriptor, args))
             }
         return marshalOut(invoked { m.invoke(target, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
     }

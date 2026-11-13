@@ -57,9 +57,12 @@ class PeerSpec(
      */
     val enumConstants: (() -> List<Any>)? = null,
 ) {
-    /** True when the interpreted class adds no real supertype behavior, so it needs no peer. */
+    /** True when the interpreted class adds no real supertype behavior, so it needs no peer until it crosses
+     *  to platform code. `toString()` does not count: every peer overrides it (to print the interpreted class's
+     *  name, not the generated peer's), and a peer made on that crossing serves it just as well. */
     val isTrivial: Boolean
-        get() = superClass == Any::class.java && interfaces.isEmpty() && methods.isEmpty() && abstractStubs.isEmpty()
+        get() = superClass == Any::class.java && interfaces.isEmpty() && abstractStubs.isEmpty() &&
+            methods.all { it.name == "toString" && it.descriptor == "()Ljava/lang/String;" }
 }
 
 /**

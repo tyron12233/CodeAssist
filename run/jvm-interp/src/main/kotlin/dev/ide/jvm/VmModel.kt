@@ -46,22 +46,36 @@ internal class VmClass(
     val volatileStaticFields: Set<String> =
         fields.filter { it.access and Opcodes.ACC_STATIC != 0 && it.access and Opcodes.ACC_VOLATILE != 0 }.mapTo(HashSet()) { it.name }
 
-    /** Static field values: defaulted from the descriptor, then seeded from any `ConstantValue` attribute (a
-     *  `static final` primitive/String constant), and finally set by the class initializer. The JVM assigns a
-     *  `ConstantValue` field during class preparation — before `<clinit>`, which carries no assignment for it —
-     *  so honoring it here is required: a class compiled against a NON-final field (emitting a `getstatic`)
-     *  reading a provider that declares it `final` (e.g. a library reading a regenerated `R` constant) would
-     *  otherwise see the descriptor default instead of the constant. ASM exposes the attribute as
-     *  [FieldNode.value] (an Integer for int/short/byte/char/boolean, else Long/Float/Double/String), which
-     *  already matches the interpreter's value conventions. */
-    val statics: HashMap<String, Any?> = HashMap<String, Any?>().apply {
+    /** Static field values, one [StaticCell] per declared static: defaulted from the descriptor, then seeded
+     *  from any `ConstantValue` attribute (a `static final` primitive/String constant), and finally set by the
+     *  class initializer. The JVM assigns a `ConstantValue` field during class preparation — before `<clinit>`,
+     *  which carries no assignment for it — so honoring it here is required: a class compiled against a
+     *  NON-final field (emitting a `getstatic`) reading a provider that declares it `final` (e.g. a library
+     *  reading a regenerated `R` constant) would otherwise see the descriptor default instead of the constant.
+     *  ASM exposes the attribute as [FieldNode.value] (an Integer for int/short/byte/char/boolean, else
+     *  Long/Float/Double/String), which already matches the interpreter's value conventions. A string constant
+     *  is interned, as every string constant is. */
+    val staticCells: HashMap<String, StaticCell> = HashMap<String, StaticCell>().apply {
         fields.filter { it.access and Opcodes.ACC_STATIC != 0 }.forEach {
-            val initial = it.value ?: Descriptors.defaultValue(it.desc)
-            // A volatile static's slot is an AtomicReference holder (see volatileStaticFields); putstatic in the
-            // class initializer writes THROUGH it, so the holder identity stays stable.
-            put(it.name, if (it.access and Opcodes.ACC_VOLATILE != 0) java.util.concurrent.atomic.AtomicReference(initial) else initial)
+            val cell = StaticCell(FieldKinds.of(it.desc, it.access and Opcodes.ACC_VOLATILE != 0))
+            cell.init((it.value as? String)?.intern() ?: it.value ?: Descriptors.defaultValue(it.desc))
+            put(it.name, cell)
         }
     }
+
+    /** [staticCells] by name in the interpreter's boxed form, for the reflective and host accessors. A volatile
+     *  static reads as its [java.util.concurrent.atomic.AtomicReference] holder, which the caller goes through. */
+    val statics: FieldMap = object : FieldMap {
+        override fun get(name: String): Any? = staticCells[name]?.boxed()
+        override fun set(name: String, value: Any?) {
+            staticCells[name]?.store(value)
+        }
+        override fun contains(name: String): Boolean = name in staticCells
+    }
+
+    /** Where each instance field of this class and its interpreted ancestors lives in an instance; computed on
+     *  first use by [Vm.layoutOf], which needs the superclass resolved. */
+    @Volatile @JvmField var layout: FieldLayout? = null
 
     /** Class-initialization state (JLS 12.4.2), so `<clinit>` runs exactly once even under concurrent first use.
      *  [initState] is one of [INIT_NONE]/[INIT_INPROGRESS]/[INIT_DONE]/[INIT_FAILED]; it is read without locking
@@ -80,6 +94,118 @@ internal class VmClass(
         methods.firstOrNull { it.name == name && it.desc == descriptor }
 }
 
+/** Field values by name in the interpreter's boxed form: the view the reflective and host accessors use. */
+internal interface FieldMap {
+    operator fun get(name: String): Any?
+    operator fun set(name: String, value: Any?)
+    operator fun contains(name: String): Boolean
+}
+
+/** How a field's value is stored. A primitive is kept unboxed; a `volatile` field of any type is a reference
+ *  slot holding an [java.util.concurrent.atomic.AtomicReference] to the boxed value. */
+internal object FieldKinds {
+    const val REF: Byte = 0
+    const val INT: Byte = 1
+    const val LONG: Byte = 2
+    const val FLOAT: Byte = 3
+    const val DOUBLE: Byte = 4
+    const val VOLATILE: Byte = 5
+
+    fun of(desc: String, volatile: Boolean): Byte = if (volatile) VOLATILE else when (desc[0]) {
+        'I', 'Z', 'B', 'C', 'S' -> INT
+        'J' -> LONG
+        'F' -> FLOAT
+        'D' -> DOUBLE
+        else -> REF
+    }
+}
+
+/** One static field's value: [ref] for a reference (or a volatile field's holder), [prim] for a primitive. */
+internal class StaticCell(@JvmField val kind: Byte) {
+    @JvmField var ref: Any? = null
+    @JvmField var prim: Long = 0
+
+    /** Seed the cell with its initial [value] (interpreter form); a volatile cell gets its holder here. */
+    fun init(value: Any?) {
+        if (kind == FieldKinds.VOLATILE) ref = java.util.concurrent.atomic.AtomicReference(value) else store(value)
+    }
+
+    fun boxed(): Any? = when (kind) {
+        FieldKinds.INT -> prim.toInt()
+        FieldKinds.LONG -> prim
+        FieldKinds.FLOAT -> Float.fromBits(prim.toInt())
+        FieldKinds.DOUBLE -> Double.fromBits(prim)
+        else -> ref
+    }
+
+    fun store(value: Any?) {
+        when (kind) {
+            FieldKinds.INT -> prim = (Marshalling.realPrimToVm(value) as? Int ?: 0).toLong()
+            FieldKinds.LONG -> prim = value as? Long ?: 0L
+            FieldKinds.FLOAT -> prim = (value as? Float ?: 0f).toRawBits().toLong()
+            FieldKinds.DOUBLE -> prim = (value as? Double ?: 0.0).toRawBits()
+            else -> ref = value
+        }
+    }
+}
+
+/**
+ * Where the instance fields of a class live in its instances. [chain] lists the interpreted classes from the
+ * root down to the class itself, and a class's layout starts with its superclass's, so a slot resolved against
+ * a class is the same slot in an instance of any subclass. Field `f` (an ordinal over the whole chain) has
+ * [names]`[f]`, a storage [kinds]`[f]`, and [slots]`[f]`, its index into [VmObject.prims] for a primitive kind
+ * and into [VmObject.refs] otherwise. [index] maps a name to the field this class sees under it: its own
+ * declaration, else the nearest ancestor's (a subclass may declare a field its superclass also declares, and
+ * the two are separate fields).
+ */
+internal class FieldLayout(parent: FieldLayout?, cls: VmClass) {
+    val chain: Array<VmClass> = if (parent == null) arrayOf(cls) else parent.chain + cls
+    val names: Array<String>
+    val kinds: ByteArray
+    val slots: IntArray
+    val index: HashMap<String, Int> = HashMap(parent?.index ?: emptyMap())
+    val refCount: Int
+    val primCount: Int
+    private val volatileRefs: IntArray
+    private val volatileDefaults: Array<Any?>
+
+    init {
+        val own = cls.fieldNodes.filter { it.access and Opcodes.ACC_STATIC == 0 }
+        val base = parent?.names?.size ?: 0
+        var refs = parent?.refCount ?: 0
+        var prims = parent?.primCount ?: 0
+        names = Array(base + own.size) { if (it < base) parent!!.names[it] else own[it - base].name }
+        kinds = ByteArray(names.size)
+        slots = IntArray(names.size)
+        if (parent != null) {
+            parent.kinds.copyInto(kinds); parent.slots.copyInto(slots)
+        }
+        own.forEachIndexed { i, f ->
+            val k = FieldKinds.of(f.desc, f.access and Opcodes.ACC_VOLATILE != 0)
+            kinds[base + i] = k
+            slots[base + i] = if (k == FieldKinds.REF || k == FieldKinds.VOLATILE) refs++ else prims++
+            index[f.name] = base + i
+        }
+        refCount = refs
+        primCount = prims
+        volatileRefs = names.indices.filter { kinds[it] == FieldKinds.VOLATILE }.toIntArray()
+        volatileDefaults = Array(volatileRefs.size) { i ->
+            val f = volatileRefs[i]
+            if (f < base) parent!!.volatileDefaults[i]
+            else Descriptors.defaultValue(own[f - base].desc)
+        }
+    }
+
+    /** The reference slots of a new instance: null, except a volatile field's holder around its default. */
+    fun newRefs(): Array<Any?> {
+        val out = arrayOfNulls<Any?>(refCount)
+        for (i in volatileRefs.indices) {
+            out[slots[volatileRefs[i]]] = java.util.concurrent.atomic.AtomicReference(volatileDefaults[i])
+        }
+        return out
+    }
+}
+
 // Class-initialization states for [VmClass.initState].
 internal const val INIT_NONE = 0
 internal const val INIT_INPROGRESS = 1
@@ -93,15 +219,48 @@ internal const val INIT_FAILED = 3
  * type; passing an interpreted object to platform code requires a real peer object, which the bridge rejects
  * until that path is implemented.
  */
-internal class VmObject(val vmClass: VmClass) {
-    /** Instance-field values, keyed by name. The full key set is populated when the object is allocated (every
-     *  declared instance field across the interpreted chain is defaulted in [Vm.newInstance]) and never grows
-     *  afterward — a `putfield` only replaces an existing key's value. That fixed-key-set invariant makes
-     *  concurrent value replacement structurally safe on a plain [HashMap] (no resize, no re-linking) across the
-     *  real threads a multithreaded program runs on; per-field visibility is relaxed, matching the VM's
-     *  best-effort (not hardened-JMM) stance — shared state that needs ordering uses the real
+internal class VmObject(val vmClass: VmClass, @JvmField val layout: FieldLayout) {
+    /** Reference-typed (and volatile) field values, and primitive ones unboxed (floats and doubles as raw
+     *  bits); a field's index into one or the other is its [FieldLayout] slot. Both arrays are sized when the
+     *  object is allocated and never replaced, so concurrent writes from the real threads a multithreaded
+     *  program runs on are structurally safe; per-field visibility is relaxed, matching the VM's best-effort
+     *  (not hardened-JMM) stance — a `volatile` field goes through an
+     *  [java.util.concurrent.atomic.AtomicReference] holder, and shared state that needs ordering uses the real
      *  `java.util.concurrent` primitives, which are bridged. */
-    val fields: HashMap<String, Any?> = HashMap()
+    @JvmField val refs: Array<Any?> = layout.newRefs()
+    @JvmField val prims: LongArray = LongArray(layout.primCount)
+
+    /** The fields by name in the interpreter's boxed form, as this object's own class sees them (its nearest
+     *  declaration of a name), for the reflective and host accessors; bytecode goes by slot. The view is made per use, so an
+     *  object carries nothing for it. A volatile field
+     *  reads as its `AtomicReference` holder, which the caller goes through. */
+    val fields: FieldMap get() = object : FieldMap {
+        override fun get(name: String): Any? {
+            val f = layout.index[name] ?: return null
+            val slot = layout.slots[f]
+            return when (layout.kinds[f]) {
+                FieldKinds.INT -> prims[slot].toInt()
+                FieldKinds.LONG -> prims[slot]
+                FieldKinds.FLOAT -> Float.fromBits(prims[slot].toInt())
+                FieldKinds.DOUBLE -> Double.fromBits(prims[slot])
+                else -> refs[slot]
+            }
+        }
+
+        override fun set(name: String, value: Any?) {
+            val f = layout.index[name] ?: return
+            val slot = layout.slots[f]
+            when (layout.kinds[f]) {
+                FieldKinds.INT -> prims[slot] = (Marshalling.realPrimToVm(value) as? Int ?: 0).toLong()
+                FieldKinds.LONG -> prims[slot] = value as? Long ?: 0L
+                FieldKinds.FLOAT -> prims[slot] = (value as? Float ?: 0f).toRawBits().toLong()
+                FieldKinds.DOUBLE -> prims[slot] = (value as? Double ?: 0.0).toRawBits()
+                else -> refs[slot] = value
+            }
+        }
+
+        override fun contains(name: String): Boolean = name in layout.index
+    }
 
     /** The real peer object platform code holds for this instance, created on demand when the object crosses to
      *  platform code or an interpreted `super` call needs the real supertype. Null until then. Volatile +

@@ -81,6 +81,28 @@ internal class Interpreter(private val vm: Vm) {
             if (n is JumpInsnNode) labelIndex.getValue(n.label) else -1
         }
 
+        /** State resolved for one instruction and reused by every later execution of it: a switch's jump table
+         *  (built here), and the field or call target an instruction resolved on first use (see [FieldSite],
+         *  [StaticSite], [CallSite]). Indexed like [insns]. A racing first use resolves twice and stores equal
+         *  results, so entries need no lock. */
+        val sites: Array<Any?> = arrayOfNulls<Any?>(insns.size).also { out ->
+            insns.forEachIndexed { i, n ->
+                when (n) {
+                    is TableSwitchInsnNode -> out[i] = SwitchTable(
+                        null, n.min, IntArray(n.labels.size) { labelIndex.getValue(n.labels[it]) }, labelIndex.getValue(n.dflt),
+                    )
+                    is LookupSwitchInsnNode -> out[i] = SwitchTable(
+                        IntArray(n.keys.size) { n.keys[it] }, 0,
+                        IntArray(n.labels.size) { labelIndex.getValue(n.labels[it]) }, labelIndex.getValue(n.dflt),
+                    )
+                    // A string constant is the SAME object wherever it appears and equal to `intern()`'s answer
+                    // (JLS 3.10.5); the class-file reader hands out a fresh String per constant.
+                    is LdcInsnNode -> (n.cst as? String)?.let { n.cst = it.intern() }
+                    else -> {}
+                }
+            }
+        }
+
         val maxLocals: Int = m.maxLocals
         val maxStack: Int = m.maxStack
         val isStatic: Boolean = m.access and ACC_STATIC != 0
@@ -107,6 +129,19 @@ internal class Interpreter(private val vm: Vm) {
             val end = labelIndex[tc.end] ?: return@mapNotNull null
             val handler = labelIndex[tc.handler] ?: return@mapNotNull null
             Handler(start, end, handler, tc.type)
+        }
+    }
+
+    /** A `tableswitch` ([keys] null, a dense table starting at [min]) or `lookupswitch` ([keys] sorted, as the
+     *  class file requires) with its targets resolved to instruction indices. */
+    private class SwitchTable(val keys: IntArray?, val min: Int, val targets: IntArray, val dflt: Int) {
+        fun target(key: Int): Int {
+            if (keys == null) {
+                val i = key.toLong() - min
+                return if (i < 0 || i >= targets.size) dflt else targets[i.toInt()]
+            }
+            val i = java.util.Arrays.binarySearch(keys, key)
+            return if (i >= 0) targets[i] else dflt
         }
     }
 
@@ -240,16 +275,23 @@ internal class Interpreter(private val vm: Vm) {
                 ref = arrayOfNulls(stackSize); prim = LongArray(stackSize); kind =
                     ByteArray(stackSize)
             } else {
-                java.util.Arrays.fill(ref, null)
+                java.util.Arrays.fill(ref, 0, usedStack, null)
             }
             if (lRef.size < maxLocals) {
                 lRef = arrayOfNulls(maxLocals); lPrim = LongArray(maxLocals)
             } else {
-                java.util.Arrays.fill(lRef, null)
+                java.util.Arrays.fill(lRef, 0, usedLocals, null)
             }
+            // Cells past these were never written since they were last cleared, so the next invocation at this
+            // depth clears only this much (a pooled frame's arrays grow to the largest method seen here).
+            usedStack = stackSize
+            usedLocals = maxLocals
             sp = 0
             retBoxed = null
         }
+
+        private var usedStack = 0
+        private var usedLocals = 0
 
         fun pushI(v: Int) {
             prim[sp] = v.toLong(); kind[sp] = K_INT; ref[sp] = null; sp++
@@ -444,12 +486,11 @@ internal class Interpreter(private val vm: Vm) {
      *  [caller] typed. */
     private fun callInterpreted(
         declaring: VmClass,
-        m: MethodNode,
+        block: MethodBlock,
         hasReceiver: Boolean,
         caller: Frame,
         exec: Exec
     ) {
-        val block = blockFor(m)
         val callee = acquire(exec, block)
         try {
             val slots = block.paramSlots
@@ -457,7 +498,7 @@ internal class Interpreter(private val vm: Vm) {
             // upstream. Fail with the method name instead of an opaque ArrayIndexOutOfBoundsException, and keep
             // it catchable (a preview degrades rather than crashing). The finally still releases the frame.
             if (caller.sp < slots.size + (if (hasReceiver) 1 else 0)) {
-                throw VmUnsupportedException("operand stack underflow calling ${declaring.name}.${m.name}${m.desc} from ${caller.sig}")
+                throw VmUnsupportedException("operand stack underflow calling ${declaring.name}.${block.sig} from ${caller.sig}")
             }
             for (i in slots.indices.reversed()) {
                 caller.sp--
@@ -525,6 +566,15 @@ internal class Interpreter(private val vm: Vm) {
                     frame.clearStack(); frame.pushRef(ve.value); pc = handler; continue
                 }
                 throw ve
+            } catch (so: StackOverflowError) {
+                // Interpreted calls recurse on the host stack, so the program's runaway recursion surfaces as the
+                // host's error. It is the program's to catch (`catch (StackOverflowError e)`), so it continues
+                // as an interpreted exception from here: this frame's handlers first, then each caller's.
+                val handler = findHandler(block, pc, so)
+                if (handler >= 0) {
+                    frame.clearStack(); frame.pushRef(so); pc = handler; continue
+                }
+                throw VmException(so)
             }
             when (frame.mode) {
                 MODE_GOTO -> pc = frame.target
@@ -572,7 +622,9 @@ internal class Interpreter(private val vm: Vm) {
         when (op) {
             NOP -> {}
             ACONST_NULL -> frame.pushRef(null)
-            in ICONST_M1..ICONST_5 -> frame.pushI(op - ICONST_0)
+            // Listed one by one: a range condition makes the compiler emit this whole `when` as a chain of
+            // comparisons instead of a table switch.
+            ICONST_M1, ICONST_0, ICONST_1, ICONST_2, ICONST_3, ICONST_4, ICONST_5 -> frame.pushI(op - ICONST_0)
             LCONST_0 -> frame.pushJ(0L); LCONST_1 -> frame.pushJ(1L)
             FCONST_0 -> frame.pushF(0f); FCONST_1 -> frame.pushF(1f); FCONST_2 -> frame.pushF(2f)
             DCONST_0 -> frame.pushD(0.0); DCONST_1 -> frame.pushD(1.0)
@@ -873,19 +925,8 @@ internal class Interpreter(private val vm: Vm) {
             IFNONNULL -> if (deref(frame.popRef()) != null) goTo(pc, block, frame)
             GOTO -> goTo(pc, block, frame)
 
-            TABLESWITCH -> {
-                val n = insn as TableSwitchInsnNode
-                val key = frame.popI()
-                val target = if (key < n.min || key > n.max) n.dflt else n.labels[key - n.min]
-                frame.mode = MODE_GOTO; frame.target = block.labelIndex.getValue(target)
-            }
-
-            LOOKUPSWITCH -> {
-                val n = insn as LookupSwitchInsnNode
-                val key = frame.popI()
-                val i = n.keys.indexOf(key)
-                frame.mode = MODE_GOTO; frame.target =
-                    block.labelIndex.getValue(if (i >= 0) n.labels[i] else n.dflt)
+            TABLESWITCH, LOOKUPSWITCH -> {
+                frame.mode = MODE_GOTO; frame.target = (block.sites[pc] as SwitchTable).target(frame.popI())
             }
 
             // returns: push onto the caller typed, or box at the VM boundary
@@ -920,115 +961,91 @@ internal class Interpreter(private val vm: Vm) {
             }
 
             // fields
-            GETSTATIC -> {
-                val f = insn as FieldInsnNode; frame.pushByDesc(
-                    f.desc,
-                    staticGet(f.owner, f.name, f.desc)
-                )
-            }
-
-            PUTSTATIC -> {
-                val f = insn as FieldInsnNode; staticPut(
-                    f.owner,
-                    f.name,
-                    f.desc,
-                    deref(frame.popByDesc(f.desc))
-                )
-            }
-
-            GETFIELD -> {
-                val f = insn as FieldInsnNode; frame.pushByDesc(
-                    f.desc,
-                    fieldGet(deref(frame.popRef()), f.name, f.desc)
-                )
-            }
-
-            PUTFIELD -> {
-                val f = insn as FieldInsnNode;
-                val v = deref(frame.popByDesc(f.desc)); fieldPut(
-                    deref(frame.popRef()),
-                    f.name,
-                    f.desc,
-                    v
-                )
-            }
+            GETSTATIC -> getStatic(insn as FieldInsnNode, pc, block, frame)
+            PUTSTATIC -> putStatic(insn as FieldInsnNode, pc, block, frame)
+            GETFIELD -> getField(insn as FieldInsnNode, pc, block, frame)
+            PUTFIELD -> putField(insn as FieldInsnNode, pc, block, frame)
 
             // method invocation
-            INVOKESTATIC -> invokeStatic(insn as MethodInsnNode, frame, exec)
-            INVOKESPECIAL -> invokeSpecial(insn as MethodInsnNode, frame, exec)
-            INVOKEVIRTUAL, INVOKEINTERFACE -> invokeVirtual(insn as MethodInsnNode, frame, exec)
+            INVOKESTATIC -> invokeStatic(insn as MethodInsnNode, pc, block, frame, exec)
+            INVOKESPECIAL -> invokeSpecial(insn as MethodInsnNode, pc, block, frame, exec)
+            INVOKEVIRTUAL, INVOKEINTERFACE -> invokeVirtual(insn as MethodInsnNode, pc, block, frame, exec)
             INVOKEDYNAMIC -> invokeDynamic(insn as InvokeDynamicInsnNode, frame)
 
             // object and array creation
             NEW -> frame.pushRef(instantiate((insn as TypeInsnNode).desc))
-            NEWARRAY -> frame.pushRef(
-                VmArray.of(
-                    primitiveArrayDesc((insn as IntInsnNode).operand),
-                    frame.popI()
-                )
-            )
+            NEWARRAY -> frame.pushRef(vm.newArray(primitiveArrayDesc((insn as IntInsnNode).operand), frame.popI()))
 
             ANEWARRAY -> {
                 val t = insn as TypeInsnNode;
-                val et = takePendingReified(exec) ?: t.desc; frame.pushRef(
-                    VmArray.of(
-                        elementDescOf(
-                            et
-                        ), frame.popI()
-                    )
-                )
+                val et = takePendingReified(exec) ?: t.desc
+                frame.pushRef(vm.newArray(elementDescOf(et), frame.popI()))
             }
 
             MULTIANEWARRAY -> frame.pushRef(multiArray(insn as MultiANewArrayInsnNode, frame))
             ARRAYLENGTH -> frame.pushI(arrayLength(deref(frame.popRef())))
 
             IALOAD, BALOAD, CALOAD, SALOAD -> {
-                val i = frame.popI(); frame.pushI(arrayGet(deref(frame.popRef()), i) as? Int ?: 0)
+                val i = frame.popI(); frame.pushI(loadInt(deref(frame.popRef()), i))
             }
 
             LALOAD -> {
-                val i = frame.popI(); frame.pushJ(arrayGet(deref(frame.popRef()), i) as? Long ?: 0L)
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is LongArray) { checkIndex(i, a.size); frame.pushJ(a[i]) }
+                else frame.pushJ(arrayGet(a, i) as? Long ?: 0L)
             }
 
             FALOAD -> {
-                val i = frame.popI(); frame.pushF(
-                    arrayGet(deref(frame.popRef()), i) as? Float ?: 0f
-                )
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is FloatArray) { checkIndex(i, a.size); frame.pushF(a[i]) }
+                else frame.pushF(arrayGet(a, i) as? Float ?: 0f)
             }
 
             DALOAD -> {
-                val i = frame.popI(); frame.pushD(
-                    arrayGet(deref(frame.popRef()), i) as? Double ?: 0.0
-                )
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is DoubleArray) { checkIndex(i, a.size); frame.pushD(a[i]) }
+                else frame.pushD(arrayGet(a, i) as? Double ?: 0.0)
             }
 
             AALOAD -> {
-                val i = frame.popI(); frame.pushRef(arrayGet(deref(frame.popRef()), i))
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is VmArray) { checkIndex(i, a.data.size); frame.pushRef(a.data[i]) }
+                else frame.pushRef(arrayGet(a, i))
             }
 
             IASTORE, BASTORE, CASTORE, SASTORE -> {
                 val v = frame.popI();
-                val i = frame.popI(); arraySet(deref(frame.popRef()), i, v)
+                val i = frame.popI(); storeInt(deref(frame.popRef()), i, v)
             }
 
             LASTORE -> {
-                val v = frame.popJ();
-                val i = frame.popI(); arraySet(deref(frame.popRef()), i, v)
+                val v = frame.popJ()
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is LongArray) { checkIndex(i, a.size); a[i] = v } else arraySet(a, i, v)
             }
 
             FASTORE -> {
-                val v = frame.popF();
-                val i = frame.popI(); arraySet(deref(frame.popRef()), i, v)
+                val v = frame.popF()
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is FloatArray) { checkIndex(i, a.size); a[i] = v } else arraySet(a, i, v)
             }
 
             DASTORE -> {
-                val v = frame.popD();
-                val i = frame.popI(); arraySet(deref(frame.popRef()), i, v)
+                val v = frame.popD()
+                val i = frame.popI()
+                val a = deref(frame.popRef())
+                if (a is DoubleArray) { checkIndex(i, a.size); a[i] = v } else arraySet(a, i, v)
             }
 
             AASTORE -> {
                 val v = deref(frame.popRef());
-                val i = frame.popI(); arraySet(deref(frame.popRef()), i, v)
+                val i = frame.popI(); storeRef(deref(frame.popRef()), i, v)
             }
 
             CHECKCAST -> {
@@ -1069,11 +1086,13 @@ internal class Interpreter(private val vm: Vm) {
         frame.target = block.jumpTargets[pc]
     }
 
+    // IEEE comparison, as `fcmpl`/`fcmpg`/`dcmpl`/`dcmpg` define it: `-0.0 == 0.0`, and an unordered pair (a
+    // NaN operand) yields [nan]. `compareTo` is the total order instead, which puts `-0.0` below `0.0`.
     private fun fcmp(a: Float, b: Float, nan: Int): Int =
-        if (a.isNaN() || b.isNaN()) nan else a.compareTo(b)
+        if (a > b) 1 else if (a == b) 0 else if (a < b) -1 else nan
 
     private fun dcmp(a: Double, b: Double, nan: Int): Int =
-        if (a.isNaN() || b.isNaN()) nan else a.compareTo(b)
+        if (a > b) 1 else if (a == b) 0 else if (a < b) -1 else nan
 
     private fun throwReal(t: Throwable): Nothing = throw VmException(t)
 
@@ -1095,17 +1114,133 @@ internal class Interpreter(private val vm: Vm) {
 
     // ---- fields -----------------------------------------------------------------------------------
 
+    /**
+     * An instance-field instruction resolved once: the field is [slot] of kind [kind] in any instance whose
+     * layout has [owner] at [depth] in its chain, which every instance of the class the instruction names (or
+     * of a subclass) does. An instance that fails the check belongs to a class loaded before a reload, and is
+     * served by name instead. [slot] is -1 when no interpreted class declares the field (it lives on the peer,
+     * inherited from a real supertype).
+     */
+    private class FieldSite(val owner: VmClass?, val depth: Int, val slot: Int, val kind: Byte)
+
+    private fun fieldSite(f: FieldInsnNode, pc: Int, block: MethodBlock): FieldSite {
+        (block.sites[pc] as? FieldSite)?.let { return it }
+        val owner = vm.resolve(f.owner)
+        val layout = owner?.let { vm.layoutOf(it) }
+        val field = layout?.index?.get(f.name)
+        val site = if (layout == null || field == null) FieldSite(null, 0, -1, FieldKinds.REF)
+        else FieldSite(owner, layout.chain.size - 1, layout.slots[field], layout.kinds[field])
+        block.sites[pc] = site
+        return site
+    }
+
+    private fun FieldSite.fits(o: VmObject): Boolean {
+        val chain = o.layout.chain
+        return slot >= 0 && depth < chain.size && chain[depth] === owner
+    }
+
+    private fun getField(f: FieldInsnNode, pc: Int, block: MethodBlock, frame: Frame) {
+        val receiver = deref(frame.popRef())
+        if (receiver is VmObject) {
+            val site = fieldSite(f, pc, block)
+            if (site.fits(receiver)) {
+                val slot = site.slot
+                when (site.kind) {
+                    FieldKinds.REF -> frame.pushRef(receiver.refs[slot])
+                    FieldKinds.INT -> frame.pushI(receiver.prims[slot].toInt())
+                    FieldKinds.LONG -> frame.pushJ(receiver.prims[slot])
+                    FieldKinds.FLOAT -> frame.pushF(Float.fromBits(receiver.prims[slot].toInt()))
+                    FieldKinds.DOUBLE -> frame.pushD(Double.fromBits(receiver.prims[slot]))
+                    else -> frame.pushByDesc(f.desc, (receiver.refs[slot] as AtomicReference<*>).get())
+                }
+                return
+            }
+        }
+        frame.pushByDesc(f.desc, fieldGet(receiver, f.name, f.desc))
+    }
+
     @Suppress("UNCHECKED_CAST")
+    private fun putField(f: FieldInsnNode, pc: Int, block: MethodBlock, frame: Frame) {
+        // The value is on top, the receiver under it.
+        val receiver = deref(frame.refAt(1))
+        if (receiver is VmObject) {
+            val site = fieldSite(f, pc, block)
+            if (site.fits(receiver)) {
+                val slot = site.slot
+                when (site.kind) {
+                    FieldKinds.REF -> receiver.refs[slot] = deref(frame.popRef())
+                    FieldKinds.INT, FieldKinds.LONG, FieldKinds.FLOAT, FieldKinds.DOUBLE ->
+                        receiver.prims[slot] = frame.prim[--frame.sp]
+                    else -> (receiver.refs[slot] as AtomicReference<Any?>).set(deref(frame.popByDesc(f.desc)))
+                }
+                frame.popAny()
+                return
+            }
+        }
+        val v = deref(frame.popByDesc(f.desc))
+        frame.popAny()
+        fieldPut(receiver, f.name, f.desc, v)
+    }
+
+    /**
+     * A static-field instruction resolved once: [cls] is the class the instruction names (initialized on first
+     * use), [cell] the field's storage on the class that declares it. [cell] is null when no interpreted class
+     * declares the field (a real class's static, or one an interpreted class inherits from a real supertype).
+     * Valid while [epoch] is the VM's.
+     */
+    private class StaticSite(val epoch: Int, val cls: VmClass?, val cell: StaticCell?)
+
+    private fun staticSite(f: FieldInsnNode, pc: Int, block: MethodBlock): StaticSite {
+        val epoch = vm.epoch
+        (block.sites[pc] as? StaticSite)?.let { if (it.epoch == epoch) return it }
+        val cls = vm.resolve(f.owner)
+        val site = StaticSite(epoch, cls, cls?.let { ownerHolding(it, f.name) }?.staticCells?.get(f.name))
+        block.sites[pc] = site
+        return site
+    }
+
+    private fun getStatic(f: FieldInsnNode, pc: Int, block: MethodBlock, frame: Frame) {
+        val site = staticSite(f, pc, block)
+        val cell = site.cell
+        if (cell == null) {
+            frame.pushByDesc(f.desc, staticGet(f.owner, f.name, f.desc)); return
+        }
+        vm.ensureInitialized(site.cls!!)
+        when (cell.kind) {
+            FieldKinds.REF -> frame.pushRef(cell.ref)
+            FieldKinds.INT -> frame.pushI(cell.prim.toInt())
+            FieldKinds.LONG -> frame.pushJ(cell.prim)
+            FieldKinds.FLOAT -> frame.pushF(Float.fromBits(cell.prim.toInt()))
+            FieldKinds.DOUBLE -> frame.pushD(Double.fromBits(cell.prim))
+            else -> frame.pushByDesc(f.desc, (cell.ref as AtomicReference<*>).get())
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun putStatic(f: FieldInsnNode, pc: Int, block: MethodBlock, frame: Frame) {
+        val site = staticSite(f, pc, block)
+        val cell = site.cell
+        if (cell == null) {
+            staticPut(f.owner, f.name, f.desc, deref(frame.popByDesc(f.desc))); return
+        }
+        vm.ensureInitialized(site.cls!!)
+        when (cell.kind) {
+            FieldKinds.REF -> cell.ref = deref(frame.popRef())
+            FieldKinds.INT, FieldKinds.LONG, FieldKinds.FLOAT, FieldKinds.DOUBLE -> cell.prim = frame.prim[--frame.sp]
+            else -> (cell.ref as AtomicReference<Any?>).set(deref(frame.popByDesc(f.desc)))
+        }
+    }
+
+    /** A static field by name, for a caller with no instruction site (and the site's own fallback). One no
+     *  interpreted class declares is a real class's, or one an interpreted class inherits from a REAL superclass
+     *  (e.g. `View.EMPTY_STATE_SET` read through an interpreted View subclass), which is read from the nearest
+     *  real superclass, whose name is loadable. Mirrors invokeStatic's inherited-method bridge. */
     private fun staticGet(owner: String, name: String, desc: String): Any? {
         val cls = vm.resolve(owner) ?: return vm.bridge.getStatic(owner, name, desc)
         vm.ensureInitialized(cls)
-        // A static field the interpreted class inherits from a REAL superclass (e.g. `View.EMPTY_STATE_SET`
-        // read through an interpreted View subclass): the interpreted chain doesn't declare it, so read it from
-        // the nearest real superclass, whose name is loadable. Mirrors invokeStatic's inherited-method bridge.
-        val holder = ownerHolding(cls, name)
+        val cell = ownerHolding(cls, name)?.staticCells?.get(name)
             ?: return vm.bridge.getStatic(vm.realSuperName(cls), name, desc)
-        val slot = holder.statics[name]
-        return if (name in holder.volatileStaticFields) (slot as AtomicReference<Any?>).get() else slot
+        return if (cell.kind == FieldKinds.VOLATILE) (cell.ref as AtomicReference<*>).get() else cell.boxed()
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -1113,12 +1248,9 @@ internal class Interpreter(private val vm: Vm) {
         val cls =
             vm.resolve(owner) ?: return vm.bridge.putStatic(owner, name, desc, vm.toReal(value))
         vm.ensureInitialized(cls)
-        val holder = ownerHolding(cls, name)
+        val cell = ownerHolding(cls, name)?.staticCells?.get(name)
             ?: return vm.bridge.putStatic(vm.realSuperName(cls), name, desc, vm.toReal(value))
-        if (name in holder.volatileStaticFields) (holder.statics[name] as AtomicReference<Any?>).set(
-            value
-        )
-        else holder.statics[name] = value
+        if (cell.kind == FieldKinds.VOLATILE) (cell.ref as AtomicReference<Any?>).set(value) else cell.store(value)
     }
 
     /** The interpreted class in [start]'s chain that declares static field [name], or null when no interpreted
@@ -1132,24 +1264,15 @@ internal class Interpreter(private val vm: Vm) {
         return null
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /** A field read the instruction's own site could not serve: a real receiver, a field inherited from a real
+     *  supertype (it lives on the peer, whatever field-reference owner the compiler emitted), or an instance of
+     *  a class from before a reload, read by name. */
     private fun fieldGet(receiver: Any?, name: String, desc: String): Any? {
         if (receiver == null) throwReal(NullPointerException("getfield $name on null"))
         if (receiver !is VmObject) return vm.bridge.getField(receiver, name, desc)
-        // A field an interpreted class declares lives on the VmObject; a field inherited from a real supertype
-        // lives on the peer (regardless of the field-reference owner the compiler emitted). A volatile field's
-        // value lives inside an AtomicReference holder for real volatile read semantics.
-        if (!vm.vmDeclaresField(receiver.vmClass, name)) return vm.bridge.getField(
-            vm.peerOf(
-                receiver
-            ), name, desc
-        )
+        if (name !in receiver.fields) return vm.bridge.getField(vm.peerOf(receiver), name, desc)
         val slot = receiver.fields[name]
-        return if (vm.isVolatileInstanceField(
-                receiver.vmClass,
-                name
-            )
-        ) (slot as AtomicReference<Any?>).get() else slot
+        return if (slot is AtomicReference<*> && vm.isVolatileInstanceField(receiver.vmClass, name)) slot.get() else slot
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -1158,14 +1281,10 @@ internal class Interpreter(private val vm: Vm) {
         if (receiver !is VmObject) {
             vm.bridge.putField(receiver, name, desc, vm.toReal(value)); return
         }
-        if (!vm.vmDeclaresField(receiver.vmClass, name)) {
+        if (name !in receiver.fields) {
             vm.bridge.putField(vm.peerOf(receiver), name, desc, vm.toReal(value)); return
         }
-        if (vm.isVolatileInstanceField(
-                receiver.vmClass,
-                name
-            )
-        ) (receiver.fields[name] as AtomicReference<Any?>).set(value)
+        if (vm.isVolatileInstanceField(receiver.vmClass, name)) (receiver.fields[name] as AtomicReference<Any?>).set(value)
         else receiver.fields[name] = value
     }
 
@@ -1192,7 +1311,48 @@ internal class Interpreter(private val vm: Vm) {
         return p
     }
 
-    private fun invokeStatic(insn: MethodInsnNode, frame: Frame, exec: Exec) {
+    /** An interpreted method a call resolved to: the class declaring it and its decoded body. */
+    private class Target(val declaring: VmClass, val block: MethodBlock)
+
+    /**
+     * An `invokestatic` or `invokespecial` resolved once, valid while [epoch] is the VM's. [target] is the
+     * interpreted method it runs, or null when the call does not land in interpreted code (a platform method, a
+     * redirected or intrinsic one), which takes the general path every time. [cls] is the class the instruction
+     * names, when interpreted (a static call initializes it).
+     */
+    private class FixedCall(val epoch: Int, val cls: VmClass?, val target: Target?)
+
+    /**
+     * An `invokevirtual`/`invokeinterface` site: the interpreted targets of the last two receiver classes seen
+     * here ([first], [second]), so a call that keeps meeting the same one or two classes skips method
+     * resolution. An entry's [Entry.target] is null when that class inherits the method from a real supertype.
+     */
+    private class VirtualCall(val epoch: Int, val key: String, val shape: CallShape) {
+        class Entry(val cls: VmClass, val target: Target?)
+
+        @JvmField var first: Entry? = null
+        @JvmField var second: Entry? = null
+    }
+
+    private fun targetOf(found: Pair<VmClass, MethodNode>?): Target? =
+        found?.let { Target(it.first, blockFor(it.second)) }
+
+    private fun invokeStatic(insn: MethodInsnNode, pc: Int, block: MethodBlock, frame: Frame, exec: Exec) {
+        val epoch = vm.epoch
+        var site = block.sites[pc] as? FixedCall
+        if (site == null || site.epoch != epoch) {
+            val intrinsic = insn.owner == REIFIED_MARKER_OWNER && insn.name == "reifiedOperationMarker"
+            val redirected = vm.staticRedirect?.hostOwner(insn.owner, insn.name, insn.desc) != null
+            val cls = if (intrinsic || redirected) null else vm.resolve(insn.owner)
+            site = FixedCall(epoch, cls, cls?.let { targetOf(vm.findInHierarchy(it, insn.name, insn.desc)) })
+            block.sites[pc] = site
+        }
+        val target = site.target
+        if (target != null) {
+            vm.ensureInitialized(site.cls!!)
+            callInterpreted(target.declaring, target.block, hasReceiver = false, caller = frame, exec = exec)
+            return
+        }
         // Kotlin's reification marker: `reifiedOperationMarker(int operationKind, String typeParameterName)`.
         // Calling it directly throws (it exists only for the compiler's inliner to strip); here we reproduce the
         // inliner's transform live — consume the operands and ARM the concrete type for the following type op,
@@ -1212,72 +1372,70 @@ internal class Interpreter(private val vm: Vm) {
             pushResult(sh, vm.bridgeStatic(hostOwner, insn.name, insn.desc, popBoxedArgs(sh, frame)), frame)
             return
         }
-        val cls = vm.resolve(insn.owner)
+        val sh = shape(insn.desc)
+        val args = popBoxedArgs(sh, frame)
+        val cls = site.cls
         if (cls != null) {
-            vm.ensureInitialized(cls)
-            val target = vm.findInHierarchy(cls, insn.name, insn.desc)
-            if (target != null) {
-                callInterpreted(
-                    target.first,
-                    target.second,
-                    hasReceiver = false,
-                    caller = frame,
-                    exec = exec
-                )
-                return
-            }
             // A static method the interpreted class inherits from a REAL superclass (e.g.
             // `ViewGroup.getChildMeasureSpec` called via an interpreted `Toolbar`): the interpreted chain
             // doesn't declare it, so bridge the call to the nearest real superclass, whose name IS loadable.
-            val sh = shape(insn.desc)
-            val args = popBoxedArgs(sh, frame)
-            pushResult(
-                sh,
-                vm.bridgeStatic(vm.realSuperName(cls), insn.name, insn.desc, args),
-                frame
-            )
+            vm.ensureInitialized(cls)
+            pushResult(sh, vm.bridgeStatic(vm.realSuperName(cls), insn.name, insn.desc, args), frame)
             return
         }
-        val sh = shape(insn.desc)
-        val args = popBoxedArgs(sh, frame)
         pushResult(sh, vm.bridgeStatic(insn.owner, insn.name, insn.desc, args), frame)
     }
 
-    private fun invokeSpecial(insn: MethodInsnNode, frame: Frame, exec: Exec) {
-        val cls = vm.resolve(insn.owner)
-        if (cls != null) {
-            val method = cls.declaredMethod(insn.name, insn.desc)
-                ?: vm.findInHierarchy(cls, insn.name, insn.desc)?.second
-            if (method != null) {
-                callInterpreted(cls, method, hasReceiver = true, caller = frame, exec = exec)
-                return
-            }
-            // The owner is interpreted but declares this method nowhere in its interpreted chain: it is a
-            // `super` call to a method a REAL supertype provides (e.g. `super.setImageDrawable` reaching
-            // ImageView from an interpreted View subclass). Fall through to the boxed dispatch, which routes it
-            // to the peer's real super method.
+    private fun invokeSpecial(insn: MethodInsnNode, pc: Int, block: MethodBlock, frame: Frame, exec: Exec) {
+        val epoch = vm.epoch
+        var site = block.sites[pc] as? FixedCall
+        if (site == null || site.epoch != epoch) {
+            val cls = vm.resolve(insn.owner)
+            val method = cls?.let { it.declaredMethod(insn.name, insn.desc) ?: vm.findInHierarchy(it, insn.name, insn.desc)?.second }
+            site = FixedCall(epoch, cls, method?.let { Target(cls!!, blockFor(it)) })
+            block.sites[pc] = site
         }
-        // Constructing a bridged object, an interpreted super(...) into a real supertype, or a super call into
-        // a real supertype: the boxed dispatch handles all of them.
+        val target = site.target
+        if (target != null) {
+            callInterpreted(target.declaring, target.block, hasReceiver = true, caller = frame, exec = exec)
+            return
+        }
+        // Constructing a bridged object, an interpreted super(...) into a real supertype, or a `super` call to
+        // a method a REAL supertype provides (e.g. `super.setImageDrawable` reaching ImageView from an
+        // interpreted View subclass, where the owner is interpreted but declares the method nowhere in its
+        // interpreted chain): the boxed dispatch handles all of them, routing the last to the peer's real
+        // super method.
         val sh = shape(insn.desc)
         val args = popBoxedArgs(sh, frame)
         val receiver = frame.popRef()
         pushResult(sh, dispatchSpecial(insn.owner, insn.name, insn.desc, receiver, args), frame)
     }
 
-    private fun invokeVirtual(insn: MethodInsnNode, frame: Frame, exec: Exec) {
-        val sh = shape(insn.desc)
+    private fun invokeVirtual(insn: MethodInsnNode, pc: Int, block: MethodBlock, frame: Frame, exec: Exec) {
+        val epoch = vm.epoch
+        var site = block.sites[pc] as? VirtualCall
+        if (site == null || site.epoch != epoch) {
+            site = VirtualCall(epoch, insn.name + insn.desc, shape(insn.desc))
+            block.sites[pc] = site
+        }
+        val sh = site.shape
         val receiver = deref(frame.refAt(sh.params.size))
         if (receiver is VmObject) {
-            val found = vm.findInHierarchy(receiver.vmClass, insn.name, insn.desc)
-            if (found != null) {
-                callInterpreted(
-                    found.first,
-                    found.second,
-                    hasReceiver = true,
-                    caller = frame,
-                    exec = exec
-                ); return
+            val cls = receiver.vmClass
+            var entry = site.first
+            if (entry == null || entry.cls !== cls) {
+                val other = site.second
+                if (other != null && other.cls === cls) entry = other
+                else {
+                    entry = VirtualCall.Entry(cls, targetOf(vm.findInHierarchy(cls, insn.name, insn.desc, site.key)))
+                    site.second = site.first
+                    site.first = entry
+                }
+            }
+            val target = entry.target
+            if (target != null) {
+                callInterpreted(target.declaring, target.block, hasReceiver = true, caller = frame, exec = exec)
+                return
             }
         }
         val args = popBoxedArgs(sh, frame)
@@ -1285,7 +1443,7 @@ internal class Interpreter(private val vm: Vm) {
         // A host-fixed answer for a platform method (a preview's View.isInEditMode), checked only when set.
         val constants = vm.constantMethods
         if (constants.isNotEmpty()) {
-            val key = insn.name + insn.desc
+            val key = site.key
             if (constants.containsKey(key)) {
                 // The frame keeps booleans (and chars) as ints, as the JVM does.
                 val v = when (val c = constants[key]) { is Boolean -> if (c) 1 else 0; is Char -> c.code; else -> c }
@@ -1418,8 +1576,18 @@ internal class Interpreter(private val vm: Vm) {
                 )!!, name, descriptor, args
             )
 
-            else -> vm.bridgeVirtual(receiver, name, descriptor, args)
+            else ->
+                // `clone()` is public on an array type only, which reflection does not list as a method.
+                if (name == "clone" && args.isEmpty() && receiver.javaClass.isArray) cloneRealArray(receiver)
+                else vm.bridgeVirtual(receiver, name, descriptor, args)
         }
+    }
+
+    private fun cloneRealArray(a: Any): Any {
+        val n = java.lang.reflect.Array.getLength(a)
+        val copy = java.lang.reflect.Array.newInstance(a.javaClass.componentType, n)
+        System.arraycopy(a, 0, copy, 0, n)
+        return copy
     }
 
     /**
@@ -1816,28 +1984,79 @@ internal class Interpreter(private val vm: Vm) {
         // Match the interpreted hierarchy by name, or a real supertype (a real interface or class reached
         // through a bridged super) by assignability.
         is VmObject -> internalNameOf(target).let { vm.isSubtype(v.vmClass, it) || vm.isRealInstance(v.vmClass, it) }
-        is VmArray -> target.startsWith("[")
+        is VmArray ->
+            if (target.startsWith("[")) vm.arrayElementAssignable(v.elementDescriptor, target.substring(1))
+            else isArraySupertype(internalNameOf(target))
         // A lambda is its functional interface AND every supertype of it (see [Vm.lambdaIsA]).
         is VmLambda -> vm.lambdaIsA(v.interfaceType, internalNameOf(target))
         // A real array cast to an array target: trust it. The element type may be an interpreted class (a
         // bridged call returning `T[]` for an interpreted `T`, e.g. Spannable.getSpans), which the real
         // classloader can't resolve, so an exact check would wrongly reject a compiler-emitted cast.
-        else -> if (target.startsWith("[") && v.javaClass.isArray) true
+        // An array target naming real classes all the way down is checked exactly (an `int[]` is not a
+        // `long[]`, nor an `Object[]`).
+        else -> if (target.startsWith("[") && v.javaClass.isArray) vm.realArrayClass(target)?.isInstance(v) ?: true
         else runCatching {
             Class.forName(target.replace('/', '.'), false, javaClass.classLoader).isInstance(v)
         }.getOrDefault(false)
     }
+
+    /** The only non-array types an array is an instance of (JLS 4.10.3). */
+    private fun isArraySupertype(internalName: String): Boolean =
+        internalName == "java/lang/Object" || internalName == "java/lang/Cloneable" || internalName == "java/io/Serializable"
 
     /** A type operand as an internal name: a reified marker may arm a DESCRIPTOR (`Lfoo/Bar;`), which is
      *  unwrapped; an internal name (which never ends in `;`) is kept as-is. */
     private fun internalNameOf(target: String): String =
         if (target.startsWith("L") && target.endsWith(";")) target.substring(1, target.length - 1) else target
 
-    /** The length of a [VmArray] or a real Java array (returned from a bridge call). */
+    /** The length of a [VmArray] or a real Java array. */
     private fun arrayLength(a: Any?): Int = when (a) {
         null -> throwReal(NullPointerException("arraylength on null"))
         is VmArray -> a.length
+        is IntArray -> a.size
+        is Array<*> -> a.size
+        is ByteArray -> a.size
+        is CharArray -> a.size
         else -> java.lang.reflect.Array.getLength(a)
+    }
+
+    /** `iaload`/`baload`/`caload`/`saload`: an element of an int, byte, boolean, char or short array, widened to
+     *  the computational int. */
+    private fun loadInt(a: Any?, i: Int): Int = when (a) {
+        is IntArray -> { checkIndex(i, a.size); a[i] }
+        is ByteArray -> { checkIndex(i, a.size); a[i].toInt() }
+        is CharArray -> { checkIndex(i, a.size); a[i].code }
+        is BooleanArray -> { checkIndex(i, a.size); if (a[i]) 1 else 0 }
+        is ShortArray -> { checkIndex(i, a.size); a[i].toInt() }
+        else -> arrayGet(a, i) as? Int ?: 0
+    }
+
+    /** `iastore`/`bastore`/`castore`/`sastore`: store [v] narrowed to the array's element type (the low byte, the
+     *  low bit for a boolean, and so on). */
+    private fun storeInt(a: Any?, i: Int, v: Int) {
+        when (a) {
+            is IntArray -> { checkIndex(i, a.size); a[i] = v }
+            is ByteArray -> { checkIndex(i, a.size); a[i] = v.toByte() }
+            is CharArray -> { checkIndex(i, a.size); a[i] = v.toChar() }
+            is BooleanArray -> { checkIndex(i, a.size); a[i] = (v and 1) != 0 }
+            is ShortArray -> { checkIndex(i, a.size); a[i] = v.toShort() }
+            else -> arraySet(a, i, v)
+        }
+    }
+
+    /** `aastore`, with its element-type check: a value the array's element type does not admit raises
+     *  `ArrayStoreException` (`Object[] a = new String[1]; a[0] = 1`). */
+    private fun storeRef(a: Any?, i: Int, v: Any?) {
+        if (a is VmArray) {
+            checkIndex(i, a.data.size)
+            if (v != null && !vm.arrayAccepts(a.elementDescriptor, v)) throwReal(ArrayStoreException(storedTypeName(v)))
+            a.data[i] = v
+        } else arraySet(a, i, v)
+    }
+
+    private fun storedTypeName(v: Any): String = when (v) {
+        is VmObject -> v.vmClass.name.replace('/', '.')
+        else -> v.javaClass.name
     }
 
     /** Read an element of a [VmArray] or a real Java array, converting a real element to the interpreter's form
@@ -1848,12 +2067,13 @@ internal class Interpreter(private val vm: Vm) {
             checkIndex(i, a.length); a.data[i]
         }
 
+        is Array<*> -> {
+            checkIndex(i, a.size); Marshalling.realToVm(a[i])
+        }
+
         else -> {
             checkIndex(i, java.lang.reflect.Array.getLength(a))
-            val v = java.lang.reflect.Array.get(a, i)
-            if (a.javaClass.componentType.isPrimitive) Marshalling.realPrimToVm(v) else Marshalling.realToVm(
-                v
-            )
+            Marshalling.realPrimToVm(java.lang.reflect.Array.get(a, i))
         }
     }
 
@@ -1865,11 +2085,14 @@ internal class Interpreter(private val vm: Vm) {
         }
 
         else -> {
-            checkIndex(i, java.lang.reflect.Array.getLength(a)); java.lang.reflect.Array.set(
-                a,
-                i,
-                realElement(v, a.javaClass.componentType)
-            )
+            checkIndex(i, java.lang.reflect.Array.getLength(a))
+            val element = realElement(v, a.javaClass.componentType)
+            try {
+                java.lang.reflect.Array.set(a, i, element)
+            } catch (e: IllegalArgumentException) {
+                // The reflective store reports an element of the wrong type this way; `aastore` raises this.
+                throwReal(ArrayStoreException(element?.javaClass?.name))
+            }
         }
     }
 
@@ -1895,9 +2118,9 @@ internal class Interpreter(private val vm: Vm) {
     /** The element descriptor for `anewarray` of internal type [desc] (already an array descriptor when nested). */
     private fun elementDescOf(desc: String): String = if (desc.startsWith("[")) desc else "L$desc;"
 
-    private fun multiArray(insn: MultiANewArrayInsnNode, frame: Frame): VmArray {
+    private fun multiArray(insn: MultiANewArrayInsnNode, frame: Frame): Any {
         val dims = IntArray(insn.dims)
         for (i in insn.dims - 1 downTo 0) dims[i] = frame.popI()
-        return VmArray.multi(insn.desc, dims)
+        return vm.newMultiArray(insn.desc, dims)
     }
 }

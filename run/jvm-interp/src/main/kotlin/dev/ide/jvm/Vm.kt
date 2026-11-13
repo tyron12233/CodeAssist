@@ -356,6 +356,8 @@ class Vm(
      */
     fun forgetClasses(match: (String) -> Boolean) {
         classes.keys.removeIf(match)
+        resolveCache.clear() // a kept class may have resolved a method to a forgotten superclass
+        epoch++
         peerSpecs.keys.removeIf { match(it.name) }
     }
 
@@ -515,6 +517,12 @@ class Vm(
         return bridge.invokeStatic(owner, name, descriptor, real).also { syncArraysBack(vmArgs) }
     }
 
+    private val internalNames = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()
+
+    /** [cls]'s internal name (`java/util/ArrayList`), kept per class: it is asked on every bridged call. */
+    private fun internalNameOf(cls: Class<*>): String =
+        internalNames[cls] ?: cls.name.replace('.', '/').also { internalNames[cls] = it }
+
     internal fun bridgeVirtual(
         receiver: Any,
         name: String,
@@ -522,13 +530,7 @@ class Vm(
         vmArgs: List<Any?>
     ): Any? {
         val real = vmArgs.map { toReal(it) }
-        interceptReflection(
-            receiver,
-            receiver.javaClass.name.replace('.', '/'),
-            name,
-            descriptor,
-            real
-        )?.let { return it.value }
+        interceptReflection(receiver, internalNameOf(receiver.javaClass), name, descriptor, real)?.let { return it.value }
         return bridge.invokeVirtual(receiver, name, descriptor, real)
             .also { syncArraysBack(vmArgs) }
     }
@@ -857,6 +859,121 @@ class Vm(
         }
     }
 
+    private val realArrayElements = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /**
+     * Whether an array of [elementDescriptor] is created as a REAL host array instead of a [VmArray]. It is when
+     * no element could ever be an interpreter-only value: a primitive, a final platform class (`String`, the
+     * boxes), or an array of those. A real array is one object on both sides of the bridge, so platform code
+     * that keeps it (`list.add(a)`, `ByteBuffer.wrap(b)`, `Arrays.asList(a)`) and the program see each other's
+     * writes, it crosses with no copy, and its primitives are stored unboxed. Any other element type (an
+     * interpreted class, or a platform type an interpreted object or lambda can implement) stays a [VmArray],
+     * whose elements are interpreter values and which crosses as a mirror copy.
+     */
+    internal fun isRealArrayElement(elementDescriptor: String): Boolean = when (elementDescriptor[0]) {
+        '[' -> isRealArrayElement(elementDescriptor.substring(1))
+        'L' -> realArrayElements.getOrPut(elementDescriptor) {
+            val name = elementDescriptor.substring(1, elementDescriptor.length - 1)
+            resolve(name) == null &&
+                runCatching { java.lang.reflect.Modifier.isFinal(loadReal(name).modifiers) }.getOrDefault(false)
+        }
+        else -> true
+    }
+
+    /** A new array of [length] elements of [elementDescriptor], each at its type default: a real array or a
+     *  [VmArray] as [isRealArrayElement] decides. A negative length and an exhausted heap are the program's to
+     *  catch, so both are thrown as interpreted exceptions. */
+    internal fun newArray(elementDescriptor: String, length: Int): Any {
+        if (length < 0) throw VmException(NegativeArraySizeException(length.toString()))
+        return try {
+            if (isRealArrayElement(elementDescriptor)) {
+                java.lang.reflect.Array.newInstance(realComponentType(elementDescriptor), length)
+            } else VmArray.of(elementDescriptor, length)
+        } catch (e: OutOfMemoryError) {
+            throw VmException(e)
+        }
+    }
+
+    /** A multi-dimensional array of type [arrayDescriptor] (`[[I`), allocating the dimensions [dims] gives and
+     *  leaving any deeper ones null, as `new int[2][]` does. */
+    internal fun newMultiArray(arrayDescriptor: String, dims: IntArray, depth: Int = 0): Any {
+        val elementDescriptor = arrayDescriptor.substring(1)
+        val arr = newArray(elementDescriptor, dims[depth])
+        if (depth + 1 < dims.size) {
+            for (i in 0 until dims[depth]) {
+                val inner = newMultiArray(elementDescriptor, dims, depth + 1)
+                @Suppress("UNCHECKED_CAST")
+                if (arr is VmArray) arr.data[i] = inner else (arr as Array<Any?>)[i] = inner
+            }
+        }
+        return arr
+    }
+
+    private val arrayTargetClasses = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    /** The real class an array type descriptor names (`[I`, `[[Ljava/lang/String;`), or null when its element
+     *  type is interpreted or cannot be loaded, so no real class stands for it. */
+    internal fun realArrayClass(arrayDescriptor: String): Class<*>? {
+        val cached = arrayTargetClasses.getOrPut(arrayDescriptor) {
+            val base = arrayDescriptor.trimStart('[')
+            val interpreted = base.length > 1 && resolve(base.substring(1, base.length - 1)) != null
+            if (interpreted) NO_REAL_CLASS
+            else runCatching { realComponentType(arrayDescriptor) }.getOrNull() ?: NO_REAL_CLASS
+        }
+        return cached as? Class<*>
+    }
+
+    /**
+     * Whether a [VmArray] whose elements are [element] is an instance of the array type whose elements are
+     * [target] (both type descriptors): array types are covariant in a reference element type and invariant in a
+     * primitive one (JLS 4.10.3). A pair that cannot be decided (a platform type that does not load here) is
+     * accepted, since the compiler already checked the cast it emitted.
+     */
+    internal fun arrayElementAssignable(element: String, target: String): Boolean = when {
+        element == target -> true
+        element.length == 1 || target.length == 1 -> false
+        target == "Ljava/lang/Object;" -> true
+        element[0] == '[' ->
+            if (target[0] == '[') arrayElementAssignable(element.substring(1), target.substring(1))
+            else target == "Ljava/lang/Cloneable;" || target == "Ljava/io/Serializable;"
+        target[0] == '[' -> false
+        else -> {
+            val from = element.substring(1, element.length - 1)
+            val to = target.substring(1, target.length - 1)
+            val fromClass = resolve(from)
+            when {
+                fromClass != null -> isSubtype(fromClass, to) || isRealInstance(fromClass, to)
+                resolve(to) != null -> false // a platform class is never a subtype of an interpreted one
+                else -> runCatching { loadReal(to).isAssignableFrom(loadReal(from)) }.getOrDefault(true)
+            }
+        }
+    }
+
+    /**
+     * Whether [value] may be stored into a [VmArray] of [elementDescriptor] (`aastore`'s check, which raises
+     * `ArrayStoreException`). Only a pairing the VM can decide for certain is refused: an interpreted object
+     * against either kind of element type, and a platform object against a platform element type. Anything
+     * else (a lambda, a platform object standing for an interpreted type) is accepted as before.
+     */
+    internal fun arrayAccepts(elementDescriptor: String, value: Any?): Boolean {
+        if (value == null || elementDescriptor == "Ljava/lang/Object;") return true
+        if (elementDescriptor[0] == '[') {
+            return when (value) {
+                is VmArray -> arrayElementAssignable(value.elementDescriptor, elementDescriptor.substring(1))
+                is VmObject, is VmLambda -> false
+                else -> if (value.javaClass.isArray) realArrayClass(elementDescriptor)?.isInstance(value) ?: true else false
+            }
+        }
+        val name = elementDescriptor.substring(1, elementDescriptor.length - 1)
+        return when (value) {
+            is VmObject -> isSubtype(value.vmClass, name) || isRealInstance(value.vmClass, name)
+            is VmArray -> name == "java/lang/Cloneable" || name == "java/io/Serializable"
+            is VmLambda -> true
+            else -> if (resolve(name) != null) true
+            else runCatching { loadReal(name).isInstance(value) }.getOrDefault(true)
+        }
+    }
+
     /** The real array class with [component] as its component type. A nested array's element type is resolved
      *  through [realComponentType] rather than by loading the descriptor's own name, because an interpreted
      *  element type has no real class of that name to load, and a host classpath that happens to carry one
@@ -914,12 +1031,22 @@ class Vm(
         val params = Descriptors.paramTypes(descriptor)
         val vmArgs = args.mapIndexed { i, a -> Marshalling.realToVm(a, params[i]) }
         val (declaring, method) = findInHierarchy(o.vmClass, name, descriptor)
-            ?: throw VmUnsupportedException("no interpreted override $name$descriptor on ${o.vmClass.name}")
+            ?: if (name + descriptor == TO_STRING) return@surfacing defaultToString(o)
+            else throw VmUnsupportedException("no interpreted override $name$descriptor on ${o.vmClass.name}")
         val result = interpreter.execute(declaring, method, o, vmArgs)
         if (result is VmObject) peerOf(result) else Marshalling.vmToReal(
             result,
             Descriptors.returnType(descriptor)
         )
+    }
+
+    /** What `Object.toString()` (`Name@hash`) or `Throwable.toString()` (`Name: message`) answers for [o], with
+     *  the interpreted class's name where the real method would print the peer's. */
+    private fun defaultToString(o: VmObject): String {
+        val name = o.vmClass.name.replace('/', '.')
+        val peer = o.peer
+        return if (peer is Throwable) peer.localizedMessage?.let { "$name: $it" } ?: name
+        else name + "@" + Integer.toHexString(peer?.hashCode() ?: System.identityHashCode(o))
     }
 
     /** The peer shape for [vmClass]: its nearest real superclass, the real interfaces it declares, the
@@ -950,6 +1077,15 @@ class Vm(
                 } -> methods.add(candidate.method)
 
                 candidate.abstract -> stubs.add(candidate.method)
+            }
+        }
+        // `Object.toString()` and `Throwable.toString()` print `getClass().getName()`, which on a peer is the
+        // generated class (`dev.ide.jvm.peers.a_b_MyException_Peer1: message`). A class that leaves either in
+        // place gets the override anyway, answered with the interpreted class's name ([defaultToString]), so a
+        // printed object, a logged exception and a stack trace's first line name the program's own class.
+        candidates[TO_STRING]?.method?.let { m ->
+            if (m !in methods && (m.ownerInternalName == "java/lang/Object" || m.ownerInternalName == "java/lang/Throwable")) {
+                methods.add(m)
             }
         }
         return PeerSpec(
@@ -1185,28 +1321,15 @@ class Vm(
      *  field's slot is an [AtomicReference] holder so its reads/writes get real
      *  volatile semantics (see [isVolatileInstanceField]).
      **/
-    internal fun newInstance(cls: VmClass): VmObject {
-        val obj = VmObject(cls)
-        var c: VmClass? = cls
-        while (c != null) {
-            val cur = c
-            cur.instanceFieldDescs.forEach { (n, d) ->
-                val default = Descriptors.defaultValue(d)
-                obj.fields.putIfAbsent(
-                    n,
-                    if (n in cur.volatileInstanceFields) {
-                        AtomicReference(
-                            default
-                        )
-                    } else {
-                        default
-                    }
-                )
-            }
-            c = cur.superName?.let { resolve(it) }
-        }
-        return obj
-    }
+    internal fun newInstance(cls: VmClass): VmObject = VmObject(cls, layoutOf(cls))
+
+    /** [cls]'s instance-field layout, built on first use on top of its interpreted superclass's. */
+    internal fun layoutOf(cls: VmClass): FieldLayout =
+        cls.layout ?: FieldLayout(cls.superName?.let { resolve(it) }?.let { layoutOf(it) }, cls).also { cls.layout = it }
+
+    /** Changes whenever a class is forgotten, so state resolved against the classes of a moment ago (a call
+     *  site's target, a static field's cell) is resolved again. */
+    @Volatile @JvmField internal var epoch: Int = 0
 
     /** Whether the interpreted class in [start]'s chain that DECLARES instance field [name] declares it
      *  `volatile` (so its slot is an AtomicReference holder). Mirrors [vmDeclaresField]'s walk. */
@@ -1269,6 +1392,11 @@ class Vm(
     /** How many class initializations this thread is inside, so [VmProfile] counts nested time once. */
     private val initDepth = ThreadLocal.withInitial { IntArray(1) }
 
+    private val TO_STRING = "toString()Ljava/lang/String;"
+
+    /** Marks an array type that no real class stands for, in [arrayTargetClasses]. */
+    private val NO_REAL_CLASS = Any()
+
     private class Resolved(val target: Pair<VmClass, org.objectweb.asm.tree.MethodNode>?)
 
     private val resolveCache =
@@ -1282,12 +1410,18 @@ class Vm(
         start: VmClass,
         name: String,
         descriptor: String
+    ): Pair<VmClass, org.objectweb.asm.tree.MethodNode>? = findInHierarchy(start, name, descriptor, name + descriptor)
+
+    /** [findInHierarchy] for a caller that keeps [key] (`name + descriptor`) instead of building it per call. */
+    internal fun findInHierarchy(
+        start: VmClass,
+        name: String,
+        descriptor: String,
+        key: String,
     ): Pair<VmClass, org.objectweb.asm.tree.MethodNode>? {
-        val perClass = resolveCache.getOrPut(start) { java.util.concurrent.ConcurrentHashMap() }
-        perClass[name + descriptor]?.let { return it.target }
-        return findInHierarchyUncached(start, name, descriptor).also {
-            perClass[name + descriptor] = Resolved(it)
-        }
+        val perClass = resolveCache[start] ?: resolveCache.getOrPut(start) { java.util.concurrent.ConcurrentHashMap() }
+        perClass[key]?.let { return it.target }
+        return findInHierarchyUncached(start, name, descriptor).also { perClass[key] = Resolved(it) }
     }
 
     private fun findInHierarchyUncached(
