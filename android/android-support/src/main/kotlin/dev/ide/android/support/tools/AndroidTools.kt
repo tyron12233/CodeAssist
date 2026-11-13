@@ -173,6 +173,24 @@ internal object DexDiagnostics {
     private val UNSUPPORTED_VERSION = Regex("""[Uu]nsupported class file (?:major )?version|bytecode (?:that is )?newer""")
     private const val TOO_MANY = "Cannot fit requested classes in a single dex file"
 
+    /** The JVM/ART exception type a tool's raw output names when it exhausts its heap. */
+    const val OOM_TOKEN = "OutOfMemoryError"
+
+    /** What [humanize] turns a raw out-of-memory line into. A shrinker that knows the heap it ran with replaces
+     *  the generic advice with its own (see `ForkedR8Shrinker`); [isOutOfMemory] recognizes either form. */
+    const val OUT_OF_MEMORY_PREFIX = "error: The dexer ran out of memory."
+    const val OUT_OF_MEMORY =
+        "$OUT_OF_MEMORY_PREFIX Raise the \"R8 forked-VM heap\" setting in Build Runtime settings, or reduce the build's dependencies."
+
+    /** True when a tool's log (raw or already humanized) says it ran out of memory. */
+    fun isOutOfMemory(log: List<String>): Boolean =
+        log.any { it.contains(OOM_TOKEN) || it.startsWith(OUT_OF_MEMORY_PREFIX) }
+
+    /** True when [t] or anything in its cause chain is an [OutOfMemoryError]. R8 wraps a worker's failure in a
+     *  `CompilationFailedException` whose own message does not name it. */
+    fun causedByOutOfMemory(t: Throwable): Boolean =
+        generateSequence(t) { it.cause }.take(16).any { it is OutOfMemoryError }
+
     fun humanize(log: List<String>): List<String> {
         val base = suppressBenignDexWarnings(log)
         val out = ArrayList<String>(base.size)
@@ -200,8 +218,7 @@ internal object DexDiagnostics {
         ALREADY_PRESENT.find(line)?.let { return duplicate(it.groupValues[1]) }
         if (line.contains(TOO_MANY))
             return "error: Too many methods or fields to fit in a single dex file (the 64K limit). Enable multidex (automatic at minSdk 21+) or remove unused dependencies."
-        if (line.contains("OutOfMemoryError"))
-            return "error: The dexer ran out of memory. Raise the \"R8 forked-VM heap\" setting in Build Runtime settings, or reduce the build's dependencies."
+        if (line.contains(OOM_TOKEN)) return OUT_OF_MEMORY
         if (UNSUPPORTED_VERSION.containsMatchIn(line))
             return "error: A class was compiled for a newer Java bytecode version than the dexer supports. Lower the module's language level to Java 17 or below."
         return null
@@ -218,6 +235,17 @@ internal object DexDiagnostics {
     /** Replace internal per-class dex-archive paths with the class name, so a retained line reads in user terms. */
     private fun shortenPaths(line: String): String =
         DEX_BUCKET_PATH.replace(line) { it.groupValues[1].replace('/', '.') }
+}
+
+/**
+ * Whether a dex or shrink tool's log says it ran out of memory, for callers outside this module: the on-device
+ * shrinker that rewrites the advice for the heap it actually had, and the build-failure classifier.
+ */
+object ToolMemory {
+    /** How the humanized out-of-memory line starts; what follows is advice the caller may replace. */
+    const val MESSAGE_PREFIX: String = DexDiagnostics.OUT_OF_MEMORY_PREFIX
+
+    fun ranOut(log: List<String>): Boolean = DexDiagnostics.isOutOfMemory(log)
 }
 
 /** aapt2: compile resources to an intermediate form, then link them into `resources.ap_` + `R.java`. */

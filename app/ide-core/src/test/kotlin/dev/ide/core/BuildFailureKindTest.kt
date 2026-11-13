@@ -36,6 +36,13 @@ class BuildFailureKindTest {
         BuildFailureKind.classify(listOf(diag(UiSeverity.Error, "dex", "D8 failed")), emptyList()),
     )
 
+    @Test fun rewrittenToolOutOfMemoryIsStillOom() = assertEquals(
+        "oom",
+        BuildFailureKind.classify(
+            listOf(diag(UiSeverity.Error, "dex", "The dexer ran out of memory. R8 ran with a 768MB heap.")), emptyList(),
+        ),
+    )
+
     @Test fun oomBeatsEverythingFromDiagnosticAndLog() {
         assertEquals(
             "oom",

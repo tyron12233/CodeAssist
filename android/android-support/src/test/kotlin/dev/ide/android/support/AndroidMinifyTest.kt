@@ -1,6 +1,12 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tools.DebugKeystore
+import dev.ide.android.support.tools.DexDiagnostics
+import dev.ide.android.support.tools.L8Request
+import dev.ide.android.support.tools.R8InProcessShrinker
+import dev.ide.android.support.tools.ShrinkRequest
+import dev.ide.android.support.tools.Shrinker
+import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
@@ -113,6 +119,77 @@ class AndroidMinifyTest {
             }
             assertTrue(!outcome.succeeded, "build should fail on the invalid R8 keep rule")
             assertTrue(log.contains("error:"), "R8's error diagnostic must reach the log (handler wired):\n$log")
+        }
+    }
+
+    /**
+     * R8 running out of memory over the whole program does not fail the build: it is run again over the project's
+     * own code with the libraries as classpath, and the libraries (here just the generated `R` classes) are dexed
+     * without it and packaged as further dex files. The whole-program attempt is faked to fail the way an
+     * exhausted heap does; the retry and the library dexing are the real R8 and D8.
+     */
+    @Test
+    fun outOfMemoryFallsBackToShrinkingProjectCodeOnly() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("android-minify-oom") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(
+                        AndroidFacet(
+                            namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34,
+                            buildTypes = listOf(BuildType("release", debuggable = false, minifyEnabled = true)),
+                        ),
+                    )
+                }
+                commit()
+            }
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+
+            val requests = ArrayList<ShrinkRequest>()
+            val real = R8InProcessShrinker()
+            val shrinker = object : Shrinker {
+                override fun shrink(request: ShrinkRequest): ToolResult {
+                    requests.add(request)
+                    return if (request.classpath.isEmpty())
+                        ToolResult(false, DexDiagnostics.humanize(listOf("java.lang.OutOfMemoryError: Failed to allocate a 24 byte allocation")))
+                    else real.shrink(request)
+                }
+                override fun l8(request: L8Request): ToolResult = real.l8(request)
+            }
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing, shrinker = shrinker)
+            val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("release"), BuildGoal.PACKAGE)
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                    .execute(buildSystem.createBuildGraph(store.workspace.projects.single(), request), SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "the build must survive R8 running out of memory:\n$log")
+            assertTrue(requests.size == 2, "one whole-program attempt, then one over the project's code: ${requests.size}")
+            val retry = requests[1]
+            assertTrue(retry.classpath.any { it.fileName.toString() == "R.jar" }, "the R jar is classpath on the retry: ${retry.classpath}")
+            assertTrue(retry.programs.none { it in retry.classpath }, "a library is never both program and classpath")
+            assertTrue(retry.resources == null, "resources are not shrunk against a partial program")
+
+            val apk = dir.resolve("app/build/outputs/apk/release/app-release.apk")
+            assertTrue(Files.isRegularFile(apk), "signed release APK missing")
+            val dex = java.util.zip.ZipFile(apk.toFile()).use { zip ->
+                zip.entries().asSequence().filter { it.name.matches(Regex("classes\\d*\\.dex")) }
+                    .associate { it.name to zip.getInputStream(it).readBytes().toString(Charsets.ISO_8859_1) }
+            }
+            assertTrue(dex.size >= 2, "the project's dex plus the libraries': ${dex.keys}")
+            assertTrue(dex.values.any { "Lcom/example/app/MainActivity;" in it }, "the activity survives the shrink")
+            assertTrue(dex.values.any { "Lcom/example/app/R\$string;" in it }, "the R classes are packaged unshrunk: ${dex.keys}")
         }
     }
 

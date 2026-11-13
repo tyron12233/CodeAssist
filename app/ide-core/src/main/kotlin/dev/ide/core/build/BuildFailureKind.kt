@@ -20,7 +20,9 @@ internal object BuildFailureKind {
      *  problem. The bucket worth watching — most likely a defect on our side, not the user's code. */
     const val NO_DIAGNOSTIC = "no_diagnostic"
 
-    private val OOM_TOKENS = listOf("OutOfMemoryError", "OutOfMemory")
+    // The last is what the dex/shrink tools' output is rewritten to before it reaches the console: without it a
+    // build that R8 or D8 failed for lack of heap was counted as a generic tool failure.
+    private val OOM_TOKENS = listOf("OutOfMemoryError", "OutOfMemory", "ran out of memory")
 
     fun classify(diagnostics: List<BuildDiagnosticUi>, log: List<BuildLogLine>): String {
         val errors = diagnostics.filter { it.severity == UiSeverity.Error }

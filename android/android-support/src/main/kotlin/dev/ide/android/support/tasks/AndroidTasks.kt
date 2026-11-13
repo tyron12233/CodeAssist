@@ -5,6 +5,7 @@ import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.DesugaredLibrary
 import dev.ide.android.support.tools.DexDiagnostics
+import dev.ide.android.support.tools.EmbeddedKeepRules
 import dev.ide.android.support.tools.DexGlobalSynthetics
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.L8Request
@@ -1084,6 +1085,9 @@ internal class DexArchiveBuilderTask(
     private val archiveExternalScope: Boolean = true,
     // Pre-dexed libraries installed into the shared cache before any library is dexed here (see DexPackSource).
     private val dexPack: dev.ide.android.support.pack.DexPackSource? = null,
+    // False dexes the library scopes only and leaves [projectDexRoot] alone: the minify path's out-of-memory
+    // fallback, where R8 has already dexed the project's own code (see [R8LibraryFallback]).
+    private val archiveProjectScope: Boolean = true,
 ) : Task {
     /** The first recognized dex error of a run, so the task's failure summary names the actual cause (e.g. a
      *  duplicate class) instead of a generic "dexBuilder failed". Set from the humanized dexer output. */
@@ -1160,7 +1164,7 @@ internal class DexArchiveBuilderTask(
         val budget = scopeBudget(subProjectJars.size + externalJars.size + rJars.size)
         val ok = coroutineScope {
             val scopes = ArrayList<kotlinx.coroutines.Deferred<Boolean>>(4)
-            scopes.add(async(Dispatchers.IO) { archiveProject(ctx, subUniverse) })
+            if (archiveProjectScope) scopes.add(async(Dispatchers.IO) { archiveProject(ctx, subUniverse) })
             // Libraries are atomic jars → per-jar content-hash buckets (a changed lib re-dexes alone).
             scopes.add(async(Dispatchers.IO) { libDexer.dexScope(subProjectJars, subDexRoot, subUniverse, budget) })
             // External libs stay in the universe above (project/sub desugar against them) but may be dexed elsewhere
@@ -2306,6 +2310,13 @@ internal class DexMergeTask(
  * mode; [mappingOutput] receives `mapping.txt`; [resources] (when set) shrinks resources in the same run;
  * [desugaredLibrary] (when set) applies core-library desugaring and emits the L8 keep rules. Class directories
  * are jarred into [stagingDir] first (R8 reads jars/class files, not raw dirs). [Shrinker] is the injected R8 port.
+ *
+ * R8 reads the whole program at once, so its heap need grows with the dependency set and no setting lowers it;
+ * on a phone that is the step that runs out of memory. With a [libraryFallback] an exhausted heap no longer
+ * fails the build: R8 is run again over the project's own code only, with the libraries as classpath (about
+ * half the heap on a small Compose app, and from then on scaling with the app, not its dependencies), and the
+ * libraries are dexed the way a debug build dexes them. The APK is larger, because library code is not
+ * shrunk, and the console says so.
  */
 internal class R8MinifyTask(
     override val name: TaskName,
@@ -2321,6 +2332,7 @@ internal class R8MinifyTask(
     private val mappingOutput: Path? = null,
     private val resources: ResourceShrink? = null,
     private val desugaredLibrary: DesugaredLibrary? = null,
+    private val libraryFallback: R8LibraryFallback? = null,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -2348,10 +2360,12 @@ internal class R8MinifyTask(
             Files.createDirectories(outDexDir)
         }
 
-        val inputs = programs.filter { Files.exists(it) }.mapIndexed { i, p ->
-            if (Files.isDirectory(p)) stagingDir.resolve("in$i.jar")
-                .also { ApkPackaging.jarClasses(p, it) } else p
+        // Each input beside whether it is a library (left out of R8 by the fallback) or the project's own code.
+        val staged = programs.filter { Files.exists(it) }.mapIndexed { i, p ->
+            val input = if (Files.isDirectory(p)) stagingDir.resolve("in$i.jar").also { ApkPackaging.jarClasses(p, it) } else p
+            input to (libraryFallback != null && p in libraryFallback.libraryPrograms)
         }
+        val inputs = staged.map { it.first }
         if (inputs.isEmpty()) return TaskResult.Failed("nothing to minify")
         // Cap R8's worker pool: it's the heaviest in-process step, so fewer threads = a smaller peak heap.
         val threads = DexConcurrency.plan(1).threadsPerInvocation
@@ -2359,6 +2373,16 @@ internal class R8MinifyTask(
         // scales with this total. Log the input scale + tuning up front so an OOM profile (pair with the
         // `ide.mem` heap heartbeat) can size the whole-program working set against the device heap ceiling.
         val inputMb = inputs.sumOf { runCatching { Files.size(it) }.getOrDefault(0L) } / (1024L * 1024L)
+        val fallback = libraryFallback?.takeIf { staged.any { (_, library) -> !library } }
+        val marker = stagingDir.resolve(OOM_MARKER)
+        if (fallback != null && ranOutBefore(marker, inputMb)) {
+            ctx.warn(
+                "${name.value}: R8 ran out of memory shrinking this project in an earlier build, so only the " +
+                    "project's own code is shrunk and the libraries are packaged unshrunk (a larger APK). " +
+                    "Clean the project to try a full shrink again, for example after raising the R8 heap."
+            )
+            return shrinkProjectOnly(ctx, fallback, staged, threads)
+        }
         ctx.debug(
             "${name.value}: R8 whole-program shrink+dex via ${shrinker::class.simpleName} — " +
                 "${inputs.size} input jar(s), ~${inputMb}MB classes, threads=$threads, " +
@@ -2366,26 +2390,114 @@ internal class R8MinifyTask(
                 (if (resources != null) ", +resourceShrink" else "") +
                 (if (desugaredLibrary != null) ", +coreLibDesugar" else "")
         )
-        val r = shrinker.shrink(
-            ShrinkRequest(
-                programs = inputs,
-                library = androidJar,
-                keepRuleFiles = keepRuleFiles,
-                inlineRules = inlineRules,
-                minApi = minApi,
-                release = true,
-                fullMode = fullMode,
-                outDir = outDexDir,
-                mappingOutput = mappingOutput,
-                resources = resources,
-                desugaredLibrary = desugaredLibrary,
-                threads = threads,
+        // A build that fell back left the libraries' dex in the output directory; R8 only replaces its own.
+        DexArchives.clearDir(outDexDir)
+        val r = shrinker.shrink(request(inputs, emptyList(), keepRuleFiles, resources, threads))
+        if (!r.success && fallback != null && DexDiagnostics.isOutOfMemory(r.log)) {
+            runCatching { Files.write(marker, listOf(inputMb.toString())) }
+            // Not reported as a problem: the build carries on. The shrinker's own notes (which VM, what heap)
+            // are worth keeping in the console beside the reason for the retry.
+            r.log.filter { !it.startsWith("error:", ignoreCase = true) && DexDiagnostics.OOM_TOKEN !in it }.take(4).forEach { ctx.debug(it) }
+            ctx.warn(
+                "${name.value}: R8 ran out of memory shrinking the whole app (~${inputMb}MB of classes). " +
+                    "Retrying with R8 on the project's own code only: the libraries are packaged unshrunk, so " +
+                    "this APK is larger than a fully shrunk one."
             )
-        )
+            return shrinkProjectOnly(ctx, fallback, staged, threads)
+        }
         ctx.reportTool("r8", r, DiagnosticKind.DEX)
+        if (r.success) runCatching { Files.deleteIfExists(marker) }
         return if (r.success) TaskResult.Success else TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "R8 minify failed")
     }
+
+    private fun request(programs: List<Path>, classpath: List<Path>, keepFiles: List<Path>, resources: ResourceShrink?, threads: Int) =
+        ShrinkRequest(
+            programs = programs,
+            library = androidJar,
+            classpath = classpath,
+            keepRuleFiles = keepFiles,
+            inlineRules = inlineRules,
+            minApi = minApi,
+            release = true,
+            fullMode = fullMode,
+            outDir = outDexDir,
+            mappingOutput = mappingOutput,
+            resources = resources,
+            desugaredLibrary = desugaredLibrary,
+            threads = threads,
+        )
+
+    /** A full shrink of an input at least this large already exhausted the heap; a much smaller one may fit. */
+    private fun ranOutBefore(marker: Path, inputMb: Long): Boolean {
+        val failedAt = runCatching { Files.readAllLines(marker).firstOrNull()?.trim()?.toLongOrNull() }.getOrNull() ?: return false
+        return inputMb * 10 >= failedAt * 9
+    }
+
+    /**
+     * The out-of-memory fallback: R8 over the project's own code with the libraries as classpath, then the
+     * libraries dexed without R8 and appended as further `classes<N>.dex`.
+     *
+     * Three things differ from a whole-program shrink beyond what R8 is handed:
+     *  - the libraries' embedded keep rules are extracted and passed explicitly, since R8 does not search a
+     *    classpath jar for them and many are about the consumer's own classes ([EmbeddedKeepRules]);
+     *  - the app's `R` classes go with the libraries. Library code reads its `R` by name, and R8 seeing no
+     *    reference to those classes from the project's code would remove them;
+     *  - resources are not shrunk. The resource shrinker keeps what the code it traced refers to, and it would
+     *    not see library code, so it would drop resources the libraries use. The unshrunk archive is passed on
+     *    as the task's output instead.
+     */
+    private suspend fun shrinkProjectOnly(
+        ctx: TaskContext, fallback: R8LibraryFallback, staged: List<Pair<Path, Boolean>>, threads: Int,
+    ): TaskResult {
+        val own = staged.filter { !it.second }.map { it.first }
+        val libraries = staged.filter { it.second }.map { it.first }
+        val rulesDir = stagingDir.resolve("library-rules")
+        val libraryRules = withContext(Dispatchers.IO) {
+            DexArchives.clearDir(rulesDir)
+            EmbeddedKeepRules.extract(libraries, rulesDir)
+        }
+        DexArchives.clearDir(outDexDir)
+        Files.createDirectories(outDexDir)
+        ctx.debug("${name.value}: R8 over ${own.size} project input(s), ${libraries.size} librar(ies) as classpath, ${libraryRules.size} library rule file(s)")
+        val r = shrinker.shrink(request(own, libraries, keepRuleFiles + libraryRules, resources = null, threads = threads))
+        ctx.reportTool("r8", r, DiagnosticKind.DEX)
+        if (!r.success) return TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "R8 minify failed")
+        ctx.checkCanceled()
+
+        val dexed = fallback.dexLibraries(ctx)
+        if (dexed is TaskResult.Failed) return dexed
+        withContext(Dispatchers.IO) {
+            var n = Files.list(outDexDir).use { s -> s.filter { INDEXED_DEX.matches(it.fileName.toString()) }.count().toInt() }
+            for (dir in fallback.dexDirs.filter { Files.isDirectory(it) }) {
+                val dexes = Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
+                for (dex in dexes) {
+                    n++
+                    Files.copy(dex, outDexDir.resolve(if (n == 1) "classes.dex" else "classes$n.dex"), StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+            resources?.let { Files.copy(it.inputAp, it.outputAp, StandardCopyOption.REPLACE_EXISTING) }
+        }
+        return TaskResult.Success
+    }
+
+    private companion object {
+        const val OOM_MARKER = "r8-out-of-memory.txt"
+        val INDEXED_DEX = Regex("""classes\d*\.dex""")
+    }
 }
+
+/**
+ * What [R8MinifyTask] does instead of failing when R8 exhausts its heap: which of its inputs are libraries, and
+ * how to dex those without R8.
+ */
+internal class R8LibraryFallback(
+    /** The entries of the task's program inputs that are libraries (and the generated `R` jar), not project code. */
+    val libraryPrograms: Set<Path>,
+    /** Dex the libraries into [dexDirs] with the debug build's cached, memory-bounded pipeline. */
+    val dexLibraries: suspend (TaskContext) -> TaskResult,
+    /** Where [dexLibraries] leaves indexed dex, in the order it should be packaged after the project's own. */
+    val dexDirs: List<Path>,
+)
 
 /**
  * `shrinkResources<Variant>`: convert the R8-shrunk proto resources back to aapt2's binary format for

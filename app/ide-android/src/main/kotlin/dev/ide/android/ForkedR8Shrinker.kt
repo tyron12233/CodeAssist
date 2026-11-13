@@ -6,6 +6,7 @@ import dev.ide.android.support.tools.R8InProcessShrinker
 import dev.ide.android.support.tools.R8Subprocess
 import dev.ide.android.support.tools.ShrinkRequest
 import dev.ide.android.support.tools.Shrinker
+import dev.ide.android.support.tools.ToolMemory
 import dev.ide.android.support.tools.ToolResult
 import dev.ide.platform.log.Log
 import java.nio.file.Paths
@@ -43,19 +44,42 @@ class ForkedR8Shrinker(
     @Volatile
     private var note: String? = null
 
+    /** What to tell the user when R8 runs out of memory, given where it actually ran and with how much. The
+     *  generic advice ("raise the heap setting") is wrong for a fork already at the device's limit and for an
+     *  in-process run, where that setting does nothing. Set when [delegate] resolves. */
+    @Volatile
+    private var outOfMemoryAdvice: String? = null
+
     // Resolve once: the forked R8Subprocess if a launcher + asset + grantable heap line up, else the fallback.
     private val delegate: Shrinker by lazy { resolve() }
 
     override fun shrink(request: ShrinkRequest): ToolResult = withNote(delegate.shrink(request))
     override fun l8(request: L8Request): ToolResult = withNote(delegate.l8(request))
 
-    private fun withNote(result: ToolResult): ToolResult =
-        note?.let { result.copy(log = listOf(it) + result.log) } ?: result
+    private fun withNote(result: ToolResult): ToolResult {
+        val advice = outOfMemoryAdvice
+        val log = if (result.success || advice == null) result.log else result.log.map {
+            if (it.startsWith(ToolMemory.MESSAGE_PREFIX)) "${ToolMemory.MESSAGE_PREFIX} $advice" else it
+        }
+        return result.copy(log = listOfNotNull(note) + log)
+    }
+
+    private fun forkedAdvice(xmx: Int): String {
+        val higher = R8ForkSupport.affordableHeaps(appContext, HEAP_STEPS.filter { it > xmx }).maxOrNull()
+        return if (higher != null)
+            "R8 ran with a ${xmx}MB heap. Raise the \"R8 forked-VM heap\" setting in Build Runtime settings " +
+                "(this device can try up to ${higher}MB), or reduce the build's dependencies."
+        else
+            "R8 ran with a ${xmx}MB heap, the most this device's ${R8ForkSupport.totalMemMb(appContext)}MB of RAM " +
+                "allows. Reduce the build's dependencies, or build the release on a device with more memory."
+    }
 
     private fun resolve(): Shrinker {
         // Default is forked (only an explicit In-process opts out).
         if (modeProvider()?.lowercase() == MODE_INPROCESS) {
             note = "R8: in-process (set to In-process in Build Runtime settings)"
+            outOfMemoryAdvice = "R8 ran inside the app (${Runtime.getRuntime().maxMemory() / MB}MB limit) because " +
+                "\"R8 execution\" is set to In-process. Switch it to Forked VM in Build Runtime settings, or reduce the build's dependencies."
             log.info("forked-R8: mode=in-process → in-process R8")
             return fallback
         }
@@ -82,6 +106,7 @@ class ForkedR8Shrinker(
                     log.info("forked-R8: R8 runs in a forked $launcher -Xmx${xmx}m (${toolClasspath.name}) — above the app heap cap")
                     "R8: forked VM, ${xmx}MB heap (vs the ${Runtime.getRuntime().maxMemory() / MB}MB app limit)"
                 }
+                outOfMemoryAdvice = forkedAdvice(xmx)
                 return R8Subprocess(listOf(toolClasspath.toPath()), Paths.get(launcher), listOf("-Xmx${xmx}m"))
             }
         }
@@ -92,6 +117,8 @@ class ForkedR8Shrinker(
      *  default Forked VM mode degrades gracefully rather than failing the build). */
     private fun forkUnavailable(reason: String): Shrinker {
         note = "R8: in-process ($reason)"
+        outOfMemoryAdvice = "R8 ran inside the app (${Runtime.getRuntime().maxMemory() / MB}MB limit) because $reason. " +
+            "Reduce the build's dependencies, or build the release on a device with more memory."
         log.warn("forked-R8: $reason → in-process R8")
         return fallback
     }
@@ -104,5 +131,7 @@ class ForkedR8Shrinker(
         const val DEFAULT_XMX_MB = 1536
         const val MIN_XMX_MB = 768
         val FALLBACK_LADDER = listOf(2048, 1536, 1024, 768)
+        // The heaps the setting's slider can reach, to tell whether a higher one is worth suggesting.
+        val HEAP_STEPS = listOf(1024, 1536, 2048, 3072, 4096)
     }
 }

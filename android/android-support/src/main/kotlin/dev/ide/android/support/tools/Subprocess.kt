@@ -4,7 +4,18 @@ import java.nio.file.Path
 
 /** Runs an external tool, merging stdout/stderr and capturing it as [ToolResult.log] for the build console. */
 internal object Subprocess {
-    fun run(command: List<String>, workingDir: Path? = null): ToolResult {
+    /**
+     * [fatalLine] marks output after which the tool cannot succeed (an `OutOfMemoryError` in a forked VM). The
+     * process normally exits on its own right after printing it, but a VM whose worker thread died that way can
+     * sit forever on a lock nobody will release, and this call would then never return: so once such a line is
+     * seen the process gets [fatalGraceMs] to exit and is killed if it has not.
+     */
+    fun run(
+        command: List<String>,
+        workingDir: Path? = null,
+        fatalLine: ((String) -> Boolean)? = null,
+        fatalGraceMs: Long = 20_000,
+    ): ToolResult {
         val pb = ProcessBuilder(command).redirectErrorStream(true)
         workingDir?.let { pb.directory(it.toFile()) }
         val proc = try {
@@ -13,8 +24,23 @@ internal object Subprocess {
             return ToolResult(false, listOf("could not launch ${command.firstOrNull()}: ${t.message}"), processFailed = true)
         }
         // Read to EOF first (drains the merged stream), then await exit — no pipe-buffer deadlock.
-        val out = proc.inputStream.bufferedReader().readLines()
+        val out = ArrayList<String>()
+        var reaper: Thread? = null
+        proc.inputStream.bufferedReader().useLines { lines ->
+            for (line in lines) {
+                out.add(line)
+                if (reaper == null && fatalLine != null && fatalLine(line)) {
+                    reaper = Thread({
+                        try {
+                            if (!proc.waitFor(fatalGraceMs, java.util.concurrent.TimeUnit.MILLISECONDS)) proc.destroyForcibly()
+                        } catch (_: InterruptedException) {
+                        }
+                    }, "tool-reaper").apply { isDaemon = true; start() }
+                }
+            }
+        }
         val code = proc.waitFor()
+        reaper?.interrupt()
         if (code == 0) return ToolResult.ok(out)
         val tool = command.first().substringAfterLast('/')
         // A process killed by signal N exits with 128+N. Decode it: a bare "code 139" is opaque, but

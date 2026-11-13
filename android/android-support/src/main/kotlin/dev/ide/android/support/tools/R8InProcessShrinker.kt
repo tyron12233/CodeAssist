@@ -94,9 +94,11 @@ class R8InProcessShrinker : Shrinker {
             )
         } catch (t: Throwable) {
             // The captured handler diagnostics carry the real cause; humanize them into an actionable Problem.
+            // An exhausted heap is named outright: R8 reports it as a bare "Compilation failed to complete".
+            val oom = if (DexDiagnostics.causedByOutOfMemory(t)) listOf("java.lang.${DexDiagnostics.OOM_TOKEN}") else emptyList()
             ToolResult(
                 false,
-                DexDiagnostics.humanize(collected.log + "R8 shrinking failed: ${t.message}"),
+                DexDiagnostics.humanize(collected.log + oom + "R8 shrinking failed: ${t.message}"),
                 collected.diagnostics + ToolDiagnostic(ToolSeverity.ERROR, "R8 shrinking failed: ${t.message}"),
             )
         }

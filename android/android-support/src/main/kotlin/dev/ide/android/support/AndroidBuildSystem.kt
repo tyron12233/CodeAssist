@@ -36,6 +36,7 @@ import dev.ide.android.support.tasks.PackageAarTask
 import dev.ide.android.support.tasks.PackageApkTask
 import dev.ide.android.support.tasks.PackagingRules
 import dev.ide.android.support.tasks.ProcessGoogleServicesTask
+import dev.ide.android.support.tasks.R8LibraryFallback
 import dev.ide.android.support.tasks.R8MinifyTask
 import dev.ide.android.support.tasks.SharedLibraryDexer
 import dev.ide.android.support.tasks.SignApkTask
@@ -875,6 +876,35 @@ class AndroidBuildSystem(
             val resourceShrink = if (shrinkResources) ResourceShrink(layout.protoAp, layout.shrunkProtoAp) else null
 
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
+            // If R8 runs out of memory over the whole program, it shrinks the project's own code alone and the
+            // libraries are dexed as a debug build dexes them: per-library archives from the shared cache, then
+            // the bounded merges (see [R8MinifyTask]). Native multidex only, since the result is several dex layers.
+            val libraryFallback = if (dexApi >= 21) {
+                val mergeBatch = mergeChunk()
+                val steps = listOf(
+                    DexArchiveBuilderTask(minifyTask, emptyList(), emptyList(), externalJars, sdk.androidJar,
+                        dexApi, release, layout.dexArchives.resolve("project.jar"),
+                        layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
+                        desugaredLibConfig = desugarJson, rJars = rJars, rDexRoot = layout.rArchives,
+                        dexPack = dexPack, archiveProjectScope = false),
+                    DexMergeTask(minifyTask, listOf(layout.rArchives), sdk.androidJar, dexApi, release, layout.rDex, mergeDexer, mergeChunk = mergeBatch),
+                    DexMergeTask(minifyTask, listOf(layout.extArchives), sdk.androidJar, dexApi, release, layout.extDex, mergeDexer,
+                        groupPerBucket = externalJars.size <= extMergeThreshold(dexApi), mergeChunk = mergeBatch,
+                        mergeCacheRoot = dexCacheRoot?.resolve("merged-ext")),
+                )
+                R8LibraryFallback(
+                    libraryPrograms = (externalJars + listOf(layout.rJar)).toSet(), // listOf: a Path is itself an Iterable<Path>
+                    dexLibraries = { ctx ->
+                        var result: dev.ide.build.TaskResult = dev.ide.build.TaskResult.Success
+                        for (step in steps) {
+                            result = step.execute(ctx)
+                            if (result is dev.ide.build.TaskResult.Failed) break
+                        }
+                        result
+                    },
+                    dexDirs = listOf(layout.rDex, layout.extDex),
+                )
+            } else null
             tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 R8MinifyTask(
                     minifyTask, dexProjectClasses + subProjectJars + externalJars + listOf(layout.rJar), androidJar, facet.minSdk,
@@ -883,6 +913,7 @@ class AndroidBuildSystem(
                     mappingOutput = layout.mappingTxt,
                     resources = resourceShrink,
                     desugaredLibrary = desugarJson?.let { DesugaredLibrary(it, layout.desugarKeepRules) },
+                    libraryFallback = libraryFallback,
                 )
             }
             dexDirs = listOf(layout.dex)

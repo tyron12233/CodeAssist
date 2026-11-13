@@ -68,7 +68,9 @@ class R8Subprocess(
             ToolArgFile.withArgFile(request.outDir, r8Args) { argFile ->
                 val cmd = listOf(javaLauncher.toString()) + vmArgs + listOf("-cp", classpath, "com.android.tools.r8.R8", argFile)
                 // A failed forked R8 dumps the process stderr (a Java stack trace); humanize it to the actual cause.
-                Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
+                // A fork whose worker ran out of heap can hang instead of exiting; see [Subprocess.run].
+                Subprocess.run(cmd, fatalLine = { DexDiagnostics.OOM_TOKEN in it })
+                    .let { it.copy(log = DexDiagnostics.humanize(it.log)) }
             }
         } finally {
             temp.forEach { runCatching { Files.deleteIfExists(it) } }
