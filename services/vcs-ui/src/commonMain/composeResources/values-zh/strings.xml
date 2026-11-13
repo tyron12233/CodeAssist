@@ -352,4 +352,7 @@
     <string name="vcs_msg_activity_pushing">正在推送</string>
     <string name="vcs_msg_activity_cloning">正在克隆</string>
     <string name="vcs_msg_activity_publishing">正在发布</string>
+    <string name="vcs_clone_auth_title">此仓库需要登录</string>
+    <string name="vcs_clone_auth_signed_out">克隆私有仓库需要使用在此处添加的 GitHub 账号。登录商店并不会让 CodeAssist 获得你仓库的访问权限。</string>
+    <string name="vcs_clone_auth_signed_in">已登录的账号无法打开它。请确认该账号能看到此仓库，或添加其他账号。</string>
 </resources>

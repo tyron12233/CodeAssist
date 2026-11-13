@@ -309,4 +309,6 @@
     <string name="conn_relay_status_replaced">Эта ссылка открыта в другом CodeAssist. Включите её здесь снова, чтобы вернуть.</string>
     <string name="conn_relay_step">В Claude: Настройки, Коннекторы, Добавить свой коннектор. Вставьте этот адрес и выберите «без входа».</string>
     <string name="conn_relay_new_link">Создать новую ссылку</string>
+    <string name="chat_ca_cert">Сертификат ЦС (необязательно)</string>
+    <string name="chat_ca_cert_hint">Вставьте сертификат ЦС (PEM), только если сервер использует частный или региональный ЦС, которому система не доверяет (например, GigaChat). Он добавляется к системным ЦС; цепочка по-прежнему проверяется.</string>
 </resources>

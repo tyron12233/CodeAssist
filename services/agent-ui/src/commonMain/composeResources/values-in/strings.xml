@@ -291,4 +291,6 @@
     <string name="conn_relay_status_replaced">Tautan ini dibuka di CodeAssist lain. Aktifkan lagi di sini untuk mengambilnya kembali.</string>
     <string name="conn_relay_step">Di Claude: Setelan, Konektor, Tambahkan konektor kustom. Tempel alamat ini dan pilih tanpa masuk.</string>
     <string name="conn_relay_new_link">Buat tautan baru</string>
+    <string name="chat_ca_cert">Sertifikat CA (opsional)</string>
+    <string name="chat_ca_cert_hint">Tempel sertifikat CA (PEM) hanya jika endpoint memakai CA privat atau regional yang tidak dipercaya sistem (mis. GigaChat). Sertifikat ini dipercaya sebagai tambahan CA sistem; rantainya tetap diverifikasi.</string>
 </resources>

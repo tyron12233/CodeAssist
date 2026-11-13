@@ -303,4 +303,6 @@
     <string name="conn_relay_status_replaced">Este enlace se abrió en otro CodeAssist. Actívalo aquí de nuevo para recuperarlo.</string>
     <string name="conn_relay_step">En Claude: Ajustes, Conectores, Añadir conector personalizado. Pega esta dirección y elige sin inicio de sesión.</string>
     <string name="conn_relay_new_link">Crear un enlace nuevo</string>
+    <string name="chat_ca_cert">Certificado de CA (opcional)</string>
+    <string name="chat_ca_cert_hint">Pega un certificado de CA (PEM) solo si el endpoint usa una CA privada o regional en la que el sistema no confía (p. ej., GigaChat). Se confía en ella además de las CA del sistema; la cadena se sigue verificando.</string>
 </resources>
