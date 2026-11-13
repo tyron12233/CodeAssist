@@ -1306,8 +1306,9 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  and re-extracted instead of reused missing its `res/`. Folded into the dependency-reconcile fingerprint so
  *  a bump forces a one-time re-resolve that heals existing caches on the next open.
  *
- *  5: `baseline-prof.txt` is unpacked too, for release builds' Baseline Profile. */
-const val AAR_EXPLODE_VERSION = "5"
+ *  5: `baseline-prof.txt` is unpacked too, for release builds' Baseline Profile.
+ *  6: `proguard.txt` is unpacked too: a minified build ran R8 without any Maven AAR's consumer keep rules. */
+const val AAR_EXPLODE_VERSION = "6"
 
 /**
  * Version of the resolved GRAPH's semantics. Bump whenever a resolver change makes the same declared set

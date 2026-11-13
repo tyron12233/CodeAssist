@@ -314,6 +314,19 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun anAarsConsumerKeepRulesAreUnpackedBesideItsClasses() {
+        // The Android build looks for `proguard.txt` beside an exploded AAR's classes.jar and hands it to R8.
+        // The explosion used to leave it in the AAR, so no Maven library's keep rules reached a minified build.
+        val files = FakeRepo()
+        files.put("widget", "1.0", packaging = "aar", jarBytes = aarWithRes())
+        val (resolver, tmp) = newResolver(files)
+        runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val rules = java.nio.file.Paths.get(ResolverCache(tmp.toString()).explodedDir(coord("widget", "1.0"))).resolve("proguard.txt")
+        assertTrue(Files.isRegularFile(rules), "proguard.txt must be unpacked: $rules")
+        assertEquals("-keep class com.widget.Reflected", Files.readString(rules))
+    }
+
+    @Test
     fun resolvesResourceOnlyAarToUsableClassFreeClassesJar() {
         // A resource-only AAR (no classes.jar inside, e.g. an Android lib that is all resources) must still
         // resolve, producing a NON-EMPTY but class-free classes.jar. A zero-entry jar is unusable on ART
@@ -1699,6 +1712,7 @@ class MavenDependencyResolverTest {
             zos.putNextEntry(ZipEntry("res/values/strings.xml"))
             zos.write("""<resources><string name="widget_label">W</string></resources>""".toByteArray())
             zos.closeEntry()
+            zos.putNextEntry(ZipEntry("proguard.txt")); zos.write("-keep class com.widget.Reflected".toByteArray()); zos.closeEntry()
         }
         return out.toByteArray()
     }
