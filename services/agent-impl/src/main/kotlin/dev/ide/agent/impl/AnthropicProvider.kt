@@ -14,6 +14,7 @@ import dev.ide.agent.StopReason
 import dev.ide.agent.TokenUsage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -39,9 +40,36 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
     override val defaultModel: String = "claude-opus-5"
     override val managesContext: Boolean = true
 
+    /**
+     * Set once the API has refused this tool set's strict schemas as too large to compile. Strict mode is an
+     * optimization (it saves the round trip a malformed call costs), so from then on the tools go out plain
+     * rather than failing every request the same way.
+     */
+    @Volatile
+    private var strictRefused = false
+
     override fun client(config: ProviderConfig): LlmClient = LlmClient { request ->
+        flow {
+            val strict = !strictRefused
+            var refused = false
+            stream(sseRequest(config, request, strict)).collect { event ->
+                // The refusal arrives before anything else, so nothing of this attempt has reached the caller.
+                if (strict && !refused && event is LlmStreamEvent.Failed && strictSchemaRefused(event.message)) {
+                    refused = true
+                } else if (!refused) {
+                    emit(event)
+                }
+            }
+            if (refused) {
+                strictRefused = true
+                emitAll(stream(sseRequest(config, request, strict = false)))
+            }
+        }
+    }
+
+    private fun sseRequest(config: ProviderConfig, request: LlmRequest, strict: Boolean): SseRequest {
         val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
-        val sse = SseRequest(
+        return SseRequest(
             url = "$base/v1/messages",
             headers = buildMap {
                 put("x-api-key", config.apiKey)
@@ -49,10 +77,9 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
                 put("content-type", "application/json")
                 betaHeader(request)?.let { put("anthropic-beta", it) }
             },
-            jsonBody = buildBody(request),
+            jsonBody = buildBody(request, strict),
             caCertificatePem = config.caCertificatePem,
         )
-        stream(sse)
     }
 
     override suspend fun listModels(config: ProviderConfig): List<LlmModelInfo> = runCatching {
@@ -87,7 +114,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
     private fun modelSupportsThinking(model: String): Boolean =
         models.firstOrNull { it.id == model }?.supportsThinking ?: true
 
-    private fun buildBody(request: LlmRequest): String = buildJsonObject {
+    private fun buildBody(request: LlmRequest, strict: Boolean): String = buildJsonObject {
         put("model", request.model)
         put("max_tokens", request.maxTokens)
         put("stream", true)
@@ -102,7 +129,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         effortLevel(request.effort)?.let { level ->
             put("output_config", buildJsonObject { put("effort", level) })
         }
-        val toolsArray = toolBlocks(request.tools, request.webSearch)
+        val toolsArray = toolBlocks(request.tools, request.webSearch, strict)
         if (toolsArray.isNotEmpty()) put("tools", toolsArray)
         put("context_management", contextManagement(request.webSearch))
         put("messages", cacheLastBlock(messages(request.messages, request.model)))
@@ -157,9 +184,9 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
      * never sees it as a client tool call, and the stream decoder simply ignores its `server_tool_use` /
      * `web_search_tool_result` blocks). A cache breakpoint on the last entry caches the whole tool block.
      */
-    private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>, webSearch: Boolean): JsonArray {
+    private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>, webSearch: Boolean, strictMode: Boolean): JsonArray {
         val blocks = ArrayList<JsonObject>(tools.size + 1)
-        val strict = strictToolNames(tools)
+        val strict = if (strictMode) strictToolNames(tools) else emptySet()
         tools.forEach { spec ->
             blocks += buildJsonObject {
                 put("name", spec.name)
@@ -386,20 +413,60 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         const val MAX_STRICT_TOOLS = 20
 
         /**
-         * The tools to mark strict when there are more than [MAX_STRICT_TOOLS]: the ones taking the most arguments,
-         * where a malformed call is most likely and costs a whole round trip to correct. A tool with no arguments
-         * gains nothing from strict mode. Ties keep their order, so the choice (and the cached tool prefix) is the
-         * same on every request.
+         * The optional parameters allowed across all strict tools together. The API's own ceiling is 24, but it
+         * also refuses a tool set whose compiled grammar is too large ("The compiled grammar is too large"), and
+         * each optional parameter roughly doubles part of that grammar, so the real ceiling is lower and depends
+         * on the whole set. This stays well under it.
          */
-        internal fun strictToolNames(tools: List<dev.ide.agent.ToolSpec>): Set<String> =
+        const val MAX_STRICT_OPTIONAL_PARAMS = 8
+
+        /**
+         * The tools to mark strict: the ones taking the most arguments, where a malformed call is most likely and
+         * costs a whole round trip to correct, for as long as they fit the API's limits ([MAX_STRICT_TOOLS] tools,
+         * [MAX_STRICT_OPTIONAL_PARAMS] optional parameters between them). A tool that would not fit is skipped,
+         * not the rest. A tool with no arguments gains nothing from strict mode. Ties keep their order, so the
+         * choice (and the cached tool prefix) is the same on every request.
+         */
+        internal fun strictToolNames(tools: List<dev.ide.agent.ToolSpec>): Set<String> {
+            val chosen = LinkedHashSet<String>()
+            var optional = 0
             tools.withIndex()
                 // Only schemas written for strict mode (every object closed with additionalProperties:false, as
                 // ToolSchemaBuilder emits). A third-party schema (an MCP server's) that is not would fail the request.
                 .filter { strictCompatible(it.value) }
                 .sortedWith(compareByDescending<IndexedValue<dev.ide.agent.ToolSpec>> { argumentCount(it.value) }.thenBy { it.index })
-                .take(MAX_STRICT_TOOLS)
-                .map { it.value.name }
-                .toSet()
+                .forEach { (_, spec) ->
+                    if (chosen.size == MAX_STRICT_TOOLS) return@forEach
+                    val cost = optionalCount(spec)
+                    if (optional + cost > MAX_STRICT_OPTIONAL_PARAMS) return@forEach
+                    optional += cost
+                    chosen += spec.name
+                }
+            return chosen
+        }
+
+        /** Whether [message] is the API refusing the strict schemas themselves, as opposed to the request. */
+        internal fun strictSchemaRefused(message: String): Boolean {
+            val m = message.lowercase()
+            return "compiled grammar" in m || "too complex for compilation" in m ||
+                "strict tools" in m || "optional parameters" in m || "union types" in m
+        }
+
+        /** Every optional parameter in the schema, nested ones included: a property its object does not require. */
+        private fun optionalCount(spec: dev.ide.agent.ToolSpec): Int = runCatching {
+            optionalIn(AgentJson.parseToJsonElement(spec.parameters))
+        }.getOrDefault(Int.MAX_VALUE / 2)
+
+        private fun optionalIn(el: kotlinx.serialization.json.JsonElement): Int = when (el) {
+            is JsonObject -> {
+                val props = el["properties"] as? JsonObject
+                val required = (el["required"] as? JsonArray)
+                    ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }?.toSet().orEmpty()
+                (props?.keys?.count { it !in required } ?: 0) + el.values.sumOf(::optionalIn)
+            }
+            is JsonArray -> el.sumOf(::optionalIn)
+            else -> 0
+        }
 
         private fun strictCompatible(spec: dev.ide.agent.ToolSpec): Boolean = runCatching {
             closedObjects(AgentJson.parseToJsonElement(spec.parameters))

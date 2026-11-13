@@ -74,7 +74,8 @@ class StrictToolCapTest {
         runBlocking {
             val tools = (1..34).map { i ->
                 val props = (0 until (i % 4)).joinToString(",") { "\"p$it\":{\"type\":\"string\"}" }
-                dev.ide.agent.ToolSpec("t$i", "tool $i", """{"type":"object","properties":{$props},"additionalProperties":false}""")
+                val required = (0 until (i % 4)).joinToString(",") { "\"p$it\"" }
+                dev.ide.agent.ToolSpec("t$i", "tool $i", """{"type":"object","properties":{$props},"required":[$required],"additionalProperties":false}""")
             }
             val t = Recording()
             val req = LlmRequest("claude-haiku-5-5", "s", listOf(LlmMessage.user("hi")), tools = tools)
