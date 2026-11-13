@@ -8,7 +8,8 @@ import dev.ide.ui.concurrent.UiLock
 /**
  * A kind of file a plugin adds to the file tree's **New ▸** menu: [title] on the row, [nameLabel] in the
  * dialog, and [files] for what a name turns into (relative path to text). [files] may throw
- * [IllegalArgumentException] to refuse a name, with a message for the user.
+ * [IllegalArgumentException] to refuse a name, with a message for the user. A template that starts several
+ * sorts of file gives them as [kinds]; the dialog offers them as a choice and uses the chosen one's files.
  */
 class NewFileTemplateContribution(
     val id: String,
@@ -16,6 +17,14 @@ class NewFileTemplateContribution(
     val nameLabel: String,
     val iconId: String?,
     val appliesTo: (dirPath: String) -> Boolean,
+    val files: (dirPath: String, name: String) -> List<Pair<String, String>>,
+    val kinds: List<NewFileKindContribution> = emptyList(),
+)
+
+/** One choice in a template's dialog: [label] on its chip and [files] for what a name turns into. */
+class NewFileKindContribution(
+    val id: String,
+    val label: String,
     val files: (dirPath: String, name: String) -> List<Pair<String, String>>,
 )
 

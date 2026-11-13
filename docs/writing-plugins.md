@@ -2056,6 +2056,27 @@ ui.newFileTemplate(NewFileTemplate(
 Throwing `IllegalArgumentException` refuses the name, with its message shown in the dialog. On a host before
 3.1.0 the call throws a `LinkageError`; catch it if the plugin supports such hosts.
 
+A template that starts more than one sort of file gives them as `kinds` instead of `files` (since SPI 3.6.0).
+The dialog then shows them as a row of choices above the name, the first one selected, the way the IDE's own
+**New Kotlin file** offers Class, Interface and the rest under one menu row:
+
+```kotlin
+ui.newFileTemplate(NewFileTemplate(
+    id = "my.csFile",
+    title = "C# File",
+    nameLabel = "Type name",
+    kinds = listOf(
+        NewFileKind("class", "Class") { _, name -> listOf(NewFileContent("$name.cs", csClass(name))) },
+        NewFileKind("interface", "Interface") { _, name -> listOf(NewFileContent("$name.cs", csInterface(name))) },
+        NewFileKind("enum", "Enum") { _, name -> listOf(NewFileContent("$name.cs", csEnum(name))) },
+    ),
+))
+```
+
+Each kind's function follows the same rules as `files`, including refusing a name. The `kinds` constructor does
+not exist on a host before 3.6.0, where the call throws a `LinkageError`; a plugin that supports such hosts
+catches it and registers one template per kind instead.
+
 ### 10.8 Icon ids
 
 Icon ids are opaque strings both sides agree on, resolved by

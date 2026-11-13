@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.5.0.
+# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.6.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/plugin/ui/AppTheme
@@ -217,15 +217,25 @@ dev/ide/plugin/ui/NewFileContent
 	ctor (Ljava/lang/String;Ljava/lang/String;)V
 	method getRelativePath()Ljava/lang/String;
 	method getText()Ljava/lang/String;
+dev/ide/plugin/ui/NewFileKind
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)V
+	method getFiles()Lkotlin/jvm/functions/Function2;
+	method getId()Ljava/lang/String;
+	method getLabel()Ljava/lang/String;
 dev/ide/plugin/ui/NewFileTemplate
 	kind class
 	super java/lang/Object
 	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;)V
 	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method getAppliesTo()Lkotlin/jvm/functions/Function1;
 	method getFiles()Lkotlin/jvm/functions/Function2;
 	method getIconId()Ljava/lang/String;
 	method getId()Ljava/lang/String;
+	method getKinds()Ljava/util/List;
 	method getNameLabel()Ljava/lang/String;
 	method getTitle()Ljava/lang/String;
 dev/ide/plugin/ui/Overlay

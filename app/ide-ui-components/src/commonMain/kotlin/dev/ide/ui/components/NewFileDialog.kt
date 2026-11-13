@@ -246,6 +246,9 @@ private fun NewFromTemplatePanel(
 ) {
     var name by remember(req) { mutableStateOf("") }
     var error by remember(req) { mutableStateOf<String?>(null) }
+    // The sort of file to start, for a template that offers a choice; the first one to begin with.
+    val kinds = req.template.kinds
+    var kind by remember(req) { mutableStateOf(kinds.firstOrNull()) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(req) { runCatching { focus.requestFocus() } }
     val trimmed = name.trim()
@@ -253,7 +256,7 @@ private fun NewFromTemplatePanel(
     fun submit() {
         if (trimmed.isEmpty()) return
         val files = try {
-            req.template.files(req.dirPath, trimmed)
+            (kind?.files ?: req.template.files)(req.dirPath, trimmed)
         } catch (e: IllegalArgumentException) {
             error = e.message ?: "That name cannot be used"
             return
@@ -279,6 +282,14 @@ private fun NewFromTemplatePanel(
         Spacer(Modifier.height(4.dp))
         Text(stringResource(Res.string.newfile_in, req.dirLabel), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         Spacer12()
+        if (kinds.isNotEmpty()) {
+            FieldLabel(stringResource(Res.string.newfile_kind))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // A name one kind refused may be fine for another, so its message goes with the kind.
+                kinds.forEach { k -> SelectChip(k.label, selected = k === kind, onClick = { kind = k; error = null }) }
+            }
+            Spacer12()
+        }
         FieldLabel(req.template.nameLabel)
         DialogField(
             value = name,

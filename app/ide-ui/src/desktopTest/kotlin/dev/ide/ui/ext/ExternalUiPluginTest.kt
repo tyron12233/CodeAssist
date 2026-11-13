@@ -235,6 +235,47 @@ class ExternalUiPluginTest {
     }
 
     @Test
+    fun aTemplatesKindsAreCarriedOverEachWithItsOwnFiles() {
+        val facet = facet { ui ->
+            ui.newFileTemplate(
+                dev.ide.plugin.ui.NewFileTemplate(
+                    id = "cs.file",
+                    title = "C# File",
+                    kinds = listOf(
+                        dev.ide.plugin.ui.NewFileKind("class", "Class") { _, name ->
+                            listOf(dev.ide.plugin.ui.NewFileContent("$name.cs", "class $name {}\n"))
+                        },
+                        dev.ide.plugin.ui.NewFileKind("interface", "Interface") { _, name ->
+                            require(name.startsWith("I")) { "An interface name starts with I" }
+                            listOf(dev.ide.plugin.ui.NewFileContent("$name.cs", "interface $name {}\n"))
+                        },
+                    ),
+                ),
+            )
+        }
+        val scope = RecordingScope("com.example.cs")
+
+        facet.asUiPlugin("com.example.cs").contributeUi(scope)
+
+        val template = scope.newFileTemplates.single()
+        assertEquals(listOf("Class", "Interface"), template.kinds.map { it.label })
+        assertEquals(listOf("Shape.cs" to "class Shape {}\n"), template.kinds[0].files("/p", "Shape"))
+        assertEquals(listOf("IShape.cs" to "interface IShape {}\n"), template.kinds[1].files("/p", "IShape"))
+        assertFailsWith<IllegalArgumentException> { template.kinds[1].files("/p", "Shape") }
+        // What a caller that knows nothing of kinds gets: the first one.
+        assertEquals(listOf("Shape.cs" to "class Shape {}\n"), template.files("/p", "Shape"))
+    }
+
+    @Test
+    fun aTemplateWithoutKindsOffersNoChoice() {
+        val template = dev.ide.plugin.ui.NewFileTemplate(id = "x", title = "X", files = { _, _ -> emptyList() })
+        assertEquals(emptyList(), template.kinds)
+        assertFailsWith<IllegalArgumentException> {
+            dev.ide.plugin.ui.NewFileTemplate(id = "x", title = "X", kinds = emptyList())
+        }
+    }
+
+    @Test
     fun fileIconDeclarationIsCarriedOver() {
         val facet = facet { ui ->
             ui.fileIcon(

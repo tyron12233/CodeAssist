@@ -252,6 +252,11 @@ private class BridgedRegistration(
                 iconId = template.iconId,
                 appliesTo = template.appliesTo,
                 files = { dir, name -> template.files(dir, name).map { it.relativePath to it.text } },
+                kinds = template.kinds.map { kind ->
+                    NewFileKindContribution(kind.id, kind.label) { dir, name ->
+                        kind.files(dir, name).map { it.relativePath to it.text }
+                    }
+                },
             ),
         )
         return UiHandle { registration.dispose() }

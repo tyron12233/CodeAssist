@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:language-api, pinned at SPI 3.5.0.
+# The compiled surface of io.github.tyron12233:language-api, pinned at SPI 3.6.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/lang/AnalysisResult
@@ -1244,6 +1244,7 @@ dev/ide/lang/resolve/ApiLevelContext
 	method copy(Ldev/ide/lang/resolve/ApiPlatform;ILdev/ide/lang/resolve/PlatformApiLevels;Z)Ldev/ide/lang/resolve/ApiLevelContext;
 	method equals(Ljava/lang/Object;)Z
 	method getEnforced()Z
+	method getJdkReference()Lkotlin/jvm/functions/Function0;
 	method getLevels()Ldev/ide/lang/resolve/PlatformApiLevels;
 	method getMinLevel()I
 	method getPlatform()Ldev/ide/lang/resolve/ApiPlatform;
@@ -1255,6 +1256,7 @@ dev/ide/lang/resolve/ApiLevelContext$Companion
 	super java/lang/Object
 	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method android(ILdev/ide/lang/resolve/PlatformApiLevels;)Ldev/ide/lang/resolve/ApiLevelContext;
+	method android(ILdev/ide/lang/resolve/PlatformApiLevels;Lkotlin/jvm/functions/Function0;)Ldev/ide/lang/resolve/ApiLevelContext;
 	method jdk(ILdev/ide/lang/resolve/PlatformApiLevels;Z)Ldev/ide/lang/resolve/ApiLevelContext;
 dev/ide/lang/resolve/ApiPlatform
 	kind enum
@@ -1265,6 +1267,13 @@ dev/ide/lang/resolve/ApiPlatform
 	method static getEntries()Lkotlin/enums/EnumEntries;
 	method static valueOf(Ljava/lang/String;)Ldev/ide/lang/resolve/ApiPlatform;
 	method static values()[Ldev/ide/lang/resolve/ApiPlatform;
+dev/ide/lang/resolve/JavaApiMissingOnAndroid
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/lang/resolve/JavaApiMissingOnAndroid;
+	method alternative(Ljava/lang/String;)Ljava/lang/String;
+	method explain(Ldev/ide/lang/resolve/ApiLevelContext;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method explainType(Ldev/ide/lang/resolve/ApiLevelContext;Ljava/lang/String;)Ljava/lang/String;
 dev/ide/lang/resolve/PermissionContext
 	kind class
 	super java/lang/Object

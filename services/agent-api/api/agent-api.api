@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:agent-api, pinned at SPI 3.5.0.
+# The compiled surface of io.github.tyron12233:agent-api, pinned at SPI 3.6.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/agent/AgentEvent
@@ -231,6 +231,7 @@ dev/ide/agent/AgentWorkspace
 	method abstract renamePath(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method abstract searchText(Ljava/lang/String;ZZILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method abstract writeFile(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method addDependency(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method applyQuickFix(Ljava/lang/String;IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method exists(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method fetchUrl(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -246,6 +247,7 @@ dev/ide/agent/AgentWorkspace
 	method quickFixes(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method readBytes(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method readMemory(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method removeDependency(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method renameSymbol(Ljava/lang/String;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method renderPreview(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method runProgram(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -263,6 +265,7 @@ dev/ide/agent/AgentWorkspace
 dev/ide/agent/AgentWorkspace$DefaultImpls
 	kind class
 	super java/lang/Object
+	method static addDependency(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static applyQuickFix(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static exists(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static fetchUrl$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -283,6 +286,7 @@ dev/ide/agent/AgentWorkspace$DefaultImpls
 	method static readBytes(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static readFile$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	method static readMemory(Ldev/ide/agent/AgentWorkspace;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static removeDependency(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static renameSymbol(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static renderPreview(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method static runProgram$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;

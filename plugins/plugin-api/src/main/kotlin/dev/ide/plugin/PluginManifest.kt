@@ -407,8 +407,13 @@ const val PLUGIN_API_VERSION: Int = 4
  * hang off state of its own (its settings, a compile database, a daemon) left stale diagnostics on screen until
  * the user typed, and the only way round it was to fake a file change. It drops no cache, the IDE's or the
  * plugin's. Additive, so [PLUGIN_API_VERSION] stays at `4`; on an older host the key resolves to nothing.
+ *
+ * `3.6.0` adds `dev.ide.plugin.ui.NewFileKind` and a `kinds` constructor on `NewFileTemplate` in
+ * `plugin-ui-api`: one New-menu row whose dialog offers a choice of what to start (Class, Interface, Enum),
+ * as the IDE's own New Kotlin file does. A plugin could only register one row per sort of file. Additive; on
+ * an older host the new constructor is missing and the call throws a `LinkageError`.
  */
-const val PLUGIN_SPI_VERSION: String = "3.5.0"
+const val PLUGIN_SPI_VERSION: String = "3.6.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
