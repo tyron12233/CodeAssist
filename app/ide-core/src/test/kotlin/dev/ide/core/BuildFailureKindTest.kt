@@ -36,6 +36,19 @@ class BuildFailureKindTest {
         BuildFailureKind.classify(listOf(diag(UiSeverity.Error, "dex", "D8 failed")), emptyList()),
     )
 
+    @Test fun r8FactsComeFromTheShrinkersNotes() {
+        val facts = dev.ide.core.build.R8BuildFacts.props(listOf(
+            line(UiLogLevel.Info, "R8: forked VM, 768MB heap (vs the 256MB app limit)"),
+            line(UiLogLevel.Warn, ":app:minifyReleaseWithR8: R8 ran out of memory shrinking the whole app (~40MB of classes). Retrying"),
+        ))
+        assertEquals(mapOf("r8_mode" to "forked", "r8_heap_mb" to "768", "r8_fallback" to "true"), facts)
+        assertEquals(
+            mapOf("r8_mode" to "in-process"),
+            dev.ide.core.build.R8BuildFacts.props(listOf(line(UiLogLevel.Info, "R8: in-process (no forked-VM launcher on this device)"))),
+        )
+        assertEquals(emptyMap(), dev.ide.core.build.R8BuildFacts.props(listOf(line(UiLogLevel.Info, "compileKotlin done"))))
+    }
+
     @Test fun rewrittenToolOutOfMemoryIsStillOom() = assertEquals(
         "oom",
         BuildFailureKind.classify(

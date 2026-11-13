@@ -53,6 +53,11 @@ class ForkedR8Shrinker(
     // Resolve once: the forked R8Subprocess if a launcher + asset + grantable heap line up, else the fallback.
     private val delegate: Shrinker by lazy { resolve() }
 
+    /** Which VM and heap R8 gets on this device, so a heap change is noticed (see [Shrinker.heapProfile]). */
+    @Volatile
+    private var profile: String = ""
+    override val heapProfile: String get() { delegate; return profile }
+
     override fun shrink(request: ShrinkRequest): ToolResult = withNote(delegate.shrink(request))
     override fun l8(request: L8Request): ToolResult = withNote(delegate.l8(request))
 
@@ -78,6 +83,7 @@ class ForkedR8Shrinker(
         // Default is forked (only an explicit In-process opts out).
         if (modeProvider()?.lowercase() == MODE_INPROCESS) {
             note = "R8: in-process (set to In-process in Build Runtime settings)"
+            profile = "inprocess-${Runtime.getRuntime().maxMemory() / MB}"
             outOfMemoryAdvice = "R8 ran inside the app (${Runtime.getRuntime().maxMemory() / MB}MB limit) because " +
                 "\"R8 execution\" is set to In-process. Switch it to Forked VM in Build Runtime settings, or reduce the build's dependencies."
             log.info("forked-R8: mode=in-process → in-process R8")
@@ -107,6 +113,7 @@ class ForkedR8Shrinker(
                     "R8: forked VM, ${xmx}MB heap (vs the ${Runtime.getRuntime().maxMemory() / MB}MB app limit)"
                 }
                 outOfMemoryAdvice = forkedAdvice(xmx)
+                profile = "forked-$xmx"
                 return R8Subprocess(listOf(toolClasspath.toPath()), Paths.get(launcher), listOf("-Xmx${xmx}m"))
             }
         }
@@ -117,6 +124,7 @@ class ForkedR8Shrinker(
      *  default Forked VM mode degrades gracefully rather than failing the build). */
     private fun forkUnavailable(reason: String): Shrinker {
         note = "R8: in-process ($reason)"
+        profile = "inprocess-${Runtime.getRuntime().maxMemory() / MB}"
         outOfMemoryAdvice = "R8 ran inside the app (${Runtime.getRuntime().maxMemory() / MB}MB limit) because $reason. " +
             "Reduce the build's dependencies, or build the release on a device with more memory."
         log.warn("forked-R8: $reason → in-process R8")

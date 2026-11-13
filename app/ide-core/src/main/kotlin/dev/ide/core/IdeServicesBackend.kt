@@ -656,7 +656,8 @@ class IdeServicesBackend(
                         // the ok=false bit alone can't tell a user's compile error from our pipeline throwing.
                         + (if (bs.status == dev.ide.ui.backend.RunStatus.Failed)
                             mapOf("failure_kind" to BuildFailureKind.classify(bs.diagnostics, bs.log))
-                          else emptyMap()),
+                          else emptyMap())
+                        + dev.ide.core.build.R8BuildFacts.props(bs.log),
                     )
                 }
                 prev = bs.status

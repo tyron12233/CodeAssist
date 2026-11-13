@@ -246,6 +246,11 @@ object ToolMemory {
     const val MESSAGE_PREFIX: String = DexDiagnostics.OUT_OF_MEMORY_PREFIX
 
     fun ranOut(log: List<String>): Boolean = DexDiagnostics.isOutOfMemory(log)
+
+    /** Whether a build-console line says the minify step fell back to shrinking the project's own code only. */
+    fun isShrinkFallback(line: String): Boolean =
+        dev.ide.android.support.tasks.R8MinifyTask.FALLBACK_TRIGGERED in line ||
+            dev.ide.android.support.tasks.R8MinifyTask.FALLBACK_REMEMBERED in line
 }
 
 /** aapt2: compile resources to an intermediate form, then link them into `resources.ap_` + `R.java`. */
@@ -480,6 +485,13 @@ data class L8Request(
 /** R8 (shrink/optimize/obfuscate/dex) plus its L8 sidekick (core-library-desugaring runtime). */
 interface Shrinker {
     fun shrink(request: ShrinkRequest): ToolResult
+
+    /**
+     * Names the memory R8 runs with here (which VM, how large a heap), or empty when that is not this shrinker's
+     * to say. The minify task remembers a whole-program shrink that ran out of memory beside this, so the same
+     * project is tried in full again once the answer changes, for example after the user raises the heap.
+     */
+    val heapProfile: String get() = ""
 
     /** Compile the core-library-desugaring runtime to dex (L8), packaged alongside the R8/D8 output. */
     fun l8(request: L8Request): ToolResult =

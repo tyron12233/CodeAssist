@@ -2375,11 +2375,12 @@ internal class R8MinifyTask(
         val inputMb = inputs.sumOf { runCatching { Files.size(it) }.getOrDefault(0L) } / (1024L * 1024L)
         val fallback = libraryFallback?.takeIf { staged.any { (_, library) -> !library } }
         val marker = stagingDir.resolve(OOM_MARKER)
-        if (fallback != null && ranOutBefore(marker, inputMb)) {
+        val heapProfile = shrinker.heapProfile
+        if (fallback != null && ranOutBefore(marker, inputMb, heapProfile)) {
             ctx.warn(
-                "${name.value}: R8 ran out of memory shrinking this project in an earlier build, so only the " +
+                "${name.value}: $FALLBACK_REMEMBERED, so only the " +
                     "project's own code is shrunk and the libraries are packaged unshrunk (a larger APK). " +
-                    "Clean the project to try a full shrink again, for example after raising the R8 heap."
+                    "A full shrink is tried again after the R8 heap setting changes or the project is cleaned."
             )
             return shrinkProjectOnly(ctx, fallback, staged, threads)
         }
@@ -2394,12 +2395,12 @@ internal class R8MinifyTask(
         DexArchives.clearDir(outDexDir)
         val r = shrinker.shrink(request(inputs, emptyList(), keepRuleFiles, resources, threads))
         if (!r.success && fallback != null && DexDiagnostics.isOutOfMemory(r.log)) {
-            runCatching { Files.write(marker, listOf(inputMb.toString())) }
-            // Not reported as a problem: the build carries on. The shrinker's own notes (which VM, what heap)
-            // are worth keeping in the console beside the reason for the retry.
-            r.log.filter { !it.startsWith("error:", ignoreCase = true) && DexDiagnostics.OOM_TOKEN !in it }.take(4).forEach { ctx.debug(it) }
+            runCatching { Files.write(marker, listOf(inputMb.toString(), heapProfile)) }
+            // Not reported as a problem: the build carries on. The shrinker's own note (which VM, what heap)
+            // is worth keeping in the console beside the reason for the retry.
+            r.log.filter { it.startsWith("R8:") }.take(2).forEach { ctx.info(it) }
             ctx.warn(
-                "${name.value}: R8 ran out of memory shrinking the whole app (~${inputMb}MB of classes). " +
+                "${name.value}: $FALLBACK_TRIGGERED (~${inputMb}MB of classes). " +
                     "Retrying with R8 on the project's own code only: the libraries are packaged unshrunk, so " +
                     "this APK is larger than a fully shrunk one."
             )
@@ -2427,9 +2428,12 @@ internal class R8MinifyTask(
             threads = threads,
         )
 
-    /** A full shrink of an input at least this large already exhausted the heap; a much smaller one may fit. */
-    private fun ranOutBefore(marker: Path, inputMb: Long): Boolean {
-        val failedAt = runCatching { Files.readAllLines(marker).firstOrNull()?.trim()?.toLongOrNull() }.getOrNull() ?: return false
+    /** A full shrink of an input at least this large already exhausted the heap R8 still has: a much smaller
+     *  input may fit, and so may the same one once R8 runs with different memory. */
+    private fun ranOutBefore(marker: Path, inputMb: Long, heapProfile: String): Boolean {
+        val lines = runCatching { Files.readAllLines(marker) }.getOrNull() ?: return false
+        val failedAt = lines.firstOrNull()?.trim()?.toLongOrNull() ?: return false
+        if (lines.getOrElse(1) { "" }.trim() != heapProfile) return false
         return inputMb * 10 >= failedAt * 9
     }
 
@@ -2480,9 +2484,13 @@ internal class R8MinifyTask(
         return TaskResult.Success
     }
 
-    private companion object {
-        const val OOM_MARKER = "r8-out-of-memory.txt"
-        val INDEXED_DEX = Regex("""classes\d*\.dex""")
+    companion object {
+        /** How the two console warnings of the fallback begin; the analytics bridge recognizes a build that
+         *  took it by them. */
+        const val FALLBACK_TRIGGERED = "R8 ran out of memory shrinking the whole app"
+        const val FALLBACK_REMEMBERED = "R8 ran out of memory shrinking this project in an earlier build"
+        private const val OOM_MARKER = "r8-out-of-memory.txt"
+        private val INDEXED_DEX = Regex("""classes\d*\.dex""")
     }
 }
 
