@@ -42,6 +42,12 @@ The AI assistant sends the conversation to an AI provider so that it can answer.
 
 You can choose to watch a rewarded ad to earn CodeAssist Free AI points. When you do, the app gives Google your CodeAssist account identifier with the ad, and Google sends a signed confirmation to our server when you have earned the reward. Our server records the ad's transaction identifier and credits your points. These ads are shown only when you tap to watch one.
 
+### App integrity check
+
+CodeAssist is open source, so anyone can build a changed copy that still talks to our servers. To tell the official app from such a copy, the app asks Google Play for an integrity token about once a day and sends it to our server, which has Google decode it. The result says which app package and signing certificate the token came from and whether Google considers the app and device genuine. It contains nothing about your projects or what you do in the app.
+
+We keep a daily count of results per app build, with no device or account identifier. If you are signed in, we also keep the date your account last passed the check and which of our signing certificates it used, so that features such as CodeAssist Free AI can later be limited to the official app. That record is deleted with your account. The check runs through Google Play services and is skipped on devices without them.
+
 ### Ads
 
 The app shows native, banner, and occasional full-screen ads from Google AdMob. To fill them, AdMob may use partner networks: Meta Audience Network, Pangle, Mintegral, and Unity Ads. These services may collect your device's advertising ID, IP address, and information about the device and the ads you see and tap, and use it to show and measure ads, and, where you have agreed, to personalize them. In the European Economic Area, the United Kingdom, and Switzerland, the app asks for your consent through Google's consent form before personalized ads are requested, and you can change your choice later in Settings, Privacy and data.
@@ -95,7 +101,7 @@ We do not sell your data and do not use it to build advertising profiles of our 
 - **Vercel** hosts the daily-challenge judge.
 - **Cloudflare R2** serves public Projects Store files.
 - **Anthropic** runs the models behind CodeAssist Free AI.
-- **Google (Firebase Cloud Messaging, AdMob)** and the ad partners listed above.
+- **Google (Firebase Cloud Messaging, AdMob, Play Integrity)** and the ad partners listed above.
 - **GitHub or Google**, when you sign in with them.
 - The **AI provider** you choose, when you use your own API key, and the **Git remote** you configure.
 

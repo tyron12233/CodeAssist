@@ -58,6 +58,22 @@ val STORE_SUBMISSION_SERVICE = ServiceKey<dev.ide.store.StoreSubmissionService>(
 /** Ratings and reviews. Reads are anonymous; writes need the account service, so the launcher builds both. */
 val STORE_REVIEW_SERVICE = ServiceKey<dev.ide.store.StoreReviewService>("platform.storeReviews")
 
+/**
+ * Shows the store backend which build this is, with a statement the app cannot write for itself (on Android,
+ * Play Integrity). The backend serves every build of this open-source app and has no other way to tell an
+ * official one from a modified one.
+ *
+ * [attest] is called when an account is adopted (a sign-in, or a stored session restored at launch) with that
+ * account's id, because the statement is made for one account and cannot be reused for another. It must not
+ * block: the host does the work on its own thread, and a failure is silent. Absent (desktop, tests, a build with
+ * no cloud project configured) nothing is attested.
+ */
+fun interface BuildAttestor {
+    fun attest(userId: String?)
+}
+
+val BUILD_ATTESTOR = ServiceKey<BuildAttestor>("platform.buildAttestor")
+
 /** Moderation: the review queue and the decisions on it. Needs a signed-in session, and the database only
  *  answers an account listed in `store_admins`, so on almost every install this resolves to a service whose
  *  every surface is hidden. Absent (desktop / tests) is the same as not being a moderator. */

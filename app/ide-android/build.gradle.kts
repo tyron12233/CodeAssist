@@ -540,70 +540,82 @@ val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAs
     into(layout.buildDirectory.dir("compose-drawables-asset/composeResources/dev.ide.ui.generated.resources/drawable"))
 }
 
-// --- AdMob ids (debug/profile = Google TEST ids; release = your real ids) ------------------------
+// --- AdMob ids (debug/profile = Google TEST ids; release = the ids you supply) -------------------
 // Debug + profile builds ALWAYS use Google's TEST ids: test ads are non-billable and safe to click during
-// development, so there's no risk of an invalid-traffic ban. The release build uses the real ids when supplied
-// via -PADMOB_APP_ID / -PADMOB_NATIVE_UNIT_ID (or the ADMOB_APP_ID / ADMOB_NATIVE_UNIT_ID env vars), falling
-// back to the test ids so a fork builds fine with AdMob unconfigured. The App id reaches the manifest through
-// the `admobAppId` placeholder; the native ad-unit id is a BuildConfig field AndroidAdHost reads. One native
-// ad unit serves every placement that has no unit of its own (see below). OFFICIAL RELEASES MUST SET BOTH real ids.
+// development, so there's no risk of an invalid-traffic ban. The release build uses real ids only when they are
+// supplied from OUTSIDE the repository, and no real id is written in this file: traffic from somebody else's
+// build of this code on the upstream ad units counts as invalid traffic against the upstream AdMob account.
+// Each id is looked up, in order, in `ads.properties` (gitignored, at the repo root, see ads.properties.example),
+// then a Gradle property (-PADMOB_APP_ID=...), then an env var of the same name. With none of them a release
+// falls back to Google's test ids (or to blank, where blank means "off"), so a fork builds with AdMob
+// unconfigured; `requireRealAdsInSignedRelease` below stops such a build from being SIGNED by accident.
+// The App id reaches the manifest through the `admobAppId` placeholder; the unit ids are BuildConfig fields
+// AndroidAdHost reads. One native ad unit serves every placement that has no unit of its own (see below).
 /** The Cloudflare Worker that serves CodeAssist Free AI (see supabase/cloudflare/ai-proxy). */
 val DEFAULT_AI_PROXY_URL = "https://codeassist-ai-proxy.lucena-tyronscott.workers.dev"
+
+val adsProperties = Properties().apply {
+    val f = rootProject.file("ads.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+/** The ad id called [name]: ads.properties, then -P[name], then the env var [name], else [fallback]. */
+fun adId(name: String, fallback: String): String =
+    (adsProperties.getProperty(name) ?: (findProperty(name) as String?) ?: System.getenv(name))?.trim() ?: fallback
 
 val testAdmobAppId = "ca-app-pub-3940256099942544~3347511713"
 val testAdmobNativeUnitId = "ca-app-pub-3940256099942544/2247696110"
 // Google's TEST interstitial unit — the full-screen "long build" ad (AndroidAdHost.showBuildInterstitial).
 val testAdmobInterstitialUnitId = "ca-app-pub-3940256099942544/1033173712"
-// The real ids are baked in as the release defaults (AdMob ids are not secret — they ship inside every APK),
-// and stay overridable so a fork can point ads at its own AdMob account instead of the upstream one.
-val realAdmobAppId = (findProperty("ADMOB_APP_ID") as String?) ?: System.getenv("ADMOB_APP_ID")
-    ?: "ca-app-pub-7523005242346905~2985774451"
-val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_ID")
-    ?: "ca-app-pub-7523005242346905/7440024785"
-// The real interstitial unit (full-screen "long build" ad). Baked in as the release default like the other
-// ids (AdMob ids aren't secret — they ship in every APK), overridable via -PADMOB_INTERSTITIAL_UNIT_ID or the
-// ADMOB_INTERSTITIAL_UNIT_ID env var so a fork can point at its own AdMob account.
-val realAdmobInterstitialUnitId = (findProperty("ADMOB_INTERSTITIAL_UNIT_ID") as String?)
-    ?: System.getenv("ADMOB_INTERSTITIAL_UNIT_ID")
-    ?: "ca-app-pub-7523005242346905/6735189457"
+val realAdmobAppId = adId("ADMOB_APP_ID", testAdmobAppId)
+val realAdmobNativeUnitId = adId("ADMOB_NATIVE_UNIT_ID", testAdmobNativeUnitId)
+val realAdmobInterstitialUnitId = adId("ADMOB_INTERSTITIAL_UNIT_ID", testAdmobInterstitialUnitId)
 // Rewarded ads: the one ad a user asks for, in exchange for CodeAssist Free AI points. Google's TEST rewarded unit
 // for non-shipping builds. The real unit's server-side verification callback is the `ai-reward` Supabase function,
-// which is what credits the points; a fork pointing at its own AdMob account must set up the same callback, and
-// passing a blank id hides the "watch an ad" button in release.
+// which is what credits the points; a fork pointing at its own AdMob account must set up the same callback. Left
+// unset it is blank in release, which hides the "watch an ad" button: the test unit never calls that server, so
+// showing it would have people watch an ad for nothing.
 val testAdmobRewardedUnitId = "ca-app-pub-3940256099942544/5224354917"
-val realAdmobRewardedUnitId = (findProperty("ADMOB_REWARDED_UNIT_ID") as String?)
-    ?: System.getenv("ADMOB_REWARDED_UNIT_ID")
-    ?: "ca-app-pub-7523005242346905/8159191965"
+val realAdmobRewardedUnitId = adId("ADMOB_REWARDED_UNIT_ID", "")
 // Google's TEST adaptive-banner unit, used by debug/profile for both banner uses below.
 val testAdmobBannerUnitId = "ca-app-pub-3940256099942544/9214589741"
-// The real banner units, baked in like the ids above. A blank one turns that banner off in release: AndroidAdHost
-// then shows nothing where it would go. ADMOB_BANNER_UNIT_ID is the banner a native slot
-// falls back to when no native ad fills; ADMOB_BUILD_BANNER_UNIT_ID is the console-footer banner while a build
-// runs, and falls back to the first one when left blank. Overridable like the others (-P or env).
-val realAdmobBannerUnitId = (findProperty("ADMOB_BANNER_UNIT_ID") as String?)
-    ?: System.getenv("ADMOB_BANNER_UNIT_ID")
-    ?: "ca-app-pub-7523005242346905/7699599336"
-val realAdmobBuildBannerUnitId = (findProperty("ADMOB_BUILD_BANNER_UNIT_ID") as String?)
-    ?: System.getenv("ADMOB_BUILD_BANNER_UNIT_ID")
-    ?: ""
+// The banner units. A blank one turns that banner off in release: AndroidAdHost then shows nothing where it would
+// go. ADMOB_BANNER_UNIT_ID is the banner a native slot falls back to when no native ad fills;
+// ADMOB_BUILD_BANNER_UNIT_ID is the console-footer banner while a build runs, and falls back to the first one
+// when left blank.
+val realAdmobBannerUnitId = adId("ADMOB_BANNER_UNIT_ID", testAdmobBannerUnitId)
+val realAdmobBuildBannerUnitId = adId("ADMOB_BUILD_BANNER_UNIT_ID", "")
 // Per-placement native units, keyed by AdPlacement name, so the AdMob report splits native earnings by screen.
-// A placement left blank falls back to the shared native unit above, and several placements may share one
-// unit. Each is overridable via -PADMOB_NATIVE_UNIT_<PLACEMENT> (or the env var of the same name). Reaches
-// AndroidAdHost as AD_NATIVE_UNIT_IDS, `PLACEMENT=unit` pairs joined by `;`.
-val realAdmobNativeUnitsByPlacement = mapOf(
-    "STORE" to "ca-app-pub-7523005242346905/7834378049",
-    "STORE_ITEM" to "ca-app-pub-7523005242346905/7783155586",
-    "PROJECTS" to "ca-app-pub-7523005242346905/4502386125",
-    "LEARN" to "ca-app-pub-7523005242346905/1338175893",
-    "CHALLENGE" to "ca-app-pub-7523005242346905/9563141113",
-    "BUILD_CONSOLE" to "ca-app-pub-7523005242346905/3460767191",
-    "RUN_RESULT" to "ca-app-pub-7523005242346905/5021260875",
-    "SDK_MANAGER" to "ca-app-pub-7523005242346905/6936977775",
-    "SETTINGS" to "ca-app-pub-7523005242346905/7642806352",
-    "SIDEBAR" to "ca-app-pub-7523005242346905/8833522537",
-).mapValues { (placement, default) ->
-    (findProperty("ADMOB_NATIVE_UNIT_$placement") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_$placement") ?: default
-}.filterValues { it.isNotBlank() }.entries.joinToString(";") { "${it.key}=${it.value}" }
+// A placement left unset falls back to the shared native unit above, and several placements may share one
+// unit. Each is ADMOB_NATIVE_UNIT_<PLACEMENT>, supplied like the ids above. Reaches AndroidAdHost as
+// AD_NATIVE_UNIT_IDS, `PLACEMENT=unit` pairs joined by `;`.
+val realAdmobNativeUnitsByPlacement = listOf(
+    "STORE", "STORE_ITEM", "PROJECTS", "LEARN", "CHALLENGE", "BUILD_CONSOLE", "RUN_RESULT", "SDK_MANAGER",
+    "SETTINGS", "SIDEBAR",
+).associateWith { placement -> adId("ADMOB_NATIVE_UNIT_$placement", "") }
+    .filterValues { it.isNotBlank() }.entries.joinToString(";") { "${it.key}=${it.value}" }
+
+// A release signed with a configured keystore is one somebody means to publish, and it must not go out with
+// Google's test ads in it: they earn nothing and a production app serving them breaks AdMob policy. So such a
+// build fails here, before the long compile, when the ids were not supplied. A build that really wants test ads
+// in a signed release (a fork with no AdMob account) says so with -Pcodeassist.testAdsInRelease=true.
+val requireRealAdsInSignedRelease = Regex("(assemble|bundle|package)Release(Bundle)?")
+gradle.taskGraph.whenReady {
+    val shipping = allTasks.any { it.project == project && requireRealAdsInSignedRelease.matches(it.name) }
+    if (!shipping || android.signingConfigs.findByName("release") == null) return@whenReady
+    if (providers.gradleProperty("codeassist.testAdsInRelease").orNull == "true") return@whenReady
+    val missing = buildList {
+        if (realAdmobAppId == testAdmobAppId) add("ADMOB_APP_ID")
+        if (realAdmobNativeUnitId == testAdmobNativeUnitId) add("ADMOB_NATIVE_UNIT_ID")
+        if (realAdmobInterstitialUnitId == testAdmobInterstitialUnitId) add("ADMOB_INTERSTITIAL_UNIT_ID")
+        if (realAdmobBannerUnitId == testAdmobBannerUnitId) add("ADMOB_BANNER_UNIT_ID")
+        if (realAdmobRewardedUnitId.isBlank()) add("ADMOB_REWARDED_UNIT_ID")
+    }
+    if (missing.isNotEmpty()) throw GradleException(
+        "This signed release has no real AdMob id for: ${missing.joinToString()}. Put them in ads.properties at " +
+            "the repo root (see ads.properties.example), or pass -Pcodeassist.testAdsInRelease=true to ship " +
+            "Google's test ads on purpose."
+    )
+}
 
 android {
     namespace = "dev.ide.android"
@@ -659,6 +671,17 @@ android {
                 ).joinToString(",")
             } else ""
         buildConfigField("String", "ANALYTICS_SIGNERS", "\"$analyticsSigners\"")
+
+        // The Google Cloud project NUMBER linked to the app in Play Console, for Play Integrity (see
+        // PlayIntegrityAttestor and supabase/functions/attest). The app asks Play to state which package and
+        // signing certificate it is, and the backend records the answer: that is how it tells an official build
+        // from a modified one. Not a secret, and it is useless without the backend's service account. Blank
+        // turns the check off, which is what a build pointed at its own endpoint gets unless it sets one.
+        val defaultPlayIntegrityProject = "114115428236"
+        val playIntegrityProject = (findProperty("PLAY_INTEGRITY_PROJECT") as String?)
+            ?: System.getenv("PLAY_INTEGRITY_PROJECT")
+            ?: if (supabaseUrl == defaultSupabaseUrl) defaultPlayIntegrityProject else ""
+        buildConfigField("String", "PLAY_INTEGRITY_PROJECT", "\"${playIntegrityProject.trim()}\"")
 
         // Where the daily-challenge judge is deployed. Separate from the Supabase pair because it is a
         // separate service: Supabase holds the problems and the leaderboard, and the judge is the only
@@ -781,7 +804,7 @@ android {
             isShrinkResources = false // code is the bulk; resources are reached by name from user projects
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
-            // The shipped build serves real AdMob ads (falls back to test ids if none were configured).
+            // The shipped build serves the AdMob ids supplied from outside the repo (test ids if none were).
             manifestPlaceholders["admobAppId"] = realAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$realAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$realAdmobInterstitialUnitId\"")
@@ -1262,6 +1285,8 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
 
+    // Play Integrity: the token the backend's `attest` function decodes (PlayIntegrityAttestor).
+    implementation(libs.play.integrity)
     implementation(libs.play.services.ads)
     // Play services (ads, base, basement) still declare androidx.fragment 1.0/1.1, which Play Console flags as
     // an outdated SDK. Nothing here uses fragments; this only lifts the resolved version.

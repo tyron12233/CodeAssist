@@ -279,6 +279,8 @@ object AndroidIde {
         // the backend is simply not push-reachable until the next one, and nothing the user is doing should
         // wait on it or fail because of it.
         if (!sandbox) registerForPush(appContext, manager, storeAccounts)
+        // Show the backend which build this is. Same terms as push: off the main thread, best-effort, silent.
+        if (!sandbox) startBuildAttestation(appContext, manager, storeAccounts)
         // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
         // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
         if (backend.diagnostics.analyticsConsent() == true) {
@@ -747,6 +749,32 @@ object AndroidIde {
                     }, "push-register").apply { isDaemon = true }.start()
                 }
         }
+    }
+
+    /**
+     * Register the Play Integrity attestor and make the launch's attestation.
+     *
+     * Off unless the build names a cloud project (`BuildConfig.PLAY_INTEGRITY_PROJECT`) and has a backend to
+     * tell. A launch with a stored session attests when that session is restored (StoreBackend.adoptAccount
+     * calls the attestor with the account), so only a signed-out launch is attested from here.
+     */
+    private fun startBuildAttestation(
+        appContext: Context,
+        manager: ProjectManager,
+        accounts: dev.ide.store.StoreAccountService,
+    ) {
+        val project = BuildConfig.PLAY_INTEGRITY_PROJECT.toLongOrNull() ?: return
+        if (!accounts.authAvailable()) return
+        val attestor = PlayIntegrityAttestor(
+            context = appContext,
+            accounts = accounts,
+            cloudProjectNumber = project,
+            signer = signingCertSha256(appContext)?.let(dev.ide.analytics.Signers::short).orEmpty(),
+            preference = manager::preference,
+            setPreference = manager::setPreference,
+        )
+        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.BUILD_ATTESTOR) { attestor }
+        if (!accounts.hasStoredSession()) attestor.attest(null)
     }
 
     private fun buildStoreAccounts(context: Context): dev.ide.store.impl.SupabaseAccountService? {

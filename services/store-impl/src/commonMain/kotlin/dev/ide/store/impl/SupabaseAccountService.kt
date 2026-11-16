@@ -290,6 +290,30 @@ class SupabaseAccountService(
     }
 
     /**
+     * Post [attestation] to the `attest` function, with the session's token when there is one.
+     *
+     * Signed out it goes with the publishable key alone, which the function reads as "nobody": the build is
+     * still counted, and no account is marked. The function decides everything; this only carries.
+     */
+    override fun attestBuild(attestation: dev.ide.store.BuildAttestation): StoreResult<Boolean> {
+        val str = { v: String -> SupabaseStoreSource.jsonStr(v) }
+        val body = buildString {
+            append('{')
+            append("\"token\":").append(attestation.integrityToken?.let(str) ?: "null")
+            append(",\"error\":").append(attestation.error?.let(str) ?: "null")
+            append(",\"app_id\":").append(str(attestation.appId))
+            append(",\"signer\":").append(str(attestation.signer))
+            append(",\"app_build\":").append(attestation.appBuild)
+            append('}')
+        }
+        return when (val r = post("/functions/v1/attest", body, bearer())) {
+            is StoreResult.Ok -> StoreResult.Ok(JsonReader.bool(JsonReader.parseOrNull(r.value), "official"))
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    /**
      * What the identity provider says about the signed-in user.
      *
      * Read by the submission service to seed a publisher row. Held here because this is the only thing

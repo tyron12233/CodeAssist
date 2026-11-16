@@ -1,0 +1,26 @@
+# AdMob ids for a release build. Copy to ads.properties (gitignored) at the repo root and fill in the ids of
+# YOUR AdMob account. Each can also be passed as -PNAME=... or as an env var of the same name.
+# Without them a release uses Google's test ids, and a signed release refuses to build (see
+# app/ide-android/build.gradle.kts). Debug and profile builds always use Google's test ids.
+
+ADMOB_APP_ID=ca-app-pub-0000000000000000~0000000000
+ADMOB_NATIVE_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+ADMOB_INTERSTITIAL_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+ADMOB_BANNER_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+# Rewarded ads pay out CodeAssist Free AI points through the ai-reward server callback. Blank hides the button.
+ADMOB_REWARDED_UNIT_ID=
+
+# Optional. The console-footer banner while a build runs; blank shares ADMOB_BANNER_UNIT_ID.
+ADMOB_BUILD_BANNER_UNIT_ID=
+# Optional, one native unit per screen so the AdMob report splits earnings by placement. Blank shares
+# ADMOB_NATIVE_UNIT_ID.
+ADMOB_NATIVE_UNIT_STORE=
+ADMOB_NATIVE_UNIT_STORE_ITEM=
+ADMOB_NATIVE_UNIT_PROJECTS=
+ADMOB_NATIVE_UNIT_LEARN=
+ADMOB_NATIVE_UNIT_CHALLENGE=
+ADMOB_NATIVE_UNIT_BUILD_CONSOLE=
+ADMOB_NATIVE_UNIT_RUN_RESULT=
+ADMOB_NATIVE_UNIT_SDK_MANAGER=
+ADMOB_NATIVE_UNIT_SETTINGS=
+ADMOB_NATIVE_UNIT_SIDEBAR=

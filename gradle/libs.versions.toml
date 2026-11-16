@@ -43,6 +43,7 @@ bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (k
 playServicesAds = "25.5.0"  # com.google.android.gms:play-services-ads — AdMob native ads + mediation (Android launcher only). 25.4.0 is the floor the current native-capable mediation adapters require.
 firebaseBom = "34.1.0"       # com.google.firebase:firebase-bom — aligns firebase-messaging; push notifications only.
 googleServices = "4.4.2"     # com.google.gms.google-services — processes google-services.json. Applied ONLY when that file exists.
+playIntegrity = "1.6.0"                # com.google.android.play:integrity: Play Integrity, so the backend can tell an official build from a modified one (PlayIntegrityAttestor)
 userMessagingPlatform = "4.0.0"        # com.google.android.ump — UMP/GDPR consent SDK; gathers consent before MobileAds.initialize (mediation prerequisite, EEA/UK)
 admobMediationMeta = "6.22.0.1"        # com.google.ads.mediation:facebook — Meta Audience Network adapter (native-capable)
 admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pangle adapter (native-capable)
@@ -207,6 +208,8 @@ play-services-ads = { module = "com.google.android.gms:play-services-ads", versi
 # the user was told. The BOM pins the messaging artifact.
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+# Play Integrity, Android launcher only (:ide-android). See PlayIntegrityAttestor.
+play-integrity = { module = "com.google.android.play:integrity", version.ref = "playIntegrity" }
 # UMP consent SDK + AdMob mediation adapters (Android launcher only). The adapters let Meta/Pangle/Mintegral
 # BID to fill the SAME native ad slots AdMob already serves — higher eCPM through network competition, no new
 # ad placements. Only NATIVE-capable networks are wired (AppLovin removed native inventory, so it would fill

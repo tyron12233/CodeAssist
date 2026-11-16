@@ -426,6 +426,10 @@ internal class StoreBackend(
      */
     private fun adoptAccount(account: dev.ide.store.StoreAccount): dev.ide.store.StoreAccount {
         bindPushDevice()
+        // Likewise the host's: which build this account is being used from (see BuildAttestor).
+        runCatching {
+            ctx.manager?.applicationContainer?.getServiceOrNull(dev.ide.core.BUILD_ATTESTOR)?.attest(account.userId)
+        }
         // The profile half is shared with the iOS host: the fields it fills in (the handle, the name, and
         // whether this account moderates) are the same wherever the app runs, and the device binding
         // above is the only part that is this host's.

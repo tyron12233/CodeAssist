@@ -24,6 +24,9 @@ keystore.properties
 # Local agent secrets — never commit
 agent.properties
 
+# The AdMob ids of a release build (see ads.properties.example). Never commit.
+ads.properties
+
 # The daily-challenge judge: a separate Vercel service, with deployment config tied to an account.
 # Kept out of the public repo for the same reason supabase/ is.
 judge/

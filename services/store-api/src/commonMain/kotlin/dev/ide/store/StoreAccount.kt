@@ -28,6 +28,32 @@ data class StoreAccount(
 )
 
 /**
+ * What a host can show the backend about the build it is running.
+ *
+ * [integrityToken] is the platform's signed statement (on Android, a Play Integrity token), made for
+ * [subject]: the backend only accepts a token for the caller it was made for, so one official install cannot
+ * vouch for another account. Null when the platform could not produce one, and [error] then says why.
+ *
+ * [appId], [signer] and [appBuild] are the app's own account of itself. They are used only when there is no
+ * token to go on, and count for no more than a modified build's word would.
+ */
+data class BuildAttestation(
+    val integrityToken: String?,
+    val error: String?,
+    val appId: String,
+    val signer: String,
+    val appBuild: Int,
+) {
+    companion object {
+        /** The subject of an attestation made signed out. */
+        const val ANONYMOUS = "anon"
+
+        /** The text whose SHA-256 (lowercase hex) a token for [subject] carries as its request hash. */
+        fun requestText(subject: String): String = "codeassist-attest:v1:$subject"
+    }
+}
+
+/**
  * Where a provider sends the user back to, defined once.
  *
  * The scheme has to agree in three places that cannot check each other: the Android manifest's
@@ -190,6 +216,20 @@ interface StoreAccountService {
      * False means the backend has no device with that token, so registration has not happened yet.
      */
     fun bindPushDevice(pushToken: String): StoreResult<Boolean> =
+        StoreResult.Unavailable("Sign-in is not available in this build")
+
+    /**
+     * Hand the backend the platform's statement about which build this is, as the current session (or as
+     * nobody, signed out).
+     *
+     * The backend is shared by every build of this open-source app, and it can only tell an official one
+     * from a modified one by a statement the app cannot write itself (see [BuildAttestation]). The answer is
+     * whether the backend took this for an official build. Nothing in the app depends on it: it is the
+     * backend's to act on.
+     *
+     * Lives on this port for the reason [bindPushDevice] does: it is a statement about the session.
+     */
+    fun attestBuild(attestation: BuildAttestation): StoreResult<Boolean> =
         StoreResult.Unavailable("Sign-in is not available in this build")
 
     companion object {
