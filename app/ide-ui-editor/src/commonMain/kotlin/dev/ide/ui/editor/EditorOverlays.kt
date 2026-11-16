@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -99,6 +102,7 @@ import dev.ide.ui.generated.resources.edoverlay_inline_rename_apply
 import dev.ide.ui.generated.resources.edoverlay_inline_rename_hint
 import dev.ide.ui.generated.resources.edoverlay_renaming_elsewhere
 import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.rename
 import dev.ide.ui.generated.resources.edoverlay_select_all
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
@@ -116,7 +120,10 @@ internal data class RenameUiState(val offset: Int, val oldName: String, val kind
 /** The last good completion render state, latched so the popup window survives a keystroke's transient gaps. */
 internal data class ShownCompletion(val tokenStart: Int, val items: List<UiCompletionItem>, val prefix: String)
 
-/** A centered prompt for the new identifier; Enter renames, Esc cancels. Auto-focused, with the name selected. */
+/**
+ * A centered prompt for the new identifier, auto-focused with the name selected. Enter (or the on-screen
+ * keyboard's action key) renames and Esc cancels; the Rename / Cancel buttons do the same for a touch screen.
+ */
 @Composable
 internal fun RenamePopup(
     state: RenameUiState,
@@ -149,6 +156,8 @@ internal fun RenamePopup(
                 onValueChange = { field = it; onChange(it.text) },
                 singleLine = true,
                 enabled = !busy,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onCommit() }),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = Ide.type.codeFamily),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
@@ -165,9 +174,19 @@ internal fun RenamePopup(
             Spacer(Modifier.size(6.dp))
             Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
         }
-        Spacer(Modifier.size(6.dp))
-        Text(if (busy) stringResource(Res.string.edoverlay_renaming) else stringResource(Res.string.edoverlay_rename_hint, state.oldName),
-            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+        // The keys are named only where there are keys; the buttons below are the way through without them.
+        if (busy || hasHardwareKeyboard()) {
+            Spacer(Modifier.size(6.dp))
+            Text(if (busy) stringResource(Res.string.edoverlay_renaming) else stringResource(Res.string.edoverlay_rename_hint, state.oldName),
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+        }
+        if (!busy) {
+            Spacer(Modifier.size(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                BarButton(stringResource(Res.string.cancel), MaterialTheme.colorScheme.onSurfaceVariant, onCancel)
+                BarButton(stringResource(Res.string.rename), MaterialTheme.colorScheme.primary, onCommit)
+            }
+        }
     }
 }
 
@@ -268,6 +287,8 @@ internal fun GoToLinePopup(
                 value = field,
                 onValueChange = { v -> field = v.copy(text = v.text.filter { it.isDigit() || it == ':' }) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { submit() }),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = Ide.type.codeFamily),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->

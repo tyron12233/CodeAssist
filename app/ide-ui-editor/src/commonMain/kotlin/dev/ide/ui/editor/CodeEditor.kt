@@ -1862,6 +1862,7 @@ private fun BoxScope.EditorDialogsLayer(
 
     // go-to-line prompt — a small centered card; jumps the caret (the into-view effect scrolls to it)
     if (gotoLineOpen) {
+        PlatformBackHandler(enabled = true) { gotoLineOpen = false; runCatching { focus.requestFocus() } }
         GoToLinePopup(
             lineCount = editorSession.doc.lineCount,
             onGo = { line, col ->
@@ -1900,6 +1901,8 @@ private fun BoxScope.EditorDialogsLayer(
 
     // rename prompt — a small centered card over the editor
     rename?.let { r ->
+        // System Back closes the prompt: the phone's Escape.
+        PlatformBackHandler(enabled = !renameBusy) { rename = null; renameError = null }
         RenamePopup(
             state = r,
             busy = renameBusy,
