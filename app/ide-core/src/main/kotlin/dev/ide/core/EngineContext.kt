@@ -105,6 +105,9 @@ internal interface EngineContext {
     /** Content roots to surface in the project tree (code + resources + assets) for [module]. */
     fun treeRoots(module: Module): List<Path>
 
+    /** Every file under [root] that is project content: derived-output directories inside it are skipped. */
+    fun contentFilesUnder(root: Path): List<Path>
+
     /** The live editor-buffer text for [path] (unsaved edits), or null when the file is not open. */
     fun overlayText(path: Path): String?
 

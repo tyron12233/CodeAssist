@@ -112,6 +112,12 @@ class IndexServiceImpl(
      * No effect on 64-bit devices or the desktop.
      */
     private val singleThreadedBuild: Boolean = false,
+    /**
+     * Directories (absolute, normalized) the source walk stays out of: derived output that sits inside a
+     * source root, which happens when a module's source root is its own directory. Read on every pass, so a
+     * changed project model takes effect on the next one. A root that is itself one of them is still walked.
+     */
+    private val excludedDirs: () -> Set<Path> = { emptySet() },
 ) : IndexService, Closeable {
 
     private class State(val ext: IndexExtension<*, *>) {
@@ -989,13 +995,21 @@ class IndexServiceImpl(
             // extension's inputFilter selects its own, so the Java indexes ignore .xml and the resource index .java.
             val groups =
                 roots.map { it to setOf(".java", ".kt") } + resourceRoots.map { it to setOf(".xml") }
+            val excluded = runCatching { excludedDirs() }.getOrDefault(emptySet())
             for ((root, exts) in groups) {
                 if (!Files.isDirectory(root)) continue
+                val start = root.toAbsolutePath().normalize()
                 // walkFileTree hands each file the [BasicFileAttributes] the traversal already stat'd, so the
                 // (size, mtime) fingerprint costs ZERO extra syscalls — the old Files.walk path did three stats
                 // per file (isRegularFile + size + lastModifiedTime), which dominated the "nothing changed" restart
                 // on a large tree (thousands of res/source files) on ART's filesystem.
                 Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+                    override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                        if (excluded.isEmpty()) return FileVisitResult.CONTINUE
+                        val d = dir.toAbsolutePath().normalize()
+                        return if (d != start && d in excluded) FileVisitResult.SKIP_SUBTREE else FileVisitResult.CONTINUE
+                    }
+
                     override fun visitFile(f: Path, attrs: BasicFileAttributes): FileVisitResult {
                         if (attrs.isRegularFile && exts.any { f.toString().endsWith(it) }) {
                             val sig = SourceSig(attrs.size(), attrs.lastModifiedTime().toMillis())

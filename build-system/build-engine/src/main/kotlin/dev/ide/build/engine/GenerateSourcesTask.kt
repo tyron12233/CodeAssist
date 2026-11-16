@@ -1,5 +1,7 @@
 package dev.ide.build.engine
 
+import dev.ide.model.derivedOutputDirs
+import dev.ide.model.contentFilesUnder
 import dev.ide.build.SourceGenRequest
 import dev.ide.build.SourceGenerator
 import dev.ide.build.Task
@@ -50,8 +52,9 @@ class GenerateSourcesTask(
         .filter { Files.isDirectory(it) }
 
     /** The module's hand-written source files of [ext] (SOURCE roots only; excludes the generated root). */
-    private fun handWritten(ext: String): List<Path> = sourceRootDirs()
-        .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(ext) }.collect(Collectors.toList()) } }
+    private fun handWritten(ext: String): List<Path> = module.derivedOutputDirs().let { excluded ->
+        sourceRootDirs().flatMap { root -> contentFilesUnder(root, excluded).filter { it.toString().endsWith(ext) } }
+    }
 
     /** The module's directly-declared library coordinates as `group:name` — the opt-in signal probe-based
      *  generators gate on (a transitive dependency is folded into a declaring library's roots, so it never

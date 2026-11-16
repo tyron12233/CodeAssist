@@ -11,7 +11,6 @@ import dev.ide.ui.backend.UiSearchOptions
 import dev.ide.ui.backend.UiTextMatch
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.stream.Collectors
 import kotlin.io.path.readText
 
 /**
@@ -50,11 +49,7 @@ internal class SearchService(private val ctx: EngineContext) : SymbolSearch {
         for (module in ctx.modules()) {
             for (root in ctx.treeRoots(module)) {
                 if (!Files.isDirectory(root)) continue
-                val files = runCatching {
-                    Files.walk(root).use { s ->
-                        s.filter { Files.isRegularFile(it) }.collect(Collectors.toList())
-                    }
-                }.getOrDefault(emptyList())
+                val files = ctx.contentFilesUnder(root).filter { Files.isRegularFile(it) }
                 for (file in files) {
                     val abs = file.toAbsolutePath().normalize()
                     if (!seen.add(abs.toString())) continue

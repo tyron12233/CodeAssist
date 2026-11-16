@@ -1,5 +1,7 @@
 package dev.ide.build.engine
 
+import dev.ide.model.derivedOutputDirs
+import dev.ide.model.contentFilesUnder
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,12 +16,14 @@ import java.util.stream.Collectors
  */
 
 /** The `.kt` files in a module's source roots (see `sourceRootDirs`) — kotlinc's program inputs. */
-fun kotlinSourceFiles(module: Module): List<Path> = sourceRootDirs(module)
-    .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".kt") }.collect(Collectors.toList()) } }
+fun kotlinSourceFiles(module: Module): List<Path> = module.derivedOutputDirs().let { excluded ->
+    sourceRootDirs(module).flatMap { root -> contentFilesUnder(root, excluded).filter { it.toString().endsWith(".kt") } }
+}
 
 /** True when a module carries any Kotlin source (so it needs a `compileKotlin` step). */
-fun hasKotlinSources(module: Module): Boolean = sourceRootDirs(module)
-    .any { root -> Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } } }
+fun hasKotlinSources(module: Module): Boolean = module.derivedOutputDirs().let { excluded ->
+    sourceRootDirs(module).any { root -> contentFilesUnder(root, excluded).any { it.toString().endsWith(".kt") } }
+}
 
 /** Where a module's Kotlin `.class` output lands — a sibling of the Java [outputDir] so the two compilers
  *  never share a directory (which would make each see the other's classes as "changed" output every run). */

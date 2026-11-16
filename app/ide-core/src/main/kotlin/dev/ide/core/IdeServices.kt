@@ -250,6 +250,7 @@ import dev.ide.model.ResourceConflict
 import dev.ide.model.ResourceWrite
 import dev.ide.model.SdkResolution
 import dev.ide.model.contentRootsFor
+import dev.ide.model.derivedOutputDirs
 import dev.ide.model.impl.DefaultFileIconProvider
 import dev.ide.core.kmp.KmpShapes
 import dev.ide.core.kmp.KmpSwitch
@@ -588,6 +589,8 @@ class IdeServices private constructor(
             // Library source archives feed only parameter names and javadoc; build them after each pass so they
             // never hold up readiness or the next pass (they were the costliest artifacts in the field).
             deferSourceArchives = true,
+            // A source root that is its module's own directory holds the build output too; keep it out of the index.
+            excludedDirs = { excludedDirs() },
         )
     }
 
@@ -657,6 +660,7 @@ class IdeServices private constructor(
 
         override fun sourceRoots(module: Module) = this@IdeServices.sourceRoots(module)
         override fun treeRoots(module: Module) = this@IdeServices.treeRoots(module)
+        override fun contentFilesUnder(root: Path) = this@IdeServices.contentFilesUnder(root)
         override fun overlayText(path: Path) = this@IdeServices.openDocuments[path]
         override fun openDocumentPaths(): Set<Path> = this@IdeServices.openDocuments.keys.toSet()
         override fun flushOpenDocuments() = this@IdeServices.flushOpenDocuments()
@@ -1041,10 +1045,7 @@ class IdeServices private constructor(
     /** Cheap check (bounded, short-circuiting) for any `.kt` under the project's source roots. */
     fun hasKotlinSources(): Boolean = runCatching {
         modules().any { m ->
-            sourceRoots(m).any { root ->
-                Files.exists(root) && Files.walk(root)
-                    .use { s -> s.anyMatch { it.fileName?.toString()?.endsWith(".kt") == true } }
-            }
+            sourceRoots(m).any { root -> contentFilesUnder(root).any { it.fileName?.toString()?.endsWith(".kt") == true } }
         }
     }.getOrDefault(false)
 
@@ -1395,9 +1396,7 @@ class IdeServices private constructor(
             .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
             .map { Paths.get(it.dir.path) }
             .any { root ->
-                Files.isDirectory(root) && runCatching {
-                    Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } }
-                }.getOrDefault(false)
+                contentFilesUnder(root).any { it.toString().endsWith(".kt") }
             }
 
     /**
@@ -2362,6 +2361,25 @@ class IdeServices private constructor(
 
     /** Restore a converted project's Gradle build files and re-enter compatibility mode. */
     internal fun revertToGradle(): GradleImport.ConvertOutcome = GradleImport.revertToGradle(workspaceRoot)
+
+    @Volatile private var excludedDirsMemo: Pair<Int, Set<Path>>? = null
+
+    /**
+     * The directories that hold derived output and are not project content, absolute and normalized: every
+     * content root a module declares with [ContentRole.EXCLUDED] (`bin/`, `obj/`), and each module's own
+     * `build/` directory. They only matter where one sits inside a source root, which happens when a root is
+     * the module's own directory: a sweep then skips them ([contentFilesUnder]) and the tree draws them as output.
+     */
+    fun excludedDirs(): Set<Path> {
+        val generation = store.generation
+        excludedDirsMemo?.let { if (it.first == generation) return it.second }
+        val out = modules().flatMapTo(HashSet()) { it.derivedOutputDirs() }
+        excludedDirsMemo = generation to out
+        return out
+    }
+
+    /** Every file under [root] that is project content: the walk skips [excludedDirs]. */
+    fun contentFilesUnder(root: Path): List<Path> = dev.ide.model.contentFilesUnder(root, excludedDirs())
 
     fun sourceRoots(module: Module): List<Path> {
         // [moduleForFile] asks for every module's roots on each call, and the editor asks that per pass and per
@@ -4266,7 +4284,7 @@ class IdeServices private constructor(
                         original.parent?.let { Files.createDirectories(it) }
                         Files.move(aside, original)
                         restored.add(original)
-                        created += filesUnder(original)
+                        created += contentFilesUnder(original)
                     }.onFailure { problems += "could not restore '${original.fileName}'" }
                 }
             }
@@ -4295,12 +4313,7 @@ class IdeServices private constructor(
     private fun projectJavaFiles(): List<Path> {
         val out = ArrayList<Path>()
         for (m in modules()) for (root in sourceRoots(m)) {
-            if (!Files.isDirectory(root)) continue
-            runCatching {
-                Files.walk(root).use { s ->
-                    s.filter { it.toString().endsWith(".java") }.forEach { out.add(it) }
-                }
-            }
+            contentFilesUnder(root).filterTo(out) { it.toString().endsWith(".java") }
         }
         return out
     }
@@ -4309,10 +4322,7 @@ class IdeServices private constructor(
     private fun projectFilesEndingWith(suffix: String): List<Path> {
         val out = ArrayList<Path>()
         for (m in modules()) for (root in sourceRoots(m)) {
-            if (!Files.isDirectory(root)) continue
-            runCatching {
-                Files.walk(root).use { s -> s.filter { it.toString().endsWith(suffix) }.forEach { out.add(it) } }
-            }
+            contentFilesUnder(root).filterTo(out) { it.toString().endsWith(suffix) }
         }
         return out.distinct()
     }
@@ -4321,12 +4331,7 @@ class IdeServices private constructor(
     private fun projectSourceFiles(): List<Path> {
         val out = ArrayList<Path>()
         for (m in modules()) for (root in sourceRoots(m)) {
-            if (!Files.isDirectory(root)) continue
-            runCatching {
-                Files.walk(root).use { s ->
-                    s.filter { isRelocatableSource(it) }.forEach { out.add(it) }
-                }
-            }
+            contentFilesUnder(root).filterTo(out) { isRelocatableSource(it) }
         }
         return out
     }
@@ -5662,7 +5667,7 @@ class IdeServices private constructor(
         for (root in roots) {
             if (!Files.isDirectory(root)) continue
             runCatching {
-                Files.walk(root).use { w ->
+                contentFilesUnder(root).let { w ->
                     w.filter { it.toString().endsWith(suffix) && Files.isRegularFile(it) }
                         .forEach { p ->
                             runCatching {
@@ -5716,9 +5721,7 @@ class IdeServices private constructor(
             // siblings/deps) resolve; library jars come from each module's analysis classpath.
             modules().forEach { m ->
                 sourceRoots(m).forEach { root ->
-                    if (Files.isDirectory(root)) Files.walk(root).use { w ->
-                        w.filter { it.toString().endsWith(".java") }.forEach { sources.add(it) }
-                    }
+                    contentFilesUnder(root).filterTo(sources) { it.toString().endsWith(".java") }
                 }
             }
             // Dedupe to one jar per artifact before dexing: flattening every module's classpath can present the
@@ -6013,14 +6016,8 @@ class IdeServices private constructor(
         override fun files(): Sequence<VirtualFile> {
             val out = ArrayList<VirtualFile>()
             for (m in modules()) for (root in sourceRoots(m)) {
-                if (!Files.isDirectory(root)) continue
-                runCatching {
-                    Files.walk(root).use { s ->
-                        // Every file the per-file pass would analyze (the same gate as targetFor), not just Java.
-                        s.filter { Files.isRegularFile(it) && isAnalyzable(it) }
-                            .forEach { out += store.vfs.fileFor(it) }
-                    }
-                }
+                // Every file the per-file pass would analyze (the same gate as targetFor), not just Java.
+                for (f in contentFilesUnder(root)) if (Files.isRegularFile(f) && isAnalyzable(f)) out += store.vfs.fileFor(f)
             }
             return out.asSequence()
         }

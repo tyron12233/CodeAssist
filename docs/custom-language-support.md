@@ -1334,6 +1334,27 @@ val LINK_ONLY = DependencyScope.register(
 otherwise a project that persisted it still loads, but the scope is re-derived permissively. The built-in
 values keep the spellings they have always been written under, so none of this is a format migration.
 
+**A language with no source folder** (a C# project keeps `MyApp.csproj` and `Program.cs` side by side) declares
+the module's own directory as its root, and its build output as `ContentRole.EXCLUDED`:
+
+```kotlin
+SourceSetTemplate(
+    "main", DependencyScope.IMPLEMENTATION,
+    mapOf(
+        "" to setOf(ContentRole.SOURCE),          // the module directory is the source root
+        "bin" to setOf(ContentRole.EXCLUDED),     // derived output: dimmed in the tree, skipped by sweeps
+        "obj" to setOf(ContentRole.EXCLUDED),
+    ),
+)
+```
+
+The project tree lists such a root's folders and files directly under the module, once. An excluded root is
+drawn as build output wherever it sits, and Find in Files, the project-wide analysis, the index and the
+built-in compile tasks skip it. A sweep of your own over a module's roots should do the same:
+`contentFilesUnder(root, module.derivedOutputDirs())` in place of `Files.walk(root)`. Whether a
+`SOURCE` root is drawn as packages (`com.acme.app`) or as plain folders follows the module type's `platform`:
+a type that declares its own `PlatformKind` gets plain folders, one that leaves the default (JVM) gets packages.
+
 ### 13.2 Facets
 
 A facet is domain-specific configuration attached to a module without the core knowing the domain

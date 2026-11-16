@@ -1,5 +1,7 @@
 package dev.ide.build.engine
 
+import dev.ide.model.derivedOutputDirs
+import dev.ide.model.contentFilesUnder
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -37,15 +39,16 @@ fun androidTestSourceRootDirs(module: Module): List<Path> = collapseNestedRoots(
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
         .map { Paths.get(it.dir.path) },
+    module.derivedOutputDirs(),
 ).filter { Files.isDirectory(it) }
 
 /** Whether [module] has any instrumented test source. */
 fun hasAndroidTestSources(module: Module): Boolean =
-    androidTestSourceRootDirs(module).any { root -> filesUnder(listOf(root), ".kt").isNotEmpty() || filesUnder(listOf(root), ".java").isNotEmpty() }
+    androidTestSourceRootDirs(module).any { root -> filesUnder(listOf(root), ".kt", module).isNotEmpty() || filesUnder(listOf(root), ".java", module).isNotEmpty() }
 
 /** The `.java` / `.kt` files under [androidTestSourceRootDirs]. */
-fun androidTestJavaSourceFiles(module: Module): List<Path> = filesUnder(androidTestSourceRootDirs(module), ".java")
-fun androidTestKotlinSourceFiles(module: Module): List<Path> = filesUnder(androidTestSourceRootDirs(module), ".kt")
+fun androidTestJavaSourceFiles(module: Module): List<Path> = filesUnder(androidTestSourceRootDirs(module), ".java", module)
+fun androidTestKotlinSourceFiles(module: Module): List<Path> = filesUnder(androidTestSourceRootDirs(module), ".kt", module)
 
 /** A module's test source roots (SOURCE and GENERATED roots of its test source sets) that exist on disk. */
 fun testSourceRootDirs(module: Module): List<Path> = collapseNestedRoots(
@@ -53,17 +56,18 @@ fun testSourceRootDirs(module: Module): List<Path> = collapseNestedRoots(
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
         .map { Paths.get(it.dir.path) },
+    module.derivedOutputDirs(),
 ).filter { Files.isDirectory(it) }
 
 /** The `.java` files under [testSourceRootDirs]. */
-fun testJavaSourceFiles(module: Module): List<Path> = filesUnder(testSourceRootDirs(module), ".java")
+fun testJavaSourceFiles(module: Module): List<Path> = filesUnder(testSourceRootDirs(module), ".java", module)
 
 /** The `.kt` files under [testSourceRootDirs]. */
-fun testKotlinSourceFiles(module: Module): List<Path> = filesUnder(testSourceRootDirs(module), ".kt")
+fun testKotlinSourceFiles(module: Module): List<Path> = filesUnder(testSourceRootDirs(module), ".kt", module)
 
 /** Whether [module] has any test source to compile. */
 fun hasTestSources(module: Module): Boolean =
-    testSourceRootDirs(module).any { root -> filesUnder(listOf(root), ".kt").isNotEmpty() || filesUnder(listOf(root), ".java").isNotEmpty() }
+    testSourceRootDirs(module).any { root -> filesUnder(listOf(root), ".kt", module).isNotEmpty() || filesUnder(listOf(root), ".java", module).isNotEmpty() }
 
 /**
  * The RESOURCE roots of the test source sets: the ones the model declares, plus each set's conventional
@@ -128,6 +132,7 @@ fun testModuleDeps(module: Module, byId: Map<ModuleId, Module>): List<Module> =
         .filter { it.scope.onTest && !it.scope.onCompile && !it.scope.onRuntime }
         .mapNotNull { byId[it.target] }
 
-private fun filesUnder(roots: List<Path>, suffix: String): List<Path> = roots.flatMap { root ->
-    Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(suffix) }.collect(Collectors.toList()) }
+private fun filesUnder(roots: List<Path>, suffix: String, module: Module): List<Path> {
+    val excluded = module.derivedOutputDirs()
+    return roots.flatMap { root -> contentFilesUnder(root, excluded).filter { Files.isRegularFile(it) && it.toString().endsWith(suffix) } }
 }

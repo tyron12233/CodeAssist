@@ -1,5 +1,7 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.model.derivedOutputDirs
+import dev.ide.model.contentFilesUnder
 import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.ApkSigner
@@ -912,15 +914,14 @@ internal class AndroidCompileTask(
     private val bootClasspath: List<Path>,
     /** Additional generated source roots (e.g. ViewBinding) to compile alongside [sourceRoots] + [genJavaDir]. */
     private val extraGenDirs: List<Path> = emptyList(),
+    /** The module's derived-output directories, skipped where one sits inside a source root. */
+    private val excludedDirs: Set<Path> = emptySet(),
 ) : Task {
     // NB: `sourceRoots + genJavaDir` would bind Collection.plus(Iterable) — a Path is an Iterable<Path>
     // of its name components — and silently scatter the gen dir into segments. Append as a single element.
     private fun javaIn(roots: List<Path>): List<Path> =
-        roots.filter { Files.isDirectory(it) }.flatMap { root ->
-            Files.walk(root).use { s ->
-                s.filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }
-                    .collect(Collectors.toList())
-            }
+        roots.flatMap { root ->
+            contentFilesUnder(root, excludedDirs).filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }
         }
 
     // The generated `R.java` is excluded — it is packaged as `R.jar` by [GenerateRJarTask] and arrives on
@@ -977,12 +978,12 @@ internal class AndroidKotlinCompileTask(
     /** Additional generated source roots (e.g. ViewBinding) fed to kotlinc for resolution, like [genJavaDir]. */
     private val extraGenDirs: List<Path> = emptyList(),
 ) : Task {
+    /** The module's derived-output directories, skipped where one sits inside a source root. */
+    private val excludedDirs: Set<Path> = module.derivedOutputDirs()
+
     private fun walk(roots: List<Path>, ext: String): List<Path> =
-        roots.filter { Files.isDirectory(it) }.flatMap { root ->
-            Files.walk(root).use { s ->
-                s.filter { Files.isRegularFile(it) && it.toString().endsWith(ext) }
-                    .collect(Collectors.toList())
-            }
+        roots.flatMap { root ->
+            contentFilesUnder(root, excludedDirs).filter { Files.isRegularFile(it) && it.toString().endsWith(ext) }
         }
 
     private fun kotlinSources(): List<Path> = walk(sourceRoots, ".kt")

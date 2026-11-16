@@ -1,5 +1,7 @@
 package dev.ide.build.engine
 
+import dev.ide.model.derivedOutputDirs
+import dev.ide.model.contentFilesUnder
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -37,10 +39,15 @@ fun generatedRoot(module: Module): Path =
  * De-duplicate [roots] and drop any that sits inside another, keeping the outermost. A source-root list
  * assembled from several places (a module's declared roots, a pipeline's generated directory, the
  * conventional generated root) can otherwise present the same file twice, which a compiler rejects.
+ *
+ * A root inside one of [excluded] (a module's derived-output directories) is kept even when an outer root
+ * contains it: the outer root's walk skips that directory, so the inner root is the only way its files are
+ * seen. This is the generated-sources root under `build/` of a module whose source root is its own directory.
  */
-fun collapseNestedRoots(roots: List<Path>): List<Path> {
+fun collapseNestedRoots(roots: List<Path>, excluded: Set<Path> = emptySet()): List<Path> {
     val all = roots.map { it.toAbsolutePath().normalize() }.distinct()
-    return all.filterNot { root -> all.any { it != root && root.startsWith(it) } }
+    fun cutOff(outer: Path, inner: Path) = excluded.any { it != outer && it.startsWith(outer) && inner.startsWith(it) }
+    return all.filterNot { root -> all.any { it != root && root.startsWith(it) && !cutOff(it, root) } }
 }
 
 /**
@@ -53,7 +60,7 @@ fun sourceRootDirs(module: Module): List<Path> {
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
         .map { Paths.get(it.dir.path) }
-    return collapseNestedRoots(declared.plusElement(generatedRoot(module))).filter { Files.isDirectory(it) }
+    return collapseNestedRoots(declared.plusElement(generatedRoot(module)), module.derivedOutputDirs()).filter { Files.isDirectory(it) }
 }
 
 /**
@@ -73,8 +80,9 @@ fun sourceRootDirs(module: Module): List<Path> {
 private fun producesOutput(sourceSet: SourceSet): Boolean =
     sourceSet.scope.onCompile || sourceSet.scope.onRuntime
 
-fun sourceFiles(module: Module): List<Path> = sourceRootDirs(module)
-    .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
+fun sourceFiles(module: Module): List<Path> = module.derivedOutputDirs().let { excluded ->
+    sourceRootDirs(module).flatMap { root -> contentFilesUnder(root, excluded).filter { it.toString().endsWith(".java") } }
+}
 
 fun depOutputDirs(module: Module): List<Path> =
     module.classpath(DependencyScope.IMPLEMENTATION).entries

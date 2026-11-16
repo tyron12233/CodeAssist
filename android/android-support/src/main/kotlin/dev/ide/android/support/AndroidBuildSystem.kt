@@ -1,5 +1,7 @@
 package dev.ide.android.support
 
+import dev.ide.model.derivedOutputDirs
+import dev.ide.model.contentFilesUnder
 import dev.ide.android.support.aidl.AidlCompiler
 import dev.ide.android.support.crashlytics.Crashlytics
 import dev.ide.android.support.gms.GoogleServices
@@ -452,7 +454,7 @@ class AndroidBuildSystem(
         // it is on the Java pipeline. Nested roots are collapsed: a project that declares `build/generated`
         // would otherwise present the pipeline's own generated directories twice.
         val sourceRoots =
-            collapseNestedRoots(contentRoots(app, variant, ContentRole.SOURCE) + roots(variant, ContentRole.GENERATED))
+            collapseNestedRoots(contentRoots(app, variant, ContentRole.SOURCE) + roots(variant, ContentRole.GENERATED), app.derivedOutputDirs())
         val assetsDirs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ASSETS) } +
             libs.assetsDirs + contentRoots(app, variant, ContentRole.ASSETS)
         val level = levelOf(app.languageLevel)
@@ -506,7 +508,7 @@ class AndroidBuildSystem(
         // Kotlin: upstream modules' `kotlin-classes` (sibling of their Java output) join the compile classpath;
         // when the app itself has `.kt`, its own `compileKotlin` runs first and its output is added too.
         val upstreamKotlin = appModuleOutputs.map { it.resolveSibling("kotlin-classes") }
-        val appHasKotlin = kotlin != null && containsKotlin(sourceRoots)
+        val appHasKotlin = kotlin != null && containsKotlin(sourceRoots, app)
         val directDepKotlin = directModuleDeps(app, byId).filter { moduleHasKotlin(it) }
             .map { TaskName(":${it.name}:compileKotlin") }
         val kotlinClasspath = compileBootclasspath + libs.compileJars + appModuleOutputs + upstreamKotlin
@@ -525,7 +527,7 @@ class AndroidBuildSystem(
             }
             gs
         } else null
-        val genSourceRoots = collapseNestedRoots(sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen }))
+        val genSourceRoots = collapseNestedRoots(sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen }), app.derivedOutputDirs())
 
         val mergeRes = step("mergeResources")
         val processManifest = step("processManifest")
@@ -721,6 +723,7 @@ class AndroidBuildSystem(
                 level,
                 bootClasspath,
                 extraGenDirs = vbGenDirs + aidlGenDirs,
+                excludedDirs = app.derivedOutputDirs(),
             )
         }
         // The app's project-scope dex covers both the Java and (when present) the Kotlin output.
@@ -1218,7 +1221,7 @@ class AndroidBuildSystem(
         val depRTasks = depAndroidLibs.map { TaskName(":${it.name}:compileR") }
         val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + depRJars)
         val compileDeps = (directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") } + depRTasks).toMutableList()
-        val sourceRoots = collapseNestedRoots(srcRoots(ContentRole.SOURCE) + srcRoots(ContentRole.GENERATED))
+        val sourceRoots = collapseNestedRoots(srcRoots(ContentRole.SOURCE) + srcRoots(ContentRole.GENERATED), m.derivedOutputDirs())
 
         val rRoot = buildDir.resolve("intermediates").resolve("r")
         val generateR = TaskName(":${m.name}:generateR")
@@ -1327,13 +1330,13 @@ class AndroidBuildSystem(
             compileDeps.add(gs)
             gs
         } else null
-        val libGenSourceRoots = collapseNestedRoots(sourceRoots + listOfNotNull(libGenerateSources?.let { kspGen }))
+        val libGenSourceRoots = collapseNestedRoots(sourceRoots + listOfNotNull(libGenerateSources?.let { kspGen }), m.derivedOutputDirs())
 
         // compileKotlin (when the lib has `.kt`): runs against android.jar + the lib's own non-final R, ahead
         // of compileJava, which then sees its output. The Kotlin output IS dexed (it's the lib's code) — only
         // the R classes are kept out. Emits to the `kotlin-classes` sibling so dependers' classpaths find it.
         val libKotlin = classesOut.resolveSibling("kotlin-classes")
-        val libHasKotlin = kotlin != null && containsKotlin(sourceRoots)
+        val libHasKotlin = kotlin != null && containsKotlin(sourceRoots, m)
         if (libHasKotlin) {
             val compileKotlin = TaskName(":${m.name}:compileKotlin")
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
@@ -1356,6 +1359,7 @@ class AndroidBuildSystem(
                 level,
                 bootClasspath,
                 extraGenDirs = libVbGenDirs + libAidlGenDirs,
+                excludedDirs = m.derivedOutputDirs(),
             )
         }
         val procRes = TaskName(":${m.name}:processResources")
@@ -1531,12 +1535,13 @@ class AndroidBuildSystem(
         signingResolver?.invoke(module, buildType) ?: signing
 
     /** True if any of [roots] holds a `.kt` file (so a `compileKotlin` step is needed). */
-    private fun containsKotlin(roots: List<Path>): Boolean = roots.filter { Files.isDirectory(it) }
-        .any { root -> Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } } }
+    private fun containsKotlin(roots: List<Path>, module: Module): Boolean = module.derivedOutputDirs().let { excluded ->
+        roots.any { root -> contentFilesUnder(root, excluded).any { it.toString().endsWith(".kt") } }
+    }
 
     /** True if module [m] carries Kotlin sources (and Kotlin compilation is wired). */
     private fun moduleHasKotlin(m: Module): Boolean =
-        kotlin != null && containsKotlin(contentRoots(m, null, ContentRole.SOURCE))
+        kotlin != null && containsKotlin(contentRoots(m, null, ContentRole.SOURCE), m)
 
     /**
      * True when [m] **directly declares** the Hilt Android runtime, so its compiled classes need the

@@ -33,7 +33,7 @@ internal object MainClassDetection {
         // Trust the index once it's ready (an empty result then means the module genuinely has no main); only
         // pay for a direct scan while it's still building, so the Run picker isn't empty right after open.
         if (fromIndex.isNotEmpty() || ctx.indexService.status.ready) return fromIndex
-        return directScan(roots)
+        return directScan(ctx, roots)
     }
 
     private fun fromIndex(ctx: EngineContext, roots: List<Path>): List<RunTarget> {
@@ -61,26 +61,24 @@ internal object MainClassDetection {
     fun detectLive(ctx: EngineContext, module: Module): List<RunTarget> {
         val roots = ctx.sourceRoots(module).map { it.toAbsolutePath().normalize() }
         if (roots.isEmpty()) return emptyList()
-        return directScan(roots)
+        return directScan(ctx, roots)
     }
 
     /** Cold-start fallback: parse the module's sources with the SAME detectors the indexes use. */
-    private fun directScan(roots: List<Path>): List<RunTarget> {
+    private fun directScan(ctx: EngineContext, roots: List<Path>): List<RunTarget> {
         val out = LinkedHashMap<String, RunTarget>()
-        scan(roots, ".java") { text, _ -> JavaMainScan.scan(text) }.forEach { merge(out, it.first, it.second) }
-        scan(roots, ".kt") { text, name -> KotlinMainScan.scan(name, text) }.forEach { merge(out, it.first, it.second) }
+        scan(ctx, roots, ".java") { text, _ -> JavaMainScan.scan(text) }.forEach { merge(out, it.first, it.second) }
+        scan(ctx, roots, ".kt") { text, name -> KotlinMainScan.scan(name, text) }.forEach { merge(out, it.first, it.second) }
         return out.values.toList()
     }
 
     private fun scan(
-        roots: List<Path>, ext: String, detect: (text: String, name: String) -> List<Pair<String, Boolean>>,
+        ctx: EngineContext, roots: List<Path>, ext: String, detect: (text: String, name: String) -> List<Pair<String, Boolean>>,
     ): List<Pair<String, Boolean>> {
         val found = ArrayList<Pair<String, Boolean>>()
         for (root in roots) {
             if (!Files.isDirectory(root)) continue
-            val files = runCatching {
-                Files.walk(root).use { s -> s.filter { it.toString().endsWith(ext) }.collect(Collectors.toList()) }
-            }.getOrDefault(emptyList())
+            val files = ctx.contentFilesUnder(root).filter { it.toString().endsWith(ext) }
             for (f in files) {
                 val text = runCatching { f.readText() }.getOrNull() ?: continue
                 found += detect(text, f.fileName.toString())

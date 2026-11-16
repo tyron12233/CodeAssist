@@ -305,11 +305,9 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
         for (m in e.modules()) {
             for (root in e.sourceRoots(m)) {
                 if (!Files.isDirectory(root)) continue
-                Files.walk(root).use { stream ->
-                    stream.filter { Files.isRegularFile(it) }
-                        .filter { val n = it.fileName.toString(); n.endsWith(".java") || n.endsWith(".kt") }
-                        .forEach { files.add(it.normalize()) }
-                }
+                e.contentFilesUnder(root).asSequence().filter { Files.isRegularFile(it) }
+                    .filter { val n = it.fileName.toString(); n.endsWith(".java") || n.endsWith(".kt") }
+                    .forEach { files.add(it.normalize()) }
             }
             if (files.size >= MAX_DIAGNOSTIC_FILES) break
         }
