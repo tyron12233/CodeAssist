@@ -4,7 +4,9 @@ import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionTrigger
+import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.completion.complete
+import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.java.env.JavaEnvironment
 import dev.ide.testkit.TestDocument
@@ -18,6 +20,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import dev.ide.vfs.local.fileFor
 
@@ -237,6 +240,25 @@ class JavaCompletionTest {
     fun overrideCompletionAtMemberLevel() {
         val labels = labelsAt("package com.foo;\nclass Use { toStr| }")
         assertTrue("toString" in labels, "typing at a member position should offer an override of Object.toString; got $labels")
+    }
+
+    /** A `.` typed to bring the override list up is removed on accept, wherever in the class body it was typed. */
+    @Test
+    fun overrideCompletionRemovesTheDotThatOpenedIt() {
+        for (source in listOf(
+            "package com.foo;\nclass Use {\n    .toStr|\n}",
+            "package com.foo;\nclass Use {\n    int x;\n    .toStr|\n}",
+            "package com.foo;\nclass Use {\n    void run() { }\n    .|\n}",
+        )) {
+            val item = assertNotNull(
+                itemsAt(source).firstOrNull { it.label == "toString" && it.insertText.startsWith("@Override") },
+                "an override of toString should be offered after a dot in:\n$source",
+            )
+            val dot = source.indexOf('.', source.indexOf("class"))
+            assertEquals(listOf(TextEdit(TextRange(dot, dot + 1), "")), item.additionalEdits, "the dot is removed in:\n$source")
+        }
+        val plain = itemsAt("package com.foo;\nclass Use {\n    toStr|\n}").first { it.label == "toString" }
+        assertTrue(plain.additionalEdits.isEmpty(), "no dot, nothing extra to remove")
     }
 
     @Test

@@ -845,11 +845,24 @@ class JavaCompletion(
     private fun addOverrideCompletions(leaf: PsiElement, insertStart: Int, params: CompletionParams, result: CompletionResultSet) {
         val cls = PsiTreeUtil.getParentOfType(leaf, PsiClass::class.java, false) ?: return
         if (cls.isAnnotationType) return
-        val indent = lineIndent(params.document.text, insertStart)
+        val text = params.document.text
+        val indent = lineIndent(text, insertStart)
+        // A `.` typed at the member position to bring the list up is not part of the stub: accepting removes it.
+        val strayDot = strayDotBefore(text, insertStart)
         for (m in overridableMethods(cls)) {
             if (!params.prefixMatches(m.name)) continue
-            result.addElement(overrideItem(m, indent))
+            result.addElement(overrideItem(m, indent, strayDot))
         }
+    }
+
+    /** The `.` directly before [offset] when nothing but indentation precedes it on its line, else null. */
+    private fun strayDotBefore(text: CharSequence, offset: Int): TextEdit? {
+        val dot = offset - 1
+        if (dot < 0 || dot >= text.length || text[dot] != '.') return null
+        var i = dot - 1
+        while (i >= 0 && (text[i] == ' ' || text[i] == '\t')) i--
+        if (i >= 0 && text[i] != '\n' && text[i] != '{' && text[i] != '}' && text[i] != ';') return null
+        return TextEdit(TextRange(dot, offset), "")
     }
 
     /** Superclass methods this class may override: non-final / non-static / non-private instance methods it
@@ -869,7 +882,7 @@ class JavaCompletion(
         return out.values
     }
 
-    private fun overrideItem(m: PsiMethod, indent: String): CompletionItem {
+    private fun overrideItem(m: PsiMethod, indent: String, strayDot: TextEdit? = null): CompletionItem {
         val ret = m.returnType?.presentableText ?: "void"
         val names = paramNames(m)
         val params = m.parameterList.parameters.withIndex().joinToString(", ") { (i, p) -> "${p.type.presentableText} ${names[i]}" }
@@ -895,6 +908,7 @@ class JavaCompletion(
             kind = CompletionItemKind.METHOD,
             detail = "override in ${m.containingClass?.name ?: "?"}",
             sortPriority = -30, // an override at a member position is a strong intent
+            additionalEdits = listOfNotNull(strayDot),
             caret = CaretAction.ExpandSnippet(exp),
         )
     }
