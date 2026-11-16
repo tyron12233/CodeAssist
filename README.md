@@ -147,3 +147,6 @@ The plugin SPI modules (`plugin-api`, `plugin-ui-api`, `platform-core`, `vfs-api
 `language-api`, `index-api`, `analysis-api` and `build-api`, published under `io.github.tyron12233`) also
 carry the Classpath exception (see [LICENSE-EXCEPTION](LICENSE-EXCEPTION)), so a plugin compiled against
 them can use any license.
+
+The license covers the code, not the name. A modified build needs its own name, icon and application id: see
+[TRADEMARKS.md](TRADEMARKS.md).
