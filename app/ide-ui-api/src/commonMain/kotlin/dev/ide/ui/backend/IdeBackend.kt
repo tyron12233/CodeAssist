@@ -2206,6 +2206,8 @@ enum class UiSeverity { Error, Warning, Info, Hint }
 data class UiSettings(
     /** "light" | "dark" | "system". */
     val themeMode: String = "dark",
+    /** The interface language as a BCP 47 tag ("ar", "pt-BR"), or null to follow the device. */
+    val language: String? = null,
     val accent: UiAccent = UiAccent.Lime,
     /** The seed color for [UiAccent.Custom], as an `0xAARRGGBB` ARGB long. Ignored unless accent is Custom. */
     val customAccentColor: Long = 0xFF8B5CF6L,

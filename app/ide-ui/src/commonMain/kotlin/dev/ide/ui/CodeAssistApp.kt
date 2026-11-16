@@ -1,5 +1,6 @@
 package dev.ide.ui
 
+import dev.ide.ui.platform.AppLanguage
 import dev.ide.ui.components.BuildSuccessBats
 import dev.ide.ui.components.HalloweenBuildFx
 import dev.ide.ui.theme.LocalSeason
@@ -63,7 +64,8 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun CodeAssistApp(
     backend: IdeBackend,
-    uiFont: FontFamily = rememberUiFont(),
+    /** The interface font; null picks the one for the language in use ([rememberUiFont]). */
+    uiFont: FontFamily? = null,
     codeFont: FontFamily = rememberJetBrainsMono(),
     fileActions: FileActions = FileActions.None,
     /** Platform advertising bridge (AdMob on Android, [AdHost.None] on desktop). Ads render only through this. */
@@ -129,141 +131,145 @@ fun CodeAssistApp(
     }
     LaunchedEffect(app.projectOpen) { onProjectOpenChange(app.projectOpen) }
 
-    // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
-    // live. "system" follows the OS dark-mode signal.
-    val dark = isDarkTheme(app.settings, isSystemInDarkTheme())
-    // Keep the system-bar icons legible against the app theme: dark icons in light mode, light icons in dark mode.
-    // Reactive, so a theme toggle re-applies it (the host's one-time edge-to-edge setup can't follow the toggle).
-    PlatformSystemBars(darkTheme = dark)
-    val resolvedCodeFont = if (app.settings.codeFont == "monospace") FontFamily.Monospace else codeFont
-    // The import notice is raised as a reason by the state holder and localized here.
-    val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
-    val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
-    val importArchiveEmptyMsg = stringResource(Res.string.import_archive_empty)
-    val importErrorMessage = when (val error = app.importError) {
-        null -> null
-        ImportError.Unrecognized -> importUnrecognizedMsg
-        is ImportError.GradleFailed -> error.message.ifBlank { importGradleFailedMsg }
-        is ImportError.ArchiveFailed -> error.message.ifBlank { importArchiveEmptyMsg }
-    }
+    // The chosen interface language, around everything that reads a string. The state above is kept across a
+    // language change; the content below is rebuilt in the new language.
+    AppLanguage(app.settings.language) {
+        // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
+        // live. "system" follows the OS dark-mode signal.
+        val dark = isDarkTheme(app.settings, isSystemInDarkTheme())
+        // Keep the system-bar icons legible against the app theme: dark icons in light mode, light icons in dark mode.
+        // Reactive, so a theme toggle re-applies it (the host's one-time edge-to-edge setup can't follow the toggle).
+        PlatformSystemBars(darkTheme = dark)
+        val resolvedCodeFont = if (app.settings.codeFont == "monospace") FontFamily.Monospace else codeFont
+        // The import notice is raised as a reason by the state holder and localized here.
+        val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
+        val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
+        val importArchiveEmptyMsg = stringResource(Res.string.import_archive_empty)
+        val importErrorMessage = when (val error = app.importError) {
+            null -> null
+            ImportError.Unrecognized -> importUnrecognizedMsg
+            is ImportError.GradleFailed -> error.message.ifBlank { importGradleFailedMsg }
+            is ImportError.ArchiveFailed -> error.message.ifBlank { importArchiveEmptyMsg }
+        }
 
-    CodeAssistTheme(
-        dark = dark,
-        accent = accentOf(app.settings),
-        // A Custom accent seeds the whole expressive theme from the user's chosen color; a "Dynamic" accent
-        // follows the wallpaper; any preset applies its fixed palette (overriding wallpaper dynamic color).
-        seedColor = seedColorOf(app.settings),
-        useDynamic = app.settings.accent == UiAccent.Dynamic,
-        uiFont = uiFont,
-        codeFont = resolvedCodeFont,
-        editorColorScheme = app.editorColorScheme,
-        // A plugin's app theme, while its plugin is loaded; once it is not, the id resolves to nothing and the
-        // default accent applies, without the user's choice being forgotten.
-        appTheme = app.settings.appTheme?.let { dev.ide.ui.theme.colors.ContributedAppThemes.byId(it) },
-    ) {
-        // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
-        // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
-        // deeper handler wins); this one only fires for screen-level back.
-        PlatformBackHandler(enabled = app.canNavigateBack, onBack = app::navigateBack)
-        // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
-        // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
-        // Read once per composition of the root: a session that crosses midnight into the season picks it up
-        // on the next settings change or launch, which is soon enough for a decoration.
-        val season = if (app.settings.seasonalTouches) Season.current() else null
-        // Translations of the text the backend writes in English (lessons, templates, settings pages).
-        val backendText = dev.ide.ui.screens.rememberBackendText()
-        CompositionLocalProvider(
-            dev.ide.ui.screens.LocalBackendText provides backendText,
-            LocalSeason provides season,
-            LocalAds provides app.adController,
-            LocalHostFileActions provides fileActions,
-            LocalPluginNavigator provides app::openPluginScreen,
-            dev.ide.ui.screens.LocalNotificationOpener provides { n -> app.openNotificationTarget(n) },
-            LocalSettingsPageOpener provides { id -> app.openSettingsPageFrom(app.screen, id) },
-            // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
-            // user on the editor to see it. Guarded on a project being open, since a tab over nothing is not a
-            // state the shell has (and `epoch > 0` would reopen a project the user closed behind Home).
-            LocalPluginFileOpener provides { path, offset ->
-                if (app.projectOpen) {
-                    state.openAt(path, offset)
-                    app.navigateTo(Screen.Editor)
-                }
-            },
+        CodeAssistTheme(
+            dark = dark,
+            accent = accentOf(app.settings),
+            // A Custom accent seeds the whole expressive theme from the user's chosen color; a "Dynamic" accent
+            // follows the wallpaper; any preset applies its fixed palette (overriding wallpaper dynamic color).
+            seedColor = seedColorOf(app.settings),
+            useDynamic = app.settings.accent == UiAccent.Dynamic,
+            uiFont = uiFont ?: rememberUiFont(),
+            codeFont = resolvedCodeFont,
+            editorColorScheme = app.editorColorScheme,
+            // A plugin's app theme, while its plugin is loaded; once it is not, the id resolves to nothing and the
+            // default accent applies, without the user's choice being forgotten.
+            appTheme = app.settings.appTheme?.let { dev.ide.ui.theme.colors.ContributedAppThemes.byId(it) },
         ) {
-            // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
-            // Renders nothing — it just observes the build state and asks the host to present an interstitial.
-            BuildAdInterstitial(backend, app.adController)
-            // Mouse or touch, from the last pointer event, for the parts of the UI that size and reveal by pointer.
-            PointerInputModeHost {
-                // App-wide shortcuts. At the root so they see a key on its way down (the switcher's modal keys,
-                // double Shift) and, last, any key nothing inside consumed. On Android this also runs before
-                // Compose's own Tab focus traversal, which would otherwise eat Ctrl+Tab.
-                Surface(
-                    Modifier.fillMaxSize().onPreviewKeyEvent(AppKeys::onPreviewKey).onKeyEvent(AppKeys::onKey),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                        // Desktop with a custom title bar: the title strip for screens that draw none of their own.
-                        WindowTitleStrip(title = "CodeAssist")
-                        Box(Modifier.weight(1f).fillMaxWidth()) {
-                            AppNavGraph(
-                                app = app,
-                                state = state,
-                                fileActions = fileActions,
-                                codeFont = codeFont,
-                                dark = dark,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                            // Over everything in the content area, drawing only while a flock is in the air.
-                            BuildSuccessBats(
-                                backend = backend,
-                                enabled = season == Season.Halloween,
-                            )
-                            // Boo on a failed build, candy when a program starts; nothing outside the season.
-                            HalloweenBuildFx(backend = backend)
-                        }
+            // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
+            // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
+            // deeper handler wins); this one only fires for screen-level back.
+            PlatformBackHandler(enabled = app.canNavigateBack, onBack = app::navigateBack)
+            // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
+            // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
+            // Read once per composition of the root: a session that crosses midnight into the season picks it up
+            // on the next settings change or launch, which is soon enough for a decoration.
+            val season = if (app.settings.seasonalTouches) Season.current() else null
+            // Translations of the text the backend writes in English (lessons, templates, settings pages).
+            val backendText = dev.ide.ui.screens.rememberBackendText()
+            CompositionLocalProvider(
+                dev.ide.ui.screens.LocalBackendText provides backendText,
+                LocalSeason provides season,
+                LocalAds provides app.adController,
+                LocalHostFileActions provides fileActions,
+                LocalPluginNavigator provides app::openPluginScreen,
+                dev.ide.ui.screens.LocalNotificationOpener provides { n -> app.openNotificationTarget(n) },
+                LocalSettingsPageOpener provides { id -> app.openSettingsPageFrom(app.screen, id) },
+                // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
+                // user on the editor to see it. Guarded on a project being open, since a tab over nothing is not a
+                // state the shell has (and `epoch > 0` would reopen a project the user closed behind Home).
+                LocalPluginFileOpener provides { path, offset ->
+                    if (app.projectOpen) {
+                        state.openAt(path, offset)
+                        app.navigateTo(Screen.Editor)
                     }
-                    AppOverlays(
-                        backend = backend,
-                        state = state,
-                        fileActions = fileActions,
-                        onPicker = app.screen == Screen.Projects && app.homeTab == HomeTab.Projects,
-                        showMigration = app.showMigration,
-                        onBackup = app::backupAndShare,
-                        onDismissMigration = app::dismissMigration,
-                        showOnboarding = app.showOnboarding,
-                        // Final CTA: send the user straight into the Create-Project flow.
-                        onGetStarted = { app.createProject() },
-                        onFinishOnboarding = app::dismissOnboarding,
-                        showAnalytics = app.showAnalytics,
-                        onAllowAnalytics = { app.setAnalyticsConsent(true) },
-                        onDeclineAnalytics = { app.setAnalyticsConsent(false) },
-                        importError = importErrorMessage,
-                        onDismissImportError = app::dismissImportError,
-                        importBusy = app.importBusy,
-                        showLearnTourOffer = app.showLearnTourOffer,
-                        onStartLearnTour = app::startLearnTour,
-                        onDismissLearnTour = app::dismissLearnTourOffer,
-                    )
-                    ImportSourceDialog(
-                        visible = app.showImportSourceChoice,
-                        canPickFolder = fileActions.canPickDirectory,
-                        canPickPackage = fileActions.canPickFile,
-                        onFolder = app::chooseFolderImport,
-                        onPackage = app::choosePackageImport,
-                        onDismiss = app::dismissImportSourceChoice,
-                    )
-                    ArchiveProjectDialog(
-                        projects = app.archiveChoices,
-                        onPick = app::chooseArchiveProject,
-                        onDismiss = app::dismissArchiveChoice,
-                    )
-                    GradleImportModeDialog(
-                        visible = app.showImportModeChoice,
-                        onCompat = { app.importGradleProject(convert = false) },
-                        onConvert = { app.importGradleProject(convert = true) },
-                        onDismiss = app::dismissImportModeChoice,
-                    )
+                },
+            ) {
+                // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
+                // Renders nothing — it just observes the build state and asks the host to present an interstitial.
+                BuildAdInterstitial(backend, app.adController)
+                // Mouse or touch, from the last pointer event, for the parts of the UI that size and reveal by pointer.
+                PointerInputModeHost {
+                    // App-wide shortcuts. At the root so they see a key on its way down (the switcher's modal keys,
+                    // double Shift) and, last, any key nothing inside consumed. On Android this also runs before
+                    // Compose's own Tab focus traversal, which would otherwise eat Ctrl+Tab.
+                    Surface(
+                        Modifier.fillMaxSize().onPreviewKeyEvent(AppKeys::onPreviewKey).onKeyEvent(AppKeys::onKey),
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                            // Desktop with a custom title bar: the title strip for screens that draw none of their own.
+                            WindowTitleStrip(title = "CodeAssist")
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                AppNavGraph(
+                                    app = app,
+                                    state = state,
+                                    fileActions = fileActions,
+                                    codeFont = codeFont,
+                                    dark = dark,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                // Over everything in the content area, drawing only while a flock is in the air.
+                                BuildSuccessBats(
+                                    backend = backend,
+                                    enabled = season == Season.Halloween,
+                                )
+                                // Boo on a failed build, candy when a program starts; nothing outside the season.
+                                HalloweenBuildFx(backend = backend)
+                            }
+                        }
+                        AppOverlays(
+                            backend = backend,
+                            state = state,
+                            fileActions = fileActions,
+                            onPicker = app.screen == Screen.Projects && app.homeTab == HomeTab.Projects,
+                            showMigration = app.showMigration,
+                            onBackup = app::backupAndShare,
+                            onDismissMigration = app::dismissMigration,
+                            showOnboarding = app.showOnboarding,
+                            // Final CTA: send the user straight into the Create-Project flow.
+                            onGetStarted = { app.createProject() },
+                            onFinishOnboarding = app::dismissOnboarding,
+                            showAnalytics = app.showAnalytics,
+                            onAllowAnalytics = { app.setAnalyticsConsent(true) },
+                            onDeclineAnalytics = { app.setAnalyticsConsent(false) },
+                            importError = importErrorMessage,
+                            onDismissImportError = app::dismissImportError,
+                            importBusy = app.importBusy,
+                            showLearnTourOffer = app.showLearnTourOffer,
+                            onStartLearnTour = app::startLearnTour,
+                            onDismissLearnTour = app::dismissLearnTourOffer,
+                        )
+                        ImportSourceDialog(
+                            visible = app.showImportSourceChoice,
+                            canPickFolder = fileActions.canPickDirectory,
+                            canPickPackage = fileActions.canPickFile,
+                            onFolder = app::chooseFolderImport,
+                            onPackage = app::choosePackageImport,
+                            onDismiss = app::dismissImportSourceChoice,
+                        )
+                        ArchiveProjectDialog(
+                            projects = app.archiveChoices,
+                            onPick = app::chooseArchiveProject,
+                            onDismiss = app::dismissArchiveChoice,
+                        )
+                        GradleImportModeDialog(
+                            visible = app.showImportModeChoice,
+                            onCompat = { app.importGradleProject(convert = false) },
+                            onConvert = { app.importGradleProject(convert = true) },
+                            onDismiss = app::dismissImportModeChoice,
+                        )
+                    }
                 }
             }
         }

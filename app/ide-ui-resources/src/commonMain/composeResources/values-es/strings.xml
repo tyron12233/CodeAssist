@@ -1358,6 +1358,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="set_appearance_theme_light">Claro</string>
     <string name="set_appearance_theme_dark">Oscuro</string>
     <string name="set_appearance_theme_system">Sistema</string>
+    <string name="set_appearance_language">Idioma</string>
+    <string name="set_appearance_language_desc">El idioma de la interfaz. La opción predeterminada sigue el del dispositivo</string>
+    <string name="set_appearance_language_system">Predeterminado del sistema</string>
     <string name="set_appearance_accent">Acento</string>
     <string name="set_appearance_accent_desc">El color de resalte de la interfaz</string>
     <string name="set_appearance_accent_violet">Violeta</string>

@@ -37,6 +37,7 @@ private val PAGE_TITLE: Map<String, StringResource> = mapOf(
 // Control title, keyed "pageId.controlKey".
 private val CONTROL_TITLE: Map<String, StringResource> = mapOf(
     "appearance.themeMode" to Res.string.set_appearance_theme,
+    "appearance.language" to Res.string.set_appearance_language,
     "appearance.accent" to Res.string.set_appearance_accent,
     "editor.fontScale" to Res.string.set_editor_font_size,
     "editor.codeFont" to Res.string.set_editor_code_font,
@@ -83,6 +84,7 @@ private val CONTROL_TITLE: Map<String, StringResource> = mapOf(
 // descriptions are intentionally absent so they fall back to the backend-authored, interpolated text).
 private val CONTROL_DESC: Map<String, StringResource> = mapOf(
     "appearance.themeMode" to Res.string.set_appearance_theme_desc,
+    "appearance.language" to Res.string.set_appearance_language_desc,
     "appearance.accent" to Res.string.set_appearance_accent_desc,
     "editor.fontLigatures" to Res.string.set_editor_ligatures_desc,
     "editor.inlayHints" to Res.string.set_editor_inlay_desc,
@@ -123,6 +125,7 @@ private val OPTION_LABEL: Map<String, StringResource> = mapOf(
     "appearance.themeMode.light" to Res.string.set_appearance_theme_light,
     "appearance.themeMode.dark" to Res.string.set_appearance_theme_dark,
     "appearance.themeMode.system" to Res.string.set_appearance_theme_system,
+    "appearance.language.system" to Res.string.set_appearance_language_system,
     "appearance.accent.violet" to Res.string.set_appearance_accent_violet,
     "appearance.accent.teal" to Res.string.set_appearance_accent_teal,
     "appearance.accent.orange" to Res.string.set_appearance_accent_orange,

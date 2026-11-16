@@ -2131,6 +2131,9 @@
     <string name="set_appearance_theme_light">فاتح</string>
     <string name="set_appearance_theme_dark">داكن</string>
     <string name="set_appearance_theme_system">النظام</string>
+    <string name="set_appearance_language">اللغة</string>
+    <string name="set_appearance_language_desc">لغة الواجهة. الخيار الافتراضي يتبع لغة الجهاز</string>
+    <string name="set_appearance_language_system">افتراضي النظام</string>
     <string name="set_appearance_accent">اللون المميّز</string>
     <string name="set_appearance_accent_desc">لون إبراز الواجهة</string>
     <string name="set_appearance_accent_violet">بنفسجي</string>

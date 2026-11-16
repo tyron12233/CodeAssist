@@ -1247,6 +1247,9 @@
     <string name="set_appearance_theme_light">Светлая</string>
     <string name="set_appearance_theme_dark">Тёмная</string>
     <string name="set_appearance_theme_system">Системная</string>
+    <string name="set_appearance_language">Язык</string>
+    <string name="set_appearance_language_desc">Язык интерфейса. Системный вариант следует языку устройства</string>
+    <string name="set_appearance_language_system">Как в системе</string>
     <string name="set_appearance_accent">Акцентный цвет</string>
     <string name="set_appearance_accent_desc">Цвет выделения интерфейса</string>
     <string name="set_appearance_accent_violet">Фиолетовый</string>

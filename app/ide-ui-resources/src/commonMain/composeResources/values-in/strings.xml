@@ -1247,6 +1247,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="set_appearance_theme_light">Terang</string>
     <string name="set_appearance_theme_dark">Gelap</string>
     <string name="set_appearance_theme_system">Sistem</string>
+    <string name="set_appearance_language">Bahasa</string>
+    <string name="set_appearance_language_desc">Bahasa antarmuka. Default sistem mengikuti perangkat</string>
+    <string name="set_appearance_language_system">Default sistem</string>
     <string name="set_appearance_accent">Aksen</string>
     <string name="set_appearance_accent_desc">Warna sorotan antarmuka</string>
     <string name="set_appearance_accent_violet">Ungu</string>

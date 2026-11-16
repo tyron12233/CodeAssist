@@ -1975,6 +1975,9 @@
     <string name="set_appearance_theme_light">浅色</string>
     <string name="set_appearance_theme_dark">深色</string>
     <string name="set_appearance_theme_system">跟随系统</string>
+    <string name="set_appearance_language">语言</string>
+    <string name="set_appearance_language_desc">界面语言。系统默认会跟随设备语言</string>
+    <string name="set_appearance_language_system">系统默认</string>
     <string name="set_appearance_accent">强调色</string>
     <string name="set_appearance_accent_desc">界面的高亮颜色</string>
     <string name="set_appearance_accent_violet">紫色</string>

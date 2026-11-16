@@ -1312,6 +1312,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="set_appearance_theme_light">Claro</string>
     <string name="set_appearance_theme_dark">Escuro</string>
     <string name="set_appearance_theme_system">Sistema</string>
+    <string name="set_appearance_language">Idioma</string>
+    <string name="set_appearance_language_desc">O idioma da interface. O padrão do sistema segue o do dispositivo</string>
+    <string name="set_appearance_language_system">Padrão do sistema</string>
     <string name="set_appearance_accent">Cor de destaque</string>
     <string name="set_appearance_accent_desc">A cor de destaque da interface</string>
     <string name="set_appearance_accent_violet">Violeta</string>

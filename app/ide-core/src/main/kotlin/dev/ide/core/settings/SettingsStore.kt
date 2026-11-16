@@ -27,6 +27,7 @@ class SettingsStore(
         val d = IdeSettings()
         return IdeSettings(
             themeMode = oneOf("appearance.themeMode", d.themeMode, IdeSettings.THEME_LIGHT, IdeSettings.THEME_DARK, IdeSettings.THEME_SYSTEM),
+            language = oneOf("appearance.language", d.language, IdeSettings.LANGUAGE_SYSTEM, *IdeSettings.LANGUAGES.map { it.first }.toTypedArray()),
             // A plugin's app theme is kept as `theme:<id>` whether or not its plugin is loaded right now, so a
             // restart with the plugin briefly off does not lose the choice; the UI falls back while it is gone.
             accent = get(key("appearance.accent"))?.takeIf { it.startsWith(IdeSettings.ACCENT_THEME_PREFIX) }
@@ -148,6 +149,7 @@ class SettingsStore(
     /** Persist every field (idempotent; only the prefs file is touched). */
     fun save(s: IdeSettings) {
         put("appearance.themeMode", s.themeMode)
+        put("appearance.language", s.language)
         put("appearance.accent", s.accent)
         put("appearance.accentColor", s.accentColor.toString())
         put("appearance.toolWindowActions", s.alwaysShowToolWindowActions.toString())

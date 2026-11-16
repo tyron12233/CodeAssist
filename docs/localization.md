@@ -18,6 +18,18 @@ back to the same key in `values/`, so a partial translation is safe and English 
 until a translator fills the gap. New keys are added to `values/strings.xml` only; translators
 add the matching entries to each locale later.
 
+## Choosing the language
+
+The interface follows the device language unless one is picked under Settings > Appearance > Language.
+The choice is the `appearance.language` setting, a BCP 47 tag from `IdeSettings.LANGUAGES`, applied by
+`AppLanguage` (`:ide-ui-core`, `dev.ide.ui.platform`) around the app's content: it sets the process locale
+and the layout direction, and rebuilds the content so every string is read again. A new `values-<lang>/`
+directory is offered in Settings once its tag is added to `IdeSettings.LANGUAGES`.
+
+Indonesian is the exception to watch: its directory is `values-in`, the legacy language code that Android
+still reports. A current JDK and iOS report `id`, which does not match the directory, so Indonesian resolves
+on Android only and the setting offers it only there.
+
 The generated accessor class is `dev.ide.ui.generated.resources.Res` (configured in
 `app/ide-ui/build.gradle.kts` under `compose.resources { ... }`, `publicResClass = false` so it stays
 an internal `dev.ide.ui` detail).

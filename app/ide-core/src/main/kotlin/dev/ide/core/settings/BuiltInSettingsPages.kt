@@ -184,6 +184,12 @@ object BuiltInSettingsPages {
                 ),
             ),
             SettingControl.Choice(
+                "language", "Language", "The language of the interface. System default follows the device",
+                default = d.language,
+                options = listOf(SettingControl.Choice.Option(IdeSettings.LANGUAGE_SYSTEM, "System default")) +
+                    IdeSettings.LANGUAGES.map { (tag, name) -> SettingControl.Choice.Option(tag, name) },
+            ),
+            SettingControl.Choice(
                 "accent", "Accent", "The interface highlight color the whole expressive theme is generated from",
                 default = d.accent,
                 options = listOf(

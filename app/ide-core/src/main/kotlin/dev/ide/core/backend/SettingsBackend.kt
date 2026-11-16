@@ -634,6 +634,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     private fun IdeSettings.toUi(): UiSettings = UiSettings(
         themeMode = themeMode,
+        language = language.takeIf { it != IdeSettings.LANGUAGE_SYSTEM },
         accent = when (accent) {
             IdeSettings.ACCENT_DYNAMIC -> UiAccent.Dynamic
             IdeSettings.ACCENT_LIME -> UiAccent.Lime

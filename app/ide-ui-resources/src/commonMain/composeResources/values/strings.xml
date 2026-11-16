@@ -2074,6 +2074,9 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="set_appearance_theme_light">Light</string>
     <string name="set_appearance_theme_dark">Dark</string>
     <string name="set_appearance_theme_system">System</string>
+    <string name="set_appearance_language">Language</string>
+    <string name="set_appearance_language_desc">The language of the interface. System default follows the device</string>
+    <string name="set_appearance_language_system">System default</string>
     <string name="set_appearance_accent">Accent</string>
     <string name="set_appearance_accent_desc">The interface highlight color</string>
     <string name="set_appearance_accent_violet">Violet</string>
