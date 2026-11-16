@@ -190,6 +190,7 @@ import dev.ide.agent.ui.generated.resources.chat_title
 import dev.ide.ui.components.CodeSample
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.markdown.Markdown
+import dev.ide.ui.platform.hasHardwareKeyboard
 import dev.ide.ui.markdown.defaultHeadingStyle
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaMotion
@@ -1538,6 +1539,9 @@ private fun Composer(
             label = "composerBorderWidth",
         )
         val fieldShape = RoundedCornerShape(Ca.radius.xl)
+        // Enter sends only from a physical keyboard. An on-screen keyboard that reports its Enter as a key
+        // press (several Chinese input methods do) would otherwise send the message instead of breaking the line.
+        val enterSends = hasHardwareKeyboard()
         Box(
             Modifier.weight(1f)
                 .background(scheme.surfaceContainerHighest, fieldShape)
@@ -1561,7 +1565,7 @@ private fun Composer(
                 modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
                     when {
                         event.type != KeyEventType.KeyDown -> false
-                        event.key == Key.Enter && !event.isShiftPressed -> { onSend(); true }
+                        event.key == Key.Enter && !event.isShiftPressed && enterSends -> { onSend(); true }
                         // Paste claims Ctrl/Cmd+V only when the clipboard holds an image; text paste is untouched.
                         event.key == Key.V && (event.isCtrlPressed || event.isMetaPressed) &&
                             images.paste != null && images.hasClipboardImage() -> { images.paste.invoke(); true }
