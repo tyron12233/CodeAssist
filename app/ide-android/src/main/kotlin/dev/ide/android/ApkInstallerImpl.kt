@@ -46,16 +46,22 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
         }
 
         val installer = pm.packageInstaller
-        val sessionId = installer.createSession(
-            PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-                setAppPackageName(packageName)
-                // Always the user's call, even if the IDE ever holds UPDATE_PACKAGES_WITHOUT_USER_ACTION again
-                // (Play refuses it today), which would otherwise make this update the user's app unasked.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
-                }
-            },
-        )
+        // An install the user never answered (the confirmation dismissed with Back or Home, or never shown)
+        // stays an active session, and the OS allows an app only so many: once they pile up, every later
+        // install is refused with "Too many active sessions". A new Run supersedes them, so drop them first.
+        abandonStaleSessions(installer)
+        val sessionId = runCatching {
+            installer.createSession(
+                PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                    setAppPackageName(packageName)
+                    // Always the user's call, even if the IDE ever holds UPDATE_PACKAGES_WITHOUT_USER_ACTION again
+                    // (Play refuses it today), which would otherwise make this update the user's app unasked.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+                    }
+                },
+            )
+        }.getOrElse { log("Install failed: ${it.message}"); return@withContext false }
         runCatching {
             installer.openSession(sessionId).use { session ->
                 session.openWrite("base.apk", 0, Files.size(apk)).use { out ->
@@ -63,13 +69,18 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
                     session.fsync(out)
                 }
                 val action = "$INSTALL_ACTION.$sessionId"
-                registerStatusReceiver(action, packageName, log)
+                registerStatusReceiver(sessionId, action, packageName, log)
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                     (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
                 val pi = PendingIntent.getBroadcast(context, sessionId, Intent(action).setPackage(context.packageName), flags)
                 session.commit(pi.intentSender)
             }
-        }.onFailure { log("Install failed: ${it.message}"); installer.runCatching { abandonSession(sessionId) }; return@withContext false }
+        }.onFailure {
+            log("Install failed: ${it.message}")
+            dropReceiver(sessionId)
+            installer.runCatching { abandonSession(sessionId) }
+            return@withContext false
+        }
         log("Installing ${apk.fileName}…")
         true
     }
@@ -138,7 +149,27 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
         }
     }
 
-    private fun registerStatusReceiver(action: String, packageName: String, log: (String) -> Unit) {
+    /** The status receiver of each install still waiting on the OS, by session id. */
+    private val receivers = java.util.concurrent.ConcurrentHashMap<Int, BroadcastReceiver>()
+
+    private fun dropReceiver(sessionId: Int) {
+        receivers.remove(sessionId)?.let { runCatching { context.unregisterReceiver(it) } }
+    }
+
+    /**
+     * Abandon every install session this app still holds. Its receiver goes first, so the abandoned install
+     * does not report "cancelled" into the console of the Run that replaced it. Sessions left by an earlier
+     * process (which has no receiver here) are covered too: the OS lists them all as this app's.
+     */
+    private fun abandonStaleSessions(installer: PackageInstaller) {
+        val stale = runCatching { installer.mySessions }.getOrNull().orEmpty()
+        for (info in stale) {
+            dropReceiver(info.sessionId)
+            runCatching { installer.abandonSession(info.sessionId) }
+        }
+    }
+
+    private fun registerStatusReceiver(sessionId: Int, action: String, packageName: String, log: (String) -> Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
@@ -154,7 +185,7 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
                     }
                     PackageInstaller.STATUS_SUCCESS -> {
                         log("Installed $packageName.")
-                        runCatching { context.unregisterReceiver(this) }
+                        dropReceiver(sessionId)
                         // Prefer the UI process for the launch (it has a foreground activity → no
                         // background-activity-launch block, and it owns the "Launching…" build-console line).
                         // Fall back to launching here only when there's no UI to forward to (isolation off /
@@ -166,11 +197,12 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
                     else -> {
                         val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                         log("Install ${if (status == PackageInstaller.STATUS_FAILURE_ABORTED) "cancelled" else "failed"}${if (msg != null) ": $msg" else ""}.")
-                        runCatching { context.unregisterReceiver(this) }
+                        dropReceiver(sessionId)
                     }
                 }
             }
         }
+        receivers[sessionId] = receiver
         ContextCompat.registerReceiver(context, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
