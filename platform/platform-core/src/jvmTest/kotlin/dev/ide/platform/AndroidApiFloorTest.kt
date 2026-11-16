@@ -51,8 +51,12 @@ class AndroidApiFloorTest {
     /** `.transferTo(x)` with a single argument (no comma before the closing parenthesis). */
     private val TRANSFER_TO_ONE_ARG = Regex("""\.transferTo\([^,()]*\)""")
 
+    /** `Path.of(` as a name of its own, not the tail of a longer one. */
+    private val PATH_OF = Regex("""(?<![A-Za-z0-9_])Path\.of\(""")
+
     private val rules = listOf(
-        Rule("Path.of", "API 34", "Paths.get(...)") { "Path.of(" in it },
+        // Not a longer name ending in `Path` (`LibraryResourcePath.of(`), which is the project's own factory.
+        Rule("Path.of", "API 34", "Paths.get(...)") { PATH_OF.containsMatchIn(it) },
         Rule("Files.readString", "no Android release at all", "path.readText() / Files.readAllBytes") {
             "Files.readString(" in it
         },
