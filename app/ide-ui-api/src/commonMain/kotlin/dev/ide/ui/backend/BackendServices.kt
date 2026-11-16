@@ -2243,6 +2243,12 @@ interface AgentService {
      *  certificate PEM to trust for an endpoint behind a private/regional CA — blank = system trust only). */
     fun setGateway(baseUrl: String, model: String, caCert: String)
 
+    /**
+     * The models the custom gateway reports serving, read with its saved base URL, key and certificate. Null
+     * when the list could not be read: no base URL yet, the endpoint is unreachable, or it has no model list.
+     */
+    suspend fun fetchGatewayModels(): List<UiAgentModel>? = null
+
     /** Whether this backend can run "Sign in with OpenRouter" (a browser sign-in that returns a key). */
     fun openRouterSignInSupported(): Boolean = false
 

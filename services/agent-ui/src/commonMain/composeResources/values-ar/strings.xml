@@ -14,6 +14,9 @@
     <string name="chat_api_key_optional">مفتاح API (اختياري)</string>
     <string name="chat_base_url">عنوان URL الأساسي</string>
     <string name="chat_model">النموذج</string>
+    <string name="chat_fetch_models">جلب النماذج</string>
+    <string name="chat_fetching_models">جارٍ جلب النماذج…</string>
+    <string name="chat_fetch_models_failed">تعذّرت قراءة قائمة النماذج من نقطة النهاية هذه. تحقق من عنوان URL الأساسي والمفتاح، أو اكتب اسم النموذج.</string>
     <string name="chat_connected">متصل</string>
     <string name="chat_add_key">إضافة مفتاح API</string>
     <string name="chat_show">إظهار</string>

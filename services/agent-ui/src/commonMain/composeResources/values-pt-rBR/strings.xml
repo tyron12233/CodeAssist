@@ -23,6 +23,9 @@
     <string name="chat_api_key_optional">Chave de API (opcional)</string>
     <string name="chat_base_url">URL base</string>
     <string name="chat_model">Modelo</string>
+    <string name="chat_fetch_models">Buscar modelos</string>
+    <string name="chat_fetching_models">Buscando modelos…</string>
+    <string name="chat_fetch_models_failed">Não foi possível ler a lista de modelos deste endpoint. Verifique a URL base e a chave ou digite o nome do modelo.</string>
     <string name="chat_connected">Conectado</string>
     <string name="chat_show">Mostrar</string>
     <string name="chat_hide">Ocultar</string>

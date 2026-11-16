@@ -23,6 +23,9 @@
     <string name="chat_api_key_optional">Kunci API (opsional)</string>
     <string name="chat_base_url">URL dasar</string>
     <string name="chat_model">Model</string>
+    <string name="chat_fetch_models">Ambil model</string>
+    <string name="chat_fetching_models">Mengambil model…</string>
+    <string name="chat_fetch_models_failed">Tidak dapat membaca daftar model dari endpoint ini. Periksa URL dasar dan kunci, atau ketik nama model.</string>
     <string name="chat_connected">Terhubung</string>
     <string name="chat_show">Tampilkan</string>
     <string name="chat_hide">Sembunyikan</string>

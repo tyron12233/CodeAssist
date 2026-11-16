@@ -23,6 +23,9 @@
     <string name="chat_api_key_optional">API-ключ (необязательно)</string>
     <string name="chat_base_url">Базовый URL</string>
     <string name="chat_model">Модель</string>
+    <string name="chat_fetch_models">Получить модели</string>
+    <string name="chat_fetching_models">Получение моделей…</string>
+    <string name="chat_fetch_models_failed">Не удалось прочитать список моделей с этого эндпоинта. Проверьте базовый URL и ключ или введите название модели.</string>
     <string name="chat_connected">Подключено</string>
     <string name="chat_show">Показать</string>
     <string name="chat_hide">Скрыть</string>

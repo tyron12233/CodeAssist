@@ -14,6 +14,9 @@
     <string name="chat_api_key_optional">API key (optional)</string>
     <string name="chat_base_url">Base URL</string>
     <string name="chat_model">Model</string>
+    <string name="chat_fetch_models">Fetch models</string>
+    <string name="chat_fetching_models">Fetching models…</string>
+    <string name="chat_fetch_models_failed">Could not read the model list from this endpoint. Check the base URL and key, or type the model name.</string>
     <string name="chat_connected">Connected</string>
     <string name="chat_add_key">Add API key</string>
     <string name="chat_show">Show</string>

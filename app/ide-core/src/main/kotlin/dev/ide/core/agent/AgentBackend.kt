@@ -76,6 +76,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.nio.file.Files
 import java.nio.file.Path
@@ -731,6 +732,17 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayModel", model)
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayCaCert", caCert)
         resetLoop()
+    }
+
+    override suspend fun fetchGatewayModels(): List<UiAgentModel>? {
+        val base = pref("gatewayBaseUrl")?.takeIf { it.isNotBlank() } ?: return null
+        val provider = registry.provider("openai") ?: return null
+        val config = ProviderConfig(pref("gatewayKey")?.trim().orEmpty(), base, pref("gatewayCaCert"))
+        val fetched = withContext(Dispatchers.IO) { runCatching { provider.listModels(config) }.getOrNull() }
+        // The client answers with its own built-in list when the endpoint could not be read; that is not the
+        // gateway's list, so it is reported as a failure.
+        if (fetched == null || fetched === provider.models) return null
+        return fetched.map { UiAgentModel(it.id, it.displayName) }
     }
 
     private val openRouter = OpenRouterSignIn(transport, scope) { key, freeModel ->

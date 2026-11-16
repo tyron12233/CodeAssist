@@ -30,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,7 @@ import dev.ide.agent.ui.generated.resources.free_ai_in_use
 import dev.ide.agent.ui.generated.resources.free_ai_section_byok
 import dev.ide.agent.ui.generated.resources.free_ai_use_this
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiAgentModel
 import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiOpenRouterSignIn
 import dev.ide.agent.ui.generated.resources.Res
@@ -68,6 +70,9 @@ import dev.ide.agent.ui.generated.resources.chat_cancel
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_connected
 import dev.ide.agent.ui.generated.resources.chat_done
+import dev.ide.agent.ui.generated.resources.chat_fetch_models
+import dev.ide.agent.ui.generated.resources.chat_fetch_models_failed
+import dev.ide.agent.ui.generated.resources.chat_fetching_models
 import dev.ide.agent.ui.generated.resources.chat_gateway_hint
 import dev.ide.agent.ui.generated.resources.chat_hide
 import dev.ide.agent.ui.generated.resources.chat_model
@@ -85,6 +90,7 @@ import dev.ide.agent.ui.generated.resources.chat_show
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Ide
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -140,6 +146,7 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                             onSetKey = { backend.agent.setProviderKey(provider.id, it) },
                             onSetBackupKeys = { backend.agent.setProviderBackupKeys(provider.id, it) },
                             onSetGateway = { url, model, ca -> backend.agent.setGateway(url, model, ca) },
+                            onFetchGatewayModels = { backend.agent.fetchGatewayModels() },
                             signIn = if (provider.id == OPENROUTER && backend.agent.openRouterSignInSupported()) {
                                 { OpenRouterSignInBlock(backend, signIn) }
                             } else {
@@ -201,6 +208,8 @@ private fun ProviderCard(
     onSetKey: (String) -> Unit,
     onSetBackupKeys: (List<String>) -> Unit,
     onSetGateway: (String, String, String) -> Unit,
+    /** Reads the gateway's model list with the saved settings; null when it could not be read. */
+    onFetchGatewayModels: suspend () -> List<UiAgentModel>?,
     /** A browser sign-in offered above the key field (OpenRouter), or null. */
     signIn: (@Composable () -> Unit)? = null,
 ) {
@@ -258,6 +267,14 @@ private fun ProviderCard(
                 // looked like a clean URL while the rest still went into requests. Flatten it so all of it is visible.
                 PlainField(baseUrl, stringResource(Res.string.chat_base_url)) { baseUrl = oneLine(it); onSetGateway(baseUrl, model, caCert) }
                 PlainField(model, stringResource(Res.string.chat_model)) { model = it; onSetGateway(baseUrl, it, caCert) }
+                GatewayModelPicker(
+                    typed = model,
+                    canFetch = baseUrl.isNotBlank(),
+                    // Keyed on what the list depends on, so a list read from one endpoint is not offered for another.
+                    endpoint = baseUrl + '\n' + key + '\n' + caCert,
+                    fetch = onFetchGatewayModels,
+                    onPick = { model = it; onSetGateway(baseUrl, it, caCert) },
+                )
                 PlainField(caCert, stringResource(Res.string.chat_ca_cert)) { caCert = it; onSetGateway(baseUrl, model, it) }
                 Text(stringResource(Res.string.chat_ca_cert_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 Text(stringResource(Res.string.chat_gateway_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
@@ -316,6 +333,81 @@ private fun OpenRouterSignInBlock(backend: IdeBackend, state: UiOpenRouterSignIn
         )
         Text(stringResource(Res.string.chat_openrouter_or_paste), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/**
+ * "Fetch models" under the gateway's model field: reads the endpoint's own model list so a name is picked
+ * rather than typed. The list narrows to what is typed in the field, and typing a name by hand stays possible
+ * for an endpoint that publishes no list.
+ */
+@Composable
+private fun GatewayModelPicker(
+    typed: String,
+    canFetch: Boolean,
+    endpoint: String,
+    fetch: suspend () -> List<UiAgentModel>?,
+    onPick: (String) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    var loading by remember(endpoint) { mutableStateOf(false) }
+    var failed by remember(endpoint) { mutableStateOf(false) }
+    var models by remember(endpoint) { mutableStateOf<List<UiAgentModel>?>(null) }
+    if (loading) {
+        Text(stringResource(Res.string.chat_fetching_models), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    } else {
+        Text(
+            stringResource(Res.string.chat_fetch_models),
+            color = if (canFetch) scheme.primary else scheme.onSurfaceVariant.copy(alpha = 0.6f),
+            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill))
+                .clickable(enabled = canFetch) {
+                    loading = true
+                    failed = false
+                    scope.launch {
+                        val result = fetch()
+                        models = result
+                        failed = result == null
+                        loading = false
+                    }
+                }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+    }
+    if (failed) {
+        Text(stringResource(Res.string.chat_fetch_models_failed), color = scheme.error, style = MaterialTheme.typography.bodySmall)
+    }
+    val all = models ?: return
+    val shown = gatewayModelMatches(all, typed)
+    val shape = RoundedCornerShape(Ca.radius.control)
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 240.dp).clip(shape)
+            .background(scheme.surfaceContainerHighest)
+            .border(1.dp, scheme.outlineVariant, shape)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        shown.forEach { m ->
+            val current = m.id == typed.trim()
+            Text(
+                m.id,
+                color = if (current) scheme.primary else scheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().clickable { onPick(m.id) }.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The fetched [models] to list for what is [typed] in the model field: those whose id contains it, or all of
+ * them when the field is empty, already names one of them, or matches none.
+ */
+internal fun gatewayModelMatches(models: List<UiAgentModel>, typed: String): List<UiAgentModel> {
+    val query = typed.trim()
+    if (query.isEmpty() || models.any { it.id == query }) return models
+    return models.filter { it.id.contains(query, ignoreCase = true) }.ifEmpty { models }
 }
 
 private const val OPENROUTER = "openrouter"
