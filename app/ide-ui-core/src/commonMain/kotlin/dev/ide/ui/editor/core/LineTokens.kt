@@ -93,6 +93,8 @@ object LexState {
     const val DOC_COMMENT = 5
     /** Inside a `<![CDATA[ … ]]>` section, which spans lines. */
     const val XML_CDATA = 6
+    /** Inside a Java text block (`"""…"""`), which spans lines. */
+    const val TEXT_BLOCK = 7
 }
 
 class StyledLine(val spans: List<LineSpan>, val exitState: Int) {
@@ -199,6 +201,7 @@ fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine
                 line, entryState,
                 language.profile.keywords.ifEmpty { JAVA_KEYWORDS },
                 language.profile.directivePrefix,
+                textBlocks = language == CodeLanguage.Java,
             )
     }
 
@@ -400,16 +403,41 @@ private fun scanDirective(line: String, prefix: String, spans: MutableList<LineS
     return end
 }
 
+/** The index just past the `"""` that closes a Java text block whose body continues at [from], or -1 when it
+ *  does not close on this line. A backslash escapes the next character, so `\"""` does not close it. */
+private fun textBlockEnd(line: String, from: Int): Int {
+    var i = from
+    while (i < line.length) {
+        when {
+            line[i] == '\\' -> i += 2
+            line.startsWith("\"\"\"", i) -> return i + 3
+            else -> i++
+        }
+    }
+    return -1
+}
+
 private fun styleCodeLine(
     line: String,
     entryState: Int,
     keywords: Set<String> = JAVA_KEYWORDS,
     directivePrefix: String? = null,
+    /** Whether `"""` opens a text block. Off for the other C-family languages, where it is an empty string
+     *  followed by the start of another. */
+    textBlocks: Boolean = false,
 ): StyledLine {
     val n = line.length
     val spans = ArrayList<LineSpan>(8)
     var i = 0
-    if (entryState == LexState.BLOCK_COMMENT || entryState == LexState.DOC_COMMENT) {
+    if (entryState == LexState.TEXT_BLOCK) {
+        val end = textBlockEnd(line, 0)
+        if (end < 0) {
+            if (n > 0) spans.add(LineSpan(0, n, TokenType.RAW_STRING))
+            return StyledLine(spans, LexState.TEXT_BLOCK)
+        }
+        spans.add(LineSpan(0, end, TokenType.RAW_STRING))
+        i = end
+    } else if (entryState == LexState.BLOCK_COMMENT || entryState == LexState.DOC_COMMENT) {
         // Both close on the same delimiter; the carried state is what remembers which one opened.
         val kind = if (entryState == LexState.DOC_COMMENT) TokenType.DOC_COMMENT else TokenType.COMMENT
         val close = line.indexOf("*/")
@@ -442,6 +470,15 @@ private fun styleCodeLine(
                 }
                 spans.add(LineSpan(i, close + 2, kind))
                 i = close + 2
+            }
+            textBlocks && c == '"' && line.startsWith("\"\"\"", i) -> {
+                val end = textBlockEnd(line, i + 3)
+                if (end < 0) {
+                    spans.add(LineSpan(i, n, TokenType.RAW_STRING))
+                    return StyledLine(spans, LexState.TEXT_BLOCK)
+                }
+                spans.add(LineSpan(i, end, TokenType.RAW_STRING))
+                i = end
             }
             c == '"' || c == '\'' -> {
                 val start = i; i++

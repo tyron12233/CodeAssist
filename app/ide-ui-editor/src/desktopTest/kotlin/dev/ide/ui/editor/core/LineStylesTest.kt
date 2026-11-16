@@ -253,6 +253,25 @@ class LineStylesTest {
     }
 
     @Test
+    fun javaTextBlockCarriesStateAcrossLines() {
+        val doc = EditorDocument.of("String s = \"\"\"\n    Hello World!\n    say \\\"\"\" twice\n    \"\"\".trim();\nint x = 1;")
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+        assertEquals(LexState.TEXT_BLOCK, styleLine(doc.lineText(0), LexState.CODE, CodeLanguage.Java).exitState)
+        assertEquals(TokenType.RAW_STRING, LineSpanTypeAt(styles, 0, doc.lineText(0).indexOf('"')), "the opening delimiter")
+        assertEquals(TokenType.RAW_STRING, LineSpanTypeAt(styles, 1, doc.lineText(1).indexOf("World")), "a word in the body is not a type")
+        assertEquals(TokenType.RAW_STRING, LineSpanTypeAt(styles, 2, doc.lineText(2).indexOf("twice")), "an escaped delimiter does not close it")
+        assertEquals(TokenType.FUNC, LineSpanTypeAt(styles, 3, doc.lineText(3).indexOf("trim")), "code resumes after the closing delimiter")
+        assertEquals(TokenType.KEYWORD, LineSpanTypeAt(styles, 4, 0), "the next line is code again")
+    }
+
+    @Test
+    fun tripleQuoteIsNotATextBlockOutsideJava() {
+        assertEquals(LexState.CODE, styleLine("s = \"\"\"abc", LexState.CODE, CodeLanguage.Aidl).exitState)
+    }
+
+    @Test
     fun kotlinKeywordsHighlightOutsideStrings() {
         assertEquals(TokenType.KEYWORD, typeAt("fun foo() {}", 0, CodeLanguage.Kotlin))
         // The words that branch are their own class now, so a scheme can colour control flow apart from
