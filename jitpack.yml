@@ -1,0 +1,20 @@
+# JitPack: a second channel for the plugin SPI artifacts, next to Maven Central.
+#
+# Central carries the releases, as io.github.tyron12233:<module>:<SPI version>. JitPack builds any tag or
+# commit of this repository on first request and serves it as
+#
+#     com.github.tyron12233.CodeAssist:<module>:<tag or commit>
+#
+# from https://jitpack.io, which is the way to try an SPI change before it is released. The artifacts are
+# unsigned and built on demand; a released plugin should depend on the Central coordinate.
+#
+# Only the SPI modules and plugin-bom apply `maven-publish`, so `publishToMavenLocal` publishes exactly
+# those. CI_CORE_ONLY drops the IDE shells from the build (see settings.gradle.kts), which need the Android
+# SDK even to configure and publish nothing. The JDK here only launches Gradle: the daemon runs on the JDK
+# gradle/gradle-daemon-jvm.properties names, which Gradle downloads itself.
+jdk:
+  - openjdk17
+env:
+  CI_CORE_ONLY: "true"
+install:
+  - ./gradlew publishToMavenLocal --no-daemon --console=plain

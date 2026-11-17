@@ -23,8 +23,23 @@ val spiVersion: String = run {
     }.groupValues[1]
 }
 
-group = "io.github.tyron12233"
-version = spiVersion
+// JitPack is a second channel for the same artifacts (see jitpack.yml): it builds a tag or a commit on
+// request and serves the result as `com.github.tyron12233.CodeAssist:<module>:<tag or commit>`. Publishing
+// under exactly that coordinate there keeps every POM, every Gradle module file and the BOM's constraints
+// pointing at artifacts JitPack actually serves; under the Central coordinate they would name versions that
+// do not exist on jitpack.io. JitPack sets these variables on its build machines; nothing else does.
+val jitpack = System.getenv("JITPACK") == "true"
+val jitpackGroup = System.getenv("GROUP")?.takeIf { it.isNotBlank() }
+val jitpackRepo = System.getenv("ARTIFACT")?.takeIf { it.isNotBlank() }
+val jitpackVersion = System.getenv("VERSION")?.takeIf { it.isNotBlank() }
+
+if (jitpack && jitpackGroup != null && jitpackRepo != null && jitpackVersion != null) {
+    group = "$jitpackGroup.$jitpackRepo"
+    version = jitpackVersion
+} else {
+    group = "io.github.tyron12233"
+    version = spiVersion
+}
 
 publishing {
     publications.withType<MavenPublication>().configureEach {
