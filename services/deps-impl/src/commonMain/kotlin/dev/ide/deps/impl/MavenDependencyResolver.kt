@@ -1307,8 +1307,9 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  a bump forces a one-time re-resolve that heals existing caches on the next open.
  *
  *  5: `baseline-prof.txt` is unpacked too, for release builds' Baseline Profile.
- *  6: `proguard.txt` is unpacked too: a minified build ran R8 without any Maven AAR's consumer keep rules. */
-const val AAR_EXPLODE_VERSION = "6"
+ *  6: `proguard.txt` is unpacked too: a minified build ran R8 without any Maven AAR's consumer keep rules.
+ *  7: an AAR's `libs/` jars are merged into its `classes.jar`: their classes were in no build at all. */
+const val AAR_EXPLODE_VERSION = "7"
 
 /**
  * Version of the resolved GRAPH's semantics. Bump whenever a resolver change makes the same declared set
