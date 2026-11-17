@@ -1705,6 +1705,8 @@
  "Volume keys move the cursor": "أزرار الصوت تحرّك المؤشر",
  "While typing on a phone, volume up moves the cursor left and volume down moves it right, instead of changing the volume": "أثناء الكتابة على الهاتف، يحرّك رفع الصوت المؤشر يسارًا وخفض الصوت يحرّكه يمينًا، بدلًا من تغيير مستوى الصوت",
  "Keyboard suggestions": "اقتراحات لوحة المفاتيح",
+ "Symbol bar above the keyboard": "شريط الرموز فوق لوحة المفاتيح",
+ "Show a row of coding symbols on top of the soft keyboard while typing, on phones, foldables and tablets alike": "إظهار صف من رموز البرمجة أعلى لوحة المفاتيح الافتراضية أثناء الكتابة، على الهواتف والأجهزة القابلة للطي والأجهزة اللوحية",
  "Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.": "السماح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفها لإدخال الكود كما هو، حتى لا تُضاف مسافة تلقائيًا بعد كتابة '.'، على حساب شريط الاقتراحات.",
  "Keyboard": "لوحة المفاتيح",
  "Code Completion": "إكمال الكود",

@@ -2170,6 +2170,8 @@
     <string name="blame_uncommitted">لم يُودَع بعد</string>
     <string name="set_editor_kbd_suggest">اقتراحات لوحة المفاتيح</string>
     <string name="set_editor_kbd_suggest_desc">اسمح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفه لإدخال الكود الخام، بحيث لا تحصل النقطة "." المكتوبة على مسافة مُدرَجة تلقائيًا، مقابل فقدان شريط الاقتراحات.</string>
+    <string name="set_editor_symbol_bar">شريط الرموز فوق لوحة المفاتيح</string>
+    <string name="set_editor_symbol_bar_desc">إظهار صف من رموز البرمجة أعلى لوحة المفاتيح الافتراضية أثناء الكتابة، على الهواتف والأجهزة القابلة للطي والأجهزة اللوحية</string>
     <string name="set_editor_close_unsaved">إغلاق علامة تبويب بها تغييرات غير محفوظة</string>
     <string name="set_editor_close_unsaved_desc">السؤال أولاً، أو الحفظ أو تجاهل التغييرات دائمًا دون سؤال</string>
     <string name="set_editor_close_unsaved_ask">السؤال</string>

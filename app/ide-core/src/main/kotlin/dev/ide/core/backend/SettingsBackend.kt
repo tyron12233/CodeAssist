@@ -675,6 +675,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         volumeKeysMoveCaret = volumeKeysMoveCaret,
         inlineBlame = inlineBlame,
         softKeyboardSuggestions = softKeyboardSuggestions,
+        symbolBar = symbolBar,
         formatOnSave = formatOnSave,
     )
 

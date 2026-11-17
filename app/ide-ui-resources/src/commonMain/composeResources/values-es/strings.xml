@@ -1392,6 +1392,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="blame_uncommitted">Aún sin commit</string>
     <string name="set_editor_kbd_suggest">Sugerencias del teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un '.' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
+    <string name="set_editor_symbol_bar">Barra de símbolos sobre el teclado</string>
+    <string name="set_editor_symbol_bar_desc">Muestra una fila de símbolos de código sobre el teclado virtual al escribir, en teléfonos, plegables y tabletas</string>
     <string name="set_editor_close_unsaved">Cerrar una pestaña con cambios sin guardar</string>
     <string name="set_editor_close_unsaved_desc">Preguntar primero, o guardar o descartar siempre los cambios sin preguntar</string>
     <string name="set_editor_close_unsaved_ask">Preguntar</string>

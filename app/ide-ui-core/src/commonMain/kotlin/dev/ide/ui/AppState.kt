@@ -935,6 +935,8 @@ class IdeUiState(
     var localHistoryOpen by mutableStateOf(false)
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     var softKeyboardSuggestions by mutableStateOf(true)
+    /** The coding-symbol bar that sits on the soft keyboard while typing, on the phone and the wide layout alike. */
+    var symbolBarEnabled by mutableStateOf(true)
 
     /** The keyboard symbol-bar keys, from the effective customization set (project ▸ global ▸ shipped defaults).
      *  Seeded in [init]; re-read via [refreshSymbolKeys] after the Symbols editor saves. */
@@ -1019,6 +1021,7 @@ class IdeUiState(
         volumeKeysMoveCaret = s.volumeKeysMoveCaret
         inlineBlameEnabled = s.inlineBlame
         softKeyboardSuggestions = s.softKeyboardSuggestions
+        symbolBarEnabled = s.symbolBar
     }
 
     /**

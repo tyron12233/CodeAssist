@@ -141,6 +141,52 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
+/**
+ * What rides on the soft keyboard while a file is being typed in: the coding-symbol bar directly above it
+ * (Settings > Editor can turn it off), and the volume keys moving the caret when the user asked for that.
+ * Shared by both layouts: a foldable or a tablet gets the wide one and types on the same soft keyboard.
+ */
+@Composable
+private fun KeyboardAccessory(state: IdeUiState, keyboardOpen: Boolean) {
+    // Volume keys move the caret while typing, when the user turned that on.
+    val takeVolumeKeys = keyboardOpen && state.active != null && state.volumeKeysMoveCaret
+    DisposableEffect(takeVolumeKeys) {
+        if (takeVolumeKeys) {
+            dev.ide.ui.platform.VolumeKeyCaret.handler = { dir ->
+                state.active?.session?.moveHorizontal(dir, select = false)
+            }
+        }
+        onDispose { dev.ide.ui.platform.VolumeKeyCaret.handler = null }
+    }
+    if (keyboardOpen && state.active != null && state.symbolBarEnabled) {
+        // Derived: the diagnostics list is replaced on every edit, and this scope should
+        // recompose only when the jump key appears or goes away.
+        val activeSession = state.active?.session
+        val hasDiagnostics by remember(activeSession) {
+            derivedStateOf { activeSession?.diagnostics?.isNotEmpty() == true }
+        }
+        EditorSymbolBar(
+            symbols = effectiveSymbolKeys(state.symbolKeys, state.active?.path),
+            onSymbol = { sym -> state.active?.session?.commitText(sym) },
+            onAction = { id -> dispatchSymbolAction(state, id) },
+            showDiagnosticJump = hasDiagnostics,
+            // No gear here — the Symbols & Macros editor lives in Settings ▸ Symbols & Macros.
+            // The dismiss key only where the platform offers no way out of the keyboard
+            // itself; Android's back already does it. See [hasSystemBack].
+            onHideKeyboard = if (hasSystemBack) null else ({ state.active?.session?.ime?.hide() }),
+            trackpad = remember(state) {
+                object : SymbolBarTrackpad {
+                    override fun begin() { state.active?.session?.beginFloatingCaret() }
+                    override fun move(columns: Float, lines: Float) {
+                        state.active?.session?.moveFloatingCaret(columns, lines)
+                    }
+                    override fun end() { state.active?.session?.endFloatingCaret() }
+                }
+            },
+        )
+    }
+}
+
 /** App-global preference marking the dock's one-shot swipe-up teaching bounce as already shown. */
 private const val DOCK_HINT_PREF = "dock.swipeHint.seen"
 
@@ -480,6 +526,8 @@ internal fun ExpandedLayout(
                         )
                     }
                 }
+                // A foldable or a tablet types on the soft keyboard too: the symbol bar sits on it here as on a phone.
+                KeyboardAccessory(state, WindowInsets.ime.getBottom(LocalDensity.current) > 0)
             }
         }
         DestinationSheets(state, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions, logsAsSheet = false)
@@ -805,43 +853,7 @@ internal fun CompactLayout(
                     )
                     // While the keyboard is up: a coding-symbol accessory bar sits directly above it. Off-keyboard,
                     // the dock's collapsed bar takes the slot instead.
-                    // Volume keys move the caret while typing, when the user turned that on.
-                    val takeVolumeKeys = keyboardOpen && state.active != null && state.volumeKeysMoveCaret
-                    DisposableEffect(takeVolumeKeys) {
-                        if (takeVolumeKeys) {
-                            dev.ide.ui.platform.VolumeKeyCaret.handler = { dir ->
-                                state.active?.session?.moveHorizontal(dir, select = false)
-                            }
-                        }
-                        onDispose { dev.ide.ui.platform.VolumeKeyCaret.handler = null }
-                    }
-                    if (keyboardOpen && state.active != null) {
-                        // Derived: the diagnostics list is replaced on every edit, and this scope should
-                        // recompose only when the jump key appears or goes away.
-                        val activeSession = state.active?.session
-                        val hasDiagnostics by remember(activeSession) {
-                            derivedStateOf { activeSession?.diagnostics?.isNotEmpty() == true }
-                        }
-                        EditorSymbolBar(
-                            symbols = effectiveSymbolKeys(state.symbolKeys, state.active?.path),
-                            onSymbol = { sym -> state.active?.session?.commitText(sym) },
-                            onAction = { id -> dispatchSymbolAction(state, id) },
-                            showDiagnosticJump = hasDiagnostics,
-                            // No gear here — the Symbols & Macros editor lives in Settings ▸ Symbols & Macros.
-                            // The dismiss key only where the platform offers no way out of the keyboard
-                            // itself; Android's back already does it. See [hasSystemBack].
-                            onHideKeyboard = if (hasSystemBack) null else ({ state.active?.session?.ime?.hide() }),
-                            trackpad = remember(state) {
-                                object : SymbolBarTrackpad {
-                                    override fun begin() { state.active?.session?.beginFloatingCaret() }
-                                    override fun move(columns: Float, lines: Float) {
-                                        state.active?.session?.moveFloatingCaret(columns, lines)
-                                    }
-                                    override fun end() { state.active?.session?.endFloatingCaret() }
-                                }
-                            },
-                        )
-                    }
+                    KeyboardAccessory(state, keyboardOpen)
                     // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it. Zen mode hides
                     // the bar, unless the console is pulled up.
                     // Room for the dock's bar, which a lesson hides (see the BuildDock below).

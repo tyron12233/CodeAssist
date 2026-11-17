@@ -1346,6 +1346,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="blame_uncommitted">Ainda sem commit</string>
     <string name="set_editor_kbd_suggest">Sugestões do teclado</string>
     <string name="set_editor_kbd_suggest_desc">Permita que o teclado virtual faça autocorreção, sugestões e espaçamento automático (um teclado normal). Desative para entrada de código bruto, para que um '.' digitado não receba um espaço inserido automaticamente, ao custo da barra de sugestões.</string>
+    <string name="set_editor_symbol_bar">Barra de símbolos acima do teclado</string>
+    <string name="set_editor_symbol_bar_desc">Mostrar uma fileira de símbolos de código sobre o teclado virtual ao digitar, em celulares, dobráveis e tablets</string>
     <string name="set_editor_close_unsaved">Fechar uma aba com alterações não salvas</string>
     <string name="set_editor_close_unsaved_desc">Perguntar antes, ou sempre salvar ou descartar as alterações sem perguntar</string>
     <string name="set_editor_close_unsaved_ask">Perguntar</string>

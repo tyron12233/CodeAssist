@@ -70,6 +70,8 @@ data class IdeSettings(
      *  doesn't get an auto-inserted space and identifiers aren't "corrected", at the cost of the suggestion
      *  strip (and a password-style keyboard on some IMEs). */
     val softKeyboardSuggestions: Boolean = true,
+    /** The coding-symbol bar that sits on the soft keyboard while typing, on the phone and the wide layout alike. */
+    val symbolBar: Boolean = true,
 
     // ---- completion ----
     /** Pop the completion list up automatically while typing; off = only on explicit trigger (Ctrl-Space). */

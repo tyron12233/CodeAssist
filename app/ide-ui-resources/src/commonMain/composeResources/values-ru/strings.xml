@@ -1281,6 +1281,8 @@
     <string name="blame_uncommitted">Ещё не закоммичено</string>
     <string name="set_editor_kbd_suggest">Подсказки клавиатуры</string>
     <string name="set_editor_kbd_suggest_desc">Разрешить экранной клавиатуре автоисправление, подсказки и автопробелы (обычная клавиатура). Выключите для ввода чистого кода, чтобы после набранной «.» не вставлялся автоматический пробел, ценой полосы подсказок.</string>
+    <string name="set_editor_symbol_bar">Панель символов над клавиатурой</string>
+    <string name="set_editor_symbol_bar_desc">Показывать ряд символов для кода над экранной клавиатурой при наборе: на телефонах, складных устройствах и планшетах</string>
     <string name="set_editor_close_unsaved">Закрытие вкладки с несохранёнными изменениями</string>
     <string name="set_editor_close_unsaved_desc">Сначала спрашивать или всегда сохранять либо отбрасывать изменения без вопроса</string>
     <string name="set_editor_close_unsaved_ask">Спрашивать</string>

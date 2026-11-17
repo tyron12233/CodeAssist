@@ -2254,6 +2254,8 @@ data class UiSettings(
     val inlineBlame: Boolean = true,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     val softKeyboardSuggestions: Boolean = true,
+    /** The coding-symbol bar that sits on the soft keyboard while typing, on the phone and the wide layout alike. */
+    val symbolBar: Boolean = true,
     /** Reformat the active file when it is saved (the editor's save handler reads this). */
     val formatOnSave: Boolean = false,
 ) {

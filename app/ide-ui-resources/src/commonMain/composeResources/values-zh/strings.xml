@@ -2014,6 +2014,8 @@
     <string name="blame_uncommitted">尚未提交</string>
     <string name="set_editor_kbd_suggest">键盘建议</string>
     <string name="set_editor_kbd_suggest_desc">允许软键盘自动纠错、联想和自动加空格（普通键盘）。关闭以进行原始代码输入，这样键入的“.”不会被自动插入空格，但会失去联想候选栏。</string>
+    <string name="set_editor_symbol_bar">键盘上方的符号栏</string>
+    <string name="set_editor_symbol_bar_desc">输入时在软键盘上方显示一排编程符号，手机、折叠屏和平板均适用</string>
     <string name="set_editor_close_unsaved">关闭有未保存更改的标签页</string>
     <string name="set_editor_close_unsaved_desc">先询问，或始终直接保存或放弃更改</string>
     <string name="set_editor_close_unsaved_ask">询问</string>

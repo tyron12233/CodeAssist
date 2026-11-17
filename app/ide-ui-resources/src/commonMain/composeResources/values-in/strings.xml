@@ -1281,6 +1281,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="blame_uncommitted">Belum di-commit</string>
     <string name="set_editor_kbd_suggest">Saran keyboard</string>
     <string name="set_editor_kbd_suggest_desc">Biarkan keyboard lunak melakukan koreksi otomatis, memberi saran, dan spasi otomatis (keyboard normal). Matikan untuk input kode mentah, agar '.' yang diketik tidak mendapat spasi yang disisipkan otomatis, dengan konsekuensi kehilangan strip saran.</string>
+    <string name="set_editor_symbol_bar">Bilah simbol di atas keyboard</string>
+    <string name="set_editor_symbol_bar_desc">Tampilkan deretan simbol kode di atas keyboard virtual saat mengetik, baik di ponsel, perangkat lipat, maupun tablet</string>
     <string name="set_editor_close_unsaved">Menutup tab dengan perubahan yang belum disimpan</string>
     <string name="set_editor_close_unsaved_desc">Tanya dulu, atau selalu simpan atau buang perubahan tanpa bertanya</string>
     <string name="set_editor_close_unsaved_ask">Tanya</string>
