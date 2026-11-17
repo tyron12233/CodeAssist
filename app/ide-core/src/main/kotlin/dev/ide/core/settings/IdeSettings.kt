@@ -53,6 +53,8 @@ data class IdeSettings(
     val wrapIndent: Boolean = true,
     /** Draggable bar along the editor's bottom edge while a line runs past the view; none when [wordWrap]. */
     val horizontalScrollbar: Boolean = true,
+    /** The line-number gutter scrolls sideways with the code instead of staying pinned at the left edge. */
+    val scrollGutter: Boolean = false,
     /** [CARET_LINE] (the default), [CARET_BLOCK], [CARET_UNDERLINE], or [CARET_CANDLE]. */
     val caretStyle: String = CARET_LINE,
     /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */

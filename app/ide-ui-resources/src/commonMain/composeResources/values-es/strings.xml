@@ -2338,6 +2338,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="modcfg_platform_missing">compileSdk %1$d no está instalado, así que este módulo compila y autocompleta con la API %2$d. Instala Android SDK Platform %1$d en el Administrador de SDK.</string>
     <string name="set_editor_hscrollbar">Barra de desplazamiento horizontal</string>
     <string name="set_editor_hscrollbar_desc">Muestra una barra arrastrable en el borde inferior cuando una línea sobrepasa la vista (con ajuste de línea no queda nada que desplazar)</string>
+    <string name="set_editor_scroll_gutter">Desplazar los números de línea con el código</string>
+    <string name="set_editor_scroll_gutter_desc">Deja que la barra de números de línea salga de la pantalla al desplazarte hacia los lados, en lugar de quedarse fija en el borde izquierdo</string>
     <string name="learn_paths">Itinerarios</string>
     <string name="learn_path_meta">%1$d de %2$d rutas</string>
     <string name="learn_path_next">Siguiente: %1$s</string>

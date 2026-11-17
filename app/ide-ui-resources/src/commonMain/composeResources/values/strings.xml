@@ -2100,6 +2100,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="set_editor_wrap_indent_desc">Align a wrapped line's continuation rows to its indentation (when word wrap is on)</string>
     <string name="set_editor_hscrollbar">Horizontal scrollbar</string>
     <string name="set_editor_hscrollbar_desc">Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)</string>
+    <string name="set_editor_scroll_gutter">Scroll line numbers with the code</string>
+    <string name="set_editor_scroll_gutter_desc">Let the line number bar slide off screen when you scroll sideways, instead of staying pinned at the left edge</string>
     <string name="set_editor_two_axis">Two-axis scrolling</string>
     <string name="set_editor_two_axis_desc">Drag in any direction to scroll both axes at once (touch)</string>
     <string name="set_editor_pinch">Pinch to zoom</string>

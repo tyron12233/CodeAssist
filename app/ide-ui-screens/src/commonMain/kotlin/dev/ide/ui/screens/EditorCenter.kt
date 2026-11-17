@@ -451,6 +451,7 @@ internal fun EditorCenter(
                                 wordWrap = state.wordWrapEnabled,
                                 wrapIndent = state.wrapIndentEnabled,
                                 horizontalScrollbar = state.horizontalScrollbarEnabled,
+                                scrollGutter = state.scrollGutterEnabled,
                                 inlineBlame = state.inlineBlameEnabled,
                                 fontLigatures = state.fontLigaturesEnabled,
                                 caretStyle = CaretStyle.fromId(state.caretStyle),

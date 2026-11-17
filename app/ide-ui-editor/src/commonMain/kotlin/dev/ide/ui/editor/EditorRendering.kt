@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
@@ -152,6 +153,10 @@ internal fun DrawScope.drawEditor(
     animatedSelection: Pair<Int, Int>? = null,
     /** Halloween: hang slime drips under error squiggles (static, see [slimeDrips]). */
     spookyErrors: Boolean = false,
+    /** The x where the code area begins on screen. [gutterWidth] remains the origin the text is laid out from;
+     *  a gutter that scrolls with the code (Settings → Editor) passes a smaller edge here, down to 0 once it is
+     *  off screen. */
+    gutterEdge: Float = gutterWidth,
 ): Float {
     val doc = session.doc
     val sel = session.selection
@@ -251,7 +256,7 @@ internal fun DrawScope.drawEditor(
         drawRect(colors.currentLine, Offset(0f, lineTop(caretLine) + caretSubRow * lineH), Size(size.width, lineH))
     }
 
-    clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+    clipRect(left = gutterEdge, top = 0f, right = size.width, bottom = size.height) {
         // Merge-conflict bands, lowest of all: each side of a block tinted by its own color across the text area,
         // the marker lines stronger so the block's edges read at a glance, a diff3 base section left plain.
         for (c in conflicts) {
@@ -269,7 +274,7 @@ internal fun DrawScope.drawEditor(
                     else -> colors.conflictIncoming.copy(alpha = 0.12f)
                 }
                 val rows = if (wrap) vlayout.rowsOf(line).coerceAtLeast(1) else 1
-                drawRect(color, Offset(gutterWidth, lineTop(line)), Size(size.width - gutterWidth, rows * lineH))
+                drawRect(color, Offset(gutterEdge, lineTop(line)), Size(size.width - gutterEdge, rows * lineH))
             }
         }
         // Plugin background decorations, BELOW every other fill: a coverage tint or a diff band is a property
@@ -393,7 +398,7 @@ internal fun DrawScope.drawEditor(
                 var level = unit
                 while (level < cols) {
                     val x = textLeft + level * metrics.charWidth
-                    if (x >= gutterWidth) {
+                    if (x >= gutterEdge) {
                         drawLine(colors.indentGuide, Offset(x, lineTop(line)), Offset(x, lineTop(line) + spanH), strokeWidth = 1f)
                     }
                     level += unit
@@ -443,7 +448,7 @@ internal fun DrawScope.drawEditor(
         // Long unwrapped lines visit their segments left to right and stop at the first one starting past the
         // viewport (positions only grow along LTR text, so the rest are off-screen too), and every squiggle path
         // is clipped to the viewport instead of being built across the whole off-screen width.
-        val clipLeft = gutterWidth
+        val clipLeft = gutterEdge
         val clipRight = size.width
         for (line in visibleLines) {
             val segs = diagByLine[line] ?: continue
@@ -555,51 +560,54 @@ internal fun DrawScope.drawEditor(
     }
 
     // gutter: opaque background over anything scrolled beneath it, then the band slice + numbers
-    drawRect(colors.background, Offset(0f, 0f), Size(gutterWidth, size.height))
-    if (sel.collapsed && caretLine in firstVisible..lastVisible) {
-        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine) + caretSubRow * lineH), Size(gutterWidth, lineH))
-    }
+    // A scrolling gutter is the same picture slid left by the horizontal scroll, until it is off screen.
     val dotR = 2.5.dp.toPx()
     // The fold strip occupies the inner [gutterWidth - foldStripWidth, gutterWidth) band; numbers right-align
     // just left of it so a chevron never overlaps a number.
     val numberRight = gutterWidth - foldStripWidth - 4.dp.toPx()
     val chevronCx = gutterWidth - foldStripWidth / 2f
-    for (line in visibleLines) {
-        val segs = diagByLine[line]
-        val hasError = segs?.any { it.severity == UiSeverity.Error } == true
-        val hasWarning = !hasError && segs?.any { it.severity == UiSeverity.Warning } == true
-        val numColor = when {
-            hasError -> colors.error
-            hasWarning -> colors.warning
-            line == caretLine -> colors.gutterCurrent
-            else -> colors.gutterText
+    if (gutterEdge > 0f) translate(left = gutterEdge - gutterWidth) {
+        drawRect(colors.background, Offset(0f, 0f), Size(gutterWidth, size.height))
+        if (sel.collapsed && caretLine in firstVisible..lastVisible) {
+            drawRect(colors.currentLine, Offset(0f, lineTop(caretLine) + caretSubRow * lineH), Size(gutterWidth, lineH))
         }
-        if (hasError || hasWarning) {
-            drawCircle(
-                color = if (hasError) colors.error else colors.warning,
-                radius = dotR,
-                center = Offset(5.dp.toPx() + dotR, lineTop(line) + lineH / 2f),
+        for (line in visibleLines) {
+            val segs = diagByLine[line]
+            val hasError = segs?.any { it.severity == UiSeverity.Error } == true
+            val hasWarning = !hasError && segs?.any { it.severity == UiSeverity.Warning } == true
+            val numColor = when {
+                hasError -> colors.error
+                hasWarning -> colors.warning
+                line == caretLine -> colors.gutterCurrent
+                else -> colors.gutterText
+            }
+            if (hasError || hasWarning) {
+                drawCircle(
+                    color = if (hasError) colors.error else colors.warning,
+                    radius = dotR,
+                    center = Offset(5.dp.toPx() + dotR, lineTop(line) + lineH / 2f),
+                )
+            }
+            // Fold chevron: a collapsed fold always shows ▸ (so it can be re-expanded); an open foldable line
+            // shows ▾ on the caret line and on mouse hover (IntelliJ-style — hover is a no-op on touch).
+            val collapsed = foldModel.foldStartingAt(line) != null
+            val expandable = !collapsed && line in foldableStartLines
+            if (collapsed || (expandable && (line == caretLine || line == hoveredLine))) {
+                drawFoldChevron(chevronCx, lineTop(line) + lineH / 2f, expanded = !collapsed, color = colors.gutterCurrent)
+            }
+            val num = numberLayout(line + 1)
+            drawText(
+                num,
+                color = numColor,
+                topLeft = Offset(
+                    numberRight - num.size.width,
+                    lineTop(line) + (lineH - num.size.height) / 2f,
+                ),
             )
         }
-        // Fold chevron: a collapsed fold always shows ▸ (so it can be re-expanded); an open foldable line
-        // shows ▾ on the caret line and on mouse hover (IntelliJ-style — hover is a no-op on touch).
-        val collapsed = foldModel.foldStartingAt(line) != null
-        val expandable = !collapsed && line in foldableStartLines
-        if (collapsed || (expandable && (line == caretLine || line == hoveredLine))) {
-            drawFoldChevron(chevronCx, lineTop(line) + lineH / 2f, expanded = !collapsed, color = colors.gutterCurrent)
-        }
-        val num = numberLayout(line + 1)
-        drawText(
-            num,
-            color = numColor,
-            topLeft = Offset(
-                numberRight - num.size.width,
-                lineTop(line) + (lineH - num.size.height) / 2f,
-            ),
-        )
+        // A hairline at the gutter's right edge separates it from the code area.
+        drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)
     }
-    // A hairline at the gutter's right edge separates it from the code area.
-    drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)
 
     // touch selection handles (under the selection edges / the caret)
     if (handlesVisible) {
@@ -609,7 +617,7 @@ internal fun DrawScope.drawEditor(
             val line = doc.lineForOffset(off)
             if (line !in firstVisible..lastVisible) continue
             val x = xOf(line, off)
-            if (x < gutterWidth) continue
+            if (x < gutterEdge) continue
             drawCircle(handleColor, r, Offset(x, yTopOf(line, off) + lineH + r * 0.8f))
         }
     }
@@ -621,14 +629,17 @@ internal fun DrawScope.drawEditor(
     if (firstVisible > 0) {
         val sticky = stickyHeadersFor(firstVisible)
         if (sticky.isNotEmpty()) {
-            val pinnedLeft = gutterWidth + metrics.padLeft
+            val pinnedLeft = gutterEdge + metrics.padLeft
             for ((i, item) in sticky.withIndex()) {
                 val line = doc.lineForOffset(item.nameOffset.coerceIn(0, doc.length))
                 val y = i * lineH
                 drawRect(colors.background, Offset(0f, y), Size(size.width, lineH)) // mask scrolling code beneath
                 val num = numberLayout(line + 1)
-                drawText(num, color = colors.gutterText, topLeft = Offset(numberRight - num.size.width, y + (lineH - num.size.height) / 2f))
-                clipRect(left = gutterWidth, top = y, right = size.width, bottom = y + lineH) {
+                if (gutterEdge > 0f) {
+                    val numLeft = numberRight - num.size.width - (gutterWidth - gutterEdge)
+                    drawText(num, color = colors.gutterText, topLeft = Offset(numLeft, y + (lineH - num.size.height) / 2f))
+                }
+                clipRect(left = gutterEdge, top = y, right = size.width, bottom = y + lineH) {
                     drawText(layoutFor(line), topLeft = Offset(pinnedLeft, y))
                 }
             }

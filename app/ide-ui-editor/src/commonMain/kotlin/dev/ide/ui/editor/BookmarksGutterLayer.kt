@@ -23,6 +23,8 @@ internal fun BookmarksGutterLayer(
     vOffset: MutableFloatState,
     gutterWidthPx: Float,
     color: Color,
+    /** How far the gutter has scrolled off the left edge (0 while pinned); read in the layout or draw phase. */
+    gutterShift: () -> Float = { 0f },
 ) {
     val lines = session.bookmarks
     if (lines.isEmpty()) return
@@ -31,8 +33,9 @@ internal fun BookmarksGutterLayer(
         val w = 7.dp.toPx()
         val h = metrics.lineHeight * 0.62f
         val notch = 2.5.dp.toPx()
-        val left = 3.dp.toPx()
-        clipRect(right = gutterWidthPx) {
+        val shift = gutterShift()
+        val left = 3.dp.toPx() - shift
+        clipRect(right = gutterWidthPx - shift) {
             for (line in lines) {
                 if (line !in 0 until doc.lineCount || session.foldModel.isHidden(line)) continue
                 val top = metrics.padTop + vlayout.topRow(line) * metrics.lineHeight - vOffset.floatValue + (metrics.lineHeight - h) / 2f

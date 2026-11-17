@@ -2001,6 +2001,8 @@
     <string name="set_editor_wrap_indent_desc">将换行行的后续行对齐到其缩进（当自动换行开启时）</string>
     <string name="set_editor_hscrollbar">水平滚动条</string>
     <string name="set_editor_hscrollbar_desc">当行超出视图时在底部边缘显示可拖动条（自动换行时无需滚动）</string>
+    <string name="set_editor_scroll_gutter">行号随代码滚动</string>
+    <string name="set_editor_scroll_gutter_desc">横向滚动时让行号栏滑出屏幕，而不是固定在左侧边缘</string>
     <string name="set_editor_two_axis">双向滚动</string>
     <string name="set_editor_two_axis_desc">朝任意方向拖动即可同时在两个轴上滚动（触摸）</string>
     <string name="set_editor_pinch">双指缩放</string>

@@ -2157,6 +2157,8 @@
     <string name="set_editor_wrap_indent_desc">محاذاة أسطر استمرار السطر الملفوف إلى مسافته البادئة (عند تفعيل التفاف النص)</string>
     <string name="set_editor_hscrollbar">شريط التمرير الأفقي</string>
     <string name="set_editor_hscrollbar_desc">إظهار شريط قابل للسحب على الحافة السفلية حين يمتد سطر خارج العرض (لا يترك التفاف النص ما يُمرَّر)</string>
+    <string name="set_editor_scroll_gutter">تمرير أرقام الأسطر مع الكود</string>
+    <string name="set_editor_scroll_gutter_desc">السماح لشريط أرقام الأسطر بالانزلاق خارج الشاشة عند التمرير جانبيًا، بدلًا من بقائه مثبتًا عند الحافة اليسرى</string>
     <string name="set_editor_two_axis">التمرير على محورين</string>
     <string name="set_editor_two_axis_desc">اسحب في أي اتجاه للتمرير على المحورين معًا (باللمس)</string>
     <string name="set_editor_pinch">القرص للتكبير</string>

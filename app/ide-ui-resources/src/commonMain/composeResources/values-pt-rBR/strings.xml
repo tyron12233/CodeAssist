@@ -2230,6 +2230,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="modcfg_platform_missing">O compileSdk %1$d não está instalado, então este módulo compila e recebe sugestões com a API %2$d. Instale a Android SDK Platform %1$d no Gerenciador de SDK.</string>
     <string name="set_editor_hscrollbar">Barra de rolagem horizontal</string>
     <string name="set_editor_hscrollbar_desc">Mostrar uma barra arrastável na borda inferior quando uma linha passa da área visível (com quebra de linha não há o que rolar)</string>
+    <string name="set_editor_scroll_gutter">Rolar os números de linha com o código</string>
+    <string name="set_editor_scroll_gutter_desc">Deixar a barra de números de linha sair da tela ao rolar para os lados, em vez de ficar fixa na borda esquerda</string>
     <string name="learn_paths">Percursos</string>
     <string name="learn_path_meta">%1$d de %2$d trilhas</string>
     <string name="learn_path_next">A seguir: %1$s</string>

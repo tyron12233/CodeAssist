@@ -1687,6 +1687,8 @@
  "Align a wrapped line's continuation rows to its indentation (when word wrap is on)": "محاذاة الأجزاء المكمِّلة للسطر الملتفّ مع إزاحته (عند تفعيل التفاف الأسطر)",
  "Horizontal scrollbar": "شريط التمرير الأفقي",
  "Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)": "إظهار شريط قابل للسحب على طول الحافة السفلية عندما يتجاوز سطر حدود العرض (التفاف الأسطر لا يترك شيئًا للتمرير)",
+ "Scroll line numbers with the code": "تمرير أرقام الأسطر مع الكود",
+ "Let the line number bar slide off screen when you scroll sideways, instead of staying pinned at the left edge": "السماح لشريط أرقام الأسطر بالانزلاق خارج الشاشة عند التمرير جانبيًا، بدلًا من بقائه مثبتًا عند الحافة اليسرى",
  "Who changed this line": "من غيّر هذا السطر",
  "In a Git project, show who last changed the caret's line, when, and why, faded after its end": "في مشروع Git، إظهار من غيّر سطر المؤشر آخر مرة ومتى ولماذا، بلون باهت بعد نهايته",
  "Closing a tab with unsaved changes": "إغلاق علامة تبويب فيها تغييرات غير محفوظة",

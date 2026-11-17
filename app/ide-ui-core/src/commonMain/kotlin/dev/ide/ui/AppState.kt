@@ -920,6 +920,8 @@ class IdeUiState(
     var wrapIndentEnabled by mutableStateOf(true)
     /** Draggable bar along the editor's bottom edge while a line runs past the view; none while wrapping. */
     var horizontalScrollbarEnabled by mutableStateOf(true)
+    /** The line-number gutter scrolls sideways with the code instead of staying pinned at the left edge. */
+    var scrollGutterEnabled by mutableStateOf(false)
     /** How the editor draws its caret, as a `CaretStyle` id ("line", "block", "underline", "candle"). */
     var caretStyle by mutableStateOf("line")
     /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */
@@ -1010,6 +1012,7 @@ class IdeUiState(
         wordWrapEnabled = s.wordWrap
         wrapIndentEnabled = s.wrapIndent
         horizontalScrollbarEnabled = s.horizontalScrollbar
+        scrollGutterEnabled = s.scrollGutter
         caretStyle = s.caretStyle
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom

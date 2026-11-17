@@ -47,6 +47,7 @@ class SettingsStore(
             wordWrap = bool("editor.wordWrap", d.wordWrap),
             wrapIndent = bool("editor.wrapIndent", d.wrapIndent),
             horizontalScrollbar = bool("editor.horizontalScrollbar", d.horizontalScrollbar),
+            scrollGutter = bool("editor.scrollGutter", d.scrollGutter),
             caretStyle = oneOf("editor.caretStyle", d.caretStyle, IdeSettings.CARET_LINE, IdeSettings.CARET_BLOCK, IdeSettings.CARET_UNDERLINE, IdeSettings.CARET_CANDLE),
             twoAxisScroll = bool("editor.twoAxisScroll", d.twoAxisScroll),
             pinchZoom = bool("editor.pinchZoom", d.pinchZoom),
@@ -165,6 +166,7 @@ class SettingsStore(
         put("editor.wordWrap", s.wordWrap.toString())
         put("editor.wrapIndent", s.wrapIndent.toString())
         put("editor.horizontalScrollbar", s.horizontalScrollbar.toString())
+        put("editor.scrollGutter", s.scrollGutter.toString())
         put("editor.caretStyle", s.caretStyle)
         put("editor.twoAxisScroll", s.twoAxisScroll.toString())
         put("editor.pinchZoom", s.pinchZoom.toString())

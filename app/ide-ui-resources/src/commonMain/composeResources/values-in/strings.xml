@@ -2114,6 +2114,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="modcfg_platform_missing">compileSdk %1$d belum terpasang, jadi modul ini dikompilasi dan dilengkapi dengan API %2$d. Pasang Android SDK Platform %1$d di SDK Manager.</string>
     <string name="set_editor_hscrollbar">Bilah gulir horizontal</string>
     <string name="set_editor_hscrollbar_desc">Tampilkan bilah yang dapat diseret di tepi bawah saat baris melewati tampilan (bungkus kata tidak menyisakan apa pun untuk digulir)</string>
+    <string name="set_editor_scroll_gutter">Gulir nomor baris bersama kode</string>
+    <string name="set_editor_scroll_gutter_desc">Biarkan bilah nomor baris bergeser keluar layar saat Anda menggulir ke samping, alih-alih tetap menempel di tepi kiri</string>
     <string name="learn_paths">Rute</string>
     <string name="learn_path_meta">%1$d dari %2$d jalur</string>
     <string name="learn_path_next">Berikutnya: %1$s</string>

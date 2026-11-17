@@ -12,7 +12,9 @@ import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
@@ -61,6 +63,8 @@ internal class EditorGeometry(private val session: EditorSession) {
 
     // ---- per-frame inputs, refreshed by rememberEditorGeometry ----
     var wordWrap: Boolean = false
+    /** The gutter scrolls sideways with the code instead of staying pinned (Settings → Editor). */
+    var gutterScrolls: Boolean by mutableStateOf(false)
     var wrapActive: Boolean = false
     var wrapWidthPx: Int = 0
     var wrapCols: Int = 0
@@ -167,6 +171,15 @@ internal class EditorGeometry(private val session: EditorSession) {
 
     fun textLeft() = gutterWidthPx + metrics.padLeft - hOffset.floatValue
 
+    /** How far the gutter has slid off the left edge: 0 while it is pinned, else the horizontal scroll up to
+     *  the gutter's own width. Reads the scroll, so call it in a draw, layout or gesture, not in composition. */
+    fun gutterShift(): Float =
+        if (gutterScrolls) hOffset.floatValue.coerceIn(0f, gutterWidthPx) else 0f
+
+    /** The x where the gutter ends and the code area begins on screen. [gutterWidthPx] stays the origin the
+     *  text is laid out from; this is the edge to clip and hit-test against. */
+    fun gutterEdge(): Float = gutterWidthPx - gutterShift()
+
     /** line, xInViewport, topInViewport (of the sub-row). */
     fun caretGeometry(offset: Int): Triple<Int, Float, Float> {
         val doc = session.doc
@@ -217,7 +230,7 @@ internal class EditorGeometry(private val session: EditorSession) {
         val doc = session.doc
         val line = lineAtY(pos.y)
         val startsFold = session.foldRegions.any { doc.lineForOffset(it.start) == line }
-        if (startsFold && pos.x >= gutterWidthPx - render.foldStripPx && pos.x < gutterWidthPx) {
+        if (startsFold && pos.x >= gutterEdge() - render.foldStripPx && pos.x < gutterEdge()) {
             return session.toggleFoldAtLine(line)
         }
         val info = session.foldModel.foldStartingAt(line)
@@ -453,7 +466,12 @@ internal fun rememberEditorGeometry(
             val caretX = layout.getHorizontalPosition(vcol, usePrimaryDirection = true) + beyondText
             val textViewW = state.viewport.value.width - gutterWidthPx - metrics.padLeft
             val margin = metrics.charWidth * 3
-            if (caretX < hOffset.floatValue + margin) hOffset.floatValue = (caretX - margin).coerceIn(0f, state.maxH())
+            // A scrolling gutter gives its width back to the code: the caret may sit anywhere right of the
+            // screen's left edge, so following it does not drag the gutter back into view.
+            val leftSlack = if (state.gutterScrolls) gutterWidthPx + metrics.padLeft else 0f
+            if (caretX + leftSlack < hOffset.floatValue + margin) {
+                hOffset.floatValue = (caretX + leftSlack - margin).coerceIn(0f, state.maxH())
+            }
             else if (caretX > hOffset.floatValue + textViewW - margin) {
                 hOffset.floatValue = (caretX - textViewW + margin).coerceIn(0f, state.maxH())
             }

@@ -174,7 +174,7 @@ internal fun Modifier.editorInput(
                 if (change.type == PointerType.Touch) continue
                 interaction.lastInputWasTouch = false
                 focus.requestFocus()
-                if (change.position.x >= gutterWidthPx) {
+                if (change.position.x >= geometry.gutterEdge()) {
                     val at = geometry.offsetAt(change.position)
                     val s = session.selection
                     if (s.collapsed || at !in s.min..s.max) session.setCaret(at)
@@ -281,7 +281,7 @@ internal fun Modifier.editorInput(
                     val triple = nearArm
                     // A tap on a gutter error/warning glyph opens that line's diagnostic sheet.
                     val gutterDiag =
-                        if (pos.x < gutterWidthPx) acts.diagnosticOnLine(geometry.lineAtY(pos.y)) else null
+                        if (pos.x < geometry.gutterEdge()) acts.diagnosticOnLine(geometry.lineAtY(pos.y)) else null
                     val stickyHit = geometry.stickyHeaderHit(pos)
                     when {
                         stickyHit != null -> { // tapped a pinned sticky header → jump to that declaration
@@ -371,7 +371,7 @@ internal fun Modifier.editorInput(
                 down.consume() // keep the scroll containers + detectTapGestures out of it
                 // Ctrl/⌘-click on an identifier: go to its declaration (the link the hover underlined).
                 val mods = currentEvent.keyboardModifiers
-                if ((mods.isCtrlPressed || mods.isMetaPressed) && down.position.x >= gutterWidthPx) {
+                if ((mods.isCtrlPressed || mods.isMetaPressed) && down.position.x >= geometry.gutterEdge()) {
                     val ch = hoveredChar(session, geometry, down.position, gutterWidthPx)
                     if (ch >= 0 && identifierRangeAt(session.doc.chars, ch) != null) {
                         hover.link = null
@@ -395,7 +395,7 @@ internal fun Modifier.editorInput(
                 interaction.mouseLastClickMs = down.uptimeMillis
                 interaction.mouseLastClickPos = down.position
                 // A click on a gutter error/warning glyph opens that line's diagnostic sheet.
-                val gutterDiag = if (down.position.x < gutterWidthPx)
+                val gutterDiag = if (down.position.x < geometry.gutterEdge())
                     acts.diagnosticOnLine(geometry.lineAtY(down.position.y)) else null
                 when {
                     interaction.mouseClicks == 1 && geometry.foldActionAt(down.position) -> {} // fold chevron / placeholder
@@ -555,7 +555,7 @@ internal fun Modifier.editorInput(
  * nearest caret position, this is the character the pointer is ON.
  */
 internal fun hoveredChar(session: EditorSession, geometry: EditorGeometry, pos: Offset, gutterWidthPx: Float): Int {
-    if (pos.x < gutterWidthPx) return -1
+    if (pos.x < geometry.gutterEdge()) return -1
     val doc = session.doc
     val nearest = geometry.offsetAt(pos)
     val ch = if (geometry.caretGeometry(nearest).second > pos.x) nearest - 1 else nearest

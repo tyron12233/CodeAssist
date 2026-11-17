@@ -100,6 +100,8 @@ internal fun ChangeMarkersLayer(
     vOffset: MutableFloatState,
     gutterWidthPx: Float,
     foldStripPx: Float,
+    /** How far the gutter has scrolled off the left edge (0 while pinned); read in the layout or draw phase. */
+    gutterShift: () -> Float = { 0f },
 ) {
     val base = markers.base ?: return
     if (markers.changes.isEmpty()) return
@@ -132,7 +134,7 @@ internal fun ChangeMarkersLayer(
                             // Where the removed lines were: the boundary above [newStart] (below the last line at EOF).
                             lineTop + (if (change.newStart >= doc.lineCount) metrics.lineHeight else 0f) - metrics.lineHeight * 0.3f
                         } else lineTop
-                        IntOffset((stripeX - hitWidthPx / 2f).roundToInt(), top.roundToInt())
+                        IntOffset((stripeX - hitWidthPx / 2f - gutterShift()).roundToInt(), top.roundToInt())
                     }
                     .width(hitWidth)
                     .height(with(density) { heightPx.toDp() })

@@ -2245,6 +2245,8 @@
     <string name="modcfg_platform_missing">compileSdk %1$d не установлен, поэтому модуль компилируется и получает автодополнение с API %2$d. Установите Android SDK Platform %1$d в менеджере SDK.</string>
     <string name="set_editor_hscrollbar">Горизонтальная полоса прокрутки</string>
     <string name="set_editor_hscrollbar_desc">Показывать перетаскиваемую полосу вдоль нижнего края, когда строка выходит за пределы экрана (при переносе строк прокручивать нечего)</string>
+    <string name="set_editor_scroll_gutter">Прокручивать номера строк вместе с кодом</string>
+    <string name="set_editor_scroll_gutter_desc">Позволить панели с номерами строк уходить за экран при прокрутке в сторону, а не оставаться закреплённой у левого края</string>
     <string name="learn_paths">Маршруты</string>
     <string name="learn_path_meta">Направлений: %1$d из %2$d</string>
     <string name="learn_path_next">Далее: %1$s</string>

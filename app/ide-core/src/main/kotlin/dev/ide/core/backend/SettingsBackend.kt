@@ -668,6 +668,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         wordWrap = wordWrap,
         wrapIndent = wrapIndent,
         horizontalScrollbar = horizontalScrollbar,
+        scrollGutter = scrollGutter,
         caretStyle = caretStyle,
         twoAxisScroll = twoAxisScroll,
         pinchZoom = pinchZoom,
