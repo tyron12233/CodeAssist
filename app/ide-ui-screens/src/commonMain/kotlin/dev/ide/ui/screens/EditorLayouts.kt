@@ -454,7 +454,12 @@ internal fun ExpandedLayout(
                     // Centre column spanning the width between the two stripes: the side panes and the editor, and
                     // the bottom pane under them. The stripes stay full-height, so the bottom group and the footer
                     // sit in the lower corner.
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                    // Zen mode took the stripes and the top bar, the only touch ways to a tool window here: a swipe
+                    // from the editor's horizontal start brings the left one back, as the phone's drawer does.
+                    val swipeOpensLeft = state.zenMode && isMobilePlatform && state.shownOn(ToolWindowSide.Left) == null
+                    BoxWithConstraints(
+                        Modifier.weight(1f).fillMaxHeight().swipeOpensStartPane(swipeOpensLeft) { state.openLeftSidebar() },
+                    ) {
                         ToolWindowPanes(state, windows, editorBody, hideSide, maxWidth, maxHeight)
                         ToolWindowDropTargets()
                     }
