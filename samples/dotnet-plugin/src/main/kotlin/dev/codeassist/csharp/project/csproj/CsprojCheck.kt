@@ -208,11 +208,16 @@ internal object CsprojCheck {
                 }
             }
 
-            "ProjectReference" -> if (include != null) {
+            "ProjectReference" -> if (
+                include != null &&
+                include.value.isNotBlank() &&
+                "$(" !in include.value &&
+                !env.exists(include.value.replace('\\', '/'))
+            ) {
                 warn(
                     include.valueStart,
                     include.valueEnd,
-                    "Project references are not supported yet",
+                    "Project not found: ${include.value}",
                     "csproj.item",
                 )
             }

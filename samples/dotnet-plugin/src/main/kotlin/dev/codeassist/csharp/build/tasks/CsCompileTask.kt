@@ -7,6 +7,7 @@ import dev.codeassist.csharp.editor.diagnostics.CsDiagnostics
 import dev.codeassist.csharp.project.CsMains
 import dev.codeassist.csharp.project.CsProject
 import dev.codeassist.csharp.project.csproj.Csproj
+import dev.codeassist.csharp.project.csproj.CsprojGraph
 import dev.codeassist.csharp.project.csproj.CsprojExtras
 import dev.codeassist.csharp.project.csproj.CsprojInfo
 import dev.codeassist.csharp.sdk.CsChecker
@@ -57,7 +58,22 @@ internal class CsCompileTask(
     private val sdk: DotnetSdk,
     private val console: RunConsole?,
     private val mainClass: String? = null,
+    /**
+     * False for a project being built because another references it: the projects it needs in turn were
+     * built before it, and it is left alone when its DLL is newer than everything it is made from.
+     */
+    private val root: Boolean = true,
 ) : Task {
+
+    /** The folder of the project file, which is [dir] unless the module keeps its project in a subfolder. */
+    private val projectDir: Path get() = Csproj.find(dir)?.parent ?: dir
+
+    /** The projects this one references, in build order, or null when it has no project file. */
+    private fun referencedProjects(project: CsprojInfo?): CsprojGraph.Result? {
+        val file = Csproj.find(dir) ?: return null
+        if (project == null || project.projectReferences.isEmpty()) return null
+        return CsprojGraph.referenced(file, project)
+    }
 
     // Task inputs and outputs
 
@@ -67,9 +83,14 @@ internal class CsCompileTask(
      */
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
-            filePaths("sources", CsProject.sources(dir))
+            val project = Csproj.load(dir)
+            val referenced = referencedProjects(project)?.nodes.orEmpty()
+            filePaths("sources", CsprojGraph.sources(projectDir, project))
             filePaths("project", listOfNotNull(Csproj.find(dir)))
-            filePaths("references", Csproj.load(dir)?.let { resolveReferences(it) }?.first ?: emptyList())
+            filePaths("references", project?.let { resolveReferences(it) }?.first ?: emptyList())
+            // A change in a referenced project is a change to this one's build.
+            filePaths("referencedSources", referenced.flatMap { CsprojGraph.sources(it.dir, it.info) })
+            filePaths("referencedProjects", referenced.map { it.file })
             property("tree", DotnetSdk.VERSION)
             property("mainClass", mainClass.orEmpty())
         }
@@ -94,8 +115,7 @@ internal class CsCompileTask(
             return TaskResult.Failed(reason)
         }
 
-        val candidates = CsProject.sources(dir)
-        val all = project?.let { Csproj.sources(it, dir, candidates) } ?: candidates
+        val all = CsprojGraph.sources(projectDir, project)
 
         // `-main:` is incompatible with top-level statements, so exclude those files when running a chosen class.
         val leftOut = if (mainClass != null) CsMains.topLevelFiles(dir).filter { it in all } else emptyList()
@@ -114,8 +134,41 @@ internal class CsCompileTask(
             }
         }
 
-        val (referenced, missing) = project?.let { resolveReferences(it) }
+        val graph = referencedProjects(project)
+        if (graph != null && graph.problems.isNotEmpty()) {
+            graph.problems.forEach {
+                report(it)
+                ctx.diagnostics.reportProblem(it, DiagnosticKind.DEPENDENCY)
+            }
+            return TaskResult.Failed(graph.problems.first())
+        }
+        val nodes = graph?.nodes.orEmpty()
+
+        if (!root && isCurrent(all, nodes)) {
+            ctx.logger()("${dir.fileName} is up to date")
+            return TaskResult.Success
+        }
+
+        // Referenced projects first, each after the ones it needs.
+        if (root) {
+            for (node in nodes) {
+                report("Building ${node.assemblyName}")
+                val built = CsCompileTask(
+                    TaskName(":${node.assemblyName}:compileCs"), node.dir, node.output, sdk, console, root = false,
+                ).execute(ctx)
+                if (built !is TaskResult.Success) return built
+            }
+        }
+
+        val (own, missing) = project?.let { resolveReferences(it) }
             ?: (emptyList<Path>() to emptyList<String>())
+
+        // What a referenced project compiles against reaches this one too, as it does in an SDK build.
+        val inherited = nodes.flatMap { node ->
+            Csproj.resolveReferences(node.info, node.dir, sdk.nuget, sdk.frameworkDllNames()).first
+        }
+        val projectDlls = nodes.map { it.output }
+        val referenced = (own + projectDlls + inherited).distinctBy { it.fileName.toString().lowercase() }
 
         if (missing.isNotEmpty()) {
             val reason = "reference not found: ${missing.joinToString()}"
@@ -134,7 +187,7 @@ internal class CsCompileTask(
 
             prepareOutput(project)
             val usings = writeGlobalUsings(project)
-            copyReferences(project, referenced)
+            copyReferences(project, referenced, projectDlls + nodes.flatMap { copiedBy(it) })
             val assemblyInfo = writeAssemblyInfo(project)
             arguments = compilerArguments(project, sources, referenced, usings, assemblyInfo)
 
@@ -334,13 +387,30 @@ internal class CsCompileTask(
      * Copies references not marked `<Private>false</Private>` beside the program's DLL, where the runtime
      * looks for them. When there is no project file, all references are copied.
      */
-    private fun copyReferences(project: CsprojInfo?, referenced: List<Path>) {
-        val toCopy = project?.let { Csproj.copyLocal(it, dir) + packageDlls(it) } ?: referenced
+    private fun copyReferences(project: CsprojInfo?, referenced: List<Path>, fromProjects: List<Path>) {
+        val toCopy = project?.let { Csproj.copyLocal(it, dir) + packageDlls(it) + fromProjects } ?: referenced
 
-        for (reference in toCopy) {
+        for (reference in toCopy.distinctBy { it.fileName.toString().lowercase() }) {
             val copy = dll.parent.resolve(reference.fileName.toString())
+            if (copy == reference) continue
             Files.copy(reference, copy, StandardCopyOption.REPLACE_EXISTING)
         }
+    }
+
+    /** What a referenced project needs beside it at run time: its copy-local references and its packages. */
+    private fun copiedBy(node: CsprojGraph.Node): List<Path> =
+        Csproj.copyLocal(node.info, node.dir) +
+            sdk.nuget.cached(Csproj.packageRequests(node.info), sdk.frameworkDllNames()).dlls
+
+    /**
+     * Whether [dll] is newer than the sources it is built from, its project file, and the DLLs of the
+     * projects it references.
+     */
+    private fun isCurrent(sources: List<Path>, nodes: List<CsprojGraph.Node>): Boolean {
+        fun stamp(file: Path): Long? = runCatching { Files.getLastModifiedTime(file).toMillis() }.getOrNull()
+        val built = stamp(dll) ?: return false
+        val inputs = sources + listOfNotNull(Csproj.find(dir)) + nodes.map { it.output }
+        return inputs.all { input -> stamp(input)?.let { it <= built } ?: false }
     }
 
     private fun compilerArguments(

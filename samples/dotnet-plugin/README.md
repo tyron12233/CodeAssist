@@ -26,9 +26,10 @@ toolchain present still produces an APK; it installs and reports that it has no 
 CSharpPlugin  (registers everything)
  ├─ sdk/        DotnetSdk (unpacks the tree, starts programs)   CsServer (the one process kept running)
  │              CsCompilerHost (compile)  CsChecker (diagnostics)  CsCompleter (completion, signatures)
- ├─ project/    Csproj* (reads .csproj)  nuget/ (package restore)  CsMains* (entry points)  templates/
+ │              CsNavigator (declarations, documentation, colouring)
+ ├─ project/    Csproj* (reads .csproj, follows project references)  nuget/ (package restore)  CsMains* (entry points)  templates/
  ├─ build/      CsBuildPlugin  CsCompileTask  CsRunProgramTask  CsRestoreTask  CsRunTaskProvider
- ├─ editor/     CsLanguageBackend  CsDiagnosticProvider  quick fixes for usings  CsRunGutter  CsSignatureHelp
+ ├─ editor/     CsLanguageBackend  CsDiagnosticProvider  CsDeclarationProvider  quick fixes for usings  CsRunGutter
  ├─ completion/ CsCompletionContributor  CsSemanticCompletion  CsSymbols  CsprojCompletionContributor
  └─ ui/         CsUiPlugin (editor languages, file icons, new-file templates)
 ```
@@ -48,6 +49,19 @@ during a build is answered after it. The server stops after five idle minutes an
 request. If it cannot be built or started, a build falls back to a plain `csc` process and completion to
 names read from the reference assemblies.
 
+**Navigation and colouring come from the same compilation.** Go to Declaration, quick documentation and the
+colouring of names are three more requests to the server: where the symbol at the caret is declared, its
+signature and doc comment, and what each name in the file resolves to. A symbol from the framework or a
+package has no source to go to; its documentation still shows, from the XML beside the reference assembly.
+
+**Project references.** A `<ProjectReference>` reaches the referenced project and everything it references
+in turn. A build compiles those first, each into its own `bin/`, and copies their DLLs beside the program.
+The editor does not wait for a build: the server compiles a referenced project in memory from its sources
+and hands it to the referencing one as a reference, so an edit saved in one project shows in the other at the
+next check, and Go to Declaration crosses from one into the other. A file belongs to the nearest project
+file above it, and a project's sources leave out any folder that has a project file of its own, so a module
+may hold several projects.
+
 **No MSBuild, no NuGet client.** Neither is shipped. `Csproj` reads the subset of a project file the plugin
 honours and turns it into compiler arguments; it is the single place that interprets a `.csproj`, used by the
 build, the editor check and completion alike. `NuGet` talks to nuget.org's package base address directly,
@@ -60,7 +74,7 @@ compilation, built from the editor's unsaved buffer and the project's other file
 
 ## What is not supported
 
-- Project references, `Import` and `Directory.Build.props`, multi-targeting, analyzers and source generators.
+- `Import` and `Directory.Build.props`, solution files, multi-targeting, analyzers and source generators.
 - NuGet beyond nuget.org and managed DLLs: no other feeds, no native assets, no package signature checks.
 - Conditions in a `.csproj` other than simple comparisons on `Configuration`, evaluated for Debug.
 - A debugger, a test runner, the `dotnet` command line, and workloads such as MAUI or Blazor.

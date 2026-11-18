@@ -11,6 +11,8 @@ import dev.codeassist.csharp.editor.CsWorkspace
 import dev.codeassist.csharp.editor.quickfixes.CsUsingFix
 import dev.codeassist.csharp.project.CsProject
 import dev.codeassist.csharp.project.csproj.Csproj
+import dev.codeassist.csharp.project.csproj.CsprojGraph
+import dev.codeassist.csharp.project.csproj.CsprojReferences
 import dev.codeassist.csharp.project.csproj.CsprojInfo
 import dev.codeassist.csharp.project.nuget.CsPackageRestorer
 import dev.codeassist.csharp.sdk.CsChecker
@@ -52,6 +54,8 @@ internal class CsDiagnosticProvider(
     private val unused: CsUsingCleanup.Unused,
 ) : DiagnosticProvider {
 
+    private val projectReferences = CsprojReferences(sdk)
+
     override val id = "csharp.roslyn"
     override val languages = setOf(LanguageId(CSharpPlugin.LANGUAGE))
 
@@ -78,7 +82,8 @@ internal class CsDiagnosticProvider(
 
         CsModules.remember(target.module)
 
-        val moduleDir = Paths.get(target.module.dir.path)
+        // The project the file belongs to: in a module holding several, the nearest project file above it.
+        val moduleDir = CsprojGraph.owningDir(file) ?: Paths.get(target.module.dir.path)
         val key = file.toString() to
             (text.hashCode() * 31 + packagesStamp(moduleDir)) * 31 +
             restorer.failuresFor(moduleDir).hashCode()
@@ -98,10 +103,7 @@ internal class CsDiagnosticProvider(
 
         // Use the same project settings as Run.
         val project = Csproj.load(moduleDir)
-        val candidates = CsProject.sources(moduleDir)
-        val sources = project?.let {
-            Csproj.sources(it, moduleDir, candidates)
-        } ?: candidates
+        val sources = CsprojGraph.sources(moduleDir, project)
 
         val others = sources.filter {
             runCatching { it.toAbsolutePath().normalize() }.getOrNull() != file
@@ -130,7 +132,10 @@ internal class CsDiagnosticProvider(
             }
             ?: emptyList()
 
-        val arguments = checkArguments(project, buffer, others, work, usings, referenced)
+        // Projects this one references are compiled by the server from their sources; `csc` knows nothing
+        // of that, so the fallbacks below go without them.
+        val projects = projectReferences.forEditor(Csproj.find(moduleDir), project)
+        val arguments = checkArguments(project, buffer, others, work, usings, referenced + projects.libraries)
 
         val lines = ArrayList<String>()
         val startedAt = System.nanoTime()
@@ -145,7 +150,9 @@ internal class CsDiagnosticProvider(
 
             // Prefer the checker, which reports syntax and semantic errors together.
             // Fall back to the compiler host when the checker cannot be used.
-            val checked = CsChecker.checkFile(sdk, buffer.toString(), arguments, cancellation) { lines += it }
+            val checked = CsChecker.checkFile(
+                sdk, buffer.toString(), arguments + projects.arguments, cancellation,
+            ) { lines += it }
 
             if (checked != null) {
                 viaChecker = true

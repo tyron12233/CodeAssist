@@ -419,11 +419,8 @@ internal object Csproj {
     }
 
     /** Returns the reason this compiler cannot build the project, or null when it can. */
-    fun unsupported(info: CsprojInfo): String? = when {
-        info.projectReferences.isNotEmpty() ->
-            "project references are not supported yet: ${info.projectReferences.joinToString()}"
-        else -> null
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun unsupported(info: CsprojInfo): String? = null
 
     /** Removes the `CS` prefix from a warning code, leaving other values unchanged. */
     private fun number(code: String): String =

@@ -90,9 +90,9 @@ class CsprojCheckTest {
     }
 
     @Test
-    fun projectReferenceIsNotSupported() {
+    fun projectReferenceToAMissingFileIsReported() {
         assertEquals(
-            listOf("Project references are not supported yet"),
+            listOf("Project not found: ../Lib/Lib.csproj"),
             messages("<ItemGroup><ProjectReference Include=\"../Lib/Lib.csproj\" /></ItemGroup>"),
         )
     }

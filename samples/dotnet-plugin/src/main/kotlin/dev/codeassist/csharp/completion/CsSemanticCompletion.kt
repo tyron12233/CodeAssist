@@ -4,6 +4,8 @@ package dev.codeassist.csharp.completion
 import android.util.Log
 import dev.codeassist.csharp.project.CsProject
 import dev.codeassist.csharp.project.csproj.Csproj
+import dev.codeassist.csharp.project.csproj.CsprojGraph
+import dev.codeassist.csharp.project.csproj.CsprojReferences
 import dev.codeassist.csharp.sdk.CsCompleter
 import dev.codeassist.csharp.sdk.CsNavigator
 import dev.codeassist.csharp.sdk.DotnetSdk
@@ -20,6 +22,8 @@ import java.nio.file.Paths
  * using the project's other source files and settings.
  */
 internal class CsSemanticCompletion(private val sdk: DotnetSdk) {
+
+    private val projectReferences = CsprojReferences(sdk)
 
     /**
      * Returns candidates at the caret, or null when Roslyn cannot answer.
@@ -129,14 +133,14 @@ internal class CsSemanticCompletion(private val sdk: DotnetSdk) {
     ): List<String>? {
         if (sdk.prepare() !is DotnetSdk.Status.Ready) return null
 
-        val moduleDir = module ?: moduleDirOf(file) ?: return null
+        // The nearest project file above the buffer decides, in a module that holds several projects.
+        val moduleDir = CsprojGraph.owningDir(file) ?: module ?: moduleDirOf(file) ?: return null
         val work = sdk.home.resolve("complete-work")
             .resolve(Integer.toHexString(file.toString().hashCode()))
         val buffer = work.resolve(file.fileName.toString())
 
         val project = Csproj.load(moduleDir)
-        val candidates = CsProject.sources(moduleDir)
-        val sources = project?.let { Csproj.sources(it, moduleDir, candidates) } ?: candidates
+        val sources = CsprojGraph.sources(moduleDir, project)
         val others = sources.filter {
             runCatching { it.toAbsolutePath().normalize() }.getOrNull() != file
         }
@@ -155,15 +159,18 @@ internal class CsSemanticCompletion(private val sdk: DotnetSdk) {
             }
             ?: emptyList()
 
+        // Referenced projects are compiled by the server from their sources, alongside this one.
+        val projects = projectReferences.forEditor(Csproj.find(moduleDir), project)
+
         val arguments = if (project != null) {
             Csproj.arguments(
                 project,
                 listOf(buffer) + others,
-                sdk.references() + referenced,
+                sdk.references() + referenced + projects.libraries,
                 work.resolve("complete.dll"),
                 usings,
                 forceLibrary = true,
-            )
+            ) + projects.arguments
         } else {
             buildList {
                 add("-nologo")

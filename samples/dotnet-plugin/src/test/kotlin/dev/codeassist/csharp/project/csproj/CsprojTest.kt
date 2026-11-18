@@ -370,8 +370,8 @@ class CsprojTest {
     }
 
     @Test
-    fun `project references are not supported`() {
-        assertNotNull(Csproj.unsupported(info().copy(projectReferences = listOf("../Lib.csproj"))))
+    fun `project references are supported`() {
+        assertNull(Csproj.unsupported(info().copy(projectReferences = listOf("../Lib.csproj"))))
     }
 
     @Test

@@ -108,8 +108,70 @@ class CsPluginTest : E2eTest() {
         awaitTextContains("Process finished with exit code 0")
     }
 
+    /**
+     * A project that references another builds it first and runs against it. The second project is written
+     * by a program run in the first, since only files the app created are readable to it.
+     */
+    @Test
+    fun referencedProjectIsBuiltAndUsed() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsRef")
+        createProject("C# Console App", name)
+        val dir = projectDir(name)
+        val project = shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") }
+            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+        readDeviceFile("$dir/Program.cs")
+        writeDeviceFile("$dir/Program.cs", LIBRARY_WRITER)
+        restartAndOpen(name)
+        run("Run $name")
+        awaitTextContains("library written", BUILD_TIMEOUT)
+        awaitTextContains("Process finished with exit code 0")
+
+        val declared = readDeviceFile("$dir/$project")
+        check("</Project>" in declared) { "unexpected project file: $declared" }
+        writeDeviceFile("$dir/$project", declared.replace("</Project>", "$REFERENCE\n</Project>"))
+        writeDeviceFile("$dir/Program.cs", LIBRARY_USER)
+        restartAndOpen(name)
+        run("Run $name")
+        awaitTextContains("library says Hello, e2e", BUILD_TIMEOUT)
+        awaitTextContains("Process finished with exit code 0")
+    }
+
     private companion object {
         const val PLUGIN_ID = "dev.codeassist.csharp"
+
+        const val REFERENCE = """  <ItemGroup>
+    <ProjectReference Include="Lib/Lib.csproj" />
+  </ItemGroup>"""
+
+        /** Writes a class library into `Lib/` under the project it runs in. */
+        val LIBRARY_WRITER = """
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    Directory.CreateDirectory("Lib");
+                    File.WriteAllText("Lib/Lib.csproj",
+                        "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Library</OutputType>" +
+                        "<TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+                    File.WriteAllText("Lib/Greeter.cs",
+                        "namespace Lib { public class Greeter { public string Greet(string name) { return \"Hello, \" + name; } } }");
+                    Console.WriteLine("library written");
+                }
+            }
+        """.trimIndent() + "\n"
+
+        val LIBRARY_USER = """
+            using Lib;
+
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    Console.WriteLine("library says " + new Greeter().Greet("e2e"));
+                }
+            }
+        """.trimIndent() + "\n"
         const val ASSET = "dotnet-plugin.apk"
 
         const val PACKAGE = """  <ItemGroup>

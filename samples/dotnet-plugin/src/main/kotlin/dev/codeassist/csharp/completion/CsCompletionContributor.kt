@@ -5,6 +5,7 @@ import android.util.Log
 import dev.codeassist.csharp.CSharpPlugin
 import dev.codeassist.csharp.project.CsProject
 import dev.codeassist.csharp.project.csproj.Csproj
+import dev.codeassist.csharp.project.csproj.CsprojGraph
 import dev.codeassist.csharp.project.csproj.CsprojInfo
 import dev.codeassist.csharp.util.TAG
 import dev.ide.lang.LanguageId
@@ -199,8 +200,7 @@ internal class CsCompletionContributor(
             ?: return null
         // Null for a module with no `.csproj`: its own sources are all there is to read, as in the editor's check.
         val info = Csproj.load(moduleDir)
-        val candidates = CsProject.sources(moduleDir)
-        val sources = info?.let { Csproj.sources(it, moduleDir, candidates) } ?: candidates
+        val sources = CsprojGraph.sources(moduleDir, info)
         return Loaded(info, symbols.tableFor(info, moduleDir, sources))
     }
 

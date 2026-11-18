@@ -1,6 +1,7 @@
 package dev.codeassist.csharp.project
 
 import dev.codeassist.csharp.project.csproj.Csproj
+import dev.codeassist.csharp.project.csproj.CsprojGraph
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -24,8 +25,7 @@ internal object CsMains {
 
     private fun sourcesOf(dir: Path): List<Path> {
         val project = Csproj.load(dir)
-        val candidates = CsProject.sources(dir)
-        return project?.let { Csproj.sources(it, dir, candidates) } ?: candidates
+        return CsprojGraph.sources(dir, project)
     }
 
     /**

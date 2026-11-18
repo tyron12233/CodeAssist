@@ -83,7 +83,7 @@ internal object CsprojSchema {
 
     val ITEMS: List<Item> = listOf(
         Item("PackageReference", "A NuGet package", listOf("Include", "Version")),
-        Item("ProjectReference", "Another project (not supported yet)", listOf("Include")),
+        Item("ProjectReference", "Another project, built first and compiled against", listOf("Include")),
         Item("Reference", "A DLL", listOf("Include", "HintPath", "Private")),
         Item("Compile", "A source file or a pattern of them", listOf("Include", "Remove", "Exclude")),
         Item("Using", "A using every file gets", listOf("Include", "Remove", "Alias", "Static")),
