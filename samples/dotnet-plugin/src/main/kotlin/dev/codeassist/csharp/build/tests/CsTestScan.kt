@@ -22,7 +22,7 @@ internal object CsTestScan {
     private val TEST_WORDS = listOf("Fact", "Theory", "TestCase", "TestMethod", "DataTestMethod", "Test")
 
     private val ATTRIBUTE = Regex(
-        """\[\s*(?:[\w.]+\s*(?:\([^\[\]]*\))?\s*,\s*)*(?:[\w.]+\.)?(?:Fact|Theory|TestCase|TestMethod|DataTestMethod|Test)(?:Attribute)?\s*(?:\([^\[\]]*\))?\s*(?:,[^\[\]]*)?]""",
+        """\[\s*(?:[\w.]+\s*(?:\([^\[\]]*\))?\s*,\s*)*(?:[\w.]+\.)?(?:Fact|Theory|TestCaseSource|TestCase|TestMethod|DataTestMethod|Test)(?:Attribute)?\s*(?:\([^\[\]]*\))?\s*(?:,[^\[\]]*)?]""",
     )
     private val NAMESPACE = Regex("""\bnamespace\s+([\w.]+)\s*([;{])""")
     private val TYPE = Regex("""\b(?:class|struct|record(?:\s+(?:class|struct))?)\s+(\w+)""")

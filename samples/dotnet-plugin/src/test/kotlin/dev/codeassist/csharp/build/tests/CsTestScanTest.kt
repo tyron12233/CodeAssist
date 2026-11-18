@@ -62,6 +62,11 @@ class CsTestScanTest {
     }
 
     @Test
+    fun `a method whose cases come from a source is a test`() {
+        assertEquals(listOf("T#Doubles"), targets("class T { [TestCaseSource(nameof(Cases))] public void Doubles(int a) { } }"))
+    }
+
+    @Test
     fun `an attribute with arguments and a qualified name is found`() {
         val text = "class T { [Fact(Skip = \"later\")] public void A() { } [Xunit.Fact] public void B() { } [FactAttribute] void C() { } }"
 

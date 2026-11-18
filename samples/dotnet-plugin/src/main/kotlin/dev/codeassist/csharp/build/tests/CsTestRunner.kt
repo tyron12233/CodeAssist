@@ -21,9 +21,9 @@ import java.nio.file.Path
  * What it runs: xUnit `[Fact]` and `[Theory]` with `[InlineData]`; NUnit `[Test]` and `[TestCase]` with
  * `[SetUp]`, `[TearDown]`, `[OneTimeSetUp]` and `[OneTimeTearDown]`; MSTest `[TestMethod]` with `[DataRow]`,
  * `[TestInitialize]` and `[TestCleanup]`; async tests; a skip or ignore reason; `IDisposable` and
- * `IAsyncLifetime` on the test class. What it reports as skipped, saying why: a test class that needs
- * constructor arguments (a fixture, `ITestOutputHelper`), and a theory whose data comes from a member or a
- * class.
+ * `IAsyncLifetime` on the test class; xUnit class fixtures and `ITestOutputHelper`; data from a member or a
+ * class (`[MemberData]`, `[ClassData]`, `[TestCaseSource]`, `[DynamicData]`). What it reports as skipped,
+ * saying why: a test class whose constructor asks for anything else, such as a collection fixture.
  *
  * A suite is the test class's full name. A target is a suite, `suite#Method` for every case of a method, or
  * `suite#Method(arguments)` for one case, which is what a re-run from the Tests tab sends back.
@@ -77,6 +77,24 @@ using System.Runtime.Loader;
 using System.Text;
 using System.Threading.Tasks;
 
+// xUnit's ITestOutputHelper, made at run time so that no xUnit type is needed to compile this: what a test
+// writes to it goes to the console, where the run's output is shown.
+public class OutputHelper : DispatchProxy
+{
+    protected override object Invoke(MethodInfo method, object[] arguments)
+    {
+        if (method.Name == "WriteLine" || method.Name == "Write")
+        {
+            string text = arguments.Length > 0 ? arguments[0] as string ?? "" : "";
+            object[] values = arguments.Length > 1 ? arguments[1] as object[] : null;
+            if (values != null && values.Length > 0) text = string.Format(text, values);
+            if (method.Name == "WriteLine") Console.Out.WriteLine(text); else Console.Out.Write(text);
+            return null;
+        }
+        return method.ReturnType == typeof(string) ? "" : null;
+    }
+}
+
 sealed class Case
 {
     public Type Type;
@@ -91,7 +109,7 @@ static class TestRunner
 {
     const string Mark = "\u0001ca-test\u0002";
 
-    static readonly string[] TestAttributes = { "FactAttribute", "TheoryAttribute", "TestAttribute", "TestCaseAttribute", "TestMethodAttribute", "DataTestMethodAttribute" };
+    static readonly string[] TestAttributes = { "FactAttribute", "TheoryAttribute", "TestAttribute", "TestCaseAttribute", "TestCaseSourceAttribute", "TestMethodAttribute", "DataTestMethodAttribute" };
     static readonly string[] RowAttributes = { "InlineDataAttribute", "TestCaseAttribute", "DataRowAttribute" };
     static readonly string[] DataAttributes = { "MemberDataAttribute", "ClassDataAttribute", "TestCaseSourceAttribute", "DynamicDataAttribute" };
 
@@ -151,22 +169,23 @@ static class TestRunner
                 if (!attributes.Any(a => TestAttributes.Contains(a.AttributeType.Name))) continue;
 
                 string skip = classSkip ?? SkipReason(attributes);
-                var rows = attributes.Where(a => RowAttributes.Contains(a.AttributeType.Name)).ToList();
+                var rows = attributes.Where(a => RowAttributes.Contains(a.AttributeType.Name))
+                    .Select(a => Values(a.ConstructorArguments)).ToList();
+                // Data named by the attribute and held in a member or a class is read here, once, like the rows.
+                foreach (CustomAttributeData source in attributes.Where(a => DataAttributes.Contains(a.AttributeType.Name)))
+                {
+                    if (skip != null) break;
+                    try { rows.AddRange(Supplied(type, source)); }
+                    catch (Exception e) { skip = "Its data could not be read: " + Unwrap(e).Message; }
+                }
                 if (rows.Count == 0)
                 {
-                    bool needsData = method.GetParameters().Length > 0;
-                    if (needsData && skip == null)
-                    {
-                        skip = attributes.Any(a => DataAttributes.Contains(a.AttributeType.Name))
-                            ? "Its data comes from a member or a class, which this runner does not read."
-                            : "It takes arguments and no data is given for them.";
-                    }
+                    if (method.GetParameters().Length > 0 && skip == null) skip = "It takes arguments and no data is given for them.";
                     yield return new Case { Type = type, Method = method, Arguments = new object[0], Suite = suite, Name = method.Name, Skip = skip };
                     continue;
                 }
-                foreach (CustomAttributeData row in rows)
+                foreach (object[] values in rows)
                 {
-                    object[] values = Values(row.ConstructorArguments);
                     yield return new Case
                     {
                         Type = type, Method = method, Arguments = values, Suite = suite,
@@ -194,6 +213,61 @@ static class TestRunner
     static object Plain(object value)
     {
         return value is CustomAttributeTypedArgument ? ((CustomAttributeTypedArgument)value).Value : value;
+    }
+
+    // The rows a data attribute points at: a static member of the test class, or of the type it names, or an
+    // instance of a class that is itself the list.
+    static List<object[]> Supplied(Type testClass, CustomAttributeData attribute)
+    {
+        Type owner = testClass;
+        string member = null;
+        foreach (CustomAttributeTypedArgument argument in attribute.ConstructorArguments)
+        {
+            if (argument.Value is Type) owner = (Type)argument.Value;
+            else if (argument.Value is string && member == null) member = (string)argument.Value;
+        }
+        foreach (CustomAttributeNamedArgument named in attribute.NamedArguments)
+            if (named.TypedValue.Value is Type) owner = (Type)named.TypedValue.Value;
+
+        object data;
+        if (attribute.AttributeType.Name == "ClassDataAttribute") data = Activator.CreateInstance(owner, true);
+        else
+        {
+            if (member == null) throw new InvalidOperationException("the attribute names no member");
+            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+            PropertyInfo property = owner.GetProperty(member, flags);
+            FieldInfo field = owner.GetField(member, flags);
+            MethodInfo method = owner.GetMethod(member, flags, null, Type.EmptyTypes, null);
+            if (property != null) data = property.GetValue(null);
+            else if (field != null) data = field.GetValue(null);
+            else if (method != null) data = method.Invoke(null, null);
+            else throw new InvalidOperationException(owner.Name + " has no static member named " + member);
+        }
+
+        var rows = new List<object[]>();
+        var list = data as System.Collections.IEnumerable;
+        if (list == null) throw new InvalidOperationException("the data is not a list of rows");
+        foreach (object row in list)
+        {
+            object[] values = row as object[];
+            if (values == null && row != null && !(row is string))
+            {
+                // NUnit's TestCaseData, and xUnit's rows in later versions, keep the values in a property.
+                PropertyInfo arguments = row.GetType().GetProperty("Arguments") ?? row.GetType().GetProperty("OriginalArguments");
+                if (arguments != null) values = arguments.GetValue(row) as object[];
+            }
+            if (values == null)
+            {
+                var tuple = row as System.Runtime.CompilerServices.ITuple;
+                if (tuple != null)
+                {
+                    values = new object[tuple.Length];
+                    for (int i = 0; i < tuple.Length; i++) values[i] = tuple[i];
+                }
+            }
+            rows.Add(values ?? new object[] { row });
+        }
+        return rows;
     }
 
     static string Show(object value)
@@ -259,6 +333,25 @@ static class TestRunner
             }
         }
 
+        // xUnit's class fixtures: one object per IClassFixture<T> the class names, shared by its tests.
+        var fixtures = new Dictionary<Type, object>();
+        string unsupplied = null;
+        try
+        {
+            foreach (Type contract in type.GetInterfaces())
+            {
+                if (!contract.IsGenericType || contract.Name != "IClassFixture`1") continue;
+                Type held = contract.GetGenericArguments()[0];
+                if (!fixtures.ContainsKey(held)) fixtures[held] = Activator.CreateInstance(held, true);
+            }
+        }
+        catch (Exception e)
+        {
+            Record("CLASS_FAILED", suite, "", 0, Describe(Unwrap(e)));
+            foreach (Case c in cases) Record("SKIPPED", c.Suite, c.Name, 0, "A fixture of its class could not be made.");
+            return 1;
+        }
+
         int failed = 0;
         foreach (Case c in cases)
         {
@@ -273,11 +366,8 @@ static class TestRunner
             {
                 if (instance == null && !c.Method.IsStatic)
                 {
-                    if (!HasPlainConstructor(type))
-                    {
-                        skipped = "Its class needs constructor arguments (a fixture or an output helper), which this runner does not supply.";
-                    }
-                    else instance = Create(type);
+                    instance = Construct(type, fixtures, out unsupplied);
+                    if (instance == null) skipped = "Its class needs a " + unsupplied + " in its constructor, which this runner does not supply.";
                 }
                 if (skipped == null)
                 {
@@ -328,6 +418,16 @@ static class TestRunner
             else Record("PASSED", c.Suite, c.Name, watch.ElapsedMilliseconds, "");
         }
 
+        foreach (object held in fixtures.Values)
+        {
+            try
+            {
+                IDisposable disposable = held as IDisposable;
+                if (disposable != null) disposable.Dispose();
+            }
+            catch (Exception e) { failed++; Record("CLASS_FAILED", suite, "", 0, Describe(Unwrap(e))); }
+        }
+
         if (fixture != null)
         {
             try
@@ -359,9 +459,26 @@ static class TestRunner
         return null;
     }
 
-    static bool HasPlainConstructor(Type type)
+    // A test object, with what its constructor asks for: nothing, the class's fixtures, or xUnit's output
+    // helper. Null when it asks for anything else, and `unsupplied` then names the type.
+    static object Construct(Type type, Dictionary<Type, object> fixtures, out string unsupplied)
     {
-        return type.GetConstructor(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, Type.EmptyTypes, null) != null;
+        unsupplied = null;
+        var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+        ConstructorInfo chosen = type.GetConstructors(flags).OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
+        if (chosen == null || chosen.GetParameters().Length == 0) return Activator.CreateInstance(type, true);
+
+        ParameterInfo[] parameters = chosen.GetParameters();
+        var arguments = new object[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Type wanted = parameters[i].ParameterType;
+            object held;
+            if (fixtures.TryGetValue(wanted, out held)) arguments[i] = held;
+            else if (wanted.IsInterface && wanted.Name == "ITestOutputHelper") arguments[i] = DispatchProxy.Create(wanted, typeof(OutputHelper));
+            else { unsupplied = wanted.Name; return null; }
+        }
+        return chosen.Invoke(arguments);
     }
 
     static object Create(Type type)

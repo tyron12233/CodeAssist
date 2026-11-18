@@ -17,6 +17,7 @@ import dev.ide.build.TaskName
 import dev.ide.model.Module
 import dev.ide.model.Project
 import dev.ide.platform.log.Logger
+import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
@@ -79,8 +80,27 @@ internal class CsRunTaskProvider(
             }
         }
 
+        // A module may hold several projects. The one above is the module's own; each other one that builds a
+        // program gets a row of its own, named by its project file.
+        for (other in otherPrograms(dir)) {
+            rows += RunTaskSpec(
+                CsRunIds.taskId(module.name, PROJECT_MARK + dir.relativize(other).toString().replace('\\', '/')),
+                "Run ${other.fileName.toString().removeSuffix(".csproj")}",
+                "run",
+            )
+        }
+
         restore?.let { rows += it }
         return rows
+    }
+
+    /** The project files under [dir], other than the module's own, that build a program and not a library. */
+    private fun otherPrograms(dir: Path): List<Path> {
+        val own = Csproj.find(dir)
+        return CsProject.files(dir, PROJECT_DEPTH, skipHidden = true)
+            .filter { it.fileName.toString().endsWith(".csproj") && it != own }
+            .filter { file -> runCatching { !Csproj.read(file).isLibrary }.getOrDefault(false) }
+            .sorted()
     }
 
     override fun actionFor(
@@ -110,6 +130,25 @@ internal class CsRunTaskProvider(
         // C# execution or library build
         val id = CsRunIds.parse(spec.id) ?: return null
         if (id.module != module.name) return null
+
+        // A row for another project of the module: built and run from that project's own folder.
+        id.mainClass?.takeIf { it.startsWith(PROJECT_MARK) }?.let { marked ->
+            val file = dir.resolve(marked.removePrefix(PROJECT_MARK)).normalize()
+            if (!file.startsWith(dir) || !java.nio.file.Files.isRegularFile(file)) return null
+            val projectDir = file.parent
+            val info = runCatching { Csproj.read(file) }.getOrNull() ?: return null
+            val name = file.fileName.toString().removeSuffix(".csproj")
+            val dll = Csproj.outputDir(projectDir, info).resolve(Csproj.assemblyName(info, name) + ".dll")
+            val console = RunConsole(name)
+            val tasks = listOf(
+                CsCompileTask(
+                    TaskName(":${module.name}:compileCs:$name"), projectDir, dll, sdk, console,
+                    CsMains.compilerMain(projectDir, null),
+                ),
+                CsRunProgramTask(TaskName(":${module.name}:runCs:$name"), projectDir, dll, name, sdk, console),
+            )
+            return RunAction("> Run $name", LinearGraph(tasks)).also { it.console = console }
+        }
 
         val info = Csproj.load(dir)
         val assembly = Csproj.assemblyName(info, module.name)
@@ -157,5 +196,11 @@ internal class CsRunTaskProvider(
     companion object {
         /** Prefix shared by this plugin's Run entry IDs. */
         const val RUN_PREFIX = CsRunIds.PREFIX
+
+        /** Marks the part of a Run id that names a project file in the module, where a class name would be. */
+        const val PROJECT_MARK = "@"
+
+        /** How far below the module's folder another project is looked for. */
+        const val PROJECT_DEPTH = 4
     }
 }
