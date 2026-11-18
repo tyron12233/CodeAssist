@@ -1,6 +1,7 @@
 package dev.ide.android.e2e
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
 import java.io.File
 import org.junit.After
 import org.junit.Assume.assumeTrue
@@ -54,9 +55,78 @@ class CsPluginTest : E2eTest() {
         awaitTextContains("Process finished with exit code 0")
     }
 
+    /**
+     * Completion and errors in the editor come from the compiler: a member of a local variable's type, which
+     * only a semantic model knows, and the error for the statement left half typed.
+     */
+    @Test
+    fun editorCompletesAndReportsErrors() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsEdit")
+        createProject("C# Console App", name)
+        val program = "${projectDir(name)}/Program.cs"
+        readDeviceFile(program)
+        writeDeviceFile(program, "string text = \"abc\";\nConsole.WriteLine(text.Length);\n")
+        restartAndOpen(name)
+
+        openFile("Program")
+        // The code area is a canvas with its own input connection (no accessibility text): focus it, go to
+        // the end of the last statement, and type through injected key events.
+        device.click(device.displayWidth / 2, device.displayHeight * 2 / 5)
+        Thread.sleep(500)
+        repeat(3) { shell("input keyevent KEYCODE_PAGE_DOWN") }
+        shell("input keyevent KEYCODE_DPAD_UP")
+        shell("input keyevent KEYCODE_MOVE_END")
+        shell("input keyevent KEYCODE_ENTER")
+        // Plain lowercase only: `input text` mangles shifted characters and brackets.
+        shell("input text text.toupperi")
+        // The first request starts the plugin's server and unpacks .NET, so it gets a build's patience.
+        await(By.textStartsWith("ToUpperInvariant"), BUILD_TIMEOUT)
+        // The half-typed call is an error, and the editor shows the compiler's own message for it.
+        awaitTextContains("does not contain a definition for 'toupperi'", 60_000)
+    }
+
+    /** A package named in the project file is fetched from nuget.org, compiled against, and found at run time. */
+    @Test
+    fun nugetPackageIsRestoredAndUsed() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsPkg")
+        createProject("C# Console App", name)
+        val dir = projectDir(name)
+        val project = shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") }
+            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+        val declared = readDeviceFile("$dir/$project")
+        check("</Project>" in declared) { "unexpected project file: $declared" }
+        writeDeviceFile("$dir/$project", declared.replace("</Project>", "$PACKAGE\n</Project>"))
+        readDeviceFile("$dir/Program.cs")
+        writeDeviceFile("$dir/Program.cs", PACKAGE_PROGRAM)
+        restartAndOpen(name)
+
+        run("Run $name")
+        awaitTextContains("Process finished with exit code", BUILD_TIMEOUT)
+        awaitTextContains("json [1,2,3]")
+        awaitTextContains("Process finished with exit code 0")
+    }
+
     private companion object {
         const val PLUGIN_ID = "dev.codeassist.csharp"
         const val ASSET = "dotnet-plugin.apk"
+
+        const val PACKAGE = """  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>"""
+
+        val PACKAGE_PROGRAM = """
+            using Newtonsoft.Json;
+
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    Console.WriteLine("json " + JsonConvert.SerializeObject(new int[] { 1, 2, 3 }));
+                }
+            }
+        """.trimIndent() + "\n"
 
         val PROGRAM = """
             using System.Linq;
