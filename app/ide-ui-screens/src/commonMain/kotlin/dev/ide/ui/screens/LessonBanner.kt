@@ -86,6 +86,7 @@ import dev.ide.ui.icons.CaIcons
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * The lesson task banner over the full editor: lessons with exercises run in a real project, and this is the
@@ -610,7 +611,7 @@ private fun LessonMenu(
 private fun MenuSection(title: String) {
     Text(
         title.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.eyebrow,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp),

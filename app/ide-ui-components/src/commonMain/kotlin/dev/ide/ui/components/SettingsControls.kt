@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -79,6 +80,7 @@ import dev.ide.ui.theme.Motion
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * Reusable controls for the Settings screen — the generic renderer composes pages out of these, so a
@@ -90,12 +92,13 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun SettingsCard(title: String?, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
-        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        // The same filled tonal group the settings hub lists its pages in, so a page reads as part of it.
+        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(Ca.radius.lg))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         if (title != null) {
-            Text(title.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+            Text(title.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.eyebrow, fontWeight = FontWeight.SemiBold)
         }
         content()
     }
@@ -105,9 +108,9 @@ fun SettingsCard(title: String?, modifier: Modifier = Modifier, content: @Compos
 @Composable
 private fun RowScopeLabel(title: String, description: String?, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
         if (description != null) {
-            Text(description, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -121,17 +124,10 @@ fun SettingsToggleRow(title: String, description: String?, value: Boolean, onTog
     }
 }
 
-/** An iOS-style accent switch. */
+/** The switch every settings row and form uses. */
 @Composable
 fun CaSwitch(on: Boolean, onToggle: (Boolean) -> Unit) {
-    val bg by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "switchBg")
-    Box(
-        Modifier.size(width = 44.dp, height = 26.dp).background(bg, RoundedCornerShape(Ca.radius.pill))
-            .clickable(remember { MutableInteractionSource() }, null) { onToggle(!on) }.padding(3.dp),
-        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
-    ) {
-        Box(Modifier.size(20.dp).background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(Ca.radius.pill)))
-    }
+    Switch(checked = on, onCheckedChange = onToggle)
 }
 
 /** A one-of-N choice rendered as a horizontally-scrolling row of accent chips. */

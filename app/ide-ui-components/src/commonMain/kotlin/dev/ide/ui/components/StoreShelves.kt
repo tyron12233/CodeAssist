@@ -52,6 +52,7 @@ import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
 import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * Collections, the personalized poster row, and the publisher spotlight.
@@ -212,7 +213,7 @@ fun PosterCard(
                     modifier = Modifier.align(Alignment.TopStart).padding(8.dp).height(22.dp),
                 ) {
                     Box(Modifier.padding(horizontal = 7.dp), contentAlignment = Alignment.Center) {
-                        Text(lang.uppercase(), style = MaterialTheme.typography.labelSmall)
+                        Text(lang.uppercase(), style = MaterialTheme.typography.eyebrow)
                     }
                 }
             }

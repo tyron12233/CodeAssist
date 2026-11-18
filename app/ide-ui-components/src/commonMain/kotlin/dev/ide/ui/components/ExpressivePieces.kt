@@ -44,6 +44,7 @@ import dev.ide.ui.theme.CaShapes
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import dev.ide.ui.theme.tonalPair
+import dev.ide.ui.theme.eyebrow
 
 /**
  * The small shared vocabulary the Home / Explore / Learn redesign is assembled from.
@@ -67,7 +68,7 @@ fun Eyebrow(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) = Text(
     text = text.uppercase(),
-    style = MaterialTheme.typography.labelSmall,
+    style = MaterialTheme.typography.eyebrow,
     color = color,
     modifier = modifier,
 )

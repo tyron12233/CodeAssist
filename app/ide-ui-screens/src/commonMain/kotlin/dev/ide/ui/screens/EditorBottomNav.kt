@@ -99,7 +99,7 @@ private fun BottomNavItem(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Box {
-            IconButtonCa(icon, label, onClick, Modifier.busyRing(busy).clearAndSetSemantics { }, active = active, iconSize = 22, boxSize = 40)
+            IconButtonCa(icon, label, onClick, Modifier.busyRing(busy).clearAndSetSemantics { }, active = active, iconSize = 22, boxSize = 36)
             if (badge > 0) dev.ide.ui.components.CountBadge(badge, Modifier.align(Alignment.TopEnd))
         }
         Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, fontSize = 10.5f.sp)

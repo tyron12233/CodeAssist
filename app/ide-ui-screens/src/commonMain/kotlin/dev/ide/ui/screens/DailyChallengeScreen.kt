@@ -84,6 +84,7 @@ import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * The Challenges tab.
@@ -331,7 +332,7 @@ internal fun difficultyLabel(difficulty: String): String = when (difficulty.lowe
 private fun DifficultyPill(difficulty: String, onContainer: Color) {
     Text(
         difficultyLabel(difficulty).uppercase(),
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.eyebrow,
         fontWeight = FontWeight.Bold,
         color = onContainer,
         modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill))

@@ -555,7 +555,7 @@ private fun HomeHeader(
         // the equivalent control one tab away.
         SquareToneButton(
             glyph = CaSymbols.accountCircle,
-            contentDescription = stringResource(Res.string.home_seg_projects),
+            contentDescription = stringResource(Res.string.home_account),
             onClick = onOpenAccount,
             shape = CircleShape,
             size = 44.dp,

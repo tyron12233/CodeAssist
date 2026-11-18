@@ -207,6 +207,7 @@ import dev.ide.ui.generated.resources.save
 import dev.ide.ui.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
+import dev.ide.ui.theme.eyebrow
 
 @Composable
 private fun DepTab.label(): String = when (this) {
@@ -1373,7 +1374,7 @@ private fun EditDependencySheet(
 @Composable
 private fun SheetSection(label: String) {
     Spacer(Modifier.height(14.dp))
-    Text(label.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+    Text(label.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.eyebrow, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(6.dp))
 }
 

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.components.CaDropdownMenu
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.theme.eyebrow
 
 /**
  * The controls the version-control surfaces are built from.
@@ -193,7 +194,7 @@ internal class VcsMenuScope(private val dismiss: () -> Unit) {
     fun heading(text: String) {
         Text(
             text.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.eyebrow,
             color = MaterialTheme.colorScheme.outline,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 2.dp),

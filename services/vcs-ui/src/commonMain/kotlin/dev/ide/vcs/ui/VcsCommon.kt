@@ -58,6 +58,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_status_renamed
 import dev.ide.vcs.ui.generated.resources.vcs_status_untracked
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * Small shared pieces every version-control surface uses: how a file status is coloured and labelled, the
@@ -130,7 +131,7 @@ internal fun SectionHeader(
     ) {
         Text(
             title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.eyebrow,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
         )

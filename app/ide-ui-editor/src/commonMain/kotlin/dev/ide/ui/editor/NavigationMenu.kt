@@ -65,6 +65,7 @@ import dev.ide.ui.generated.resources.nav_usages
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * The editor context menu's state: the action [Menu] (only the navigation actions applicable at the caret,
@@ -149,7 +150,7 @@ fun NavMenu(
 @Composable
 private fun SectionHeader(text: String) {
     Text(
-        text.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
+        text.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.eyebrow, fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 2.dp),
     )
 }

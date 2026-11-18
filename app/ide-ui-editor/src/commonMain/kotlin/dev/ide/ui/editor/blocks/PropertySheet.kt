@@ -42,6 +42,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * What a call can still take: its optional parameters (each with its type), picked one at a time to become a
@@ -113,7 +114,7 @@ internal fun PropertySheet(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+    Text(text.uppercase(), style = MaterialTheme.typography.eyebrow, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
 }
 
 /** The quick list behind a scoped body's `+`: what the lambda's [receiver] adds; [functions] is null while loading. */

@@ -18,8 +18,9 @@ import androidx.compose.ui.unit.sp
  *   projects", "Explore", "Learn") get their presence from size and tracking, and the weight contrast
  *   against the medium-weight titles below them is the point.
  *
- * `labelSmall` is deliberately **bold with wide tracking**: it is the all-caps eyebrow label ("ABOUT",
- * "SORT BY", "CONTINUE"), which needs the extra letter spacing to stay legible in caps at 12 sp.
+ * `labelSmall` is the small sentence-case label: captions, row descriptions, badges. The all-caps eyebrow
+ * ("ABOUT", "SORT BY", "CONTINUE") is its own style, [eyebrow], because what caps need at 12 sp (bold, wide
+ * tracking) makes a sentence heavy and hard to read.
  *
  * Fed to [androidx.compose.material3.MaterialTheme], so every native M3 component picks this up. Sizes
  * are in sp and therefore scale with the user's font scale; nothing in the redesign fixes a text
@@ -40,6 +41,9 @@ fun expressiveTypography(ui: FontFamily): Typography = Typography(
     bodySmall = TextStyle(fontFamily = ui, fontWeight = FontWeight.Normal, fontSize = 12.5.sp, lineHeight = 18.sp),
     labelLarge = TextStyle(fontFamily = ui, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = 0.1.sp),
     labelMedium = TextStyle(fontFamily = ui, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = 0.1.sp),
-    // The all-caps eyebrow. Bold + wide tracking, because caps at 12 sp need the separation.
-    labelSmall = TextStyle(fontFamily = ui, fontWeight = FontWeight.Bold, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.7.sp),
+    labelSmall = TextStyle(fontFamily = ui, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.1.sp),
 )
+
+/** The all-caps eyebrow label. Bold with wide tracking, because caps at 12 sp need the separation. */
+val Typography.eyebrow: TextStyle
+    get() = labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.7.sp)

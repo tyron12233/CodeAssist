@@ -31,6 +31,7 @@ import dev.ide.ui.generated.resources.submit_suggestion
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.theme.eyebrow
 
 /**
  * Single source of truth for the Beta program: the version label shown in-app and the destination the
@@ -131,7 +132,7 @@ fun BetaBadge(modifier: Modifier = Modifier) {
         Text(
             BetaInfo.LABEL.uppercase(),
             color = Ide.colors.warning,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.eyebrow,
             fontWeight = FontWeight.Bold
         )
     }

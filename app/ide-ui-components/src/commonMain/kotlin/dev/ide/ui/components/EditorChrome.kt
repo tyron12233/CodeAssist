@@ -996,7 +996,9 @@ private fun RunControl(
                         CaMenuItem(
                             label = task.label,
                             onClick = { open = false; onPickTask(task) },
-                            supporting = task.group,
+                            // The group is a lowercase task category ("run", "build"). Under "Run app" it only
+                            // repeats the label's first word, so it shows when it says something the label does not.
+                            supporting = task.group.takeUnless { task.label.startsWith(it, ignoreCase = true) },
                             selected = task.id == selected?.id,
                             // Accented rather than the usual row tint: the glyph is what says "this runs".
                             leading = {
