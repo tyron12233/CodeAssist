@@ -51,8 +51,12 @@
          heap than a normal app. largeHeap raises the per-app cap (device-dependent, often 2-4x) — the single
          biggest lever against OOM during on-device builds; the dexer also bounds its parallelism to the heap
          (see DexConcurrency). -->
+    <!-- hasFragileUserData: the uninstall dialog offers "Keep app data" (Android 10 and later). What this app
+         holds is slow to get back: projects, and gigabytes of downloaded SDKs, platforms and libraries. With
+         the box ticked, a reinstall finds all of it where it was. -->
     <application
             android:allowBackup="true"
+            android:hasFragileUserData="true"
             android:fullBackupContent="@xml/backup_rules"
             android:dataExtractionRules="@xml/data_extraction_rules"
             android:largeHeap="true"
