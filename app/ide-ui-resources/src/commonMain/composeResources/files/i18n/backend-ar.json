@@ -1557,6 +1557,7 @@
  "Java Console App": "تطبيق Java لسطر الأوامر",
  "A runnable command-line Java application with a main() entry point.": "تطبيق Java قابل للتشغيل من سطر الأوامر مع نقطة دخول main().",
  "Java Library": "مكتبة Java",
+ "Java Module": "وحدة Java",
  "A reusable Java library module with no entry point.": "وحدة مكتبة Java قابلة لإعادة الاستخدام دون نقطة دخول.",
  "Swing Desktop App": "تطبيق Swing لسطح المكتب",
  "A windowed Java application: a frame with a label and a button that responds to clicks.": "تطبيق Java بنوافذ: إطار فيه تسمية وزر يستجيب للنقرات.",

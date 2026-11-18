@@ -64,7 +64,7 @@ class IosModuleModelTest {
         val modules = backend.modules.configurableModules()
 
         assertEquals(listOf("app"), modules.map { it.name }, "the template's module, not the project name")
-        assertEquals("Java Library", modules.single().typeDisplay)
+        assertEquals("Java Module", modules.single().typeDisplay)
     }
 
     @Test

@@ -19,7 +19,8 @@ import dev.ide.model.template.ProjectScaffold
  */
 object JavaLibModuleType : ModuleType {
     override val id = "java-lib"
-    override val displayName = "Java Library"
+    // Every plain JVM module has this type, a console app as much as a library, so the name says neither.
+    override val displayName = "Java Module"
     override fun defaultSourceSets(): List<SourceSetTemplate> = emptyList()
     override fun defaultFacets(): List<FacetTemplate> = emptyList()
     override fun supportedBuildSystems(): Set<BuildSystemId> = setOf(BuildSystemId.NATIVE)

@@ -8,7 +8,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.hoverable
@@ -114,7 +113,8 @@ fun CreateProjectScreen(
             )
         } else {
             Column(
-                Modifier.widthIn(max = 640.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
+                // The gallery's own gutter and top inset, so the header does not jump between the two steps.
+                Modifier.widthIn(max = 640.dp).fillMaxSize().padding(horizontal = 16.dp).padding(top = 16.dp, bottom = 24.dp),
             ) {
                 Configure(
                     backend = backend,
@@ -260,8 +260,8 @@ private fun TemplateCard(template: UiProjectTemplate, onClick: () -> Unit) {
             .fillMaxWidth()
             .pressScale(interaction)
             .clip(shape)
-            .background(if (hovered) c.surfaceContainerHigh else c.surface)
-            .border(1.dp, if (hovered) c.outline else c.outlineVariant, shape)
+            // A filled tonal card, as on Learn and in Settings, rather than an outline on the page colour.
+            .background(if (hovered) c.surfaceContainerHigh else c.surfaceContainer)
             .hoverable(interaction)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
@@ -503,7 +503,7 @@ private fun Chip(label: String, count: Int?, selected: Boolean, onClick: () -> U
 /** Render a template's icon id through the shared [TreeIcons] registry (same icons as the file tree). */
 @Composable
 private fun TemplateGlyph(iconId: String) {
-    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(Ca.radius.md)), contentAlignment = Alignment.Center) {
         when (val ic = TreeIcons.resolve(iconId)) {
             is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(24.dp), tint = resolveTint(ic.tint))
             is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(24.dp), tint = resolveTint(ic.tint))
