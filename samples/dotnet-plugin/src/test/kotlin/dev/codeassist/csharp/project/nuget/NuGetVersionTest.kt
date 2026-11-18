@@ -91,6 +91,13 @@ class NuGetVersionTest {
     }
 
     @Test
+    fun `an older net standard is usable when nothing newer is offered`() {
+        assertEquals("netstandard1.1", NuGetFrameworks.best(listOf("net452", "netstandard1.1")))
+        assertEquals("netstandard2.0", NuGetFrameworks.best(listOf("netstandard1.3", "netstandard2.0")))
+        assertEquals("netstandard1.6", NuGetFrameworks.best(listOf("netstandard1.0", "netstandard1.6")))
+    }
+
+    @Test
     fun `platform and framework folders are not usable`() {
         assertNull(NuGetFrameworks.best(listOf("net8.0-android", "net472", "net45", "monoandroid10.0")))
         assertNull(NuGetFrameworks.best(emptyList()))

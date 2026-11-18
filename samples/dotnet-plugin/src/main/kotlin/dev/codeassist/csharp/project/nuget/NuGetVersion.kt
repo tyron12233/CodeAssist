@@ -164,7 +164,18 @@ internal object NuGetFrameworks {
         "net5.0",
         "netcoreapp3.1",
         "netcoreapp3.0",
+        "netcoreapp2.2",
+        "netcoreapp2.1",
+        "netcoreapp2.0",
         "netstandard2.1",
         "netstandard2.0",
+        // Every .NET Standard 1.x library runs on .NET too, and older packages ship nothing newer.
+        "netstandard1.6",
+        "netstandard1.5",
+        "netstandard1.4",
+        "netstandard1.3",
+        "netstandard1.2",
+        "netstandard1.1",
+        "netstandard1.0",
     )
 }
