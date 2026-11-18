@@ -64,8 +64,23 @@ val stageHelloPlugin = tasks.register<Copy>("stageHelloPluginApk") {
     }
     into(layout.buildDirectory.dir("plugin-asset"))
 }
+
+// CsPluginTest installs the C# plugin the same way. Its .NET toolchain is built outside Gradle
+// (tools/dotnet-toolchain), so without one there is nothing worth installing and the test skips itself.
+val dotnetToolchainBuilt = rootProject.file("tools/dotnet-toolchain/build/out/arm64-v8a/assets/dotnet-sdk.zip").isFile
+val stageDotnetPlugin = tasks.register<Copy>("stageDotnetPluginApk") {
+    onlyIf { dotnetToolchainBuilt }
+    if (dotnetToolchainBuilt) dependsOn(":samples:dotnet-plugin:assembleDebug")
+    from(project(":samples:dotnet-plugin").layout.buildDirectory.dir("outputs/apk/debug")) {
+        include("*.apk")
+        rename { "dotnet-plugin.apk" }
+    }
+    into(layout.buildDirectory.dir("plugin-asset"))
+}
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("plugin-asset").get().asFile)
-tasks.matching { it.name.matches(Regex("merge\\w*Assets")) }.configureEach { dependsOn(stageHelloPlugin) }
+tasks.matching { it.name.matches(Regex("merge\\w*Assets")) }.configureEach { dependsOn(stageHelloPlugin, stageDotnetPlugin) }
+// The plugin APK is one large stored archive; compressing it again into the test APK only costs time.
+android.androidResources.noCompress += "apk"
 
 dependencies {
     implementation(libs.androidx.test.runner)

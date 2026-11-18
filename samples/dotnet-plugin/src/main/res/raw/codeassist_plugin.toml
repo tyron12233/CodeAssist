@@ -1,0 +1,23 @@
+[plugin]
+id = "dev.codeassist.csharp"
+name = "C# (.NET)"
+version = "1.1.0"
+apiVersion = 4
+description = "Compiles and runs C# on the device with a bundled .NET 10 runtime and the Roslyn compiler: errors and warnings as you type, completion and parameter help from the compiler, quick fixes for missing and unused usings, Run for console programs, .csproj support with NuGet package restore, and Console App and Class Library templates."
+entryPoints = ["dev.codeassist.csharp.CSharpPlugin"]
+uiEntryPoints = ["dev.codeassist.csharp.ui.CsUiPlugin"]
+capabilities = [
+    "ui.editorLanguage",
+    "ui.editorDecoration",
+    "ui.newFileTemplate",
+    "lang.backend",
+    "build.task",
+    "build.runTask",
+    "model.moduleType",
+    "fs.read",
+    "fs.write",
+    "net",
+]
+# Built against plugin API 4, which IDE 3.21.0 introduced. Later SPI additions (the plugin's private data
+# directory, workspace reanalysis) are used when present and fall back without them.
+minHostVersion = "3.21.0"

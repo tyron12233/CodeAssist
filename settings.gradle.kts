@@ -216,6 +216,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":samples:ndk-plugin",
         ":samples:lsp-plugin",
         ":samples:dart-plugin",
+        ":samples:dotnet-plugin",
     )
 }
 
