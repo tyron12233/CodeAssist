@@ -230,6 +230,29 @@ class CsPluginTest : E2eTest() {
         awaitTextContains("greeter.cs", 60_000)
     }
 
+    /**
+     * A module that holds a second program gets a Run row for it, which builds and runs that project from its
+     * own folder. The second project is written by a program run in the first.
+     */
+    @Test
+    fun secondProgramInAModuleHasItsOwnRunRow() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsTwo")
+        createProject("C# Console App", name)
+        val dir = projectDir(name)
+        readDeviceFile("$dir/Program.cs")
+        writeDeviceFile("$dir/Program.cs", PROGRAM_WRITER)
+        restartAndOpen(name)
+        run("Run $name")
+        awaitTextContains("tool written", BUILD_TIMEOUT)
+        awaitTextContains("Process finished with exit code 0")
+
+        restartAndOpen(name)
+        run("Run Tool")
+        awaitTextContains("the tool ran in Tool", BUILD_TIMEOUT)
+        awaitTextContains("Process finished with exit code 0")
+    }
+
     /** The name of the project file in [dir]. Files the app has just created can take a moment to show to the shell. */
     private fun projectFileIn(dir: String): String =
         poll(60_000, 1_000) { shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") } }
@@ -237,6 +260,23 @@ class CsPluginTest : E2eTest() {
 
     private companion object {
         const val PLUGIN_ID = "dev.codeassist.csharp"
+
+        /** Writes a second program, a project of its own, into `Tool/` under the project it runs in. */
+        val PROGRAM_WRITER = """
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    Directory.CreateDirectory("Tool");
+                    File.WriteAllText("Tool/Tool.csproj",
+                        "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Exe</OutputType>" +
+                        "<TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>");
+                    File.WriteAllText("Tool/Program.cs",
+                        "class Tool { static void Main() { Console.WriteLine(\"the tool ran in \" + new DirectoryInfo(Directory.GetCurrentDirectory()).Name); } }");
+                    Console.WriteLine("tool written");
+                }
+            }
+        """.trimIndent() + "\n"
 
         /** Writes a second source file beside the program it runs in. */
         val TYPE_WRITER = """
