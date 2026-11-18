@@ -134,9 +134,9 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="export_format_gradle">Gradle project</string>
     <string name="export_format_gradle_desc">A .zip holding your sources plus generated Gradle build files, for Android Studio or a gradle build.</string>
     <string name="export_gradle_title">What gets generated</string>
-    <string name="export_gradle_contents">settings.gradle.kts, a build.gradle.kts per module, gradle.properties, and the Gradle wrapper settings, all written from your project: modules, dependencies, SDK levels, build types, flavors and build features.</string>
+    <string name="export_gradle_contents">settings.gradle.kts, a build.gradle.kts per module, gradle.properties and the Gradle wrapper, all written from your project: modules, dependencies, SDK levels, build types, flavors and build features.</string>
     <string name="export_gradle_caveat">Best effort. The build files are generated from the project model rather than from a build that ran, so read them before you rely on them. Dependencies are declared as Maven coordinates and Gradle downloads them on the first sync, so that sync needs a connection.</string>
-    <string name="export_gradle_wrapper_note">The gradlew scripts are not included: Android Studio adds them on the first sync, or run gradle wrapper once.</string>
+    <string name="export_gradle_wrapper_note">A library module also gets a Maven publication and a jitpack.yml, so the export can be published as it is, JitPack included.</string>
     <string name="export_success_subtitle_gradle">Your Gradle project is ready.</string>
     <string name="export_notes_title">Worth checking</string>
     <string name="export_notes_desc">These are also in GRADLE-EXPORT.md inside the archive.</string>

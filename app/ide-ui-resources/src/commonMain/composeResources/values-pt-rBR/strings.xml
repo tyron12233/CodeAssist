@@ -1611,9 +1611,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="export_format_gradle">Projeto Gradle</string>
     <string name="export_format_gradle_desc">Um .zip com seus fontes e os arquivos de compilação Gradle gerados, para o Android Studio ou uma compilação com o gradle.</string>
     <string name="export_gradle_title">O que é gerado</string>
-    <string name="export_gradle_contents">settings.gradle.kts, um build.gradle.kts por módulo, gradle.properties e as configurações do Gradle wrapper, tudo gerado a partir do seu projeto: módulos, dependências, níveis de SDK, tipos de compilação, flavors e recursos de compilação.</string>
+    <string name="export_gradle_contents">settings.gradle.kts, um build.gradle.kts por módulo, gradle.properties e o Gradle wrapper, tudo gerado a partir do seu projeto: módulos, dependências, níveis de SDK, tipos de compilação, flavors e recursos de compilação.</string>
     <string name="export_gradle_caveat">Melhor esforço. Os arquivos de compilação são gerados a partir do modelo do projeto, e não de uma compilação que foi executada, então leia-os antes de confiar neles. As dependências são declaradas como coordenadas Maven e o Gradle as baixa na primeira sincronização, que portanto precisa de conexão.</string>
-    <string name="export_gradle_wrapper_note">Os scripts gradlew não estão incluídos: o Android Studio os adiciona na primeira sincronização, ou execute gradle wrapper uma vez.</string>
+    <string name="export_gradle_wrapper_note">Um módulo de biblioteca também recebe uma publicação Maven e um jitpack.yml, então a exportação pode ser publicada como está, inclusive no JitPack.</string>
     <string name="export_success_subtitle_gradle">Seu projeto Gradle está pronto.</string>
     <string name="export_notes_title">Vale conferir</string>
     <string name="export_notes_desc">Isso também está em GRADLE-EXPORT.md dentro do arquivo compactado.</string>

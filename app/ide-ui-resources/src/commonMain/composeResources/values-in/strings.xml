@@ -1517,9 +1517,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="export_format_gradle">Proyek Gradle</string>
     <string name="export_format_gradle_desc">File .zip berisi sumber Anda dan file build Gradle yang dihasilkan, untuk Android Studio atau build gradle.</string>
     <string name="export_gradle_title">Yang dihasilkan</string>
-    <string name="export_gradle_contents">settings.gradle.kts, satu build.gradle.kts per modul, gradle.properties, dan setelan Gradle wrapper, semuanya ditulis dari proyek Anda: modul, dependensi, level SDK, tipe build, flavor, dan fitur build.</string>
+    <string name="export_gradle_contents">settings.gradle.kts, satu build.gradle.kts per modul, gradle.properties, dan Gradle wrapper, semuanya ditulis dari proyek Anda: modul, dependensi, level SDK, tipe build, flavor, dan fitur build.</string>
     <string name="export_gradle_caveat">Upaya terbaik. File build dihasilkan dari model proyek, bukan dari build yang sudah dijalankan, jadi baca dulu sebelum mengandalkannya. Dependensi dideklarasikan sebagai koordinat Maven dan Gradle mengunduhnya pada sinkronisasi pertama, jadi sinkronisasi itu memerlukan koneksi.</string>
-    <string name="export_gradle_wrapper_note">Skrip gradlew tidak disertakan: Android Studio menambahkannya pada sinkronisasi pertama, atau jalankan gradle wrapper sekali.</string>
+    <string name="export_gradle_wrapper_note">Modul pustaka juga mendapat publikasi Maven dan jitpack.yml, sehingga hasil ekspor bisa langsung dipublikasikan, termasuk lewat JitPack.</string>
     <string name="export_success_subtitle_gradle">Proyek Gradle Anda siap.</string>
     <string name="export_notes_title">Perlu diperiksa</string>
     <string name="export_notes_desc">Catatan ini juga ada di GRADLE-EXPORT.md di dalam arsip.</string>

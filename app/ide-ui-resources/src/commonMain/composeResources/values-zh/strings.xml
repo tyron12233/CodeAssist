@@ -134,9 +134,9 @@
     <string name="export_format_gradle">Gradle 项目</string>
     <string name="export_format_gradle_desc">一个 .zip 文件，包含你的源代码和生成的 Gradle 构建文件，适用于 Android Studio 或 gradle 构建。</string>
     <string name="export_gradle_title">生成的内容</string>
-    <string name="export_gradle_contents"><![CDATA[settings.gradle.kts、每个模块的 build.gradle.kts、gradle.properties 和 Gradle wrapper 设置，全部从你的项目生成：模块、依赖、SDK 级别、构建类型、风味和构建功能。]]></string>
+    <string name="export_gradle_contents"><![CDATA[settings.gradle.kts、每个模块的 build.gradle.kts、gradle.properties 和 Gradle wrapper，全部从你的项目生成：模块、依赖、SDK 级别、构建类型、风味和构建功能。]]></string>
     <string name="export_gradle_caveat"><![CDATA[尽力而为。构建文件是从项目模型生成的，而非从实际运行的构建生成，因此在使用前请先阅读。依赖声明为 Maven 坐标，Gradle 在首次同步时下载它们，因此该同步需要网络连接。]]></string>
-    <string name="export_gradle_wrapper_note">不包含 gradlew 脚本：Android Studio 会在首次同步时添加它们，或者运行一次 gradle wrapper。</string>
+    <string name="export_gradle_wrapper_note">库模块还会获得 Maven 发布配置和 jitpack.yml，因此导出的项目可以直接发布，包括通过 JitPack。</string>
     <string name="export_success_subtitle_gradle">你的 Gradle 项目已就绪。</string>
     <string name="export_notes_title">值得检查</string>
     <string name="export_notes_desc">这些内容也包含在归档内的 GRADLE-EXPORT.md 中。</string>

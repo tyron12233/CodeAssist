@@ -1615,9 +1615,9 @@
     <string name="export_format_gradle">Проект Gradle</string>
     <string name="export_format_gradle_desc">Архив .zip с исходниками и сгенерированными файлами сборки Gradle для Android Studio или сборки через gradle.</string>
     <string name="export_gradle_title">Что будет сгенерировано</string>
-    <string name="export_gradle_contents">settings.gradle.kts, по одному build.gradle.kts на модуль, gradle.properties и настройки Gradle wrapper, всё на основе вашего проекта: модули, зависимости, уровни SDK, типы сборки, flavors и возможности сборки.</string>
+    <string name="export_gradle_contents">settings.gradle.kts, по одному build.gradle.kts на модуль, gradle.properties и Gradle wrapper, всё на основе вашего проекта: модули, зависимости, уровни SDK, типы сборки, flavors и возможности сборки.</string>
     <string name="export_gradle_caveat">Гарантий нет. Файлы сборки создаются по модели проекта, а не по выполненной сборке, поэтому проверьте их, прежде чем на них полагаться. Зависимости объявлены как координаты Maven, и Gradle скачает их при первой синхронизации, так что для неё нужно подключение к сети.</string>
-    <string name="export_gradle_wrapper_note">Скрипты gradlew не включены: Android Studio добавит их при первой синхронизации, либо один раз выполните gradle wrapper.</string>
+    <string name="export_gradle_wrapper_note">Модуль-библиотека также получает публикацию Maven и файл jitpack.yml, поэтому экспорт можно публиковать как есть, в том числе через JitPack.</string>
     <string name="export_success_subtitle_gradle">Ваш проект Gradle готов.</string>
     <string name="export_notes_title">Стоит проверить</string>
     <string name="export_notes_desc">Это также записано в GRADLE-EXPORT.md внутри архива.</string>

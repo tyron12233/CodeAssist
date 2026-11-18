@@ -137,9 +137,9 @@
     <string name="export_format_gradle">مشروع Gradle</string>
     <string name="export_format_gradle_desc">ملف ‎.zip يضم مصادرك مع ملفات بناء Gradle المولَّدة، من أجل Android Studio أو بناء gradle.</string>
     <string name="export_gradle_title">ما الذي سيُولَّد</string>
-    <string name="export_gradle_contents">‏settings.gradle.kts، وملف build.gradle.kts لكل وحدة، وgradle.properties، وإعدادات غلاف Gradle، وكلها مكتوبة من مشروعك: الوحدات والتبعيات ومستويات SDK وأنواع البناء والنكهات وميزات البناء.</string>
+    <string name="export_gradle_contents">‏settings.gradle.kts، وملف build.gradle.kts لكل وحدة، وgradle.properties، وغلاف Gradle، وكلها مكتوبة من مشروعك: الوحدات والتبعيات ومستويات SDK وأنواع البناء والنكهات وميزات البناء.</string>
     <string name="export_gradle_caveat">هذا أفضل ما يمكن. تُولَّد ملفات البناء من نموذج المشروع لا من بناء نُفِّذ فعلًا، فاقرأها قبل أن تعتمد عليها. تُعلَن التبعيات بإحداثيات Maven وينزّلها Gradle عند أول مزامنة، لذا تحتاج تلك المزامنة إلى اتصال.</string>
-    <string name="export_gradle_wrapper_note">لا تُضمَّن سكربتات gradlew: يضيفها Android Studio عند أول مزامنة، أو نفِّذ gradle wrapper مرة واحدة.</string>
+    <string name="export_gradle_wrapper_note">تحصل وحدة المكتبة أيضًا على منشور Maven وملف jitpack.yml، فيمكن نشر المشروع المُصدَّر كما هو، بما في ذلك عبر JitPack.</string>
     <string name="export_success_subtitle_gradle">مشروع Gradle جاهز.</string>
     <string name="export_notes_title">يستحق المراجعة</string>
     <string name="export_notes_desc">هذه موجودة أيضًا في GRADLE-EXPORT.md داخل الأرشيف.</string>
