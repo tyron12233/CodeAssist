@@ -1,0 +1,299 @@
+package dev.codeassist.csharp.sdk
+
+/**
+ * The one .NET process this plugin keeps running. It compiles ([CsCompilerHost]), reports diagnostics
+ * ([CsChecker]) and answers completion and parameter help ([CsCompleter]).
+ *
+ * One process and not three: each would load the runtime and Roslyn for itself, well over a hundred megabytes
+ * apiece, and each would parse the project and read the reference assemblies again. Here the editor's check and
+ * completion work on the same compilation, kept from one request to the next and changed only where a file
+ * changed. The cost is that requests wait for one another: completion asked during a build is answered after it.
+ *
+ * A request is a response file whose first line names the work (`@@compile`, `@@check`, `@@checkfile`,
+ * `@@complete`, `@@signature`); see [ResidentProgram] for the protocol around it. The process ends itself
+ * after a few idle minutes and starts again on the next request.
+ */
+internal object CsServer : ResidentProgram(
+    label = "server",
+    fileName = "CsServer",
+    folder = "server",
+    source = SERVER_SOURCE,
+    // Roslyn is a compile-time reference for the checker and the completer; `csc` itself is reached by reflection.
+    extraReferences = { sdk ->
+        listOf(
+            sdk.csc.parent.resolve("Microsoft.CodeAnalysis.dll"),
+            sdk.csc.parent.resolve("Microsoft.CodeAnalysis.CSharp.dll"),
+        )
+    },
+)
+
+/**
+ * The server's entry point and the project state its halves share. No `$` anywhere in it: this is a Kotlin
+ * raw string. Roslyn is named only in classes reached through `Dispatch`: `Main` registers the resolver for
+ * Roslyn's assemblies first, and the runtime loads them when `Dispatch` is first compiled, not before.
+ */
+private const val SERVER_MAIN = """using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+static class CsServer
+{
+    static string roslyn;
+
+    static int Main(string[] argv)
+    {
+        roslyn = argv[0];
+        AssemblyLoadContext.Default.Resolving += (context, name) =>
+        {
+            string candidate = Path.Combine(roslyn, name.Name + ".dll");
+            return File.Exists(candidate) ? context.LoadFromAssemblyPath(candidate) : null;
+        };
+
+        var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
+        var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false));
+        output.AutoFlush = true;
+
+        // Warm up, so that the first real request does not pay for loading Roslyn. Its result is not used.
+        try { Dispatch(new string[] { "@@complete", "0", "0", "x.cs", "-nologo" }, TextWriter.Null); }
+        catch (Exception) { }
+        output.WriteLine("@@CS-READY@@");
+
+        string line;
+        while ((line = input.ReadLine()) != null)
+        {
+            if (line.Length == 0) continue;
+            var capture = new StringWriter();
+            int code = 255;
+            try { code = Dispatch(File.ReadAllLines(line), capture); }
+            catch (Exception e) { capture.WriteLine("server: " + (e.InnerException ?? e)); }
+            string text = capture.ToString();
+            output.Write(text);
+            if (text.Length > 0 && !text.EndsWith("\n")) output.WriteLine();
+            output.WriteLine("@@CS-DONE@@ " + code);
+        }
+        return 0;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static int Dispatch(string[] arguments, TextWriter output)
+    {
+        if (arguments.Length == 0) return 255;
+        switch (arguments[0])
+        {
+            case "@@complete":
+            case "@@signature":
+                return Completer.Run(arguments, output);
+            case "@@check":
+                return Checker.Run(arguments.Skip(1).ToArray(), output);
+            case "@@checkfile":
+                if (arguments.Length < 2) return 255;
+                return Checker.RunFile(arguments[1], arguments.Skip(2).ToArray(), output);
+            case "@@compile":
+                return Compiler.Run(roslyn, arguments.Skip(1).ToArray(), output);
+            default:
+                return 255;
+        }
+    }
+}
+
+// `csc` itself, loaded on the first build and called through its own `Main`, so a build is what the command
+// line would have produced.
+static class Compiler
+{
+    static MethodInfo main;
+    static string loadError;
+
+    public static int Run(string roslyn, string[] arguments, TextWriter output)
+    {
+        if (main == null && loadError == null)
+        {
+            try
+            {
+                Assembly csc = Assembly.LoadFrom(Path.Combine(roslyn, "csc.dll"));
+                Type program = csc.GetType("Microsoft.CodeAnalysis.CSharp.CommandLine.Program");
+                main = program.GetMethod("Main",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(string[]) }, null);
+            }
+            catch (Exception e) { loadError = e.ToString(); }
+        }
+        if (main == null)
+        {
+            output.WriteLine("server: csc could not be loaded: " + loadError);
+            return 255;
+        }
+
+        TextWriter oldOut = Console.Out;
+        TextWriter oldErr = Console.Error;
+        Console.SetOut(output);
+        Console.SetError(output);
+        try { return (int)main.Invoke(null, new object[] { arguments }); }
+        finally
+        {
+            Console.SetOut(oldOut);
+            Console.SetError(oldErr);
+            // A build leaves a whole compilation behind; it is not needed again, and this process stays.
+            GC.Collect();
+        }
+    }
+}
+
+// What a request works on: the compilation for its arguments, and the tree of the file it is about.
+sealed class Snapshot
+{
+    public CSharpCompilation Compilation;
+    public SyntaxTree Buffer;
+    public SyntaxTree First;
+    public List<string> Problems = new List<string>();
+}
+
+// The project as the last request left it. A request's arguments are turned into a compilation by changing the
+// kept one: a file whose time and size are as before keeps its syntax tree, and the compilation keeps what it
+// knows of the reference assemblies and of the unchanged files' declarations. Only one project is kept.
+static class Project
+{
+    sealed class Parsed
+    {
+        public DateTime Stamp;
+        public long Length;
+        public SyntaxTree Tree;
+    }
+
+    // The metadata of a reference is read once and kept, with the time the file had.
+    static readonly Dictionary<string, MetadataReference> References = new Dictionary<string, MetadataReference>();
+    static readonly Dictionary<string, DateTime> Stamps = new Dictionary<string, DateTime>();
+
+    static readonly Dictionary<string, Parsed> Trees = new Dictionary<string, Parsed>();
+    static CSharpParseOptions parseOptions;
+    static CSharpCompilationOptions options;
+    static List<MetadataReference> references;
+    static CSharpCompilation compilation;
+
+    // `bufferPath` is the full path of the file the request is about, or null.
+    public static Snapshot Open(string[] arguments, string bufferPath)
+    {
+        var snapshot = new Snapshot();
+        string baseDirectory = Directory.GetCurrentDirectory();
+        string sdkDirectory = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
+        var parsed = CSharpCommandLineParser.Default.Parse(arguments, baseDirectory, sdkDirectory, null);
+
+        bool stop = false;
+        foreach (var d in parsed.Errors)
+        {
+            snapshot.Problems.Add(d.ToString());
+            if (d.Severity == DiagnosticSeverity.Error) stop = true;
+        }
+        if (stop) return snapshot;
+
+        // The command line parser turns doc comments off unless /doc is given. They are wanted: the popup shows
+        // them, and a using only a doc comment's cref names counts as used.
+        CSharpParseOptions wanted = parsed.ParseOptions.WithDocumentationMode(DocumentationMode.Parse);
+        if (parseOptions == null || !wanted.Equals(parseOptions))
+        {
+            Trees.Clear();
+            parseOptions = wanted;
+        }
+
+        var trees = new List<SyntaxTree>();
+        var present = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in parsed.SourceFiles)
+        {
+            string path = Path.GetFullPath(file.Path);
+            SyntaxTree tree = Tree(path);
+            if (tree == null)
+            {
+                snapshot.Problems.Add("error CS2001: Source file '" + file.Path + "' could not be found");
+                continue;
+            }
+            if (!present.Add(path)) continue;
+            trees.Add(tree);
+            if (snapshot.First == null) snapshot.First = tree;
+            if (bufferPath != null && string.Equals(path, bufferPath, StringComparison.Ordinal)) snapshot.Buffer = tree;
+        }
+        foreach (string gone in Trees.Keys.Where(k => !present.Contains(k)).ToList()) Trees.Remove(gone);
+
+        var wantedReferences = new List<MetadataReference>();
+        foreach (var reference in parsed.MetadataReferences)
+        {
+            MetadataReference loaded = Load(reference.Reference);
+            if (loaded == null)
+                snapshot.Problems.Add("error CS0006: Metadata file '" + reference.Reference + "' could not be found");
+            else wantedReferences.Add(loaded);
+        }
+
+        bool same = compilation != null && parsed.CompilationOptions.Equals(options)
+            && references != null && references.SequenceEqual(wantedReferences);
+        if (same)
+        {
+            var wantedTrees = new HashSet<SyntaxTree>(trees);
+            var kept = new HashSet<SyntaxTree>(compilation.SyntaxTrees);
+            compilation = compilation
+                .RemoveSyntaxTrees(kept.Where(t => !wantedTrees.Contains(t)).ToList())
+                .AddSyntaxTrees(trees.Where(t => !kept.Contains(t)).ToList());
+        }
+        else
+        {
+            options = parsed.CompilationOptions;
+            references = wantedReferences;
+            compilation = CSharpCompilation.Create("project", trees, wantedReferences, options);
+        }
+        snapshot.Compilation = compilation;
+        return snapshot;
+    }
+
+    static SyntaxTree Tree(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists) { Trees.Remove(path); return null; }
+            Parsed known;
+            if (Trees.TryGetValue(path, out known) && known.Stamp == info.LastWriteTimeUtc && known.Length == info.Length)
+                return known.Tree;
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(path), parseOptions, path, null, CancellationToken.None);
+            Trees[path] = new Parsed { Stamp = info.LastWriteTimeUtc, Length = info.Length, Tree = tree };
+            return tree;
+        }
+        catch (Exception) { return null; }
+    }
+
+    static MetadataReference Load(string path)
+    {
+        try
+        {
+            DateTime stamp = File.GetLastWriteTimeUtc(path);
+            MetadataReference cached;
+            DateTime cachedStamp;
+            if (References.TryGetValue(path, out cached) && Stamps.TryGetValue(path, out cachedStamp)
+                && cachedStamp == stamp)
+                return cached;
+            // The XML documentation beside the DLL, when there is one, is what `GetDocumentationCommentXml` reads.
+            DocumentationProvider documentation = null;
+            string xml = Path.ChangeExtension(path, ".xml");
+            if (File.Exists(xml))
+            {
+                try { documentation = new Completer.XmlDocs(xml); }
+                catch (Exception) { documentation = null; }
+            }
+            MetadataReference made = MetadataReference.CreateFromFile(
+                path, default(MetadataReferenceProperties), documentation);
+            References[path] = made;
+            Stamps[path] = stamp;
+            return made;
+        }
+        catch (Exception) { return null; }
+    }
+}
+"""
+
+/** The whole program: the entry point and shared state, then the checker and the completer. */
+internal const val SERVER_SOURCE = SERVER_MAIN + CHECKER_SOURCE + COMPLETER_SOURCE

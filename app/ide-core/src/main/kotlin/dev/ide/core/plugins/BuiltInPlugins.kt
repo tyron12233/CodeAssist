@@ -994,6 +994,9 @@ private class IdeCoreServicesPlugin : Plugin {
         reg.service(REANALYSIS, ServiceScopeLevel.WORKSPACE) {
             dev.ide.core.services.ReanalysisService(getService(ENGINE_CONTEXT))
         }
+        reg.service(dev.ide.build.RUN_SETTINGS, ServiceScopeLevel.WORKSPACE) {
+            dev.ide.core.services.RunSettingsService(getService(ENGINE_CONTEXT))
+        }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
             RefactorService(getService(ENGINE_CONTEXT), getService(KOTLIN_EDITOR_SERVICE))
         }

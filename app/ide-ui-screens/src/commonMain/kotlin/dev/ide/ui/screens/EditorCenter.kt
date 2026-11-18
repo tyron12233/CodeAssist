@@ -492,7 +492,16 @@ internal fun EditorCenter(
                                         if (falseErrorReport != null) {
                                             falseErrorReport = built?.let { FalseErrorReportState.Ready(it) } ?: FalseErrorReportState.Failed
                                         }
-                                    } else if (runTask != null) state.startRun(RunGutter.option(runTask))
+                                    } else if (runTask != null) {
+                                        // A plugin's run mark names a task its provider lists: run it under
+                                        // the provider's label. Looked up only then, and off the main thread,
+                                        // because listing tasks scans sources.
+                                        val option = RunGutter.option(runTask)
+                                        val listed = if (!RunGutter.isUnnamed(option)) null else withContext(Dispatchers.Default) {
+                                            runCatching { state.backend.build.runTasks().firstOrNull { it.id == runTask } }.getOrNull()
+                                        }
+                                        state.startRun(listed ?: option)
+                                    }
                                     else state.dispatchAction(
                                         actionId,
                                         UiActionContext(
