@@ -8,6 +8,7 @@ import dev.codeassist.csharp.completion.csCompletionContribution
 import dev.codeassist.csharp.completion.csprojCompletionContribution
 import dev.codeassist.csharp.editor.CsContextProvider
 import dev.codeassist.csharp.editor.CsLanguageBackend
+import dev.codeassist.csharp.editor.CsNavigationRegistration
 import dev.codeassist.csharp.editor.CsRunGutter
 import dev.codeassist.csharp.editor.CsSignatureHelp
 import dev.codeassist.csharp.editor.CsUsingCleanup
@@ -96,7 +97,11 @@ class CSharpPlugin : Plugin {
 
         // Completion and signature help use the same Roslyn-backed semantic completion service.
         val semantic = CsSemanticCompletion(sdk)
-        reg.register(LANGUAGE_BACKEND_EP, CsLanguageBackend(CsSignatureHelp(semantic)))
+        reg.register(LANGUAGE_BACKEND_EP, CsLanguageBackend(CsSignatureHelp(semantic), semantic))
+
+        // Go to Declaration needs an extension point an older host does not have.
+        runCatching { CsNavigationRegistration.register(reg, semantic) }
+            .onFailure { log.info("this IDE has no go-to-declaration for plugins; C# navigation is off") }
 
         // Provides the workspace needed to request checks for open files.
         reg.register(COMPILATION_CONTEXT_PROVIDER_EP, CsContextProvider())

@@ -2,7 +2,8 @@ package dev.codeassist.csharp.sdk
 
 /**
  * The one .NET process this plugin keeps running. It compiles ([CsCompilerHost]), reports diagnostics
- * ([CsChecker]) and answers completion and parameter help ([CsCompleter]).
+ * ([CsChecker]), answers completion and parameter help ([CsCompleter]), and resolves and colours the names in
+ * a file ([CsNavigator]).
  *
  * One process and not three: each would load the runtime and Roslyn for itself, well over a hundred megabytes
  * apiece, and each would parse the project and read the reference assemblies again. Here the editor's check and
@@ -10,7 +11,7 @@ package dev.codeassist.csharp.sdk
  * changed. The cost is that requests wait for one another: completion asked during a build is answered after it.
  *
  * A request is a response file whose first line names the work (`@@compile`, `@@check`, `@@checkfile`,
- * `@@complete`, `@@signature`); see [ResidentProgram] for the protocol around it. The process ends itself
+ * `@@complete`, `@@signature`, `@@definition`, `@@hover`, `@@tokens`); see [ResidentProgram] for the protocol around it. The process ends itself
  * after a few idle minutes and starts again on the next request.
  */
 internal object CsServer : ResidentProgram(
@@ -98,6 +99,12 @@ static class CsServer
             case "@@checkfile":
                 if (arguments.Length < 2) return 255;
                 return Checker.RunFile(arguments[1], arguments.Skip(2).ToArray(), output);
+            case "@@definition":
+                return Navigator.Definition(arguments.Skip(1).ToArray(), output);
+            case "@@hover":
+                return Navigator.Hover(arguments.Skip(1).ToArray(), output);
+            case "@@tokens":
+                return Navigator.Tokens(arguments.Skip(1).ToArray(), output);
             case "@@compile":
                 return Compiler.Run(roslyn, arguments.Skip(1).ToArray(), output);
             default:
@@ -295,5 +302,5 @@ static class Project
 }
 """
 
-/** The whole program: the entry point and shared state, then the checker and the completer. */
-internal const val SERVER_SOURCE = SERVER_MAIN + CHECKER_SOURCE + COMPLETER_SOURCE
+/** The whole program: the entry point and shared state, then the checker, the completer and the navigator. */
+internal const val SERVER_SOURCE = SERVER_MAIN + CHECKER_SOURCE + COMPLETER_SOURCE + NAVIGATOR_SOURCE

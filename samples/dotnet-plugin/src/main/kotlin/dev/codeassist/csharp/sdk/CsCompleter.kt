@@ -186,7 +186,7 @@ static class Completer
     // The summary of the symbol's XML documentation, and with [withParams] its param elements, escaped onto one line
     // (a backslash, a tab and a newline become \\, \t and \n). Empty when it has none. Only those elements are sent:
     // remarks and examples can be long and the popup does not show them.
-    static string Documentation(ISymbol symbol, bool withParams)
+    internal static string Documentation(ISymbol symbol, bool withParams)
     {
         try
         {
@@ -482,7 +482,7 @@ static class Completer
     }
 
     // The declaring type, or the namespace for a type; empty for a local or a parameter.
-    static string Container(ISymbol symbol)
+    internal static string Container(ISymbol symbol)
     {
         if (symbol is ILocalSymbol || symbol is IParameterSymbol) return "";
         if (symbol.ContainingType != null) return symbol.ContainingType.Name;
@@ -490,7 +490,7 @@ static class Completer
         return ns != null && !ns.IsGlobalNamespace ? ns.ToDisplayString() : "";
     }
 
-    static string Clean(string text)
+    internal static string Clean(string text)
     {
         return text == null ? "" : text.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
     }

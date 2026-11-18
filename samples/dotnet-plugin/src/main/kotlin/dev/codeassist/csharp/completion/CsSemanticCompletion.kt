@@ -5,6 +5,7 @@ import android.util.Log
 import dev.codeassist.csharp.project.CsProject
 import dev.codeassist.csharp.project.csproj.Csproj
 import dev.codeassist.csharp.sdk.CsCompleter
+import dev.codeassist.csharp.sdk.CsNavigator
 import dev.codeassist.csharp.sdk.DotnetSdk
 import dev.codeassist.csharp.util.TAG
 import dev.codeassist.csharp.util.ToolCancellation
@@ -72,6 +73,47 @@ internal class CsSemanticCompletion(private val sdk: DotnetSdk) {
         } ?: return null
 
         return CsSignatureLines.parse(lines)
+    }
+
+    /**
+     * Returns where the symbol at [offset] is declared in the project's sources: empty when it has no source
+     * (a framework or package type), null when Roslyn cannot answer.
+     */
+    suspend fun definitionsAt(path: String, text: String, offset: Int): List<CsNavigationLines.Definition>? {
+        val file = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+        var scratch: String? = null
+
+        val lines = ask("definition", file, null, text) { buffer, arguments, cancellation, onLine ->
+            scratch = buffer
+            CsNavigator.definition(sdk, buffer, offset, arguments, cancellation, onLine)
+        } ?: return null
+
+        // The server saw the buffer as a scratch copy; a declaration in it is one in the file being edited.
+        return CsNavigationLines.definitions(lines).map {
+            if (it.path == scratch) it.copy(path = file.toString()) else it
+        }
+    }
+
+    /** Returns what the symbol at [offset] is, or null when there is none or Roslyn cannot answer. */
+    suspend fun hoverAt(path: String, text: String, offset: Int): CsNavigationLines.Hover? {
+        val file = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+
+        val lines = ask("hover", file, null, text) { buffer, arguments, cancellation, onLine ->
+            CsNavigator.hover(sdk, buffer, offset, arguments, cancellation, onLine)
+        } ?: return null
+
+        return CsNavigationLines.hover(lines)
+    }
+
+    /** Returns the names of [text] with what each one is, or null when Roslyn cannot answer. */
+    suspend fun tokensFor(path: String, text: String): List<CsNavigationLines.Token>? {
+        val file = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+
+        val lines = ask("tokens", file, null, text) { buffer, arguments, cancellation, onLine ->
+            CsNavigator.tokens(sdk, buffer, arguments, cancellation, onLine)
+        } ?: return null
+
+        return CsNavigationLines.tokens(lines)
     }
 
     /**
