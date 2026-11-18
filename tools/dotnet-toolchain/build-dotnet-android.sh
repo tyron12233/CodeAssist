@@ -14,7 +14,7 @@
 #   assets/dotnet-sdk.zip              the tree that is only read, unpacked by the plugin on first use:
 #       host/fxr/<version>/libhostfxr.so
 #       shared/Microsoft.NETCore.App/<version>/   the runtime and its managed libraries
-#       sdk/Roslyn/                               csc.dll and the compiler assemblies
+#       sdk/Roslyn/                               csc.dll, the compiler assemblies and the formatter's
 #       ref/                                      reference assemblies and their XML documentation
 #       lib/                                      libssl.so.3, libcrypto.so.3
 #
@@ -29,6 +29,12 @@ ROSLYN_VERSION="${ROSLYN_VERSION:-5.0.0}"
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.9}"
 NDK_VERSION="${NDK_VERSION:-r27c}"
 ANDROID_API="${ANDROID_API:-26}"
+
+# Roslyn's formatter is not in the compiler package: it lives in the Workspaces assemblies, which need a small
+# composition library and Humanizer beside them. Their version is the compiler's own; the two must match.
+FORMATTER_PACKAGES="microsoft.codeanalysis.workspaces.common:$ROSLYN_VERSION microsoft.codeanalysis.csharp.workspaces:$ROSLYN_VERSION
+humanizer.core:2.14.1 system.composition.attributedmodel:9.0.0 system.composition.convention:9.0.0
+system.composition.hosting:9.0.0 system.composition.runtime:9.0.0 system.composition.typedparts:9.0.0"
 HOST_ABI="${HOST_ABI:-arm64-v8a}"
 
 case "$HOST_ABI" in
@@ -44,6 +50,14 @@ sha_of() {
         microsoft.netcore.app.runtime.linux-bionic-x64.10.0.15.nupkg)   echo 4b254d514c7258862329628a46e404acc691990bcc684b1db1e63af637632fb2 ;;
         microsoft.netcore.app.ref.10.0.15.nupkg)                        echo 71d5c46b014531d3226cb716e82b1a6e5434ac4a151a941d37ea34e1eb5e1c8e ;;
         microsoft.net.compilers.toolset.5.0.0.nupkg)                    echo e3f0207e7a8caf2cf79ad8f276eb20b2b880b3a7bb0e8ad27b4d3183d0a81627 ;;
+        microsoft.codeanalysis.workspaces.common.5.0.0.nupkg)           echo 062af97b5804860410eaea509952901c028b45f7a702eeb40c0ccdba936766c4 ;;
+        microsoft.codeanalysis.csharp.workspaces.5.0.0.nupkg)           echo c9655c2edfdfd82a2e39f172f7aea094676d485cbe45c82b53575df54b652ff4 ;;
+        humanizer.core.2.14.1.nupkg)                                    echo 117be88dd74fbbef492a0386f4d4908144df5aad51a4e630eda7710cf28327aa ;;
+        system.composition.attributedmodel.9.0.0.nupkg)                 echo 6bbcbb1face3fa499892594d1c0e34d83a157d8f486aa0b73a8cacf15ce5db83 ;;
+        system.composition.convention.9.0.0.nupkg)                      echo b70e2f13925143ad2e6d36416f1a0c3e1b63390082dd7a031541fb3473bba3c5 ;;
+        system.composition.hosting.9.0.0.nupkg)                         echo a0ec54f833c411f302b8d2e05bac12919a74258e6062de381493675adfbdebbb ;;
+        system.composition.runtime.9.0.0.nupkg)                         echo 03221ef9d8b54eac1405b489fec27c43cb73b274cdf9505d270e0af31673e37b ;;
+        system.composition.typedparts.9.0.0.nupkg)                      echo 1797e94d4b3746bef23ff372233afe5e7e4d7535d7a7caeb8c19c5f540415288 ;;
         openssl-3.5.9.tar.gz)                                           echo 603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a ;;
         *) echo "" ;;
     esac
@@ -81,6 +95,7 @@ stage_fetch() {
     nupkg "microsoft.netcore.app.runtime.$RID" "$DOTNET_VERSION"
     nupkg microsoft.netcore.app.ref "$DOTNET_VERSION"
     nupkg microsoft.net.compilers.toolset "$ROSLYN_VERSION"
+    for package in $FORMATTER_PACKAGES; do nupkg "${package%%:*}" "${package##*:}"; done
     fetch "openssl-$OPENSSL_VERSION.tar.gz" \
         "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
 }
@@ -110,6 +125,19 @@ stage_tree() {
     local bincore="$unpack/roslyn/tasks/netcore/bincore"
     cp "$bincore"/csc.dll "$bincore"/csc.deps.json "$bincore"/csc.runtimeconfig.json \
         "$bincore"/Microsoft.CodeAnalysis.dll "$bincore"/Microsoft.CodeAnalysis.CSharp.dll "$TREE/sdk/Roslyn/"
+
+    # The formatter's assemblies go beside the compiler's, where the plugin's server resolves both.
+    for package in $FORMATTER_PACKAGES; do
+        local id="${package%%:*}" version="${package##*:}" folder
+        mkdir -p "$unpack/formatter/$id"
+        unzip -q "$DL/$id.$version.nupkg" -d "$unpack/formatter/$id"
+        folder=""
+        for framework in net9.0 net8.0 net6.0; do
+            if [ -d "$unpack/formatter/$id/lib/$framework" ]; then folder="$unpack/formatter/$id/lib/$framework"; break; fi
+        done
+        [ -n "$folder" ] || { echo "$id $version has no library for .NET" >&2; exit 1; }
+        cp "$folder"/*.dll "$TREE/sdk/Roslyn/"
+    done
 
     # The licenses the packages ship under, carried with the files they cover.
     mkdir -p "$TREE/licenses"

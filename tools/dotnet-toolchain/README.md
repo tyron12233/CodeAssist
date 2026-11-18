@@ -18,6 +18,7 @@ Output goes to `build/out/<abi>/`: `jniLibs/<abi>/libdotnetlaunch.so` and `asset
 | Runtime (`host/`, `shared/`) | `Microsoft.NETCore.App.Runtime.linux-bionic-<arch>` from nuget.org |
 | Reference assemblies and their XML documentation (`ref/`) | `Microsoft.NETCore.App.Ref` from nuget.org |
 | C# compiler (`sdk/Roslyn/`) | `Microsoft.Net.Compilers.Toolset` from nuget.org |
+| C# formatter (`sdk/Roslyn/`) | `Microsoft.CodeAnalysis.Workspaces.Common`, `Microsoft.CodeAnalysis.CSharp.Workspaces` and what they load (`System.Composition.*`, `Humanizer.Core`) from nuget.org |
 | OpenSSL (`lib/`) | built from the release tarball with the NDK |
 | Launcher | built from `launcher/dotnetlaunch.c` with the NDK |
 
