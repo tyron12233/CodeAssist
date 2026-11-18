@@ -111,6 +111,7 @@ internal class ProjectBackend(
     // The app storage root a file manager browses: it holds the projects folder alongside the SDK, keystore,
     // caches, and any sibling data such as a previous app version's projects.
     override fun storageRootPath(): String? = ctx.manager?.storageRoot?.toString()
+    override fun hasLegacyData(): Boolean = ctx.manager?.hasLegacyData() ?: true
 
     // Prefer the open engine's registry, but fall back to the ProjectManager's APPLICATION-scoped registry
     // so the picker's Create-Project gallery enumerates templates BEFORE any project is open.

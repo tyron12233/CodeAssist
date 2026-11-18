@@ -355,9 +355,12 @@ class CodeAssistAppState(
 
     // ---- first-launch sheets ----
 
-    var showMigration: Boolean by mutableStateOf(backend.settings.preference(MIGRATION_ACK_PREF) != "true")
+    // Both speak to someone coming from an older version. A fresh install has nothing to back up or recover,
+    // and skips them.
+    private val hasLegacyData: Boolean = backend.projects.hasLegacyData()
+    var showMigration: Boolean by mutableStateOf(hasLegacyData && backend.settings.preference(MIGRATION_ACK_PREF) != "true")
         private set
-    var showLegacyRecovery: Boolean by mutableStateOf(backend.settings.preference(LEGACY_RECOVERY_SEEN_PREF) != "true")
+    var showLegacyRecovery: Boolean by mutableStateOf(hasLegacyData && backend.settings.preference(LEGACY_RECOVERY_SEEN_PREF) != "true")
         private set
     var showOnboarding: Boolean by mutableStateOf(backend.settings.preference(ONBOARDING_SEEN_PREF) != "true")
         private set

@@ -1051,6 +1051,11 @@ class ProjectManager private constructor(
 
     // --- legacy project recovery ---
 
+    /** Whether any of [legacyDataDirs] holds anything: an earlier version of the app was used on this device. */
+    fun hasLegacyData(): Boolean = legacyDataDirs.any { dir ->
+        runCatching { Files.isDirectory(dir) && Files.list(dir).use { it.findAny().isPresent } }.getOrDefault(false)
+    }
+
     /**
      * One-time recovery for users upgrading from a build that kept projects in internal app storage (before
      * the move to external app storage): copy every loadable project workspace found under [legacyDataDirs]

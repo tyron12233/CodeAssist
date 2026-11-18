@@ -830,6 +830,13 @@ interface ProjectService {
     /** The whole app storage root (projects + SDK + caches + sibling data). Defaults to [projectsRootPath]. */
     fun storageRootPath(): String? = projectsRootPath()
 
+    /**
+     * Whether an earlier version of the app left data on this device. The notices about older projects are
+     * for someone who has some; on a fresh install they describe a problem the reader does not have. True
+     * when the host cannot tell.
+     */
+    fun hasLegacyData(): Boolean = true
+
     /** The templates the Create-Project gallery offers. */
     fun projectTemplates(): List<UiProjectTemplate> = emptyList()
 

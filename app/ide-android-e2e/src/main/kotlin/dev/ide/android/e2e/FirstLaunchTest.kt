@@ -4,7 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** A fresh install walks its first-run sheets (migration, onboarding, analytics, tour) to the project list. */
+/** A fresh install walks its first-run sheets (onboarding, analytics, tour) to the project list. */
 @RunWith(AndroidJUnit4::class)
 class FirstLaunchTest : E2eTest() {
     override val clearAppData = true
