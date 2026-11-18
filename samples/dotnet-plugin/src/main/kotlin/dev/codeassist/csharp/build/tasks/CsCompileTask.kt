@@ -63,6 +63,8 @@ internal class CsCompileTask(
      * built before it, and it is left alone when its DLL is newer than everything it is made from.
      */
     private val root: Boolean = true,
+    /** Compile as a library whatever the project's output type: a test run loads the DLL and needs no `Main`. */
+    private val asLibrary: Boolean = false,
 ) : Task {
 
     /** The folder of the project file, which is [dir] unless the module keeps its project in a subfolder. */
@@ -189,7 +191,10 @@ internal class CsCompileTask(
             val usings = writeGlobalUsings(project)
             copyReferences(project, referenced, projectDlls + nodes.flatMap { copiedBy(it) })
             val assemblyInfo = writeAssemblyInfo(project)
-            arguments = compilerArguments(project, sources, referenced, usings, assemblyInfo)
+            arguments = compilerArguments(project, sources, referenced, usings, assemblyInfo).let { built ->
+                if (!asLibrary) built
+                else built.filterNot { it.startsWith("-main:") }.map { if (it == "-target:exe") "-target:library" else it }
+            }
 
             val onLine: (String) -> Unit = { line ->
                 Log.d(TAG, "csc> $line")

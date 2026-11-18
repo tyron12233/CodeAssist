@@ -137,8 +137,60 @@ class CsPluginTest : E2eTest() {
         awaitTextContains("Process finished with exit code 0")
     }
 
+    /**
+     * A project that references xUnit gets a tests row in the Run picker, and a run of it fills the Tests
+     * tab: the package is restored, the project compiled as a library, and each test reported.
+     */
+    @Test
+    fun xunitTestsRunAndReport() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsTest")
+        createProject("C# Console App", name)
+        val dir = projectDir(name)
+        val project = shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") }
+            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+        val declared = readDeviceFile("$dir/$project")
+        check("</Project>" in declared) { "unexpected project file: $declared" }
+        writeDeviceFile("$dir/$project", declared.replace("</Project>", "$XUNIT\n</Project>"))
+        readDeviceFile("$dir/Program.cs")
+        writeDeviceFile("$dir/Program.cs", XUNIT_TESTS)
+        restartAndOpen(name)
+
+        run("C# tests · $name")
+        // The run opens on the Tests tab, which lists each test under its class.
+        awaitTextContains("2 passed", BUILD_TIMEOUT)
+        awaitTextContains("1 failed")
+        awaitTextContains("CartTests")
+        awaitTextContains("Sums(2, 3, 5)")
+        awaitTextContains("Assert.Equal() Failure")
+    }
+
     private companion object {
         const val PLUGIN_ID = "dev.codeassist.csharp"
+
+        const val XUNIT = """  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.9.3" />
+  </ItemGroup>"""
+
+        val XUNIT_TESTS = """
+            using Xunit;
+
+            namespace Shop.Tests
+            {
+                public class CartTests
+                {
+                    [Fact]
+                    public void Adds() { Assert.Equal(4, 2 + 2); }
+
+                    [Theory]
+                    [InlineData(2, 3, 5)]
+                    public void Sums(int a, int b, int expected) { Assert.Equal(expected, a + b); }
+
+                    [Fact]
+                    public void IsWrong() { Assert.Equal(5, 2 + 2); }
+                }
+            }
+        """.trimIndent() + "\n"
 
         const val REFERENCE = """  <ItemGroup>
     <ProjectReference Include="Lib/Lib.csproj" />

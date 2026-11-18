@@ -29,6 +29,7 @@ CSharpPlugin  (registers everything)
  │              CsNavigator (declarations, documentation, colouring)
  ├─ project/    Csproj* (reads .csproj, follows project references)  nuget/ (package restore)  CsMains* (entry points)  templates/
  ├─ build/      CsBuildPlugin  CsCompileTask  CsRunProgramTask  CsRestoreTask  CsRunTaskProvider
+ │              tests/ (CsTestProvider, CsTestScan, CsTestRunner)
  ├─ editor/     CsLanguageBackend  CsDiagnosticProvider  CsDeclarationProvider  quick fixes for usings  CsRunGutter
  ├─ completion/ CsCompletionContributor  CsSemanticCompletion  CsSymbols  CsprojCompletionContributor
  └─ ui/         CsUiPlugin (editor languages, file icons, new-file templates)
@@ -62,6 +63,15 @@ next check, and Go to Declaration crosses from one into the other. A file belong
 file above it, and a project's sources leave out any folder that has a project file of its own, so a module
 may hold several projects.
 
+**Tests.** A project that references xUnit, NUnit or MSTest gets run marks beside its test methods and
+classes, a "C# tests" row in the Run picker, and results in the Run screen's Tests tab, with re-run and
+re-run failed. A run compiles the project as a library and hands the DLL to a small runner of the plugin's
+own, which finds the methods those frameworks mark as tests and calls them. The assertions are the
+framework's, so a failure reads as it would anywhere. It runs facts, theories with inline data, test cases,
+data rows, async tests, setup and teardown methods, and skip reasons. It reports as skipped, saying why, a
+test class that needs constructor arguments (a fixture, an output helper) and a theory whose data comes from
+a member or a class.
+
 **No MSBuild, no NuGet client.** Neither is shipped. `Csproj` reads the subset of a project file the plugin
 honours and turns it into compiler arguments; it is the single place that interprets a `.csproj`, used by the
 build, the editor check and completion alike. `NuGet` talks to nuget.org's package base address directly,
@@ -77,7 +87,11 @@ compilation, built from the editor's unsaved buffer and the project's other file
 - `Import` and `Directory.Build.props`, solution files, multi-targeting, analyzers and source generators.
 - NuGet beyond nuget.org and managed DLLs: no other feeds, no native assets, no package signature checks.
 - Conditions in a `.csproj` other than simple comparisons on `Configuration`, evaluated for Debug.
-- A debugger, a test runner, the `dotnet` command line, and workloads such as MAUI or Blazor.
+- A debugger, the `dotnet` command line, and workloads such as MAUI or Blazor.
+- The test frameworks' own runners: fixtures, collection ordering, data from members or classes, and custom
+  test attributes are not honoured.
+- A terminal for Run. A program's input and output are pipes, so `Console.ReadKey` and cursor movement do not
+  work. A pseudo-terminal was tried: .NET then echoes every typed line itself, on top of the console's echo.
 - 32-bit devices: there is no Android runtime published for them.
 
 ## Older IDE versions

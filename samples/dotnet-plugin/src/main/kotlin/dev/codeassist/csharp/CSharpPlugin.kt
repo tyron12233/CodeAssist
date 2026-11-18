@@ -2,6 +2,7 @@ package dev.codeassist.csharp
 
 import dev.codeassist.csharp.build.CsBuildPlugin
 import dev.codeassist.csharp.build.tasks.CsRunTaskProvider
+import dev.codeassist.csharp.build.tests.CsTestRegistration
 import dev.codeassist.csharp.completion.CsSemanticCompletion
 import dev.codeassist.csharp.completion.CsSymbols
 import dev.codeassist.csharp.completion.csCompletionContribution
@@ -107,6 +108,10 @@ class CSharpPlugin : Plugin {
         reg.register(COMPILATION_CONTEXT_PROVIDER_EP, CsContextProvider())
 
         reg.register(BUILD_PLUGIN_EP, CsBuildPlugin(sdk))
+
+        // Test running needs an extension point an older host does not have.
+        runCatching { CsTestRegistration.register(reg, sdk) }
+            .onFailure { log.info("this IDE has no test runners for plugins; C# tests are off") }
         reg.register(COMPLETION_CONTRIBUTOR_EP, csCompletionContribution(symbols, semantic))
         reg.register(COMPLETION_CONTRIBUTOR_EP, csprojCompletionContribution())
 
