@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -87,40 +89,47 @@ private fun ConsentBody(
     modifier: Modifier,
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier.size(72.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center,
+        // The explanation scrolls and the two answers stay put below it: the sheet is a fixed share of the
+        // screen, and text longer than that would otherwise push "Allow" and "No thanks" past its bottom edge.
+        Column(
+            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(CaIcons.info, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
-        }
-        Spacer(Modifier.height(20.dp))
-        Text(
-            stringResource(Res.string.help_improve_codeassist),
-            color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            stringResource(Res.string.help_improve_codeassist_content),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-        )
-        if (onLearnMore != null) {
-            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier.size(72.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.info, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(20.dp))
             Text(
-                stringResource(Res.string.learn_more),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier
-                    .clickable(
-                        remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onLearnMore
-                    )
-                    .padding(6.dp),
+                stringResource(Res.string.help_improve_codeassist),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(Res.string.help_improve_codeassist_content),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+            if (onLearnMore != null) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    stringResource(Res.string.learn_more),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(
+                            remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onLearnMore
+                        )
+                        .padding(6.dp),
+                )
+            }
         }
         Spacer(Modifier.height(24.dp))
         PrimaryButton(
