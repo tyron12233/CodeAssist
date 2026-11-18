@@ -994,6 +994,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="dep_version_conflict">Konflik versi</string>
     <string name="dep_extra_auto_resolved">+%1$d diselesaikan otomatis</string>
     <string name="dep_repo_invalid">Masukkan URL http(s) valid yang belum ditambahkan.</string>
+    <string name="dep_repo_quick_add">Tambah cepat</string>
+    <string name="dep_repo_err_address">Itu bukan alamat web. Coba seperti https://repo.example.com/maven</string>
+    <string name="dep_repo_err_duplicate">%1$s sudah memakai alamat ini.</string>
+    <string name="dep_repo_warn_http">Alamat ini memakai http, jadi unduhan darinya tidak terenkripsi.</string>
     <string name="dep_subtitle_module">modul</string>
     <string name="dep_subtitle_platform">platform (BOM)</string>
     <string name="dep_subtitle_local_aar">aar lokal</string>

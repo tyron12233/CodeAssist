@@ -435,6 +435,18 @@ internal fun rememberAddDependencyState(
     AddDependencyState(pane, fileActions, scope)
 }
 
+/** Why the Repositories manager refused an add. */
+internal sealed interface RepositoryError {
+    /** Nothing in the field reads as a web address. */
+    data object NotAnAddress : RepositoryError
+
+    /** The address is already listed, as the repository named [name]. */
+    data class Duplicate(val name: String) : RepositoryError
+
+    /** The backend would not store it (the project's repository file could not be written). */
+    data object Rejected : RepositoryError
+}
+
 /** State and intents for the custom-Maven-repository manager. */
 @Stable
 internal class RepositoriesState(
@@ -448,29 +460,48 @@ internal class RepositoriesState(
     var url: String by mutableStateOf("")
         private set
 
-    /** True when the last add was rejected (the host renders the localized reason). */
-    var invalid: Boolean by mutableStateOf(false)
+    /** Why the last add was refused, or null. The host renders the localized reason. */
+    var error: RepositoryError? by mutableStateOf(null)
         private set
+
+    /** The typed address is plain http: allowed, but shown with a warning before it is added. */
+    val insecure: Boolean
+        get() = (parseRepositoryInput(name, url, repositories) as? RepositoryInput.Ok)?.insecure == true
+
+    /** The well-known repositories not in the list yet, offered as one-tap adds. */
+    val suggestions: List<SuggestedRepository>
+        get() = SUGGESTED_REPOSITORIES.filter { s -> repositories.none { sameRepositoryUrl(it.url, s.url) } }
 
     fun updateName(value: String) {
         name = value
-        invalid = false
+        error = null
     }
 
     fun updateUrl(value: String) {
         url = value
-        invalid = false
+        error = null
     }
 
     fun add() {
-        if (!backend.deps.addRepository(name, url)) {
-            invalid = true
-            return
+        when (val input = parseRepositoryInput(name, url, repositories)) {
+            RepositoryInput.NotAnAddress -> error = RepositoryError.NotAnAddress
+            is RepositoryInput.Duplicate -> error = RepositoryError.Duplicate(input.name)
+            is RepositoryInput.Ok -> {
+                if (!backend.deps.addRepository(input.name, input.url)) {
+                    error = RepositoryError.Rejected
+                    return
+                }
+                repositories = backend.deps.repositories()
+                name = ""
+                url = ""
+                error = null
+            }
         }
-        repositories = backend.deps.repositories()
-        name = ""
-        url = ""
-        invalid = false
+    }
+
+    /** Add a suggested repository as it stands, leaving whatever is being typed alone. */
+    fun addSuggestion(suggestion: SuggestedRepository) {
+        if (backend.deps.addRepository(suggestion.name, suggestion.url)) repositories = backend.deps.repositories()
     }
 
     fun remove(url: String) {

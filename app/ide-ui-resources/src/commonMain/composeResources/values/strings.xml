@@ -1796,6 +1796,10 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="dep_version_conflict">Version conflict</string>
     <string name="dep_extra_auto_resolved">+%1$d auto-resolved</string>
     <string name="dep_repo_invalid">Enter a valid http(s) URL that isn't already added.</string>
+    <string name="dep_repo_quick_add">Quick add</string>
+    <string name="dep_repo_err_address">That is not a web address. Try something like https://repo.example.com/maven</string>
+    <string name="dep_repo_err_duplicate">%1$s already uses this address.</string>
+    <string name="dep_repo_warn_http">This address uses http, so downloads from it are not encrypted.</string>
     <string name="dep_subtitle_module">module</string>
     <string name="dep_subtitle_platform">platform (BOM)</string>
     <string name="dep_subtitle_local_aar">local aar</string>

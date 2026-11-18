@@ -1845,6 +1845,10 @@
     <string name="dep_version_conflict">تعارض في الإصدار</string>
     <string name="dep_extra_auto_resolved">+%1$d تم حلها تلقائيًا</string>
     <string name="dep_repo_invalid">أدخل عنوان http(s) صالحًا لم تتم إضافته بالفعل.</string>
+    <string name="dep_repo_quick_add">إضافة سريعة</string>
+    <string name="dep_repo_err_address">هذا ليس عنوان ويب. جرّب شيئًا مثل https://repo.example.com/maven</string>
+    <string name="dep_repo_err_duplicate">%1$s يستخدم هذا العنوان بالفعل.</string>
+    <string name="dep_repo_warn_http">هذا العنوان يستخدم http، لذا التنزيلات منه غير مشفّرة.</string>
     <string name="dep_subtitle_module">وحدة</string>
     <string name="dep_subtitle_platform">منصة (BOM)</string>
     <string name="dep_subtitle_local_aar">aar محلي</string>

@@ -220,6 +220,13 @@ object CaIcons {
     val pin = build("pin", s("M9 4h6l-.8 5 2.3 2.5h-9L9.8 9z"), s("M12 13.5V20"))
     /** A closed padlock (shackle latched on both sides) — the preview "lock the view" toggle when active. */
     val lock = build("lock", roundRect(5f, 11f, 14f, 9f, 2f), s("M8 11V8a4 4 0 0 1 8 0v3"))
+    /** A repository: two stacked server units, each with its status light. Where libraries are fetched from. */
+    val repository = build(
+        "repository",
+        roundRect(4f, 4.5f, 16f, 6.5f, 2f), roundRect(4f, 13f, 16f, 6.5f, 2f),
+        circle(7.5f, 7.75f, 0.7f, true), circle(7.5f, 16.25f, 0.7f, true),
+        s("M11 7.75h5.5M11 16.25h5.5"),
+    )
     /** An open padlock (shackle raised, right leg unlatched) — the "unlock" state of the same toggle. */
     val lockOpen = build("lock-open", roundRect(5f, 11f, 14f, 9f, 2f), s("M8 11V8a4 4 0 0 1 8 0"))
     /** A four-point concave star — code completion. */

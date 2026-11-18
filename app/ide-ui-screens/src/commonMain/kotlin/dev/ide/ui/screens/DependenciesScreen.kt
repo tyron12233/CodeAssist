@@ -42,6 +42,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenuItem
@@ -166,6 +167,10 @@ import dev.ide.ui.generated.resources.dep_repo_invalid
 import dev.ide.ui.generated.resources.dep_repo_name_hint
 import dev.ide.ui.generated.resources.dep_repo_url_hint
 import dev.ide.ui.generated.resources.dep_repositories
+import dev.ide.ui.generated.resources.dep_repo_quick_add
+import dev.ide.ui.generated.resources.dep_repo_err_address
+import dev.ide.ui.generated.resources.dep_repo_err_duplicate
+import dev.ide.ui.generated.resources.dep_repo_warn_http
 import dev.ide.ui.generated.resources.dep_repositories_subtitle
 import dev.ide.ui.generated.resources.dep_resolved
 import dev.ide.ui.generated.resources.dep_resolving
@@ -352,15 +357,30 @@ private fun DepPaneToolbar(
         // Force a fresh resolve of the declared deps — clears the reconcile marker so resolver changes
         // (e.g. new variant/constraint handling) actually re-apply to a project whose deps are unchanged.
         IconButtonCa(CaIcons.refresh, stringResource(Res.string.dep_re_resolve), onClick = { if (!resolving) onResolve() })
-        IconButtonCa(CaIcons.pkg, stringResource(Res.string.dep_repositories), onClick = onRepos)
+        // Labelled where there is room: it is a rare action, and an icon alone does not say "where libraries
+        // come from".
+        if (compact) IconButtonCa(CaIcons.repository, stringResource(Res.string.dep_repositories), onClick = onRepos)
+        else RepositoriesButton(onRepos)
         PrimaryButton(stringResource(Res.string.add), onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
     }
 }
 
 // ---- repositories manager -----------------------------------------------------------------------
 
+/** The toolbar's way into the Repositories manager on a wide pane: the icon with its name beside it. */
 @Composable
-private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier, fillHeight: Boolean = false) {
+private fun RepositoriesButton(onClick: () -> Unit) {
+    Row(
+        Modifier.height(38.dp).clip(MaterialTheme.shapes.small).clickable(onClick = onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(CaIcons.repository, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.dep_repositories), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+internal fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier, fillHeight: Boolean = false) {
     val state = rememberRepositoriesState(backend)
 
     Column(modifier) {
@@ -374,6 +394,16 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
         LazyColumn(listMod) {
             itemsKeyed(state.repositories, key = { it.url }) { r -> RepoRow(r) { state.remove(r.url) } }
         }
+        // The well-known ones, one tap each: nobody should have to remember JitPack's address.
+        val suggestions = state.suggestions
+        if (suggestions.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(Res.string.dep_repo_quick_add), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                suggestions.forEach { s -> SuggestedRepoChip(s.name) { state.addSuggestion(s) } }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         // add a custom repository
         RepoField(stringResource(Res.string.dep_repo_name_hint), state.name, codeFont, state::updateName)
@@ -382,10 +412,36 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
             Box(Modifier.weight(1f)) { RepoField(stringResource(Res.string.dep_repo_url_hint), state.url, codeFont, state::updateUrl) }
             PrimaryButton(stringResource(Res.string.add), onClick = state::add, icon = CaIcons.plus)
         }
-        if (state.invalid) {
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(Res.string.dep_repo_invalid), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+        val error = state.error
+        val message = when {
+            error is RepositoryError.NotAnAddress -> stringResource(Res.string.dep_repo_err_address)
+            error is RepositoryError.Duplicate -> stringResource(Res.string.dep_repo_err_duplicate, error.name)
+            error is RepositoryError.Rejected -> stringResource(Res.string.dep_repo_invalid)
+            state.insecure -> stringResource(Res.string.dep_repo_warn_http)
+            else -> null
         }
+        if (message != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                message,
+                color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+/** A well-known repository offered as a one-tap add. */
+@Composable
+private fun SuggestedRepoChip(name: String, onAdd: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Row(
+        Modifier.height(32.dp).clip(CircleShape).border(1.dp, c.outlineVariant, CircleShape)
+            .clickable(onClick = onAdd).padding(start = 10.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(CaIcons.plus, null, Modifier.size(14.dp), tint = c.primary)
+        Text(name, color = c.onSurface, style = MaterialTheme.typography.labelLarge, maxLines = 1)
     }
 }
 
@@ -393,9 +449,17 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
 private fun RepoRow(repo: dev.ide.ui.backend.UiRepository, onRemove: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        LetterBox(if (repo.builtin) "•" else "+", if (repo.builtin) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary)
+        // A built-in one is locked in place; one the user added carries its initial.
+        val tone = if (repo.builtin) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+        Box(Modifier.size(28.dp).background(tone.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.xs)), contentAlignment = Alignment.Center) {
+            if (repo.builtin) Icon(CaIcons.lock, null, Modifier.size(15.dp), tint = tone)
+            else Text(
+                repo.name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?",
+                color = tone, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+            )
+        }
         Column(Modifier.weight(1f)) {
             Text(repo.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(repo.url, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

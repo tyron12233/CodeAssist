@@ -1003,6 +1003,10 @@
     <string name="dep_version_conflict">Конфликт версий</string>
     <string name="dep_extra_auto_resolved">+%1$d разрешено автоматически</string>
     <string name="dep_repo_invalid">Введите корректный URL http(s), который ещё не добавлен.</string>
+    <string name="dep_repo_quick_add">Быстрое добавление</string>
+    <string name="dep_repo_err_address">Это не веб-адрес. Попробуйте что-то вроде https://repo.example.com/maven</string>
+    <string name="dep_repo_err_duplicate">%1$s уже использует этот адрес.</string>
+    <string name="dep_repo_warn_http">Этот адрес использует http, поэтому загрузки с него не шифруются.</string>
     <string name="dep_subtitle_module">модуль</string>
     <string name="dep_subtitle_platform">платформа (BOM)</string>
     <string name="dep_subtitle_local_aar">локальный aar</string>

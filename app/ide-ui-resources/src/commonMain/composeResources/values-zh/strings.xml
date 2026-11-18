@@ -1698,6 +1698,10 @@
     <string name="dep_version_conflict">版本冲突</string>
     <string name="dep_extra_auto_resolved">+%1$d 项自动解析</string>
     <string name="dep_repo_invalid">请输入有效http(s)URL!</string>
+    <string name="dep_repo_quick_add">快速添加</string>
+    <string name="dep_repo_err_address">这不是网址。请尝试类似 https://repo.example.com/maven 的地址</string>
+    <string name="dep_repo_err_duplicate">%1$s 已在使用此地址。</string>
+    <string name="dep_repo_warn_http">此地址使用 http，从它下载的内容未加密。</string>
     <string name="dep_subtitle_module">模块</string>
     <string name="dep_subtitle_platform">平台（BOM）</string>
     <string name="dep_subtitle_local_aar">本地 aar</string>

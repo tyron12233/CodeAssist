@@ -1090,6 +1090,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="dep_version_conflict">Conflicto de versión</string>
     <string name="dep_extra_auto_resolved">+%1$d resueltas automáticamente</string>
     <string name="dep_repo_invalid">Introduce una URL http(s) válida que no se haya añadido ya.</string>
+    <string name="dep_repo_quick_add">Añadir rápido</string>
+    <string name="dep_repo_err_address">Eso no es una dirección web. Prueba algo como https://repo.example.com/maven</string>
+    <string name="dep_repo_err_duplicate">%1$s ya usa esta dirección.</string>
+    <string name="dep_repo_warn_http">Esta dirección usa http, así que las descargas no van cifradas.</string>
     <string name="dep_subtitle_module">módulo</string>
     <string name="dep_subtitle_platform">plataforma (BOM)</string>
     <string name="dep_subtitle_local_aar">aar local</string>
