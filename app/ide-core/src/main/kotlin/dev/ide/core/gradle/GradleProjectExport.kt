@@ -70,12 +70,28 @@ object GradleProjectExport {
     private const val PLUGIN_PARCELIZE = "org.jetbrains.kotlin.plugin.parcelize"
     private const val PLUGIN_JAVA_LIBRARY = "java-library"
     private const val PLUGIN_APPLICATION = "application"
+    private const val PLUGIN_PUBLISH = "maven-publish"
 
     /** Plugins Gradle ships itself, so they carry no version in the root `plugins` block. */
-    private val CORE_PLUGINS = setOf(PLUGIN_JAVA_LIBRARY, PLUGIN_APPLICATION)
+    private val CORE_PLUGINS = setOf(PLUGIN_JAVA_LIBRARY, PLUGIN_APPLICATION, PLUGIN_PUBLISH)
 
-    /** The generated build files (path relative to the project root, in write order) plus the notes. */
-    data class Rendered(val files: Map<String, String>, val notes: List<String>)
+    /** Where the Gradle wrapper's own files are bundled (the scripts and its launcher jar). */
+    private const val WRAPPER_RESOURCES = "gradle-export"
+    private const val WRAPPER_JAR = "gradle/wrapper/gradle-wrapper.jar"
+    private const val JITPACK_FILE = "jitpack.yml"
+
+    /** The version a library publishes under when its model names none. JitPack replaces it with the tag. */
+    private const val FALLBACK_VERSION = "1.0.0"
+
+    /**
+     * The generated build files (path relative to the project root, in write order) plus the notes.
+     * [binaries] are the generated files that are not text: the wrapper's launcher jar.
+     */
+    data class Rendered(
+        val files: Map<String, String>,
+        val notes: List<String>,
+        val binaries: Map<String, ByteArray> = emptyMap(),
+    )
 
     /** A finished export: the archive that was written and what could not be carried into it. */
     data class Outcome(val zip: Path, val notes: List<String>)
@@ -94,7 +110,8 @@ object GradleProjectExport {
         val libraries = (workspace.libraries + project.libraries).associateBy { it.name }
         val notes = ArrayList<String>()
         val modules = readModules(root, project, settingsProps(projectDir), notes)
-        return root to Rendered(renderFiles(root, project, modules, libraries, notes), notes.distinct())
+        val files = renderFiles(root, project, modules, libraries, notes)
+        return root to Rendered(files, notes.distinct(), wrapperBinaries())
     }
 
     /**
@@ -111,7 +128,7 @@ object GradleProjectExport {
                 val rel = root.relativize(file).toString().replace(File.separatorChar, '/')
                 // A generated script wins over a same-named file already in the tree, so the export is
                 // never two build files deep.
-                if (rel in rendered.files) continue
+                if (rel in rendered.files || rel in rendered.binaries) continue
                 zip.putNextEntry(ZipEntry("$prefix/$rel"))
                 Files.copy(file, zip)
                 zip.closeEntry()
@@ -119,6 +136,11 @@ object GradleProjectExport {
             for ((rel, text) in rendered.files) {
                 zip.putNextEntry(ZipEntry("$prefix/$rel"))
                 zip.write(text.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+            for ((rel, bytes) in rendered.binaries) {
+                zip.putNextEntry(ZipEntry("$prefix/$rel"))
+                zip.write(bytes)
                 zip.closeEntry()
             }
         }
@@ -152,6 +174,15 @@ object GradleProjectExport {
     ) {
         val isRoot: Boolean get() = path == ":"
         val buildFile: String get() = if (isRoot) "build.gradle.kts" else "$relDir/build.gradle.kts"
+
+        /** Something other projects depend on: an Android library, or a JVM module with no `main`. */
+        val isLibrary: Boolean get() = if (android != null) !android.isApplication else mainClass == null
+
+        /**
+         * Whether the export gives the module a Maven publication. A flavored Android library has one
+         * component per flavor and no `release` one, and which of them to publish is not the exporter's call.
+         */
+        val publishes: Boolean get() = isLibrary && android?.productFlavors.isNullOrEmpty()
     }
 
     private fun projectRoot(projectDir: Path, project: ProjectData): Path {
@@ -296,14 +327,23 @@ object GradleProjectExport {
         val rootModule = modules.firstOrNull { it.isRoot }
         val android = modules.any { it.android != null }
 
+        val group = publicationOf(project, modules)
         files["settings.gradle.kts"] = settingsScript(root, project, modules)
-        files["build.gradle.kts"] = rootScript(rootModule, modules, libraries, notes)
+        files["build.gradle.kts"] = rootScript(rootModule, modules, libraries, notes, group)
         for (module in modules.filterNot { it.isRoot }) {
-            files[module.buildFile] = moduleScript(module, modules, libraries, notes, foldedIntoRoot = false)
+            files[module.buildFile] = moduleScript(module, modules, libraries, notes, group, foldedIntoRoot = false)
         }
         for (module in modules) files += extraModuleFiles(module)
         files["gradle.properties"] = gradleProperties(modules, android)
         files["gradle/wrapper/gradle-wrapper.properties"] = wrapperProperties()
+        for (script in listOf("gradlew", "gradlew.bat")) wrapperResource(script)?.let { files[script] = it.decodeToString() }
+        if (modules.any { it.publishes }) files[JITPACK_FILE] = jitpackFile(modules)
+        for (module in modules) {
+            if (module.isLibrary && !module.publishes) {
+                notes += "Module '${module.data.name}' has product flavors, so no Maven publication was " +
+                    "generated for it: choose the variant to publish and add the `publishing` block yourself."
+            }
+        }
         files[".gitignore"] = gitIgnore()
         // Written last: it reports on everything the passes above collected.
         files[NOTES_FILE] = notesDocument(project, modules, notes)
@@ -353,6 +393,7 @@ object GradleProjectExport {
         modules: List<Exported>,
         libraries: Map<String, LibraryData>,
         notes: MutableList<String>,
+        group: Publication,
     ): String {
         val applied = rootModule?.let { pluginsFor(it) }.orEmpty()
         val used = LinkedHashSet<String>()
@@ -371,7 +412,7 @@ object GradleProjectExport {
         if (rootModule == null) return k.text()
         k.line()
         // The root module's own body; its plugins are already in the merged block above.
-        return k.text() + moduleScript(rootModule, modules, libraries, notes, foldedIntoRoot = true)
+        return k.text() + moduleScript(rootModule, modules, libraries, notes, group, foldedIntoRoot = true)
     }
 
     /** The plugin ids a module applies, in the order they belong in a `plugins` block. */
@@ -389,6 +430,7 @@ object GradleProjectExport {
         if (module.compose) ids += PLUGIN_COMPOSE
         if (module.parcelize) ids += PLUGIN_PARCELIZE
         if (module.serialization) ids += PLUGIN_SERIALIZATION
+        if (module.publishes) ids += PLUGIN_PUBLISH
         return ids
     }
 
@@ -403,6 +445,8 @@ object GradleProjectExport {
         modules: List<Exported>,
         libraries: Map<String, LibraryData>,
         notes: MutableList<String>,
+        /** The coordinates a published module goes under (see [publicationOf]). */
+        group: Publication,
         /** True when this is the root project's own module: the header and plugins are already written. */
         foldedIntoRoot: Boolean,
     ): String {
@@ -438,8 +482,85 @@ object GradleProjectExport {
         nativesConfiguration(k, module)
         dependenciesBlock(k, module, modules, libraries, notes)
         nativesUnpackTask(k, module, notes)
+        publishingBlock(k, module, group)
         return k.text().trimEnd() + "\n"
     }
+
+    /**
+     * The Maven publication of a library module: what `publishToMavenLocal` installs, and so what JitPack
+     * (which runs exactly that and serves what it finds) or any other repository gets.
+     *
+     * An Android library's `release` component only exists once the variants are created, hence
+     * `afterEvaluate`; a JVM library's `java` component is there from the start.
+     */
+    private fun publishingBlock(k: Kts, module: Exported, publication: Publication) {
+        val group = publication.group
+        val version = publication.version
+        if (!module.publishes) return
+        val android = module.android
+        val artifact = sanitize(module.data.name).lowercase()
+        k.line()
+        fun Kts.publication(name: String, component: String) {
+            block("publishing") {
+                block("publications") {
+                    block("create<MavenPublication>(\"$name\")") {
+                        line("from(components[\"$component\"])")
+                        line("groupId = \"${escape(group)}\"")
+                        line("artifactId = \"${escape(artifact)}\"")
+                        line("version = \"${escape(version)}\"")
+                    }
+                }
+            }
+        }
+        if (android != null) k.block("afterEvaluate") { publication("release", "release") }
+        else k.publication("maven", "java")
+    }
+
+    /**
+     * The group and version every published module shares. The group is the first Android library's
+     * namespace when there is one (already a reverse-DNS name its author chose), else one made from the
+     * project's name; the version is that library's version name. JitPack overrides both, with
+     * `com.github.<user>` and the tag, so they only have to be valid.
+     */
+    private fun publicationOf(project: ProjectData, modules: List<Exported>): Publication {
+        val library = modules.firstNotNullOfOrNull { m -> m.android?.takeIf { m.publishes } }
+        val name = project.name.lowercase().filter { it.isLetterOrDigit() }.ifEmpty { "project" }
+        return Publication(
+            group = library?.namespace?.takeIf { it.isNotBlank() }
+                ?: ("com.example." + (if (name[0].isDigit()) "p$name" else name)),
+            // One version for every module: they are published together and depend on each other by it.
+            version = library?.versionName?.takeIf { it.isNotBlank() && it != AndroidFacet.DEFAULT_VERSION_NAME }
+                ?: FALLBACK_VERSION,
+        )
+    }
+
+    /** The coordinates the published modules share. */
+    private class Publication(val group: String, val version: String)
+
+    /**
+     * `jitpack.yml`: JitPack builds on JDK 8 unless told otherwise, and this build needs 17. The install
+     * step is spelled out because the archive cannot carry `gradlew`'s executable bit (a zip written here
+     * has no file modes, and a file uploaded through the GitHub site has none either).
+     */
+    private fun jitpackFile(modules: List<Exported>): String = buildString {
+        appendLine("# Lets https://jitpack.io build this repository and serve its libraries as")
+        appendLine("#     com.github.<user>:<repository>:<tag>")
+        if (modules.count { it.publishes } > 1) {
+            appendLine("# or, one module at a time, com.github.<user>.<repository>:<module>:<tag>")
+        }
+        appendLine("jdk:")
+        appendLine("  - openjdk17")
+        appendLine("install:")
+        appendLine("  - chmod +x gradlew")
+        appendLine("  - ./gradlew publishToMavenLocal --no-daemon --console=plain")
+    }
+
+    private fun wrapperResource(name: String): ByteArray? =
+        GradleProjectExport::class.java.classLoader.getResourceAsStream("$WRAPPER_RESOURCES/$name")?.use { it.readBytes() }
+
+    /** The wrapper's launcher jar, bundled under a name no packaging step mistakes for a library. */
+    private fun wrapperBinaries(): Map<String, ByteArray> =
+        wrapperResource("gradle-wrapper.jar.bin")?.let { mapOf(WRAPPER_JAR to it) }.orEmpty()
 
     /** Every `natives`-scoped declaration of [module] (the per-ABI classifier jars). */
     private fun nativesDeps(module: Exported): List<LibraryDependency> =
@@ -518,8 +639,11 @@ object GradleProjectExport {
                 if (facet.isApplication) facet.applicationId?.let { line("applicationId = \"${escape(it)}\"") }
                 line("minSdk = ${facet.minSdk}")
                 if (facet.isApplication) line("targetSdk = ${facet.targetSdk}")
-                if (facet.versionCode != AndroidFacet.DEFAULT_VERSION_CODE) line("versionCode = ${facet.versionCode}")
-                if (facet.versionName != AndroidFacet.DEFAULT_VERSION_NAME) {
+                // A library's defaultConfig has neither: the version of a library is its publication's.
+                if (facet.isApplication && facet.versionCode != AndroidFacet.DEFAULT_VERSION_CODE) {
+                    line("versionCode = ${facet.versionCode}")
+                }
+                if (facet.isApplication && facet.versionName != AndroidFacet.DEFAULT_VERSION_NAME) {
                     line("versionName = \"${escape(facet.versionName)}\"")
                 }
                 placeholders(facet.manifestPlaceholders)
@@ -536,6 +660,13 @@ object GradleProjectExport {
             buildFeaturesBlock(this, module, facet)
             packagingBlock(this, facet)
             manifestAndSources(this, module, facet)
+            if (module.publishes) {
+                line()
+                // Declares the `release` component the publication below is made from.
+                block("publishing") {
+                    block("singleVariant(\"release\")") { line("withSourcesJar()") }
+                }
+            }
         }
     }
 
@@ -940,8 +1071,8 @@ object GradleProjectExport {
             appendLine()
             appendLine("- Android Gradle plugin $AGP_VERSION")
             appendLine("- Kotlin $KOTLIN_VERSION")
-            appendLine("- Gradle $GRADLE_VERSION (the wrapper properties are here; the `gradlew` scripts are not,")
-            appendLine("  so run `gradle wrapper` once or let Android Studio do it)")
+            appendLine("- Gradle $GRADLE_VERSION, through the wrapper included here (`./gradlew build`; on Linux or")
+            appendLine("  macOS run `chmod +x gradlew` first, since a zip keeps no executable bit)")
             appendLine()
             appendLine("Kotlin is pinned to the version CodeAssist compiled this project with, so the sources")
             appendLine("build the same way there. It is newer than the D8/R8 this AGP bundles, which warns")
@@ -959,6 +1090,24 @@ object GradleProjectExport {
                 appendLine("- `${module.path}` (${module.data.name}): $kind")
             }
             appendLine()
+            val published = modules.filter { it.publishes }
+            if (published.isNotEmpty()) {
+                appendLine("## Publishing")
+                appendLine()
+                appendLine("${published.joinToString(", ") { "`${it.path}`" }} ${if (published.size == 1) "has" else "have"} a Maven publication:")
+                appendLine("`./gradlew publishToMavenLocal` installs it, and any Maven repository can be added to the")
+                appendLine("`publishing` block of the module's build script.")
+                appendLine()
+                appendLine("To serve it from JitPack, push this folder as the ROOT of a GitHub repository (with")
+                appendLine("`settings.gradle.kts`, `gradlew` and `$JITPACK_FILE` at the top level), create a release or")
+                appendLine("tag, and look the repository up on https://jitpack.io. Users then add")
+                appendLine("`maven(\"https://jitpack.io\")` to their repositories and depend on")
+                appendLine(
+                    if (published.size == 1) "`com.github.<user>:<repository>:<tag>`."
+                    else "`com.github.<user>.<repository>:<module>:<tag>`, one line per module."
+                )
+                appendLine()
+            }
             appendLine("## Notes")
             appendLine()
             if (notes.isEmpty()) {

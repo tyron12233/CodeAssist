@@ -295,6 +295,132 @@ class GradleExportTest {
         }
     }
 
+    /** An Android library (`widgets`) beside a JVM one (`core`) and the app that uses them. */
+    private fun writeLibraryProject(dir: Path, platform: PlatformCore, flavored: Boolean = false) {
+        val types = ModuleTypeRegistry(platform.extensions)
+        types.register(TestType("android-app"), PluginId("android-support"))
+        types.register(TestType("android-lib"), PluginId("android-support"))
+        types.register(TestType("java-lib"), PluginId("java-support"))
+        val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+        store.workspace.beginModification().apply {
+            addProject("Fancy Widgets", BuildSystemId.NATIVE, store.vfs.root()); commit()
+        }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("widgets", types.resolve("android-lib")).apply {
+                languageLevel = LanguageLevel.JAVA_17
+                addSourceSet(androidSourceSet("main"))
+                addDependency(ModuleDependency(ModuleId("core"), DependencyScope.API))
+                putFacet(
+                    AndroidFacet(
+                        namespace = "com.acme.widgets", compileSdk = 34, minSdk = 24, isApplication = false,
+                        versionName = "2.1.0",
+                        productFlavors = if (flavored) listOf(ProductFlavor("free")) else emptyList(),
+                    ),
+                )
+            }
+            addModule("core", types.resolve("java-lib")).apply {
+                languageLevel = LanguageLevel.JAVA_17
+                addSourceSet(
+                    SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/kotlin" to setOf(ContentRole.SOURCE))),
+                )
+            }
+            addModule("app", types.resolve("android-app")).apply {
+                languageLevel = LanguageLevel.JAVA_17
+                addSourceSet(androidSourceSet("main"))
+                addDependency(ModuleDependency(ModuleId("widgets"), DependencyScope.IMPLEMENTATION))
+                putFacet(AndroidFacet(namespace = "com.acme.demo", compileSdk = 34, minSdk = 24))
+            }
+            commit()
+        }
+        store.save()
+        dir.writeSource("widgets/src/main/AndroidManifest.xml", """<manifest/>""")
+        dir.writeSource("widgets/src/main/java/com/acme/widgets/Badge.kt", "package com.acme.widgets\n\nclass Badge")
+        dir.writeSource("core/src/main/kotlin/com/acme/core/Shape.kt", "package com.acme.core\n\nclass Shape")
+        dir.writeSource("app/src/main/AndroidManifest.xml", """<manifest/>""")
+        dir.writeSource("app/src/main/java/com/acme/demo/Main.kt", "package com.acme.demo\n\nclass Main")
+    }
+
+    /**
+     * A library is exported to be published: JitPack answered a native project with "Android project not
+     * found", and the export it was pointed at instead still lacked the publication, the JDK pin and the
+     * wrapper JitPack runs. An app publishes nothing.
+     */
+    @Test
+    fun aLibraryModuleExportsReadyToPublish() {
+        testEnv("gradle-export-publish") { env ->
+            writeLibraryProject(env.dir, env.platform)
+            val rendered = GradleProjectExport.render(env.dir)
+            val files = rendered.files
+
+            val widgets = assertNotNull(files["widgets/build.gradle.kts"])
+            assertContains(widgets, """id("maven-publish")""")
+            assertContains(widgets, """singleVariant("release")""")
+            assertContains(widgets, "afterEvaluate {")
+            assertContains(widgets, """from(components["release"])""")
+            assertContains(widgets, """groupId = "com.acme.widgets"""")
+            assertContains(widgets, """artifactId = "widgets"""")
+            assertContains(widgets, """version = "2.1.0"""")
+            // A library's defaultConfig has no versionName: writing one there does not compile.
+            assertFalse("versionName" in widgets, widgets)
+
+            val core = assertNotNull(files["core/build.gradle.kts"])
+            assertContains(core, """id("maven-publish")""")
+            assertContains(core, """from(components["java"])""")
+            assertContains(core, """groupId = "com.acme.widgets"""")
+            assertContains(core, """version = "2.1.0"""")
+            assertFalse("afterEvaluate" in core, "a JVM library's component exists from the start")
+
+            val app = assertNotNull(files["app/build.gradle.kts"])
+            assertFalse("maven-publish" in app || "publishing" in app, "an application is not published:\n$app")
+            // Gradle ships maven-publish itself, so the root block does not declare it.
+            assertFalse("maven-publish" in assertNotNull(files["build.gradle.kts"]))
+
+            val jitpack = assertNotNull(files["jitpack.yml"])
+            assertContains(jitpack, "openjdk17")
+            assertContains(jitpack, "chmod +x gradlew")
+            assertContains(jitpack, "./gradlew publishToMavenLocal")
+
+            assertTrue(assertNotNull(files["gradlew"]).startsWith("#!/"), "the wrapper script is the real one")
+            assertContains(assertNotNull(files["gradlew.bat"]), "gradle-wrapper.jar")
+            val jar = assertNotNull(rendered.binaries["gradle/wrapper/gradle-wrapper.jar"])
+            assertTrue(jar.size > 10_000 && jar[0] == 'P'.code.toByte() && jar[1] == 'K'.code.toByte(), "a real jar")
+            assertContains(assertNotNull(files["GRADLE-EXPORT.md"]), "## Publishing")
+
+            val out = env.dir.resolve("out/widgets-gradle.zip")
+            GradleProjectExport.exportZip(env.dir, out, "widgets")
+            ZipFile(out.toFile()).use { zip ->
+                val wrapper = assertNotNull(zip.getEntry("widgets/gradle/wrapper/gradle-wrapper.jar"))
+                assertEquals(jar.size.toLong(), zip.getInputStream(wrapper).use { it.readBytes().size.toLong() })
+                assertNotNull(zip.getEntry("widgets/gradlew"))
+                assertNotNull(zip.getEntry("widgets/jitpack.yml"))
+            }
+        }
+    }
+
+    @Test
+    fun anApplicationOnlyProjectGetsNoPublishingFiles() {
+        testEnv("gradle-export-nopublish") { env ->
+            writeNativesProject(env.dir, env.platform)
+            val files = GradleProjectExport.render(env.dir).files
+            assertFalse("jitpack.yml" in files, "nothing to publish, so nothing for JitPack to read")
+            assertFalse("## Publishing" in assertNotNull(files["GRADLE-EXPORT.md"]))
+            assertNotNull(files["gradlew"], "the wrapper is useful to every export")
+        }
+    }
+
+    /** A flavored library has one component per flavor; which to publish is left to its author, and said so. */
+    @Test
+    fun aFlavoredLibraryIsNotedInsteadOfPublished() {
+        testEnv("gradle-export-flavored-lib") { env ->
+            writeLibraryProject(env.dir, env.platform, flavored = true)
+            val rendered = GradleProjectExport.render(env.dir)
+            val widgets = assertNotNull(rendered.files["widgets/build.gradle.kts"])
+            assertFalse("maven-publish" in widgets || "singleVariant" in widgets, widgets)
+            assertTrue(rendered.notes.any { "widgets" in it && "product flavors" in it }, "notes: ${rendered.notes}")
+            assertContains(assertNotNull(rendered.files["core/build.gradle.kts"]), """groupId = "com.example.fancywidgets"""")
+        }
+    }
+
     @Test
     fun zipCarriesSourcesAndLeavesIdeStateBehind() {
         testEnv("gradle-export-zip") { env ->
