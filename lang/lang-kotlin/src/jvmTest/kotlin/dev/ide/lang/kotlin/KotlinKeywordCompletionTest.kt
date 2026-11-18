@@ -35,6 +35,18 @@ class KotlinKeywordCompletionTest {
     }
 
     @Test
+    fun setterParameterOffersValue() {
+        // #1774: the slot offered nothing of its own, so the popup held only buffer words (`var`).
+        val typed = items("package demo\nvar num = 10\n    get() = field\n    set(va|) { println(\"set\") }")
+        val value = typed.firstOrNull { it.label == "value" }
+        assertEquals(CompletionItemKind.PARAMETER, value?.kind, "a setter parameter should offer `value`; got ${typed.map { it.label }}")
+        assertEquals("value", value?.insertText)
+        assertTrue("value" in labels("package demo\nclass C {\n    var num = 10\n        set(|) { field = 1 }\n}"), "an empty setter parameter list should offer `value`")
+        assertFalse("value" in labels("package demo\nfun f(va|) {}"), "`value` belongs to a setter only")
+        assertFalse("value" in labels("package demo\nvar num = 10\n    set(nu|) {}"), "`value` must still match what was typed")
+    }
+
+    @Test
     fun returnOfferedInFunctionBody() {
         assertTrue("return" in labels("package demo\nfun g() { ret| }"), "expected `return` in a function body")
     }

@@ -668,6 +668,8 @@ class KotlinCompletion(
         // At a `when (subject) { <caret> }` branch slot on a SEALED/ENUM subject → a single "add remaining
         // branches" item that fills every not-yet-covered case (IntelliJ's exhaustive-when fill).
         whenAddBranchesItem(markerLeaf, offset, resolver)?.let { extra += it }
+        // The one parameter of a property setter (`set(<caret>)`) → `value`, the name everyone gives it.
+        setterParameterItem(markerLeaf, matcher)?.let { extra += it }
         // The marker IS the NAME being given to a declaration (`val foo`, `fun bar`, a parameter) — an
         // identifier the user is inventing, so scope symbols / type names / auto-imports don't belong here.
         // (Any override / ctor-property / named-argument stubs above still apply: they're the *right* offers at
@@ -696,6 +698,24 @@ class KotlinCompletion(
         return PositionResult(
             raw, extra = extra, expected = expected, keywordContext = true,
             nameReference = true, capped = types.capped,
+        )
+    }
+
+    /**
+     * `value` at the name of a property setter's parameter (`set(<caret>)`, `set(va<caret>)`). The name is free,
+     * but `value` is the convention, and nothing else is offered here: the slot is a name being invented, so
+     * without this the popup held only words lifted from the buffer (`var` for someone typing `va`).
+     */
+    private fun setterParameterItem(markerLeaf: KtElement?, matcher: PrefixMatcher): CompletionItem? {
+        val param = markerLeaf?.parent as? KtParameter ?: return null
+        if (param.nameIdentifier !== markerLeaf) return null
+        val accessor = (param.parent as? KtParameterList)?.parent as? KtPropertyAccessor ?: return null
+        if (!accessor.isSetter || !matcher.matches(SETTER_PARAMETER)) return null
+        return CompletionItem(
+            label = SETTER_PARAMETER,
+            insertText = SETTER_PARAMETER,
+            kind = CompletionItemKind.PARAMETER,
+            sortPriority = -1,
         )
     }
 
@@ -1518,6 +1538,9 @@ class KotlinCompletion(
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.
         const val MARKER = "IntellijIdeaRulezzz"
+
+        /** The conventional name of a property setter's parameter. */
+        private const val SETTER_PARAMETER = "value"
 
         /** Value types with a callable constructor that nobody means to call: completing `String` wants the
          *  type (`String.format`, `String::class`), never `String()`. The boxed Java forms come along because
