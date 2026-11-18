@@ -3,6 +3,7 @@ package dev.codeassist.csharp.completion
 
 import android.util.Log
 import dev.codeassist.csharp.CSharpPlugin
+import dev.codeassist.csharp.editor.quickfixes.CsUsingFix
 import dev.codeassist.csharp.project.CsProject
 import dev.codeassist.csharp.project.csproj.Csproj
 import dev.codeassist.csharp.project.csproj.CsprojGraph
@@ -16,6 +17,8 @@ import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionResultSet
+import dev.ide.lang.completion.TextEdit
+import dev.ide.lang.dom.TextRange
 import kotlinx.coroutines.CancellationException
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -76,8 +79,26 @@ internal class CsCompletionContributor(
         result: CompletionResultSet,
         items: List<CsCompletionItems.Item>,
     ) {
+        val source by lazy { params.document.text.toString() }
         for (item in items) {
             if (!params.prefixMatches(item.name)) continue
+            // A type no using reaches yet: accepting it also writes the using, where the quick fix would.
+            if (item.importNamespace.isNotEmpty()) {
+                if (CsUsingFix.imports(source, item.importNamespace)) continue
+                val using = CsUsingFix.insertion(source, item.importNamespace)
+                result.addElement(
+                    CompletionItem(
+                        label = item.name,
+                        insertText = item.name,
+                        kind = CompletionItemKind.CLASS,
+                        detail = "using ${item.importNamespace}",
+                        container = item.importNamespace,
+                        sortPriority = UNIMPORTED_PRIORITY,
+                        additionalEdits = listOf(TextEdit(TextRange(using.offset, using.offset), using.text)),
+                    ),
+                )
+                continue
+            }
             val kind = when (item.kind) {
                 "class", "struct", "delegate" -> CompletionItemKind.CLASS
                 "interface" -> CompletionItemKind.INTERFACE
@@ -339,6 +360,9 @@ internal class CsCompletionContributor(
     }
 
     private companion object {
+        /** After everything already in scope: a type that needs a using is the less likely pick. */
+        const val UNIMPORTED_PRIORITY = 50
+
         /** A line that has only `using` before the name: `using `, `global using `. */
         val USING_START = Regex("""^\s*(?:global\s+)?using\s+$""")
 

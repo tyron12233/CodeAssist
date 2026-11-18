@@ -63,4 +63,17 @@ class CsCompletionItemsTest {
         val without = CsCompletionItems.parse(listOf("item\tF\tmethod\tvoid\t0\tC\t0\t1")).single()
         assertEquals("", without.documentation)
     }
+
+    @Test
+    fun `a type that needs a using carries its namespace`() {
+        val items = CsCompletionItems.parse(
+            listOf(
+                "item\tStringBuilder\tclass\t\t0\tSystem.Text\t0\t1\t\tSystem.Text",
+                "item\tString\tclass\t\t0\tSystem\t0\t1\t",
+            ),
+        )
+
+        assertEquals("System.Text", items[0].importNamespace)
+        assertEquals("", items[1].importNamespace)
+    }
 }

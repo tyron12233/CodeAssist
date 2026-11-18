@@ -22,6 +22,69 @@ internal object CsNavigationLines {
     /** One name to colour. [modifiers] are the server's words (`declaration`, `static`, ...). */
     data class Token(val start: Int, val length: Int, val kind: String, val modifiers: List<String>)
 
+    /** A declaration in the file's outline. [depth] is its nesting, 0 at the top. */
+    data class Item(val kind: String, val depth: Int, val nameOffset: Int, val end: Int, val name: String, val detail: String)
+
+    /** A region that can be collapsed. [kind] is the editor's word for it (`classBody`, `imports`, ...). */
+    data class Fold(val start: Int, val end: Int, val kind: String, val placeholder: String)
+
+    class Outline(val items: List<Item>, val folds: List<Fold>)
+
+    /** The name at the caret: its text and range, what it is, and whether the project declares it. */
+    data class Named(val name: String, val start: Int, val end: Int, val kind: String, val inSource: Boolean)
+
+    /** One place a symbol appears. [access] is `d` for its declaration, `w` where it is assigned, `r` elsewhere. */
+    data class Reference(val path: String, val start: Int, val end: Int, val access: Char)
+
+    class References(val symbol: Named, val places: List<Reference>)
+
+    fun outline(lines: List<String>): Outline {
+        val items = ArrayList<Item>()
+        val folds = ArrayList<Fold>()
+        for (line in lines) {
+            val parts = line.split('\t')
+            when (parts[0]) {
+                "item" -> {
+                    if (parts.size < 6) continue
+                    val depth = parts[2].toIntOrNull() ?: continue
+                    val offset = parts[3].toIntOrNull() ?: continue
+                    val end = parts[4].toIntOrNull() ?: continue
+                    items += Item(parts[1], depth, offset, end, parts[5], parts.getOrElse(6) { "" })
+                }
+                "fold" -> {
+                    if (parts.size < 4) continue
+                    val start = parts[1].toIntOrNull() ?: continue
+                    val end = parts[2].toIntOrNull() ?: continue
+                    if (end > start) folds += Fold(start, end, parts[3], parts.getOrElse(4) { "..." }.ifEmpty { "..." })
+                }
+            }
+        }
+        return Outline(items, folds)
+    }
+
+    fun references(lines: List<String>): References? {
+        var symbol: Named? = null
+        val places = ArrayList<Reference>()
+        for (line in lines) {
+            val parts = line.split('\t')
+            when (parts[0]) {
+                "sym" -> {
+                    if (parts.size < 6) continue
+                    val start = parts[2].toIntOrNull() ?: continue
+                    val end = parts[3].toIntOrNull() ?: continue
+                    symbol = Named(parts[1], start, end, parts[4], parts[5] == "1")
+                }
+                "ref" -> {
+                    if (parts.size < 5) continue
+                    val start = parts[2].toIntOrNull() ?: continue
+                    val end = parts[3].toIntOrNull() ?: continue
+                    places += Reference(parts[1], start, end, parts[4].firstOrNull() ?: 'r')
+                }
+            }
+        }
+        return symbol?.let { References(it, places) }
+    }
+
     fun definitions(lines: List<String>): List<Definition> = lines.mapNotNull { line ->
         val parts = line.split('\t')
         if (parts.size < 4 || parts[0] != "def") return@mapNotNull null

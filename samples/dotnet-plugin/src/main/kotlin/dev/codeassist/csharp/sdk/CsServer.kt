@@ -11,7 +11,7 @@ package dev.codeassist.csharp.sdk
  * changed. The cost is that requests wait for one another: completion asked during a build is answered after it.
  *
  * A request is a response file whose first line names the work (`@@compile`, `@@check`, `@@checkfile`,
- * `@@complete`, `@@signature`, `@@definition`, `@@hover`, `@@tokens`); see [ResidentProgram] for the protocol around it. The process ends itself
+ * `@@complete`, `@@signature`, `@@definition`, `@@hover`, `@@tokens`, `@@outline`, `@@references`, `@@format`); see [ResidentProgram] for the protocol around it. The process ends itself
  * after a few idle minutes and starts again on the next request.
  */
 internal object CsServer : ResidentProgram(
@@ -24,6 +24,9 @@ internal object CsServer : ResidentProgram(
         listOf(
             sdk.csc.parent.resolve("Microsoft.CodeAnalysis.dll"),
             sdk.csc.parent.resolve("Microsoft.CodeAnalysis.CSharp.dll"),
+            // The formatter's. Named at compile time and loaded only when something is first reformatted.
+            sdk.csc.parent.resolve("Microsoft.CodeAnalysis.Workspaces.dll"),
+            sdk.csc.parent.resolve("Microsoft.CodeAnalysis.CSharp.Workspaces.dll"),
         )
     },
 )
@@ -105,6 +108,12 @@ static class CsServer
                 return Navigator.Hover(arguments.Skip(1).ToArray(), output);
             case "@@tokens":
                 return Navigator.Tokens(arguments.Skip(1).ToArray(), output);
+            case "@@outline":
+                return Navigator.Outline(arguments.Skip(1).ToArray(), output);
+            case "@@references":
+                return Navigator.References(arguments.Skip(1).ToArray(), output);
+            case "@@format":
+                return Reformatter.Run(arguments.Skip(1).ToArray(), output);
             case "@@compile":
                 return Compiler.Run(roslyn, arguments.Skip(1).ToArray(), output);
             default:
@@ -402,4 +411,4 @@ sealed class ProjectState
 """
 
 /** The whole program: the entry point and shared state, then the checker, the completer and the navigator. */
-internal const val SERVER_SOURCE = SERVER_MAIN + CHECKER_SOURCE + COMPLETER_SOURCE + NAVIGATOR_SOURCE
+internal const val SERVER_SOURCE = SERVER_MAIN + CHECKER_SOURCE + COMPLETER_SOURCE + NAVIGATOR_SOURCE + FORMATTER_SOURCE

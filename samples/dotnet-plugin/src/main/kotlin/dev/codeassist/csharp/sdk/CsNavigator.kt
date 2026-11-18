@@ -16,6 +16,10 @@ import dev.codeassist.csharp.util.ToolCancellation
  *   comes from a reference assembly has no source and gives no lines.
  * - `@@hover`: one `hover <kind> <name> <container> <signature> <doc>` line, or none.
  * - `@@tokens`: `tok <start> <length> <kind> <modifiers>`, one per name, in document order.
+ * - `@@outline`: `item <kind> <depth> <name offset> <end> <name> <detail>` for each declaration, then
+ *   `fold <start> <end> <kind> <placeholder>` for each region that can be collapsed. Syntax only.
+ * - `@@references`: `sym <name> <start> <end> <kind> <in source 0|1>` for the name at the caret, then
+ *   `ref <path> <start> <end> <d|w|r>` for each place the project declares, writes or reads that symbol.
  */
 internal object CsNavigator {
 
@@ -46,6 +50,23 @@ internal object CsNavigator {
         cancellation: ToolCancellation,
         onLine: (String) -> Unit,
     ): Int? = ask(sdk, listOf("@@tokens", bufferPath) + arguments, cancellation, onLine)
+
+    fun outline(
+        sdk: DotnetSdk,
+        bufferPath: String,
+        arguments: List<String>,
+        cancellation: ToolCancellation,
+        onLine: (String) -> Unit,
+    ): Int? = ask(sdk, listOf("@@outline", bufferPath) + arguments, cancellation, onLine)
+
+    fun references(
+        sdk: DotnetSdk,
+        bufferPath: String,
+        caret: Int,
+        arguments: List<String>,
+        cancellation: ToolCancellation,
+        onLine: (String) -> Unit,
+    ): Int? = ask(sdk, listOf("@@references", caret.toString(), bufferPath) + arguments, cancellation, onLine)
 
     private fun ask(
         sdk: DotnetSdk,
@@ -137,7 +158,14 @@ static class Navigator
     // The symbol the caret is on or just after, and whether the caret is on its declaration.
     static ISymbol SymbolAt(Snapshot snapshot, int caret, out bool declared)
     {
+        SyntaxToken token;
+        return SymbolAt(snapshot, caret, out declared, out token);
+    }
+
+    static ISymbol SymbolAt(Snapshot snapshot, int caret, out bool declared, out SyntaxToken at)
+    {
         declared = false;
+        at = default(SyntaxToken);
         SyntaxNode root = snapshot.Buffer.GetRoot(CancellationToken.None);
         int end = root.FullSpan.End;
         if (end == 0) return null;
@@ -150,8 +178,185 @@ static class Navigator
             if (before.IsKind(SyntaxKind.IdentifierToken)) token = before;
         }
         if (token.Parent == null) return null;
+        at = token;
         SemanticModel model = snapshot.Compilation.GetSemanticModel(snapshot.Buffer, false);
         return SymbolOf(model, token, out declared);
+    }
+
+    // ---- usages
+
+    public static int References(string[] arguments, TextWriter output)
+    {
+        if (arguments.Length < 2) return 255;
+        Snapshot snapshot = Project.Open(arguments.Skip(2).ToArray(), Path.GetFullPath(arguments[1]));
+        if (snapshot.Buffer == null) return 0;
+        bool declared;
+        SyntaxToken token;
+        ISymbol symbol = SymbolAt(snapshot, int.Parse(arguments[0]), out declared, out token);
+        if (symbol == null || !token.IsKind(SyntaxKind.IdentifierToken)) return 0;
+        ISymbol wanted = Source(symbol);
+        // A name that stands for a constructor is a use of its type: `new Cart()` and `class Cart` go together.
+        IMethodSymbol constructor = wanted as IMethodSymbol;
+        if (constructor != null && (constructor.MethodKind == MethodKind.Constructor || constructor.MethodKind == MethodKind.StaticConstructor))
+            wanted = constructor.ContainingType.OriginalDefinition;
+
+        bool inSource = wanted.Locations.Any(l => l.IsInSource);
+        string name = token.ValueText;
+        output.WriteLine("sym\t" + Completer.Clean(name) + "\t" + token.SpanStart + "\t" + token.Span.End + "\t" + Kind(wanted) + "\t" + (inSource ? "1" : "0"));
+
+        foreach (SyntaxTree tree in snapshot.Compilation.SyntaxTrees)
+        {
+            if (tree.GetText(CancellationToken.None).ToString().IndexOf(name, StringComparison.Ordinal) < 0) continue;
+            SemanticModel model = snapshot.Compilation.GetSemanticModel(tree, false);
+            foreach (SyntaxToken candidate in tree.GetRoot(CancellationToken.None).DescendantTokens())
+            {
+                if (!candidate.IsKind(SyntaxKind.IdentifierToken) || candidate.ValueText != name) continue;
+                bool own;
+                ISymbol found;
+                try { found = SymbolOf(model, candidate, out own); }
+                catch (Exception) { continue; }
+                if (found == null) continue;
+                ISymbol source = Source(found);
+                IMethodSymbol made = source as IMethodSymbol;
+                if (made != null && made.MethodKind == MethodKind.Constructor && wanted is INamedTypeSymbol)
+                    source = made.ContainingType.OriginalDefinition;
+                if (!SymbolEqualityComparer.Default.Equals(source, wanted)) continue;
+                string access = own ? "d" : Written(candidate) ? "w" : "r";
+                output.WriteLine("ref\t" + tree.FilePath + "\t" + candidate.SpanStart + "\t" + candidate.Span.End + "\t" + access);
+            }
+        }
+        return 0;
+    }
+
+    // Whether a use of a name assigns to it: the left of an assignment, `++` or `--`, an `out` or `ref` argument.
+    static bool Written(SyntaxToken token)
+    {
+        SyntaxNode expression = token.Parent;
+        MemberAccessExpressionSyntax member = expression == null ? null : expression.Parent as MemberAccessExpressionSyntax;
+        if (member != null && member.Name == expression) expression = member;
+        SyntaxNode parent = expression == null ? null : expression.Parent;
+        AssignmentExpressionSyntax assignment = parent as AssignmentExpressionSyntax;
+        if (assignment != null) return assignment.Left == expression;
+        if (parent is PrefixUnaryExpressionSyntax || parent is PostfixUnaryExpressionSyntax)
+            return parent.IsKind(SyntaxKind.PreIncrementExpression) || parent.IsKind(SyntaxKind.PreDecrementExpression)
+                || parent.IsKind(SyntaxKind.PostIncrementExpression) || parent.IsKind(SyntaxKind.PostDecrementExpression);
+        ArgumentSyntax argument = parent as ArgumentSyntax;
+        return argument != null && (argument.RefKindKeyword.IsKind(SyntaxKind.OutKeyword) || argument.RefKindKeyword.IsKind(SyntaxKind.RefKeyword));
+    }
+
+    // ---- outline and folding
+
+    public static int Outline(string[] arguments, TextWriter output)
+    {
+        if (arguments.Length < 1) return 255;
+        Snapshot snapshot = Project.Open(arguments.Skip(1).ToArray(), Path.GetFullPath(arguments[0]));
+        if (snapshot.Buffer == null) return 0;
+        SyntaxNode root = snapshot.Buffer.GetRoot(CancellationToken.None);
+        Items(root, 0, output);
+        Folds(root, snapshot.Buffer, output);
+        return 0;
+    }
+
+    static void Item(TextWriter output, string kind, int depth, SyntaxToken name, SyntaxNode node, string detail)
+    {
+        if (name.Span.Length == 0) return;
+        output.WriteLine("item\t" + kind + "\t" + depth + "\t" + name.SpanStart + "\t" + node.Span.End + "\t"
+            + Completer.Clean(name.ValueText) + "\t" + Completer.Clean(detail ?? ""));
+    }
+
+    static void Items(SyntaxNode node, int depth, TextWriter output)
+    {
+        foreach (SyntaxNode child in node.ChildNodes())
+        {
+            BaseNamespaceDeclarationSyntax space = child as BaseNamespaceDeclarationSyntax;
+            if (space != null)
+            {
+                // A file-scoped namespace holds the whole file; indenting everything under it says nothing.
+                bool whole = child is FileScopedNamespaceDeclarationSyntax;
+                output.WriteLine("item\tnamespace\t" + depth + "\t" + space.Name.SpanStart + "\t" + child.Span.End + "\t"
+                    + Completer.Clean(space.Name.ToString()) + "\t");
+                Items(child, whole ? depth : depth + 1, output);
+                continue;
+            }
+            TypeDeclarationSyntax type = child as TypeDeclarationSyntax;
+            if (type != null)
+            {
+                Item(output, type is InterfaceDeclarationSyntax ? "interface" : "class", depth, type.Identifier, child, "");
+                Items(child, depth + 1, output);
+                continue;
+            }
+            EnumDeclarationSyntax enumeration = child as EnumDeclarationSyntax;
+            if (enumeration != null)
+            {
+                Item(output, "enum", depth, enumeration.Identifier, child, "");
+                foreach (EnumMemberDeclarationSyntax member in enumeration.Members)
+                    Item(output, "enumConstant", depth + 1, member.Identifier, member, "");
+                continue;
+            }
+            DelegateDeclarationSyntax callback = child as DelegateDeclarationSyntax;
+            if (callback != null) { Item(output, "class", depth, callback.Identifier, child, callback.ParameterList.ToString()); continue; }
+            MethodDeclarationSyntax method = child as MethodDeclarationSyntax;
+            if (method != null) { Item(output, "method", depth, method.Identifier, child, method.ParameterList.ToString()); continue; }
+            ConstructorDeclarationSyntax constructor = child as ConstructorDeclarationSyntax;
+            if (constructor != null) { Item(output, "constructor", depth, constructor.Identifier, child, constructor.ParameterList.ToString()); continue; }
+            PropertyDeclarationSyntax property = child as PropertyDeclarationSyntax;
+            if (property != null) { Item(output, "property", depth, property.Identifier, child, property.Type.ToString()); continue; }
+            EventDeclarationSyntax raised = child as EventDeclarationSyntax;
+            if (raised != null) { Item(output, "property", depth, raised.Identifier, child, raised.Type.ToString()); continue; }
+            BaseFieldDeclarationSyntax field = child as BaseFieldDeclarationSyntax;
+            if (field != null)
+            {
+                bool constant = field.Modifiers.Any(m => m.IsKind(SyntaxKind.ConstKeyword));
+                foreach (VariableDeclaratorSyntax variable in field.Declaration.Variables)
+                    Item(output, constant ? "constant" : "field", depth, variable.Identifier, child, field.Declaration.Type.ToString());
+            }
+        }
+    }
+
+    static void Fold(TextWriter output, SyntaxTree tree, int start, int end, string kind, string placeholder)
+    {
+        if (end <= start) return;
+        var span = tree.GetLineSpan(Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(start, end), CancellationToken.None);
+        if (span.StartLinePosition.Line == span.EndLinePosition.Line) return;
+        output.WriteLine("fold\t" + start + "\t" + end + "\t" + kind + "\t" + Completer.Clean(placeholder));
+    }
+
+    static void Folds(SyntaxNode root, SyntaxTree tree, TextWriter output)
+    {
+        var usings = root.DescendantNodes(n => n is CompilationUnitSyntax || n is BaseNamespaceDeclarationSyntax)
+            .OfType<UsingDirectiveSyntax>().ToList();
+        if (usings.Count > 1) Fold(output, tree, usings[0].SpanStart, usings[usings.Count - 1].Span.End, "imports", "using ...");
+
+        foreach (SyntaxNode node in root.DescendantNodes())
+        {
+            BaseTypeDeclarationSyntax type = node as BaseTypeDeclarationSyntax;
+            if (type != null) { Fold(output, tree, type.OpenBraceToken.SpanStart, type.CloseBraceToken.Span.End, "classBody", "{...}"); continue; }
+            NamespaceDeclarationSyntax space = node as NamespaceDeclarationSyntax;
+            if (space != null) { Fold(output, tree, space.OpenBraceToken.SpanStart, space.CloseBraceToken.Span.End, "block", "{...}"); continue; }
+            AccessorListSyntax accessors = node as AccessorListSyntax;
+            if (accessors != null) { Fold(output, tree, accessors.OpenBraceToken.SpanStart, accessors.CloseBraceToken.Span.End, "functionBody", "{...}"); continue; }
+            BlockSyntax block = node as BlockSyntax;
+            if (block != null)
+            {
+                bool body = block.Parent is BaseMethodDeclarationSyntax || block.Parent is AccessorDeclarationSyntax
+                    || block.Parent is LocalFunctionStatementSyntax || block.Parent is AnonymousFunctionExpressionSyntax;
+                Fold(output, tree, block.OpenBraceToken.SpanStart, block.CloseBraceToken.Span.End, body ? "functionBody" : "block", "{...}");
+            }
+        }
+
+        var regions = new Stack<SyntaxTrivia>();
+        foreach (SyntaxTrivia trivia in root.DescendantTrivia(null, true))
+        {
+            if (trivia.IsKind(SyntaxKind.MultiLineCommentTrivia)) Fold(output, tree, trivia.SpanStart, trivia.Span.End, "comment", "/*...*/");
+            else if (trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia))
+                Fold(output, tree, trivia.SpanStart, trivia.Span.End - (trivia.ToFullString().EndsWith("\n") ? 1 : 0), "comment", "/// ...");
+            else if (trivia.IsKind(SyntaxKind.RegionDirectiveTrivia)) regions.Push(trivia);
+            else if (trivia.IsKind(SyntaxKind.EndRegionDirectiveTrivia) && regions.Count > 0)
+            {
+                SyntaxTrivia opened = regions.Pop();
+                Fold(output, tree, opened.SpanStart, trivia.Span.End, "block", opened.ToString().Trim());
+            }
+        }
     }
 
     static ISymbol SymbolOf(SemanticModel model, SyntaxToken token, out bool declared)

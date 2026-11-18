@@ -139,7 +139,71 @@ static class Completer
                 + "\t" + (list.Count > 1 ? list.Count.ToString() : "1")
                 + "\t" + Documentation(first, false));
         }
+
+        // Types by name that no using reaches yet, each with the namespace to import. Only where a type name can
+        // stand (not after a dot), and only once two letters say which.
+        int before = wordStart - 1;
+        while (before >= 0 && char.IsWhiteSpace(source[before])) before--;
+        bool afterDot = before >= 0 && source[before] == '.';
+        if (!afterDot && prefix.Length >= 2)
+        {
+            var offered = new HashSet<string>(order.Select(k => k.Substring(k.IndexOf('\t') + 1)), StringComparer.Ordinal);
+            int added = 0;
+            foreach (Importable type in Importables(compilation)
+                .Where(t => t.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !offered.Contains(t.Name))
+                .OrderBy(t => t.Name.Length).ThenBy(t => t.Name, StringComparer.Ordinal).ThenBy(t => t.Namespace, StringComparer.Ordinal))
+            {
+                if (added++ >= 40) break;
+                output.WriteLine("item\t" + Clean(type.Name) + "\t" + type.Kind + "\t\t0\t" + Clean(type.Namespace) + "\t0\t1\t\t" + Clean(type.Namespace));
+            }
+        }
         return 0;
+    }
+
+    sealed class Importable
+    {
+        public string Name;
+        public string Namespace;
+        public string Kind;
+    }
+
+    // The public types of the references, kept by name for as long as the references are the same ones: walking
+    // every namespace of the class library on each request would cost more than the request.
+    static long importablesKey;
+    static List<Importable> importables;
+
+    static List<Importable> Importables(CSharpCompilation compilation)
+    {
+        long key = 17;
+        foreach (MetadataReference reference in compilation.References)
+            key = key * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(reference);
+        if (importables == null || key != importablesKey)
+        {
+            var found = new List<Importable>();
+            foreach (MetadataReference reference in compilation.References)
+            {
+                IAssemblySymbol assembly = compilation.GetAssemblyOrModuleSymbol(reference) as IAssemblySymbol;
+                if (assembly != null) Collect(assembly.GlobalNamespace, found, false);
+            }
+            importables = found;
+            importablesKey = key;
+        }
+        // The project's own types change as it is edited, so they are read each time; there are few of them.
+        var all = new List<Importable>(importables);
+        Collect(compilation.Assembly.GlobalNamespace, all, true);
+        return all;
+    }
+
+    static void Collect(INamespaceSymbol space, List<Importable> found, bool own)
+    {
+        foreach (INamedTypeSymbol type in space.GetTypeMembers())
+        {
+            if (space.IsGlobalNamespace || type.Name.Length == 0 || type.Name[0] == '<') continue;
+            bool visible = type.DeclaredAccessibility == Accessibility.Public || (own && type.DeclaredAccessibility == Accessibility.Internal);
+            if (!visible) continue;
+            found.Add(new Importable { Name = type.Name, Namespace = space.ToDisplayString(), Kind = Category(type) });
+        }
+        foreach (INamespaceSymbol inner in space.GetNamespaceMembers()) Collect(inner, found, own);
     }
 
     // The documentation of a DLL, read from the .xml file beside it. Roslyn's own XmlDocumentationProvider is in the

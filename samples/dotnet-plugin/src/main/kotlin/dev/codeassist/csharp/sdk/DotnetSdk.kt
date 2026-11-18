@@ -229,7 +229,7 @@ class DotnetSdk(
 
     companion object {
         /** The runtime version staged into the asset; also the unpack stamp, so a new tree unpacks afresh. */
-        const val VERSION = "10.0.15-2"
+        const val VERSION = "10.0.15-3"
 
         /** What the user is told when there is no launcher for this device's architecture. */
         const val NO_DOTNET =

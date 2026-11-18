@@ -7,6 +7,8 @@ import dev.codeassist.csharp.project.csproj.Csproj
 import dev.codeassist.csharp.project.csproj.CsprojGraph
 import dev.codeassist.csharp.project.csproj.CsprojReferences
 import dev.codeassist.csharp.sdk.CsCompleter
+import dev.codeassist.csharp.sdk.CsFormatEdits
+import dev.codeassist.csharp.sdk.CsFormatter
 import dev.codeassist.csharp.sdk.CsNavigator
 import dev.codeassist.csharp.sdk.DotnetSdk
 import dev.codeassist.csharp.util.TAG
@@ -107,6 +109,59 @@ internal class CsSemanticCompletion(private val sdk: DotnetSdk) {
         } ?: return null
 
         return CsNavigationLines.hover(lines)
+    }
+
+    /** Returns the declarations and collapsible regions of [text], or null when Roslyn cannot answer. */
+    suspend fun outlineFor(path: String, text: String): CsNavigationLines.Outline? {
+        val file = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+
+        val lines = ask("outline", file, null, text) { buffer, arguments, cancellation, onLine ->
+            CsNavigator.outline(sdk, buffer, arguments, cancellation, onLine)
+        } ?: return null
+
+        return CsNavigationLines.outline(lines)
+    }
+
+    /**
+     * Returns the symbol at [offset] and every place the project declares or uses it, the buffer's own
+     * places under [path]. Null when there is no name there or Roslyn cannot answer.
+     */
+    suspend fun referencesAt(path: String, text: String, offset: Int): CsNavigationLines.References? {
+        val file = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+        var scratch: String? = null
+
+        val lines = ask("references", file, null, text) { buffer, arguments, cancellation, onLine ->
+            scratch = buffer
+            CsNavigator.references(sdk, buffer, offset, arguments, cancellation, onLine)
+        } ?: return null
+
+        val found = CsNavigationLines.references(lines) ?: return null
+        return CsNavigationLines.References(
+            found.symbol,
+            found.places.map { if (it.path == scratch) it.copy(path = file.toString()) else it },
+        )
+    }
+
+    /**
+     * Returns the edits that reformat [text], or the part of it from [start] to [end] when both are given.
+     * Empty when there is nothing to change, or the text does not parse and is best left alone. Null when
+     * Roslyn cannot answer.
+     */
+    suspend fun formatEdits(
+        path: String,
+        text: String,
+        start: Int,
+        end: Int,
+        indentSize: Int,
+        useTabs: Boolean,
+    ): List<CsFormatEdits.Edit>? {
+        val file = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+
+        val lines = ask("format", file, null, text) { buffer, arguments, cancellation, onLine ->
+            CsFormatter.format(sdk, buffer, start, end, indentSize, useTabs, arguments, cancellation, onLine)
+        } ?: return null
+
+        return CsFormatEdits.parse(lines)
     }
 
     /** Returns the names of [text] with what each one is, or null when Roslyn cannot answer. */

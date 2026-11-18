@@ -1,5 +1,6 @@
 package dev.ide.android.e2e
 
+import android.view.KeyEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import java.io.File
@@ -93,8 +94,7 @@ class CsPluginTest : E2eTest() {
         val name = uniqueName("CsPkg")
         createProject("C# Console App", name)
         val dir = projectDir(name)
-        val project = shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") }
-            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+        val project = projectFileIn(dir)
         val declared = readDeviceFile("$dir/$project")
         check("</Project>" in declared) { "unexpected project file: $declared" }
         writeDeviceFile("$dir/$project", declared.replace("</Project>", "$PACKAGE\n</Project>"))
@@ -118,8 +118,7 @@ class CsPluginTest : E2eTest() {
         val name = uniqueName("CsRef")
         createProject("C# Console App", name)
         val dir = projectDir(name)
-        val project = shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") }
-            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+        val project = projectFileIn(dir)
         readDeviceFile("$dir/Program.cs")
         writeDeviceFile("$dir/Program.cs", LIBRARY_WRITER)
         restartAndOpen(name)
@@ -147,8 +146,7 @@ class CsPluginTest : E2eTest() {
         val name = uniqueName("CsTest")
         createProject("C# Console App", name)
         val dir = projectDir(name)
-        val project = shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") }
-            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+        val project = projectFileIn(dir)
         val declared = readDeviceFile("$dir/$project")
         check("</Project>" in declared) { "unexpected project file: $declared" }
         writeDeviceFile("$dir/$project", declared.replace("</Project>", "$XUNIT\n</Project>"))
@@ -165,8 +163,94 @@ class CsPluginTest : E2eTest() {
         awaitTextContains("Assert.Equal() Failure")
     }
 
+    /** The editor marks a test class in the gutter, and the mark runs the class's tests. */
+    @Test
+    fun gutterMarkRunsATestClass() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsMark")
+        createProject("C# Console App", name)
+        val dir = projectDir(name)
+        val project = projectFileIn(dir)
+        val declared = readDeviceFile("$dir/$project")
+        check("</Project>" in declared) { "unexpected project file: $declared" }
+        writeDeviceFile("$dir/$project", declared.replace("</Project>", "$XUNIT\n</Project>"))
+        readDeviceFile("$dir/Program.cs")
+        writeDeviceFile("$dir/Program.cs", XUNIT_TESTS)
+        restartAndOpen(name)
+
+        openFile("Program")
+        val mark = poll(60_000) { device.findObject(By.desc("Run all tests in CartTests")) }
+            ?: failWithScreen("the test class has no run mark")
+        mark.click()
+        awaitTextContains("2 passed", BUILD_TIMEOUT)
+        awaitTextContains("1 failed")
+        awaitTextContains("CartTests")
+    }
+
+    /**
+     * Reformat and Go to Declaration reach Roslyn from the editor's own shortcuts: a badly spaced file is
+     * saved as Roslyn lays it out, and a type's name leads to the file that declares it.
+     */
+    @Test
+    fun editorReformatsAndGoesToDeclaration() {
+        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        val name = uniqueName("CsNav")
+        createProject("C# Console App", name)
+        val dir = projectDir(name)
+        // A second file, written by a program run in the project: only files the app created are readable to it.
+        readDeviceFile("$dir/Program.cs")
+        writeDeviceFile("$dir/Program.cs", TYPE_WRITER)
+        restartAndOpen(name)
+        run("Run $name")
+        awaitTextContains("type written", BUILD_TIMEOUT)
+        awaitTextContains("Process finished with exit code 0")
+
+        writeDeviceFile("$dir/Program.cs", BADLY_SPACED)
+        restartAndOpen(name)
+        openFile("Program")
+        device.click(device.displayWidth / 2, device.displayHeight * 2 / 5)
+        Thread.sleep(500)
+        device.pressKeyCode(KeyEvent.KEYCODE_L, KeyEvent.META_CTRL_ON or KeyEvent.META_ALT_ON)
+        // The first request starts the plugin's server; then the formatted text has to reach the disk.
+        val formatted = poll(BUILD_TIMEOUT, 2_000) {
+            device.pressKeyCode(KeyEvent.KEYCODE_S, KeyEvent.META_CTRL_ON)
+            shell("cat $dir/Program.cs").takeIf { "    static void Main()" in it }
+        } ?: failWithScreen("the file was never reformatted: ${shell("cat $dir/Program.cs")}")
+        check("        System.Console.WriteLine(1);" in formatted) { "not laid out as expected: $formatted" }
+
+        // After the statement, a use of the other file's type; the caret is left at the end of its name.
+        repeat(3) { shell("input keyevent KEYCODE_PAGE_DOWN") }
+        repeat(3) { shell("input keyevent KEYCODE_DPAD_UP") }
+        shell("input keyevent KEYCODE_MOVE_END")
+        shell("input keyevent KEYCODE_ENTER")
+        shell("input text greeter")
+        Thread.sleep(1_500)
+        shell("input keyevent KEYCODE_ESCAPE")
+        device.pressKeyCode(KeyEvent.KEYCODE_B, KeyEvent.META_CTRL_ON)
+        awaitTextContains("greeter.cs", 60_000)
+    }
+
+    /** The name of the project file in [dir]. Files the app has just created can take a moment to show to the shell. */
+    private fun projectFileIn(dir: String): String =
+        poll(60_000, 1_000) { shell("ls $dir").lines().map { it.trim() }.firstOrNull { it.endsWith(".csproj") } }
+            ?: error("no .csproj in $dir: ${shell("ls $dir")}")
+
     private companion object {
         const val PLUGIN_ID = "dev.codeassist.csharp"
+
+        /** Writes a second source file beside the program it runs in. */
+        val TYPE_WRITER = """
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    File.WriteAllText("greeter.cs", "public class greeter { public string hi() { return \"hi\"; } }\n");
+                    Console.WriteLine("type written");
+                }
+            }
+        """.trimIndent() + "\n"
+
+        const val BADLY_SPACED = "class Program{\nstatic void Main( ){\nSystem.Console.WriteLine( 1 );\n}\n}\n"
 
         const val XUNIT = """  <ItemGroup>
     <PackageReference Include="xunit" Version="2.9.3" />

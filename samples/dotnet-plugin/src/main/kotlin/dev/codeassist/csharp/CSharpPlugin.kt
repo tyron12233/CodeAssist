@@ -10,6 +10,7 @@ import dev.codeassist.csharp.completion.csprojCompletionContribution
 import dev.codeassist.csharp.editor.CsContextProvider
 import dev.codeassist.csharp.editor.CsLanguageBackend
 import dev.codeassist.csharp.editor.CsNavigationRegistration
+import dev.codeassist.csharp.editor.CsReferenceRegistration
 import dev.codeassist.csharp.editor.CsRunGutter
 import dev.codeassist.csharp.editor.CsSignatureHelp
 import dev.codeassist.csharp.editor.CsUsingCleanup
@@ -103,6 +104,10 @@ class CSharpPlugin : Plugin {
         // Go to Declaration needs an extension point an older host does not have.
         runCatching { CsNavigationRegistration.register(reg, semantic) }
             .onFailure { log.info("this IDE has no go-to-declaration for plugins; C# navigation is off") }
+        runCatching { CsReferenceRegistration.references(reg, semantic) }
+            .onFailure { log.info("this IDE has no find usages for plugins; it is off for C#") }
+        runCatching { CsReferenceRegistration.rename(reg, semantic) }
+            .onFailure { log.info("this IDE has no rename for plugins; it is off for C#") }
 
         // Provides the workspace needed to request checks for open files.
         reg.register(COMPILATION_CONTEXT_PROVIDER_EP, CsContextProvider())

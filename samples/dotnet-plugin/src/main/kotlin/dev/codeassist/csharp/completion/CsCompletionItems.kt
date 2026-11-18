@@ -4,7 +4,7 @@ package dev.codeassist.csharp.completion
  * Parses the completion output of [dev.codeassist.csharp.sdk.CsCompleter].
  *
  * Expected format, one candidate per line, with fields separated by tabs:
- * `item<TAB>name<TAB>kind<TAB>detail<TAB>takesArguments 0|1<TAB>container<TAB>deprecated 0|1<TAB>overloads<TAB>documentation`
+ * `item<TAB>name<TAB>kind<TAB>detail<TAB>takesArguments 0|1<TAB>container<TAB>deprecated 0|1<TAB>overloads<TAB>documentation<TAB>namespace to import`
  *
  * Documentation is optional and escaped (see [CsDocText.unescape]).
  * Pure, so it can be tested without a device.
@@ -30,6 +30,8 @@ internal object CsCompletionItems {
         val overloads: Int,
         /** The member's summary documentation XML, or empty. See [CsDocText]. */
         val documentation: String = "",
+        /** The namespace a `using` must name for this type to resolve, or empty when it already does. */
+        val importNamespace: String = "",
     ) {
         val isMethod: Boolean get() = kind == "method" || kind == "extension"
         val isType: Boolean get() = kind in TYPE_KINDS
@@ -53,6 +55,7 @@ internal object CsCompletionItems {
             deprecated = fields[6] == "1",
             overloads = fields[7].toIntOrNull() ?: 1,
             documentation = fields.getOrNull(8)?.let(CsDocText::unescape) ?: "",
+            importNamespace = fields.getOrNull(9).orEmpty(),
         )
     }
 }

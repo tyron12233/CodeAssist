@@ -3,6 +3,7 @@ package dev.codeassist.csharp.editor
 
 import dev.codeassist.csharp.CSharpPlugin
 import dev.codeassist.csharp.completion.CsDocText
+import dev.codeassist.csharp.completion.CsNavigationLines
 import dev.codeassist.csharp.completion.CsSemanticCompletion
 import dev.codeassist.csharp.editor.CsSourceAnalyzer.TextFile
 import dev.ide.lang.AnalysisResult
@@ -16,7 +17,10 @@ import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.folding.FoldKind
+import dev.ide.lang.folding.FoldRegion
 import dev.ide.lang.folding.FoldingService
+import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.highlight.HighlightKind
 import dev.ide.lang.highlight.HighlightModifier
@@ -32,6 +36,7 @@ import dev.ide.lang.resolve.DocFormat
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
+import dev.ide.lang.resolve.StructureItem
 import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.SymbolFilter
 import dev.ide.lang.resolve.SymbolKind
@@ -62,6 +67,8 @@ class CsLanguageBackend internal constructor(
         BackendCapability.ERROR_RECOVERY,
         BackendCapability.SIGNATURE_HELP,
         BackendCapability.SEMANTIC_HIGHLIGHT,
+        BackendCapability.CODE_FOLDING,
+        BackendCapability.FORMAT,
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer =
@@ -146,8 +153,91 @@ internal class CsSourceAnalyzer(
             docFormat = DocFormat.PLAIN,
         )
     }
-    override val folding: FoldingService? = null
-    override val formatting: FormattingService? = null
+    /** The last outline asked for, by file: folding and the structure view ask for the same text in turn. */
+    private val outlines = ConcurrentHashMap<String, Pair<Int, CsNavigationLines.Outline>>()
+
+    private suspend fun outlineOf(path: String, text: String): CsNavigationLines.Outline? {
+        val key = text.hashCode()
+        outlines[path]?.let { if (it.first == key) return it.second }
+        val outline = semantic?.outlineFor(path, text) ?: return null
+        outlines[path] = key to outline
+        return outline
+    }
+
+    override val folding: FoldingService? = semantic?.let {
+        object : FoldingService {
+            override suspend fun folds(file: VirtualFile): List<FoldRegion> {
+                val text = buffers[file.path]?.toString() ?: return emptyList()
+                val outline = try {
+                    outlineOf(file.path, text)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                } ?: return emptyList()
+
+                return outline.folds.mapNotNull { fold ->
+                    if (fold.end > text.length) return@mapNotNull null
+                    FoldRegion(
+                        TextRange(fold.start, fold.end),
+                        fold.placeholder,
+                        FoldKind(fold.kind),
+                        collapsedByDefault = false,
+                    )
+                }
+            }
+        }
+    }
+
+    /** The file's declarations, for the structure view and the sticky headers. */
+    override fun fileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> {
+        val outline = runCatching {
+            runBlocking { outlineOf(file.path, text.toString()) }
+        }.getOrNull() ?: return emptyList()
+
+        return outline.items.map { item ->
+            StructureItem(
+                name = item.name,
+                detail = item.detail.ifEmpty { null },
+                kind = KINDS[item.kind] ?: SymbolKind.FIELD,
+                nameOffset = item.nameOffset,
+                endOffset = item.end,
+                depth = item.depth,
+            )
+        }
+    }
+    /**
+     * Reformats with Roslyn's formatter, to C#'s own conventions: braces on their own lines, four spaces.
+     * Of the editor's style only tabs or spaces is taken, since its other settings are Java's and Kotlin's.
+     */
+    override val formatting: FormattingService? = semantic?.let { service ->
+        object : FormattingService {
+            override suspend fun format(file: VirtualFile, text: CharSequence, style: FormatStyle): List<DocumentEdit> =
+                edits(file, text, -1, -1, style)
+
+            override suspend fun formatRange(
+                file: VirtualFile,
+                text: CharSequence,
+                range: TextRange,
+                style: FormatStyle,
+            ): List<DocumentEdit> = edits(file, text, range.start, range.end, style)
+
+            private suspend fun edits(file: VirtualFile, text: CharSequence, start: Int, end: Int, style: FormatStyle): List<DocumentEdit> {
+                val source = text.toString()
+                val found = try {
+                    service.formatEdits(file.path, source, start, end, CS_INDENT, style.useTabs)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                } ?: return emptyList()
+
+                return found
+                    .filter { it.offset + it.length <= source.length }
+                    .map { DocumentEdit(it.offset, it.length, it.text) }
+            }
+        }
+    }
     override val importOrganizer: ImportOrganizerService? = null
 
     // Analysis and resolution
@@ -187,6 +277,9 @@ internal class CsSourceAnalyzer(
     }
 
     private companion object {
+        /** C#'s conventional indentation. */
+        const val CS_INDENT = 4
+
         val MODIFIERS = mapOf(
             "declaration" to HighlightModifier.DECLARATION,
             "static" to HighlightModifier.STATIC,

@@ -83,4 +83,61 @@ class CsNavigationLinesTest {
 
         assertTrue(tokens.isEmpty())
     }
+
+    @Test
+    fun `an outline gives the declarations and the regions to fold`() {
+        val outline = CsNavigationLines.outline(
+            listOf(
+                "item\tclass\t0\t73\t358\tProgram\t",
+                "item\tmethod\t1\t329\t356\tHelper\t(int x)",
+                "fold\t0\t25\timports\tusing ...",
+                "fold\t81\t358\tclassBody\t{...}",
+                "fold\t5\t5\tblock\t{...}",
+                "noise",
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                CsNavigationLines.Item("class", 0, 73, 358, "Program", ""),
+                CsNavigationLines.Item("method", 1, 329, 356, "Helper", "(int x)"),
+            ),
+            outline.items,
+        )
+        assertEquals(
+            listOf(
+                CsNavigationLines.Fold(0, 25, "imports", "using ..."),
+                CsNavigationLines.Fold(81, 358, "classBody", "{...}"),
+            ),
+            outline.folds,
+        )
+    }
+
+    @Test
+    fun `references give the name at the caret and each place it appears`() {
+        val found = CsNavigationLines.references(
+            listOf(
+                "sym\tTotal\t235\t240\tfield\t1",
+                "ref\t/p/Program.cs\t235\t240\tw",
+                "ref\t/p/Other.cs\t60\t65\td",
+                "ref\t/p/Program.cs\t277\t282\tr",
+            ),
+        )!!
+
+        assertEquals(CsNavigationLines.Named("Total", 235, 240, "field", inSource = true), found.symbol)
+        assertEquals(listOf('w', 'd', 'r'), found.places.map { it.access })
+        assertEquals("/p/Other.cs", found.places[1].path)
+    }
+
+    @Test
+    fun `a symbol the project does not declare says so`() {
+        val found = CsNavigationLines.references(listOf("sym\tConsole\t254\t261\tclass\t0", "ref\t/p/A.cs\t254\t261\tr"))!!
+
+        assertTrue(!found.symbol.inSource)
+    }
+
+    @Test
+    fun `no name at the caret is no references`() {
+        assertNull(CsNavigationLines.references(listOf("ref\t/p/A.cs\t1\t2\tr")))
+    }
 }

@@ -40,6 +40,9 @@ directory, the one place Android lets an app run a file from. What is only read 
 reference assemblies, OpenSSL) is `assets/dotnet-sdk.zip`, unpacked on first use into the plugin's private
 directory in the IDE's internal storage. tools/dotnet-toolchain/README.md explains where each comes from.
 
+**Several projects in a module.** The module's own project runs from the Run button; every other project
+under it that builds a program has a Run row of its own.
+
 **One resident server.** Starting the compiler costs seconds, nearly all of it the runtime warming up, so
 one small C# program (`CsServer`) is compiled once and kept running. It compiles a project, reports
 diagnostics, and answers completion and parameter-help requests, taking requests on stdin and answering on
@@ -54,6 +57,17 @@ names read from the reference assemblies.
 colouring of names are three more requests to the server: where the symbol at the caret is declared, its
 signature and doc comment, and what each name in the file resolves to. A symbol from the framework or a
 package has no source to go to; its documentation still shows, from the XML beside the reference assembly.
+Find Usages lists every place the project declares, reads or writes a symbol, and Rename changes them all; a
+symbol the project does not declare is refused. The structure view and code folding come from the file's
+syntax tree.
+
+**Completion reaches types that are not imported.** Past the names already in scope, completion offers the
+public types of every reference by name, and accepting one also writes its `using`, where the quick fix
+would put it.
+
+**Formatting is Roslyn's.** Reformat uses the formatter the compiler's own tooling uses, to C#'s conventions:
+braces on their own lines, four spaces. Of the editor's style only tabs or spaces is taken. Its assemblies
+are loaded when something is first reformatted. A file that does not parse is left as it is.
 
 **Project references.** A `<ProjectReference>` reaches the referenced project and everything it references
 in turn. A build compiles those first, each into its own `bin/`, and copies their DLLs beside the program.
@@ -67,10 +81,9 @@ may hold several projects.
 classes, a "C# tests" row in the Run picker, and results in the Run screen's Tests tab, with re-run and
 re-run failed. A run compiles the project as a library and hands the DLL to a small runner of the plugin's
 own, which finds the methods those frameworks mark as tests and calls them. The assertions are the
-framework's, so a failure reads as it would anywhere. It runs facts, theories with inline data, test cases,
-data rows, async tests, setup and teardown methods, and skip reasons. It reports as skipped, saying why, a
-test class that needs constructor arguments (a fixture, an output helper) and a theory whose data comes from
-a member or a class.
+framework's, so a failure reads as it would anywhere. It runs facts, theories and test cases with inline data or data from a member or a class, data rows, async
+tests, setup and teardown methods, xUnit class fixtures and its output helper, and skip reasons. It reports
+as skipped, saying why, a test class whose constructor asks for anything else, such as a collection fixture.
 
 **No MSBuild, no NuGet client.** Neither is shipped. `Csproj` reads the subset of a project file the plugin
 honours and turns it into compiler arguments; it is the single place that interprets a `.csproj`, used by the
@@ -88,8 +101,8 @@ compilation, built from the editor's unsaved buffer and the project's other file
 - NuGet beyond nuget.org and managed DLLs: no other feeds, no native assets, no package signature checks.
 - Conditions in a `.csproj` other than simple comparisons on `Configuration`, evaluated for Debug.
 - A debugger, the `dotnet` command line, and workloads such as MAUI or Blazor.
-- The test frameworks' own runners: fixtures, collection ordering, data from members or classes, and custom
-  test attributes are not honoured.
+- The test frameworks' own runners: collection fixtures, test ordering and custom test attributes are not
+  honoured.
 - A terminal for Run. A program's input and output are pipes, so `Console.ReadKey` and cursor movement do not
   work. A pseudo-terminal was tried: .NET then echoes every typed line itself, on top of the console's echo.
 - 32-bit devices: there is no Android runtime published for them.
