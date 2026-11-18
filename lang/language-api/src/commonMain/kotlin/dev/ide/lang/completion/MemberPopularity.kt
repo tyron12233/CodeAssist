@@ -53,6 +53,9 @@ object MemberPopularity {
         }
     }
 
+    private const val NUMBER_MEMBERS = "toString toInt toLong toDouble toFloat coerceIn coerceAtLeast " +
+        "coerceAtMost toShort toByte plus minus times div rem"
+
     private val LISTS: Map<String, String> = mapOf(
         // ---- Android views ----
         "android.view.View" to "setOnClickListener setVisibility getVisibility findViewById setEnabled isEnabled " +
@@ -199,8 +202,20 @@ object MemberPopularity {
             "drop format toCharArray lines padStart removePrefix removeSuffix substringBefore substringAfter " +
             "ifEmpty toRegex repeat reversed count",
         "kotlin.collections.Iterable" to "forEach map filter first firstOrNull joinToString any all find " +
-            "count sumOf mapNotNull forEachIndexed groupBy associateBy distinct sortedBy sorted reversed toList " +
-            "toMutableList last lastOrNull take drop flatMap none",
+            "count sum sumOf mapNotNull forEachIndexed groupBy associateBy distinct sortedBy sorted reversed toList " +
+            "toMutableList last lastOrNull take drop flatMap none max min maxOrNull minOrNull average",
+        // The numbers: conversions and clamping first, so the operator functions nobody types by name
+        // (`and`, `compareTo`, `dec`) stop opening the list.
+        "kotlin.Int" to NUMBER_MEMBERS + " until downTo rangeTo toChar shl shr",
+        "kotlin.Long" to NUMBER_MEMBERS + " until downTo rangeTo",
+        "kotlin.Double" to NUMBER_MEMBERS + " roundToInt roundToLong isNaN isFinite pow",
+        "kotlin.Float" to NUMBER_MEMBERS + " roundToInt roundToLong isNaN isFinite pow",
+        "kotlin.Short" to NUMBER_MEMBERS,
+        "kotlin.Byte" to NUMBER_MEMBERS,
+        "kotlin.Char" to "isDigit isLetter isLetterOrDigit isWhitespace uppercaseChar lowercaseChar code toString " +
+            "digitToInt isUpperCase isLowerCase uppercase lowercase",
+        "kotlin.Boolean" to "not and or xor toString",
+        "kotlin.Enum" to "name ordinal",
         "kotlin.collections.Collection" to "size isEmpty isNotEmpty contains forEach map filter first " +
             "firstOrNull joinToString any all find count sumOf",
         "kotlin.collections.List" to "size get isEmpty isNotEmpty forEach map filter first firstOrNull last " +

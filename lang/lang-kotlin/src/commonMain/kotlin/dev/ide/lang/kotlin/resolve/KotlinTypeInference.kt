@@ -5,6 +5,8 @@ import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
+import dev.ide.kotlin.syntax.psi.KtTryExpression
 import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtClassLiteralExpression
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
@@ -106,6 +108,11 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
             // arg disambiguate the overload.)
             is KtIfExpression -> inferBranchUnion(listOf(expr.then, expr.`else`))
             is KtWhenExpression -> inferBranchUnion(expr.entries.map { it.expression })
+            // `try` as an expression is the same kind of choice: its block or one of its `catch` bodies.
+            is KtTryExpression -> inferBranchUnion(listOf<KtExpression?>(expr.tryBlock) + expr.catchClauses.map { it.catchBody })
+            // A reference to a PROPERTY (`::name`, `this::name`, `User::name`) is a `KProperty`, which is what
+            // gives `::name.isInitialized` and `User::name.name` their members.
+            is KtCallableReferenceExpression -> propertyReferenceType(expr)
             else -> null
         }
     } finally {
@@ -508,7 +515,7 @@ internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinTyp
     }
     val inferred = inferType(q.receiverExpression)
         ?: typeOfTypeName(q.receiverExpression) // receiver may be a class name (companion/static access)
-        ?: return null
+        ?: return fullyQualifiedConstructorCall(q)
     // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) resolves its members against the
     // parameter's upper bound; a normal type is unchanged, an unbounded parameter yields null (no members).
     val receiverType =
@@ -533,6 +540,45 @@ internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinTyp
 
         else -> null
     }
+}
+
+/**
+ * `java.io.File("a")`, `kotlin.text.StringBuilder()`: a constructor call spelled with its package. The
+ * receiver is then a package path, which is not a value and has no type, so the call went untyped and
+ * nothing could be completed or checked after it.
+ */
+private fun KotlinResolver.fullyQualifiedConstructorCall(q: KtQualifiedExpression): KotlinType? {
+    val call = q.selectorExpression as? KtCallExpression ?: return null
+    val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    if (callee.firstOrNull()?.isUpperCase() != true) return null
+    fun path(e: KtExpression?): String? = when (e) {
+        is KtNameReferenceExpression -> e.getReferencedName()
+        is KtQualifiedExpression -> {
+            val head = path(e.receiverExpression)
+            val tail = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
+            if (head != null && tail != null) "$head.$tail" else null
+        }
+        else -> null
+    }
+    val pkg = path(q.receiverExpression) ?: return null
+    val fqn = "$pkg.$callee"
+    return if (service.isKnownType(fqn)) constructorResultType(fqn, call) else null
+}
+
+/** The type of a callable reference to a property: `KProperty0<T>` when it is bound (`::x`, `obj::x`),
+ *  `KProperty1<Owner, T>` when it names the owner (`Owner::x`); the mutable flavours for a `var` declared in
+ *  this project. Null for a function reference, which keeps the handling it has elsewhere. */
+internal fun KotlinResolver.propertyReferenceType(e: KtCallableReferenceExpression): KotlinType? {
+    val target = runCatching { callableReferenceTarget(e) }.getOrNull() ?: return null
+    if (target.kind != SymbolKind.FIELD && target.kind != SymbolKind.PARAMETER && target.kind != SymbolKind.LOCAL_VARIABLE) return null
+    val valueType = target.type as? KotlinType ?: return null
+    val psi = (target.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
+    val mutable = (psi as? dev.ide.kotlin.syntax.psi.KtProperty)?.isVar == true
+    val receiver = e.receiverExpression
+    val owner = receiver?.let { typeDenotationFqn(it) }
+    val prefix = if (mutable) "kotlin.reflect.KMutableProperty" else "kotlin.reflect.KProperty"
+    return if (owner != null) service.typeByFqn(prefix + "1", listOf(service.typeByFqn(owner), valueType))
+    else service.typeByFqn(prefix + "0", listOf(valueType))
 }
 
 /** A nested type/object reached as `Owner.Nested` — not a member but a classifier; resolved by probing the
@@ -831,7 +877,9 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     // above; a cross-file top-level property still falls through to the model type below.
     ktFile.declarations.firstOrNull { it is KtProperty && it.receiverTypeReference == null && it.name == name }
         ?.let { return sameFileProperty(it as KtProperty, null).type as? KotlinType }
-    service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
+    // Only one that is IN SCOPE (imported, same package, default-imported): `kotlin.math.E` is a top-level
+    // property too, and without the scope test a project `enum class E` read as that `Double` everywhere.
+    service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD && topLevelInScope(it, fileContext) }
         ?.let { return it.type as? KotlinType }
     // A bare type name used as an expression (e.g. `Foo` in `Foo.CONST`): a LOCAL type in scope first (a local
     // `object`/`class` the module model registered under a synthetic FQN), else a resolvable type name. The

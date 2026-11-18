@@ -92,6 +92,7 @@ class KotlinRealWorldAnalysisSweepTest {
                 "${report.crashed} crashed",
         )
         report.printCodes()
+        report.dump("repository")
         assertTrue(report.crashed == 0, "the analysis threw on ${report.crashed} of ${files.size} files")
     }
 
@@ -153,6 +154,7 @@ class KotlinRealWorldAnalysisSweepTest {
                 "${report.crashed} crashed"
         )
         report.printCodes()
+        report.dump("module")
         assertTrue(report.crashed == 0, "the analysis threw on ${report.crashed} of ${files.size} files")
     }
 
@@ -253,11 +255,20 @@ class KotlinRealWorldAnalysisSweepTest {
             for (d in errors) {
                 val code = d.code ?: "<none>"
                 byCode.merge(code, 1, Int::plus)
+                all += "$relative [$code] ${d.message} | ${sourceLineAt(text, d.range.start)}"
                 byCodeFiles.getOrPut(code) { HashMap() }.merge(relative, 1, Int::plus)
                 samples.getOrPut(code) { LinkedHashSet() }.let {
                     if (it.size < 3) it += "$relative: ${d.message}\n        | ${sourceLineAt(text, d.range.start)}"
                 }
             }
+        }
+
+        /** Every error, one per line, for diffing one run against another: three samples per code cannot say
+         *  WHICH reports a change added. Written beside the JVM's temp files as `kt-sweep-<label>.txt`. */
+        private val all = ArrayList<String>()
+
+        fun dump(label: String) {
+            File(System.getProperty("java.io.tmpdir"), "kt-sweep-$label.txt").writeText(all.sorted().joinToString("\n"))
         }
 
         fun printCodes() {

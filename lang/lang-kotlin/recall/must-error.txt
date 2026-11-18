@@ -1,0 +1,232 @@
+// One-line compile errors, each headed by the diagnostic code(s) the editor must report for it (any one of
+// them is enough). Split on the `////` lines. KotlinErrorRecallTest fails when a snippet goes unreported.
+// Collected by writing down what the compiler rejects and counting what the editor let through: 46 of the
+// first 100 at the time. A plain-text fixture, so no build, sweep or formatter picks it up as source.
+//// kt.typeMismatch
+fun g(): Int = "a"
+//// kt.typeMismatch
+fun g() { val x: String = 1 }
+//// kt.valReassign
+fun g() { val x = 1; x = 2 }
+//// kt.missingReturn
+fun g(): Int { }
+//// kt.argumentCount
+fun f(a: Int) = a
+fun g() = f()
+//// kt.argumentCount
+fun f(a: Int) = a
+fun g() = f(1, 2)
+//// kt.typeMismatch
+fun f(a: Int) = a
+fun g() = f("s")
+//// kt.typeMismatch
+fun f(a: String) = a
+fun g() = f(null)
+//// kt.unsafeNullable
+fun g(s: String?) = s.length
+//// kt.abstractInstantiation
+abstract class A
+fun g() = A()
+//// kt.abstractNotImplemented
+interface I { fun f() }
+class C : I
+//// kt.overrideRequired
+open class A { open fun f() {} }
+class B : A() { fun f() {} }
+//// kt.finalSupertype
+class A { fun f() {} }
+class B : A()
+//// kt.whenExhaustive
+enum class E { A, B }
+fun g(e: E): Int = when (e) { E.A -> 1 }
+//// kt.uninitializedVariable
+fun g() { val x: Int; println(x) }
+//// kt.argumentCount,kt.namedArgument
+fun f(a: Int) = a
+fun g() = f(b = 1)
+//// kt.invisibleReference
+class A { private fun p() {} }
+fun g() = A().p()
+//// kt.unresolved
+fun g() = undefinedThing()
+//// kt.unresolved
+fun g(l: List<Int>) = l.nope()
+//// kt.breakOrContinueOutsideLoop
+fun g() { break }
+//// kt.conflictingDeclaration
+fun g() { val a = 1; val a = 2 }
+//// kt.conflictingDeclaration
+fun g(a: Int, a: String) {}
+//// kt.conflictingDeclaration
+class A
+class A
+//// kt.typeMismatch
+fun g() { if (1) println() }
+//// kt.notIterable
+fun g() { for (x in 5) println(x) }
+//// kt.unresolved
+fun g() = "a" - 1
+//// kt.unresolved
+fun g() = !5
+//// kt.suspendContext
+suspend fun s() {}
+fun g() { s() }
+//// kt.typeMismatch
+fun g() { val l: List<Int> = listOf("a") }
+//// kt.typeMismatch
+fun g(): String { return 1 }
+//// kt.typeMismatch
+fun g(): Int = listOf(1).map { it.toString() }.first()
+//// kt.unresolved
+fun g(l: List<Int>) { l.add(1) }
+//// kt.constructorArgs
+class A(val x: Int)
+fun g() = A()
+//// kt.typeMismatch
+class A(val x: Int)
+fun g() = A("s")
+//// kt.typeMismatch
+fun g() { val s: String = null }
+//// kt.typeMismatch
+fun g(m: Map<String, Int>): Int = m["a"]
+//// kt.unsafeNullable
+fun g(m: Map<String, Int>) = m["a"].plus(1)
+//// kt.constructorArgs
+open class A(x: Int)
+class B : A()
+//// kt.supertypeNotInitialized
+open class A(x: Int)
+class B : A
+//// kt.noConstructor
+interface I
+class B : I()
+//// kt.typeMismatch
+fun g() { val f: (Int) -> String = { it } }
+//// kt.lambdaParameters
+fun g() { val f: (Int) -> Int = { a, b -> a } }
+//// kt.unresolved
+fun g(x: Any) { x.length }
+//// kt.typeMismatch
+fun <T : Number> f(x: T) = x
+fun g() = f("s")
+//// kt.notCallable
+fun g() { val x = 1; x() }
+//// kt.unresolved
+fun g() { String.nope }
+//// kt.typeMismatch
+fun g() { return 1 }
+//// kt.returnValueExpected
+fun g(): Int { return }
+//// kt.mustBeInitialized
+class A { val x: Int }
+//// kt.typeMismatch
+fun g() { var s: String = "a"; s = null }
+//// kt.noSetOperator
+fun g() { val l = listOf(1); l[0] = 2 }
+//// kt.unsafeNullable
+fun g(a: Int?) { val b: Int = a + 1 }
+//// kt.noThis
+fun g() { this.toString() }
+//// kt.unresolved
+class A { companion object { fun c() {} } }
+fun g() { A().c() }
+//// kt.instanceAccessViaType
+class A { fun m() {} }
+fun g() { A.m() }
+//// kt.ifAsExpression
+fun g(): Int { val x = if (true) 1; return x }
+//// kt.whenExhaustive
+fun g() { val x = when (1) { 1 -> "a" } }
+//// kt.notCallable
+object O
+fun g() = O()
+//// kt.typeMismatch
+fun g() { throw "x" }
+//// kt.valReassign
+fun g(a: Int) { a = 2 }
+//// kt.destructuring
+fun g() { val p = Pair(1, 2); val (a, b, c) = p }
+//// kt.valReassign
+fun g() { val l = listOf(1); l.size = 3 }
+//// kt.lateinit
+fun g() { lateinit val x: String }
+//// kt.variableExpected
+fun g() { 1 = 2 }
+//// kt.abstractNotImplemented
+interface I { fun f() }
+fun g() = object : I {}
+//// kt.typeArgumentCount
+class A<T>
+fun g() { val a: A = A<Int>() }
+//// kt.typeArgumentCount
+fun g() { val a: List<Int, Int> = listOf() }
+//// kt.lambdaParameters
+fun g() { listOf(1).forEach { a, b -> } }
+//// kt.typeMismatch
+fun g(x: Int): String = when (x) { 1 -> "a"; else -> 2 }
+//// kt.conflictingDeclaration
+class A { fun f(): Int = 1; fun f(): Int = 2 }
+//// kt.typeMismatch
+fun g() { val x: Int = 1L }
+//// kt.typeMismatch
+fun g() { val x: Long = 1; val y: Int = x }
+//// kt.typeMismatch
+fun g() { val d: Double = 1 }
+//// kt.valReassign
+fun g(s: String) { s.length = 3 }
+//// kt.typeMismatch
+fun g() { val c: Char = "a" }
+//// kt.typeMismatch
+fun g(l: List<String>) { for (i: Int in l) {} }
+//// kt.typeMismatch
+fun g(): Unit = 1
+//// kt.unresolved
+class A { fun f() { super.nope() } }
+//// kt.unresolvedLabel
+fun g() { while (true) { continue@nolabel } }
+//// kt.typeMismatch
+fun f(vararg a: Int) {}
+fun g() { f(intArrayOf(1)) }
+//// kt.typeMismatch
+fun g(b: Boolean): Int = if (b) 1 else "a"
+//// kt.unresolved
+fun g() { val x = 5; x.foo = 1 }
+//// kt.exposedVisibility
+private class P
+fun g(): P = P()
+//// kt.typeMismatch
+fun g() { try { } catch (e: String) { } }
+//// kt.unresolved
+fun g(): Int { val x: Int? = null; return x!!.nope }
+//// kt.dataClass
+data class D()
+//// kt.unresolved
+fun g() { val a = arrayOf(1); a.length }
+//// kt.incomparableEquality
+fun g(x: Int) { when (x) { "a" -> {} } }
+//// kt.incomparableEquality
+fun g(s: String) { if (s == 1) {} }
+//// kt.typeMismatch
+fun g(l: List<Int>): List<String> = l.map { it + 1 }
+//// kt.typeMismatch
+fun g(s: String?): Int { return s?.length }
+//// kt.unsafeNullable
+class A { fun f() {} }
+fun g(a: A?) { a.f() }
+//// kt.typeMismatch
+fun g(f: (Int) -> Unit) { f("s") }
+//// kt.argumentCount
+fun g(f: (Int) -> Unit) { f() }
+//// kt.overrideReturnType
+interface I { fun f(): Int }
+class C : I { override fun f(): String = "" }
+//// kt.overridingFinal
+open class A { fun f() {} }
+class B : A() { override fun f() {} }
+//// kt.typeMismatch
+fun g() { val x = listOf(1, 2); val y: String = x.first() }
+//// kt.typeMismatch
+fun g() { val m = mapOf("a" to 1); val v: String = m.getValue("a") }
+//// kt.unresolved
+class A { fun f() { g2() } }
+fun String.g2() {}

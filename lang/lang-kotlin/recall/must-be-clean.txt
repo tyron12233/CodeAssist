@@ -1,0 +1,627 @@
+// Kotlin the compiler accepts, written to look like each error the recall checks report: one block per
+// family, split on the `////` lines. KotlinErrorRecallTest analyzes every block and fails on any ERROR.
+// A plain-text fixture rather than a .kt file, so no build, sweep or formatter picks it up as source.
+//// jumps
+fun g(l: List<Int>): Int {
+    var t = 0
+    for (x in l) { when (x) { 0 -> break; 1 -> continue; else -> t += x } }
+    outer@ for (a in l) { for (b in l) { if (b == 2) continue@outer; if (b == 3) break@outer } }
+    while (true) { run { if (t > 3) break }; t++ }
+    do { l.forEach { if (it == 0) continue }; t++ } while (t < 3)
+    return t
+}
+//// labels
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+class V { fun f(): Int = 1 }
+fun g(l: List<Int>, v: V?, scope: CoroutineScope): Int {
+    l.forEach { if (it == 0) return@forEach }
+    l.forEachIndexed { i, x -> if (i == x) return@forEachIndexed }
+    val m = l.map { if (it == 0) return@map 1; it * 2 }
+    val n = l.map lit@{ if (it == 0) return@lit 1; it * 2 }
+    val a = v?.let { return@let it.f() } ?: 0
+    val w = with(l) { if (isEmpty()) return@with 0; size }
+    val r = l.run { if (isEmpty()) return@run 0; size }
+    val p = l.also lbl@{ if (it.isEmpty()) return@lbl }
+    scope.launch { if (l.isEmpty()) return@launch; delay(1) }
+    val f = flow { if (l.isEmpty()) return@flow; emit(1) }
+    val t = Thread { if (l.isEmpty()) return@Thread }
+    val z by lazy { if (l.isEmpty()) return@lazy 0; 1 }
+    val c = Comparator<Int> { x, y -> if (x == y) return@Comparator 0; x - y }
+    l.filter { it > 0 }.forEach { x -> l.forEach { y -> if (x == y) return@forEach } }
+    fun inner(): Int { l.forEach { if (it == 1) return@inner 1 }; return 0 }
+    return m.size + n.size + a + w + r + p.size + z + inner() + c.compare(1, 2) + f.hashCode() + t.hashCode()
+}
+//// this
+class A { val x = 1; fun f() = this.x; val g = { this.x }; init { println(this) }; companion object { fun c() = this } }
+object O { fun f() = this }
+fun String.e() = this.length
+val String.p: Int get() = this.length
+fun g(): Int = with("a") { this.length } + "b".run { this.length } + buildString { this.append("x") }.length
+val h: String.() -> Int = { this.length }
+fun k() = object { val me = this }
+interface I { fun me() = this }
+enum class E { A; fun me() = this }
+//// if-values
+fun f(c: Boolean, l: MutableList<Int>): Int {
+    val a = if (c) 1 else 2
+    var b = 0
+    b = if (c) 1 else 2
+    if (c) l.add(1)
+    l.run { if (c) add(2) }
+    val u = run { if (c) println() }
+    println(if (c) "a" else "b")
+    val d = if (c) { 1 } else if (!c) { 2 } else 3
+    return a + b + d + u.hashCode()
+}
+fun e(c: Boolean) = if (c) println() else Unit
+//// data
+data class D(val a: Int)
+data class E(val a: Int, var b: String = "", private val c: List<Int> = emptyList())
+data class F(val xs: IntArray, val n: Int) { val extra = 1 }
+data object G
+//// nullable-guards
+fun g(s: String) = s.length
+fun a(x: String?): Int { if (x != null) return g(x); return 0 }
+fun b(x: String?): Int = x?.let { g(it) } ?: 0
+fun c(x: String?): Int { val y: String? = "a"; return g(y) + g(x ?: "") }
+fun d(x: String?): Int { x ?: return 0; return g(x) }
+fun e(x: String?): Int { requireNotNull(x); return g(x) }
+fun f(x: String?): Int { checkNotNull(x) { "no" }; return g(x) }
+fun h(x: String?): Int = g(x!!) + g(x)
+fun i(x: String?): Int = g(x.orEmpty())
+fun j(x: String?): Int { if (x == null) return 0; return g(x) }
+fun k(x: String?): Int = when (x) { null -> 0; else -> g(x) }
+fun l(x: String?): Int { if (x.isNullOrEmpty()) return 0; return g(x) }
+fun m(x: String?): Int { while (x != null) { return g(x) }; return 0 }
+fun n(x: String?): Int = if (x is String) g(x) else 0
+fun o(x: String?): Int = x?.let(::g) ?: 0
+fun p(x: String?): Int { val y = x ?: return 0; return g(y) }
+fun q(x: String?): String = x ?: ""
+fun r(x: String?): String { return x ?: "" }
+fun s(x: String?): Int = x?.length ?: 0
+fun t(x: String?): Int? = x?.length
+fun u(x: String?): String = x.toString() + x
+fun v(x: String?): Any? = x
+fun w(x: String?, y: String = x ?: "d"): String = y
+//// nullable-args
+fun a(s: String?) {}
+fun b(s: String? = null, n: Int = 0) {}
+fun <T> c(x: T) {}
+fun <T> d(x: T?, y: List<T>) {}
+fun e(x: Any?) {}
+class Box<T>(var v: T) { fun set(x: T) { v = x } }
+fun g() {
+    a(null); b(null, 1); b(s = null); c(null); d(null, listOf(1)); e(null)
+    listOf(null, 1); mutableListOf<String?>().add(null); arrayOfNulls<String>(2).fill(null)
+    val m = mutableMapOf<String, String?>(); m.put("a", null); m["b"] = null
+    setOf<String?>(null); Box<String?>("a").set(null); Box<Int?>(null).v = null
+    println(null); val t: Thread? = null; StringBuilder().append(null as String?)
+    java.util.Objects.requireNonNullElse(null, "a")
+}
+//// map-reads
+fun g(m: Map<String, Int>, mm: MutableMap<String, List<Int>>, k: String): Int {
+    val a: Int = m[k] ?: 0
+    val b: Int = m[k]!!
+    val c: Int? = m[k]
+    val d = m.getValue(k) + 1
+    val e = if (m[k] != null) 1 else 0
+    val f = m[k]?.plus(1) ?: 0
+    val s = m[k].toString() + m[k].hashCode() + (m[k] == 1) + m[k].let { it ?: 0 }
+    val h = mm[k].orEmpty().size + (if (mm[k].isNullOrEmpty()) 0 else 1) + (mm[k]?.size ?: 0)
+    val i = m.getOrDefault(k, 0) + m.getOrElse(k) { 0 }
+    val arr = arrayOf(1, 2); val l = listOf(1, 2)
+    val j: Int = arr[0] + l[0] + "ab"[0].code + intArrayOf(1)[0]
+    val hm = HashMap<String, Int>(); hm[k] = 1
+    val n: Int = hm[k] ?: 0
+    return a + b + (c ?: 0) + d + e + f + s.length + h + i + j + n
+}
+fun r(m: Map<String, Int>): Int? = m["a"]
+fun q(m: Map<String, String>): String = m["a"] ?: return ""
+//// numerics
+const val K = 5
+fun g(i: Int, lg: Long): Double {
+    val a: Long = 1
+    val b: Double = 1.0
+    val c: Float = 1f
+    val d: Byte = 1
+    val e: Short = -1
+    val f: Long = 1 + 2
+    val h: Double = 1.0 * 2
+    val j: Long = 0xFF
+    val k: Int = 'a'.code
+    val l: Long = i.toLong()
+    val m: Double = i.toDouble()
+    val n: Float = 1.5.toFloat()
+    val o: Number = 1
+    val p: Any = 1L
+    val q: Comparable<Int> = 1
+    val r: Long? = 1
+    val s: ULong = 1u
+    val t: Long = Int.MAX_VALUE.toLong()
+    val u: Double = 1e3
+    val v: Float = 1e3f
+    val w: Long = 1_000_000_000_000
+    val x: Float = -0.5f
+    val y: Int = i
+    val z: Long = lg
+    val aa: Long = -1
+    val ab: Double = -1.0
+    val ac: Int = (3)
+    val ad: Long = (lg)
+    val ae: Int = K
+    val af: Double = Double.MAX_VALUE
+    val ag: Long = System.currentTimeMillis()
+    val ah: Int = "abc".length
+    val ai: Float = 1.0f + i
+    val aj: Double = i / 2.0
+    val ak: Long = lg * i
+    val al: Int = i shl 2
+    val am: Long = 1L shl 40
+    val an: Short = 0x7F
+    val ao: Byte = 0b11
+    return a + b + c + d + e + f + h + j + k + l + m + n + o.toInt() + p.hashCode() + q.compareTo(1) + (r ?: 0) + s.toInt() + t + u + v + w + x + y + z + aa + ab + ac + ad + ae + af + ag + ah + ai + aj + ak + al + am + an + ao
+}
+fun n1(): Long = 0
+fun n2(): Double = -1.0
+fun n3(): Float = 0f
+fun n4(i: Int): Long { return i.toLong() }
+fun n5(): Long { return 1 }
+fun n6(b: Boolean): Long = if (b) 1 else 2
+fun n7(x: Int): Double = when (x) { 0 -> 0.0; else -> 1.5 }
+fun n8(i: Int): Long { val r: Long = i.toLong(); return r }
+fun n9(l: Long?): Long = l ?: 0
+fun n10(x: Int = 0, y: Long = 0, z: Double = 0.0, w: Float = 0f): Double = x + y + z + w
+//// branches
+open class Ex : Exception()
+fun a(b: Boolean): Any = if (b) 1 else "a"
+fun c(b: Boolean): Number = if (b) 1 else 2.0
+fun d(b: Boolean): String? = if (b) "a" else null
+fun e(b: Boolean): Int = if (b) 1 else throw Ex()
+fun f(b: Boolean): Int { val x: Int = if (b) 1 else return 2; return x }
+fun g(x: Int): CharSequence = when (x) { 1 -> "a"; else -> StringBuilder() }
+fun h(s: String): Int = try { s.toInt() } catch (e: Exception) { 0 }
+fun i(s: String?): String = s ?: "x"
+fun j(b: Boolean): Comparable<*> = if (b) 1 else "a"
+fun k(b: Boolean): List<Any> = if (b) listOf(1) else listOf("a")
+fun l(b: Boolean, s: String): CharSequence { return if (b) s else StringBuilder(s) }
+fun m(x: Int): String = when { x > 0 -> "p"; x < 0 -> "n"; else -> error("z") }
+fun n(b: Boolean): Unit = if (b) println("a") else Unit
+fun o(b: Boolean, t: Throwable): Throwable = if (b) t else IllegalStateException(t)
+//// lambdas-declared
+val a: (Int) -> String = { it.toString() }
+val b: (Int, Int) -> Int = { x, y -> x + y }
+val c: (Int) -> Unit = { println(it) }
+val d: Int.() -> Int = { this + 1 }
+val e: Int.(Int) -> Int = { it + this }
+val f: (Pair<Int, Int>) -> Int = { (x, y) -> x + y }
+val g: suspend (Int) -> Int = { it }
+val h: () -> Unit = { }
+val i: (Int) -> Long = { 1 }
+val j: (Int) -> Double = { it * 2.0 }
+val k: (String) -> Int = String::length
+val l: (Int) -> Int = { x -> if (x > 0) x else -x }
+val m: (Int) -> Any = { "s" }
+val n: (Int) -> String? = { null }
+val o: ((Int) -> Int)? = { it }
+val p: (Int, String) -> Unit = { _, _ -> }
+val q: (Int) -> List<Int> = { listOf(it) }
+val r: (String) -> CharSequence = { it }
+val s: (Int) -> Int = { val t = it * 2; t }
+val u: (Int) -> Unit = { it + 1 }
+val v: (List<Int>) -> Int = { it.sum() }
+val w: Comparator<String> = Comparator { x, y -> x.length - y.length }
+val y: () -> Int = { 1 }
+val z: (Int) -> Number = { it }
+//// lambdas-calls
+typealias H = (Int, Int) -> Unit
+fun on(h: H) {}
+fun two(h: (Int) -> Unit = {}, k: (Int, Int) -> Unit = { _, _ -> }) {}
+fun ov(h: (Int) -> Unit) {}
+fun ov(h: (Int, Int) -> Unit) {}
+fun build(b: StringBuilder.(Int) -> Unit) {}
+fun opt(h: ((Int) -> Unit)?) {}
+fun sus(b: suspend (Int) -> Unit) {}
+fun <T> gen(x: T, h: (T) -> Unit) {}
+fun interface F2 { fun call(a: Int, b: Int): Int }
+fun sam(f: F2) = f.call(1, 2)
+fun va(vararg xs: Int, done: (Int) -> Unit = {}) {}
+class Adb { fun run(vararg args: String, timeout: Long = 60, onLine: (String) -> Unit = {}) {} }
+fun g(l: List<Int>, m: Map<String, Int>, mm: MutableMap<String, Int>, s: String) {
+    on { a, b -> println(a + b) }; two(k = { a, b -> println(a + b) }); two({ a -> println(a) })
+    ov { a, b -> println(a + b) }; ov { a -> println(a) }
+    build { n -> append(n) }; opt { x -> println(x) }; sus { x -> println(x) }; gen(1) { x -> println(x) }
+    sam { a, b -> a + b }; va(1, 2) { x -> println(x) }; Adb().run("a", "b", timeout = 3) { line -> println(line) }
+    m.forEach { (k, v) -> println(k + v) }; m.forEach { k, v -> println(k + v) }; m.forEach { e -> println(e.key) }
+    m.entries.forEach { (k, v) -> println(k + v) }; l.forEach { x -> println(x) }; l.forEachIndexed { i, x -> println(i + x) }
+    l.fold(0) { acc, x -> acc + x }; l.sortedWith { a, b -> a - b }; l.zip(l) { a, b -> a + b }
+    l.reduceIndexed { i, a, b -> i + a + b }; with(l) { size }; l.run { size }; l.let { y -> y.size }
+    repeat(3) { i -> println(i) }; s.forEach { c -> println(c) }; l.asSequence().forEachIndexed { i, x -> println(i + x) }
+    mm.getOrPut("a") { 1 }; mm.computeIfAbsent("a") { k -> k.length }; mm.compute("a") { k, v -> (v ?: 0) + k.length }
+    mm.merge("a", 1) { a, b -> a + b }; l.groupBy({ it }, { it }); l.maxWith { a, b -> a - b }
+    Thread { println() }; Runnable { println() }; Comparator<Int> { a, b -> a - b }
+    java.util.Optional.of(1).map { x -> x + 1 }; l.stream().reduce { a, b -> a + b }; mutableListOf(1).removeIf { x -> x > 1 }
+    l.associate { x -> x to x }; m.map { (k, v) -> k + v }; m.filter { (k, v) -> k.length > v }; m.mapValues { (_, v) -> v }
+    l.withIndex().forEach { (i, x) -> println(i + x) }; l.zip(l).forEach { (a, b) -> println(a + b) }
+    l.foldIndexed(0) { i, acc, x -> i + acc + x }; l.scan(0) { acc, x -> acc + x }; l.mapIndexed { i, x -> i + x }
+}
+//// conditions
+fun g(flag: Boolean, it: Iterator<Int>, x: Any, s: String, a: Int?, l: List<Int>): Int {
+    var i = 0
+    if (flag) i++
+    while (it.hasNext()) i += it.next()
+    if (i in 1..2) i++
+    if (s.isEmpty()) i++
+    do { i++ } while (i < 3)
+    if (flag && !flag || i > 2) i++
+    if (x is String) i++
+    if (a == i) i++
+    if (a != null && a > 2) i++
+    if (l.any { it > 2 }) i++
+    if (s.startsWith("a").not()) i++
+    if (s == "a" || s.equals("b", ignoreCase = true)) i++
+    while (i < 10 && l.isNotEmpty()) i++
+    if (run { flag }) i++
+    if (l.firstOrNull() == 1) i++
+    return i
+}
+//// loops
+operator fun Int.iterator(): Iterator<Int> = (0 until this).iterator()
+class Tree(val kids: List<Tree>) : Iterable<Tree> { override fun iterator() = kids.iterator() }
+fun g(m: Map<String, Int>, n: Int, it: Iterator<String>, t: Tree): Int {
+    var s = 0
+    for (i in 0..3) s += i
+    for (c in "abc") s += c.code
+    for (x in arrayOf(1)) s += x
+    for ((k, v) in m) s += k.length + v
+    for (x in it) s += x.length
+    for (i in 0 until n step 2) s += i
+    for (i: Int in listOf(1)) s += i
+    for (x: Any in listOf("a")) s += x.hashCode()
+    for (e: CharSequence in listOf("a")) s += e.length
+    for (q: Number in listOf(1)) s += q.toInt()
+    for (x in 5) s += x
+    for (k in t) s += k.kids.size
+    for (x in sequenceOf(1)) s += x
+    for (b in byteArrayOf(1)) s += b
+    for (e in m.entries) s += e.value
+    for (i in n downTo 0) s += i
+    for (ch in 'a'..'c') s += ch.code
+    for (l: Long in 1L..3L) s += l.toInt()
+    for (x: Int? in listOf(1, null)) s += x ?: 0
+    return s
+}
+//// operators
+operator fun String.minus(o: String): String = removeSuffix(o)
+operator fun String.times(n: Int): String = repeat(n)
+operator fun String.unaryMinus(): String = reversed()
+operator fun String.not(): Boolean = isEmpty()
+operator fun Boolean.plus(o: Boolean): Boolean = this || o
+operator fun Char.times(n: Int): String = toString().repeat(n)
+fun g(flag: Boolean, x: Int, c: Char, s: String): String {
+    val a = "a" + 1 + 'c' + null + 2.0
+    val b = 'a' + 1
+    val d = 'b' - 'a'
+    val e = !flag
+    val f = -x + +x
+    val h = "a" < "b" && c > 'a'
+    val i = "ab"[0]
+    val j = "a" - "b"
+    val k = "a" * 3
+    val l = -"abc"
+    val m = !"x"
+    val n = flag + flag
+    val o = c * 2
+    val p = s + s
+    val q = c + 1 - 1
+    val r = c - 'a' + x % 2 * 3 / 1
+    return a + b + d + e + f + h + i + j + k + l + m + n + o + p + q + r
+}
+//// throws
+class MyEx(m: String) : Exception(m)
+open class Base : RuntimeException()
+class Derived : Base()
+fun make(): Exception = MyEx("x")
+fun g(e: Exception, t: Throwable?, k: Int): Nothing {
+    when (k) {
+        0 -> throw IllegalStateException()
+        1 -> throw e
+        2 -> throw MyEx("a")
+        3 -> throw RuntimeException("x", e)
+        4 -> throw e.cause ?: e
+        5 -> throw Error()
+        6 -> throw object : Exception() {}
+        7 -> throw make()
+        8 -> throw Derived()
+        9 -> throw t ?: Base()
+        10 -> throw NotImplementedError()
+        11 -> throw java.io.IOException("x")
+        else -> throw AssertionError()
+    }
+}
+fun h(): Int = try { 1 } catch (e: MyEx) { 2 } catch (e: Base) { 3 } catch (e: java.io.IOException) { 4 } catch (_: Exception) { 5 } catch (t: Throwable) { 6 }
+fun <T : Throwable> rethrow(t: T): Nothing = throw t
+//// whens
+enum class E { A, B }
+fun g(x: Int, s: String, c: Char, l: Long, e: E, a: Any, n: Int?, d: Double): Int {
+    val r1 = when (x) { 1 -> 1; 2, 3 -> 2; in 4..9 -> 3; else -> 0 }
+    val r2 = when (s) { "a" -> 1; "b" + "c" -> 2; else -> 0 }
+    val r3 = when (c) { 'a' -> 1; in 'b'..'z' -> 2; else -> 0 }
+    val r4 = when (l) { 1L -> 1; 2L -> 2; else -> 0 }
+    val r5 = when (e) { E.A -> 1; E.B -> 2 }
+    val r6 = when (a) { 1 -> 1; "a" -> 2; is Int -> 3; else -> 0 }
+    val r7 = when (n) { null -> 0; 1 -> 1; else -> 2 }
+    val r8 = when (d) { 0.0 -> 0; 1.5 -> 1; else -> 2 }
+    val r9 = when (x) { s.length -> 1; c.code -> 2; else -> 0 }
+    val r10 = when (l) { 1L -> 1; x.toLong() -> 2; else -> 0 }
+    return r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10
+}
+fun eq(s: String, o: String, c: Char, lg: Long, d: Double, b: Boolean, a: Any, n: Int?, cs: CharSequence, e: E): Boolean =
+    s == "a" || s == o || c == 'a' || lg == 0L || d == 0.0 || b == true || a == 1 || n == 1 || cs == "a" || e == E.A || s != "" || "a" == s || 1 == n || a == "x"
+//// private
+class A {
+    private val x = 1
+    private fun p() = 2
+    fun f(o: A) = o.x + o.p() + this.x + p()
+    class N { fun g(a: A) = a.x + a.p() }
+    inner class I { fun g() = x + p() + this@A.x }
+    companion object { private val secret = 3; private fun mk() = A(); fun h(a: A) = a.x + a.p() + secret }
+    fun useCompanion() = secret + mk().x + Companion.secret
+    val lam = { a: A -> a.x + a.p() }
+    fun String.ext(a: A) = a.x + length
+    fun obj(a: A) = object { val v = a.x + a.p() }
+}
+object O { private val k = 1; fun f() = k + O.k }
+class V { var n = 0; private set; fun bump() { n++ } }
+class P private constructor(private val v: Int) { companion object { fun of(v: Int) = P(v).v } }
+private fun topPrivate() = 1
+private val topVal = 2
+fun g(v: V) = v.n + topPrivate() + topVal + P.of(1)
+data class D(private val a: Int, val b: Int) { fun both(o: D) = a + o.a }
+open class Base { protected val q = 1; internal val r = 2 }
+class Sub : Base() { fun f(o: Sub) = q + o.q + r }
+//// exposed
+private class P
+private interface PI
+private fun f1(): P = P()
+private val v1: P = P()
+internal class Q { private fun m(): P = P(); private val p: P? = null; fun ok(): Int = 1 }
+private class R { fun m(): P = P(); val p: P = P() }
+fun f2(): Int {
+    val p: P = P()
+    fun local(): P = p
+    return local().hashCode()
+}
+class S<P> { fun m(x: P): P = x }
+fun <P> f3(x: P): P = x
+private class T : PI { fun me(): PI = this }
+class U { private class P; private fun m(): P = P(); fun n(): Int = m().hashCode() }
+fun f4(): Any = P()
+val v2 = 1
+val v3: () -> Int = { P().hashCode() }
+private object PO
+private fun f5(): PO = PO
+class W { private class In; private val i: In? = null; class P; fun pub(): P = P() }
+//// assignments
+var counter = 0
+val Any.tag: String get() = "t"
+var A.z: Int get() = 1; set(v) { println(v) }
+interface HasName { var name: String }
+class A(val id: Int, var label: String) : HasName {
+    var x = 1
+    val y: Int
+    val w: Int
+    lateinit var late: String
+    override var name = "n"
+    var custom: Int = 0
+        set(value) { field = value * 2 }
+    val obs: Int get() = x
+    init { y = 2; this.w = 3 }
+    constructor() : this(0, "") { x = 5 }
+    fun f(x: Int) { var x = x; x = 2; this.x = x; label = "l"; late = "s"; name = "m"; custom = 3; counter = x }
+    fun g(o: A) { o.x = 1; o.label = "q"; o.z = 3; o.name = "z"; o.custom = 1 }
+    fun h() { val y: Int; y = 1; var id = id; id = 2; println(y + id) }
+}
+fun g(arr: IntArray, ml: MutableList<Int>, mm: MutableMap<String, Int>, sb: StringBuilder, a2: Array<String>, ll: ArrayList<Int>) {
+    arr[0] = 1; ml[0] = 1; mm["a"] = 1; a2[0] = "x"; ll[0] = 2; sb[0] = 'c'
+    val hm = HashMap<String, Int>(); hm["a"] = 1
+    val l2: MutableList<Int> = mutableListOf(1); l2[0] = 2
+    val grid = Array(2) { IntArray(2) }; grid[0][1] = 3
+    buildList { add(1); this[0] = 2 }
+    var p = Pair(1, 2); p = p.copy(first = 3); println(p)
+    val lst = listOf(mutableListOf(1)); lst[0][0] = 2
+    counter = 2; counter++
+    sb.setLength(0)
+    val t = Thread(); t.name = "x"; t.isDaemon = true; t.priority = 1
+}
+//// supertypes
+interface I
+fun interface FI { fun run() }
+open class A0
+open class A1(x: Int = 0)
+open class A2(x: Int)
+open class A3 { constructor(x: Int); constructor() }
+abstract class A4(vararg x: Int)
+open class A5<T>(val t: T)
+open class A6(val a: Int, val b: String = "", val c: Double = 0.0)
+sealed class S(val n: Int) { object One : S(1); class Two(n: Int) : S(n) }
+class B0 : A0()
+class B1 : A1()
+class B1b : A1(1)
+class B2 : A2(1)
+class B3 : A3()
+class B3b : A3(1)
+class B4 : A4()
+class B4b : A4(1, 2, 3)
+class B5 : A5<Int>(1)
+class B6 : A6(1)
+class B6b : A6(1, "x", 2.0)
+class B7(x: Int) : A2(x), I
+class B8 : Exception()
+class B9 : Exception("m")
+class B10 : Exception("m", null)
+class B11 : I
+class B12(i: I) : I by i
+class B13 : Runnable { override fun run() {} }
+class B14 : FI { override fun run() {} }
+object B15 : A2(1), I
+class B17 : Thread("name")
+class B18 : A2 { constructor() : super(1) }
+enum class En(val v: Int) : I { X(1), Y(2) }
+val anon = object : A2(3), I {}
+val anon2 = object : I {}
+class Outer { open class In(x: Int); class Sub : In(1) }
+typealias AliasA2 = A2
+class B19 : AliasA2(1)
+//// type-access
+class A {
+    val x = 1
+    fun m() = 2
+    class Nested { fun n() = 3 }
+    inner class Inner
+    object Obj { fun o() = 4 }
+    companion object { const val K = 5; fun make() = A(); val x2 = 6; @JvmStatic fun st() = 7 }
+}
+class B { fun dup() = 1; companion object { fun dup() = 2 } }
+enum class E { P, Q; fun inst() = 1; companion object { fun c() = 2 } }
+object O { fun m() = 1; val v = 2 }
+class G<T>(val t: T) { companion object { fun <T> of(t: T) = G(t) } }
+sealed class R { data class Ok(val v: Int) : R(); object Err : R() }
+fun A.Companion.ext() = 8
+fun g(a: A): Int {
+    val r = A::m
+    val q = A::x
+    return A.K + A.make().x + A.x2 + A.st() + A.Nested().n() + A.Obj.o() + A.Companion.K + B.dup() + B().dup() +
+        E.P.inst() + E.valueOf("P").ordinal + E.entries.size + E.values().size + E.c() + O.m() + O.v + G.of(1).t +
+        R.Ok(1).v + R.Err.hashCode() + A.ext() + r(a) + q(a) + Int.MAX_VALUE + String.format("%d", 1).length +
+        Integer.parseInt("1") + java.lang.Long.MAX_VALUE.toInt() + a.Inner().hashCode() + A.Nested::class.hashCode() +
+        Char.MIN_VALUE.code + E.P.name.length + A::class.hashCode()
+}
+//// object-calls
+object Inv { operator fun invoke(): Int = 1; operator fun invoke(x: Int): Int = x }
+object Plain { fun f() = 1 }
+class WithInvoke { companion object { operator fun invoke(x: Int) = WithInvoke() } }
+data object DO
+fun g(): Int = Inv() + Inv(2) + Plain.f() + WithInvoke(1).hashCode() + DO.hashCode() + Plain.hashCode()
+//// type-arguments
+annotation class Ann(val k: kotlin.reflect.KClass<*>)
+open class Box<T>(val v: T) { companion object; class N<U>(val u: U); inner class In; fun self(): Box<T> = this; fun i(x: In): In = x }
+typealias IB = Box<Int>
+typealias BoxOf<T> = Box<T>
+class Sub : Box<Int>(1)
+@Ann(Box::class) class Use {
+    val a: Box<Int> = Box(1)
+    val b = Box("s")
+    val c: IB = Box(2)
+    val d: List<Box<String>> = emptyList()
+    val e: Box.N<Int> = Box.N(1)
+    val f: (Box<Int>) -> Unit = {}
+    val g: Map<String, Box<*>> = emptyMap()
+    val h: BoxOf<Int> = Box(3)
+    val i: Box.Companion = Box
+    val j: Box<Box<Int>> = Box(Box(1))
+    val k: Array<Box<Int>?> = arrayOfNulls(1)
+    fun <T> m(x: Box<T>): Box<out T> = x
+    fun n(x: Any): Boolean = x is Box<*> && (x as Box<*>).v != null && Box::class.isInstance(x)
+    fun o(x: Box<in Nothing>): Any? = x.v
+    fun p(e: Map.Entry<String, Int>): Int = e.value
+}
+fun <T> Box<T>.ext(): T = v
+val Box<*>.any: Any? get() = v
+//// extension-receivers
+open class A
+class B : A() { fun g() = e() + f() }
+interface I
+class C : I { fun g() = i() }
+fun A.e() = 1
+fun Any.f() = 2
+fun I.i() = 3
+fun <T> T.gen() = 4
+fun String.s() = 5
+fun CharSequence.cs() = 6
+fun String.g(): Int = s() + cs() + f() + gen()
+fun plain() = 7
+fun String.plain() = 8
+class D { fun String.me() = 9; fun g() = "a".me() + with("a") { me() + s() } + "b".run { s() } + plain() + gen() + f() }
+fun h(str: String): Int = with(str) { s() } + str.run { cs() } + str.let { it.s() } + buildString { s() }.length + str.apply { s() }.length
+val String.p: Int get() = s()
+fun StringBuilder.k() = cs() + f()
+//// overrides
+open class A { open fun f() {}; open val v: Int = 1; fun fin() {}; open fun r(): Any = 1; open fun n(): Number = 1 }
+abstract class Ab { abstract fun f(); abstract val v: Any; open fun self(): Ab = this }
+interface I { fun f() {}; val v: CharSequence; fun l(): Collection<Int>; fun s(): String? }
+interface G<T> { fun g(): T; fun h(x: T): List<T> }
+open class B : A() { override fun f() {}; override val v = 2; override fun r(): String = ""; override fun n(): Int = 1 }
+class C : B() { override fun f() {}; override fun r(): String = "c" }
+open class D : A() { final override fun f() {} }
+class E : Ab() { override fun f() {}; override val v: Int = 1; override fun self(): E = this }
+class F : I { override fun f() {}; override val v: String = ""; override fun l(): List<Int> = emptyList(); override fun s(): String = "" }
+class H : G<String> { override fun g(): String = ""; override fun h(x: String): List<String> = listOf(x) }
+class J : Runnable, Comparable<J> { override fun run() {}; override fun compareTo(other: J): Int = 0 }
+class K : java.util.concurrent.Callable<String> { override fun call(): String = "" }
+data class L(val a: Int) { override fun toString(): String = "L"; override fun equals(other: Any?): Boolean = true; override fun hashCode(): Int = 1 }
+open class M(open val x: Int)
+class N(override val x: Int) : M(x)
+enum class En { X { override fun f() = 1 }; abstract fun f(): Int }
+val o = object : A() { override fun f() {}; override fun r(): Int = 2 }
+class P : Thread() { override fun run() {} }
+class Q : Exception() { override val message: String get() = "q" }
+class Cl : Cloneable { public override fun clone(): Cl = Cl() }
+class It : Iterator<Int> { override fun hasNext(): Boolean = false; override fun next(): Int = 0 }
+//// duplicates
+class A { class B; companion object; class Same }
+class B
+object C
+interface I
+class Impl : I
+typealias T1 = A
+fun Fact(): A = A()
+class Fact2
+fun Fact2(x: Int): Fact2 = Fact2()
+class Outer1 { class Same; enum class K { A, B } }
+class Outer2 { class Same; enum class K { A, B } }
+fun f1() { class Local; println(Local()) }
+fun f2() { class Local; println(Local()) }
+enum class En { A, B }
+//// returns
+typealias U = Unit
+fun a() { return }
+fun b(): Unit { return }
+fun c(): Int { run { return 1 } }
+fun d(): Int { listOf(1).forEach { return 1 }; return 0 }
+fun e(l: List<Int>): Int { l.forEach { if (it == 0) return@forEach }; return 1 }
+val f = fun() { return }
+fun g(): Int { val h = fun() { return }; h(); return 1 }
+val p: Int get() { return 1 }
+class K { val q: Int; init { q = 1; if (q > 0) println() }; constructor() { return } }
+fun i(): Nothing { throw Exception() }
+fun j(): U { return }
+fun k(): Int { fun inner() { return }; inner(); return 1 }
+fun l(): Int { val o = object : Runnable { override fun run() { return } }; o.run(); return 1 }
+fun m(x: Int): Int { if (x > 0) return x; return -x }
+fun n(): Int? { return null }
+fun o(b: Boolean) { if (b) return; println() }
+suspend fun s(): Unit { return }
+fun t(): Any { return Unit }
+//// several-bounds
+fun <T> g(x: T): String where T : CharSequence, T : Comparable<T> = x.toString() + x.length + x.compareTo(x)
+fun <T> h(x: T): Int where T : Number, T : Comparable<T> = x.toInt() + x.compareTo(x)
+//// top-level-name-collision
+enum class E { A, B; companion object { fun c() = 2 } }
+fun g(): Int = E.A.ordinal + E.valueOf("A").ordinal + E.entries.size + E.values().size + E.c()
+//// factory-beside-class
+class Fact
+fun Fact(x: Int): Fact = Fact()
+fun g(): Fact = Fact(1)
+//// null-and-unsigned
+fun g() { println(null); val a: ULong = 1u; val b: UInt = 2u; val c: UShort = 3u; println(a.toString() + b + c) }
+//// implicit-receiver-beats-short-top-level
+fun String.x(n: Int): String = repeat(n)
+fun String.y(n: Int): Int = repeat(n).length
+fun CharSequence.z(n: Int): String = repeat(n)
+fun twice(block: () -> Unit) { repeat(2) { block() } }
+//// companion-extensions
+class Foo { companion object }
+fun Foo.Companion.create(): Foo = Foo()
+val Foo.Companion.label: String get() = "foo"
+fun g(): Int = String.CASE_INSENSITIVE_ORDER.compare("a", "b") + Foo.create().hashCode() + Foo.label.length

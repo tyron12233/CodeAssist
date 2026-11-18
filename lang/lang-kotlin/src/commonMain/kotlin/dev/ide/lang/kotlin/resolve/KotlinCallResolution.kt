@@ -191,6 +191,20 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                     enclosingClassMembersContain(call.textRange.startOffset, name)
                 if (it.isNotEmpty() && shadowed) emptyList() else it
             }
+            .let { tops ->
+                // A top-level function that cannot take this many arguments is not the callee when the implicit
+                // receiver has one that can: inside `fun String.pad(n: Int) = repeat(n)`, `repeat(n)` is
+                // `CharSequence.repeat(n)`, not `kotlin.repeat(times, action)` with its action missing. The
+                // compiler weighs both at once; this only steps in when EVERY top-level hit is short of
+                // arguments, so the cheap path above still answers nearly every call.
+                if (tops.isEmpty() || tops.any { !needsMoreArguments(it, argCount) }) tops
+                else scopeSymbolsAt(call.textRange.startOffset, name, exactName = true)
+                    .filter {
+                        it.name == name && it.kind == SymbolKind.METHOD && it.isExtension && extensionInScope(it) &&
+                            !needsMoreArguments(it, argCount)
+                    }
+                    .ifEmpty { tops }
+            }
             .ifEmpty {
                 scopeSymbolsAt(
                     call.textRange.startOffset,
@@ -246,6 +260,14 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         return bestOverload(pool, call, receiverType)
     }
     return viable.firstOrNull()
+}
+
+/** Whether [sym] has more REQUIRED parameters than the [argCount] arguments supplied (no default, not the
+ *  vararg). False when its defaults are unknown, so an undecidable candidate is never ruled out. */
+private fun needsMoreArguments(sym: KotlinSymbol, argCount: Int): Boolean {
+    if (sym.paramHasDefault.size != sym.paramTypes.size) return false
+    val required = sym.paramTypes.indices.count { it != sym.varargParamIndex && !sym.paramHasDefault[it] }
+    return required > argCount
 }
 
 /** Whether the parameter a SYNTACTIC trailing lambda in [call] would fill on [sym] is a function-type (or a Java

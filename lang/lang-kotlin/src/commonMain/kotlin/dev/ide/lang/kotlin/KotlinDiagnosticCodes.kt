@@ -150,6 +150,38 @@ object KotlinDiagnosticCodes {
      *  synthetic-property syntax (`view.text = "x"` / `view.text`) is idiomatic. */
     const val USE_PROPERTY_ACCESS = "kt.usePropertyAccess"
 
+    // --- structural checks that need no types (see KotlinStructuralChecks) ---
+    /** `break` / `continue` with no enclosing loop. */
+    const val JUMP_OUTSIDE_LOOP = "kt.breakOrContinueOutsideLoop"
+    /** A `break@x` / `continue@x` / `return@x` whose label names nothing that encloses it. */
+    const val UNRESOLVED_LABEL = "kt.unresolvedLabel"
+    /** `this` where no receiver exists: a top-level function or property with no extension receiver. */
+    const val NO_THIS = "kt.noThis"
+    /** An `if` with no `else` whose value is used. */
+    const val IF_AS_EXPRESSION = "kt.ifAsExpression"
+    /** A `data class` with no primary constructor parameter, or one that is not a `val`/`var`. */
+    const val DATA_CLASS = "kt.dataClass"
+    /** A bare `return` in a function that must return a value. */
+    const val RETURN_VALUE_EXPECTED = "kt.returnValueExpected"
+
+    // --- typed checks added with the error-recall corpus (see KotlinTypedChecks) ---
+    /** A `for` loop over a value with no `iterator()`. */
+    const val NOT_ITERABLE = "kt.notIterable"
+    /** A public declaration whose signature names a `private` class of the same file. */
+    const val EXPOSED_VISIBILITY = "kt.exposedVisibility"
+    /** `a[i] = v` on a type with no `set` operator (a read-only `List`, a `String`). */
+    const val NO_SET_OPERATOR = "kt.noSetOperator"
+    /** An `override` of a member that is final in the supertype. */
+    const val OVERRIDING_FINAL = "kt.overridingFinal"
+    /** An `override` whose return type is not a subtype of the overridden member's. */
+    const val OVERRIDE_RETURN_TYPE = "kt.overrideReturnType"
+    /** A constructor call on something that has none: `: Iface()` in a supertype list. */
+    const val NO_CONSTRUCTOR = "kt.noConstructor"
+    /** A lambda whose parameter count does not fit the function type it is written for. */
+    const val LAMBDA_PARAMETERS = "kt.lambdaParameters"
+    /** An instance member reached through its class name (`A.m()`), with no instance. */
+    const val INSTANCE_ACCESS = "kt.instanceAccessViaType"
+
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"
 

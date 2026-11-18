@@ -188,15 +188,19 @@ and tests key on). Categories, with representative codes:
 
 - **Resolution / calls / types** — `kt.unresolved`, `kt.typeMismatch`, `kt.argumentCount`,
   `kt.constructorArgs`, `kt.namedArgument`, `kt.notCallable`, `kt.cannotInferType`, `kt.overloadAmbiguity`,
-  `kt.classifierAsValue`, `kt.destructuring`, `kt.delegateOperator`.
+  `kt.classifierAsValue`, `kt.destructuring`, `kt.delegateOperator`, `kt.lambdaParameters`,
+  `kt.instanceAccessViaType`, `kt.notIterable`, `kt.noSetOperator`, `kt.returnValueExpected`.
 - **Nullability** — `kt.unsafeNullable`, `kt.redundantNotNull`, `kt.redundantSafeCall`, `kt.uselessElvis`,
   `kt.senselessComparison`.
 - **Control flow** — `kt.missingReturn`, `kt.unreachable`, `kt.uninitializedVariable`, `kt.whenExhaustive`,
-  `kt.duplicateWhenBranch`, `kt.unreachableCatch`.
+  `kt.duplicateWhenBranch`, `kt.unreachableCatch`, `kt.breakOrContinueOutsideLoop`, `kt.unresolvedLabel`,
+  `kt.ifAsExpression`, `kt.noThis`.
 - **Declarations / modifiers** — `kt.conflictingDeclaration`, `kt.conflictingImport`, `kt.modifiers`,
-  `kt.valReassign`, `kt.valVarParameter`, `kt.mustBeInitialized`, `kt.lateinit`, `kt.constMisuse`, `kt.functionNoBody`.
+  `kt.valReassign`, `kt.valVarParameter`, `kt.mustBeInitialized`, `kt.lateinit`, `kt.constMisuse`, `kt.functionNoBody`,
+  `kt.dataClass`, `kt.exposedVisibility`, `kt.invisibleReference`.
 - **Inheritance / override** — `kt.abstractNotImplemented`, `kt.nothingToOverride`, `kt.overrideRequired`,
-  `kt.abstractInstantiation`, `kt.supertypeNotInitialized`.
+  `kt.abstractInstantiation`, `kt.supertypeNotInitialized`, `kt.overridingFinal`, `kt.overrideReturnType`,
+  `kt.noConstructor`.
 - **Generics / variance** — `kt.typeArgumentCount`, `kt.upperBoundViolated`, `kt.varianceConflict`,
   `kt.conflictingProjection`, `kt.redundantProjection`.
 - **Redundancy / style (warnings/hints)** — `kt.unusedImport`, `kt.unusedPrivate`, `kt.unusedLocal`,
@@ -208,6 +212,19 @@ and tests key on). Categories, with representative codes:
 
 Like the rest of the model the checks are conservative — an unmodelled shape under-reports rather than
 producing a false error.
+
+Both directions are held by tests. The sweeps (`KotlinRealWorldAnalysisSweepTest`) run the checks over real,
+compiling code and treat every error as a suspected false positive; each sweep also writes every error it
+found to `kt-sweep-<name>.txt` in the JVM's temp directory, so two runs can be diffed line by line.
+`KotlinErrorRecallTest` holds the other direction: `lang/lang-kotlin/recall/must-error.txt` is a list of
+ordinary compile errors, each with the code the editor must report for it, and `must-be-clean.txt` is valid
+code written to look like each of them. A new check belongs in both files.
+
+The checks that read an inferred type trust it only where it was read rather than guessed: a nullable value
+is reported where a non-null one is required only at the first use of a local whose `?` is written on its
+declaration (every guard that would narrow it mentions the name), a numeric width mismatch only for a
+literal or a local with a written type, and a nullable argument only against a parameter declared in this
+project's source (a library signature arrives with its type arguments already substituted).
 
 ### Quick-fixes
 

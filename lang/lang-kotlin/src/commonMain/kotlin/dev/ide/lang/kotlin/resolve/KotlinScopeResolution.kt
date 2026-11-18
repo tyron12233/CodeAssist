@@ -642,6 +642,27 @@ fun KotlinResolver.typeParameterUpperBound(
     return null
 }
 
+/** Every resolvable upper bound of the type parameter [name] in scope at [offset]: its `: Bound` and each
+ *  `where T : Bound`. [typeParameterUpperBound] answers with the first; a member may come from any of them. */
+fun KotlinResolver.typeParameterUpperBounds(name: String, offset: Int): List<KotlinType> {
+    var node: KtElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtTypeParameterListOwner) {
+            val tp = node.typeParameters.firstOrNull { it.name == name }
+            if (tp != null) {
+                val texts = ArrayList<String>()
+                tp.extendsBound?.text?.let { texts += it }
+                node.typeConstraints.forEach { c ->
+                    if (c.subjectTypeParameterName?.getReferencedName() == name) c.boundTypeReference?.text?.let { texts += it }
+                }
+                return texts.mapNotNull { service.typeFromText(it, fileContext) }.filter { service.isKnownType(it.qualifiedName) }
+            }
+        }
+        node = node.parent
+    }
+    return emptyList()
+}
+
 /**
  * [type] as a receiver for MEMBER access: a bare type-parameter classifier in scope at [offset] is replaced by
  * its resolved upper bound ([typeParameterUpperBound]) so `t.member` sees the bound's members; any other type

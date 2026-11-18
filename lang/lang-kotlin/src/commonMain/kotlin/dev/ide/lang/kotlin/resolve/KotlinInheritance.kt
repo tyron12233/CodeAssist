@@ -7,6 +7,7 @@ import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.containingClassOrObject
+import dev.ide.kotlin.syntax.psi.getStrictParentOfType
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.resolve.Modifier
@@ -19,9 +20,13 @@ import dev.ide.lang.resolve.SymbolKind
  *  supertype. Drives override completion. */
 fun KotlinResolver.overridableMembersAt(offset: Int): List<KotlinSymbol> {
     val cls = enclosingClassOrObject(offset) ?: return emptyList()
-    val superFqns = cls.superTypeListEntries.mapNotNull { e ->
+    val declaredSupers = cls.superTypeListEntries.mapNotNull { e ->
         e.typeReference?.text?.let { service.resolveTypeName(it, fileContext) }
     }
+    // Every class also extends `Any`, named or not: `toString`, `equals` and `hashCode` are the three members
+    // people override most, and a class with no supertype list was offered none of them.
+    val isInterface = cls is dev.ide.kotlin.syntax.psi.KtClass && cls.isInterface()
+    val superFqns = if (isInterface || "kotlin.Any" in declaredSupers) declaredSupers else declaredSupers + "kotlin.Any"
     if (superFqns.isEmpty()) return emptyList()
     val declared = cls.declarations.mapNotNull { d ->
         when (d) {
@@ -79,10 +84,15 @@ class InheritanceReport(
     /** Each `override` function whose `suspend`-ness disagrees with the supertype member it overrides,
      *  paired with that member. Both directions are compile errors. */
     val suspendMismatch: List<Pair<KtCallableDeclaration, KotlinSymbol>> = emptyList(),
+    /** Each `override` of a member that is FINAL in the supertype, paired with that member. */
+    val overridesFinal: List<Pair<KtCallableDeclaration, KotlinSymbol>> = emptyList(),
+    /** Each `override` with a declared type, paired with every same-shape supertype member it could be
+     *  overriding. The diagnostics layer reports the ones whose type no candidate accepts. */
+    val overrideCandidates: List<Pair<KtCallableDeclaration, List<KotlinSymbol>>> = emptyList(),
 ) {
     val isEmpty: Boolean
         get() = missing.isEmpty() && overridesNothing.isEmpty() && needsOverride.isEmpty() &&
-                suspendMismatch.isEmpty()
+                suspendMismatch.isEmpty() && overridesFinal.isEmpty() && overrideCandidates.isEmpty()
 
     companion object {
         val EMPTY = InheritanceReport(emptyList(), emptyList(), emptyList())
@@ -111,6 +121,8 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
     val overridesNothing = ArrayList<KtCallableDeclaration>()
     val needsOverride = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
     val suspendMismatch = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
+    val overridesFinal = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
+    val overrideCandidates = ArrayList<Pair<KtCallableDeclaration, List<KotlinSymbol>>>()
     for (d in cls.declarations) {
         val member = d as? KtCallableDeclaration ?: continue
         if (member !is KtNamedFunction && member !is KtProperty) continue
@@ -119,11 +131,32 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
         if (member.hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
             if (closureFullyEnumerable && sameName.isEmpty()) overridesNothing += member // `override` but nothing carries this name
             else suspendMismatchedOverride(member, sameName)?.let { suspendMismatch += member to it }
+            val shaped = sameShapeMembers(member, sameName)
+            // Final in EVERY supertype that carries it: one open declaration is enough to make it overridable.
+            if (shaped.isNotEmpty() && shaped.all { isFinalMember(it) }) overridesFinal += member to shaped.first()
+            else if (shaped.isNotEmpty() && member.typeReference != null) overrideCandidates += member to shaped
         } else if (!member.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
             hiddenSupertypeMember(member, sameName)?.let { needsOverride += member to it }
         }
     }
-    return InheritanceReport(missing, overridesNothing, needsOverride, suspendMismatch)
+    return InheritanceReport(missing, overridesNothing, needsOverride, suspendMismatch, overridesFinal, overrideCandidates)
+}
+
+/**
+ * Whether [m] is known to be final: a Java member carrying `final`, or a member of a project class whose
+ * declaration is neither `open`, `abstract` nor itself an `override`, outside an interface. A member read from
+ * Kotlin metadata does not say, and counts as overridable.
+ */
+internal fun KotlinResolver.isFinalMember(m: KotlinSymbol): Boolean {
+    if (Modifier.FINAL in m.modifiers) return true
+    if (!m.origin.fromSource) return false
+    val psi = (m.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtModifierListOwner
+        ?: return false
+    if (psi !is KtNamedFunction && psi !is KtProperty && psi !is dev.ide.kotlin.syntax.psi.KtParameter) return false
+    if (psi.hasModifier(KtTokens.FINAL_KEYWORD)) return true
+    if (psi.hasModifier(KtTokens.OPEN_KEYWORD) || psi.hasModifier(KtTokens.ABSTRACT_KEYWORD) || psi.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return false
+    val owner = (psi as dev.ide.kotlin.syntax.psi.KtElement).getStrictParentOfType<KtClassOrObject>() ?: return false
+    return !(owner is dev.ide.kotlin.syntax.psi.KtClass && owner.isInterface())
 }
 
 /**
