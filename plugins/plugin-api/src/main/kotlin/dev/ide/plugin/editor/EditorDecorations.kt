@@ -169,7 +169,8 @@ class GutterMark(
     /**
      * The `dev.ide.plugin.action.IdeAction` id to invoke when the mark is tapped, dispatched through the
      * normal action path so its effects (edits, navigation) work as they do anywhere else. Null makes the
-     * mark a passive indicator.
+     * mark a passive indicator. An id from [GutterActions] is carried out by the editor instead: a run mark
+     * uses [GutterActions.runTask].
      */
     val actionId: String? = null,
 

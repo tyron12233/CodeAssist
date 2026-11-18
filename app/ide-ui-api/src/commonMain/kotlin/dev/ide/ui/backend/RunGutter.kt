@@ -8,8 +8,17 @@ package dev.ide.ui.backend
  * configuration does, so the next Run (button or shortcut) starts the same `main` again.
  */
 object RunGutter {
-    /** Prefixes a gutter mark's action id that is a `run:` task id: tapping it starts that run. */
+    /**
+     * Prefixes a gutter mark's action id that is a Run task id: tapping it starts that run. Published to
+     * plugins as `dev.ide.plugin.editor.GutterActions.RUN_TASK_PREFIX`, so the text cannot change.
+     */
     const val ACTION_PREFIX = "ca.run:"
+
+    /**
+     * Whether [option] is only a placeholder for a task this object knows nothing about: one a plugin's
+     * provider lists, whose label is the provider's to give.
+     */
+    fun isUnnamed(option: RunTaskOption): Boolean = option.label == option.id
 
     /** The Run task that launches [mainClass] (a binary class name) of console module [module]. */
     fun mainTaskId(module: String, mainClass: String): String = "run:$module:$mainClass"

@@ -412,8 +412,16 @@ const val PLUGIN_API_VERSION: Int = 4
  * `plugin-ui-api`: one New-menu row whose dialog offers a choice of what to start (Class, Interface, Enum),
  * as the IDE's own New Kotlin file does. A plugin could only register one row per sort of file. Additive; on
  * an older host the new constructor is missing and the call throws a `LinkageError`.
+ *
+ * `3.7.0` adds two things a plugin with a Run of its own had to reach past the SPI for.
+ * `dev.ide.plugin.editor.GutterActions` in `plugin-api` names the action id that makes a gutter mark start a
+ * Run task; the editor already honoured that id for its own run marks, and a plugin could only copy the text.
+ * `dev.ide.build.RunSettings` on `RUN_SETTINGS` (`platform.runSettings`, WORKSPACE) in `build-api` gives the
+ * entry point chosen on a module's Run card in Module Settings, which is shown for a plugin's module types
+ * but was readable only from the project's settings file. Additive; on an older host the key resolves to
+ * nothing, and the gutter id is a constant the plugin carries.
  */
-const val PLUGIN_SPI_VERSION: String = "3.6.0"
+const val PLUGIN_SPI_VERSION: String = "3.7.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
