@@ -799,7 +799,10 @@ class IdeServicesBackend(
         // The sheet the user just answered is the current wording, so a yes covers usage and a no covers nothing.
         manager?.setPreference(ANALYTICS_SCOPE_PREF, if (granted) ANALYTICS_SCOPE_USAGE else "")
         analytics.enabled = granted
-        if (!granted) usage.clear()
+        if (!granted) {
+            usage.clear()
+            trail.clear()
+        }
     }
 
     /** Feature-use counts, reported per feature when telemetry is flushed ([flushTelemetry], [close]). */
@@ -807,8 +810,14 @@ class IdeServicesBackend(
         track(dev.ide.analytics.Events.FEATURE_USED, mapOf("feature" to feature, "count" to count.toString()))
     }
 
+    /** Where the user has just been, for a crash whose stack cannot say; holds only what [usage] may count. */
+    private val trail = dev.ide.core.perf.FeatureTrail()
+
     override fun countFeature(feature: String) {
-        if (consentCoversUsage()) usage.count(feature)
+        if (consentCoversUsage()) {
+            usage.count(feature)
+            trail.note(feature)
+        }
     }
 
     override fun track(event: String, props: Map<String, String>) {
@@ -886,7 +895,9 @@ class IdeServicesBackend(
                         // plural lookup throws for a default locale with no language.
                         dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name) + MemSample.now().props() +
                             ("locale" to runCatching { java.util.Locale.getDefault().toLanguageTag() }.getOrDefault("?")) +
-                            (if (plugin != null) mapOf("in_plugin" to "1") else emptyMap()),
+                            (if (plugin != null) mapOf("in_plugin" to "1") else emptyMap()) +
+                            // `trail`: the last screens and tools shown, for a crash with no frame of ours.
+                            (trail.render()?.let { mapOf("trail" to it) } ?: emptyMap()),
                     )
                 )
                 analytics.flush()

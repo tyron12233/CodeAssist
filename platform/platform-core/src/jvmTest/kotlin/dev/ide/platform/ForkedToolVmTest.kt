@@ -80,5 +80,34 @@ class ForkedToolVmTest {
         assertTrue(ForkedToolVm.isToolVmCrash(probe))
     }
 
+    /** The 3.46.0 shape: the same probe on a ROM that names the forked VM's thread `main`. */
+    @Test
+    fun `a VM that dies while its runtime starts is filtered whatever its thread is called`() {
+        val probe = NativeTombstone(
+            arch = "arm64",
+            signal = "SIGSEGV",
+            signalCode = "SEGV_MAPERR",
+            faultingThread = "main",
+            frames = listOf(
+                "libart.so!art::Thread::AssertPendingOOMException() const",
+                "libart.so!art::mirror::Class::EnsureExtDataPresent(art::Handle<art::mirror::Class>, art::Thread*)",
+                "libart.so!art::jni::JniIdManager::Init(art::Thread*)",
+                "libart.so!art::Runtime::Init(art::RuntimeArgumentMap&&)",
+            ),
+            uptimeSeconds = 2,
+        )
+        assertTrue(ForkedToolVm.isToolVmCrash(probe))
+    }
+
+    @Test
+    fun `a crash in a running app process on its main thread is still reported`() {
+        val real = NativeTombstone(
+            signal = "SIGSEGV",
+            faultingThread = "main",
+            frames = listOf("libart.so!artInstanceOfFromCode", "libart.so!art::Runtime::Abort(char const*)"),
+        )
+        assertFalse(ForkedToolVm.isToolVmCrash(real))
+    }
+
     private fun tombstone(thread: String) = NativeTombstone(faultingThread = thread)
 }

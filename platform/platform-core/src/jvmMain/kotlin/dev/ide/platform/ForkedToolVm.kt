@@ -57,12 +57,21 @@ object ForkedToolVm {
      *
      * Such a death is not an app crash: the fork is a capability probe or a tool run that self-falls back
      * in-process, and reporting it as a crash makes a working device look broken (it dominated the 3.9.5/3.9.6
-     * crash counts). The faulting thread is the only unambiguous signal — no thread in an IDE process is named
-     * after a VM launcher — so a tombstone that names no thread is treated as the app's own, which keeps a real
-     * crash reportable at the cost of leaving a probe abort in the numbers on ROMs that hand out no tombstone.
+     * crash counts). Two signals say so without doubt. The faulting thread is named after a VM launcher, which
+     * no thread in an IDE process is. Or the stack is inside the runtime's own creation: an app process is
+     * forked from the zygote with its runtime already built, so `Runtime::Create` or `Runtime::Init` can only be
+     * on the stack of a VM started from the command line. Some ROMs name that VM's thread `main`, which the
+     * thread name alone let through (vivo and nubia on 3.46.0, dying in `JniIdManager::Init` with no heap).
+     * A tombstone with neither is treated as the app's own, which keeps a real crash reportable at the cost of
+     * leaving a probe abort in the numbers on ROMs that hand out no tombstone.
      */
     fun isToolVmCrash(tombstone: NativeTombstone?): Boolean {
-        val thread = tombstone?.faultingThread?.trim()?.lowercase() ?: return false
-        return thread in LAUNCHER_THREAD_NAMES
+        if (tombstone == null) return false
+        val thread = tombstone.faultingThread?.trim()?.lowercase()
+        if (thread != null && thread in LAUNCHER_THREAD_NAMES) return true
+        return tombstone.frames.any { frame -> RUNTIME_STARTUP_FRAMES.any { it in frame } }
     }
+
+    /** Frames only a VM that is still starting has: the zygote ran them long before any app process existed. */
+    private val RUNTIME_STARTUP_FRAMES = listOf("art::Runtime::Create(", "art::Runtime::Init(")
 }
