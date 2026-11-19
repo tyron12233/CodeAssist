@@ -16,6 +16,8 @@ import platform.Foundation.timeIntervalSince1970
 
 actual val isMobilePlatform: Boolean = true
 
+actual val supportsBlur: Boolean = true
+
 // iOS has no system back; every way out of something is an affordance the app draws itself.
 actual val hasSystemBack: Boolean = false
 

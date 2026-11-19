@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.blur
+import dev.ide.ui.platform.supportsBlur
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -482,8 +483,8 @@ internal fun DetailTopBar(
  * For a published project it carries the project's own colour: its icon (or, without one, its first
  * screenshot) fills the card, blurred and darkened, and everything on it is drawn in white. Every listing
  * used to open on the same neutral card, which is most of why the page read as a form.
- * The blur is unavailable before Android 12, so the scrim alone has to keep the text legible; it is set
- * dark enough to.
+ * The blur is unavailable before Android 12, where the picture stays sharp and a white icon would sit
+ * straight under the white text, so there the scrim is much heavier and does the work alone.
  *
  * Without one it is the tonal card it always was, with the item's glyph as a watermark. The icon tile is
  * **inverted** against the card (the container's `on*` role as its background) so the one element that has
@@ -515,8 +516,8 @@ private fun DetailHero(
                 Box(
                     Modifier.matchParentSize().background(
                         Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0.30f),
-                            1f to Color.Black.copy(alpha = 0.72f),
+                            0f to Color.Black.copy(alpha = if (supportsBlur) 0.30f else 0.68f),
+                            1f to Color.Black.copy(alpha = if (supportsBlur) 0.72f else 0.86f),
                         ),
                     ),
                 )

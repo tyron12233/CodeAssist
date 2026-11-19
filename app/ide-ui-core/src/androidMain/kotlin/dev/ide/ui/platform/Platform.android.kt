@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 
 actual val isMobilePlatform: Boolean = true
 
+actual val supportsBlur: Boolean = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+
 // The system back gesture/button, which the IME also consumes to dismiss itself.
 actual val hasSystemBack: Boolean = true
 

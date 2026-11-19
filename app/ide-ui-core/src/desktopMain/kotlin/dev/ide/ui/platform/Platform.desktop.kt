@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 
 actual val isMobilePlatform: Boolean = false
 
+actual val supportsBlur: Boolean = true
+
 // Window chrome, not a back gesture. Nothing here raises a soft keyboard either.
 actual val hasSystemBack: Boolean = false
 
