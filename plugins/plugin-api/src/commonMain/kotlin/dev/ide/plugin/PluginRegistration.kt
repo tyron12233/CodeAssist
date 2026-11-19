@@ -14,7 +14,6 @@ import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.platform.log.Logger
-import java.nio.file.Path
 
 /**
  * The registrar handed to [Plugin.register]. Every contribution is attributed to this plugin's [pluginId]
@@ -112,7 +111,7 @@ interface PluginRegistration {
      * which cannot hold a symbolic link or anything that must stay out of another app's reach. Such files go
      * in [privateDataDir].
      */
-    val dataDir: Path
+    val dataDir: HostPath
 
     /**
      * A directory this plugin owns on the IDE's PRIVATE storage, created on first read: on a device, the app's
@@ -128,7 +127,7 @@ interface PluginRegistration {
      * `NoSuchMethodError` (an `AbstractMethodError` on some runtimes), which a plugin that must also run
      * there catches and falls back from.
      */
-    val privateDataDir: Path
+    val privateDataDir: HostPath
 
     /** A [Logger] whose records are attributed to this plugin (via [pluginId]) so the in-app Logs viewer can
      *  filter by plugin. The attribution is set by the platform and cannot be forged by the caller. */
@@ -148,7 +147,7 @@ interface PluginRegistration {
      * single library through [nativeLibrary] rather than composing the file name here, and keep this for the
      * cases that need the directory itself, such as handing a child process a search path for its siblings.
      */
-    val nativeLibraryDir: Path? get() = null
+    val nativeLibraryDir: HostPath? get() = null
 
     /**
      * This plugin's packaged native library [name], named the plain way (`"clang"` for a packaged
@@ -162,7 +161,7 @@ interface PluginRegistration {
      * [name] is a name, not a path: anything carrying a directory separator is refused rather than reduced,
      * so there is no spelling of it that reaches outside [nativeLibraryDir].
      */
-    fun nativeLibrary(name: String): Path? = null
+    fun nativeLibrary(name: String): HostPath? = null
 
     /**
      * The running IDE's version, or null when the host supplied none (the desktop launcher, a standalone

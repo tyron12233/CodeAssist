@@ -1,12 +1,16 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.multiplatform)
+    // The Compose Multiplatform plugin, for the `compose.runtime` / `compose.ui` coordinates an iOS build
+    // links against. It adds no dependency by itself.
+    alias(libs.plugins.compose)
     // The Compose compiler plugin, for the `@Composable` function types in this module's signatures. A
     // composable lambda's ABI (the synthetic `Composer`/`$changed` parameters) is produced by this plugin, so
     // a host that reads one and a plugin that writes one must both be compiled with it, at the same version.
     alias(libs.plugins.kotlin.compose)
-    `java-library`
     // Published for plugin authors to compile against; see the convention plugin for the coordinate.
-    id("dev.ide.spi-publish")
+    id("dev.ide.spi-publish-mpp")
 }
 
 // plugin-ui-api: the UI half of the plugin SPI, i.e. what a plugin shipped as its own app implements to
@@ -22,25 +26,62 @@ plugins {
 // classloader parent delegation, so this artifact must not put a Compose dependency in a consumer's POM:
 // an Android plugin would otherwise resolve a desktop artifact. A plugin declares the Compose it compiles
 // against itself (the template does this), and the host provides it at runtime.
+//
+// Multiplatform: the built-in layout editor is a UI plugin, and it is built for iOS too. There the Compose
+// runtime is linked, not provided by a parent class loader, so the iOS source set depends on it for real;
+// the JVM artifact keeps it compileOnly and its POM stays as it was.
+kotlin {
+    jvm {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
+
+    iosSimulatorArm64()
+
+    iosArm64()
+
+    sourceSets {
+        commonMain.dependencies {
+            // `ServiceKey`, for `UiContext.service`. This is the one CodeAssist module this artifact depends on, and
+            // it is deliberate: a plugin's UI facet resolves the plugin's OWN service, and the key it resolves by has
+            // to be the same type the engine facet registered with. Declaring a second key type here instead would
+            // mean a plugin holding two keys for one service. `platform-core` is published, is already on every
+            // plugin's compile path (settings pages, logging), and depends on nothing itself, so this adds no
+            // resolution a plugin author does not already have.
+            api(project(":platform-core"))
+            // compose-ui, for the editor painter alone: a raw drawing hook IS a `DrawScope`, so that one type has to
+            // appear in this module's signature.
+            compileOnly(compose.runtime)
+            compileOnly(compose.ui)
+        }
+
+        jvmTest.dependencies {
+            // The Compose compiler plugin is applied to this module, and it refuses to run without the runtime on
+            // the class path. `compileOnly` does not reach the test compilation, so the tests need their own copy.
+            // Test-scoped, so it stays out of the published POM the way the main one does.
+            implementation(libs.compose.runtime.desktop)
+            implementation(libs.compose.ui.desktop)
+            implementation(project(":test-support"))
+            implementation(libs.kotlin.test)
+        }
+
+        val iosMain = create("iosMain") {
+            dependsOn(getByName("commonMain"))
+            dependencies {
+                api(compose.runtime)
+                api(compose.ui)
+            }
+        }
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Main").dependsOn(iosMain)
+    }
+}
+
 dependencies {
-    // `ServiceKey`, for `UiContext.service`. This is the one CodeAssist module this artifact depends on, and
-    // it is deliberate: a plugin's UI facet resolves the plugin's OWN service, and the key it resolves by has
-    // to be the same type the engine facet registered with. Declaring a second key type here instead would
-    // mean a plugin holding two keys for one service. `platform-core` is published, is already on every
-    // plugin's compile path (settings pages, logging), and depends on nothing itself, so this adds no
-    // resolution a plugin author does not already have.
-    api(project(":platform-core"))
+    "jvmTestImplementation"(platform(libs.junit.bom))
+    "jvmTestImplementation"(libs.junit.jupiter)
+    "jvmTestRuntimeOnly"(libs.junit.platform.launcher)
+}
 
-    compileOnly(libs.compose.runtime.desktop)
-
-    // compose-ui, for the editor painter alone: a raw drawing hook IS a `DrawScope`, so that one type has to
-    // appear in this module's signature. compileOnly for the same reason the runtime is, and the only piece
-    // of compose-ui this module names.
-    compileOnly(libs.compose.ui.desktop)
-
-    // The Compose compiler plugin is applied to this module, and it refuses to run without the runtime on
-    // the class path. `compileOnly` does not reach the test compilation, so the tests need their own copy.
-    // Test-scoped, so it stays out of the published POM the way the main one does.
-    testImplementation(libs.compose.runtime.desktop)
-    testImplementation(libs.compose.ui.desktop)
+tasks.named<Test>("jvmTest") {
+    useJUnitPlatform()
 }

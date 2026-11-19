@@ -405,7 +405,7 @@ class SpiSurfaceTest {
 
     /** The version the baselines record, read from the constant every other consumer of it reads. */
     private fun spiVersion(root: File): String {
-        val source = File(root, "plugins/plugin-api/src/main/kotlin/dev/ide/plugin/PluginManifest.kt")
+        val source = File(root, "plugins/plugin-api/src/commonMain/kotlin/dev/ide/plugin/PluginManifest.kt")
         val match = Regex("""PLUGIN_SPI_VERSION:\s*String\s*=\s*"([^"]+)"""").find(source.readText())
         return match?.groupValues?.get(1) ?: "unknown"
     }

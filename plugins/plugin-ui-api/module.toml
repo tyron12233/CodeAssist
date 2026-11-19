@@ -8,11 +8,11 @@ output = "build/codeassist/classes"
 
 [sourceSets.main]
 scope = "IMPLEMENTATION"
-java = ["src/main/kotlin"]
+java = ["src/commonMain/kotlin"]
 
 [sourceSets.test]
 scope = "TEST_IMPLEMENTATION"
-java = ["src/test/kotlin"]
+java = ["src/jvmTest/kotlin"]
 
 [dependencies]
 implementation = ["kotlin-stdlib"]
