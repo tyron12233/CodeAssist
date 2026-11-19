@@ -147,6 +147,16 @@ class IosBackend(
 
     private var active: ProjectInfo? = null
 
+    /** The backend running in the app's embedded JVM, once the app has started one; see [EmbeddedBackend]. */
+    private var embedded: EmbeddedBackend? = null
+
+    /** Called by the app before the UI is created, with the JVM it started. */
+    fun attachEmbeddedJvm(jvm: EmbeddedJvm) {
+        embedded = EmbeddedBackend(jvm) { active?.rootPath?.takeIf { it.isNotEmpty() } }
+    }
+
+    override fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = embedded?.uiPlugins ?: emptyList()
+
     /**
      * Project creation and the project model behind it: the built-in templates, and what a created project
      * records about itself. See [IosProjects] for why the store is opened per operation rather than held.

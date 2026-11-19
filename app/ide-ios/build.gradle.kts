@@ -172,6 +172,12 @@ kotlin {
             // `api`, not `implementation`: it is the supertype of a public class here.
             api(project(":ide-ui-testing"))
 
+            // The layout editor, a UI plugin like any other, and the services it is written against. Its
+            // services are answered by the backend in the app's embedded JVM; see EmbeddedBackend.
+            implementation(project(":layout-editor"))
+            implementation(project(":android-layout-api"))
+            implementation(project(":plugin-api"))
+
             // The Projects Store. The transport (:store-impl) and its translation onto the UI contract
             // (:store-bridge) are the same code the Android and desktop hosts run; what this host supplies
             // is where things live (the app container), how a credential is kept (the keychain) and how a

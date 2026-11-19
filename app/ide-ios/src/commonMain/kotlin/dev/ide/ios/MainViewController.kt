@@ -35,3 +35,10 @@ val host: IosHost by lazy { IosHost() }
 
 /** Called from Swift when the app is opened with a URL. Returns whether it was one the app knows. */
 fun handleDeepLink(url: String): Boolean = host.handleUrl(url)
+
+/**
+ * Hand the framework the JVM the app embeds. Call once, before [MainViewController]: the layout editor is
+ * mounted when the UI is first composed, and only a host with an embedded backend has one to mount.
+ */
+fun attachEmbeddedJvm(jvm: EmbeddedJvm) = host.backend.attachEmbeddedJvm(jvm)
+
