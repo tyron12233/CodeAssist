@@ -20,6 +20,7 @@ import dev.ide.android.layout.LayoutViewClass
 import dev.ide.android.layout.LayoutViewNode
 import dev.ide.android.layout.LayoutViewProperty
 import dev.ide.android.layout.ViewOrigin
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +60,16 @@ class RemoteLayoutServices(private val channel: (ByteArray) -> ByteArray) {
             stage.value = "Rendering"
             try {
                 return remote(LayoutWire.RENDER, { LayoutWire.write(this, request) }) { LayoutWire.readRenderResult(this) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // The far side could not be reached or could not answer. A render that throws leaves the editor
+                // waiting for a frame that is never coming; one that says why gives it something to show.
+                return LayoutRenderResult(
+                    image = null, root = null,
+                    problems = listOf(LayoutProblem(null, e.message ?: e.toString())),
+                    widthPx = request.widthPx, heightPx = request.heightPx,
+                )
             } finally {
                 stage.value = null
             }
@@ -147,6 +158,7 @@ class LayoutServiceDispatcher(private val renderer: LayoutRenderer, private val 
         }
         out.done()
     } catch (t: Throwable) {
+        t.printStackTrace()
         WireOut().apply { bool(false); string(t.message ?: t.toString()) }.done()
     }
 

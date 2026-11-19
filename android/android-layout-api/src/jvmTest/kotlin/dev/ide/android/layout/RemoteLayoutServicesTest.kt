@@ -61,7 +61,7 @@ class RemoteLayoutServicesTest {
             listOf(LayoutEdit(5, 22, ""))
         override suspend fun resources(path: String, type: String) =
             listOf(LayoutResource(type, "ink", "@$type/ink", "#FF4A148C", "/p/colors.xml", 0xFF4A148C.toInt(), library = true), LayoutResource(type, "bare", "@$type/bare"))
-        override suspend fun themeColors(path: String) = listOf(LayoutResource("attr", "colorPrimary", "?attr/colorPrimary", argb = -1))
+        override suspend fun themeColors(path: String) = if (path == "boom") error("no such layout") else listOf(LayoutResource("attr", "colorPrimary", "?attr/colorPrimary", argb = -1))
         override suspend fun viewClasses(path: String) =
             listOf(LayoutViewClass("android.widget.Button", false, ViewOrigin.FRAMEWORK, "A button"), LayoutViewClass("com.example.MyChart", true, ViewOrigin.PROJECT))
     }
@@ -129,13 +129,21 @@ class RemoteLayoutServicesTest {
     }
 
     @Test
-    fun aFailureOnTheFarSideArrivesAsItsMessage() {
+    fun aRenderThatFailsOnTheFarSideSaysWhyInsteadOfThrowing() {
         runBlocking {
-            val failure = assertFailsWith<RemoteLayoutException> {
-                remote.renderer.render(LayoutRenderRequest("boom", "", 1, 1, 1f))
-            }
-            assertEquals("no such layout", failure.message)
+            // The editor waits for a result; a thrown render left it waiting for good.
+            val result = remote.renderer.render(LayoutRenderRequest("boom", "", 1, 1, 1f))
+            assertNull(result.image)
+            assertEquals(listOf("no such layout"), result.problems.map { it.message })
             assertNull(remote.renderer.progress.value, "the stage is cleared after a failed render too")
+        }
+    }
+
+    @Test
+    fun aFailureOfAnyOtherCallArrivesAsItsMessage() {
+        runBlocking {
+            val failure = assertFailsWith<RemoteLayoutException> { remote.model.themeColors("boom") }
+            assertEquals("no such layout", failure.message)
         }
     }
 }
