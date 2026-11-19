@@ -93,6 +93,8 @@ class BuiltInParityTest {
             "platform.moduleDependencies",
             // Not an alias either: the plugin's way to ask the editor for a fresh analysis pass.
             "platform.reanalysis",
+            // The entry point the user chose on a module's Run card, for a plugin with a Run of its own (SPI 3.7.0).
+            "platform.runSettings",
         )
         // The plugin-facing interpreter (interp-api) is the one published service at APPLICATION scope: a
         // plugin resolves services through `PluginRegistration.appServices` and holds no project, so it
@@ -102,7 +104,7 @@ class BuiltInParityTest {
             moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
                 spiApplicationServices,
             byId.keys,
-            "exactly the 19 engine services plus the 9 published-SPI keys",
+            "exactly the 19 engine services plus the 10 published-SPI keys",
         )
         spiApplicationServices.forEach {
             assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)
