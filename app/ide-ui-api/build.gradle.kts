@@ -29,8 +29,7 @@ kotlin {
     }
 
     // iOS. The DTOs and the `IdeBackend` port are platform-neutral by contract (paths are opaque strings),
-    // so the iOS target compiles commonMain unchanged. The `jvmShared` set below stays out of its way: the
-    // external-plugin bridge needs the plain-JVM `plugin-ui-api`, and an iOS host loads no plugins.
+    // so the iOS target compiles commonMain unchanged.
     iosSimulatorArm64()
     iosArm64()
 
@@ -40,15 +39,15 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.ui)
             implementation(libs.kotlinx.coroutines.core)
+            // The published UI facet a plugin implements, and the bridge from it onto the contribution model
+            // above (ExternalUiPlugin.kt). Common, since a built-in UI plugin is mounted on iOS too.
+            api(project(":plugin-ui-api"))
         }
 
         // An intermediate JVM-only source set shared by the desktop + android targets (the same pattern
-        // :ide-ui uses), so it can depend on the plain-JVM `plugin-ui-api` that commonMain cannot. The bridge
-        // from a plugin's published UI facet onto the contribution model above lives here; a plugin ships as
-        // an APK, so no other target has one to load.
+        // :ide-ui uses), for what only a JVM host has.
         val jvmShared = create("jvmShared") {
             dependsOn(getByName("commonMain"))
-            dependencies { api(project(":plugin-ui-api")) }
         }
         getByName("desktopMain").dependsOn(jvmShared)
         getByName("androidMain").dependsOn(jvmShared)
