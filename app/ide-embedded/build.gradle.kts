@@ -19,6 +19,7 @@ dependencies {
     implementation(project(":platform-core"))
     implementation(project(":android-support"))     // the seam a host with aapt2 linked in plugs into
     implementation(project(":build-api"))           // where a host's native file hash plugs in
+    implementation(project(":lang-kotlin"))         // where a host's linked-in Kotlin compiler plugs in
     implementation(project(":ide-ui-api"))          // the project tree's types and its byte form
     implementation(libs.kotlinx.coroutines.core)
 
@@ -82,3 +83,31 @@ val desktopPatchJar by tasks.registering(Jar::class) {
     destinationDirectory.set(layout.buildDirectory.dir("ios-payload/patch"))
 }
 assembleIosPayload { dependsOn(desktopPatchJar) }
+
+// ---- the build's tools, compiled ahead of time (see aot/build-ios.sh) --------------------------------------
+
+// The Kotlin compiler as the build drives it (:lang-kotlin's JVM side and everything under it) with the three
+// compiler plugins the IDE bundles. An image compiled ahead of time loads no class at run time, so the
+// plugins are compiled into it beside the compiler.
+val kotlincAot: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.attribute, org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.jvm)
+    }
+}
+
+dependencies {
+    kotlincAot(project(":lang-kotlin"))
+    kotlincAot(libs.kotlin.compose.compiler.plugin.ide) { isTransitive = false }
+    kotlincAot(libs.kotlin.serialization.compiler.plugin.ide) { isTransitive = false }
+    kotlincAot(libs.kotlin.parcelize.compiler.plugin.ide) { isTransitive = false }
+}
+
+/** `build/aot/kotlinc/jars`: the class path of the Kotlin compiler's image. */
+val assembleKotlincAot by tasks.registering(Sync::class) {
+    from(kotlincAot)
+    into(layout.buildDirectory.dir("aot/kotlinc/jars"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

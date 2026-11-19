@@ -4,6 +4,7 @@ import android.content.Context
 import dev.ide.android.R8ForkSupport
 import dev.ide.lang.kotlin.compile.KotlinCompileRequest
 import dev.ide.lang.kotlin.compile.KotlinCompileResult
+import dev.ide.lang.kotlin.compile.KotlinCompileWire
 import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.lang.kotlin.compile.KotlinDiagnostic
 import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
@@ -318,9 +319,9 @@ class ForkedKotlinCompiler(
             val requestFile = workRoot.resolve("req-$id")
             val responseFile = workRoot.resolve("res-$id")
             try {
-                KotlincWire.writeRequest(request, requestFile)
+                KotlinCompileWire.writeRequest(request, requestFile)
                 send("${KotlincWorkerMain.COMPILE} $requestFile $responseFile", COMPILE_TIMEOUT_SEC)
-                return KotlincWire.readResult(responseFile)
+                return KotlinCompileWire.readResult(responseFile)
             } finally {
                 runCatching { Files.deleteIfExists(requestFile) }
                 runCatching { Files.deleteIfExists(responseFile) }
@@ -394,7 +395,7 @@ class ForkedKotlinCompiler(
                     add(launcher); addAll(vmArgs)
                     add("-cp"); add(forkClasspath)
                     add(KotlincWorkerMain::class.java.name)
-                    add(KotlincWorkerMain.PROTOCOL_ARG); add(KotlincWire.PROTOCOL_VERSION.toString())
+                    add(KotlincWorkerMain.PROTOCOL_ARG); add(KotlinCompileWire.PROTOCOL_VERSION.toString())
                     add(KotlincWorkerMain.IDLE_EXIT_ARG); add(IDLE_EXIT_SEC.toString())
                 }
                 val process = ProcessBuilder(cmd).start()

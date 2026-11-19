@@ -422,6 +422,8 @@ class IdeServices private constructor(
     /** The host's Kotlin compiler backend (on device: the persistent forked VM). Absent → in-process. */
     private val kotlinCompilerBackend: KotlinCompilerBackend? =
         env.container.getServiceOrNull(KOTLIN_COMPILER_BACKEND)
+            // A host that carries the compiler compiled ahead of time (an iOS app, whose JVM only interprets).
+            ?: dev.ide.lang.kotlin.compile.KotlincNative.backend()
     private val realViewRuntime: RealViewRuntime? = env.container.getServiceOrNull(REAL_VIEW_RUNTIME)
 
     /** The build/run seam ([BuildRunner]): today an in-process runner; a future remote runner swaps in for

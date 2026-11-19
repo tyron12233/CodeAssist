@@ -150,6 +150,10 @@ class KotlinJvmCompiler : KotlinCompilerBackend {
         // LightTree path would die with NoClassDefFoundError fir/lightTree/LightTree.
         useFirLT = false
         reportOutputFiles = true   // emit OUTPUT messages -> source->.class mapping recovered by the collector
+        // Compiled ahead of time (a GraalVM native image) the compiler is in no jar, and looking for the one it
+        // was loaded from, which is how it finds its home when given none, fails the compile. Nothing is read
+        // from the home here (no stdlib, no reflect, no scripting), so any folder serves.
+        if (compiledAheadOfTime) kotlinHome = System.getProperty("java.io.tmpdir") ?: "."
         if (friendPaths.isNotEmpty()) this.friendPaths = friendPaths.map { it.toString() }.toTypedArray()
         if (onArt) {
             noJdk = true    // ART has no JDK; the platform is android.jar, folded into the classpath
@@ -202,6 +206,8 @@ class KotlinJvmCompiler : KotlinCompilerBackend {
             }
         }
     }
+
+    private val compiledAheadOfTime: Boolean = System.getProperty("org.graalvm.nativeimage.imagecode") != null
 
     @Volatile private var warmedUp = false
     private val warmLock = Any()

@@ -1,0 +1,2 @@
+-H:+AddAllCharsets
+--initialize-at-build-time=com.android.tools.r8.internal.s5

@@ -66,3 +66,19 @@ object NativeD8 {
         System.err.println("D8 in this process: compiled ahead of time")
     }
 }
+
+/**
+ * The Kotlin compiler as the iOS app carries it: compiled ahead of time into a library of the app (see
+ * [dev.ide.lang.kotlin.compile.KotlincNative] for why), entered through JNI.
+ */
+object NativeKotlinc {
+    /** Compiles the request in [requestFile], writing the result to [resultFile]. Non-zero when it wrote none. */
+    @JvmStatic
+    external fun run(requestFile: String, resultFile: String): Int
+
+    fun install() {
+        if (System.getProperty("codeassist.kotlinc.native") != "true" || dev.ide.lang.kotlin.compile.KotlincNative.runner != null) return
+        dev.ide.lang.kotlin.compile.KotlincNative.runner = { request, result -> run(request.toString(), result.toString()) }
+        System.err.println("kotlinc in this process: compiled ahead of time")
+    }
+}

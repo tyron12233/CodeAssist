@@ -1,6 +1,7 @@
 package dev.ide.android.fork
 
 import dev.ide.lang.kotlin.compile.KotlinCompileResult
+import dev.ide.lang.kotlin.compile.KotlinCompileWire
 import dev.ide.lang.kotlin.compile.KotlinDiagnostic
 import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
@@ -25,7 +26,7 @@ import kotlin.system.exitProcess
  * resources the compiler reads off its own classloader, such as `compiler.version` and the bundled
  * `kotlin-stdlib.jar`. So there is no separate compiler asset to ship or extract.
  *
- * Control protocol on stdin/stdout, one line each way, with the compile payload on disk (see [KotlincWire]):
+ * Control protocol on stdin/stdout, one line each way, with the compile payload on disk (see [KotlinCompileWire]):
  *
  *     <- READY <protocolVersion>
  *     -> C <requestFile> <responseFile>        compile; answered by DONE or FAIL
@@ -51,9 +52,9 @@ object KotlincWorkerMain {
     @JvmStatic
     fun main(args: Array<String>) {
         val opts = args.toList().chunked(2).mapNotNull { if (it.size == 2) it[0] to it[1] else null }.toMap()
-        if (opts[PROTOCOL_ARG]?.toIntOrNull() != KotlincWire.PROTOCOL_VERSION) {
+        if (opts[PROTOCOL_ARG]?.toIntOrNull() != KotlinCompileWire.PROTOCOL_VERSION) {
             // A worker left over from a previous app version would silently drop fields it does not know.
-            System.err.println("kotlinc worker: protocol ${opts[PROTOCOL_ARG]} != ${KotlincWire.PROTOCOL_VERSION}")
+            System.err.println("kotlinc worker: protocol ${opts[PROTOCOL_ARG]} != ${KotlinCompileWire.PROTOCOL_VERSION}")
             exitProcess(2)
         }
 
@@ -70,7 +71,7 @@ object KotlincWorkerMain {
         val activity = Activity()
         if (idleSeconds > 0) startIdleWatchdog(activity, idleSeconds)
 
-        control.println("$READY ${KotlincWire.PROTOCOL_VERSION}")
+        control.println("$READY ${KotlinCompileWire.PROTOCOL_VERSION}")
 
         val input = System.`in`.bufferedReader()
         while (true) {
@@ -103,7 +104,7 @@ object KotlincWorkerMain {
             val parts = line.substring(1).trim().split(' ', limit = 2)
             if (parts.size != 2) "$FAIL malformed compile command" else {
                 val result = compile(compiler, Paths.get(parts[0]))
-                KotlincWire.writeResult(result, Paths.get(parts[1]))
+                KotlinCompileWire.writeResult(result, Paths.get(parts[1]))
                 DONE
             }
         }
@@ -123,7 +124,7 @@ object KotlincWorkerMain {
      * the build console next to the module that caused it, and the next module still needs this VM.
      */
     private fun compile(compiler: KotlinJvmCompiler, requestFile: java.nio.file.Path): KotlinCompileResult =
-        runCatching { compiler.compile(KotlincWire.readRequest(requestFile)) }
+        runCatching { compiler.compile(KotlinCompileWire.readRequest(requestFile)) }
             .getOrElse {
                 val threw = "kotlinc threw: ${it.javaClass.name}: ${flatten(it.message)}"
                 KotlinCompileResult(

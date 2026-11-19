@@ -1,16 +1,13 @@
-package dev.ide.android.fork
+package dev.ide.lang.kotlin.compile
 
-import dev.ide.lang.kotlin.compile.KotlinCompileRequest
-import dev.ide.lang.kotlin.compile.KotlinCompileResult
-import dev.ide.lang.kotlin.compile.KotlinDiagnostic
-import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * The on-disk encoding of a compile request and its result, shared by [ForkedKotlinCompiler] (writer of the
- * request, reader of the result) and [KotlincWorkerMain] (the reverse).
+ * The on-disk encoding of a compile request and its result, shared by a [KotlinCompilerBackend] that compiles
+ * somewhere else (writer of the request, reader of the result) and the compiler there (the reverse): the
+ * on-device host's forked VM, and the compiler an iOS host carries compiled ahead of time ([KotlincNative]).
  *
  * Bulk travels on disk, not through the pipe: the control channel between the two processes carries only a
  * file path per request and a one-line acknowledgement per result. A source list can run to thousands of
@@ -23,7 +20,7 @@ import java.nio.file.Paths
  * left running against a newer client degrades to dropping a field rather than failing to parse (the client
  * kills stale workers on version mismatch anyway, see [PROTOCOL_VERSION]).
  */
-internal object KotlincWire {
+object KotlinCompileWire {
 
     /**
      * Bumped whenever a key's meaning changes or a field the compile depends on is added. The client sends it
