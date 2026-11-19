@@ -25,8 +25,9 @@ class RealViewRequest(
     val density: Float,
     val night: Boolean,
     /** The `resources.ap_` to render against (binary manifest + `resources.arsc` + compiled res XML): the
-     *  build's compiled resources relinked with [layoutText], or the build's own if the relink was unavailable. */
-    val resourcesAp: Path,
+     *  build's compiled resources relinked with [layoutText], or the build's own if the relink was unavailable.
+     *  Null for a runtime that [reads source resources][RealViewRuntime.readsSourceResources]. */
+    val resourcesAp: Path?,
     /** What to load onto the `DexClassLoader`, as a mixed list the runtime splits by kind:
      *  - library `.jar`s (framework/library classes) → dexed via the shared cache + merged (stable layer),
      *  - the `R.jar` (`R.jar`/`preview-r.jar`, matched by name) → the volatile R layer,
@@ -59,6 +60,15 @@ class RealViewRequest(
     val rtl: Boolean = false,
     /** The drawn image's size relative to [widthPx] x [heightPx]; see [scaledPx]. Layout always runs at full size. */
     val renderScale: Float = 1f,
+    /**
+     * For a runtime that [reads source resources][RealViewRuntime.readsSourceResources] (no aapt2, no linked
+     * table): the `res/` folders, lowest priority first (each library's, then the module's own), the live
+     * buffer written to [layoutFile], and every package that has an `R` class (the app's and each library's).
+     * Empty and null for the device runtime, which reads [resourcesAp].
+     */
+    val resourceDirs: List<Path> = emptyList(),
+    val resourcePackages: List<String> = emptyList(),
+    val layoutFile: Path? = null,
 ) {
     /** Transient in-process callback for fine render stages ("Dexing"/"Inflating"/"Drawing"), for the status
      *  chip. NOT serialized across the `:preview` IPC — each side sets its own (the daemon forwards over the
@@ -84,6 +94,9 @@ class RealViewResult(
     val height: Int = 0,
     val error: String? = null,
     val nativeBitmap: Any? = null,
+    /** The image as [width] x [height] packed ARGB pixels (not premultiplied), row by row: the form a runtime
+     *  with no platform bitmap and no image encoder to hand answers in. */
+    val argb: IntArray? = null,
     /** The captured hierarchy of the real inflated view tree (class/id/bounds/attributes per node), or null
      *  when the runtime didn't snapshot it. Carried up to [dev.ide.preview.LayoutPreviewResult.viewTree] so
      *  the Preview view can show the hierarchy + a tap-to-inspect panel over the real-view render. */
@@ -103,6 +116,14 @@ class RealViewResult(
  */
 interface RealViewRuntime {
     fun render(request: RealViewRequest): RealViewResult?
+
+    /**
+     * True for a runtime that renders from the project's resource FOLDERS rather than from an aapt2-linked
+     * table: the host then links nothing and sends [RealViewRequest.resourceDirs] instead of
+     * [RealViewRequest.resourcesAp]. The device runtime reads the linked table, because the framework's own
+     * `Resources` does; one driving layoutlib resolves source values itself.
+     */
+    val readsSourceResources: Boolean get() = false
 
     companion object {
         val NONE: RealViewRuntime = object : RealViewRuntime {

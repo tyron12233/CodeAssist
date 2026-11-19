@@ -121,6 +121,16 @@ internal class HostLayoutRenderer(
             )
         }
         // Owned: draw it here. The rasterizer lays the tree out as it draws, so the bounds are read after.
+        r.renderedArgb?.let { argb ->
+            return LayoutRenderResult(
+                image = LayoutImage(r.renderedArgbWidth, r.renderedArgbHeight, argb = argb),
+                widthPx = request.widthPx,
+                heightPx = request.heightPx,
+                root = r.viewTree?.let(::fromCaptured),
+                problems = problems,
+                resourceErrors = errors,
+            )
+        }
         val pixels = rasterizer()?.rasterize(r, request.widthPx, request.heightPx)
         if (pixels == null) layoutHeadless(r, request.widthPx, request.heightPx)
         return LayoutRenderResult(

@@ -81,10 +81,15 @@ class LayoutlibRenderer(private val home: LayoutlibHome) {
             ?: return LayoutlibResult(null, error = "configuration '$configText' is not one the resource system knows")
 
         val project = projectFor(request, config, configText)
-        val theme = if (request.themeName.startsWith("android:")) {
-            ResourceReference.style(ResourceNamespace.ANDROID, request.themeName.removePrefix("android:"))
-        } else {
-            ResourceReference.style(ResourceNamespace.RES_AUTO, request.themeName)
+        val themeName = request.themeName.removePrefix("@style/").removePrefix("@android:style/")
+        val appStyles = project.resolverTables[ResourceNamespace.RES_AUTO]?.get(ResourceType.STYLE)
+        // A manifest names a framework theme without a prefix as readily as one of its own.
+        val theme = when {
+            themeName.startsWith("android:") -> ResourceReference.style(ResourceNamespace.ANDROID, themeName.removePrefix("android:"))
+            request.themeName.startsWith("@android:style/") || appStyles?.get(themeName) == null &&
+                project.resolverTables[ResourceNamespace.ANDROID]?.get(ResourceType.STYLE)?.get(themeName) != null ->
+                ResourceReference.style(ResourceNamespace.ANDROID, themeName)
+            else -> ResourceReference.style(ResourceNamespace.RES_AUTO, themeName)
         }
         val resolver = ResourceResolver.create(project.resolverTables, theme)
         if (resolver.defaultTheme == null) return LayoutlibResult(null, error = "theme '${request.themeName}' is not in the resources")
@@ -188,8 +193,21 @@ class LayoutlibRenderer(private val home: LayoutlibHome) {
     }
 
     private inner class Callback(private val project: Project) : LayoutlibCallback() {
-        override fun loadView(name: String, signature: Array<out Class<*>>, args: Array<out Any?>): Any =
+        /**
+         * A view that cannot be made (its class is not on the classpath yet, its constructor threw) is drawn as
+         * layoutlib's own labelled stand-in and reported, and the rest of the layout renders around it: what
+         * the device preview does, where failing the whole frame for one view would show nothing at all.
+         */
+        override fun loadView(name: String, signature: Array<out Class<*>>, args: Array<out Any?>): Any = try {
             project.classes.loadClass(name).getConstructor(*signature).newInstance(*args)
+        } catch (t: Throwable) {
+            var cause: Throwable = t
+            while (cause.cause != null && cause.cause !== cause) cause = cause.cause!!
+            if (problems.size < MAX_PROBLEMS) problems += name + "\t" + cause.toString()
+            val standIn = com.android.layoutlib.bridge.MockView::class.java.getConstructor(*signature).newInstance(*args)
+            standIn.setText(name.substringAfterLast('.'))
+            standIn
+        }
 
         override fun findClass(name: String): Class<*> = project.classes.loadClass(name)
         override fun resolveResourceId(id: Int): ResourceReference? = project.ids.referenceOf(id)

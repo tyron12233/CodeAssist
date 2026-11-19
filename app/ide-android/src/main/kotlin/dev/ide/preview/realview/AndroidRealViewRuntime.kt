@@ -86,8 +86,8 @@ class AndroidRealViewRuntime(
     private val renderHandler by lazy { Handler(renderThread.looper) }
 
     override fun render(request: RealViewRequest): RealViewResult = onLooperThread {
-        val resourcesAp = request.resourcesAp.toFile()
-        if (!resourcesAp.exists()) RealViewResult(
+        val resourcesAp = request.resourcesAp?.toFile()
+        if (resourcesAp == null || !resourcesAp.exists()) RealViewResult(
             null, error = "resources.ap_ missing — build the project first"
         )
         else runCatching { renderInternal(request, resourcesAp) }.getOrElse { t ->

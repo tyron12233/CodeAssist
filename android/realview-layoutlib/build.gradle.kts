@@ -13,6 +13,7 @@ plugins {
 // published artifacts (see LayoutlibHome), which is also what the tests render against.
 dependencies {
     api(project(":layout-preview-api"))             // PreviewViewNode: the captured tree the Preview inspects
+    api(project(":layout-preview-impl"))            // RealViewRuntime: the seam the IDE's real-view path renders through
 
     compileOnly(libs.layoutlib)
     compileOnly(libs.layoutlib.api)
@@ -27,6 +28,8 @@ dependencies {
     testImplementation(libs.layoutlib.api)
     testImplementation(libs.android.tools.sdk.common)
     testImplementation(libs.kxml2)
+    testImplementation(project(":ide-core"))        // the IDE's own real-view path, rendered through this runtime
+    testImplementation(project(":test-support"))
     // Not named by this module's code, but layoutlib loads it by name to draw a nine-patch (a Switch's thumb).
     testRuntimeOnly(libs.android.tools.ninepatch)
 }

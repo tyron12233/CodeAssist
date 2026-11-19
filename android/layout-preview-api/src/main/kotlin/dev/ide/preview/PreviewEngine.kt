@@ -70,6 +70,11 @@ class LayoutPreviewResult(
      * no PNG encode/decode. The UI prefers this over [renderedImage] when present; desktop never sets it.
      */
     val renderedNativeImage: Any? = null,
+    /** The same real-view render as packed ARGB pixels (not premultiplied), with their size: what a host with
+     *  neither a platform bitmap nor an encoder answers in. */
+    val renderedArgb: IntArray? = null,
+    val renderedArgbWidth: Int = 0,
+    val renderedArgbHeight: Int = 0,
     /**
      * The captured hierarchy of the REAL inflated view tree (device "layoutlib" path), or null for the
      * owned-rendering path (where [root] already carries the geometry). When present the UI drives its

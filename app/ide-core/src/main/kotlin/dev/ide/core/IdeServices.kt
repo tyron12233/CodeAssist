@@ -4856,7 +4856,11 @@ class IdeServices private constructor(
         // is NOT required and edits to other resources show. It also generates a preview `R.jar` with ids matching
         // the relinked arsc (every library's `R` resolves to the app's in the renderer), so the preview no longer
         // depends on a prior build's (id-mismatched, possibly absent) R.jar.
-        val linked = previewResourceLinker?.link(
+        // A runtime that reads the resource folders itself (layoutlib, on a host with no Android framework)
+        // needs no linked table and no R.jar: nothing is linked for it.
+        val sourceResources = runtime.readsSourceResources
+        val libraryResDirs = runCatching { AndroidResources.libraryResourceDirs(module, store.workspace) }.getOrDefault(emptyList())
+        val linked = if (sourceResources) null else previewResourceLinker?.link(
             module,
             variant,
             resDirs,
@@ -4866,7 +4870,7 @@ class IdeServices private constructor(
             facet.minSdk,
             facet.targetSdk,
             progress = { _realViewProgress.value = PreviewProgress(it) },
-            libraryResDirs = runCatching { AndroidResources.libraryResourceDirs(module, store.workspace) }.getOrDefault(emptyList()),
+            libraryResDirs = libraryResDirs,
         )
         val tLinked = System.nanoTime()
         // Broken project resources: report them. Rendering the build's last resources.ap_ (or owned rendering)
@@ -4883,7 +4887,7 @@ class IdeServices private constructor(
             )
         }
         // The resources.ap_ to render against: the live relink, else the build's own, else owned rendering.
-        val resourcesAp = linked?.resourcesAp
+        val resourcesAp = if (sourceResources) null else linked?.resourcesAp
             ?: AndroidBuildSystem.resourcesApPath(module, variant)
                 .takeIf { Files.exists(it) }
             ?: return owned(
@@ -4891,7 +4895,7 @@ class IdeServices private constructor(
             )
         // The R.jar: prefer the relink's (ids match the relinked arsc AND it covers every lib package); fall
         // back to the build's if the relink didn't produce one (e.g. it used the build's compiled-flats base).
-        val rJar = linked?.rJar?.takeIf { Files.exists(it) }
+        val rJar = if (sourceResources) null else linked?.rJar?.takeIf { Files.exists(it) }
             ?: AndroidBuildSystem.rJarPath(module, variant)
                 .takeIf { Files.exists(it) }
         val runtimeLibs = resolvedDexJars ?: emptyList()
@@ -4955,6 +4959,9 @@ class IdeServices private constructor(
             smallestWidthDp = config.smallestWidthDp,
             rtl = config.rtl,
             renderScale = request.renderScale,
+            resourceDirs = if (sourceResources) libraryResDirs + resDirs else emptyList(),
+            resourcePackages = if (sourceResources) listOf(facet.namespace) + libraryPackages(libraryResDirs) else emptyList(),
+            layoutFile = if (sourceResources) liveLayoutFile(module, file, text) else null,
         ).apply {
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
@@ -4967,7 +4974,8 @@ class IdeServices private constructor(
         // The render is a live native Bitmap on device (no PNG round-trip) or PNG bytes as the portable form.
         val nativeImage = result?.nativeBitmap
         val png = result?.pngBytes
-        if (nativeImage == null && png == null) {
+        val argb = result?.argb
+        if (nativeImage == null && png == null && argb == null) {
             return owned(
                 "Real-view render unavailable (${result?.error ?: "no result"}). Showing Legacy Rendering"
             )
@@ -5005,6 +5013,9 @@ class IdeServices private constructor(
             request.density,
             renderedImage = png,
             renderedNativeImage = nativeImage,
+            renderedArgb = argb,
+            renderedArgbWidth = if (argb != null) result.width else 0,
+            renderedArgbHeight = if (argb != null) result.height else 0,
             viewTree = viewTree,
             // The views that rendered as a stand-in or failed mid-frame (the rest of the frame rendered).
             problems = result.problems.map { line ->
@@ -5012,6 +5023,26 @@ class IdeServices private constructor(
             },
         )
     }
+
+    /**
+     * The package of each library whose resources are in [libraryResDirs], read from the manifest beside its
+     * `res/` (an exploded AAR keeps both in one folder). These are the packages library code reads `R` from.
+     */
+    private fun libraryPackages(libraryResDirs: List<Path>): List<String> = libraryResDirs.mapNotNull { res ->
+        val manifest = res.resolveSibling("AndroidManifest.xml")
+        if (!Files.isRegularFile(manifest)) return@mapNotNull null
+        runCatching { Regex("package=\"([^\"]+)\"").find(Files.readString(manifest))?.groupValues?.get(1) }.getOrNull()
+    }.distinct()
+
+    /**
+     * The live buffer as a file, for a runtime that reads layouts from disk: beside nothing of the project's,
+     * under the module's preview cache, and named as the layout is so errors name the file the user knows.
+     */
+    private fun liveLayoutFile(module: Module, file: Path, text: String): Path? = runCatching {
+        val dir = workspaceRoot.resolve(".platform/preview/live-layout/${module.name}")
+        Files.createDirectories(dir)
+        dir.resolve(file.fileName.toString()).also { Files.writeString(it, text) }
+    }.getOrNull()
 
     /** [node] and its subtree with every id in [aliases] replaced by the name it stands for. */
     private fun renameIds(node: dev.ide.preview.PreviewViewNode, aliases: Map<String, String>): dev.ide.preview.PreviewViewNode =
@@ -6170,10 +6201,16 @@ class IdeServices private constructor(
          * Android SDK so `android.*` resolves; with no SDK it falls back to a JDK (Java resolves, `android.*`
          * does not). Not used by the launchers — the IDE no longer seeds a demo on first run.
          */
-        fun bootstrapDemo(root: Path, sharedCachesRoot: Path? = null): IdeServices {
+        fun bootstrapDemo(
+            root: Path,
+            sharedCachesRoot: Path? = null,
+            /** A real-view renderer for the sample's layouts, as a host would register one. */
+            realViewRuntime: RealViewRuntime? = null,
+        ): IdeServices {
             if (Files.exists(root)) root.toFile().deleteRecursively()
             Files.createDirectories(root)
             val env = ApplicationEnvironment()
+            realViewRuntime?.let { runtime -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { runtime } }
             val (platform, store) = openStore(root, env)
             ensureSdks(
                 store,
