@@ -194,6 +194,8 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":layout-editor", // the Android layout editor: a built-in plugin written against the plugin SPI only (engine + UI facet)
         ":ide-core",
         ":ide-desktop",
+        // The backend as the iOS app runs it: inside the JVM that app embeds, reached over a byte channel.
+        ":ide-embedded",
         // The iOS shell: a Compose `UIViewController` over :ide-ui, the third host beside desktop and
         // Android. It builds only on a machine with Xcode, which is every machine that can target iOS.
         ":ide-ios",
@@ -269,7 +271,7 @@ val layers = mapOf(
     // The IDE itself: the Compose UI, its backend port, and the desktop/Android/iOS shells.
     "app" to listOf(
         "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",
-        "ide-ui-screens", "ide-ui-testing", "ide-ui", "model-bridge", "ide-core", "ide-desktop",
+        "ide-ui-screens", "ide-ui-testing", "ide-ui", "model-bridge", "ide-core", "ide-embedded", "ide-desktop",
         "ide-android", "ide-android-e2e", "ide-ios",
         "build-cli",
     ),

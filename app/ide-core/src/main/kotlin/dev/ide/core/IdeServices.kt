@@ -6353,8 +6353,13 @@ class IdeServices private constructor(
         }
 
         /** Open an existing workspace at [root] (used by the "Open Project…" picker). */
-        fun open(root: Path): IdeServices {
+        fun open(
+            root: Path,
+            /** The host's real-view renderer, for one that has it but is not built through a ProjectManager. */
+            realViewRuntime: RealViewRuntime? = null,
+        ): IdeServices {
             val env = ApplicationEnvironment()
+            realViewRuntime?.let { runtime -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { runtime } }
             val (platform, store) = openStore(root, env)
             ensureSdks(store, defaultDesktopSdk(), root)
             return IdeServices(platform, store, env = env)

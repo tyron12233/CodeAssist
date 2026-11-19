@@ -1,0 +1,67 @@
+package dev.ide.embedded
+
+import dev.ide.android.layout.ANDROID_LAYOUT_MODEL
+import dev.ide.android.layout.LAYOUT_RENDERER
+import dev.ide.android.layout.remote.LayoutServiceDispatcher
+import dev.ide.core.IdeServices
+import dev.ide.core.IdeServicesBackend
+import dev.ide.preview.layoutlib.LayoutlibRealViewRuntime
+import kotlinx.coroutines.runBlocking
+import java.io.File
+import java.nio.file.Paths
+
+/**
+ * The layout services of the real backend, for a caller on the other side of JNI.
+ *
+ * [open] starts the engine on a project the way the desktop app does and registers layoutlib as its real-view
+ * renderer; [call] takes one request of the layout services' byte protocol and answers it from the engine's
+ * own `LayoutRenderer` and `AndroidLayoutModel`, the objects the layout editor is handed on a phone. Static,
+ * and typed by strings and byte arrays only, because that is what is easy to call through JNI.
+ */
+object EmbeddedLayoutHost {
+    private var openRoot: String? = null
+    private var engine: IdeServices? = null
+    private var backend: IdeServicesBackend? = null
+    private var dispatcher: LayoutServiceDispatcher? = null
+    private var runtime: LayoutlibRealViewRuntime? = null
+
+    /**
+     * Open the project at [projectRoot], closing the one open before. Returns an empty string, or why it could
+     * not be opened. layoutlib starts once per process, so [layoutlibHome] is honoured on the first open only.
+     */
+    @JvmStatic
+    @Synchronized
+    fun open(projectRoot: String, layoutlibHome: String, cacheDir: String): String = try {
+        if (projectRoot != openRoot) {
+            close()
+            val renderer = runtime ?: LayoutlibRealViewRuntime(File(layoutlibHome), File(cacheDir)).also { runtime = it }
+            val services = IdeServices.open(Paths.get(projectRoot), realViewRuntime = renderer)
+            val host = IdeServicesBackend(services)
+            val container = services.store.workspaceContainer
+            dispatcher = LayoutServiceDispatcher(container.getService(LAYOUT_RENDERER), container.getService(ANDROID_LAYOUT_MODEL))
+            engine = services
+            backend = host
+            openRoot = projectRoot
+        }
+        ""
+    } catch (t: Throwable) {
+        t.message ?: t.toString()
+    }
+
+    /** Answer one request. Never throws: with no project open, or on any failure, the answer says so. */
+    @JvmStatic
+    fun call(request: ByteArray): ByteArray {
+        val target = synchronized(this) { dispatcher } ?: LayoutServiceDispatcher(NoProject, NoProject)
+        return runBlocking { target.handle(request) }
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun close() {
+        dispatcher = null
+        backend = null
+        runCatching { engine?.close() }
+        engine = null
+        openRoot = null
+    }
+}
