@@ -132,6 +132,30 @@ class LayoutlibRendererTest {
     }
 
     @Test
+    fun theFlatEntryAnswersTheSamePictureAndTree() {
+        // What the iOS host does: the request as text in, the result as bytes out, nothing else shared.
+        val home = File(System.getProperty("layoutlib.home"))
+        val direct = renderer.render(frameworkRequest())
+        val bytes = LayoutlibEntry.render(LayoutlibWire.request(home, frameworkRequest()))
+        val decoded = LayoutlibWire.decodeResult(bytes)
+        assertNull(decoded.error)
+        assertEquals(direct.width to direct.height, decoded.width to decoded.height)
+        assertContentEquals(direct.pixels, decoded.pixels)
+        fun shape(n: PreviewViewNode): String =
+            "${n.className}#${n.id}[${n.left},${n.top},${n.right},${n.bottom}]${n.properties.map { it.name + "=" + it.value }}(${n.children.joinToString(",") { shape(it) }})"
+        assertEquals(shape(direct.viewTree!!), shape(decoded.viewTree!!))
+        // Little-endian ARGB ints are BGRA bytes: the first pixel's alpha is the fourth byte after the description.
+        val first = direct.pixels!![0]
+        val offset = bytes.size - direct.width * direct.height * 4
+        assertEquals((first ushr 24).toByte(), bytes[offset + 3])
+        assertEquals((first and 0xff).toByte(), bytes[offset])
+
+        val failed = LayoutlibWire.decodeResult(LayoutlibEntry.render("home=${home.path}\nlayout=/nowhere.xml\n"))
+        assertNull(failed.pixels)
+        assertTrue(failed.error!!.contains("theme"), "a request with a field missing says which: ${failed.error}")
+    }
+
+    @Test
     fun aMissingThemeIsReportedNotThrown() {
         val request = frameworkRequest().let {
             LayoutlibRequest(it.layoutFile, it.resourceDirs, it.classpath, it.resourcePackages, "Theme.DoesNotExist",
