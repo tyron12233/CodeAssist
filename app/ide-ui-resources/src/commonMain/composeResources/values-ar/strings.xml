@@ -2142,7 +2142,7 @@
     <string name="set_appearance_accent_desc">لون إبراز الواجهة</string>
     <string name="set_appearance_accent_violet">بنفسجي</string>
     <string name="set_appearance_accent_teal">أزرق مخضر</string>
-    <string name="set_appearance_accent_orange">برتقالي (قديم)</string>
+    <string name="set_appearance_accent_orange">برتقالي (كلاسيكي)</string>
     <!-- Editor -->
     <string name="set_editor_font_size">حجم الخط</string>
     <string name="set_editor_code_font">خط الكود</string>

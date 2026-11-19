@@ -319,7 +319,7 @@ private fun NarrowLayout(
     } else {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.settings_all_settings), { openId = null })
+                IconButtonCa(CaIcons.arrowLeft, stringResource(Res.string.settings_all_settings), { openId = null })
                 Text(localizedPageTitle(open), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             PageContent(backend, open, values, codeFont, onSet, onAction, onStructuralChange, Modifier.weight(1f))
@@ -524,7 +524,7 @@ private fun SettingsHeader(onBack: () -> Unit, title: String) {
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
+            IconButtonCa(CaIcons.arrowLeft, stringResource(Res.string.back), onBack)
             Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }

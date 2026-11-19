@@ -65,7 +65,7 @@ fun ExpressiveScaffold(
         topBar = {
             val nav: @Composable () -> Unit = {
                 if (back != null) IconButton(onClick = back) {
-                    Icon(CaIcons.chevronLeft, stringResource(Res.string.back))
+                    Icon(CaIcons.arrowLeft, stringResource(Res.string.back))
                 }
             }
             val titleContent: @Composable () -> Unit = { Text(title) }

@@ -451,7 +451,7 @@ private fun Header(title: String, subtitle: String, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Pulled left by the button's own padding, so the arrow lines up with the fields below it.
         IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
-            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
+            Icon(CaIcons.arrowLeft, stringResource(Res.string.back), Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
         Column {
             Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

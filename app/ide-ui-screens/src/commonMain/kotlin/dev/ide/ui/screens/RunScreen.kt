@@ -238,7 +238,7 @@ private fun RunTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (onHide == null) IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.run_back), onBack, boxSize = iconBox)
+        if (onHide == null) IconButtonCa(CaIcons.arrowLeft, stringResource(Res.string.run_back), onBack, boxSize = iconBox)
         else Spacer(Modifier.size(4.dp))
         Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         val runLabel = stringResource(Res.string.run)

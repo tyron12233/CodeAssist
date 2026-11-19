@@ -76,6 +76,7 @@ import dev.ide.ui.generated.resources.challenge_todays_top
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.joinMeta
+import dev.ide.ui.platform.formatIsoDay
 import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -174,7 +175,7 @@ private fun ChallengeHeader(day: UiChallengeDay, streak: Int) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                if (day.date.isBlank()) stringResource(Res.string.challenge_subtitle) else day.date,
+                if (day.date.isBlank()) stringResource(Res.string.challenge_subtitle) else formatIsoDay(day.date),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -502,9 +503,8 @@ private fun ArchiveStrip(history: List<UiChallengeHistoryEntry>, onOpen: (String
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        entry.date.takeLast(5),
+                        formatIsoDay(entry.date, short = true),
                         style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace,
                         color = pair.onContainer.copy(alpha = 0.7f),
                         modifier = Modifier.weight(1f),
                     )

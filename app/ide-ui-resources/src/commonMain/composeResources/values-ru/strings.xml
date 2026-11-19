@@ -1258,7 +1258,7 @@
     <string name="set_appearance_accent_desc">Цвет выделения интерфейса</string>
     <string name="set_appearance_accent_violet">Фиолетовый</string>
     <string name="set_appearance_accent_teal">Бирюзовый</string>
-    <string name="set_appearance_accent_orange">Оранжевый (устаревший)</string>
+    <string name="set_appearance_accent_orange">Оранжевый (классический)</string>
     <string name="set_editor_font_size">Размер шрифта</string>
     <string name="set_editor_code_font">Шрифт кода</string>
     <string name="set_editor_code_font_monospace">Системный моноширинный</string>

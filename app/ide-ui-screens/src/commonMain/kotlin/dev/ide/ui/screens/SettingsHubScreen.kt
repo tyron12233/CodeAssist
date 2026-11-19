@@ -97,7 +97,7 @@ fun SettingsHubScreen(
                 title = { Text(stringResource(Res.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(CaIcons.chevronLeft, stringResource(Res.string.back))
+                        Icon(CaIcons.arrowLeft, stringResource(Res.string.back))
                     }
                 },
                 scrollBehavior = scroll,
@@ -203,7 +203,7 @@ fun SettingsHubPane(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(CaIcons.chevronLeft, stringResource(Res.string.back))
+                    Icon(CaIcons.arrowLeft, stringResource(Res.string.back))
                 }
                 Text(
                     stringResource(Res.string.settings_title),

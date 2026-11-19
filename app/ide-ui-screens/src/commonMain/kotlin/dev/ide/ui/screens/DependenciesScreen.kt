@@ -822,7 +822,7 @@ internal fun AddDependencyContent(
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (picking) IconButtonCa(
-                CaIcons.chevronLeft, stringResource(Res.string.dep_back_to_search),
+                CaIcons.arrowLeft, stringResource(Res.string.dep_back_to_search),
                 onClick = { state.selectMode(AddMode.Library) }, boxSize = 32, iconSize = 18,
             )
             Text(

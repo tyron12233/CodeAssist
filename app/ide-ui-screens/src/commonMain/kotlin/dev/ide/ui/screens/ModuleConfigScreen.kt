@@ -399,7 +399,7 @@ private fun ListPaneHeader(onBack: () -> Unit, onNewModule: (() -> Unit)?) {
         Modifier.fillMaxWidth().height(64.dp).padding(start = 4.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        IconButton(onClick = onBack) { Icon(CaIcons.chevronLeft, stringResource(Res.string.back)) }
+        IconButton(onClick = onBack) { Icon(CaIcons.arrowLeft, stringResource(Res.string.back)) }
         Text(
             stringResource(Res.string.modcfg_title_modules), color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -575,7 +575,7 @@ private fun ModuleDetailHeader(
             .padding(start = if (onBack != null) 4.dp else gutter, end = (gutter - 12.dp).coerceAtLeast(4.dp), top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (onBack != null) IconButton(onClick = onBack) { Icon(CaIcons.chevronLeft, stringResource(Res.string.back)) }
+        if (onBack != null) IconButton(onClick = onBack) { Icon(CaIcons.arrowLeft, stringResource(Res.string.back)) }
         ModuleTypeTile(typeDisplay, 44.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -1986,7 +1986,7 @@
     <string name="set_appearance_accent_desc">界面的高亮颜色</string>
     <string name="set_appearance_accent_violet">紫色</string>
     <string name="set_appearance_accent_teal">青色</string>
-    <string name="set_appearance_accent_orange">橙色（旧版）</string>
+    <string name="set_appearance_accent_orange">橙色（经典）</string>
     <!-- Editor -->
     <string name="set_editor_font_size">字号</string>
     <string name="set_editor_code_font">代码字体</string>

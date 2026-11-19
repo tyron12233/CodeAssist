@@ -1323,7 +1323,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="set_appearance_accent_desc">A cor de destaque da interface</string>
     <string name="set_appearance_accent_violet">Violeta</string>
     <string name="set_appearance_accent_teal">Azul-petróleo</string>
-    <string name="set_appearance_accent_orange">Laranja (legado)</string>
+    <string name="set_appearance_accent_orange">Laranja (clássico)</string>
     <string name="set_editor_font_size">Tamanho da fonte</string>
     <string name="set_editor_code_font">Fonte do código</string>
     <string name="set_editor_code_font_monospace">Monoespaçada do sistema</string>

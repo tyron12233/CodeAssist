@@ -1258,7 +1258,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="set_appearance_accent_desc">Warna sorotan antarmuka</string>
     <string name="set_appearance_accent_violet">Ungu</string>
     <string name="set_appearance_accent_teal">Teal</string>
-    <string name="set_appearance_accent_orange">Oranye (Lama)</string>
+    <string name="set_appearance_accent_orange">Oranye (Klasik)</string>
     <string name="set_editor_font_size">Ukuran font</string>
     <string name="set_editor_code_font">Font kode</string>
     <string name="set_editor_code_font_monospace">Monospace sistem</string>

@@ -1369,7 +1369,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="set_appearance_accent_desc">El color de resalte de la interfaz</string>
     <string name="set_appearance_accent_violet">Violeta</string>
     <string name="set_appearance_accent_teal">Verde azulado</string>
-    <string name="set_appearance_accent_orange">Naranja (heredado)</string>
+    <string name="set_appearance_accent_orange">Naranja (clásico)</string>
     <string name="set_editor_font_size">Tamaño de fuente</string>
     <string name="set_editor_code_font">Fuente del código</string>
     <string name="set_editor_code_font_monospace">Monoespaciada del sistema</string>

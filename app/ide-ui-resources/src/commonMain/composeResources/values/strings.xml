@@ -2085,7 +2085,7 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="set_appearance_accent_desc">The interface highlight color</string>
     <string name="set_appearance_accent_violet">Violet</string>
     <string name="set_appearance_accent_teal">Teal</string>
-    <string name="set_appearance_accent_orange">Orange (Legacy)</string>
+    <string name="set_appearance_accent_orange">Orange (Classic)</string>
     <!-- Editor -->
     <string name="set_editor_font_size">Font size</string>
     <string name="set_editor_code_font">Code font</string>
