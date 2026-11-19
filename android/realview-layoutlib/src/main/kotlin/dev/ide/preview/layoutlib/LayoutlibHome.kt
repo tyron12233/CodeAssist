@@ -14,11 +14,17 @@ import java.io.File
  * <home>/framework-res/res/      the same, prepared by [frameworkRes]
  * ```
  */
-class LayoutlibHome(val dir: File) {
+class LayoutlibHome(
+    val dir: File,
+    /**
+     * Where `layoutlib_jni` and `libandroid_runtime` are. Beside the data on a desktop; on iOS a library can
+     * only be loaded from the app's own signed Frameworks folder, which is nowhere near it.
+     */
+    val nativeDir: File = File(dir, "native"),
+) {
     val buildProp: File get() = File(dir, "build.prop")
     val fonts: File get() = File(dir, "data/fonts")
     val hyphenData: File get() = File(dir, "data/hyphen-data")
-    val nativeDir: File get() = File(dir, "native")
 
     /** The ICU data file; its name carries the ICU version, so it is found rather than named. */
     val icuData: File

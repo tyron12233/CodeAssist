@@ -16,9 +16,11 @@ class LayoutlibRealViewRuntime(
     home: File,
     /** Where resolved resource tables are kept between renders and launches. */
     private val cacheDir: File,
+    /** Where layoutlib's native libraries are, when not in the home's own `native` folder. */
+    nativeDir: File = File(home, "native"),
 ) : RealViewRuntime {
 
-    private val renderer = LayoutlibRenderer(LayoutlibHome(home))
+    private val renderer = LayoutlibRenderer(LayoutlibHome(home, nativeDir))
 
     override val readsSourceResources: Boolean get() = true
 

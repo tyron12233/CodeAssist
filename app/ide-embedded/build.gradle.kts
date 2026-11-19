@@ -35,3 +35,28 @@ tasks.named<Test>("test") {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     maxHeapSize = "2g"
 }
+
+// ---- what the iOS app bundles ------------------------------------------------------------------------------
+
+// Everything the embedded JVM puts on its class path: this module, the engine under it, and layoutlib with
+// its loader, which the engine compiles against but an IDE on a device never carries.
+val iosPayload: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    extendsFrom(configurations.runtimeClasspath.get())
+}
+
+dependencies {
+    iosPayload(libs.layoutlib)
+    iosPayload(libs.layoutlib.api)
+    iosPayload(libs.android.tools.sdk.common)
+    iosPayload(libs.kxml2)
+    iosPayload(libs.android.tools.ninepatch)
+}
+
+/** `build/ios-payload/jars`: one flat folder of jars, which is what the app's JVM is pointed at. */
+val assembleIosPayload by tasks.registering(Sync::class) {
+    from(tasks.named("jar"))
+    from(iosPayload)
+    into(layout.buildDirectory.dir("ios-payload/jars"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

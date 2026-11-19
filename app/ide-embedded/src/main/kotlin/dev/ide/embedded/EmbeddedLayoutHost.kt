@@ -28,13 +28,16 @@ object EmbeddedLayoutHost {
     /**
      * Open the project at [projectRoot], closing the one open before. Returns an empty string, or why it could
      * not be opened. layoutlib starts once per process, so [layoutlibHome] is honoured on the first open only.
+     * Its native libraries are looked for in the `layoutlib.native` system property's folder when that is set
+     * (an iOS app can only load them from its Frameworks folder), else in the home's own `native`.
      */
     @JvmStatic
     @Synchronized
     fun open(projectRoot: String, layoutlibHome: String, cacheDir: String): String = try {
         if (projectRoot != openRoot) {
             close()
-            val renderer = runtime ?: LayoutlibRealViewRuntime(File(layoutlibHome), File(cacheDir)).also { runtime = it }
+            val nativeDir = System.getProperty("layoutlib.native")?.let(::File) ?: File(layoutlibHome, "native")
+            val renderer = runtime ?: LayoutlibRealViewRuntime(File(layoutlibHome), File(cacheDir), nativeDir).also { runtime = it }
             val services = IdeServices.open(Paths.get(projectRoot), realViewRuntime = renderer)
             val host = IdeServicesBackend(services)
             val container = services.store.workspaceContainer
