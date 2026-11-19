@@ -4911,7 +4911,8 @@ class IdeServices private constructor(
                     AndroidBuildSystem.classesPath(it, variant),
                     AndroidBuildSystem.kotlinClassesPath(it, variant),
                 )
-            }.filter { Files.isDirectory(it) }
+            }.filter { Files.isDirectory(it) } +
+                listOfNotNull(if (sourceResources) sourceViewClasses(text) else null)
         // EXTERNAL libraries (the maven/AAR runtime set) are dexed via the shared cache; the project's own code
         // arrives PRE-DEXED (above) and needs no re-dex. The readiness gate + the render must key the shared cache
         // the SAME way the build does — an external lib desugars against the external set alone. A single combined
@@ -5163,7 +5164,10 @@ class IdeServices private constructor(
      */
     internal fun projectViewsToCompile(file: Path, text: String): Triple<String, String, Long>? {
         // Only the real-view runtime reads compiled classes; the approximate renderer compiles its own.
-        if (realViewRuntime == null) return null
+        val runtime = realViewRuntime ?: return null
+        // A runtime that reads the project's sources has no build behind it: its views are compiled for the
+        // preview alone (see sourceViewClasses).
+        if (runtime.readsSourceResources) return null
         val module = moduleForResourceFile(file) ?: return null
         val refs = projectCustomViewRefs(text)
         val fqns = refs.javaTags + refs.kotlinOnlyTags
@@ -5862,6 +5866,89 @@ class IdeServices private constructor(
         "string" -> dev.ide.preview.ValueFormat.STRING
         "reference" -> dev.ide.preview.ValueFormat.REFERENCE
         else -> dev.ide.preview.ValueFormat.ANY
+    }
+
+    /** The last [sourceViewClasses] compile: the sources' stamp it was made from, and its classes (null: failed). */
+    @Volatile
+    private var sourceViews: Pair<Long, Path?>? = null
+    private val sourceViewsLock = Any()
+
+    /**
+     * The project's Java classes, compiled for a preview that has no build to take them from, or null when the
+     * layout ([text]) names no view of the project, or they do not compile.
+     *
+     * A host that renders from the resource folders (layoutlib, where there is no Android framework and so no
+     * build either) still has to run a project's own view, and a view is code. This is the build's Java compile
+     * without the build: the project's sources and the editor's own `R` against `android.jar`. It is made again
+     * when a source is saved, into a folder named for that state of the sources, so the renderer (which keeps
+     * its class loader for as long as its class path reads the same) sees a new one.
+     *
+     * The `R` it compiles against is not the one that runs: the renderer numbers resources itself. So `R`'s
+     * fields are not constants here, or javac would copy this `R`'s numbers into the classes. A source that
+     * needs them constant (`case R.id.x:`) is compiled again with them so, which runs with the wrong numbers
+     * in that one place and is better than not at all. Kotlin sources are not compiled: a Kotlin class is
+     * here in outline only, enough for the Java that names it.
+     */
+    private fun sourceViewClasses(text: String): Path? {
+        val refs = projectCustomViewRefs(text)
+        if (refs.javaTags.isEmpty() && refs.kotlinOnlyTags.isEmpty()) return null
+        val androidJar = previewAndroidJar() ?: return null
+        val javaSources = modules().flatMap { m -> sourceRoots(m).flatMap { root -> contentFilesUnder(root).filter { it.toString().endsWith(".java") } } }
+        var stamp = javaSources.size.toLong()
+        for (f in javaSources) stamp = stamp * 31 + runCatching { Files.getLastModifiedTime(f).toMillis() }.getOrDefault(0L) + f.toString().hashCode()
+        sourceViews?.let { if (it.first == stamp) return it.second }
+        synchronized(sourceViewsLock) {
+            sourceViews?.let { if (it.first == stamp) return it.second }
+            val started = System.nanoTime()
+            val work = store.rootPath.resolve(".platform/caches/preview-views")
+            val classes = runCatching {
+                work.toFile().deleteRecursively()
+                val srcDir = work.resolve("src")
+                val outDir = work.resolve(java.lang.Long.toHexString(stamp))
+                Files.createDirectories(outDir)
+                val deps = dedupeJarsForAndroidDex(
+                    modules().flatMap { m ->
+                        runCatching {
+                            ModuleCompilationContext.create(store.workspace, m, activeConfigs(m)).classpath.entries.map { Paths.get(it.root.path) }
+                        }.getOrDefault(emptyList())
+                    }.filter { Files.exists(it) }.distinct()
+                )
+                val boot = listOf(androidJar) + (androidTools?.desugarStubs ?: emptyList()) +
+                    listOfNotNull(androidJar.resolveSibling("core-lambda-stubs.jar").takeIf { Files.isRegularFile(it) })
+                val overlay = syntheticOverlay()
+                fun compile(constantIds: Boolean): JdtBatchCompiler.Result {
+                    val sources = ArrayList<Path>(javaSources)
+                    for ((fqn, src) in overlay) {
+                        val f = srcDir.resolve(fqn.replace('.', '/') + ".java")
+                        Files.createDirectories(f.parent)
+                        val java = String(src)
+                        val isR = fqn == "R" || fqn.endsWith(".R")
+                        Files.write(f, (if (isR && !constantIds) java.replace("static final int ", "static int ") else java).toByteArray())
+                        sources.add(f)
+                    }
+                    // Java 8 for the reason the build compiles at it: android.jar is the boot library, and ecj
+                    // takes a boot class path at no higher level.
+                    return JdtBatchCompiler.compile(sources, deps, outDir, sourceLevel = "8", bootClasspath = boot)
+                }
+                var result = compile(constantIds = false)
+                if (!result.success) result = compile(constantIds = true)
+                if (!result.success) {
+                    Log.logger("ide.preview").info("project views did not compile for the preview:\n${formatCompileErrors(result)}")
+                    return@runCatching null
+                }
+                // The renderer's own R is the one that runs.
+                Files.walk(outDir).use { w ->
+                    w.filter { val n = it.fileName.toString(); n == "R.class" || n.startsWith("R$") && n.endsWith(".class") }
+                        .forEach { runCatching { Files.delete(it) } }
+                }
+                outDir
+            }.onFailure { Log.logger("ide.preview").info("project views did not compile for the preview: $it") }.getOrNull()
+            Log.logger("ide.preview").info(
+                "project views for the preview: ${javaSources.size} sources in ${(System.nanoTime() - started) / 1_000_000}ms, ${if (classes != null) "compiled" else "failed"}"
+            )
+            sourceViews = stamp to classes
+            return classes
+        }
     }
 
     /** The `android.jar` for the preview compile: the device's bundled jar, else a desktop SDK's or the desktop

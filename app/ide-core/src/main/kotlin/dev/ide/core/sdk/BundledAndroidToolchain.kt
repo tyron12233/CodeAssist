@@ -57,4 +57,6 @@ object BundledAndroidToolchain {
     /** The `android.jar` to compile and preview against: an installed SDK's platform, else the bundled one. */
     fun androidJar(): Path? =
         AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }?.androidJar ?: bundled()?.androidJar
+            // A host that cannot run aapt2 at all (an iOS app's embedded JVM) still compiles against the jar.
+            ?: System.getProperty(DIR_PROPERTY)?.let { Paths.get(it).resolve("android.jar") }?.takeIf { Files.isRegularFile(it) }
 }
