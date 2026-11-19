@@ -14,6 +14,14 @@ struct ComposeView: UIViewControllerRepresentable {
 
 @main
 struct CodeAssistApp: App {
+    init() {
+        // A build that embeds a JVM hands it over before the UI exists: the layout editor is mounted when the
+        // UI is first composed, and only a host with a JVM backend has one to mount.
+        if let jvm = JvmHost.start() as? EmbeddedJvm {
+            MainViewControllerKt.attachEmbeddedJvm(jvm: jvm)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ComposeView()

@@ -225,6 +225,10 @@ class IosBackend(
         if (root == null || !IosFiles.isDirectory(root)) {
             return TreeNode(id = "root", name = "No project", kind = NodeKind.Workspace, filePath = null)
         }
+        // With an embedded backend the tree is the engine's own, the one the other hosts show. Until it has
+        // opened the project the folder is shown as it is, and the tree is asked for again when it has.
+        embedded?.fileTree(root, mode, starter = { work -> analysisScope.launch(ioDispatcher) { work() } }, onReady = ::bumpFs)
+            ?.let { return it }
         return TreeNode(
             id = root,
             name = IosFiles.nameOf(root),

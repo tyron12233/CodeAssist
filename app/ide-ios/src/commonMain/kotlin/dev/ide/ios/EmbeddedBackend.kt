@@ -7,6 +7,10 @@ import dev.ide.android.layouteditor.LayoutEditorPlugin
 import dev.ide.android.layouteditor.LayoutEditorUiPlugin
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
+import dev.ide.platform.log.Log
+import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.backend.remote.RemoteFileTree
 import dev.ide.ui.ext.UiPlugin
 import dev.ide.ui.ext.asUiPlugin
 import platform.Foundation.NSData
@@ -35,7 +39,9 @@ internal class EmbeddedBackend(
     /** The project the app has open, which the embedded backend follows. */
     private val activeRoot: () -> String?,
 ) {
+    @kotlin.concurrent.Volatile
     private var openedRoot: String? = null
+    @kotlin.concurrent.Volatile
     private var openFailure: String? = null
     private val lock = dev.ide.ui.concurrent.UiLock()
 
@@ -51,6 +57,33 @@ internal class EmbeddedBackend(
         }
         openFailure?.let { error(it) }
     }
+
+    /**
+     * The project tree as the engine makes it (modules, source roots by role, packages in one row), or null
+     * while the embedded backend has not opened [root] yet. Never waits for it to: a tree is asked for the
+     * moment a project opens, and the engine takes seconds to start, so the first ask starts it on [starter]
+     * and [onReady] says when to ask again.
+     */
+    fun fileTree(root: String, mode: TreeViewMode, starter: (work: () -> Unit) -> Unit, onReady: () -> Unit): TreeNode? {
+        if (openedRoot == root) {
+            if (openFailure != null) return null
+            return runCatching { RemoteFileTree.read(jvm.call(RemoteFileTree.request(mode).toNSData()).toByteArray()) }
+                .onFailure { Log.logger("ide.embedded").warn("no project tree from the embedded backend: ${it.message}") }
+                .getOrNull()
+        }
+        if (starting != root) {
+            starting = root
+            starter {
+                runCatching { ensureOpen() }
+                if (openedRoot == root && openFailure == null) onReady()
+            }
+        }
+        return null
+    }
+
+    /** The root an open was last started for, so a tree asked for again meanwhile does not start another. */
+    @kotlin.concurrent.Volatile
+    private var starting: String? = null
 
     private val remote = RemoteLayoutServices { request ->
         ensureOpen()

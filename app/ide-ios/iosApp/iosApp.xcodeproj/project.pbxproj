@@ -7,12 +7,16 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000000000009 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000008 /* App.swift */; };
+		000000000000000000000021 /* JvmHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000020 /* JvmHost.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000003 /* CodeAssist.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodeAssist.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000008 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		00000000000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000000020 /* JvmHost.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = JvmHost.m; sourceTree = "<group>"; };
+		000000000000000000000022 /* JvmHost.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = JvmHost.h; sourceTree = "<group>"; };
+		000000000000000000000023 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -21,7 +25,7 @@
 
 /* Begin PBXGroup section */
 		000000000000000000000007 = {isa = PBXGroup; children = (000000000000000000000005 /* iosApp */, 000000000000000000000006 /* Products */, ); sourceTree = "<group>"; };
-		000000000000000000000005 /* iosApp */ = {isa = PBXGroup; children = (000000000000000000000008 /* App.swift */, 00000000000000000000000A /* Info.plist */, ); path = iosApp; sourceTree = "<group>"; };
+		000000000000000000000005 /* iosApp */ = {isa = PBXGroup; children = (000000000000000000000008 /* App.swift */, 000000000000000000000020 /* JvmHost.m */, 000000000000000000000022 /* JvmHost.h */, 000000000000000000000023 /* iosApp-Bridging-Header.h */, 00000000000000000000000A /* Info.plist */, ); path = iosApp; sourceTree = "<group>"; };
 		000000000000000000000006 /* Products */ = {isa = PBXGroup; children = (000000000000000000000003 /* CodeAssist.app */, ); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -29,7 +33,7 @@
 		000000000000000000000002 /* iosApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 00000000000000000000000F;
-			buildPhases = (000000000000000000000014 /* Build Kotlin framework */, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D, );
+			buildPhases = (000000000000000000000014 /* Build Kotlin framework */, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D, 000000000000000000000024 /* Embed JVM payload */, );
 			dependencies = ();
 			name = iosApp;
 			productName = iosApp;
@@ -72,10 +76,22 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\ncd \"$SRCROOT/../../..\"\nexport JAVA_HOME=\"${JAVA_HOME:-/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home}\"\n# The Kotlin target follows what Xcode is building for: the device links iosArm64, the\n# simulator iosSimulatorArm64. Reading SDK_NAME rather than the destination keeps one phase\n# correct for both.\ncase \"$SDK_NAME\" in\n  iphoneos*) KOTLIN_TARGET=IosArm64 ;;\n  *) KOTLIN_TARGET=IosSimulatorArm64 ;;\nesac\n./gradlew --quiet \":ide-ios:link${CONFIGURATION}Framework${KOTLIN_TARGET}\" :ide-ios:syncComposeResourcesForIos :ide-ios:syncPreviewRuntimeForIos\n";
 		};
+		000000000000000000000024 /* Embed JVM payload */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Embed JVM payload";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# Only a build given a JVM SDK carries one: CODEASSIST_JVM_SDK names a folder holding the JVM's class\n# library (java-home), the backend's jars, layoutlib's runtime files and its native libraries.\n[ -n \"$CODEASSIST_JVM_SDK\" ] || exit 0\nAPP=\"$TARGET_BUILD_DIR/$WRAPPER_NAME\"\n# The VM looks for its class library at <app>/lib and reads no option before it has found it.\nrsync -aL --delete \"$CODEASSIST_JVM_SDK/java-home/\" \"$APP/lib/\"\nrsync -a --delete \"$CODEASSIST_JVM_SDK/jars/\" \"$APP/jvm-jars/\"\n[ -d \"$CODEASSIST_JVM_SDK/patch\" ] && rsync -a --delete \"$CODEASSIST_JVM_SDK/patch/\" \"$APP/jvm-patch/\"\n[ -d \"$CODEASSIST_JVM_SDK/android-toolchain\" ] && rsync -a --delete \"$CODEASSIST_JVM_SDK/android-toolchain/\" \"$APP/android-toolchain/\"\nrsync -a --delete \"$CODEASSIST_JVM_SDK/layoutlib-home/\" \"$APP/layoutlib/\"\nmkdir -p \"$APP/Frameworks\"\nfor f in \"$CODEASSIST_JVM_SDK\"/frameworks/*.dylib; do\n  cp \"$f\" \"$APP/Frameworks/\"\n  if [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$APP/Frameworks/$(basename \"$f\")\"\n  fi\ndone\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		00000000000000000000000B /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000009 /* App.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		00000000000000000000000B /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000009 /* App.swift in Sources */, 000000000000000000000021 /* JvmHost.m in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -136,6 +152,7 @@
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = ("$(inherited)", "-framework", CodeAssistUi, );
+				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ide.codeassist.ios;
 				PRODUCT_NAME = CodeAssist;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -164,6 +181,7 @@
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = ("$(inherited)", "-framework", CodeAssistUi, );
+				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ide.codeassist.ios;
 				PRODUCT_NAME = CodeAssist;
 				SWIFT_EMIT_LOC_STRINGS = YES;
