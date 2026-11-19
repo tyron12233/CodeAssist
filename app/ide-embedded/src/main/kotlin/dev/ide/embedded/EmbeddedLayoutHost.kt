@@ -40,6 +40,7 @@ object EmbeddedLayoutHost {
         if (projectRoot != openRoot) {
             close()
             NativeAapt2.install()
+            NativeDigests.install()
             NativeDigest.install()
             val nativeDir = System.getProperty("layoutlib.native")?.let(::File) ?: File(layoutlibHome, "native")
             val renderer = runtime ?: LayoutlibRealViewRuntime(File(layoutlibHome), File(cacheDir), nativeDir).also { runtime = it }

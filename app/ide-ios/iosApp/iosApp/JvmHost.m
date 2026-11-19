@@ -160,6 +160,48 @@ static jbyteArray JNICALL sha256File(JNIEnv *env, jclass cls, jstring path) {
     return result;
 }
 
+// Every MessageDigest in the JVM (see NativeDigests): the state of a digest in progress is a Java array, read
+// into the system's context for each call and written back.
+
+typedef union { CC_SHA256_CTX sha256; CC_SHA1_CTX sha1; CC_MD5_CTX md5; } DigestContext;
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+static void JNICALL digestInit(JNIEnv *env, jclass cls, jint algorithm, jbyteArray state) {
+    DigestContext context;
+    memset(&context, 0, sizeof context);
+    if (algorithm == 0) CC_SHA256_Init(&context.sha256); else if (algorithm == 1) CC_SHA1_Init(&context.sha1); else CC_MD5_Init(&context.md5);
+    (*env)->SetByteArrayRegion(env, state, 0, sizeof context, (const jbyte *)&context);
+}
+
+static void JNICALL digestUpdate(JNIEnv *env, jclass cls, jint algorithm, jbyteArray state, jbyteArray input, jint offset, jint length) {
+    DigestContext context;
+    (*env)->GetByteArrayRegion(env, state, 0, sizeof context, (jbyte *)&context);
+    jbyte *bytes = (*env)->GetPrimitiveArrayCritical(env, input, NULL);
+    if (!bytes) return;
+    if (algorithm == 0) CC_SHA256_Update(&context.sha256, bytes + offset, (CC_LONG)length);
+    else if (algorithm == 1) CC_SHA1_Update(&context.sha1, bytes + offset, (CC_LONG)length);
+    else CC_MD5_Update(&context.md5, bytes + offset, (CC_LONG)length);
+    (*env)->ReleasePrimitiveArrayCritical(env, input, bytes, JNI_ABORT);
+    (*env)->SetByteArrayRegion(env, state, 0, sizeof context, (const jbyte *)&context);
+}
+
+static jbyteArray JNICALL digestFinish(JNIEnv *env, jclass cls, jint algorithm, jbyteArray state) {
+    DigestContext context;
+    (*env)->GetByteArrayRegion(env, state, 0, sizeof context, (jbyte *)&context);
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    jsize size;
+    if (algorithm == 0) { CC_SHA256_Final(digest, &context.sha256); size = CC_SHA256_DIGEST_LENGTH; }
+    else if (algorithm == 1) { CC_SHA1_Final(digest, &context.sha1); size = CC_SHA1_DIGEST_LENGTH; }
+    else { CC_MD5_Final(digest, &context.md5); size = CC_MD5_DIGEST_LENGTH; }
+    jbyteArray result = (*env)->NewByteArray(env, size);
+    (*env)->SetByteArrayRegion(env, result, 0, size, (const jbyte *)digest);
+    return result;
+}
+#pragma clang diagnostic pop
+
+_Static_assert(sizeof(DigestContext) <= 256, "NativeDigests.STATE_BYTES is too small for a digest context");
+
 @implementation JvmChannel {
     NSCondition *_pending;
     NSMutableArray<dispatch_block_t> *_jobs;
@@ -263,6 +305,7 @@ static void *runJobs(void *context) {
     }
     if (loadAapt2()) options = [options arrayByAddingObject:@"-Dcodeassist.aapt2.native=true"];
     options = [options arrayByAddingObject:@"-Dcodeassist.sha256.native=true"];
+    options = [options arrayByAddingObject:@"-Dcodeassist.digests.native=true"];
     // This JVM only interprets, and dexing a library in it takes tens of seconds: take them dexed already.
     options = [options arrayByAddingObject:@"-Dcodeassist.dexpack=true"];
     JavaVMOption *vmOptions = calloc(options.count, sizeof(JavaVMOption));
@@ -283,6 +326,15 @@ static void *runJobs(void *context) {
     JNINativeMethod digestMethod = { "sha256", "(Ljava/lang/String;)[B", (void *)sha256File };
     if (!digest || (*_env)->RegisterNatives(_env, digest, &digestMethod, 1) != JNI_OK) {
         fprintf(stderr, "the native file hash could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
+    }
+    jclass digests = (*_env)->FindClass(_env, "dev/ide/embedded/NativeDigests");
+    JNINativeMethod digestMethods[] = {
+        { "init", "(I[B)V", (void *)digestInit },
+        { "update", "(I[B[BII)V", (void *)digestUpdate },
+        { "finish", "(I[B)[B", (void *)digestFinish },
+    };
+    if (!digests || (*_env)->RegisterNatives(_env, digests, digestMethods, 3) != JNI_OK) {
+        fprintf(stderr, "the native digests could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
     }
     if (aapt2Main) {
         jclass tool = (*_env)->FindClass(_env, "dev/ide/embedded/NativeAapt2");
