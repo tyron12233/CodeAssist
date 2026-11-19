@@ -70,6 +70,8 @@ kotlin {
         androidMain.dependencies {
             // androidx.activity.compose.BackHandler — backs PlatformBackHandler's Android actual.
             implementation(libs.androidx.activity.compose)
+            // The fold and posture of a foldable device: backs rememberWindowFold's Android actual.
+            implementation(libs.androidx.window)
         }
 
         // The default hierarchy template is off project-wide (see gradle.properties), so the intermediate

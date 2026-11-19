@@ -19,6 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import dev.ide.ui.platform.WindowFold
+import dev.ide.ui.platform.rememberWindowFold
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,26 +52,59 @@ internal fun SplitEditorPreview(
     // The editor's share of the split; the divider drags it within [0.2, 0.8].
     var fraction by remember { mutableStateOf(0.5f) }
     val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    BoxWithConstraints(modifier) {
+    // On a foldable the divider starts on the fold, so each pane has a side of the hinge to itself. Dragging
+    // it takes over until the posture changes.
+    val fold = rememberWindowFold()
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+    var dragged by remember(fold) { mutableStateOf(false) }
+    val handlePx = with(LocalDensity.current) { SplitHandleSize.toPx() }
+    BoxWithConstraints(modifier.onGloballyPositioned { bounds = it.boundsInWindow() }) {
+        val onFold = if (dragged) null else fold?.let { foldShare(it, bounds, stacked, handlePx) }
+        val share = onFold ?: fraction
         if (stacked) {
             // While typing, keep the preview as the larger pane (cap editor ≤ half of the reduced height).
-            val editorShare = if (keyboardOpen) fraction.coerceIn(0.3f, 0.5f) else fraction
+            val editorShare = if (keyboardOpen) share.coerceIn(0.3f, 0.5f) else share
             val extentPx = with(LocalDensity.current) { maxHeight.toPx() }
             Column(Modifier.fillMaxSize()) {
                 preview(Modifier.fillMaxWidth().weight(1f - editorShare))
                 // Editor is the bottom pane, so dragging the handle DOWN shrinks it.
-                SplitHandle(stacked = true) { delta -> fraction = (fraction - delta / extentPx).coerceIn(0.2f, 0.8f) }
+                SplitHandle(stacked = true) { delta ->
+                    fraction = (share - delta / extentPx).coerceIn(0.2f, 0.8f)
+                    dragged = true
+                }
                 editor(Modifier.fillMaxWidth().weight(editorShare))
             }
         } else {
             val extentPx = with(LocalDensity.current) { maxWidth.toPx() }
             Row(Modifier.fillMaxSize()) {
-                editor(Modifier.fillMaxHeight().weight(fraction))
-                SplitHandle(stacked = false) { delta -> fraction = (fraction + delta / extentPx).coerceIn(0.2f, 0.8f) }
-                preview(Modifier.fillMaxHeight().weight(1f - fraction))
+                editor(Modifier.fillMaxHeight().weight(share))
+                SplitHandle(stacked = false) { delta ->
+                    fraction = (share + delta / extentPx).coerceIn(0.2f, 0.8f)
+                    dragged = true
+                }
+                preview(Modifier.fillMaxHeight().weight(1f - share))
             }
         }
     }
+}
+
+private val SplitHandleSize = 12.dp
+
+/**
+ * The editor's share that puts the divider on [fold], or null when the fold does not divide this split: it runs
+ * the other way, lies outside [bounds], or would leave a pane under a fifth of the space.
+ */
+internal fun foldShare(fold: WindowFold, bounds: Rect, stacked: Boolean, handlePx: Float): Float? {
+    if (bounds.isEmpty || fold.vertical == stacked) return null
+    val share = if (stacked) {
+        // The editor is the lower pane.
+        val centre = (fold.top + fold.bottom) / 2f
+        (bounds.bottom - centre - handlePx / 2f) / (bounds.height - handlePx)
+    } else {
+        val centre = (fold.left + fold.right) / 2f
+        (centre - bounds.left - handlePx / 2f) / (bounds.width - handlePx)
+    }
+    return share.takeIf { it in 0.2f..0.8f }
 }
 
 /** The draggable divider between the Split panes — a thin bar with a centered grip handle. */
@@ -78,11 +116,11 @@ private fun SplitHandle(stacked: Boolean, onDrag: (Float) -> Unit) {
     )
     val grip = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
     if (stacked) {
-        Box(Modifier.fillMaxWidth().height(12.dp).then(drag).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(SplitHandleSize).then(drag).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
             Box(Modifier.width(34.dp).height(3.dp).clip(grip).background(MaterialTheme.colorScheme.outline))
         }
     } else {
-        Box(Modifier.fillMaxHeight().width(12.dp).then(drag).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxHeight().width(SplitHandleSize).then(drag).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
             Box(Modifier.height(34.dp).width(3.dp).clip(grip).background(MaterialTheme.colorScheme.outline))
         }
     }

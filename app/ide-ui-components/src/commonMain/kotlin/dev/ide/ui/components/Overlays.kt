@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.platform.avoidFold
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
@@ -248,15 +249,17 @@ fun CenteredDialog(
         ) {
             Scrim(onDismiss)
         }
-        AnimatedVisibility(
-            visible = visible,
-            modifier = Modifier.align(Alignment.Center),
-            enter = fadeIn(tween(Motion.BASE, easing = Motion.quiet)) +
-                scaleIn(tween(Motion.BASE, easing = Motion.quiet), initialScale = 0.94f),
-            exit = fadeOut(tween(Motion.FAST, easing = Motion.soft)) +
-                scaleOut(tween(Motion.FAST, easing = Motion.soft), targetScale = 0.94f),
-        ) {
-            Box(Modifier.swallowTaps()) { content() }
+        // Centred in the window, or on one side of a foldable's hinge while the hinge divides the screen.
+        Box(Modifier.fillMaxSize().avoidFold(), contentAlignment = Alignment.Center) {
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(Motion.BASE, easing = Motion.quiet)) +
+                    scaleIn(tween(Motion.BASE, easing = Motion.quiet), initialScale = 0.94f),
+                exit = fadeOut(tween(Motion.FAST, easing = Motion.soft)) +
+                    scaleOut(tween(Motion.FAST, easing = Motion.soft), targetScale = 0.94f),
+            ) {
+                Box(Modifier.swallowTaps()) { content() }
+            }
         }
     }
 }
