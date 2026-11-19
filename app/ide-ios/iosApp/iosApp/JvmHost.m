@@ -99,6 +99,55 @@ static BOOL loadAapt2(void) {
     return NO;
 }
 
+// ---- D8, compiled ahead of time ---------------------------------------------------------------------------
+//
+// The JVM here only interprets, and D8 is the build's heaviest Java after the compilers. The app carries it as
+// a GraalVM native image: a library with a runtime and a heap of its own (an "isolate"), which exports only
+// its entry points, so the JDK libraries inside it and the JVM's own never meet.
+
+static void *aotIsolate;
+static int (*aotAttach)(void *, void **);
+static int (*aotDetach)(void *);
+static int (*aotD8)(void *, const char *, const char *);
+
+static BOOL loadAotD8(void) {
+    if (aotD8) return YES;
+    NSString *path = [[NSBundle mainBundle].privateFrameworksPath stringByAppendingPathComponent:@"libaotd8.dylib"];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
+    void *library = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
+    if (!library) { fprintf(stderr, "D8 did not load: %s\n", dlerror()); return NO; }
+    int (*create)(void *, void **, void **) = dlsym(library, "graal_create_isolate");
+    int (*run)(void *, const char *, const char *) = dlsym(library, "aot_d8");
+    aotAttach = dlsym(library, "graal_attach_thread");
+    aotDetach = dlsym(library, "graal_detach_thread");
+    if (!create || !run || !aotAttach || !aotDetach) { fprintf(stderr, "D8 loaded, but its entry points were not found\n"); return NO; }
+    // The image reserves the address range its heap may grow into, by default more than iOS grants an app.
+    struct { int version; unsigned long reservedAddressSpaceSize; const char *auxPath; unsigned long auxSize;
+             int argc; char **argv; int pkey; char ignoreUnrecognized, reserved4, reserved5; } params = { 0 };
+    params.version = 5;
+    params.reservedAddressSpaceSize = 2UL << 30;
+    void *thread = NULL;
+    int created = create(&params, &aotIsolate, &thread);
+    if (created != 0) { fprintf(stderr, "D8's runtime did not start (%d)\n", created); return NO; }
+    // Every call attaches the thread it is on and detaches it after; this one is no different.
+    aotDetach(thread);
+    aotD8 = run;
+    return YES;
+}
+
+/// `NativeD8.run(String argFile, String log)`: D8 on the calling thread, which may be any of the build's.
+static jint JNICALL d8Run(JNIEnv *env, jclass cls, jstring argFile, jstring log) {
+    void *thread = NULL;
+    if (!aotD8 || aotAttach(aotIsolate, &thread) != 0) return -1;
+    const char *args = (*env)->GetStringUTFChars(env, argFile, NULL);
+    const char *out = (*env)->GetStringUTFChars(env, log, NULL);
+    int code = aotD8(thread, args, out);
+    (*env)->ReleaseStringUTFChars(env, argFile, args);
+    (*env)->ReleaseStringUTFChars(env, log, out);
+    aotDetach(thread);
+    return code;
+}
+
 /// `NativeAapt2.run(String[] args, String output)`: aapt2's main, with what it prints sent to `output`.
 static jint JNICALL aapt2Run(JNIEnv *env, jclass cls, jobjectArray args, jstring output) {
     if (!aapt2Main) return -1;
@@ -304,10 +353,11 @@ static void *runJobs(void *context) {
         options = [options arrayByAddingObject:[@"-Dcodeassist.android.toolchain=" stringByAppendingString:toolchain]];
     }
     if (loadAapt2()) options = [options arrayByAddingObject:@"-Dcodeassist.aapt2.native=true"];
+    if (loadAotD8()) options = [options arrayByAddingObject:@"-Dcodeassist.d8.native=true"];
     options = [options arrayByAddingObject:@"-Dcodeassist.sha256.native=true"];
     options = [options arrayByAddingObject:@"-Dcodeassist.digests.native=true"];
     // This JVM only interprets, and dexing a library in it takes tens of seconds: take them dexed already.
-    options = [options arrayByAddingObject:@"-Dcodeassist.dexpack=true"];
+    if (!aotD8) options = [options arrayByAddingObject:@"-Dcodeassist.dexpack=true"];
     JavaVMOption *vmOptions = calloc(options.count, sizeof(JavaVMOption));
     for (NSUInteger i = 0; i < options.count; i++) vmOptions[i].optionString = strdup(options[i].UTF8String);
     JavaVMInitArgs arguments = { .version = JNI_VERSION_10, .nOptions = (jint)options.count, .options = vmOptions, .ignoreUnrecognized = JNI_TRUE };
@@ -341,6 +391,13 @@ static void *runJobs(void *context) {
         JNINativeMethod method = { "run", "([Ljava/lang/String;Ljava/lang/String;)I", (void *)aapt2Run };
         if (!tool || (*_env)->RegisterNatives(_env, tool, &method, 1) != JNI_OK) {
             fprintf(stderr, "aapt2 is in the app but could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
+        }
+    }
+    if (aotD8) {
+        jclass tool = (*_env)->FindClass(_env, "dev/ide/embedded/NativeD8");
+        JNINativeMethod method = { "run", "(Ljava/lang/String;Ljava/lang/String;)I", (void *)d8Run };
+        if (!tool || (*_env)->RegisterNatives(_env, tool, &method, 1) != JNI_OK) {
+            fprintf(stderr, "D8 is in the app but could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
         }
     }
     return YES;

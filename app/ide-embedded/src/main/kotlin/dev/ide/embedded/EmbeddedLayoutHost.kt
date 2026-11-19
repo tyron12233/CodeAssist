@@ -40,6 +40,7 @@ object EmbeddedLayoutHost {
         if (projectRoot != openRoot) {
             close()
             NativeAapt2.install()
+            NativeD8.install()
             NativeDigests.install()
             NativeDigest.install()
             val nativeDir = System.getProperty("layoutlib.native")?.let(::File) ?: File(layoutlibHome, "native")

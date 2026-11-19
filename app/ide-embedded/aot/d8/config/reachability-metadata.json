@@ -1,0 +1,63 @@
+{
+  "reflection": [
+    {
+      "type": "com.android.tools.r8.graph.r1[]"
+    },
+    {
+      "type": "com.android.tools.r8.internal.xp1"
+    },
+    {
+      "type": "com.android.tools.r8.threading.providers.blocking.ThreadingModuleBlockingProvider",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Boolean",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getBoolean",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Throwable"
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.ReflectionFactoryImpl"
+    },
+    {
+      "type": "sun.security.provider.SHA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA2$SHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/services/com.android.tools.r8.internal.dc2"
+    },
+    {
+      "glob": "r8-version.properties"
+    }
+  ]
+}

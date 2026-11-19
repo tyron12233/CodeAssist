@@ -50,3 +50,19 @@ object NativeDigest {
         dev.ide.build.NativeFileHash.sha256 = { path -> runCatching { sha256(path.toString()) }.getOrNull() }
     }
 }
+
+/**
+ * D8 as the iOS app carries it: compiled ahead of time into a library of the app (see
+ * [dev.ide.android.support.tools.D8Native] for why), entered through JNI.
+ */
+object NativeD8 {
+    /** Runs D8 with the arguments in [argFile], one per line; what it reports goes to [log]. Returns its exit code. */
+    @JvmStatic
+    external fun run(argFile: String, log: String): Int
+
+    fun install() {
+        if (System.getProperty("codeassist.d8.native") != "true" || dev.ide.android.support.tools.D8Native.runner != null) return
+        dev.ide.android.support.tools.D8Native.runner = { argFile, log -> run(argFile.toString(), log.toString()) }
+        System.err.println("D8 in this process: compiled ahead of time")
+    }
+}

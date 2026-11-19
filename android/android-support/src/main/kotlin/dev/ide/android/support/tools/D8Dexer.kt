@@ -25,7 +25,16 @@ class D8Dexer(
      * extracted from the bundled R8 rather than a jar carrying a version marker.
      */
     supportsGlobalSynthetics: Boolean? = null,
+    /**
+     * D8 itself, when it is not a program to launch: given the file holding its arguments (one per line) and a
+     * file to write what it reports to, it answers D8's exit code. See [D8Native].
+     */
+    private val tool: ((argFile: Path, log: Path) -> Int)? = null,
 ) : Dexer {
+    // A linked-in D8 dexes one library at a time, as the in-process dexer does: each is then taken from, and
+    // kept in, the caches that are keyed by library.
+    override fun runsOffHeap(): Boolean = tool == null
+
     private val toolCp: String get() = toolClasspath.joinToString(File.pathSeparator) { it.toString() }
 
     private val globalSynthetics: Boolean by lazy {
@@ -108,6 +117,20 @@ class D8Dexer(
             add("--output"); add(outDir.toString())
             addAll(existing.map { it.toString() })
         }
+        if (tool != null) {
+            val argFile = ToolArgFile.write(outDir, d8Args)
+            val log = Files.createTempFile(outDir, "d8", ".log")
+            return try {
+                val code = tool.invoke(argFile, log)
+                val lines = runCatching { Files.readAllLines(log) }.getOrDefault(emptyList())
+                ToolResult(code == 0, DexDiagnostics.humanize(if (code == 0) lines else lines + "D8 exited with code $code"))
+            } catch (t: Throwable) {
+                ToolResult(false, listOf("D8 could not be called: $t"), processFailed = true)
+            } finally {
+                runCatching { Files.deleteIfExists(argFile) }
+                runCatching { Files.deleteIfExists(log) }
+            }
+        }
         return ToolArgFile.withArgFile(outDir, d8Args) { argFile ->
             val cmd = listOf(javaLauncher.toString()) + vmArgs + listOf("-cp", toolCp, "com.android.tools.r8.D8", argFile)
             val r = Subprocess.run(cmd)
@@ -115,4 +138,20 @@ class D8Dexer(
             r.copy(log = DexDiagnostics.humanize(r.log))
         }
     }
+}
+
+/**
+ * D8 compiled into the host, for a host whose JVM only interprets.
+ *
+ * D8 is Java, and the JVM an iOS app embeds runs it a few dozen times slower than a compiling one: a library
+ * took most of a second to dex, and an app's libraries most of a minute. Such a host carries D8 compiled ahead
+ * of time and sets [runner] to it; the build then drives it with the same arguments it gives a launched D8.
+ */
+object D8Native {
+    /** D8 with the arguments in a file (one per line), what it reports written to a second file; its exit code. */
+    @Volatile
+    var runner: ((argFile: Path, log: Path) -> Int)? = null
+
+    /** A dexer over [runner], or null when the host has none. */
+    fun dexer(): Dexer? = runner?.let { D8Dexer(emptyList(), java.nio.file.Paths.get("d8"), supportsGlobalSynthetics = true, tool = it) }
 }
