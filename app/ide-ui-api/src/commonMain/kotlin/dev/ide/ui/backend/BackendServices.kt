@@ -335,6 +335,12 @@ interface BlockService {
      */
     fun blocksEnabled(): Boolean = false
 
+    /**
+     * Whether [path] is in a language the block editor can show. The Blocks segment is offered per file on
+     * this, so a file with no block form (a layout, a manifest) does not lead to an empty view.
+     */
+    fun blocksSupport(path: String): Boolean = blocksEnabled()
+
     /** Project the live buffer [text] of [path] into a block tree, or null when unsupported. */
     suspend fun projectBlocks(path: String, text: String): UiBlockNode? = null
 

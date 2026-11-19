@@ -1330,6 +1330,9 @@ private val ProjectsWideMaxWidth = 1120.dp
 /** From this width the wide rows also show the kind and module count as a column of their own. */
 private val ProjectsKindColumnBreakpoint = 760.dp
 
+/** Below this width the header's secondary buttons drop their labels so the title is not squeezed out. */
+private val ProjectsLabelledActionsBreakpoint = 900.dp
+
 private enum class ProjectSort { Recent, Name }
 
 /**
@@ -1375,6 +1378,9 @@ private fun WideProjectsHome(
     BoxWithConstraints(Modifier.fillMaxSize().background(c.background)) {
         HalloweenBackdrop()
         val showKind = maxWidth >= ProjectsKindColumnBreakpoint
+        // Below this the labelled Import and Clone buttons leave no room for the title, which was cut to
+        // "Your ...". They keep their icons and the primary action keeps its label.
+        val compactActions = maxWidth < ProjectsLabelledActionsBreakpoint
         Column(Modifier.widthIn(max = ProjectsWideMaxWidth).fillMaxSize().padding(horizontal = 28.dp)) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 16.dp),
@@ -1390,10 +1396,10 @@ private fun WideProjectsHome(
                     modifier = Modifier.weight(1f),
                 )
                 if (onImportProject != null) {
-                    HeaderButton(CaSymbols.folderOpen, stringResource(Res.string.home_import_project), primary = false, onClick = onImportProject)
+                    HeaderButton(CaSymbols.folderOpen, stringResource(Res.string.home_import_project), primary = false, iconOnly = compactActions, onClick = onImportProject)
                 }
                 if (onCloneRepository != null) {
-                    HeaderButton(CaSymbols.forkRight, stringResource(Res.string.home_clone_repository), primary = false, onClick = onCloneRepository)
+                    HeaderButton(CaSymbols.forkRight, stringResource(Res.string.home_clone_repository), primary = false, iconOnly = compactActions, onClick = onCloneRepository)
                 }
                 HeaderButton(CaSymbols.add, stringResource(Res.string.home_new_project), primary = true, onClick = onNewProject)
                 if (!sidebarShown) {
@@ -1472,13 +1478,15 @@ private fun WideProjectsHome(
 
 /** A compact header button: filled for the primary action, outlined for the others. */
 @Composable
-private fun HeaderButton(glyph: Char, label: String, primary: Boolean, onClick: () -> Unit) {
+private fun HeaderButton(glyph: Char, label: String, primary: Boolean, iconOnly: Boolean = false, onClick: () -> Unit) {
     val content: @Composable RowScope.() -> Unit = {
-        Symbol(glyph, contentDescription = null, size = 18.dp)
-        Spacer(Modifier.width(8.dp))
-        Text(label, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+        Symbol(glyph, contentDescription = label.takeIf { iconOnly }, size = 18.dp)
+        if (!iconOnly) {
+            Spacer(Modifier.width(8.dp))
+            Text(label, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+        }
     }
-    val padding = PaddingValues(start = 14.dp, end = 18.dp)
+    val padding = if (iconOnly) PaddingValues(horizontal = 14.dp) else PaddingValues(start = 14.dp, end = 18.dp)
     if (primary) {
         Button(onClick = onClick, contentPadding = padding, modifier = Modifier.height(40.dp), content = content)
     } else {

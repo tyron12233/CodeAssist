@@ -1424,9 +1424,12 @@ class IdeUiState(
                 // Reapply the saved per-tab view state to the tab we just opened. setCaret + the scroll anchor
                 // coerce into the (possibly changed) buffer, so a shrunken file can't strand the caret/scroll.
                 openFiles.firstOrNull { it.path == tab.path }?.let { f ->
-                    // Drop a persisted Blocks mode if the block editor is disabled (plugin off) — restore as text.
+                    // Drop a persisted Blocks mode if the block editor is disabled (plugin off) or has no
+                    // blocks for this file's language: restore as text.
                     editorViewModeOf(tab.viewMode)
-                        ?.takeUnless { it == EditorViewMode.Blocks && !blocksEnabled }
+                        ?.takeUnless {
+                            it == EditorViewMode.Blocks && !(blocksEnabled && backend.blocks.blocksSupport(tab.path))
+                        }
                         ?.let { f.viewMode = it }
                     f.session.setCaret(tab.caret)
                     f.session.viewportTopLine = tab.scrollLine.coerceAtLeast(0)

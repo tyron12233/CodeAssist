@@ -30,6 +30,12 @@ internal class BlockService(private val ctx: EngineContext) {
      */
     val enabled: Boolean get() = mappings.isNotEmpty()
 
+    /** Whether some mapping covers [file]'s language. Without one the projection has nothing to show. */
+    fun supports(file: Path): Boolean {
+        val language = ctx.languageFor(file)
+        return mappings.any { language in it.languages }
+    }
+
     /** Project [file]'s live buffer [text] into a [BlockTree], or null if [file] is outside the project. */
     fun projectBlocks(file: Path, text: String): BlockTree? =
         ctx.parse(file, text)?.let { engine.project(it) }

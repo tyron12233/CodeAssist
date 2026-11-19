@@ -39,6 +39,9 @@ internal class BlockBackend(private val ctx: BackendContext) : BlockService {
 
     override fun blocksEnabled(): Boolean = ctx.servicesOrNull?.blocks?.enabled ?: false
 
+    override fun blocksSupport(path: String): Boolean =
+        ctx.servicesOrNull?.blocks?.supports(Paths.get(path)) ?: false
+
     override suspend fun projectBlocks(path: String, text: String): UiBlockNode? =
         withContext(ctx.engineDispatcher) {
             ctx.services.blocks.projectBlocks(

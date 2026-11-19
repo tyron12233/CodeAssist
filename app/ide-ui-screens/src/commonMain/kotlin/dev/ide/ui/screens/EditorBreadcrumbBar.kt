@@ -62,6 +62,7 @@ internal fun BreadcrumbBar(
     hasPreview: Boolean,
 ) {
     var crumbs by remember(active.path) { mutableStateOf(breadcrumbFor(state, active)) }
+    val blocksHere = remember(active.path) { state.blocksEnabled && state.backend.blocks.blocksSupport(active.path) }
     val caretOffset = active.session.selection.start
     LaunchedEffect(active.path, active.session.textRevision, caretOffset) {
         delay(200.milliseconds)
@@ -101,7 +102,7 @@ internal fun BreadcrumbBar(
         ViewModeToggle(
             mode = active.viewMode,
             canPreview = canPreview,
-            blocksEnabled = state.blocksEnabled,
+            blocksEnabled = blocksHere,
             contributed = ViewModeRegistry.forFile(active.path),
         ) {
             if (it != active.viewMode) state.countViewMode(active.path, it)
@@ -146,7 +147,8 @@ private fun ViewModeToggle(
             stringResource(Res.string.breadcrumb_code),
             mode == EditorViewMode.Text
         ) { onSelect(EditorViewMode.Text) }
-        // The Blocks segment is present only when the `blocks` plugin is enabled (see IdeUiState.blocksEnabled).
+        // The Blocks segment is present only when the `blocks` plugin is enabled (see IdeUiState.blocksEnabled)
+        // and the file is in a language it has blocks for.
         if (blocksEnabled) {
             SegmentItem(CaIcons.layers, stringResource(Res.string.breadcrumb_blocks), mode == EditorViewMode.Blocks) {
                 onSelect(
