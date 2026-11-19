@@ -32,6 +32,8 @@ aapt2 = "9.2.1-15009934" # com.android.tools.build:aapt2 — the host aapt2 bina
 bundletool = "1.18.3" # com.android.tools.build.bundletool — builds the .aab (aligns with AGP 9.x's bundletool)
 guava = "32.0.1-jre"  # com.google.common.* — bundletool's collections (ImmutableList) at compile time
 asm = "9.7"           # org.ow2.asm — bytecode rewrite of System.exit for the in-process Java dex-run
+layoutlib = "17.0.4"            # com.android.tools.layoutlib — the Android framework as Android Studio renders layouts with it
+androidToolsBase = "32.6.0-alpha04"  # layoutlib-api + sdk-common: the render API and the resource loader layoutlib 17 is driven through
 trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin compiler needs but doesn't bundle
 # StAX on ART (which ships none): the standalone JSR-173 API, and aalto as its implementation. Used by the
 # on-device Kotlin compiler (IntelliJ-core's descriptor parsing) and by R8's resource shrinker.
@@ -192,6 +194,14 @@ bundletool-gson = { module = "com.google.code.gson:gson", version = "2.8.9" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_configuration", version.ref = "desugarJdkLibs" }
+layoutlib = { module = "com.android.tools.layoutlib:layoutlib", version.ref = "layoutlib" }
+layoutlib-runtime = { module = "com.android.tools.layoutlib:layoutlib-runtime", version.ref = "layoutlib" }
+layoutlib-resources = { module = "com.android.tools.layoutlib:layoutlib-resources", version.ref = "layoutlib" }
+layoutlib-api = { module = "com.android.tools.layoutlib:layoutlib-api", version.ref = "androidToolsBase" }
+android-tools-sdk-common = { module = "com.android.tools:sdk-common", version.ref = "androidToolsBase" }
+android-tools-common = { module = "com.android.tools:common", version.ref = "androidToolsBase" }
+android-tools-ninepatch = { module = "com.android.tools:ninepatch", version.ref = "androidToolsBase" }
+kxml2 = { module = "net.sf.kxml:kxml2", version = "2.3.0" }
 ow2-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 ow2-asm-tree = { module = "org.ow2.asm:asm-tree", version.ref = "asm" }
 ow2-asm-commons = { module = "org.ow2.asm:asm-commons", version.ref = "asm" } # ClassRemapper/Remapper — bridge reparent + type remap

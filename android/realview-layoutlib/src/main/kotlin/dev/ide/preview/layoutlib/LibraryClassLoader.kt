@@ -1,0 +1,54 @@
+package dev.ide.preview.layoutlib
+
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.commons.ClassRemapper
+import org.objectweb.asm.commons.Remapper
+import java.io.File
+import java.net.URLClassLoader
+
+/**
+ * Loads the views a layout names, and what they need, from the project's jars and class folders.
+ *
+ * Two kinds of class do not come from those files as they are. `R` classes are made by [ResourceIds]. And any
+ * class that names `android.os.Build` is rewritten as it loads to name `android.os._Original_Build`: layoutlib
+ * ships the class under that name (it stands in its own at render time), so code compiled against the real one
+ * would otherwise fail to link. Android Studio does the same.
+ */
+internal class LibraryClassLoader(
+    classpath: List<File>,
+    parent: ClassLoader,
+    private val ids: ResourceIds,
+) : URLClassLoader(classpath.filter { it.exists() }.map { it.toURI().toURL() }.toTypedArray(), parent) {
+
+    override fun findClass(name: String): Class<*> {
+        ids.classBytes(name)?.let { return defineClass(name, it, 0, it.size) }
+        val url = findResource(name.replace('.', '/') + ".class") ?: throw ClassNotFoundException(name)
+        var bytes = url.openStream().use { it.readBytes() }
+        if (mentionsBuild(bytes)) {
+            val writer = ClassWriter(0)
+            ClassReader(bytes).accept(ClassRemapper(writer, BUILD), 0)
+            bytes = writer.toByteArray()
+        }
+        return defineClass(name, bytes, 0, bytes.size)
+    }
+
+    private fun mentionsBuild(bytes: ByteArray): Boolean {
+        outer@ for (i in 0..bytes.size - NEEDLE.size) {
+            for (j in NEEDLE.indices) if (bytes[i + j] != NEEDLE[j]) continue@outer
+            return true
+        }
+        return false
+    }
+
+    private companion object {
+        const val BUILD_NAME = "android/os/Build"
+        val NEEDLE = BUILD_NAME.toByteArray(Charsets.ISO_8859_1)
+        val BUILD = object : Remapper() {
+            override fun map(internalName: String): String =
+                if (internalName == BUILD_NAME || internalName.startsWith("$BUILD_NAME$")) {
+                    "android/os/_Original_Build" + internalName.substring(BUILD_NAME.length)
+                } else internalName
+        }
+    }
+}

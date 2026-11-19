@@ -137,6 +137,7 @@ include(
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
+    ":realview-layoutlib", // real Android views off-device: layoutlib driven on a plain JVM (the desktop's, or the one embedded on iOS)
     ":android-layout-api", // plugin-facing layout SPI (in-tree, unpublished): render image + view tree, layout model, attribute catalog
     // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
     // Multiplatform, because a model that cannot be named from common code cannot be built there.
@@ -254,7 +255,7 @@ val layers = mapOf(
     // preview, and the ART compatibility shims.
     "android" to listOf(
         "android-support", "android-sdk-metadata", "art-compat",
-        "layout-preview-api", "layout-preview-impl", "applog-runtime", "android-layout-api", "layout-editor",
+        "layout-preview-api", "layout-preview-impl", "realview-layoutlib", "applog-runtime", "android-layout-api", "layout-editor",
     ),
     // Cross-cutting services, each an api/impl pair (plus its own Compose UI where it has one):
     // dependency resolution, version control, the Projects Store, analytics, the AI agent.

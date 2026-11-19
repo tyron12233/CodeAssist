@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="24dp">
+    <com.google.android.material.textview.MaterialTextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Material 3 on a JVM" android:textAppearance="?attr/textAppearanceHeadlineMedium"/>
+    <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="16dp" android:hint="Email" style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+        <com.google.android.material.textfield.TextInputEditText android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="tyron@example.com"/>
+    </com.google.android.material.textfield.TextInputLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="horizontal">
+        <com.google.android.material.button.MaterialButton android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Filled"/>
+        <com.google.android.material.button.MaterialButton style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:text="Outlined"/>
+        <com.google.android.material.materialswitch.MaterialSwitch android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="12dp" android:checked="true"/>
+    </LinearLayout>
+    <com.google.android.material.chip.ChipGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+        <com.google.android.material.chip.Chip android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Kotlin"
+            style="@style/Widget.Material3.Chip.Filter" android:checked="true"/>
+        <com.google.android.material.chip.Chip android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Java"
+            style="@style/Widget.Material3.Chip.Assist"/>
+    </com.google.android.material.chip.ChipGroup>
+    <com.google.android.material.slider.Slider android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="12dp" android:valueFrom="0" android:valueTo="100" android:value="60"/>
+    <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="16dp" style="@style/Widget.Material3.CardView.Elevated">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MaterialCardView"
+                android:textAppearance="?attr/textAppearanceTitleMedium"/>
+            <com.google.android.material.progressindicator.LinearProgressIndicator android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="12dp" android:progress="45"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_marginTop="20dp" android:layout_gravity="end" android:text="Compose"/>
+</LinearLayout>
