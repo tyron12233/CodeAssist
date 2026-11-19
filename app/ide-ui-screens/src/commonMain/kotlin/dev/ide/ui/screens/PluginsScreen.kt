@@ -9,7 +9,7 @@ import dev.ide.ui.generated.resources.plugins_leftover_delete
 import dev.ide.ui.generated.resources.plugins_leftovers_body
 import dev.ide.ui.generated.resources.plugins_leftovers_title
 import dev.ide.ui.backend.UiPluginLeftover
-import androidx.compose.material3.AlertDialog
+import dev.ide.ui.dialog.AlertDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -40,7 +40,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BasicAlertDialog
+import dev.ide.ui.dialog.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton

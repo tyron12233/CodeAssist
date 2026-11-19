@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import dev.ide.ui.dialog.Dialog
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.block_property_none
 import dev.ide.ui.generated.resources.block_property_optional

@@ -111,7 +111,7 @@ internal fun AppOverlays(
 /** "Learn CodeAssist in a few minutes": offered once, right after onboarding. */
 @Composable
 private fun LearnTourOffer(onStart: () -> Unit, onDismiss: () -> Unit) {
-    androidx.compose.material3.AlertDialog(
+    dev.ide.ui.dialog.AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
             dev.ide.ui.theme.Symbol(

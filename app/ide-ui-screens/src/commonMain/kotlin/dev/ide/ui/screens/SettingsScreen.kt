@@ -1,7 +1,7 @@
 package dev.ide.ui.screens
 
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
+import dev.ide.ui.dialog.AlertDialog
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme

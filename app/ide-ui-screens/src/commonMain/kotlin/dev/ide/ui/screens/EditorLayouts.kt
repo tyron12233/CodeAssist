@@ -1,5 +1,9 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.platform.rememberWindowFold
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.geometry.Rect
 import dev.ide.ui.components.ToolWindowFrame
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -590,8 +594,23 @@ private fun ToolWindowPanes(
     val rightUsed = if (rightDocked) state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax) else 0.dp
     val leftMax = if (leftFloats) (width * 0.85f).coerceAtLeast(MinPaneWidth)
         else (width - editorMin - rightUsed).coerceAtLeast(MinPaneWidth)
-    val leftW = if (maximized == ToolWindowSide.Left) width else state.leftPaneWidth.dp.coerceIn(MinPaneWidth, leftMax)
-    val rightW = if (maximized == ToolWindowSide.Right) width else state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax)
+    // On a foldable a docked pane ends at the fold, so the pane has one side of the hinge and the editor the
+    // other. The left pane takes it when both are docked. Dragging a splitter takes over until the posture
+    // changes.
+    val fold = rememberWindowFold()?.takeIf { it.vertical }
+    var columnBounds by remember { mutableStateOf(Rect.Zero) }
+    var paneDragged by remember(fold) { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val leftToFold = fold?.takeIf { leftDocked && !paneDragged && !columnBounds.isEmpty }
+        ?.let { with(density) { (it.left - columnBounds.left).toDp() } }
+        ?.takeIf { it >= MinPaneWidth && it <= leftMax }
+    val rightToFold = fold?.takeIf { rightDocked && !leftDocked && !paneDragged && !columnBounds.isEmpty }
+        ?.let { with(density) { (columnBounds.right - it.right).toDp() } }
+        ?.takeIf { it >= MinPaneWidth && it <= rightMax }
+    val leftW = if (maximized == ToolWindowSide.Left) width
+        else leftToFold ?: state.leftPaneWidth.dp.coerceIn(MinPaneWidth, leftMax)
+    val rightW = if (maximized == ToolWindowSide.Right) width
+        else rightToFold ?: state.rightPaneWidth.dp.coerceIn(MinPaneWidth, rightMax)
     // Below the editor: the pane leaves the editor a few lines (a phone in landscape has ~300dp here).
     val bottomMax = (height - BottomSplitterSize - MinEditorHeight).coerceAtLeast(MinBottomPaneHeight)
     val bottomH = if (maximized == ToolWindowSide.Bottom) height - BottomSplitterSize
@@ -599,10 +618,12 @@ private fun ToolWindowPanes(
     // Drag deltas accumulate onto the stored size, first pulled into range so a size saved in a larger window
     // starts moving at once instead of after the excess is dragged off.
     val onResizeLeft: ((Dp) -> Unit)? = if (maximized != null) null else ({ d ->
-        state.leftPaneWidth = state.leftPaneWidth.coerceIn(MinPaneWidth.value, leftMax.value) + d.value
+        state.leftPaneWidth = (leftToFold?.value ?: state.leftPaneWidth.coerceIn(MinPaneWidth.value, leftMax.value)) + d.value
+        paneDragged = true
     })
     val onResizeRight: ((Dp) -> Unit)? = if (maximized != null) null else ({ d ->
-        state.rightPaneWidth = state.rightPaneWidth.coerceIn(MinPaneWidth.value, rightMax.value) + d.value
+        state.rightPaneWidth = (rightToFold?.value ?: state.rightPaneWidth.coerceIn(MinPaneWidth.value, rightMax.value)) + d.value
+        paneDragged = true
     })
     val onResizeBottom: ((Dp) -> Unit)? = if (maximized != null) null else ({ d ->
         state.bottomPaneHeight = state.bottomPaneHeight.coerceIn(MinBottomPaneHeight.value, bottomMax.value) + d.value
@@ -632,7 +653,7 @@ private fun ToolWindowPanes(
             controls = if (floating) null else controls(side),
         )
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().onGloballyPositioned { columnBounds = it.boundsInWindow() }) {
         Row(Modifier.weight(1f).fillMaxWidth()) {
             if (!leftFloats && (maximized == null || maximized == ToolWindowSide.Left)) sidePane(ToolWindowSide.Left, floating = false)
             Box(Modifier.weight(1f).fillMaxHeight()) {

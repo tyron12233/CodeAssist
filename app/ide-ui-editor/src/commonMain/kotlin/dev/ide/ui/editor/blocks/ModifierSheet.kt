@@ -42,7 +42,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import dev.ide.ui.dialog.Dialog
 import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.components.CaDropdownMenu
 import dev.ide.ui.components.CaMenuItem

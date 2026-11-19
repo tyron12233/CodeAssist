@@ -158,7 +158,7 @@ import dev.ide.ui.generated.resources.profile_likes
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.backend.UiStoreUpdate
 import dev.ide.ui.backend.UiLocalChanges
-import androidx.compose.material3.AlertDialog
+import dev.ide.ui.dialog.AlertDialog
 import dev.ide.ui.generated.resources.store_update_to
 import dev.ide.ui.generated.resources.store_update_versions
 import dev.ide.ui.generated.resources.store_update_conflict_title

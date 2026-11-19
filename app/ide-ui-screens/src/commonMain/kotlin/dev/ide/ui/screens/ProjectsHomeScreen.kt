@@ -157,7 +157,7 @@ import dev.ide.ui.theme.tonalPair
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import dev.ide.ui.pluralStringResource
-import androidx.compose.material3.AlertDialog
+import dev.ide.ui.dialog.AlertDialog
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
