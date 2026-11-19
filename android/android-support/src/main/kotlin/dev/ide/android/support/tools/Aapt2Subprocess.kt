@@ -17,7 +17,8 @@ class Aapt2Subprocess(
 ) : Aapt2 {
 
     /** Run [cmd] (the binary first): through the daemon when there is one and it answers, else as a process. */
-    private fun exec(cmd: List<String>): ToolResult = daemon?.run(cmd.drop(1)) ?: Subprocess.run(cmd)
+    private fun exec(cmd: List<String>): ToolResult =
+        Aapt2InProcess.runner?.invoke(cmd.drop(1)) ?: daemon?.run(cmd.drop(1)) ?: Subprocess.run(cmd)
 
     override fun compile(resDirs: List<Path>, outDir: Path): Aapt2CompileResult {
         Files.createDirectories(outDir)
@@ -40,7 +41,7 @@ class Aapt2Subprocess(
      * a different aapt2 prebuilt. If it prints a version, the binary runs and the failure is in the inputs.
      */
     private fun selfTest(): List<String> {
-        val r = Subprocess.run(listOf(aapt2.toString(), "version"))
+        val r = exec(listOf(aapt2.toString(), "version"))
         val banner = r.log.joinToString(" ").trim()
         return if (r.success)
             listOf("[diagnostic] `aapt2 version` works ($banner) — the binary runs; the failure is in the compile inputs/args.")
@@ -149,4 +150,16 @@ class Aapt2Subprocess(
         val r = exec(cmd)
         return if (r.success) r else ToolResult(false, r.log + selfTest())
     }
+}
+
+/**
+ * aapt2 for a host that cannot start a process: the tool linked into the host itself.
+ *
+ * An iOS app may not launch a program, so the aapt2 it carries is a library and a run of it is a call. A host
+ * with one sets [runner] (the arguments without the binary's name in, the result out) before any build, and
+ * every [Aapt2Subprocess] then goes through it; the path it was given names nothing and is never run.
+ */
+object Aapt2InProcess {
+    @Volatile
+    var runner: ((List<String>) -> ToolResult)? = null
 }

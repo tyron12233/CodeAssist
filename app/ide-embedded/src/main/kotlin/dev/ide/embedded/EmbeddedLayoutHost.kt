@@ -37,6 +37,7 @@ object EmbeddedLayoutHost {
     fun open(projectRoot: String, layoutlibHome: String, cacheDir: String): String = try {
         if (projectRoot != openRoot) {
             close()
+            NativeAapt2.install()
             val nativeDir = System.getProperty("layoutlib.native")?.let(::File) ?: File(layoutlibHome, "native")
             val renderer = runtime ?: LayoutlibRealViewRuntime(File(layoutlibHome), File(cacheDir), nativeDir).also { runtime = it }
             val services = IdeServices.open(Paths.get(projectRoot), realViewRuntime = renderer)
@@ -46,6 +47,7 @@ object EmbeddedLayoutHost {
             engine = services
             backend = host
             openRoot = projectRoot
+            runRequestedBuild(File(projectRoot, ".platform/embedded-build"), host, services)
         }
         ""
     } catch (t: Throwable) {
@@ -70,6 +72,40 @@ object EmbeddedLayoutHost {
         }
         val target = synchronized(this) { dispatcher } ?: LayoutServiceDispatcher(NoProject, NoProject)
         return runBlocking { target.handle(request) }
+    }
+
+    /**
+     * A build asked for by a file, until the app has a Run button of its own for this backend: `request` names
+     * a task (`assemble:app:debug`), is consumed, and the build's transcript goes to the error stream.
+     */
+    private fun runRequestedBuild(request: File, host: IdeServicesBackend, services: IdeServices) {
+        val task = runCatching { request.readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+        request.delete()
+        Thread({
+            try {
+                val runner = host.buildRunnerFor(services)
+                System.err.println("embedded build: $task; tasks on offer: ${runner.runTasks().map { it.id }}")
+                val started = System.nanoTime()
+                runner.runTask(task)
+                var printed = 0
+                var seenRunning = false
+                while (true) {
+                    val state = runner.buildState.value
+                    for (line in state.log.drop(printed)) System.err.println("  [build] ${line.task ?: ""} ${line.message}")
+                    printed = state.log.size
+                    val running = state.status == dev.ide.ui.backend.RunStatus.Running
+                    seenRunning = seenRunning || running
+                    val waited = (System.nanoTime() - started) / 1_000_000
+                    if (seenRunning && !running || !seenRunning && waited > 15_000) {
+                        System.err.println("embedded build: $task ended ${state.status} after ${waited}ms")
+                        break
+                    }
+                    Thread.sleep(250)
+                }
+            } catch (t: Throwable) {
+                t.printStackTrace()
+            }
+        }, "embedded-build").apply { isDaemon = true }.start()
     }
 
     @JvmStatic

@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":layout-preview-impl"))
     implementation(project(":project-model-impl"))  // the store the engine keeps its per-project services in
     implementation(project(":platform-core"))
+    implementation(project(":android-support"))     // the seam a host with aapt2 linked in plugs into
     implementation(project(":ide-ui-api"))          // the project tree's types and its byte form
     implementation(libs.kotlinx.coroutines.core)
 
@@ -52,6 +53,9 @@ dependencies {
     iosPayload(libs.android.tools.sdk.common)
     iosPayload(libs.kxml2)
     iosPayload(libs.android.tools.ninepatch)
+    // The dexer and the signer the Android build runs in this process (the engine compiles against them only).
+    iosPayload(libs.android.r8)
+    iosPayload(libs.android.apksig)
 }
 
 /** `build/ios-payload/jars`: one flat folder of jars, which is what the app's JVM is pointed at. */

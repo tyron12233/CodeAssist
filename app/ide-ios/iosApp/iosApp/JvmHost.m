@@ -1,5 +1,6 @@
 #import "JvmHost.h"
 #include <unistd.h>
+#include <fcntl.h>
 
 #if CODEASSIST_EMBEDDED_JVM
 
@@ -64,6 +65,69 @@ AWT_INIT_IDS(sun_awt_image_BufImgSurfaceData)
 
 @interface JvmChannel : NSObject <CAUEmbeddedJvm>
 @end
+
+// ---- aapt2 ---------------------------------------------------------------------------------------------
+//
+// An iOS app cannot launch a program, so aapt2 is here as a library: Google's own Mac binary, turned from an
+// executable into a dylib and marked for iOS. It still has its `main`, found through the LC_MAIN record the
+// conversion keeps, and a run of the tool is a call of it.
+
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+
+static int (*aapt2Main)(int, char **);
+
+static BOOL loadAapt2(void) {
+    if (aapt2Main) return YES;
+    NSString *path = [[NSBundle mainBundle].privateFrameworksPath stringByAppendingPathComponent:@"libaapt2.dylib"];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
+    if (!dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL)) { fprintf(stderr, "aapt2 did not load: %s\n", dlerror()); return NO; }
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name || !strstr(name, "libaapt2.dylib")) continue;
+        const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(i);
+        const struct load_command *command = (const struct load_command *)(header + 1);
+        for (uint32_t c = 0; c < header->ncmds; c++) {
+            if (command->cmd == LC_MAIN) {
+                aapt2Main = (int (*)(int, char **))((const char *)header + ((const struct entry_point_command *)command)->entryoff);
+                return YES;
+            }
+            command = (const struct load_command *)((const char *)command + command->cmdsize);
+        }
+    }
+    fprintf(stderr, "aapt2 loaded, but its entry point was not found\n");
+    return NO;
+}
+
+/// `NativeAapt2.run(String[] args, String output)`: aapt2's main, with what it prints sent to `output`.
+static jint JNICALL aapt2Run(JNIEnv *env, jclass cls, jobjectArray args, jstring output) {
+    if (!aapt2Main) return -1;
+    jsize count = (*env)->GetArrayLength(env, args);
+    char **argv = calloc((size_t)count + 2, sizeof(char *));
+    argv[0] = strdup("aapt2");
+    for (jsize i = 0; i < count; i++) {
+        jstring arg = (jstring)(*env)->GetObjectArrayElement(env, args, i);
+        const char *utf = (*env)->GetStringUTFChars(env, arg, NULL);
+        argv[i + 1] = strdup(utf);
+        (*env)->ReleaseStringUTFChars(env, arg, utf);
+        (*env)->DeleteLocalRef(env, arg);
+    }
+    const char *path = (*env)->GetStringUTFChars(env, output, NULL);
+    int file = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    (*env)->ReleaseStringUTFChars(env, output, path);
+    // One process, one stdout: it is the file for as long as the tool runs, then what it was again.
+    fflush(stdout); fflush(stderr);
+    int savedOut = dup(STDOUT_FILENO), savedErr = dup(STDERR_FILENO);
+    if (file >= 0) { dup2(file, STDOUT_FILENO); dup2(file, STDERR_FILENO); }
+    int code = aapt2Main((int)count + 1, argv);
+    fflush(stdout); fflush(stderr);
+    dup2(savedOut, STDOUT_FILENO); dup2(savedErr, STDERR_FILENO);
+    close(savedOut); close(savedErr);
+    if (file >= 0) close(file);
+    for (jsize i = 0; i <= count; i++) free(argv[i]);
+    free(argv);
+    return code;
+}
 
 @implementation JvmChannel {
     NSCondition *_pending;
@@ -166,6 +230,7 @@ static void *runJobs(void *context) {
     if ([[NSFileManager defaultManager] fileExistsAtPath:[toolchain stringByAppendingPathComponent:@"android.jar"]]) {
         options = [options arrayByAddingObject:[@"-Dcodeassist.android.toolchain=" stringByAppendingString:toolchain]];
     }
+    if (loadAapt2()) options = [options arrayByAddingObject:@"-Dcodeassist.aapt2.native=true"];
     JavaVMOption *vmOptions = calloc(options.count, sizeof(JavaVMOption));
     for (NSUInteger i = 0; i < options.count; i++) vmOptions[i].optionString = strdup(options[i].UTF8String);
     JavaVMInitArgs arguments = { .version = JNI_VERSION_10, .nOptions = (jint)options.count, .options = vmOptions, .ignoreUnrecognized = JNI_TRUE };
@@ -180,6 +245,13 @@ static void *runJobs(void *context) {
     _open = (*_env)->GetStaticMethodID(_env, _host, "open", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
     _call = (*_env)->GetStaticMethodID(_env, _host, "call", "([B)[B");
     if (!_open || !_call) { _startFailure = [self takeException] ?: @"The embedded backend has no entry points."; return NO; }
+    if (aapt2Main) {
+        jclass tool = (*_env)->FindClass(_env, "dev/ide/embedded/NativeAapt2");
+        JNINativeMethod method = { "run", "([Ljava/lang/String;Ljava/lang/String;)I", (void *)aapt2Run };
+        if (!tool || (*_env)->RegisterNatives(_env, tool, &method, 1) != JNI_OK) {
+            fprintf(stderr, "aapt2 is in the app but could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
+        }
+    }
     return YES;
 }
 

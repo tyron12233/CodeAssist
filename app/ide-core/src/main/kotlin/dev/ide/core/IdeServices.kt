@@ -1294,7 +1294,8 @@ class IdeServices private constructor(
      * the Kotlin compiler warm-up all read it, so it stays engine-owned and is reached via [EngineContext].
      */
     val compileBootClasspath: List<Path> =
-        listOfNotNull(androidTools?.androidJar) + (androidTools?.desugarStubs ?: emptyList())
+        if (androidTools != null) listOfNotNull(androidTools.androidJar) + androidTools.desugarStubs
+        else BundledAndroidToolchain.bootClasspathWithoutHostJdk()
 
     /**
      * The compile boot classpath for a SINGLE module — its resolved platform SDK ([SdkResolution]) rather

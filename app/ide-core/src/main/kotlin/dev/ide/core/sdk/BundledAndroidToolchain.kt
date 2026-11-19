@@ -27,6 +27,10 @@ object BundledAndroidToolchain {
     fun bundled(): AndroidSdk? {
         val dir = System.getProperty(DIR_PROPERTY)?.let { Paths.get(it) } ?: return null
         val shipped = dir.resolve(if (IS_WINDOWS) "aapt2.exe" else "aapt2")
+        // A host with aapt2 linked into it has no binary to ship, only the platform jar.
+        if (dev.ide.android.support.tools.Aapt2InProcess.runner != null && Files.isRegularFile(dir.resolve("android.jar"))) {
+            return AndroidSdk(androidJar = dir.resolve("android.jar"), buildToolsDir = dir, aapt2 = shipped)
+        }
         if (!Files.isRegularFile(shipped) || !Files.isRegularFile(dir.resolve("android.jar"))) return null
         val aapt2 = runnable(shipped) ?: return null
         return AndroidSdk(androidJar = dir.resolve("android.jar"), buildToolsDir = dir, aapt2 = aapt2)
@@ -52,6 +56,26 @@ object BundledAndroidToolchain {
             }
             copy
         }.getOrNull()
+    }
+
+    /**
+     * The debug keystore shipped beside the toolchain, for a host that cannot run `keytool` to make one (the
+     * same shared, non-secret key the Android app carries as an asset).
+     */
+    fun debugKeystore(): Path? =
+        System.getProperty(DIR_PROPERTY)?.let { Paths.get(it).resolve("debug.keystore") }?.takeIf { Files.isRegularFile(it) }
+
+    /**
+     * The platform library to compile against where the JVM this runs in has none a compiler can read: a JDK
+     * with no `lib/modules` image (the one an iOS app embeds runs from unpacked class folders), which ecj
+     * rejects as a system library. The toolchain's `android.jar` and the lambda stubs beside it then stand in,
+     * as they do on a phone. Empty on an ordinary JDK, where the compilers read the host's own.
+     */
+    fun bootClasspathWithoutHostJdk(): List<Path> {
+        val home = System.getProperty("java.home") ?: return emptyList()
+        if (Files.exists(Paths.get(home, "lib", "modules")) || Files.isDirectory(Paths.get(home, "jmods"))) return emptyList()
+        val dir = System.getProperty(DIR_PROPERTY)?.let { Paths.get(it) } ?: return emptyList()
+        return listOf(dir.resolve("android.jar"), dir.resolve("core-lambda-stubs.jar")).filter { Files.isRegularFile(it) }
     }
 
     /** The `android.jar` to compile and preview against: an installed SDK's platform, else the bundled one. */

@@ -307,8 +307,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // No SDK on this machine: the desktop app's own android.jar + aapt2, with D8 and apksigner in-process
         // (the desktop launcher bundles both libraries), so a fresh install builds an APK with nothing to set up.
         val bundled = BundledAndroidToolchain.bundled() ?: return@lazy null
-        val signing =
-            DebugKeystore.getOrCreate(ctx.store.rootPath.resolve(".platform/debug.ks"), bundled.keytool)
+        val signing = BundledAndroidToolchain.debugKeystore()
+            ?.let { SigningConfig(it, DebugKeystore.STORE_PASS, DebugKeystore.KEY_ALIAS, DebugKeystore.KEY_PASS) }
+            ?: DebugKeystore.getOrCreate(ctx.store.rootPath.resolve(".platform/debug.ks"), bundled.keytool)
         AndroidBuildSystem.inProcess(
             bundled,
             signing,
