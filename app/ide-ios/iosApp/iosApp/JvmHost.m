@@ -99,54 +99,65 @@ static BOOL loadAapt2(void) {
     return NO;
 }
 
-// ---- D8, compiled ahead of time ---------------------------------------------------------------------------
+// ---- the build's Java tools, compiled ahead of time --------------------------------------------------------
 //
-// The JVM here only interprets, and D8 is the build's heaviest Java after the compilers. The app carries it as
-// a GraalVM native image: a library with a runtime and a heap of its own (an "isolate"), which exports only
-// its entry points, so the JDK libraries inside it and the JVM's own never meet.
+// The JVM here only interprets, and D8 and the Kotlin compiler are the heaviest Java a build runs. The app
+// carries both in one GraalVM native image: a library with a runtime and a heap of its own (an "isolate"),
+// which exports only its entry points, so the JDK libraries inside it and the JVM's own never meet. Each tool
+// takes two file paths, what to do and where to write what came of it, and answers a code.
 
+typedef int (*AotEntry)(void *, const char *, const char *);
 static void *aotIsolate;
 static int (*aotAttach)(void *, void **);
 static int (*aotDetach)(void *);
-static int (*aotD8)(void *, const char *, const char *);
+static AotEntry aotD8, aotKotlinc;
 
-static BOOL loadAotD8(void) {
-    if (aotD8) return YES;
-    NSString *path = [[NSBundle mainBundle].privateFrameworksPath stringByAppendingPathComponent:@"libaotd8.dylib"];
+/// Starts the tools' runtime. After the VM, which then has first call on the app's address space: without
+/// the tools the build still runs, each of them in the VM as before.
+static BOOL loadAotTools(void) {
+    if (aotIsolate) return YES;
+    NSString *path = [[NSBundle mainBundle].privateFrameworksPath stringByAppendingPathComponent:@"libaottools.dylib"];
     if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
     void *library = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
-    if (!library) { fprintf(stderr, "D8 did not load: %s\n", dlerror()); return NO; }
+    if (!library) { fprintf(stderr, "the build tools did not load: %s\n", dlerror()); return NO; }
     int (*create)(void *, void **, void **) = dlsym(library, "graal_create_isolate");
-    int (*run)(void *, const char *, const char *) = dlsym(library, "aot_d8");
     aotAttach = dlsym(library, "graal_attach_thread");
     aotDetach = dlsym(library, "graal_detach_thread");
-    if (!create || !run || !aotAttach || !aotDetach) { fprintf(stderr, "D8 loaded, but its entry points were not found\n"); return NO; }
+    if (!create || !aotAttach || !aotDetach) { fprintf(stderr, "the build tools loaded, but their runtime's entry points were not found\n"); return NO; }
     // The image reserves the address range its heap may grow into, by default more than iOS grants an app.
     struct { int version; unsigned long reservedAddressSpaceSize; const char *auxPath; unsigned long auxSize;
              int argc; char **argv; int pkey; char ignoreUnrecognized, reserved4, reserved5; } params = { 0 };
     params.version = 5;
     params.reservedAddressSpaceSize = 2UL << 30;
-    void *thread = NULL;
-    int created = create(&params, &aotIsolate, &thread);
-    if (created != 0) { fprintf(stderr, "D8's runtime did not start (%d)\n", created); return NO; }
+    void *isolate = NULL, *thread = NULL;
+    int created = create(&params, &isolate, &thread);
+    if (created != 0) { fprintf(stderr, "the build tools' runtime did not start (%d)\n", created); return NO; }
     // Every call attaches the thread it is on and detaches it after; this one is no different.
     aotDetach(thread);
-    aotD8 = run;
+    aotD8 = dlsym(library, "aot_d8");
+    aotKotlinc = dlsym(library, "aot_kotlinc");
+    aotIsolate = isolate;
     return YES;
 }
 
-/// `NativeD8.run(String argFile, String log)`: D8 on the calling thread, which may be any of the build's.
-static jint JNICALL d8Run(JNIEnv *env, jclass cls, jstring argFile, jstring log) {
+/// A tool on the calling thread, which may be any of the build's.
+static jint runAotTool(AotEntry tool, JNIEnv *env, jstring first, jstring second) {
     void *thread = NULL;
-    if (!aotD8 || aotAttach(aotIsolate, &thread) != 0) return -1;
-    const char *args = (*env)->GetStringUTFChars(env, argFile, NULL);
-    const char *out = (*env)->GetStringUTFChars(env, log, NULL);
-    int code = aotD8(thread, args, out);
-    (*env)->ReleaseStringUTFChars(env, argFile, args);
-    (*env)->ReleaseStringUTFChars(env, log, out);
+    if (!tool || aotAttach(aotIsolate, &thread) != 0) return -1;
+    const char *a = (*env)->GetStringUTFChars(env, first, NULL);
+    const char *b = (*env)->GetStringUTFChars(env, second, NULL);
+    int code = tool(thread, a, b);
+    (*env)->ReleaseStringUTFChars(env, first, a);
+    (*env)->ReleaseStringUTFChars(env, second, b);
     aotDetach(thread);
     return code;
 }
+
+/// `NativeD8.run(String argFile, String log)`.
+static jint JNICALL d8Run(JNIEnv *env, jclass cls, jstring argFile, jstring log) { return runAotTool(aotD8, env, argFile, log); }
+
+/// `NativeKotlinc.run(String requestFile, String resultFile)`.
+static jint JNICALL kotlincRun(JNIEnv *env, jclass cls, jstring request, jstring result) { return runAotTool(aotKotlinc, env, request, result); }
 
 /// `NativeAapt2.run(String[] args, String output)`: aapt2's main, with what it prints sent to `output`.
 static jint JNICALL aapt2Run(JNIEnv *env, jclass cls, jobjectArray args, jstring output) {
@@ -254,6 +265,10 @@ _Static_assert(sizeof(DigestContext) <= 256, "NativeDigests.STATE_BYTES is too s
 @implementation JvmChannel {
     NSCondition *_pending;
     NSMutableArray<dispatch_block_t> *_jobs;
+    // The editor's calls (completion, diagnostics) have a thread of their own: on the one above they would
+    // wait behind a layout being rendered or a build being asked how it is doing.
+    NSCondition *_editorPending;
+    NSMutableArray<dispatch_block_t> *_editorJobs;
     JavaVM *_vm;
     JNIEnv *_env;
     jclass _host;
@@ -271,6 +286,9 @@ _Static_assert(sizeof(DigestContext) <= 256, "NativeDigests.STATE_BYTES is too s
         pthread_attr_setstacksize(&attributes, 64 * 1024 * 1024);
         pthread_t thread;
         pthread_create(&thread, &attributes, runJobs, (__bridge_retained void *)self);
+        _editorPending = [NSCondition new];
+        _editorJobs = [NSMutableArray array];
+        pthread_create(&thread, &attributes, runEditorJobs, (__bridge_retained void *)self);
         pthread_attr_destroy(&attributes);
     }
     return self;
@@ -289,6 +307,60 @@ static void *runJobs(void *context) {
         @autoreleasepool { job(); }
     }
     return NULL;
+}
+
+static void *runEditorJobs(void *context) {
+    JvmChannel *channel = (__bridge_transfer JvmChannel *)context;
+    pthread_setname_np("codeassist-jvm-editor");
+    for (;;) {
+        dispatch_block_t job;
+        [channel->_editorPending lock];
+        while (channel->_editorJobs.count == 0) [channel->_editorPending wait];
+        job = channel->_editorJobs.firstObject;
+        [channel->_editorJobs removeObjectAtIndex:0];
+        [channel->_editorPending unlock];
+        @autoreleasepool { job(); }
+    }
+    return NULL;
+}
+
+/// One request to the backend on the calling thread, which must be attached to the VM as `env`.
+- (NSData *)call:(NSData *)request env:(JNIEnv *)env {
+    NSData *answer = [NSData data];
+    (*env)->PushLocalFrame(env, 8);
+    jbyteArray bytes = (*env)->NewByteArray(env, (jsize)request.length);
+    (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)request.length, request.bytes);
+    jbyteArray reply = (jbyteArray)(*env)->CallStaticObjectMethod(env, _host, _call, bytes);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+    } else if (reply) {
+        jsize length = (*env)->GetArrayLength(env, reply);
+        NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)length];
+        (*env)->GetByteArrayRegion(env, reply, 0, length, data.mutableBytes);
+        answer = data;
+    }
+    (*env)->PopLocalFrame(env, NULL);
+    return answer;
+}
+
+/// An editor request (they open with "EDT1"), on the editor's thread. Empty while there is no VM: the
+/// editor's calls never start one, and the app answers them itself until a project has.
+- (NSData *)callEditorRequest:(NSData *)request {
+    __block NSData *answer = [NSData data];
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    [_editorPending lock];
+    [_editorJobs addObject:^{
+        JNIEnv *env = NULL;
+        if (self->_vm && self->_call && (*self->_vm)->AttachCurrentThreadAsDaemon(self->_vm, (void **)&env, NULL) == JNI_OK) {
+            answer = [self call:request env:env];
+        }
+        dispatch_semaphore_signal(done);
+    }];
+    [_editorPending signal];
+    [_editorPending unlock];
+    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+    return answer;
 }
 
 /// Run `work` on the Java thread and wait for it.
@@ -333,6 +405,9 @@ static void *runJobs(void *context) {
         @"-XX:+UseSerialGC",
         @"-Xshare:off",
         @"-Xmx2g",
+        // An app's address space is a few gigabytes, and the default class space alone reserves one of them:
+        // with the heap and the tools compiled ahead of time (each reserving its own) the VM could not start.
+        @"-XX:CompressedClassSpaceSize=256m",
     ];
     // What the VM and the backend print (a stack trace, a fatal error) has no console on a phone. It goes to a
     // file in Documents, started afresh with each VM, where the Files app and a debugger can both read it.
@@ -353,11 +428,10 @@ static void *runJobs(void *context) {
         options = [options arrayByAddingObject:[@"-Dcodeassist.android.toolchain=" stringByAppendingString:toolchain]];
     }
     if (loadAapt2()) options = [options arrayByAddingObject:@"-Dcodeassist.aapt2.native=true"];
-    if (loadAotD8()) options = [options arrayByAddingObject:@"-Dcodeassist.d8.native=true"];
     options = [options arrayByAddingObject:@"-Dcodeassist.sha256.native=true"];
     options = [options arrayByAddingObject:@"-Dcodeassist.digests.native=true"];
     // This JVM only interprets, and dexing a library in it takes tens of seconds: take them dexed already.
-    if (!aotD8) options = [options arrayByAddingObject:@"-Dcodeassist.dexpack=true"];
+    options = [options arrayByAddingObject:@"-Dcodeassist.dexpack=true"];
     JavaVMOption *vmOptions = calloc(options.count, sizeof(JavaVMOption));
     for (NSUInteger i = 0; i < options.count; i++) vmOptions[i].optionString = strdup(options[i].UTF8String);
     JavaVMInitArgs arguments = { .version = JNI_VERSION_10, .nOptions = (jint)options.count, .options = vmOptions, .ignoreUnrecognized = JNI_TRUE };
@@ -393,13 +467,25 @@ static void *runJobs(void *context) {
             fprintf(stderr, "aapt2 is in the app but could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
         }
     }
-    if (aotD8) {
-        jclass tool = (*_env)->FindClass(_env, "dev/ide/embedded/NativeD8");
-        JNINativeMethod method = { "run", "(Ljava/lang/String;Ljava/lang/String;)I", (void *)d8Run };
-        if (!tool || (*_env)->RegisterNatives(_env, tool, &method, 1) != JNI_OK) {
-            fprintf(stderr, "D8 is in the app but could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
+    loadAotTools();
+    struct { AotEntry tool; const char *name, *owner; void *function; const char *property; } tools[] = {
+        { aotD8, "D8", "dev/ide/embedded/NativeD8", (void *)d8Run, "codeassist.d8.native" },
+        { aotKotlinc, "kotlinc", "dev/ide/embedded/NativeKotlinc", (void *)kotlincRun, "codeassist.kotlinc.native" },
+    };
+    jclass system = (*_env)->FindClass(_env, "java/lang/System");
+    jmethodID setProperty = (*_env)->GetStaticMethodID(_env, system, "setProperty", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    for (int i = 0; i < 2; i++) {
+        if (!tools[i].tool) continue;
+        jclass owner = (*_env)->FindClass(_env, tools[i].owner);
+        JNINativeMethod method = { "run", "(Ljava/lang/String;Ljava/lang/String;)I", tools[i].function };
+        if (!owner || (*_env)->RegisterNatives(_env, owner, &method, 1) != JNI_OK) {
+            fprintf(stderr, "%s is in the app but could not be registered: %s\n", tools[i].name, ([self takeException] ?: @"no reason given").UTF8String);
+            continue;
         }
+        (*_env)->CallStaticObjectMethod(_env, system, setProperty, (*_env)->NewStringUTF(_env, tools[i].property), (*_env)->NewStringUTF(_env, "true"));
     }
+    // With D8 here, libraries are dexed on the phone faster than they download dexed.
+    if (aotD8) (*_env)->CallStaticObjectMethod(_env, system, setProperty, (*_env)->NewStringUTF(_env, "codeassist.dexpack"), (*_env)->NewStringUTF(_env, "false"));
     return YES;
 }
 
@@ -447,22 +533,12 @@ static void *runJobs(void *context) {
 }
 
 - (NSData *)callRequest:(NSData *)request {
+    if (request.length >= 4 && memcmp(request.bytes, "EDT1", 4) == 0) return [self callEditorRequest:request];
     __block NSData *answer = [NSData data];
     [self onJavaThread:^{
         // With no VM there is no dispatcher to say why; the caller has already been told by openProject.
         if (![self startIfNeeded]) return;
-        JNIEnv *env = self->_env;
-        (*env)->PushLocalFrame(env, 8);
-        jbyteArray bytes = (*env)->NewByteArray(env, (jsize)request.length);
-        (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)request.length, request.bytes);
-        jbyteArray reply = (jbyteArray)(*env)->CallStaticObjectMethod(env, self->_host, self->_call, bytes);
-        if (![self takeException] && reply) {
-            jsize length = (*env)->GetArrayLength(env, reply);
-            NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)length];
-            (*env)->GetByteArrayRegion(env, reply, 0, length, data.mutableBytes);
-            answer = data;
-        }
-        (*env)->PopLocalFrame(env, NULL);
+        answer = [self call:request env:self->_env];
     }];
     return answer;
 }

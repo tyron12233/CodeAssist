@@ -7,6 +7,7 @@ import dev.ide.core.IdeServices
 import dev.ide.core.IdeServicesBackend
 import dev.ide.preview.layoutlib.LayoutlibRealViewRuntime
 import dev.ide.ui.backend.remote.RemoteBuild
+import dev.ide.ui.backend.remote.RemoteEditor
 import dev.ide.ui.backend.remote.RemoteFileTree
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -27,6 +28,8 @@ object EmbeddedLayoutHost {
     private var dispatcher: LayoutServiceDispatcher? = null
     private var runtime: LayoutlibRealViewRuntime? = null
     private var buildServer: RemoteBuild.Server? = null
+    @Volatile
+    private var editorServer: RemoteEditor.Server? = null
 
     /**
      * Open the project at [projectRoot], closing the one open before. Returns an empty string, or why it could
@@ -41,6 +44,7 @@ object EmbeddedLayoutHost {
             close()
             NativeAapt2.install()
             NativeD8.install()
+            NativeKotlinc.install()
             NativeDigests.install()
             NativeDigest.install()
             val nativeDir = System.getProperty("layoutlib.native")?.let(::File) ?: File(layoutlibHome, "native")
@@ -52,6 +56,7 @@ object EmbeddedLayoutHost {
             engine = services
             backend = host
             buildServer = RemoteBuild.Server(host.build)
+            editorServer = RemoteEditor.Server(host.editor)
             openRoot = projectRoot
             runRequestedBuild(File(projectRoot, ".platform/embedded-build"), host, services)
         }
@@ -66,6 +71,17 @@ object EmbeddedLayoutHost {
     /** Answer one request. Never throws: with no project open, or on any failure, the answer says so. */
     @JvmStatic
     fun call(request: ByteArray): ByteArray {
+        if (RemoteEditor.handles(request)) {
+            // Not under this object's lock: the app gives editor calls a thread of their own, so a completion
+            // is answered while a render or a build's state is being asked for on the other.
+            val server = editorServer ?: return RemoteEditor.failure("No project is open in the embedded backend.")
+            val started = System.nanoTime()
+            val reply = runBlocking { server.handle(request) }
+            val millis = (System.nanoTime() - started) / 1_000_000
+            // Until these are known to be fast enough in a JVM that only interprets, each one says how long it took.
+            if (millis >= 20) System.err.println("editor call ${request.getOrNull(7)}: $millis ms, ${request.size} bytes in, ${reply.size} out")
+            return reply
+        }
         if (RemoteBuild.handles(request)) {
             val server = synchronized(this) { buildServer } ?: return RemoteBuild.failure("No project is open in the embedded backend.")
             return server.handle(request)
@@ -137,6 +153,7 @@ object EmbeddedLayoutHost {
         dispatcher = null
         backend = null
         buildServer = null
+        editorServer = null
         runCatching { engine?.close() }
         engine = null
         openRoot = null

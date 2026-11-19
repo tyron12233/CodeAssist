@@ -768,7 +768,10 @@ class IosBackend(
      */
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val empty = UiCompletionResult(emptyList(), offset, offset)
-        if (!path.isKotlin()) return empty
+        // Kotlin is answered by this host's own analysis: the engine in the embedded JVM is only interpreted,
+        // and measured on a phone its Kotlin completion took half a second to four and a half. The languages
+        // this host has no analysis for (Java, XML) are the engine's, where a slow answer beats none.
+        if (!path.isKotlin()) return embedded?.let { withContext(ioDispatcher) { it.complete(path, text, offset) } } ?: empty
         return withAnalysis(empty) { it.complete(path, text, offset)?.toUi() ?: empty }
     }
 
@@ -784,7 +787,7 @@ class IosBackend(
      * false errors — but it is also why project-only code is where it earns its keep today.
      */
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
-        if (!path.isKotlin()) return emptyList()
+        if (!path.isKotlin()) return embedded?.let { withContext(ioDispatcher) { it.analyze(path, text) } } ?: emptyList()
         val diagnostics = withAnalysis(emptyList()) { it.analyze(path, text).orEmpty() }
         return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)
@@ -817,6 +820,7 @@ class IosBackend(
 
     override fun saveFile(path: String, text: String) {
         IosFiles.writeText(path, text)
+        embedded?.let { engine -> analysisScope.launch(ioDispatcher) { engine.documentChanged(path, text) } }
     }
 
     /**

@@ -15,7 +15,10 @@ import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiLogLevel
+import dev.ide.ui.backend.UiCompletionResult
+import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.remote.RemoteBuild
+import dev.ide.ui.backend.remote.RemoteEditor
 import dev.ide.ui.platform.ioDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -96,6 +99,47 @@ internal class EmbeddedBackend(
         }
         return null
     }
+
+    // ---- the editor's language services ------------------------------------------------------------------
+
+    private val editor = RemoteEditor.Client { request -> jvm.call(request.toNSData()).toByteArray() }
+    private val editorLog = Log.logger("ide.embedded")
+
+    /**
+     * Whether the engine can answer for [path]: it has the app's project open, and the file is in it. Asking is
+     * never what opens a project in the engine (the tree does that, as the project opens), so until it has,
+     * and for a file outside the project, the host's own analysis answers.
+     */
+    private fun engineHas(path: String): Boolean {
+        val root = openedRoot ?: return false
+        return openFailure == null && root == activeRoot() && path.startsWith("$root/")
+    }
+
+    /** [ask]'s answer and how long it took, or null when the engine cannot answer or failed to. */
+    private fun <T> asked(what: String, path: String, ask: () -> T): T? {
+        if (!engineHas(path)) return null
+        val started = kotlin.time.TimeSource.Monotonic.markNow()
+        return try {
+            ask().also { editorLog.info("engine $what ${path.substringAfterLast('/')}: ${started.elapsedNow().inWholeMilliseconds} ms") }
+        } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
+            throw preempted
+        } catch (t: Throwable) {
+            editorLog.warn("engine $what failed after ${started.elapsedNow().inWholeMilliseconds} ms: ${t.message}")
+            null
+        }
+    }
+
+    /** Completion from the engine, or null for the host's own to answer. Blocks until answered. */
+    fun complete(path: String, text: String, offset: Int): UiCompletionResult? =
+        asked("completion", path) { editor.complete(path, text, offset) }
+
+    fun completionAccepted(path: String, label: String) { asked("accepted", path) { editor.completionAccepted(path, label) } }
+
+    /** Diagnostics from the engine, or null for the host's own. May throw [dev.ide.ui.backend.AnalysisPreempted]. */
+    fun analyze(path: String, text: String): List<UiDiagnostic>? = asked("analysis", path) { editor.analyze(path, text) }
+
+    /** Tells the engine what [path] now holds: it does not watch the folder, and this host writes the files. */
+    fun documentChanged(path: String, text: String) { asked("document", path) { editor.updateDocument(path, text) } }
 
     /** The root an open was last started for, so a tree asked for again meanwhile does not start another. */
     @kotlin.concurrent.Volatile
