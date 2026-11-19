@@ -167,7 +167,7 @@ internal class EditorRenderState(private val session: EditorSession) {
 
     private fun measureComposite(line: Int, info: FoldedLineInfo, fm: FoldModel, doc: EditorDocument): TextLayoutResult {
         val text = fm.compositeText(line, doc)
-        val prefixLen = (info.prefixEnd - doc.lineStart(line)).coerceIn(0, text.length)
+        val prefixLen = fm.compositePrefixLength(line, doc).coerceAtMost(text.length)
         val phEnd = (prefixLen + info.placeholder.length).coerceAtMost(text.length)
         val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>()
         for (sp in session.styles.spansFor(line)) {

@@ -1,6 +1,8 @@
 package dev.ide.ui.editor.folding
 
 import dev.ide.ui.editor.core.EditorDocument
+import dev.ide.ui.editor.core.MAX_RENDERED_LINE_COLS
+import dev.ide.ui.editor.core.renderedLineText
 
 /**
  * A foldable region anchored to the buffer in document offsets. [collapsed] tracks the user's toggle (an
@@ -90,12 +92,24 @@ class FoldModel private constructor(
         return (line - hidden).coerceIn(0, visualLineCount - 1)
     }
 
-    /** The single-row text for a fold-start [line]: prefix + placeholder + suffix (all from [doc]). */
+    /**
+     * The single-row text for a fold-start [line]: prefix + placeholder + suffix (all from [doc]). Each side is
+     * cut at [MAX_RENDERED_LINE_COLS] like any other line the editor lays out, so a fold that opens or closes
+     * on a very long line costs no more to shape than one that does not.
+     */
     fun compositeText(line: Int, doc: EditorDocument): String {
-        val info = foldByStartLine[line] ?: return doc.lineText(line)
-        val prefix = doc.substring(doc.lineStart(line), info.prefixEnd)
-        val suffix = doc.substring(info.suffixStart, doc.lineEnd(info.endLine))
+        val info = foldByStartLine[line] ?: return doc.renderedLineText(line)
+        val prefixStart = doc.lineStart(line)
+        val prefix = doc.substring(prefixStart, prefixStart + compositePrefixLength(line, doc))
+        val suffixEnd = minOf(doc.lineEnd(info.endLine), info.suffixStart + MAX_RENDERED_LINE_COLS)
+        val suffix = doc.substring(info.suffixStart, maxOf(info.suffixStart, suffixEnd))
         return prefix + info.placeholder + suffix
+    }
+
+    /** How many columns of a fold-start [line] come before the placeholder in [compositeText]. */
+    fun compositePrefixLength(line: Int, doc: EditorDocument): Int {
+        val info = foldByStartLine[line] ?: return 0
+        return (info.prefixEnd - doc.lineStart(line)).coerceIn(0, MAX_RENDERED_LINE_COLS)
     }
 
     /**

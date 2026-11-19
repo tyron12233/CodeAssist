@@ -48,6 +48,7 @@ import dev.ide.ui.backend.UiGutterMark
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorDocument
+import dev.ide.ui.editor.core.MAX_RENDERED_LINE_COLS
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.folding.FoldModel
 import dev.ide.ui.ext.EditorAnchor
@@ -266,7 +267,9 @@ private fun estimatedLineWidth(
 ): Float {
     val fold = fm.foldStartingAt(line)
     val cols = if (fold != null) {
-        (fold.prefixEnd - doc.lineStart(line)) + fold.placeholder.length + (doc.lineEnd(fold.endLine) - fold.suffixStart)
+        // Each side as the composite draws it: cut at the rendered limit.
+        (fold.prefixEnd - doc.lineStart(line)).coerceAtMost(MAX_RENDERED_LINE_COLS) + fold.placeholder.length +
+            (doc.lineEnd(fold.endLine) - fold.suffixStart).coerceAtMost(MAX_RENDERED_LINE_COLS)
     } else {
         render.renderCache.rawToVisual(line, doc.lineLength(line))
     }

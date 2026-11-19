@@ -69,7 +69,7 @@ class LineStyles(private val language: CodeLanguage) {
         var entry = if (highWater < 0) LexState.CODE else exits[highWater]
         var i = highWater + 1
         while (i <= target) {
-            val res = styleLine(d.lineText(i), entry, language)
+            val res = lex(d, i, entry)
             spans[i] = res.spans; exits[i] = res.exitState; revs[i] = ++stamp
             entry = res.exitState
             i++
@@ -130,7 +130,7 @@ class LineStyles(private val language: CodeLanguage) {
             // The first untouched line lexed from the same entry state as before: nothing below changed.
             if (i == firstLine + inserted && entry == oldEntryAfterEdit) break
             val oldExit = if (fresh) -1 else exits[i]
-            val res = styleLine(doc.lineText(i), entry, language)
+            val res = lex(doc, i, entry)
             // A rippled line keeps its revision when its spans came out the same, so the render cache keeps
             // its layout; an edited line always gets a fresh one.
             if (fresh || !sameSpans(spans[i], res.spans)) revs[i] = ++stamp
@@ -141,6 +141,19 @@ class LineStyles(private val language: CodeLanguage) {
         }
         return i
     }
+
+    /**
+     * Tokenize [line] entered in [entry], or pass a line longer than [MAX_TOKENIZED_LINE_COLS] through untouched:
+     * no spans, and the state it was entered in handed on to the next line.
+     *
+     * Lexing is linear in the line and runs on the main thread, in the draw and on every keystroke in the
+     * line. A line of several megabytes is first copied whole into a string and then turned into a span per
+     * token, of which the editor draws the first [MAX_RENDERED_LINE_COLS] columns. Such a line is data, not
+     * code someone reads in colour, so it is drawn plain, which is what VS Code does at the same length.
+     */
+    private fun lex(doc: EditorDocument, line: Int, entry: Int): StyledLine =
+        if (doc.lineLength(line) > MAX_TOKENIZED_LINE_COLS) StyledLine(emptyList(), entry)
+        else styleLine(doc.lineText(line), entry, language)
 
     private fun sameSpans(a: List<LineSpan>, b: List<LineSpan>): Boolean {
         if (a.size != b.size) return false

@@ -35,6 +35,9 @@ const val MEASURER_CACHE_ENTRIES: Int = 64
  */
 const val MAX_RENDERED_LINE_COLS: Int = 10_000
 
+/** The longest line the editor tokenizes for colour; a longer one is drawn plain. See `LineStyles`. */
+const val MAX_TOKENIZED_LINE_COLS: Int = 20_000
+
 /** Drawn after the last rendered column of a line cut at [MAX_RENDERED_LINE_COLS]. */
 private const val CUT_LINE_MARKER = " \u2026"
 
