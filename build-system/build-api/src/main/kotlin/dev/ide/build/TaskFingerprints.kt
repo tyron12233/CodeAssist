@@ -37,6 +37,19 @@ private fun MessageDigest.putFileContent(path: Path) {
  * written moments ago) can change again without its timestamp moving on a coarse-grained filesystem, so it
  * is hashed again until it has been stable for the whole window.
  */
+/**
+ * A file's SHA-256 from the host's own code, for a JVM that computes it slowly.
+ *
+ * The digest above is Java, which a compiling JVM turns into a few machine instructions a byte. A JVM that
+ * only interprets (the one an iOS app may embed) runs it at under two megabytes a second, so fingerprinting
+ * `android.jar` alone took a quarter of a minute of a build. Such a host sets [sha256] to its platform's
+ * implementation; it must return the same 32 bytes, or null to have the file hashed here.
+ */
+object NativeFileHash {
+    @Volatile
+    var sha256: ((Path) -> ByteArray?)? = null
+}
+
 private object FileDigests {
     private const val RACY_WINDOW_MS = 2_000L
     private const val MAX_ENTRIES = 100_000
@@ -73,6 +86,7 @@ private object FileDigests {
     }
 
     private fun hash(path: Path): ByteArray? = runCatching {
+        NativeFileHash.sha256?.invoke(path)?.let { return@runCatching it }
         val md = sha256()
         val buf = ByteArray(BUFFER_SIZE)
         Files.newInputStream(path).use { input ->

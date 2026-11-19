@@ -321,6 +321,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             dexCacheRoot = dexCache,
             signingResolver = signingResolver,
             platformFor = platformJarFor,
+            // A host that dexes slowly (a JVM that only interprets, which an iOS app embeds) asks for the
+            // libraries we published already dexed, as a phone does, instead of dexing each one itself.
+            dexPack = if (System.getProperty("codeassist.dexpack") == "true") {
+                dev.ide.android.support.pack.DexRepository.at { dev.ide.android.support.pack.LibraryPack.DEFAULT_BASE_URL }
+            } else null,
         )
     }
 

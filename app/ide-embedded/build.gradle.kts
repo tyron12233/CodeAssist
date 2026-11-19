@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":project-model-impl"))  // the store the engine keeps its per-project services in
     implementation(project(":platform-core"))
     implementation(project(":android-support"))     // the seam a host with aapt2 linked in plugs into
+    implementation(project(":build-api"))           // where a host's native file hash plugs in
     implementation(project(":ide-ui-api"))          // the project tree's types and its byte form
     implementation(libs.kotlinx.coroutines.core)
 

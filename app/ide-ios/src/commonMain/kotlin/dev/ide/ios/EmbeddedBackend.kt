@@ -8,7 +8,23 @@ import dev.ide.android.layouteditor.LayoutEditorUiPlugin
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
 import dev.ide.platform.log.Log
+import dev.ide.ui.backend.BuildLogLine
+import dev.ide.ui.backend.BuildService
+import dev.ide.ui.backend.BuildState
+import dev.ide.ui.backend.RunStatus
+import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.UiLogLevel
+import dev.ide.ui.backend.remote.RemoteBuild
+import dev.ide.ui.platform.ioDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.remote.RemoteFileTree
 import dev.ide.ui.ext.UiPlugin
@@ -84,6 +100,59 @@ internal class EmbeddedBackend(
     /** The root an open was last started for, so a tree asked for again meanwhile does not start another. */
     @kotlin.concurrent.Volatile
     private var starting: String? = null
+
+    /**
+     * Build and run, done by the embedded backend. The console's state is asked for while a build runs (see
+     * [RemoteBuild]); between builds nothing is asked.
+     */
+    val build: BuildService = object : BuildService {
+        private val state = MutableStateFlow(BuildState())
+        private val client = RemoteBuild.Client { request -> ensureOpen(); jvm.call(request.toNSData()).toByteArray() }
+        private val scope = CoroutineScope(SupervisorJob() + ioDispatcher.limitedParallelism(1))
+        private var watching: Job? = null
+
+        override val buildState: StateFlow<BuildState> = state
+        override fun supported(): Boolean = true
+
+        /** Empty until the engine has the project open: the Run picker is drawn from the main thread. */
+        override fun runTasks(): List<RunTaskOption> =
+            if (openedRoot == null || openedRoot != activeRoot()) emptyList()
+            else runCatching { client.tasks() }.getOrDefault(emptyList())
+
+        override fun runTask(id: String) = start { client.runTask(id) }
+        override fun runBuild() = start { client.runBuild() }
+        override fun stopBuild() { scope.launch { runCatching { client.stop() } } }
+
+        private fun start(ask: () -> Unit) {
+            state.value = BuildState(status = RunStatus.Running)
+            watching?.cancel()
+            watching = scope.launch {
+                try {
+                    ask()
+                } catch (t: Throwable) {
+                    state.value = BuildState(
+                        status = RunStatus.Failed,
+                        log = listOf(BuildLogLine(t.message ?: t.toString(), UiLogLevel.Error)),
+                    )
+                    return@launch
+                }
+                // The engine starts a build on a thread of its own, so the first answers may still say idle.
+                var sawRunning = false
+                var asked = 0
+                while (isActive) {
+                    val now = runCatching { client.state() }.getOrNull()
+                    if (now != null) {
+                        val running = now.status == RunStatus.Running
+                        sawRunning = sawRunning || running
+                        if (sawRunning || now.status != RunStatus.Idle) state.value = now
+                        if (sawRunning && !running || !sawRunning && now.status != RunStatus.Idle && asked > 4) break
+                    }
+                    if (!sawRunning && ++asked > 60) { state.value = now ?: BuildState(status = RunStatus.Failed); break }
+                    delay(250)
+                }
+            }
+        }
+    }
 
     private val remote = RemoteLayoutServices { request ->
         ensureOpen()

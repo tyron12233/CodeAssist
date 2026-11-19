@@ -104,3 +104,36 @@ class EmbeddedFileTreeTest {
         }
     }
 }
+
+/** Build across the channel: the Run picker's tasks, and a build whose transcript arrives as it grows. */
+class EmbeddedBuildTest {
+    @Test
+    fun aBuildIsStartedAndFollowedAcrossTheChannel() {
+        withTempDir("ide-embedded-build") { dir ->
+            IdeServices.bootstrapDemo(dir).close()
+            val client = dev.ide.ui.backend.remote.RemoteBuild.Client { EmbeddedLayoutHost.call(it) }
+            assertFailsWith<IllegalStateException> { client.tasks() }
+            assertEquals("", EmbeddedLayoutHost.open(dir.toString(), System.getProperty("layoutlib.home"), File(System.getProperty("render.out"), "cache").path))
+            try {
+                val tasks = client.tasks().map { it.id }
+                assertTrue("build:core" in tasks, "$tasks")
+                client.runTask("build:core")
+                var state = client.state()
+                val deadline = System.currentTimeMillis() + 120_000
+                var sawRunning = false
+                while (System.currentTimeMillis() < deadline) {
+                    state = client.state()
+                    val running = state.status == dev.ide.ui.backend.RunStatus.Running
+                    sawRunning = sawRunning || running
+                    if (!running && (sawRunning || state.status != dev.ide.ui.backend.RunStatus.Idle)) break
+                    Thread.sleep(50)
+                }
+                assertEquals(dev.ide.ui.backend.RunStatus.Succeeded, state.status, state.log.joinToString("\n") { it.message })
+                assertTrue(state.log.any { "compileJava" in it.message }, "the transcript came across: ${state.log.map { it.message }}")
+                assertEquals(state.log.size, client.state().log.size, "asking again adds nothing")
+            } finally {
+                EmbeddedLayoutHost.close()
+            }
+        }
+    }
+}

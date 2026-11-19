@@ -157,6 +157,9 @@ class IosBackend(
 
     override fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = embedded?.uiPlugins ?: emptyList()
 
+    /** Build and run are the embedded backend's when there is one; without it this host cannot build. */
+    override val build: dev.ide.ui.backend.BuildService get() = embedded?.build ?: this
+
     /**
      * Project creation and the project model behind it: the built-in templates, and what a created project
      * records about itself. See [IosProjects] for why the store is opened per operation rather than held.

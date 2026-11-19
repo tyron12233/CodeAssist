@@ -129,6 +129,37 @@ static jint JNICALL aapt2Run(JNIEnv *env, jclass cls, jobjectArray args, jstring
     return code;
 }
 
+// ---- SHA-256 -------------------------------------------------------------------------------------------
+//
+// The build fingerprints its inputs, and this JVM only interprets: its own SHA-256 does under two megabytes
+// a second. The system's does the platform jar in a blink.
+
+#include <CommonCrypto/CommonDigest.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
+/// `NativeDigest.sha256(String path)`: the file's digest, or null when it cannot be read.
+static jbyteArray JNICALL sha256File(JNIEnv *env, jclass cls, jstring path) {
+    const char *utf = (*env)->GetStringUTFChars(env, path, NULL);
+    int file = open(utf, O_RDONLY);
+    (*env)->ReleaseStringUTFChars(env, path, utf);
+    if (file < 0) return NULL;
+    CC_SHA256_CTX context;
+    CC_SHA256_Init(&context);
+    static const size_t size = 1 << 20;
+    unsigned char *buffer = malloc(size);
+    ssize_t n;
+    while ((n = read(file, buffer, size)) > 0) CC_SHA256_Update(&context, buffer, (CC_LONG)n);
+    free(buffer);
+    close(file);
+    if (n < 0) return NULL;
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256_Final(digest, &context);
+    jbyteArray result = (*env)->NewByteArray(env, CC_SHA256_DIGEST_LENGTH);
+    (*env)->SetByteArrayRegion(env, result, 0, CC_SHA256_DIGEST_LENGTH, (const jbyte *)digest);
+    return result;
+}
+
 @implementation JvmChannel {
     NSCondition *_pending;
     NSMutableArray<dispatch_block_t> *_jobs;
@@ -210,7 +241,7 @@ static void *runJobs(void *context) {
         @"--enable-native-access=ALL-UNNAMED",
         @"-XX:+UseSerialGC",
         @"-Xshare:off",
-        @"-Xmx1g",
+        @"-Xmx2g",
     ];
     // What the VM and the backend print (a stack trace, a fatal error) has no console on a phone. It goes to a
     // file in Documents, started afresh with each VM, where the Files app and a debugger can both read it.
@@ -231,6 +262,9 @@ static void *runJobs(void *context) {
         options = [options arrayByAddingObject:[@"-Dcodeassist.android.toolchain=" stringByAppendingString:toolchain]];
     }
     if (loadAapt2()) options = [options arrayByAddingObject:@"-Dcodeassist.aapt2.native=true"];
+    options = [options arrayByAddingObject:@"-Dcodeassist.sha256.native=true"];
+    // This JVM only interprets, and dexing a library in it takes tens of seconds: take them dexed already.
+    options = [options arrayByAddingObject:@"-Dcodeassist.dexpack=true"];
     JavaVMOption *vmOptions = calloc(options.count, sizeof(JavaVMOption));
     for (NSUInteger i = 0; i < options.count; i++) vmOptions[i].optionString = strdup(options[i].UTF8String);
     JavaVMInitArgs arguments = { .version = JNI_VERSION_10, .nOptions = (jint)options.count, .options = vmOptions, .ignoreUnrecognized = JNI_TRUE };
@@ -245,6 +279,11 @@ static void *runJobs(void *context) {
     _open = (*_env)->GetStaticMethodID(_env, _host, "open", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
     _call = (*_env)->GetStaticMethodID(_env, _host, "call", "([B)[B");
     if (!_open || !_call) { _startFailure = [self takeException] ?: @"The embedded backend has no entry points."; return NO; }
+    jclass digest = (*_env)->FindClass(_env, "dev/ide/embedded/NativeDigest");
+    JNINativeMethod digestMethod = { "sha256", "(Ljava/lang/String;)[B", (void *)sha256File };
+    if (!digest || (*_env)->RegisterNatives(_env, digest, &digestMethod, 1) != JNI_OK) {
+        fprintf(stderr, "the native file hash could not be registered: %s\n", ([self takeException] ?: @"no reason given").UTF8String);
+    }
     if (aapt2Main) {
         jclass tool = (*_env)->FindClass(_env, "dev/ide/embedded/NativeAapt2");
         JNINativeMethod method = { "run", "([Ljava/lang/String;Ljava/lang/String;)I", (void *)aapt2Run };

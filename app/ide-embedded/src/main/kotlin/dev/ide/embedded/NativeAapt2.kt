@@ -38,3 +38,15 @@ object NativeAapt2 {
         System.err.println("aapt2 in this process: ${version?.log?.joinToString(" ")} (${if (version?.success == true) "ok" else "FAILED"})")
     }
 }
+
+/** SHA-256 of a file by the app's native code (see [dev.ide.build.NativeFileHash] for why). */
+object NativeDigest {
+    /** The file's digest, or null when it could not be read. */
+    @JvmStatic
+    external fun sha256(path: String): ByteArray?
+
+    fun install() {
+        if (System.getProperty("codeassist.sha256.native") != "true" || dev.ide.build.NativeFileHash.sha256 != null) return
+        dev.ide.build.NativeFileHash.sha256 = { path -> runCatching { sha256(path.toString()) }.getOrNull() }
+    }
+}
