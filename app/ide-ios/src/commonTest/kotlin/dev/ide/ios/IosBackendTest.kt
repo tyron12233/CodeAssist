@@ -283,6 +283,17 @@ class IosBackendTest {
     }
 
     @Test
+    fun deletingAProjectIsNotAProjectOpening() = runTest {
+        // The app follows the project epoch into the editor: a delete that advanced it opened an editor on nothing.
+        val created = assertNotNull(backend.projects.createProject(template, mapOf("name" to "Gone")).rootPath)
+        val epoch = backend.projects.projectEpoch.value
+        val files = backend.files.fileSystemEpoch.value
+        assertTrue(backend.projects.deleteProject(created))
+        assertEquals(epoch, backend.projects.projectEpoch.value)
+        assertTrue(backend.files.fileSystemEpoch.value > files, "the folder's listing is still read again")
+    }
+
+    @Test
     fun moduleNameIsTheOwningModuleForPathsInsideItAndNullOutside() = runTest {
         val created = assertNotNull(backend.projects.createProject(template, mapOf("name" to "Mod")).rootPath)
         // The template's module, not the project: the model names one now, and a file under its directory

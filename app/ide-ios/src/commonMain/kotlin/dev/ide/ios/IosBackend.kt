@@ -191,8 +191,10 @@ class IosBackend(
                 "That download isn't a project CodeAssist can open"
             } else {
                 // Nothing else to do: [projects] lists the directories under the root, so an unpacked
-                // archive is a project the moment it lands. The picker just has to be told to look again.
-                bumpProjects()
+                // archive is a project the moment it lands. The picker is told to look again by the screen
+                // that asked for the install; the project epoch stays put, because advancing it says a
+                // project was opened and the app would walk into the editor on whichever one was open before.
+                bumpFs()
                 null
             }
         },
@@ -1119,7 +1121,9 @@ class IosBackend(
         if (projectModel.storeFor(rootPath) != null) projectModel.close()
         if (!IosFiles.delete(rootPath)) return false
         if (active?.rootPath == rootPath) { resetAnalysis(); active = null }
-        bumpProjects()
+        // Not the project epoch: that advancing means a project was opened, and the app follows it into the
+        // editor, which after a delete was an editor on nothing.
+        bumpFs()
         return true
     }
 
