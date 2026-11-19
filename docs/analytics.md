@@ -167,6 +167,7 @@ create table public.events (
 
 create index events_received_at_idx on public.events (received_at);
 create index events_event_idx       on public.events (event);
+create index events_install_id_idx  on public.events (install_id, id);  -- one install's events, 2026-11-19
 
 -- 2. RLS: the publishable/anon key may INSERT only. No select / update / delete.
 alter table public.events enable row level security;
