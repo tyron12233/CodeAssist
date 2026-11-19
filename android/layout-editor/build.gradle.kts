@@ -25,7 +25,16 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // The layout editor is a UI plugin like any other, and the iOS app mounts it too.
+    iosSimulatorArm64()
+
+    iosArm64()
+
     sourceSets {
+        val iosMain = create("iosMain") { dependsOn(getByName("commonMain")) }
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Main").dependsOn(iosMain)
+
         commonMain.dependencies {
             // The SPI, and nothing else of the IDE's.
             implementation(project(":plugin-api"))

@@ -218,7 +218,7 @@ private fun DrawScope.drawMini(kind: Mini, c: MiniColors) {
             val star = Path().apply {
                 for (k in 0 until 10) {
                     val rr = if (k % 2 == 0) 5.5f * d else 2.4f * d
-                    val a = Math.toRadians((k * 36 - 90).toDouble())
+                    val a = (k * 36 - 90) * kotlin.math.PI / 180.0
                     val p = Offset(sx + (rr * kotlin.math.cos(a)).toFloat(), cy + (rr * kotlin.math.sin(a)).toFloat())
                     if (k == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
                 }
