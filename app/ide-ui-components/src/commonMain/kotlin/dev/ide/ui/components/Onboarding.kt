@@ -78,6 +78,8 @@ import dev.ide.ui.generated.resources.your_files
 import dev.ide.ui.generated.resources.your_files_content
 import dev.ide.ui.generated.resources.your_files_title
 import dev.ide.ui.icons.CaIcons
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -173,6 +175,9 @@ private val STEPS: List<OnboardingStep> = listOf(
     ),
 )
 
+/** From this window width the tour is a centred card instead of a bottom sheet. */
+private val CardFromWidth = 600.dp
+
 /**
  * The first-launch feature tour: a glass bottom sheet (~74% on mobile, a
  * centered card on desktop) that pages through the full-bleed feature mocks with a segmented progress bar.
@@ -181,7 +186,10 @@ private val STEPS: List<OnboardingStep> = listOf(
  */
 @Composable
 fun OnboardingSheet(visible: Boolean, onGetStarted: () -> Unit, onFinish: () -> Unit) {
-    if (isMobilePlatform) {
+    // A sheet across a tablet or an unfolded foldable stretched every step to the full width and left the copy
+    // no height, so a wide window gets the centred card whatever the platform.
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    if (isMobilePlatform && windowWidth < CardFromWidth) {
         // At least tall enough for a step's 250dp illustration, its copy and the footer, so a small phone
         // (640dp tall) shows the whole step instead of the illustration alone.
         BottomSheet(visible = visible, onDismiss = onFinish, heightFraction = 0.74f, minRestingHeight = 560.dp) {
@@ -199,7 +207,9 @@ fun OnboardingSheet(visible: Boolean, onGetStarted: () -> Unit, onFinish: () -> 
                 Modifier
                     .width(400.dp)
                     .clip(shape)
-                    .background(Ide.colors.glassThick)
+                    // Glass needs the blur behind it that a desktop window has. On a tablet the home screen
+                    // read straight through the card, so there it is a solid surface.
+                    .background(if (isMobilePlatform) MaterialTheme.colorScheme.surfaceContainer else Ide.colors.glassThick)
                     .border(1.dp, Ide.colors.glassEdgeTop, shape)
                     .padding(top = 16.dp),
             ) {

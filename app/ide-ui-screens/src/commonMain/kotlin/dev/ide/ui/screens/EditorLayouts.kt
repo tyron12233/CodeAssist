@@ -194,6 +194,11 @@ private const val DOCK_HINT_PREF = "dock.swipeHint.seen"
 /** Below this editor-area width the tool-window panes float over the editor instead of docking beside it
  *  (IntelliJ's "Undock" mode), so a phone in landscape or a narrow window keeps the editor full width. */
 private val FloatingPanesBelow = 880.dp
+/** A centre column at least this wide and [DockingHeight] tall docks its panes even below
+ *  [FloatingPanesBelow]: an unfolded foldable or a small tablet has the height a phone in landscape lacks, and
+ *  there a floating pane only hides the file being worked on. */
+private val DockingWidth = 640.dp
+private val DockingHeight = 520.dp
 /** The editor width docked panes must leave free; past it they stop growing. */
 private val MinEditorWidth = 360.dp
 
@@ -542,7 +547,8 @@ internal fun ExpandedLayout(
  * beside the editor, bottom under them, each showing the window docked on that side.
  *
  * Below [FloatingPanesBelow] the side panes float over the editor (IntelliJ's "Undock" mode) so a phone in
- * landscape keeps the editor full width; one side at a time then. The console windows are the exception: they
+ * landscape keeps the editor full width; one side at a time then. A column that is narrower than that but
+ * tall, as on an unfolded foldable, still docks them. The console windows are the exception: they
  * stay docked beside the editor, since being watched while the code is edited is what they are for.
  */
 @Composable
@@ -558,7 +564,7 @@ private fun ToolWindowPanes(
     val rightId = state.shownOn(ToolWindowSide.Right)
     val bottomId = state.shownOn(ToolWindowSide.Bottom)
     val maximized = state.maximizedSide?.takeIf { state.shownOn(it) != null }
-    val narrow = width < FloatingPanesBelow
+    val narrow = width < FloatingPanesBelow && !(width >= DockingWidth && height >= DockingHeight)
     // Whether a side floats follows the window on it, and the last one while it animates out.
     var lastLeft by remember { mutableStateOf(leftId) }
     var lastRight by remember { mutableStateOf(rightId) }
