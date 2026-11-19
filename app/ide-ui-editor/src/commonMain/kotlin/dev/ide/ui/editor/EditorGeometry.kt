@@ -236,8 +236,8 @@ internal class EditorGeometry(private val session: EditorSession) {
         val info = session.foldModel.foldStartingAt(line)
         if (info != null && pos.x >= textLeft()) {
             val prefixCols = (info.prefixEnd - doc.lineStart(line)).coerceAtLeast(0)
-            val prefixX = textLeft() + render.compositeLayoutFor(line)
-                .getHorizontalPosition(prefixCols, usePrimaryDirection = true)
+            val composite = render.compositeLayoutFor(line)
+            val prefixX = textLeft() + composite.getHorizontalPosition(composite.clampColumn(prefixCols), usePrimaryDirection = true)
             if (pos.x >= prefixX) return session.toggleFoldAtLine(line)
         }
         return false

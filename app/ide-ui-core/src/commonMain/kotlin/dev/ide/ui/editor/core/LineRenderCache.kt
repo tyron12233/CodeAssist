@@ -25,6 +25,28 @@ import androidx.compose.ui.unit.TextUnit
 const val MEASURER_CACHE_ENTRIES: Int = 64
 
 /**
+ * The columns of one line the editor shapes and draws; the rest of a longer line is in the document and is
+ * edited, searched and saved as usual, but is not laid out.
+ *
+ * Shaping is linear in the line and runs in the draw on the main thread. A minified script or a page with an
+ * inlined image is one line of hundreds of thousands of characters, and laying it out held the main thread
+ * past the system's five seconds: the top ANR of ours on 3.45 and 3.46, three of four on an HTML file. Ten
+ * thousand columns is where VS Code stops too, and is some two hundred screens of text across.
+ */
+const val MAX_RENDERED_LINE_COLS: Int = 10_000
+
+/** Drawn after the last rendered column of a line cut at [MAX_RENDERED_LINE_COLS]. */
+private const val CUT_LINE_MARKER = " \u2026"
+
+/** A line's text as the editor lays it out: all of it, or its first [MAX_RENDERED_LINE_COLS] columns, read
+ *  without materialising the rest (a line of several megabytes is a string of several megabytes). */
+internal fun EditorDocument.renderedLineText(line: Int): String {
+    val start = lineStart(line)
+    val length = lineLength(line)
+    return if (length <= MAX_RENDERED_LINE_COLS) lineText(line) else substring(start, start + MAX_RENDERED_LINE_COLS)
+}
+
+/**
  * Phantom (non-document) text rendered inside a line at column [col] — an inlay hint. [relatesToPreceding] says
  * which side of the hint the position [col] itself is drawn on: a type hint (`val x: Int`, the `: Int` after the
  * name) belongs to the text before it, so the caret at [col] sits before it and typing extends the name; a
@@ -159,17 +181,20 @@ class LineRenderCache(
      * which is where the next character goes, rather than before it, which made the caret jump on typing.
      */
     fun rawToVisual(line: Int, rawCol: Int): Int {
+        // A column past the rendered part of a cut line is drawn at the cut, where the layout ends.
+        val col = if (rawCol > MAX_RENDERED_LINE_COLS) MAX_RENDERED_LINE_COLS else rawCol
         val pieces = inlayRevs.piecesFor(line)
-        if (pieces.isEmpty()) return rawCol
+        if (pieces.isEmpty()) return col
         var add = 0
-        for (p in pieces) if (p.col < rawCol || (p.col == rawCol && !p.relatesToPreceding)) add += p.text.length
-        return rawCol + add
+        for (p in pieces) if (p.col < col || (p.col == col && !p.relatesToPreceding)) add += p.text.length
+        return col + add
     }
 
     /** Visual (laid-out) column → document column for [line]; a hit inside an inlay snaps to its anchor. */
     fun visualToRaw(line: Int, visualCol: Int): Int {
         val pieces = inlayRevs.piecesFor(line)
-        if (pieces.isEmpty()) return visualCol
+        // A hit on a cut line's marker is a hit on the cut.
+        if (pieces.isEmpty()) return visualCol.coerceAtMost(MAX_RENDERED_LINE_COLS)
         var add = 0
         for (p in pieces) {
             val vstart = p.col + add
@@ -177,7 +202,7 @@ class LineRenderCache(
             if (visualCol < vstart + p.text.length) return p.col // inside the inlay → snap to anchor
             add += p.text.length
         }
-        return visualCol - add
+        return (visualCol - add).coerceAtMost(MAX_RENDERED_LINE_COLS)
     }
 
     fun layoutFor(line: Int, doc: EditorDocument, styles: LineStyles): TextLayoutResult {
@@ -190,26 +215,33 @@ class LineRenderCache(
                 return e.layout
             }
         }
-        val text = doc.lineText(line)
+        val text = doc.renderedLineText(line)
+        val cut = doc.lineLength(line) > text.length
         val spans = styles.spansFor(line)
-        val pieces = inlayRevs.piecesFor(line)
+        // An inlay past the cut has no text to sit in.
+        val pieces = inlayRevs.piecesFor(line).let { all -> if (cut) all.filter { it.col <= text.length } else all }
         val sem = semantic.spansFor(line)
-        val annotated = when {
+        val laidOut = when {
             pieces.isEmpty() && spans.isEmpty() && sem.isEmpty() -> AnnotatedString(text)
             pieces.isEmpty() -> {
                 // Lexical spans first, then semantic on top (later ranges win on overlap), bounded to the line.
                 // One list sized up front: this runs for every line laid out, in the draw on the main thread,
                 // where the field showed it waiting out GCs that per-line throwaway lists help cause.
                 val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>(spans.size + sem.size)
-                for (sp in spans) palette[sp.type.ordinal]?.let { ranges.add(AnnotatedString.Range(it, sp.start, sp.end)) }
+                for (sp in spans) {
+                    val st = palette[sp.type.ordinal] ?: continue
+                    if (!cut) ranges.add(AnnotatedString.Range(st, sp.start, sp.end))
+                    else clampRange(sp.start, sp.end, text.length)?.let { (s, e) -> ranges.add(AnnotatedString.Range(st, s, e)) }
+                }
                 for (sp in sem) {
                     val (s, e) = clampRange(sp.start, sp.end, text.length) ?: continue
                     ranges.add(AnnotatedString.Range(sp.style, s, e))
                 }
                 AnnotatedString(text, spanStyles = ranges)
             }
-            else -> buildInlayAnnotated(text, spans, pieces, sem)
+            else -> buildInlayAnnotated(text, spans, pieces, sem, cut)
         }
+        val annotated = if (cut) laidOut + AnnotatedString(CUT_LINE_MARKER, inlayStyle) else laidOut
         val layout = if (wrapWidthPx > 0) {
             // Indent continuation rows to the line's own indent (capped) when smart wrap indent is on.
             val style = if (wrapIndentEnabled && charWidthSp != TextUnit.Unspecified) {
@@ -234,6 +266,7 @@ class LineRenderCache(
         spans: List<LineSpan>,
         pieces: List<InlayPiece>,
         sem: List<SemSpan>,
+        cut: Boolean,
     ): AnnotatedString {
         val sb = StringBuilder(text.length + pieces.sumOf { it.text.length })
         val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>(spans.size + sem.size + pieces.size)
@@ -250,7 +283,10 @@ class LineRenderCache(
         }
         for (sp in spans) {
             val st = palette[sp.type.ordinal] ?: continue
-            ranges.add(AnnotatedString.Range(st, mapCol(pieces, sp.start), mapCol(pieces, sp.end)))
+            if (!cut) ranges.add(AnnotatedString.Range(st, mapCol(pieces, sp.start), mapCol(pieces, sp.end)))
+            else clampRange(sp.start, sp.end, text.length)?.let { (s, e) ->
+                ranges.add(AnnotatedString.Range(st, mapCol(pieces, s), mapCol(pieces, e)))
+            }
         }
         for (sp in sem) {
             val (s, e) = clampRange(sp.start, sp.end, text.length) ?: continue
