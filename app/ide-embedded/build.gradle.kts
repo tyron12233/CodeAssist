@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":layout-preview-impl"))
     implementation(project(":project-model-impl"))  // the store the engine keeps its per-project services in
     implementation(project(":platform-core"))
+    implementation(project(":ide-ui-api"))          // the project tree's types and its byte form
     implementation(libs.kotlinx.coroutines.core)
 
     // layoutlib and its loader, which :realview-layoutlib compiles against but does not carry.
@@ -60,3 +61,19 @@ val assembleIosPayload by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("ios-payload/jars"))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// A java.desktop the embedded JVM can use: see the one class under src/desktopPatch for why. It is compiled
+// into the module it replaces a class of, and the app hands the jar to the JVM as `--patch-module`.
+val desktopPatchSources = layout.projectDirectory.dir("src/desktopPatch/java")
+val compileDesktopPatch by tasks.registering(JavaCompile::class) {
+    source = fileTree(desktopPatchSources)
+    classpath = files()
+    options.compilerArgs.addAll(listOf("--patch-module", "java.desktop=${desktopPatchSources.asFile.absolutePath}"))
+    destinationDirectory.set(layout.buildDirectory.dir("desktop-patch/classes"))
+}
+val desktopPatchJar by tasks.registering(Jar::class) {
+    from(compileDesktopPatch.flatMap { it.destinationDirectory })
+    archiveFileName.set("java.desktop.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("ios-payload/patch"))
+}
+assembleIosPayload { dependsOn(desktopPatchJar) }

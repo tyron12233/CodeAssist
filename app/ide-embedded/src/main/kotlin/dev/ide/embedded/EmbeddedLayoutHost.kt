@@ -6,6 +6,7 @@ import dev.ide.android.layout.remote.LayoutServiceDispatcher
 import dev.ide.core.IdeServices
 import dev.ide.core.IdeServicesBackend
 import dev.ide.preview.layoutlib.LayoutlibRealViewRuntime
+import dev.ide.ui.backend.remote.RemoteFileTree
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Paths
@@ -48,12 +49,25 @@ object EmbeddedLayoutHost {
         }
         ""
     } catch (t: Throwable) {
-        t.message ?: t.toString()
+        // The trace goes to the process's error stream, which the iOS app keeps in a file: the one line
+        // returned is all the editor has room to show.
+        t.printStackTrace()
+        "${t.javaClass.simpleName}: ${t.message ?: "no message"}"
     }
 
     /** Answer one request. Never throws: with no project open, or on any failure, the answer says so. */
     @JvmStatic
     fun call(request: ByteArray): ByteArray {
+        // The project tree rides the same channel: its requests open with a mark of their own.
+        RemoteFileTree.modeOf(request)?.let { mode ->
+            val host = synchronized(this) { backend } ?: return RemoteFileTree.failure("No project is open in the embedded backend.")
+            return try {
+                RemoteFileTree.answer(host.files.fileTree(mode))
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                RemoteFileTree.failure(t.message ?: t.toString())
+            }
+        }
         val target = synchronized(this) { dispatcher } ?: LayoutServiceDispatcher(NoProject, NoProject)
         return runBlocking { target.handle(request) }
     }

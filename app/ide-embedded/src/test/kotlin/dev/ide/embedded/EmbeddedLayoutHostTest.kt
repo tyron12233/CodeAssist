@@ -52,6 +52,9 @@ class EmbeddedLayoutHostTest {
                     val out = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_ARGB)
                     out.setRGB(0, 0, image.width, image.height, argb, 0, image.width)
                     ImageIO.write(out, "png", File(System.getProperty("render.out"), "embedded_activity_main.png").apply { parentFile.mkdirs() })
+                    // The project's own view is Java nobody built: the engine compiles it for the preview.
+                    assertTrue(rendered.problems.none { "MyChart" in it.message || it.tag?.contains("MyChart") == true }, "problems: ${rendered.problems.map { "${it.tag} ${it.message}" }}")
+                    assertTrue(assertNotNull(rendered.root).walk().any { it.className == "com.example.app.MyChart" }, "the project's view is in the tree as itself")
                     val drawn = assertNotNull(rendered.root).walk().first { it.simpleName.contains("TextView") && it.sourceOffset != null }
                     assertEquals(textView.start, drawn.sourceOffset, "the drawn view maps to the element the parser found")
 
@@ -71,6 +74,32 @@ class EmbeddedLayoutHostTest {
                 } finally {
                     EmbeddedLayoutHost.close()
                 }
+            }
+        }
+    }
+}
+
+/** The project tree across the same channel: the engine's curated view, not the folder as it lies on disk. */
+class EmbeddedFileTreeTest {
+    @Test
+    fun theTreeIsTheEnginesOwn() {
+        withTempDir("ide-embedded-tree") { dir ->
+            IdeServices.bootstrapDemo(dir).close()
+            val mode = dev.ide.ui.backend.TreeViewMode.Project
+            val request = dev.ide.ui.backend.remote.RemoteFileTree.request(mode)
+            assertFailsWith<IllegalStateException> { dev.ide.ui.backend.remote.RemoteFileTree.read(EmbeddedLayoutHost.call(request)) }
+            assertEquals("", EmbeddedLayoutHost.open(dir.toString(), System.getProperty("layoutlib.home"), File(System.getProperty("render.out"), "cache").path))
+            try {
+                val tree = dev.ide.ui.backend.remote.RemoteFileTree.read(EmbeddedLayoutHost.call(request))
+                val modules = tree.children.filter { it.kind == dev.ide.ui.backend.NodeKind.Module }
+                assertEquals(listOf("app", "core", "feature"), modules.map { it.name })
+                val app = modules.first()
+                assertEquals("app", app.moduleConfigName)
+                fun dev.ide.ui.backend.TreeNode.all(): List<dev.ide.ui.backend.TreeNode> = listOf(this) + children.flatMap { it.all() }
+                assertTrue(app.all().any { it.kind == dev.ide.ui.backend.NodeKind.Package && it.name == "com.example.app" }, "packages are one row: ${app.all().map { it.name }}")
+                assertTrue(tree.all().none { it.name == ".platform" || it.name == "workspace.json" }, "the engine's files are not project content")
+            } finally {
+                EmbeddedLayoutHost.close()
             }
         }
     }
