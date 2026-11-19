@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -148,7 +149,7 @@ private fun StoreBrowse(
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
+    ) { distinctKeys {
         item("header") {
             Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp)) {
                 Text(
@@ -249,7 +250,7 @@ private fun StoreBrowse(
                 }
             }
         }
-    }
+    } }
 }
 
 /** One catalog section rendered as list rows. */

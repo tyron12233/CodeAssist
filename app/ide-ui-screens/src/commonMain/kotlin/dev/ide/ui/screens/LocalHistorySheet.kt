@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -104,7 +104,7 @@ internal fun LocalHistorySheet(state: IdeUiState, file: OpenFile, onDismiss: () 
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     else -> LazyColumn(Modifier.heightIn(max = 520.dp)) {
-                        items(list, key = { it.id }) { v ->
+                        itemsKeyed(list, key = { it.id }) { v ->
                             Row(
                                 Modifier.fillMaxWidth().clickable { picked = v }.padding(horizontal = 24.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,

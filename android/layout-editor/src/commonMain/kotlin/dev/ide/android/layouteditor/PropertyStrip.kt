@@ -161,7 +161,7 @@ internal fun PropertyStrip(
                     contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(tiles, key = { it.key }) { spec ->
+                    items(tiles.distinctBy { it.key }, key = { it.key }) { spec ->
                         PropertyTile(
                             spec = spec,
                             preview = previewOf(spec, element, strings),

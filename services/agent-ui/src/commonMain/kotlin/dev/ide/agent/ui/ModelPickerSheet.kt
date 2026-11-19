@@ -1,5 +1,7 @@
 package dev.ide.agent.ui
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenuItem
@@ -240,7 +241,7 @@ internal fun ModelPickerDialog(
             if (sections.isEmpty) {
                 Text(stringResource(Res.string.chat_models_none), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
             }
-            LazyColumn(Modifier.heightIn(max = 460.dp)) {
+            LazyColumn(Modifier.heightIn(max = 460.dp)) { distinctKeys {
                 val favoritesTitle = Res.string.chat_models_favorites
                 listOf(
                     favoritesTitle to sections.favorites,
@@ -252,7 +253,7 @@ internal fun ModelPickerDialog(
                     if (list.size != sections.favorites.size + sections.recents.size + sections.all.size) {
                         item(key = "h:$title") { SectionHeading(stringResource(title)) }
                     }
-                    items(list, key = { "${title.key}:${it.id}" }) { model ->
+                    itemsKeyed(list, key = { "${title.key}:${it.id}" }) { model ->
                         ModelRow(
                             model = model,
                             selected = model.id == current,
@@ -263,7 +264,7 @@ internal fun ModelPickerDialog(
                         )
                     }
                 }
-            }
+            } }
         }
     }
 }

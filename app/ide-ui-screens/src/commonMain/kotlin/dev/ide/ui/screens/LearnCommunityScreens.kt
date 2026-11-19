@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.backend.localized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -124,7 +126,7 @@ fun LearnDiscussionScreen(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = padding.calculateTopPadding(), bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+        ) { distinctKeys {
             item("lesson") {
                 Text(lesson?.title.orEmpty(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -140,11 +142,11 @@ fun LearnDiscussionScreen(
             when {
                 list == null -> item("error") { LoadError { reload++ } }
                 list.isEmpty() -> item("empty") { EmptyNote(stringResource(Res.string.learn_no_questions)) }
-                else -> items(list.size, key = { list[it].id }) { i ->
+                else -> itemsKeyed(list.size, key = { list[it].id }) { i ->
                     ThreadRow(list[i], now) { onOpenThread(list[i].id) }
                 }
             }
-        }
+        } }
     }
 }
 
@@ -240,7 +242,7 @@ fun LearnThreadScreen(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        ) { distinctKeys {
             if (t == null) {
                 item("state") { if (loaded.value) LoadError { reload++ } else EmptyNote("…") }
                 return@LazyColumn
@@ -256,7 +258,7 @@ fun LearnThreadScreen(
             item("answersHead") {
                 Text(pluralStringResource(Res.plurals.learn_answers_n, t.answers.size, t.answers.size), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             }
-            items(t.answers.size, key = { t.answers[it].id }) { i ->
+            itemsKeyed(t.answers.size, key = { t.answers[it].id }) { i ->
                 val a = t.answers[i]
                 AnswerCard(
                     a, now,
@@ -267,7 +269,7 @@ fun LearnThreadScreen(
                     onDelete = if (a.mine) ({ act { backend.learn.deleteMine("post", a.id) } }) else null,
                 )
             }
-        }
+        } }
     }
 
     reporting?.let { (kind, id) ->
@@ -581,7 +583,7 @@ fun LearnSolutionsScreen(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = padding.calculateTopPadding(), bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        ) { distinctKeys {
             item("head") {
                 Text(
                     listOfNotNull(lesson?.title, lesson?.steps?.firstOrNull { it.id == stepId }?.title?.takeIf { it != lesson?.title }).joinToString(" · "),
@@ -622,7 +624,7 @@ fun LearnSolutionsScreen(
                         }
                     }
                     if (p.solutions.isEmpty()) item("empty") { EmptyNote(stringResource(Res.string.learn_solutions_empty)) }
-                    items(p.solutions.size, key = { p.solutions[it].id }) { i ->
+                    itemsKeyed(p.solutions.size, key = { p.solutions[it].id }) { i ->
                         val s = p.solutions[i]
                         SolutionCard(
                             s, now,
@@ -633,7 +635,7 @@ fun LearnSolutionsScreen(
                     }
                 }
             }
-        }
+        } }
     }
     reporting?.let { id ->
         ReportDialog(onDismiss = { reporting = null }, onSend = { reason ->

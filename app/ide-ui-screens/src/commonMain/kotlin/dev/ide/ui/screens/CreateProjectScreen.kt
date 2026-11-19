@@ -2,6 +2,8 @@
 
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.backend.localized
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -20,8 +22,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -239,10 +239,10 @@ private fun TemplateGrid(
                 item(key = "header:${cat.key}", span = { GridItemSpan(maxLineSpan) }) {
                     SectionLabel(LocalBackendText.current.tr(cat.label), Modifier.padding(top = if (i == 0) 0.dp else 12.dp))
                 }
-                items(cat.templates, key = { it.id }) { t -> TemplateCard(t, onClick = { onPick(t) }) }
+                itemsKeyed(cat.templates, key = { it.id }) { t -> TemplateCard(t, onClick = { onPick(t) }) }
             }
         } else {
-            items(templates, key = { it.id }) { t -> TemplateCard(t, onClick = { onPick(t) }) }
+            itemsKeyed(templates, key = { it.id }) { t -> TemplateCard(t, onClick = { onPick(t) }) }
         }
     }
 }
@@ -366,12 +366,12 @@ private fun CategoryChips(
         Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = gutter),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    ) { distinctKeys {
         item("all") { Chip(stringResource(Res.string.templates_all), total, selected == null) { onSelect(null) } }
-        items(categories, key = { it.key }) { cat ->
+        itemsKeyed(categories, key = { it.key }) { cat ->
             Chip(LocalBackendText.current.tr(cat.label), cat.templates.size, selected == cat.key) { onSelect(cat.key) }
         }
-    }
+    } }
 }
 
 /** Below this the categories collapse from a rail into a row of chips. */

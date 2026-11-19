@@ -1,6 +1,7 @@
 package dev.ide.agent.ui
 
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.ide.ui.backend.UiFeatures
@@ -795,7 +796,7 @@ internal fun Transcript(
             contentPadding = PaddingValues(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 2.dp),
             // Chat-app feel: content anchors to the bottom when short, newest message at the bottom.
             verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
-        ) {
+        ) { distinctKeys {
             itemsKeyed(messages, key = { it.id }) { msg ->
                 // Only the most recent failure offers a retry (it resumes the latest turn).
                 val latest = msg.id == lastId
@@ -809,7 +810,7 @@ internal fun Transcript(
                 )
             }
             item(key = TRANSCRIPT_END) { Spacer(Modifier.fillMaxWidth().height(1.dp)) }
-        }
+        } }
         AnimatedVisibility(
             visible = !following && listState.canScrollForward,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),

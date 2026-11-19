@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.backend.localized
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -328,7 +329,7 @@ private fun YouPage(
     val cells: List<UiPublishedItem?> = published + if (onPublish != null) listOf(null) else emptyList()
     val rows = cells.chunked(2)
 
-    LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
+    LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) { distinctKeys {
         item("head") {
             ProfileHero(
                 backend = backend,
@@ -403,7 +404,7 @@ private fun YouPage(
                 Spacer(Modifier.height(12.dp))
             }
         }
-        items(rows.size, key = { "apps_$it" }) { r ->
+        itemsKeyed(rows.size, key = { "apps_$it" }) { r ->
             Row(
                 Modifier.fillMaxWidth().height(IntrinsicSize.Max)
                     .padding(horizontal = 16.dp).padding(bottom = 12.dp),
@@ -453,7 +454,7 @@ private fun YouPage(
             }
             Spacer(Modifier.height(32.dp))
         }
-    }
+    } }
 }
 
 /**

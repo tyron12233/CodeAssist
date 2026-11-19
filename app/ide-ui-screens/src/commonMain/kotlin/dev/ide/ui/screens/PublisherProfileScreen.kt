@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.backend.localized
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
@@ -33,7 +35,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -124,7 +125,7 @@ fun PublisherProfileScreen(
             when {
                 current == null -> Missing()
                 current.loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                else -> LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
+                else -> LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) { distinctKeys {
                     item("head") {
                         ProfileHeader(
                             backend = backend,
@@ -227,7 +228,7 @@ fun PublisherProfileScreen(
                         }
                     }
                     item("tail") { Spacer(Modifier.height(32.dp)) }
-                }
+                } }
             }
         }
     }
@@ -437,7 +438,7 @@ private fun SortChips(sorts: List<ProfileSort>, selected: ProfileSort, onSelect:
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(sorts.size, key = { sorts[it].name }) { i ->
+        itemsKeyed(sorts.size, key = { sorts[it].name }) { i ->
             val sort = sorts[i]
             PillChip(
                 label = stringResource(

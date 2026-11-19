@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
@@ -126,7 +127,7 @@ internal fun TestResults(
         var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
         // Method groups the user opened or closed, against their default (open while running or failed).
         var toggledGroups by rememberSaveable { mutableStateOf(setOf<String>()) }
-        LazyColumn(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().padding(bottom = 6.dp)) { distinctKeys {
             for ((cls, cases) in groups) {
                 item(key = "c:$cls") {
                     ClassRow(cls, cases, tests.classFailures[cls], running, onRun, onOpen, passColor, failColor)
@@ -159,10 +160,10 @@ internal fun TestResults(
                             passColor = passColor, failColor = failColor,
                         )
                     }
-                    if (open) items(runs, key = { "t:$cls#${it.name}" }) { case -> testCase(case, 52.dp) }
+                    if (open) itemsKeyed(runs, key = { "t:$cls#${it.name}" }) { case -> testCase(case, 52.dp) }
                 }
             }
-        }
+        } }
     }
 }
 

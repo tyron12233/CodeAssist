@@ -2,6 +2,10 @@ package dev.ide.ui
 
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemScope
+import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.runtime.Composable
 
 /**
@@ -53,6 +57,117 @@ fun <T> LazyListScope.itemsIndexedKeyed(
     ) { index -> itemContent(index, items[index]) }
 }
 
+/** [itemsKeyed] for rows addressed by position: [count] of them, [key] and the content given the index. */
+fun LazyListScope.itemsKeyed(
+    count: Int,
+    key: (Int) -> Any,
+    contentType: (Int) -> Any? = { null },
+    itemContent: @Composable LazyItemScope.(Int) -> Unit,
+) {
+    val keys = uniqueKeysIndexed(List(count) { it }) { _, index -> key(index) }
+    items(count = count, key = { index -> keys[index] }, contentType = contentType, itemContent = itemContent)
+}
+
+/** [itemsKeyed] for a lazy grid, where a repeated key ends the measure pass the same way. */
+fun <T> LazyGridScope.itemsKeyed(
+    items: List<T>,
+    key: (T) -> Any,
+    span: (LazyGridItemSpanScope.(T) -> GridItemSpan)? = null,
+    contentType: (T) -> Any? = { null },
+    itemContent: @Composable LazyGridItemScope.(T) -> Unit,
+) {
+    val keys = uniqueKeys(items, key)
+    items(
+        count = items.size,
+        key = { index -> keys[index] },
+        span = span?.let { { index -> it(items[index]) } },
+        contentType = { index -> contentType(items[index]) },
+    ) { index -> itemContent(items[index]) }
+}
+
+/** The grid [itemsKeyed] for a key and content that both need the index. */
+fun <T> LazyGridScope.itemsIndexedKeyed(
+    items: List<T>,
+    key: (Int, T) -> Any,
+    contentType: (Int, T) -> Any? = { _, _ -> null },
+    itemContent: @Composable LazyGridItemScope.(Int, T) -> Unit,
+) {
+    val keys = uniqueKeysIndexed(items, key)
+    items(
+        count = items.size,
+        key = { index -> keys[index] },
+        contentType = { index -> contentType(index, items[index]) },
+    ) { index -> itemContent(index, items[index]) }
+}
+
+/** The grid [itemsKeyed] for tiles addressed by position. */
+fun LazyGridScope.itemsKeyed(
+    count: Int,
+    key: (Int) -> Any,
+    contentType: (Int) -> Any? = { null },
+    itemContent: @Composable LazyGridItemScope.(Int) -> Unit,
+) {
+    val keys = uniqueKeysIndexed(List(count) { it }) { _, index -> key(index) }
+    items(count = count, key = { index -> keys[index] }, contentType = contentType, itemContent = itemContent)
+}
+
+/**
+ * Runs [content] with every key it gives checked against every other, whichever call gave it.
+ *
+ * [itemsKeyed] sees one call's keys. A list built from several calls (a header per group and that group's
+ * rows, one `item` per section) can still repeat a key between them: two groups that hold the same function,
+ * a section id that matches another's row. Inside this block a repeat is renamed the way [uniqueKeys] renames
+ * one, whether it came from `item`, `items`, `stickyHeader` or [itemsKeyed], so the measure pass never meets
+ * the same key twice. Keys are read eagerly, once per run of the list's content lambda.
+ *
+ * Wrap the whole content of any `LazyColumn` or `LazyRow` that gives keys from more than one call:
+ * `LazyColumn { distinctKeys { … } }`.
+ */
+inline fun LazyListScope.distinctKeys(content: LazyListScope.() -> Unit) {
+    DistinctKeyScope(this).content()
+}
+
+@PublishedApi
+internal class DistinctKeyScope(private val list: LazyListScope) : LazyListScope {
+    private val taken = HashSet<Any>()
+
+    private fun claim(natural: Any): Any = claimKey(taken, natural)
+
+    override fun item(key: Any?, contentType: Any?, content: @Composable LazyItemScope.() -> Unit) {
+        list.item(key?.let(::claim), contentType, content)
+    }
+
+    override fun items(
+        count: Int,
+        key: ((index: Int) -> Any)?,
+        contentType: (index: Int) -> Any?,
+        itemContent: @Composable LazyItemScope.(index: Int) -> Unit,
+    ) {
+        if (key == null) {
+            list.items(count, null, contentType, itemContent)
+            return
+        }
+        val keys = List(count) { claim(key(it)) }
+        list.items(count, { keys[it] }, contentType, itemContent)
+    }
+
+    override fun stickyHeader(key: Any?, contentType: Any?, content: @Composable LazyItemScope.(Int) -> Unit) {
+        list.stickyHeader(key?.let(::claim), contentType, content)
+    }
+}
+
+/** [natural] if it is free in [taken], else the first free `"<natural>\u0000<n>"`; the result is recorded. */
+internal fun claimKey(taken: MutableSet<Any>, natural: Any): Any {
+    if (taken.add(natural)) return natural
+    var n = 1
+    var renamed: Any = "$natural\u0000$n"
+    while (!taken.add(renamed)) {
+        n++
+        renamed = "$natural\u0000$n"
+    }
+    return renamed
+}
+
 /**
  * The keys [items] should be drawn with: [key] applied to each element, with any repeat renamed.
  *
@@ -71,19 +186,6 @@ fun <T> uniqueKeys(items: List<T>, key: (T) -> Any): List<Any> =
 fun <T> uniqueKeysIndexed(items: List<T>, key: (Int, T) -> Any): List<Any> {
     val taken = HashSet<Any>(items.size * 2)
     val out = ArrayList<Any>(items.size)
-    for ((index, item) in items.withIndex()) {
-        val natural = key(index, item)
-        if (taken.add(natural)) {
-            out.add(natural)
-            continue
-        }
-        var n = 1
-        var renamed: Any = "$natural\u0000$n"
-        while (!taken.add(renamed)) {
-            n++
-            renamed = "$natural\u0000$n"
-        }
-        out.add(renamed)
-    }
+    for ((index, item) in items.withIndex()) out.add(claimKey(taken, key(index, item)))
     return out
 }

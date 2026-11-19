@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import dev.ide.ui.components.ToolWindowHeaderActions
@@ -257,7 +258,7 @@ private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOp
     if (matches.isEmpty()) { if (!searching) Hint(stringResource(Res.string.search_no_text_matches)); return }
     val accent = MaterialTheme.colorScheme.primary
     val grouped = remember(matches) { matches.groupBy { it.filePath } }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) { distinctKeys {
         grouped.forEach { (path, hits) ->
             item("file:$path") {
                 Row(
@@ -283,7 +284,7 @@ private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOp
                 }
             }
         }
-    }
+    } }
 }
 
 /** The matched line with the hit span tinted accent + semibold, trimming long leading whitespace. */

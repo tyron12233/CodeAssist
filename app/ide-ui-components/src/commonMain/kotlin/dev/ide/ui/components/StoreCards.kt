@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -563,7 +564,7 @@ fun TrendingSearches(
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
-    ) {
+    ) { distinctKeys {
         item("label") {
             Row(
                 Modifier.padding(end = 4.dp),
@@ -578,7 +579,7 @@ fun TrendingSearches(
                 )
             }
         }
-        items(terms, key = { it }) { term ->
+        itemsKeyed(terms, key = { it }) { term ->
             val description = stringResource(Res.string.store_trending_search, term)
             Surface(
                 onClick = { onTerm(term) },
@@ -592,7 +593,7 @@ fun TrendingSearches(
                 }
             }
         }
-    }
+    } }
 }
 
 /** `48K`, `1.2K`, `940`. Abbreviated the way the design writes install counts. */

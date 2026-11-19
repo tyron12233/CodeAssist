@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -20,7 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -163,7 +163,7 @@ private fun CompletionListPanel(
             // When any row has an ⓘ, every row keeps its slot, so the types stay in one right-aligned column.
             val infoSlot = infoFor != null && remember(items) { items.any { !it.documentation.isNullOrBlank() } }
             LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
-                itemsIndexed(items, key = { index, _ -> keys[index] }) { index, item ->
+                itemsIndexedKeyed(items, key = { index, _ -> keys[index] }) { index, item ->
                     val sel = index == selectedIndex
                     CompletionRow(
                         item, prefix, sel, labelStyle, detailStyle,

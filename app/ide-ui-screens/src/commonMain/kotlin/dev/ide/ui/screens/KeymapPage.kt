@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -120,7 +121,7 @@ internal fun KeymapPageContent(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = gutter, end = gutter, top = 8.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        ) { distinctKeys {
             item("toolbar") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(Res.string.keymap_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
@@ -200,7 +201,7 @@ internal fun KeymapPageContent(
                     }
                 }
             }
-        }
+        } }
     }
 }
 

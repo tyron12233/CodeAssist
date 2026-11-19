@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.components.HauntedGhost
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
@@ -206,7 +207,7 @@ private fun NotificationList(
         modifier,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    ) { distinctKeys {
         val labelled = fresh.isNotEmpty() && earlier.isNotEmpty()
         if (labelled) item(key = "h-new") { SectionLabel(stringResource(Res.string.notif_section_new)) }
         itemsKeyed(fresh, key = { it.id }) { n ->
@@ -216,7 +217,7 @@ private fun NotificationList(
         itemsKeyed(earlier, key = { it.id }) { n ->
             NotificationCard(n, now, isNew = false, onOpen = { onOpen(n) }, onDismissOne = { onDismissOne(n) })
         }
-    }
+    } }
 }
 
 /** The empty list: nothing to catch up on. */

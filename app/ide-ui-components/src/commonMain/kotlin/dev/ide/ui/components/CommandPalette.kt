@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
@@ -347,7 +347,7 @@ fun CommandPalette(
             }
         } else {
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), state = listState, contentPadding = PaddingValues(vertical = 6.dp)) {
-                items(rows, key = { it.key }) { row ->
+                itemsKeyed(rows, key = { it.key }) { row ->
                     when (row) {
                         is PaletteRowItem.Heading -> SectionHeading(sectionLabel(row.section))
                         is PaletteRowItem.Result -> PaletteRow(

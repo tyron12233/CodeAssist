@@ -1,5 +1,6 @@
 package dev.ide.vcs.ui
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -214,7 +215,7 @@ internal fun CloneScreen(ctx: ScreenContext) {
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 } else {
-                    LazyColumn(Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize()) { distinctKeys {
                         itemsKeyed(repos, key = { it.fullName }) { repo ->
                             RepoRow(repo) {
                                 url = repo.cloneUrl
@@ -222,7 +223,7 @@ internal fun CloneScreen(ctx: ScreenContext) {
                             }
                         }
                         item("tail") { Spacer(Modifier.height(24.dp)) }
-                    }
+                    } }
                 }
             }
         }

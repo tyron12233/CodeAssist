@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.generated.resources.storage_cat_plugin_leftovers_desc
 import dev.ide.ui.generated.resources.storage_cat_plugin_leftovers_title
 import dev.ide.ui.generated.resources.storage_clear_plugin_leftovers_body
@@ -193,7 +194,7 @@ private fun StorageContent(
         Modifier.widthIn(max = 640.dp).fillMaxWidth(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    ) { distinctKeys {
         item("total") { TotalCard(report) }
         item("bar") { UsageBar(shown) }
         item("legend") {
@@ -225,7 +226,7 @@ private fun StorageContent(
                 ProjectRow(p, isOpen = p.rootPath == openProjectRootPath, busy = busy) { onRequestDeleteProject(p) }
             }
         }
-    }
+    } }
 }
 
 @Composable

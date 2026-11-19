@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.generated.resources.tests_none_in_file
 import dev.ide.ui.backend.TestOutput
 import androidx.compose.animation.AnimatedVisibility
@@ -19,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -439,7 +439,7 @@ private fun FileSwitcher(state: FileSwitcherState, onPick: (Int) -> Unit, onDism
                 )
             }
             LazyColumn(Modifier.fillMaxWidth().heightInRows(items.size), state = list) {
-                itemsIndexed(items, key = { _, it -> it.path }) { index, item ->
+                itemsIndexedKeyed(items, key = { _, it -> it.path }) { index, item ->
                     SwitcherRow(item, selected = index == state.selected, onClick = { onPick(index) })
                 }
             }

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.components.SeasonalEmptyArt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -214,7 +215,7 @@ fun StoreSearchScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 24.dp),
-                ) {
+                ) { distinctKeys {
                     itemsIndexedKeyed(results, key = { _, it -> it.id }) { i, item ->
                         StoreItemRow(item, i, onOpenItem, backend = backend)
                     }
@@ -237,7 +238,7 @@ fun StoreSearchScreen(
                             )
                         }
                     }
-                }
+                } }
             }
         }
     }

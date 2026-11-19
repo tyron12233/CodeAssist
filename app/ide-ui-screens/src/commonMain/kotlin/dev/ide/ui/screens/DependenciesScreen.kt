@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
@@ -561,7 +562,7 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
     val realConflicts = remember(deps) { deps.conflicts.filter(::isRealConflict).associateBy { it.artifact } }
     fun conflictFor(node: UiDependencyNode): UiVersionConflict? = realConflicts["${node.group}:${node.name}"]
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) { distinctKeys {
         // A quiet, collapsible conflict summary: real (major-version) clashes are listed for review; benign
         // newest-wins differences are just counted (the per-row warning glyph flags the real ones in place).
         if (deps.conflicts.isNotEmpty()) item("conflicts") {
@@ -646,7 +647,7 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                 }
             }
         }
-    }
+    } }
 }
 
 private fun LazyListScope.treeRows(
@@ -894,7 +895,7 @@ internal fun AddDependencyContent(
                 AddEmptyState(state, backend, moduleName, listModifier)
             } else {
                 val typed = sanitizeCoordinateInput(state.query)
-                LazyColumn(listModifier) {
+                LazyColumn(listModifier) { distinctKeys {
                     // Direct add of a typed coordinate — the only way to add a versionless `group:name`
                     // (resolved against the module's imported platforms) or a coordinate not in the index.
                     if (looksLikeCoordinate(typed)) item("direct:$typed") {
@@ -914,7 +915,7 @@ internal fun AddDependencyContent(
                         )
                     }
                     if (typed.length < 2) item { EmptyRow(stringResource(Res.string.dep_type_to_search)) }
-                }
+                } }
             }
         }
     }
@@ -1007,7 +1008,7 @@ private fun AddEmptyState(
     moduleName: String,
     modifier: Modifier,
 ) {
-    LazyColumn(modifier) {
+    LazyColumn(modifier) { distinctKeys {
         item("quick-header") { SectionLabel(stringResource(Res.string.dep_quick_start)) }
         item("firebase") {
             AddSourceRow("F", Ide.colors.warning, "Firebase", stringResource(Res.string.dep_firebase_subtitle)) {
@@ -1043,7 +1044,7 @@ private fun AddEmptyState(
                 state.selectMode(AddMode.Local)
             }
         }
-    }
+    } }
 }
 
 @Composable
@@ -1139,7 +1140,7 @@ private fun LocalLibraryBody(
     onPick: () -> Unit,
     onAttach: (String) -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { distinctKeys {
         if (canPick) item("pick") {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 6.dp)
@@ -1167,7 +1168,7 @@ private fun LocalLibraryBody(
         if (!canPick && candidates.isEmpty()) item("empty") {
             EmptyRow(stringResource(Res.string.dep_no_local_libs))
         }
-    }
+    } }
 }
 
 /** A `.jar`/`.aar` file already in the project tree, offered for one-tap attach as a local library. */

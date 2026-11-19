@@ -181,7 +181,8 @@ internal fun PalettePanel(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(shown, key = { it.tag }) { cls ->
+            // Two classes that share a tag would be one key twice, which ends the measure pass.
+            items(shown.distinctBy { it.tag }, key = { it.tag }) { cls ->
                 PaletteTile(cls, mini, Modifier.then(dragSource(cls)).clickable { onAdd(cls) })
             }
         }

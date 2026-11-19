@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.blocks
 
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -167,7 +167,7 @@ internal fun BlockPalette(
                 current == PaletteCategory.Variables && entries.isEmpty() -> Hint(stringResource(Res.string.block_palette_no_variables))
             }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(entries, key = { it.template.text + it.template.isValue }) { e -> PaletteBlock(e, drag, ink, g) }
+                itemsKeyed(entries, key = { it.template.text + it.template.isValue }) { e -> PaletteBlock(e, drag, ink, g) }
                 item { Hint(stringResource(Res.string.block_palette_hint)) }
             }
         }

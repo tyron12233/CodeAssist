@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -106,7 +107,7 @@ fun ChallengeBoardScreen(
             else -> LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            ) { distinctKeys {
                 loaded.you?.takeIf { row -> loaded.rows.none { it.isYou } }?.let { you ->
                     item { BoardRow(you) }
                     item {
@@ -127,7 +128,7 @@ fun ChallengeBoardScreen(
                 // puts it at the foot instead, which is where it belongs when there is nothing to break.
                 item("ad") { AdSlot(AdPlacement.CHALLENGE, Modifier.padding(vertical = 4.dp)) }
                 itemsIndexedKeyed(tail, key = { i, r -> "t$i:${r.rank}" }) { _, row -> BoardRow(row) }
-            }
+            } }
         }
     }
 }

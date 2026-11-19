@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.backend.localized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -150,7 +151,7 @@ fun LearnScreen(
         LazyColumn(
             Modifier.widthIn(max = 640.dp).fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
-        ) {
+        ) { distinctKeys {
             item("header") { LearnHeader(lessonsDone, streak = account?.takeIf { it.signedIn }?.streak ?: 0) }
             if (onSignIn != null && account?.available == true && !account.signedIn && lessonsDone > 0) {
                 item("sync") { SyncPrompt(onSignIn) }
@@ -186,7 +187,7 @@ fun LearnScreen(
             item("trailingAd") {
                 AdSlot(AdPlacement.LEARN, Modifier.padding(horizontal = 20.dp).padding(top = 14.dp))
             }
-        }
+        } }
     }
 }
 
@@ -341,7 +342,7 @@ private fun TrackFilterRow(categories: List<String>, active: String?, onPick: (S
         Modifier.fillMaxWidth().padding(top = 20.dp),
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    ) { distinctKeys {
         item("all") {
             PillChip(
                 label = stringResource(Res.string.learn_all),
@@ -358,7 +359,7 @@ private fun TrackFilterRow(categories: List<String>, active: String?, onPick: (S
                 onClick = { onPick(cat) },
             )
         }
-    }
+    } }
 }
 
 /**

@@ -1,5 +1,6 @@
 package dev.ide.vcs.ui
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -93,7 +94,7 @@ internal fun HistoryScreen(ctx: ScreenContext) {
                     body = stringResource(Res.string.vcs_history_empty),
                 )
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize()) { distinctKeys {
                     if (path != null) {
                         item("path") {
                             Text(
@@ -139,7 +140,7 @@ internal fun HistoryScreen(ctx: ScreenContext) {
                         }
                     }
                     item("tail") { Spacer(Modifier.height(24.dp)) }
-                }
+                } }
             }
         }
     }

@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.blocks
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.background
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.generated.resources.add
@@ -10,7 +12,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,7 +121,7 @@ internal fun OutlineScreen(
     LazyColumn(
         modifier.background(MaterialTheme.colorScheme.surface),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 24.dp),
-    ) {
+    ) { distinctKeys {
         if (outline.groups.all { it.functions.isEmpty() && it.variables.isEmpty() }) {
             item {
                 Text(
@@ -141,14 +142,14 @@ internal fun OutlineScreen(
                     )
                 }
             }
-            items(group.functions, key = { "f:" + it.key }) { fn ->
+            itemsKeyed(group.functions, key = { "f:" + it.key }) { fn ->
                 FunctionRow(fn, outline.kotlin, fn.key == openKey, group.depth, ink) { onOpen(fn) }
             }
-            items(group.variables, key = { "v:" + group.key + ":" + it.name + ":" + it.node.start }) { v ->
+            itemsKeyed(group.variables, key = { "v:" + group.key + ":" + it.name + ":" + it.node.start }) { v ->
                 VariableRow(v, outline.kotlin, group.depth, ink) { onEditVariable(v) }
             }
         }
-    }
+    } }
 }
 
 /** A group's title line: `class MainActivity` (or "Top level") with the group's add menu. */

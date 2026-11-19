@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.itemsIndexedKeyed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -134,7 +134,7 @@ internal fun PasteHistoryList(
             )
         } else {
             LazyColumn(Modifier.heightIn(max = 360.dp)) {
-                itemsIndexed(entries, key = { i, e -> "$i:${e.hashCode()}" }) { i, entry ->
+                itemsIndexedKeyed(entries, key = { i, e -> "$i:${e.hashCode()}" }) { i, entry ->
                     if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     PasteHistoryRow(entry) { onPick(entry) }
                 }

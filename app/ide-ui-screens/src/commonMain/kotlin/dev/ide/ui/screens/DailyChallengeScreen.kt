@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -116,7 +117,7 @@ fun DailyChallengeScreen(
             start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    ) { distinctKeys {
         item { ChallengeHeader(day, state.profile.streak.current) }
 
         if (!settled) {
@@ -161,7 +162,7 @@ fun DailyChallengeScreen(
             item { ChallengeSectionHeader(stringResource(Res.string.challenge_previous_days)) }
             item { ArchiveStrip(history, onOpenArchive) }
         }
-    }
+    } }
 }
 
 @Composable

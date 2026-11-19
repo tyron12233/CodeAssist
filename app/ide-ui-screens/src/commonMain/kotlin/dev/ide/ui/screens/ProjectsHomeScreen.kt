@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import dev.ide.ui.components.HalloweenBackdrop
 import dev.ide.ui.components.HauntedGhost
 import dev.ide.ui.components.SeasonalEmptyArt
@@ -351,7 +352,7 @@ fun ProjectsHomeScreen(
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
-        ) {
+        ) { distinctKeys {
             item("header") { HomeHeader(onOpenAccount = { sheet = HomeSheet.Account }, bell = bell) }
             item("actions") {
                 HomeActions(
@@ -428,7 +429,7 @@ fun ProjectsHomeScreen(
             if (mostRecent != null) {
                 item("resume") { ResumeCard(mostRecent, now) { onOpen(mostRecent) } }
             }
-        }
+        } }
       }
     }
     }
@@ -626,7 +627,7 @@ private fun SegmentRow(
         Modifier.fillMaxWidth().padding(top = 20.dp),
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    ) { distinctKeys {
         item("projects") {
             CountFilterChip(
                 label = stringResource(Res.string.home_seg_projects),
@@ -658,7 +659,7 @@ private fun SegmentRow(
                 )
             }
         }
-    }
+    } }
 }
 
 /**
@@ -1436,7 +1437,7 @@ private fun WideProjectsHome(
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 24.dp),
-            ) {
+            ) { distinctKeys {
                 if (shown.isEmpty() && projectsLoaded) {
                     item("empty") {
                         if (projects.isEmpty()) {
@@ -1471,7 +1472,7 @@ private fun WideProjectsHome(
                     )
                 }
                 item("ad") { AdSlot(AdPlacement.PROJECTS, Modifier.padding(top = 16.dp)) }
-            }
+            } }
         }
     }
 }

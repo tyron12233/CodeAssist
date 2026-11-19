@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,7 +65,7 @@ fun PublishingGuideScreen(
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             DetailTopBar(title = stringResource(Res.string.guide_title), isSaved = false, onBack = onBack)
-            LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize().padding(horizontal = 20.dp)) {
+            LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize().padding(horizontal = 20.dp)) { distinctKeys {
                 item("intro") {
                     Text(
                         stringResource(Res.string.guide_intro),
@@ -102,7 +103,7 @@ fun PublishingGuideScreen(
                     }
                 }
                 item("tail") { Spacer(Modifier.height(36.dp)) }
-            }
+            } }
         }
     }
 }

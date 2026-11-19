@@ -1,5 +1,6 @@
 package dev.ide.vcs.ui
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -127,7 +128,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
                     body = stringResource(Res.string.vcs_branches_none),
                 )
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize()) { distinctKeys {
                     if (local.isNotEmpty()) {
                         item("local") {
                             SectionHeader(stringResource(Res.string.vcs_branches_local), local.size)
@@ -157,7 +158,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
                         }
                     }
                     item("tail") { Spacer(Modifier.height(24.dp)) }
-                }
+                } }
             }
         }
     }

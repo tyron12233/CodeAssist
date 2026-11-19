@@ -1,5 +1,6 @@
 package dev.ide.vcs.ui
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -581,7 +582,7 @@ private fun ChangeList(
     onResolve: (List<String>) -> Unit,
     onDiscard: (UiVcsChange) -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize()) { distinctKeys {
         if (status.conflicted.isNotEmpty()) {
             item("conflicts") {
                 SectionHeader(
@@ -659,7 +660,7 @@ private fun ChangeList(
             }
         }
         item("tail") { Spacer(Modifier.height(8.dp)) }
-    }
+    } }
 }
 
 /**

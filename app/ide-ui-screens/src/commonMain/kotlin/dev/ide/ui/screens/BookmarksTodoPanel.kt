@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
+import dev.ide.ui.itemsKeyed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,12 +56,12 @@ internal fun BookmarksTodoPanel(state: IdeUiState, onNavigated: () -> Unit, modi
         }.getOrDefault(emptyList())
     }
     val marks = state.bookmarks.entries.sortedBy { it.key }.flatMap { (path, lines) -> lines.sorted().map { path to it } }
-    LazyColumn(modifier) {
+    LazyColumn(modifier) { distinctKeys {
         item { SectionHeader(stringResource(Res.string.bookmarks_title)) }
         if (marks.isEmpty()) {
             item { Hint(stringResource(Res.string.bookmarks_empty)) }
         }
-        items(marks, key = { "b:${it.first}:${it.second}" }) { (path, line) ->
+        itemsKeyed(marks, key = { "b:${it.first}:${it.second}" }) { (path, line) ->
             val open = state.openFiles.firstOrNull { it.path == path }
             val text = open?.session?.doc?.takeIf { line < it.lineCount }?.let { it.substring(it.lineStart(line), it.lineEnd(line)).trim() }
             Row(
@@ -95,7 +96,7 @@ internal fun BookmarksTodoPanel(state: IdeUiState, onNavigated: () -> Unit, modi
         val list = todos
         if (list != null && list.isEmpty()) item { Hint(stringResource(Res.string.todo_empty)) }
         if (list != null) {
-            items(list, key = { "t:${it.filePath}:${it.offset}" }) { m ->
+            itemsKeyed(list, key = { "t:${it.filePath}:${it.offset}" }) { m ->
                 Column(
                     Modifier.fillMaxWidth().clickable { state.openAt(m.filePath, m.offset); onNavigated() }.padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp),
@@ -112,7 +113,7 @@ internal fun BookmarksTodoPanel(state: IdeUiState, onNavigated: () -> Unit, modi
                 }
             }
         }
-    }
+    } }
 }
 
 private val TODO_WORD = Regex("""\b(TODO|FIXME)\b""")

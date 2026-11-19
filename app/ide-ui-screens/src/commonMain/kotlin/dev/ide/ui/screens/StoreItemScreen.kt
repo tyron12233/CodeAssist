@@ -2,6 +2,7 @@
 
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -257,7 +258,7 @@ fun StoreItemScreen(
                     onToggleSaved = onToggleSaved,
                     onShare = onShare?.let { { it(item) } },
                 )
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) { distinctKeys {
                     item("hero") {
                         // The app's own icon, blurred into a wash of its colours: icons are made to be colourful,
                         // and the first try (the first screenshot) went near-black on every project with a dark UI,
@@ -347,7 +348,7 @@ fun StoreItemScreen(
                     item("ad") {
                         AdSlot(AdPlacement.STORE_ITEM, Modifier.padding(horizontal = 20.dp).padding(top = 24.dp))
                     }
-                }
+                } }
             }
         }
         if (lightbox >= 0) {

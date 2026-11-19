@@ -399,7 +399,8 @@ private fun SwatchGrid(colors: List<LayoutResource>, value: String?, enabled: Bo
         GridCells.Adaptive(64.dp), Modifier.heightIn(max = 216.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(colors, key = { it.reference }) { c -> Swatch(c, selected = value == c.reference, enabled = enabled) { onPick(c) } }
+        // A library color the project overrides arrives twice under one reference; one swatch stands for both.
+        items(colors.distinctBy { it.reference }, key = { it.reference }) { c -> Swatch(c, selected = value == c.reference, enabled = enabled) { onPick(c) } }
     }
 }
 
@@ -461,7 +462,8 @@ private fun ImagePicker(attr: String, pc: PropertyContext) {
             FoldHeader(stringResource(Res.string.le_res_library_images, libraryImages.size), showLibrary) { showLibrary = !showLibrary }
         }
         LazyVerticalGrid(GridCells.Adaptive(76.dp), Modifier.heightIn(max = 260.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(shown, key = { it.reference }) { r ->
+            // The same for an image the project and a library both declare.
+            items(shown.distinctBy { it.reference }, key = { it.reference }) { r ->
                 val on = v == r.reference
                 Column(
                     Modifier.clip(RoundedCornerShape(14.dp))

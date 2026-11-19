@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.ide.ui.dialog.AlertDialog
 import androidx.compose.material3.Button
@@ -336,7 +336,7 @@ private fun QueueList(
         }
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) { distinctKeys {
         if (queue.pending.isEmpty() && !queue.loading) {
             item("clear") {
                 Column(
@@ -376,7 +376,7 @@ private fun QueueList(
                 DecidedRow(submission)
             }
         }
-    }
+    } }
 }
 
 /**
@@ -810,13 +810,13 @@ private fun LearnReportList(
     onResolve: (dev.ide.ui.backend.UiLearnReport, hide: Boolean) -> Unit,
 ) {
     val c = MaterialTheme.colorScheme
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp)) { distinctKeys {
         if (reports.isEmpty()) {
             item("clear") {
                 Text(stringResource(Res.string.moderation_reports_none), color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
             }
         }
-        items(reports.size, key = { reports[it].id }) { i ->
+        itemsKeyed(reports.size, key = { reports[it].id }) { i ->
             val r = reports[i]
             Surface(
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
@@ -842,5 +842,5 @@ private fun LearnReportList(
                 }
             }
         }
-    }
+    } }
 }

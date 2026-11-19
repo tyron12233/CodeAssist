@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -182,7 +183,7 @@ fun ExploreFeed(
         LazyColumn(
             Modifier.widthIn(max = 820.dp).fillMaxSize(),
             contentPadding = PaddingValues(bottom = 28.dp),
-        ) {
+        ) { distinctKeys {
             item("header") {
                 ExploreHeader(
                     // The count badge shows in every mode except populated, where the page speaks for
@@ -319,7 +320,7 @@ fun ExploreFeed(
                     }
                 }
             }
-        }
+        } }
     }
 }
 
@@ -792,7 +793,7 @@ private fun ExploreEmpty(
         LazyColumn(
             Modifier.widthIn(max = 820.dp).fillMaxSize(),
             contentPadding = PaddingValues(bottom = 28.dp),
-        ) {
+        ) { distinctKeys {
             item("header") {
                 ExploreHeader(
                     count = feed.state.publishedProjectCount,
@@ -885,7 +886,7 @@ private fun ExploreEmpty(
                 )
             }
 
-        }
+        } }
     }
 }
 

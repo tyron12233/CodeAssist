@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -304,7 +305,7 @@ fun SubmitProjectScreen(
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             DetailTopBar(title = stringResource(Res.string.submit_title), isSaved = false, onBack = onBack)
-            LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize().padding(horizontal = 20.dp)) {
+            LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize().padding(horizontal = 20.dp)) { distinctKeys {
                 if (chosen == null) {
                     item("pick") {
                         Eyebrow(stringResource(Res.string.submit_pick_project))
@@ -578,7 +579,7 @@ fun SubmitProjectScreen(
                         Spacer(Modifier.height(28.dp))
                     }
                 }
-            }
+            } }
         }
     }
 

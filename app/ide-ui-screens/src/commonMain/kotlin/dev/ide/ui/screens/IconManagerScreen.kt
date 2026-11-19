@@ -164,7 +164,6 @@ import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Symbol
-import dev.ide.ui.uniqueKeysIndexed
 import org.jetbrains.compose.resources.stringResource
 
 /** The widest the content grows to before it stays centred, so a desktop window is not one giant grid row. */
@@ -784,8 +783,7 @@ private fun IconGrid(
         verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
     ) {
         if (header != null) item(key = "header", span = { GridItemSpan(maxLineSpan) }) { header() }
-        val keys = uniqueKeysIndexed(List(count) { it }) { _, index -> key(index) }
-        items(count, key = { keys[it] }) { index -> tile(index) }
+        itemsKeyed(count, key = key) { index -> tile(index) }
     }
 }
 

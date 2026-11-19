@@ -1,5 +1,6 @@
 package dev.ide.agent.ui
 
+import dev.ide.ui.itemsKeyed
 import androidx.compose.animation.AnimatedVisibility
 import dev.ide.ui.theme.Motion
 import dev.ide.ui.platform.isMobilePlatform
@@ -17,7 +18,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -520,7 +520,7 @@ private fun ProjectPickerSheet(
                     )
                 }
             }
-            items(shown, key = { it.rootPath }) { p ->
+            itemsKeyed(shown, key = { it.rootPath }) { p ->
                 val kind = stringResource(if (p.isAndroid) Res.string.aihome_kind_android else Res.string.aihome_kind_project)
                 PickerRow(
                     icon = projectIcon(p),

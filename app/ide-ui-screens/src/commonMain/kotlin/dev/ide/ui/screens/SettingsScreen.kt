@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.material3.TextButton
 import dev.ide.ui.dialog.AlertDialog
 import dev.ide.ui.itemsKeyed
@@ -353,7 +354,7 @@ private fun PageContent(
     // Regular controls grouped by their optional sub-heading (null group first, in declaration order).
     val groups = regular.groupBy { it.group }.toList()
 
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { distinctKeys {
         groups.forEach { (groupTitle, controls) ->
             item(groupTitle ?: "_") {
                 SettingsCard(localizedGroup(groupTitle)) {
@@ -371,7 +372,7 @@ private fun PageContent(
         if (page.inspectionsSection) {
             item("inspections") { InspectionsCard(backend) }
         }
-    }
+    } }
 }
 
 @Composable

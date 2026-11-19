@@ -2,6 +2,7 @@
 
 package dev.ide.ui.screens
 
+import dev.ide.ui.distinctKeys
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -984,7 +985,7 @@ private fun NewModuleDialog(
 
                 Text(stringResource(Res.string.modcfg_new_module), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { distinctKeys {
                     item("name") {
                         OutlinedTextField(
                             value = name,
@@ -1031,7 +1032,7 @@ private fun NewModuleDialog(
                         }
                     }
                     itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont, twoColumn = false) }
-                }
+                } }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Spacer(Modifier.weight(1f))
