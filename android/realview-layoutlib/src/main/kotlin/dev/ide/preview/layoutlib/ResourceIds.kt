@@ -25,6 +25,13 @@ internal class ResourceIds(
     packages: Collection<String>,
     /** The framework's own id for an `android:` attribute, which a styleable array must hold as it is. */
     private val frameworkAttrId: (String) -> Int,
+    /**
+     * The ids the project's last build gave its resources (aapt2's `R.txt`: `int string app_name 0x7f0e0001`),
+     * when it has been built. The project's own classes were compiled with those numbers in them, as constants,
+     * so `stringResource(R.string.app_name)` asks for 0x7f0e0001 whatever this table would have called it:
+     * they are taken as they are, and only what the build never saw is numbered here.
+     */
+    built: java.io.File? = null,
 ) {
     private val packages = packages.toSet()
     private val ids = HashMap<String, Int>()
@@ -36,7 +43,7 @@ internal class ResourceIds(
     fun idOf(type: ResourceType, name: String): Int {
         val key = type.getName() + "/" + fieldName(name)
         ids[key]?.let { return it }
-        val index = typeIndex.getOrPut(type) { typeIndex.size + 1 }
+        val index = typeIndex.getOrPut(type) { (typeIndex.values.maxOrNull() ?: 0) + 1 }
         val n = (nextInType[type] ?: 0) + 1
         nextInType[type] = n
         val id = 0x7f000000 or (index shl 16) or n
@@ -55,6 +62,25 @@ internal class ResourceIds(
         for ((type, values) in table) for (value in values.values()) {
             val field = fieldName(value.name)
             if (field != value.name) put(type.getName() + "/" + field, value.name)
+        }
+    }
+
+    init {
+        // After [realNames]: a built id resolves to the resource as the resources spell its name.
+        runCatching {
+            built?.takeIf { it.isFile }?.forEachLine { line ->
+                val parts = line.split(' ')
+                if (parts.size != 4 || parts[0] != "int") return@forEachLine
+                val type = ResourceType.fromClassName(parts[1]) ?: return@forEachLine
+                if (type == ResourceType.STYLEABLE) return@forEachLine
+                val id = parts[3].removePrefix("0x").toLongOrNull(16)?.toInt() ?: return@forEachLine
+                if (id ushr 24 != 0x7f) return@forEachLine
+                val key = type.getName() + "/" + parts[2]
+                ids[key] = id
+                references[id] = ResourceReference(ResourceNamespace.RES_AUTO, type, table[type]?.get(parts[2])?.name ?: realNames[key] ?: parts[2])
+                typeIndex[type] = (id ushr 16) and 0xff
+                nextInType[type] = maxOf(nextInType[type] ?: 0, id and 0xffff)
+            }
         }
     }
 

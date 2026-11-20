@@ -42,6 +42,7 @@ class LayoutlibRealViewRuntime(
                 rtl = request.rtl,
                 minSdk = request.minApi,
                 cacheDir = cacheDir,
+                builtResourceIds = request.builtResourceIds?.toFile(),
             ),
         )
         val pixels = result.pixels

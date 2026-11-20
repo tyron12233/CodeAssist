@@ -4862,7 +4862,28 @@ class IdeServices private constructor(
         // A runtime that reads the resource folders itself (layoutlib, on a host with no Android framework)
         // needs no linked table and no R.jar: nothing is linked for it.
         val sourceResources = runtime.readsSourceResources
-        val libraryResDirs = runCatching { AndroidResources.libraryResourceDirs(module, store.workspace) }.getOrDefault(emptyList())
+        val compileLibraryResDirs = runCatching { AndroidResources.libraryResourceDirs(module, store.workspace) }.getOrDefault(emptyList())
+        // A runtime that reads the folders itself also makes each library's `R` from them, and what runs is the
+        // RUNTIME set of libraries: one that is only there at run time (Compose's `customview-poolingcontainer`)
+        // has an `R` its classes ask for all the same, so its resources are read too.
+        // Such a library may have been unpacked for its classes alone (nothing compiled against its
+        // resources): the rest of it is then unpacked here, from the archive beside it.
+        val libraryResDirs = if (!sourceResources) compileLibraryResDirs else (compileLibraryResDirs + resolvedDexJars.orEmpty()
+            .filter { it.fileName?.toString() == "classes.jar" }
+            .mapNotNull { jar ->
+                val unpacked = jar.parent ?: return@mapNotNull null
+                val res = unpacked.resolve("res")
+                if (Files.isDirectory(res)) return@mapNotNull res
+                val archive = unpacked.resolveSibling(unpacked.fileName.toString().removeSuffix("-exploded") + ".aar")
+                if (!Files.isRegularFile(archive)) return@mapNotNull null
+                runCatching {
+                    dev.ide.android.support.tools.AarExtractor.explode(
+                        archive,
+                        store.rootPath.resolve(".platform").resolve("caches").resolve("preview-aar")
+                            .resolve(dev.ide.android.support.tools.AarExtractor.explodeDirName(archive)),
+                    ).resDir
+                }.getOrNull()
+            }).distinct()
         val linked = if (sourceResources) null else previewResourceLinker?.link(
             module,
             variant,
@@ -4966,6 +4987,7 @@ class IdeServices private constructor(
             resourceDirs = if (sourceResources) libraryResDirs + resDirs else emptyList(),
             resourcePackages = if (sourceResources) listOf(facet.namespace) + libraryPackages(libraryResDirs) else emptyList(),
             layoutFile = if (sourceResources) liveLayoutFile(module, file, text) else null,
+            builtResourceIds = if (sourceResources) AndroidBuildSystem.rJarPath(module, variant).resolveSibling("R.txt").takeIf { Files.isRegularFile(it) } else null,
         ).apply {
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }

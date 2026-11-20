@@ -30,6 +30,14 @@ class LayoutlibRequest(
     val minSdk: Int = 21,
     /** Where resolved resource tables are kept between renders and launches. */
     val cacheDir: File,
+    /**
+     * How many frames to run before the picture is taken. A view draws itself in one; one that posts work to
+     * the frame clock or the main looper (an animation's first step, a deferred layout) is itself a frame or
+     * two later.
+     */
+    val frames: Int = 1,
+    /** aapt2's `R.txt` from the project's last build, when there is one: see [ResourceIds]. */
+    val builtResourceIds: File? = null,
 )
 
 /**

@@ -113,7 +113,17 @@ class LayoutlibRenderer(private val home: LayoutlibHome) {
             if (!inflated.isSuccess) {
                 return LayoutlibResult(null, problems = problems.toList(), error = describe(inflated.errorMessage, inflated.exception))
             }
-            val drawn = session.render()
+            var drawn = session.render()
+            // Later frames: what was posted to the frame clock and the main looper runs, then the views are
+            // measured and drawn again. Time moves a display frame at a time, as it would on a device.
+            var frameTime = 0L
+            for (frame in 1 until request.frames) {
+                if (!drawn.isSuccess) break
+                frameTime += FRAME_NANOS
+                session.setElapsedFrameTimeNanos(frameTime)
+                session.executeCallbacks(frameTime)
+                drawn = session.render()
+            }
             if (!drawn.isSuccess) {
                 return LayoutlibResult(null, problems = problems.toList(), error = describe(drawn.errorMessage, drawn.exception))
             }
@@ -172,14 +182,15 @@ class LayoutlibRenderer(private val home: LayoutlibHome) {
     // ---- per project ---------------------------------------------------------------------------------------
 
     private fun projectFor(request: LayoutlibRequest, config: FolderConfiguration, configText: String): Project {
-        val key = listOf(request.resourceDirs, request.classpath, request.resourcePackages, configText, stamp(request.resourceDirs))
+        val built = request.builtResourceIds?.takeIf { it.isFile }
+        val key = listOf(request.resourceDirs, request.classpath, request.resourcePackages, configText, stamp(request.resourceDirs), built?.let { it.path + it.lastModified() + it.length() })
         project?.takeIf { it.key == key }?.let { return it }
         val framework = frameworkTables.getOrPut(configText) {
             ResourceTables.load(File(request.cacheDir, "framework-$configText.bin"), ResourceNamespace.ANDROID, listOf(home.frameworkRes()), config, configText)
         }
         val name = "project-" + Integer.toHexString(request.resourceDirs.map { it.path }.hashCode()) + "-$configText.bin"
         val app = ResourceTables.load(File(request.cacheDir, name), ResourceNamespace.RES_AUTO, request.resourceDirs, config, configText)
-        val ids = ResourceIds(app, request.resourcePackages) { attr -> Bridge.getResourceId(ResourceType.ATTR, attr) ?: 0 }
+        val ids = ResourceIds(app, request.resourcePackages, { attr -> Bridge.getResourceId(ResourceType.ATTR, attr) ?: 0 }, built)
         val classes = LibraryClassLoader(request.classpath, LayoutlibRenderer::class.java.classLoader, ids)
         return Project(key, mapOf(ResourceNamespace.ANDROID to framework, ResourceNamespace.RES_AUTO to app), ids, classes).also { project = it }
     }
@@ -302,5 +313,7 @@ class LayoutlibRenderer(private val home: LayoutlibHome) {
 
     private companion object {
         const val MAX_PROBLEMS = 50
+        /** One frame of a 60 Hz display. */
+        const val FRAME_NANOS = 16_666_667L
     }
 }

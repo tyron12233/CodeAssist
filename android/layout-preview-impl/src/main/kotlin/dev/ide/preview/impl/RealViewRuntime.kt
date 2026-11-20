@@ -69,6 +69,11 @@ class RealViewRequest(
     val resourceDirs: List<Path> = emptyList(),
     val resourcePackages: List<String> = emptyList(),
     val layoutFile: Path? = null,
+    /**
+     * aapt2's `R.txt` from the project's last build, when it has been built. The project's compiled classes
+     * hold those ids as constants, so a runtime that numbers resources itself must use the same numbers.
+     */
+    val builtResourceIds: Path? = null,
 ) {
     /** Transient in-process callback for fine render stages ("Dexing"/"Inflating"/"Drawing"), for the status
      *  chip. NOT serialized across the `:preview` IPC — each side sets its own (the daemon forwards over the
