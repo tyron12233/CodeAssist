@@ -389,6 +389,12 @@ class PreviewResourceLinkerTest {
                     <string name="theme_only">Theme</string>
                 </resources>
             """.trimIndent())
+            // An image in each tier: the preview stores PNGs as they are, and they must still link.
+            val dot = java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+            for (png in listOf("aars/widgets-1.0/res/drawable/widget_dot.png", "app/src/main/res/drawable/app_dot.png")) {
+                Files.createDirectories(dir.resolve(png).parent)
+                Files.write(dir.resolve(png), dot)
+            }
             val libraries = listOf(dir.resolve("aars/widgets-1.0/res"), dir.resolve("aars/theme-2.0/res"))
             val resDirs = libraries + AndroidResources.resourceDirs(module, store.workspace)
             val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
@@ -404,7 +410,7 @@ class PreviewResourceLinkerTest {
             val first = table(link().resourcesAp!!)
             assertTrue("CodeAssist Demo" in first && "From widgets" !in first, "the project does not override the library:\n$first")
             assertTrue("#ff222222" in first && "#ff111111" !in first, "the later library does not override the earlier:\n$first")
-            for (name in listOf("string/widgets_only", "string/theme_only", "layout/widget_row", "style/WidgetThing")) {
+            for (name in listOf("string/widgets_only", "string/theme_only", "layout/widget_row", "style/WidgetThing", "drawable/widget_dot", "drawable/app_dot")) {
                 assertTrue(name in first, "$name is missing:\n$first")
             }
 

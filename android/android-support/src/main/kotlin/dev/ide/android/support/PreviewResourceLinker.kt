@@ -122,6 +122,9 @@ class PreviewResourceLinker(
             return out to spareFor.entries.associate { (name, spare) -> spare to name }
         }
 
+        /** How long a set of libraries' compiled resources is kept after the last link against it. */
+        private const val LIBRARY_TIER_DAYS = 30
+
         /** Dead bytes [quickRelink]'s patches may leave in `resources.ap_` before a full link compacts it. */
         private const val MAX_PATCH_GROWTH = 8L shl 20
     }
@@ -221,7 +224,7 @@ class PreviewResourceLinker(
                 Files.createDirectories(overlayFile.parent)
                 Files.write(overlayFile, rewritten.toByteArray())
 
-                val overlay = aapt2.compile(listOf(overlaySrc), overlayCompiled)
+                val overlay = aapt2.compile(listOf(overlaySrc), overlayCompiled, crunch = false)
                 if (!overlay.result.success) {
                     locate(overlay.result.log, outDir, ownDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
                     return Result(null, "aapt2 compile failed: ${overlay.result.log.takeLast(2).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
@@ -306,7 +309,7 @@ class PreviewResourceLinker(
         Files.createDirectories(src.resolve(qualifier))
         Files.write(src.resolve(qualifier).resolve(name), referenced.toByteArray())
         val q1 = System.nanoTime()
-        val c = aapt2.compile(listOf(src), compiled)
+        val c = aapt2.compile(listOf(src), compiled, crunch = false)
         if (!c.result.success) return null
         val q2 = System.nanoTime()
         val scratch = outDir.resolve("quick.ap_")
@@ -425,7 +428,11 @@ class PreviewResourceLinker(
     private fun libraryTier(libraries: List<Path>, progress: (String) -> Unit): List<Path>? {
         val dir = cacheRoot.resolve("libraries").resolve(libraryKey(libraries))
         val done = dir.resolve("done")
-        if (Files.isRegularFile(done)) return listZips(dir.resolve("compiled"))
+        if (Files.isRegularFile(done)) {
+            // Marked as used, once per launch: the mark is what [pruneLibraryTiers] goes by.
+            if (usedTiers.add(dir.toString())) runCatching { Files.setLastModifiedTime(done, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis())) }
+            return listZips(dir.resolve("compiled"))
+        }
         progress("Compiling library resources")
         return runCatching {
             // Built beside where it will be and moved there whole: another project opening on the same
@@ -437,7 +444,7 @@ class PreviewResourceLinker(
             rewriteLayouts(merged)
             val tc = System.nanoTime()
             val hasResources = Files.walk(merged).use { s -> s.anyMatch { Files.isRegularFile(it) } }
-            val compiled = if (hasResources) aapt2.compile(listOf(merged), work.resolve("compiled")) else null
+            val compiled = if (hasResources) aapt2.compile(listOf(merged), work.resolve("compiled"), crunch = false) else null
             log.info("preview libraries: ${libraries.size} merged=${(tc - tm) / 1_000_000}ms compiled=${(System.nanoTime() - tc) / 1_000_000}ms")
             if (compiled != null && !compiled.result.success) {
                 log.warn("library resources did not compile apart: ${compiled.result.log.takeLast(2).joinToString(" / ")}")
@@ -447,8 +454,29 @@ class PreviewResourceLinker(
             Files.write(work.resolve("done"), ByteArray(0))
             runCatching { Files.move(work, dir, StandardCopyOption.ATOMIC_MOVE) }
                 .onFailure { work.toFile().deleteRecursively() }
+            pruneLibraryTiers(keep = dir)
             if (Files.isRegularFile(done)) listZips(dir.resolve("compiled")) else null
         }.onFailure { log.warn("library resources not compiled apart: ${it.message}") }.getOrNull()
+    }
+
+    /** The library tiers this linker has already marked as used. */
+    private val usedTiers: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * Removes the library tiers no project has linked against for [LIBRARY_TIER_DAYS], and what an interrupted
+     * build of one left behind. Run when a new tier is made, which is when the folder grows: a project that
+     * moves to a newer Material leaves the old set's megabytes there for nothing.
+     */
+    private fun pruneLibraryTiers(keep: Path) {
+        val root = keep.parent ?: return
+        val cutoff = System.currentTimeMillis() - LIBRARY_TIER_DAYS * 24L * 60 * 60 * 1000
+        runCatching {
+            Files.list(root).use { s -> s.collect(Collectors.toList()) }.forEach { tier ->
+                if (tier == keep) return@forEach
+                val mark = tier.resolve("done").takeIf { Files.isRegularFile(it) } ?: tier
+                if (Files.getLastModifiedTime(mark).toMillis() < cutoff) tier.toFile().deleteRecursively()
+            }
+        }
     }
 
     /**
@@ -495,7 +523,7 @@ class PreviewResourceLinker(
             writeSpareIds(merged)
             compiledDir.toFile().deleteRecursively()
             val tc = System.nanoTime()
-            val r = aapt2.compile(listOf(merged), compiledDir)
+            val r = aapt2.compile(listOf(merged), compiledDir, crunch = false)
             log.info("preview base: merge=${(tc - tm) / 1_000_000}ms compile=${(System.nanoTime() - tc) / 1_000_000}ms")
             if (!r.result.success) {
                 val errors = locate(r.result.log, outDir, resDirs, overlay = null)

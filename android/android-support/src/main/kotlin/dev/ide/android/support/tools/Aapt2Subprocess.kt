@@ -20,13 +20,13 @@ class Aapt2Subprocess(
     private fun exec(cmd: List<String>): ToolResult =
         Aapt2InProcess.runner?.invoke(cmd.drop(1)) ?: daemon?.run(cmd.drop(1)) ?: Subprocess.run(cmd)
 
-    override fun compile(resDirs: List<Path>, outDir: Path): Aapt2CompileResult {
+    override fun compile(resDirs: List<Path>, outDir: Path, crunch: Boolean): Aapt2CompileResult {
         Files.createDirectories(outDir)
         val archives = ArrayList<Path>()
         val log = ArrayList<String>()
         resDirs.filter { Files.isDirectory(it) }.forEachIndexed { i, resDir ->
             val archive = outDir.resolve("res-$i.zip")
-            val r = exec(listOf(aapt2.toString(), "compile", "--dir", resDir.toString(), "-o", archive.toString()))
+            val r = exec(listOf(aapt2.toString(), "compile", "--dir", resDir.toString(), "-o", archive.toString()) + if (crunch) emptyList() else listOf("--no-crunch"))
             log += r.log
             if (!r.success) return Aapt2CompileResult(archives, ToolResult(false, log + selfTest()))
             if (Files.exists(archive)) archives.add(archive)

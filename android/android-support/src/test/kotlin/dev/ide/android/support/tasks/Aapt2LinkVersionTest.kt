@@ -24,7 +24,7 @@ class Aapt2LinkVersionTest {
     private class RecordingAapt2 : Aapt2 {
         var versionCode: Int? = null
         var versionName: String? = null
-        override fun compile(resDirs: List<Path>, outDir: Path) = Aapt2CompileResult(emptyList(), ToolResult.ok())
+        override fun compile(resDirs: List<Path>, outDir: Path, crunch: Boolean) = Aapt2CompileResult(emptyList(), ToolResult.ok())
         override fun link(
             compiled: List<Path>, manifest: Path, androidJar: Path, customPackage: String,
             extraPackages: List<String>, minSdk: Int, targetSdk: Int, genJavaDir: Path, outApk: Path,

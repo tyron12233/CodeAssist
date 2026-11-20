@@ -255,8 +255,15 @@ object ToolMemory {
 
 /** aapt2: compile resources to an intermediate form, then link them into `resources.ap_` + `R.java`. */
 interface Aapt2 {
-    /** Compile each res directory into a flat-file archive; returns the produced archives under [outDir]. */
-    fun compile(resDirs: List<Path>, outDir: Path): Aapt2CompileResult
+    /**
+     * Compile each res directory into a flat-file archive; returns the produced archives under [outDir].
+     *
+     * [crunch] false (`--no-crunch`) stores each PNG as it is. Crunching recompresses them to make the APK
+     * smaller and is nearly all of a compile's time when a project has images: sixty 384 px PNGs took 12 s
+     * crunched and 23 ms not, on a desktop. A caller whose output is never shipped (the layout preview) has
+     * no use for it.
+     */
+    fun compile(resDirs: List<Path>, outDir: Path, crunch: Boolean = true): Aapt2CompileResult
 
     /**
      * Link [compiled] archives with the [manifest] against [androidJar] into [outApk] (`resources.ap_`),
