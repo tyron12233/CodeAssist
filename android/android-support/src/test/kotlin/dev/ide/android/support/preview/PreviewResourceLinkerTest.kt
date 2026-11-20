@@ -362,6 +362,72 @@ class PreviewResourceLinkerTest {
         }
     }
 
+    @Test
+    fun libraryResourcesCompileOnceAndLinkAsTheMergedTreeDid() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("preview-relink-libraries") { env ->
+            val dir = env.dir
+            val store = buildAppWorkspace(dir, env.platform)
+            val module: Module = store.workspace.projects.single().modules.single { it.name == "app" }
+            // Two libraries as an unpacked AAR is: a folder named for the artifact, its resources under `res`.
+            // The second overrides the first, and the project overrides both.
+            dir.writeSource("aars/widgets-1.0/res/values/values.xml", """
+                <?xml version="1.0" encoding="utf-8"?>
+                <resources>
+                    <string name="app_name">From widgets</string>
+                    <string name="widgets_only">Widgets</string>
+                    <color name="shared">#111111</color>
+                    <style name="WidgetThing"><item name="android:textColor">@color/shared</item></style>
+                </resources>
+            """.trimIndent())
+            dir.writeSource("aars/widgets-1.0/res/layout/widget_row.xml", LAYOUT.trimIndent())
+            dir.writeSource("aars/theme-2.0/res/values/values.xml", """
+                <?xml version="1.0" encoding="utf-8"?>
+                <resources>
+                    <color name="shared">#222222</color>
+                    <string name="theme_only">Theme</string>
+                </resources>
+            """.trimIndent())
+            val libraries = listOf(dir.resolve("aars/widgets-1.0/res"), dir.resolve("aars/theme-2.0/res"))
+            val resDirs = libraries + AndroidResources.resourceDirs(module, store.workspace)
+            val layout = dir.resolve("app/src/main/res/layout/activity_main.xml")
+            fun table(ap: Path) = ProcessBuilder(sdk.aapt2.toString(), "dump", "resources", ap.toString())
+                .redirectErrorStream(true).start().inputStream.readBytes().decodeToString()
+
+            val cache = dir.resolve(".caches/preview-res")
+            val linker = PreviewResourceLinker(Aapt2Subprocess(sdk.aapt2), sdk.androidJar, cache)
+            fun link(l: PreviewResourceLinker = linker, tiers: Boolean = true) =
+                l.link(module, "debug", resDirs, layout, LAYOUT.trimIndent(), "com.example.app", 24, 34, libraryResDirs = if (tiers) libraries else emptyList())
+                    .also { assertNull(it.error, "relink failed: ${it.error}") }
+
+            val first = table(link().resourcesAp!!)
+            assertTrue("CodeAssist Demo" in first && "From widgets" !in first, "the project does not override the library:\n$first")
+            assertTrue("#ff222222" in first && "#ff111111" !in first, "the later library does not override the earlier:\n$first")
+            for (name in listOf("string/widgets_only", "string/theme_only", "layout/widget_row", "style/WidgetThing")) {
+                assertTrue(name in first, "$name is missing:\n$first")
+            }
+
+            // The same table as one merged tree gives: names, ids and values.
+            val merged = PreviewResourceLinker(Aapt2Subprocess(sdk.aapt2), sdk.androidJar, dir.resolve(".caches/merged"))
+            assertEquals(table(link(merged, tiers = false).resourcesAp!!), first)
+
+            // A saved string recompiles the project's resources and leaves the libraries' as they are.
+            val tier = Files.list(cache.resolve("libraries")).use { s -> s.toList() }.single()
+            val archive = Files.list(tier.resolve("compiled")).use { s -> s.toList() }.single()
+            val compiledAt = Files.getLastModifiedTime(archive)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS.replace("CodeAssist Demo", "Renamed"))
+            assertTrue("Renamed" in table(link().resourcesAp!!))
+            assertEquals(listOf(tier), Files.list(cache.resolve("libraries")).use { s -> s.toList() })
+            assertEquals(compiledAt, Files.getLastModifiedTime(archive), "the libraries were compiled again")
+
+            // Another linker over the same cache (another project, another launch) finds them there.
+            val later = PreviewResourceLinker(Aapt2Subprocess(sdk.aapt2), sdk.androidJar, cache)
+            assertTrue("Renamed" in table(link(later).resourcesAp!!))
+            assertEquals(compiledAt, Files.getLastModifiedTime(archive), "a second linker compiled the libraries again")
+        }
+    }
+
     private fun zipEntries(ap: Path): Set<String> =
         ZipFile(ap.toFile()).use { z -> z.entries().toList().map { it.name }.toSet() }
 

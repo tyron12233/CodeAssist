@@ -28,9 +28,13 @@ import java.util.stream.Collectors
  * preview shows it instead of a stale render. The build's already-compiled flats are a fallback only when the
  * self-build fails without aapt2 naming an error (the tool itself failing).
  *
- * The base archive is cached by the live `res/` files' signatures, ignoring the edited layout (the live buffer
- * always overlays it), so editing a layout, and saving it, reuses the base and only the one-file overlay
- * recompiles. The per-edit ARSC relink is cached by base + manifest + buffer, and an edit that changes no ids
+ * The base is two tiers, as the build's is. The libraries' resources are most of the table (Material alone is
+ * some two thousand files) and never change, so they are merged and compiled once for a set of libraries and
+ * kept where every project with that set finds them ([libraryTier]). The project's own are merged and compiled
+ * apart, cached by their files' signatures, ignoring the edited layout (the live buffer always overlays it):
+ * saving a string or adding a drawable recompiles the project's resources and nothing else, and editing a
+ * layout, and saving it, reuses both and only the one-file overlay recompiles. The link takes the library tier
+ * as the table and everything above it as an overlay, so what overrides what is as it was in one merged tree. The per-edit ARSC relink is cached by base + manifest + buffer, and an edit that changes no ids
  * skips it: the layout is linked alone against the last full output and patched into a copy of it.
  *
  * The preview `R.jar` ([Result.rJar]) holds the app's `R`, packaged to bytecode via [RBytecodeGenerator]. A
@@ -52,6 +56,11 @@ class PreviewResourceLinker(
     private val aapt2: Aapt2,
     private val androidJar: Path,
     private val cacheRoot: Path,
+    /**
+     * Names this project under [cacheRoot] when the cache is shared between projects: what is linked for a
+     * module is kept by its name, which two projects can both use. Empty for a cache that is one project's.
+     */
+    private val projectId: String = "",
 ) {
     /** A preview relink result: the linked preview [resourcesAp] + the generated preview [rJar] (app + extra
      *  packages, ids matching this arsc), or an [error] to fall back on. Non-empty [resourceErrors] mean the
@@ -165,15 +174,21 @@ class PreviewResourceLinker(
         targetSdk: Int,
         progress: (String) -> Unit,
     ): Result {
-        val outDir = cacheRoot.resolve(module.name).resolve(variant)
+        val outDir = (if (projectId.isEmpty()) cacheRoot else cacheRoot.resolve("projects").resolve(projectId)).resolve(module.name).resolve(variant)
         Files.createDirectories(outDir)
         val manifest = previewManifest(outDir, packageName)
         val t0 = System.nanoTime()
 
         // Base: the live project resources, merged + compiled. A resource error is reported, not papered over
         // with the build's (stale) flats; those stand in only when aapt2 failed without naming an error.
-        val base = when (val built = selfBuildBase(outDir, resDirs, editedLayout, progress)) {
-            is Base.Built -> built.archives
+        // The libraries' tier first: it is the table, and the project's own go on top of it. Without one (no
+        // libraries, or theirs would not compile apart) everything is one tier, as it was.
+        val libraries = libraryDirs(resDirs)
+        val libraryArchives = if (libraries.isEmpty()) null else libraryTier(libraries, progress)
+        val ownDirs = if (libraryArchives == null) resDirs else resDirs - libraries.toSet()
+        val tLibs = System.nanoTime()
+        val base = when (val built = selfBuildBase(outDir, ownDirs, editedLayout, progress)) {
+            is Base.Built -> libraryArchives.orEmpty() + built.archives
             is Base.Broken -> return errors(built.errors)
             null -> fallbackBase(module, variant)
                 ?: return Result(null, "no resources to link — build the project once")
@@ -208,7 +223,7 @@ class PreviewResourceLinker(
 
                 val overlay = aapt2.compile(listOf(overlaySrc), overlayCompiled)
                 if (!overlay.result.success) {
-                    locate(overlay.result.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
+                    locate(overlay.result.log, outDir, ownDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
                     return Result(null, "aapt2 compile failed: ${overlay.result.log.takeLast(2).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
                 }
 
@@ -232,7 +247,7 @@ class PreviewResourceLinker(
                     overlays = base.drop(1) + overlay.archives,
                 )
                 if (!linkRes.success) {
-                    locate(linkRes.log, outDir, resDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
+                    locate(linkRes.log, outDir, ownDirs, overlaySrc to editedLayout).takeIf { it.isNotEmpty() }?.let { return errors(it) }
                     return Result(null, "aapt2 link failed: ${linkRes.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
                 }
                 // The next edit of this layout can patch this output instead of relinking ([quickRelink]).
@@ -245,7 +260,7 @@ class PreviewResourceLinker(
         val previewRJar = ensurePreviewRJar(outDir, packageName, progress)
         fun ms(a: Long, b: Long) = (b - a) / 1_000_000
         log.info(
-            "preview link: base=${ms(t0, tBase)}ms link=${ms(tBase, tLink)}ms${if (quick) " (quick)" else ""} " +
+            "preview link: libs=${ms(t0, tLibs)}ms base=${ms(tLibs, tBase)}ms link=${ms(tBase, tLink)}ms${if (quick) " (quick)" else ""} " +
                 "rJar=${ms(tLink, System.nanoTime())}ms"
         )
         val toolsJar = runCatching { PreviewToolsClasses.jar(cacheRoot) }
@@ -386,6 +401,71 @@ class PreviewResourceLinker(
     private sealed interface Base {
         class Built(val archives: List<Path>) : Base
         class Broken(val errors: List<ResourceError>) : Base
+    }
+
+    /**
+     * The [resDirs] that are libraries' ([immutableDirs]), when they are all below the project's own in
+     * priority, which is the order resources are given in. Any other order has a library overriding the
+     * project, which two tiers cannot say: empty then, and everything is one tier.
+     */
+    private fun libraryDirs(resDirs: List<Path>): List<Path> {
+        val isLibrary = resDirs.map { normalized(it) in immutableDirs }
+        val firstOwn = isLibrary.indexOf(false).let { if (it < 0) resDirs.size else it }
+        if (isLibrary.drop(firstOwn).any { it }) return emptyList()
+        return resDirs.take(firstOwn).filter { Files.isDirectory(it) }
+    }
+
+    /**
+     * The libraries' resources merged and compiled, as the archives to link, lowest tier of the base. Kept
+     * under the cache's root, not a project's folder, by what the set of libraries is ([libraryKey]): the
+     * first project with a set of libraries pays for it and every later one, and every later launch, finds it
+     * there. Empty when the libraries hold no resources. Null when they cannot be compiled apart, and the
+     * caller compiles them with the project's as one tier, which is also what reports why.
+     */
+    private fun libraryTier(libraries: List<Path>, progress: (String) -> Unit): List<Path>? {
+        val dir = cacheRoot.resolve("libraries").resolve(libraryKey(libraries))
+        val done = dir.resolve("done")
+        if (Files.isRegularFile(done)) return listZips(dir.resolve("compiled"))
+        progress("Compiling library resources")
+        return runCatching {
+            // Built beside where it will be and moved there whole: another project opening on the same
+            // libraries at the same moment builds its own and one of the two is kept.
+            val work = dir.resolveSibling(dir.fileName.toString() + ".tmp-" + System.nanoTime())
+            val merged = work.resolve("merged")
+            val tm = System.nanoTime()
+            mergeResourceDirs(libraries, merged)
+            rewriteLayouts(merged)
+            val tc = System.nanoTime()
+            val hasResources = Files.walk(merged).use { s -> s.anyMatch { Files.isRegularFile(it) } }
+            val compiled = if (hasResources) aapt2.compile(listOf(merged), work.resolve("compiled")) else null
+            log.info("preview libraries: ${libraries.size} merged=${(tc - tm) / 1_000_000}ms compiled=${(System.nanoTime() - tc) / 1_000_000}ms")
+            if (compiled != null && !compiled.result.success) {
+                log.warn("library resources did not compile apart: ${compiled.result.log.takeLast(2).joinToString(" / ")}")
+                work.toFile().deleteRecursively()
+                return@runCatching null
+            }
+            Files.write(work.resolve("done"), ByteArray(0))
+            runCatching { Files.move(work, dir, StandardCopyOption.ATOMIC_MOVE) }
+                .onFailure { work.toFile().deleteRecursively() }
+            if (Files.isRegularFile(done)) listZips(dir.resolve("compiled")) else null
+        }.onFailure { log.warn("library resources not compiled apart: ${it.message}") }.getOrNull()
+    }
+
+    /**
+     * What a set of libraries' compiled resources depend on: which libraries, in their order. A library's
+     * folder is named for its artifact and never changes in place; its manifest's and symbol list's sizes say
+     * the same of two folders of one name, without reading the thousands of files under them. Nothing of a
+     * project is in it, so projects with the same libraries share one answer.
+     */
+    private fun libraryKey(libraries: List<Path>): String = digest {
+        put("libraries v1 rewriter ${PreviewLayoutRewriter.VERSION}")
+        for (res in libraries) {
+            val home = res.toAbsolutePath().normalize().parent
+            put(home?.fileName?.toString() ?: res.toString())
+            for (name in listOf("AndroidManifest.xml", "R.txt")) {
+                put(runCatching { Files.size(home.resolve(name)) }.getOrDefault(-1L).toString())
+            }
+        }
     }
 
     /**
@@ -570,6 +650,8 @@ class PreviewResourceLinker(
         // Not a file: the base's merged layouts are rewritten, so a new rewriter rebuilds it.
         out["#layout-rewriter"] = PreviewLayoutRewriter.VERSION
         out["#spare-ids"] = SPARE_IDS.toString()
+        // A base from before the libraries had a tier of their own holds their resources too.
+        out["#tiers"] = "2"
         return out
     }
 
