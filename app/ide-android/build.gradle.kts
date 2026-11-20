@@ -329,6 +329,21 @@ val moshiArtLibs: Configuration by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = true
 }
 dependencies { moshiArtLibs("com.squareup.moshi:moshi:1.15.2") }
+// The runtimes the other bundled processors read their annotations from, for the interpreted runs in the same
+// test: each resolves to plain JVM jars (Room's and Room 3's are multiplatform, with a JVM variant).
+val kspArtLibs = mapOf(
+    "room" to libs.room.runtime, "room3" to libs.room3.runtime, "hilt" to libs.hilt.core, "glide" to libs.glide.annotations,
+).mapValues { (id, dep) ->
+    configurations.create("kspArtLibs_$id") { isCanBeConsumed = false; isCanBeResolved = true }
+        .also { dependencies.add(it.name, dep) }
+}
+val bundleKspLibsAsset = tasks.register<Copy>("bundleKspLibsAsset") {
+    description = "Stage the Room/Room 3/Hilt/Glide runtime jars as an androidTest asset for the KSP-on-ART spike."
+    into(layout.buildDirectory.dir("moshi-libs-asset/ksp-libs"))
+    for ((id, cfg) in kspArtLibs) {
+        from(provider { cfg.filter { it.name.endsWith(".jar") && !it.name.startsWith("kotlin-stdlib") } }) { into(id) }
+    }
+}
 val bundleMoshiLibsAsset = tasks.register<Copy>("bundleMoshiLibsAsset") {
     description = "Stage the Moshi runtime jars (moshi + okio) as an androidTest asset for the KSP-on-ART spike."
     from(provider { moshiArtLibs.filter { it.name.endsWith(".jar") } })
@@ -994,7 +1009,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleLayoutEditorComposeAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, predexKotlinStdlib, predexAppLogRuntime, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleLayoutEditorComposeAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, predexKotlinStdlib, predexAppLogRuntime, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleKspLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui-resources'

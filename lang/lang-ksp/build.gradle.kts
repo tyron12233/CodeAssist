@@ -32,6 +32,9 @@ dependencies {
     // runtime floor) without loading it, the same way android-support/lang-java scan a classpath.
     implementation(libs.ow2.asm)
 
+    // InterpretedKspProcessors runs a processor's jars on the bytecode VM instead of defining their classes.
+    implementation(project(":jvm-interp"))
+
     // Test-only: the de-risk spikes (KspEngineSpikeTest / RoomKspSpikeTest) reference KotlinSymbolProcessing
     // statically, so they need the runner on the test compile classpath. KspSourceGeneratorTest instead drives
     // the production reflective path. KSP's Analysis API frontend uses coroutines (the embeddable bundles a
@@ -177,6 +180,7 @@ val roomLibs: Configuration by configurations.creating        // room-runtime/-c
 val room3Libs: Configuration by configurations.creating       // room3-runtime — the SEPARATE androidx.room3 group
 val moshiLibs: Configuration by configurations.creating       // moshi runtime (JsonClass marker + KSerializer machinery)
 val hiltLibs: Configuration by configurations.creating        // hilt-core (dagger.hilt.InstallIn marker) + the dagger runtime
+val glideLibs: Configuration by configurations.creating       // glide annotations (@GlideModule, the marker)
 // The Dagger the APP carries: it dexes bundletool for in-process .aab building, whose closure drags in an
 // ANCIENT dagger runtime. HiltProcessorDaggerShadowingTest parents the processor loader on exactly that jar to
 // reproduce the device classloader shape (see ToolClassIsolation). It is resolved from bundletool so the
@@ -199,6 +203,7 @@ dependencies {
     room3Libs(libs.room3.runtime)
     moshiLibs(libs.moshi.runtime)
     hiltLibs(libs.hilt.core)
+    glideLibs(libs.glide.annotations)
     appProvidedDagger(libs.android.bundletool)
     appProvidedGuava(libs.guava)   // the version :ide-android ships, so the fixture tracks the app
     kspRunner(libs.ksp.aa.embeddable)
@@ -226,6 +231,7 @@ tasks.named<Test>("test") {
         systemProperty("room3.libs.classpath", room3Libs.asPath)
         systemProperty("moshi.libs.classpath", moshiLibs.asPath)
         systemProperty("hilt.libs.classpath", hiltLibs.asPath)
+        systemProperty("glide.libs.classpath", glideLibs.asPath)
         // Just the dagger runtime (+ the javax.inject it implements) out of bundletool's closure: what the
         // app's own classloader carries, and nothing else, so the fixture is the shadowing pair and not a
         // second copy of bundletool's whole world.

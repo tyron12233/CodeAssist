@@ -63,6 +63,13 @@ class KspSourceGenerator(
     private val jvmTarget: String = DEFAULT_JVM_TARGET,
     /** Sink for the run's diagnostics (also returned in the [SourceGenResult]); defaults to no-op. */
     private val log: (String) -> Unit = {},
+    /**
+     * Instantiates the processors' providers itself instead of loading their classes through [loader], which
+     * then carries the runner alone. This is the seam for a host that EXECUTES the processor jars some other
+     * way than defining their classes (interpreting their bytecode): the providers it returns only have to
+     * implement the shipped [SymbolProcessorProvider] interface. Null (the default) loads them from [loader].
+     */
+    private val providerFactory: ((processorJars: List<Path>) -> List<SymbolProcessorProvider>)? = null,
 ) : SourceGenerator {
 
     override val id: String = "ksp"
@@ -103,12 +110,12 @@ class KspSourceGenerator(
         val classOut = File(sidecar, "classes")
         val caches = File(sidecar, "caches")
 
-        val cl = loader.load(runner + processorJars)
+        val cl = loader.load(if (providerFactory != null) runner else runner + processorJars)
         // Read each processor's SymbolProcessorProvider from its jar's META-INF/services descriptor, then load
         // the class through `cl`. NOT `ServiceLoader.load(cl)`: on ART `cl` is a DexClassLoader over dex-only
         // jars (D8 drops non-class resources like META-INF/services), so ServiceLoader would find nothing —
         // read the descriptor from the original jars instead (the same split the kotlinc-plugin loader uses).
-        val providers = loadProviders(processorJars, cl)
+        val providers = providerFactory?.invoke(processorJars) ?: loadProviders(processorJars, cl)
         if (providers.isEmpty()) {
             val m = "ksp error: no SymbolProcessorProvider found on the processor classpath for ${request.moduleName}"
             log(m)

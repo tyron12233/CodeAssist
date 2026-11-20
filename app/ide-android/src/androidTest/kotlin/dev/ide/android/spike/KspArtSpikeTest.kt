@@ -17,9 +17,11 @@ import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import dev.ide.android.ArtKotlinPluginLoader
+import dev.ide.android.DexPeerFactory
 import dev.ide.build.SourceGenRequest
 import dev.ide.ksp.BundledKspProcessors
 import dev.ide.ksp.BundledKspThin
+import dev.ide.ksp.InterpretedKspProcessors
 import dev.ide.ksp.KspProcessorCatalog
 import dev.ide.ksp.KspProcessorLoader
 import dev.ide.ksp.KspSourceGenerator
@@ -145,64 +147,104 @@ class KspArtSpikeTest {
      */
     @Test
     fun bundledMoshiRunsOnArt() {
+        runProcessor(MOSHI, interpreted = false)
+    }
+
+    /**
+     * The same processors with NONE of their classes defined on ART: the processor jars are executed by the
+     * bytecode VM (`:jvm-interp`) through the production [InterpretedKspProcessors], and only the thin KSP
+     * runner is dexed. KSP is handed a peer implementing `SymbolProcessorProvider`; the code generator,
+     * kotlinpoet/javapoet, guava and Dagger's own model run interpreted behind it. This is the path a
+     * processor the app does not bundle would take. Each run logs its wall time under [TAG]; the desktop twin
+     * (`InterpretedProcessorSpikeTest`) checks the output against a loaded run byte for byte.
+     */
+    @Test fun moshiRunsInterpretedOnArt() = runProcessor(MOSHI, interpreted = true)
+    @Test fun roomRunsInterpretedOnArt() = runProcessor(ROOM, interpreted = true)
+    @Test fun room3RunsInterpretedOnArt() = runProcessor(ROOM3, interpreted = true)
+    @Test fun hiltRunsInterpretedOnArt() = runProcessor(HILT, interpreted = true)
+    @Test fun daggerComponentRunsInterpretedOnArt() = runProcessor(DAGGER, interpreted = true)
+    @Test fun glideRunsInterpretedOnArt() = runProcessor(GLIDE, interpreted = true)
+
+    /** One processor's fixture: the runtime it reads annotations from, a module to process, what must come out. */
+    private class Case(
+        val id: String,
+        val libsAsset: String,
+        val expected: String,
+        val sources: Map<String, String>,
+        val options: Map<String, String> = emptyMap(),
+        val declared: List<String> = emptyList(),
+    )
+
+    private fun runProcessor(case: Case, interpreted: Boolean) {
         System.setProperty("kotlin.environment.keepalive", "true")
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val work = File(ctx.filesDir, "ksp-moshi-art-spike").apply { deleteRecursively(); mkdirs() }
+        val work = File(ctx.filesDir, "ksp-${case.id}-${if (interpreted) "interp" else "dex"}-${case.expected.lowercase().take(12)}")
+            .apply { deleteRecursively(); mkdirs() }
         val home = provisionKotlincHome(ctx, File(work, "kotlinc-home"))
         System.setProperty("kotlinc.art.home", home.absolutePath)
 
         val androidJar = copyAsset(ctx, "android.jar", File(work, "android.jar"))
         val stdlibJar = copyAsset(ctx, "kotlin-stdlib.jar", File(work, "kotlin-stdlib.jar"))
-        // moshi-libs is an androidTest asset → it lives in the INSTRUMENTATION apk, not the app under test, so
-        // read it from the instrumentation context (android.jar etc. above are the app's own main assets).
-        val moshiLibs = copyAssetDir(InstrumentationRegistry.getInstrumentation().context, "moshi-libs", File(work, "moshi-libs"))
-        assertTrue("moshi-libs asset empty (bundleMoshiLibsAsset)", moshiLibs.isNotEmpty())
-        assertTrue("/processors/moshi.zip not bundled in the app", BundledKspProcessors.isBundled("moshi"))
+        // The runtime jars are androidTest assets → they live in the INSTRUMENTATION apk, not the app under
+        // test, so read them from the instrumentation context (android.jar etc. above are the app's own).
+        val libs = copyAssetDir(InstrumentationRegistry.getInstrumentation().context, case.libsAsset, File(work, "libs"))
+        assertTrue("${case.libsAsset} asset empty", libs.isNotEmpty())
+        assertTrue("/processors/${case.id}.zip not bundled in the app", BundledKspProcessors.isBundled(case.id))
 
         val srcDir = File(work, "src").apply { mkdirs() }
-        File(srcDir, "Person.kt").writeText(
-            """
-            package demo
-            import com.squareup.moshi.JsonClass
-            @JsonClass(generateAdapter = true)
-            data class Person(val name: String, val age: Int)
-            """.trimIndent(),
-        )
-        val genRoot = File(work, "generated").apply { mkdirs() }
-
-        val generator = KspSourceGenerator(
-            runnerClasspath = { listOfNotNull(BundledKspThin.jar()) },
-            // Catalog probe: the moshi runtime on `classpath` selects the bundled Moshi processor.
-            processors = { req -> KspProcessorCatalog.bundled().classpathFor(req.classpath) },
-            // Dex + load the runner + processor on the app classloader (our compiler/AA), like production ART.
-            loader = KspProcessorLoader { cp ->
-                ArtKotlinPluginLoader(androidJar.toPath(), File(work, "loader-cache").toPath(), minApi = 26).load(cp)
-            },
-            jdkHome = null, // ART: java.* resolves from android.jar on the classpath below
-        )
-        val request = SourceGenRequest(
-            moduleName = "app",
-            kotlinSources = listOf(File(srcDir, "Person.kt").toPath()),
-            javaSources = emptyList(),
-            classpath = (listOf(androidJar, stdlibJar) + moshiLibs).map { it.toPath() },
-            outputDir = genRoot.toPath(),
-            sourceRoots = listOf(srcDir.toPath()),
-        )
-
-        assertTrue("generator should apply (bundled Moshi + moshi runtime present)", generator.appliesTo(request))
-        val result = try {
-            generator.generate(request)
-        } catch (t: Throwable) {
-            Log.e(TAG, "bundled Moshi failed to RUN on ART:", t)
-            fail("bundled Moshi failed on ART: ${t.javaClass.name}: ${t.message}\n${t.stackTraceToString()}")
-            return
+        val sources = case.sources.map { (path, text) ->
+            File(srcDir, path).apply { parentFile?.mkdirs(); writeText(text.trimIndent()) }
         }
-        val emitted = genRoot.walkTopDown().filter { it.isFile }.map { it.relativeTo(genRoot).path }.toList()
-        Log.i(TAG, "Moshi-on-ART success=${result.success} messages=${result.messages}\nemitted: $emitted")
-        assertTrue(
-            "bundled Moshi did not generate PersonJsonAdapter.kt on ART.\n${result.messages.joinToString("\n")}\n$emitted",
-            result.success && genRoot.walkTopDown().any { it.name == "PersonJsonAdapter.kt" },
-        )
+        val catalog = KspProcessorCatalog.bundled()
+        // An interpreted case runs twice: the first run pays for dexing every small bridge class the processor
+        // needs (a peer per interpreted class that extends a platform type, a stand-in per reflected class),
+        // the second finds them cached, which is what every build after a project's first sees.
+        repeat(if (interpreted) 2 else 1) { round ->
+            val genRoot = File(work, "generated-$round").apply { mkdirs() }
+            val host = InterpretedKspProcessors(DexPeerFactory(File(work, "peer-cache").apply { mkdirs() }.toPath()))
+            val generator = KspSourceGenerator(
+                runnerClasspath = { listOfNotNull(BundledKspThin.jar()) },
+                // Catalog probe: the runtime on `classpath` selects the bundled processor.
+                processors = { req ->
+                    if (case.declared.isEmpty()) catalog.classpathFor(req.classpath) else catalog.classpathFor(req.classpath, req.declaredDependencies)
+                },
+                processorOptions = { case.options },
+                // Dex + load on the app classloader (our compiler/AA), like production ART: the runner and the
+                // processor for a loaded run, the runner alone for an interpreted one.
+                loader = KspProcessorLoader { cp ->
+                    ArtKotlinPluginLoader(androidJar.toPath(), File(work, "loader-cache").toPath(), minApi = 26).load(cp)
+                },
+                jdkHome = null, // ART: java.* resolves from android.jar on the classpath below
+                providerFactory = if (interpreted) host::providers else null,
+            )
+            val request = SourceGenRequest(
+                moduleName = "app",
+                kotlinSources = sources.map { it.toPath() },
+                javaSources = emptyList(),
+                classpath = (listOf(androidJar, stdlibJar) + libs).map { it.toPath() },
+                outputDir = genRoot.toPath(),
+                sourceRoots = listOf(srcDir.toPath()),
+                declaredDependencies = case.declared,
+            )
+
+            assertTrue("generator should apply (bundled ${case.id} + its runtime present)", generator.appliesTo(request))
+            val started = System.nanoTime()
+            val result = try {
+                host.use { generator.generate(request) }
+            } catch (t: Throwable) {
+                Log.e(TAG, "bundled ${case.id} failed to RUN on ART:", t)
+                fail("bundled ${case.id} failed on ART: ${t.javaClass.name}: ${t.message}\n${t.stackTraceToString()}")
+                return
+            }
+            val emitted = genRoot.walkTopDown().filter { it.isFile }.map { it.relativeTo(genRoot).path }.toList()
+            val cached = File(work, "peer-cache").listFiles()?.size ?: 0
+            Log.i(TAG, "KSP-ON-ART ${case.id}/${case.expected} interpreted=$interpreted run=${round + 1} took=${(System.nanoTime() - started) / 1_000_000}ms steps=${host.vm?.steps} bridgedCalls=${host.vm?.bridgedCalls} bridgeClasses=$cached success=${result.success} emitted=${emitted.size}")
+            if (!result.success) result.messages.forEach { Log.e(TAG, "  $it") }
+            assertTrue(
+                "bundled ${case.id} did not generate ${case.expected} on ART.\n${result.messages.joinToString("\n")}\n$emitted",
+                result.success && emitted.any { case.expected in it },
+            )
+        }
     }
 
     private fun copyAsset(ctx: Context, assetName: String, dest: File): File {
@@ -280,5 +322,130 @@ class KspArtSpikeTest {
 
     private companion object {
         const val TAG = "KspArtSpike"
+
+        val MOSHI = Case(
+            "moshi", "moshi-libs", "PersonJsonAdapter.kt",
+            mapOf("Person.kt" to """
+                package demo
+                import com.squareup.moshi.JsonClass
+                @JsonClass(generateAdapter = true)
+                data class Person(val name: String, val age: Int)
+            """),
+        )
+        val ROOM = Case(
+            "room", "ksp-libs/room", "AppDatabase_Impl.kt",
+            mapOf("Db.kt" to """
+                package demo
+                import androidx.room.*
+                @Entity data class User(@PrimaryKey val id: Int, val name: String)
+                @Dao interface UserDao {
+                    @Query("SELECT * FROM User") suspend fun all(): List<User>
+                    @Query("SELECT * FROM User WHERE id = :id") suspend fun byId(id: Int): User?
+                    @Insert suspend fun insert(user: User)
+                }
+                @Database(entities = [User::class], version = 1, exportSchema = false)
+                abstract class AppDatabase : RoomDatabase() { abstract fun userDao(): UserDao }
+            """),
+            options = mapOf("room.generateKotlin" to "true"),
+        )
+        val ROOM3 = Case(
+            "room3", "ksp-libs/room3", "AppDatabase_Impl.kt",
+            mapOf("Db.kt" to """
+                package demo
+                import androidx.room3.*
+                @Entity data class User(@PrimaryKey val id: Int, val name: String)
+                @Dao interface UserDao {
+                    @Query("SELECT * FROM User") suspend fun all(): List<User>
+                    @Insert suspend fun insert(user: User)
+                }
+                @Database(entities = [User::class], version = 1, exportSchema = false)
+                abstract class AppDatabase : RoomDatabase() { abstract fun userDao(): UserDao }
+            """),
+            options = mapOf("room.generateKotlin" to "true"),
+            declared = listOf("androidx.room3:room3-runtime"),
+        )
+        val HILT = Case(
+            "hilt", "ksp-libs/hilt", "NetModule",
+            mapOf("NetModule.kt" to """
+                package demo
+                import dagger.Module
+                import dagger.Provides
+                import dagger.hilt.InstallIn
+                import dagger.hilt.components.SingletonComponent
+                import javax.inject.Inject
+                import javax.inject.Named
+
+                @Module
+                @InstallIn(SingletonComponent::class)
+                object NetModule {
+                    @Provides @Named("base") fun baseUrl(): String = "https://example.com"
+                }
+
+                class Repo @Inject constructor(@param:Named("base") val base: String) {
+                    @set:Inject
+                    var tag: String = ""
+                }
+            """),
+            options = KspProcessorCatalog.HILT_OPTIONS,
+        )
+        val DAGGER = Case(
+            "hilt", "ksp-libs/hilt", "DaggerCarComponent",
+            mapOf("Car.kt" to """
+                package demo
+                import dagger.Binds
+                import dagger.Component
+                import dagger.Module
+                import dagger.Provides
+                import javax.inject.Inject
+                import javax.inject.Named
+                import javax.inject.Provider
+                import javax.inject.Singleton
+
+                interface Engine
+                class Electric @Inject constructor() : Engine
+                @Singleton class Garage @Inject constructor(val engines: Provider<Engine>)
+                class Car @Inject constructor(val engine: Engine, @param:Named("plate") val plate: String, val garage: Garage)
+
+                @Module
+                abstract class EngineModule {
+                    @Binds abstract fun engine(electric: Electric): Engine
+                }
+
+                @Module
+                class PlateModule(private val prefix: String) {
+                    @Provides @Named("plate") fun plate(): String = prefix + "-1"
+                }
+
+                @Singleton
+                @Component(modules = [EngineModule::class, PlateModule::class])
+                interface CarComponent {
+                    fun car(): Car
+                    fun inject(target: Workshop)
+                }
+
+                class Workshop {
+                    @Inject lateinit var car: Car
+                }
+            """),
+            options = KspProcessorCatalog.HILT_OPTIONS + ("dagger.hilt.disableModulesHaveInstallInCheck" to "true"),
+        )
+        val GLIDE = Case(
+            "glide", "ksp-libs/glide", "GeneratedAppGlideModuleImpl",
+            mapOf(
+                "MyGlideModule.kt" to """
+                    package demo
+                    import com.bumptech.glide.annotation.GlideModule
+                    import com.bumptech.glide.module.AppGlideModule
+                    @GlideModule
+                    class MyGlideModule : AppGlideModule()
+                """,
+                // The Glide runtime is an Android library; the one base class the processor looks for is
+                // declared beside the source under its real name.
+                "com/bumptech/glide/module/AppGlideModule.kt" to """
+                    package com.bumptech.glide.module
+                    abstract class AppGlideModule
+                """,
+            ),
+        )
     }
 }
