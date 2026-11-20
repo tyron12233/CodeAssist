@@ -28,6 +28,14 @@ import platform.Foundation.timeIntervalSince1970
  * Compose coordinate is replaced by the Compose Multiplatform coordinate whose Android variant IS it, found
  * by reading that module's metadata rather than from a table of known pairs.
  */
+/**
+ * The Compose the preview runtime is compiled against: `compose` in `gradle/libs.versions.toml`, which the
+ * build's `previewRuntime` configuration resolves. Named here because the app, not the build, resolves it.
+ */
+private const val PREVIEW_COMPOSE_VERSION = "1.11.1"
+private val PREVIEW_COMPOSE = listOf("runtime" to "runtime", "ui" to "ui", "foundation" to "foundation")
+    .map { (group, name) -> Coordinate("org.jetbrains.compose.$group", name, PREVIEW_COMPOSE_VERSION) }
+
 internal class IosPreviewDependencies(
     projectRoot: String,
     private val fetcher: ArtifactFetcher = HttpArtifactFetcher(),
@@ -62,7 +70,12 @@ internal class IosPreviewDependencies(
      * its equivalent added, until a resolve brings in nothing new to swap.
      */
     suspend fun classpath(declared: List<Coordinate>, progress: ProgressReporter = IosDependencies.SilentProgress): List<String> {
-        val roots = (declared.map { desktopEquivalent(it) ?: it } + IosDependencies.STDLIB).distinct()
+        // The preview's own runtime (the interpreter and its entry into Compose) is compiled against the
+        // Compose this IDE is built with, and Compose's inline functions are compiled INTO it: a project on an
+        // older Compose would have it call a runtime that does not have what those bodies call
+        // (`currentCompositeKeyHashCode`, a NoSuchMethodError on the first frame). A newer runtime runs what was
+        // compiled against an older one, so the IDE's version is the floor for every preview.
+        val roots = (declared.map { desktopEquivalent(it) ?: it } + IosDependencies.STDLIB + PREVIEW_COMPOSE).distinct()
         val swapped = LinkedHashMap<String, Coordinate>()
         repeat(MAX_ROUNDS) { round ->
             val all = (roots + swapped.values).distinct()

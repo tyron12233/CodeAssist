@@ -43,8 +43,13 @@ actual class DepsHttp actual constructor(
 
     private val session: NSURLSession = NSURLSession.sessionWithConfiguration(
         NSURLSessionConfiguration.ephemeralSessionConfiguration().apply {
-            setTimeoutIntervalForRequest(connectTimeoutMs / 1000.0)
-            setTimeoutIntervalForResource(readTimeoutMs / 1000.0)
+            // URLSession's two timeouts are not the JDK's two. "For request" is how long the transfer may
+            // stand still, which is what both of the JDK's mean (no connection yet, no bytes arriving).
+            // "For resource" is how long the WHOLE download may take: set to the read timeout it cut every
+            // artifact off at thirty seconds, and a Compose or Skia jar of several megabytes on a phone's
+            // connection needs longer than that however steadily it arrives.
+            setTimeoutIntervalForRequest(maxOf(connectTimeoutMs, readTimeoutMs) / 1000.0)
+            setTimeoutIntervalForResource(WHOLE_DOWNLOAD_SECONDS)
             // The resolver's cache is the Maven-layout directory on disk and IS the offline repository; a
             // second, opaque cache underneath it would only make a stale artifact harder to explain.
             setURLCache(null)
@@ -141,3 +146,6 @@ private fun NSData.toByteArray(): ByteArray {
     out.usePinned { memcpy(it.addressOf(0), bytes, length) }
     return out
 }
+
+/** The longest one artifact may take to arrive, as long as it keeps arriving. */
+private const val WHOLE_DOWNLOAD_SECONDS = 15 * 60.0

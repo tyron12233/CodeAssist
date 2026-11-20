@@ -559,7 +559,10 @@ class IosBackend(
             } ?: return IosPreviewSession(null, IosPreviewFrame(null, listOf("`$functionName` could not be lowered for preview.")))
             val libraries = previewStage("Resolving preview libraries") { previewLibraryJars() }
             if (libraries.isEmpty()) {
-                previewLog.warn("no preview libraries resolved; the preview runs on the runtime alone and will likely fail")
+                previewLog.warn("no preview libraries resolved")
+                return IosPreviewSession(null, IosPreviewFrame(null, listOf(
+                    "The libraries this preview runs on could not be downloaded. Check the connection and open the preview again.",
+                )))
             }
             val classpath = runtime + libraries
             val warm = previewRenderer?.let { previewRendererClasspath == classpath } == true
@@ -646,6 +649,24 @@ class IosBackend(
             ?: IosPreviewRenderer(classpath).also { previewRenderer = it; previewRendererClasspath = classpath }
 
     /** The project's libraries as the preview runs them, re-resolved only when the declarations change. */
+    /**
+     * Resolves what a Compose preview runs on as the project opens, with the project's other downloads, where
+     * the first preview would otherwise wait for it (and, on a slow connection, time out in front of the user).
+     * Only for a project that uses Compose, and only once the build carries the preview runtime.
+     */
+    private fun prefetchPreviewLibraries(root: String) {
+        if (previewRuntimeJars().isEmpty()) return
+        analysisScope.launch(ioDispatcher) {
+            runCatching {
+                val store = projectModel.storeFor(root) ?: return@launch
+                val bridge = DependencyModelBridge(store)
+                val compose = store.workspace.projects.flatMap { it.modules }.flatMap { bridge.declared(it) }
+                    .any { it.coordinate.group.startsWith("androidx.compose") || it.coordinate.group.startsWith("org.jetbrains.compose") }
+                if (compose && active?.rootPath == root) previewLibraryJars()
+            }.onFailure { previewLog.warn("preview libraries were not fetched at open: ${it.message}") }
+        }
+    }
+
     private suspend fun previewLibraryJars(): List<String> = withContext(ioDispatcher) {
         val root = active?.rootPath?.takeIf { it.isNotEmpty() } ?: return@withContext emptyList()
         val store = projectModel.storeFor(root) ?: return@withContext emptyList()
@@ -655,7 +676,9 @@ class IosBackend(
         previewLibraries?.takeIf { it.first == declared }?.second
             ?: resolving(message = "Resolving preview libraries", showUntilReported = true) { progress ->
                 IosPreviewDependencies(root).classpath(declared, progress)
-            }.also { previewLibraries = declared to it }
+            // An empty answer is a resolve that failed (a download timed out, the preview was closed while it
+            // ran). Kept, it would be the answer from then on, and every preview would fail on its first class.
+            }.also { if (it.isNotEmpty()) previewLibraries = declared to it }
     }
 
     private fun toUiPreview(p: PreviewInfo): UiComposePreview {
@@ -1107,6 +1130,7 @@ class IosBackend(
         withContext(ioDispatcher) { projectModel.reopen(rootPath) }
         ensureClasspath(rootPath)
         bumpProjects()
+        prefetchPreviewLibraries(rootPath)
         return true
     }
 
