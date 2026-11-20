@@ -457,7 +457,8 @@ internal class GenerateLibraryRTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         val m = if (Files.isRegularFile(manifest)) withPackage(manifest) else synthesizeManifest()
-        val compile = aapt2.compile(resDirs, compiledResDir)
+        // Linked for the `R` alone and thrown away: nothing here is packaged, so PNGs are stored as they are.
+        val compile = aapt2.compile(resDirs, compiledResDir, crunch = false)
         ctx.reportTool("aapt2", compile.result, DiagnosticKind.RESOURCE)
         if (!compile.result.success) return TaskResult.Failed("aapt2 compile (library R) failed")
         val r = aapt2.link(
@@ -538,7 +539,8 @@ internal class LinkLibraryDependencyResourcesTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         Files.deleteIfExists(table)
-        val compile = aapt2.compile(resDirs, compiledDir)
+        // A table to resolve references against, never packaged: PNGs are stored as they are.
+        val compile = aapt2.compile(resDirs, compiledDir, crunch = false)
         val archives = compile.archives
         if (!compile.result.success || archives.isEmpty()) {
             if (!compile.result.success) ctx.warn("Could not compile the dependencies' resources; ${name.value} skipped")
@@ -569,14 +571,24 @@ internal class LinkLibraryDependencyResourcesTask(
     }
 }
 
-/** `aapt2 compile`: compile each `res/` dir into a flat-file archive under [outDir]. */
+/**
+ * `aapt2 compile`: compile each `res/` dir into a flat-file archive under [outDir].
+ *
+ * [crunch] is whether PNGs are recompressed to make the APK smaller. That is nearly all of this task's time
+ * for a project with images (sixty 384 px PNGs: 12 s crunched, 23 ms not, on a desktop), so only a release
+ * build does it, as with the Android Gradle plugin, whose debug build type does not crunch either.
+ */
 internal class Aapt2CompileTask(
     override val name: TaskName,
     private val resDirs: List<Path>,
     private val outDir: Path,
     private val aapt2: Aapt2,
+    private val crunch: Boolean = true,
 ) : Task {
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply { dirPaths("res", resDirs) }
+    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
+        dirPaths("res", resDirs)
+        property("crunch", crunch)
+    }
     override val outputs: TaskOutputs
         get() = TaskOutputsImpl().apply {
             dirPath(
@@ -587,7 +599,7 @@ internal class Aapt2CompileTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         Files.createDirectories(outDir)
-        val r = aapt2.compile(resDirs, outDir)
+        val r = aapt2.compile(resDirs, outDir, crunch)
         ctx.reportTool("aapt2", ResourceMergeMap.remapped(r.result, resDirs), DiagnosticKind.RESOURCE)
         return if (r.result.success) TaskResult.Success else TaskResult.Failed("aapt2 compile failed")
     }

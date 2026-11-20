@@ -612,7 +612,7 @@ class AndroidBuildSystem(
                 val merge = step("merge${label}Resources")
                 val compile = step("compile${label}Resources")
                 tasks.task(merge) { MergeResourcesTask(merge, inputs, merged) }
-                tasks.task(compile, listOf(merge)) { Aapt2CompileTask(compile, listOf(merged), compiled, aapt2) }
+                tasks.task(compile, listOf(merge)) { Aapt2CompileTask(compile, listOf(merged), compiled, aapt2, crunch = release) }
                 lowerResTiers += Triple(merged, compiled, compile)
             }
             tier("Module", moduleRes, layout.mergedModuleRes, layout.compiledModuleRes)
@@ -649,7 +649,7 @@ class AndroidBuildSystem(
             linkManifest = layout.mergedManifest
             manifestDep = processManifest
         }
-        tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
+        tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2, crunch = release) }
         // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
         // a shrinkResources build additionally links proto resources (R8's resource-shrinker input form).
         tasks.task(aapt2Link, listOf(aapt2Compile, manifestDep) + lowerResTiers.map { it.third }) {
@@ -1148,7 +1148,7 @@ class AndroidBuildSystem(
             tasks.task(mergeTestRes) { MergeResourcesTask(mergeTestRes, testLibs.resDirs, testRoot.resolve("merged-res")) }
             val compileTestRes = step("compileAndroidTestResources")
             tasks.task(compileTestRes, listOf(mergeTestRes)) {
-                Aapt2CompileTask(compileTestRes, listOf(testRoot.resolve("merged-res")), testRoot.resolve("compiled-res"), aapt2)
+                Aapt2CompileTask(compileTestRes, listOf(testRoot.resolve("merged-res")), testRoot.resolve("compiled-res"), aapt2, crunch = false)
             }
             val linkTest = step("linkAndroidTestResources")
             val testAp = testRoot.resolve("resources.ap_")
