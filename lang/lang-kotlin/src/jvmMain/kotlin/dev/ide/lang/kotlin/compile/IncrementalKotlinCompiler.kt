@@ -66,16 +66,19 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
             return Result(true, emptyList(), Mode.NOOP)
         }
 
+        val started = System.nanoTime()
         val prev = state(outputDir).read()
         val javaSig = javaSignatures(javaSources, prev?.javaSig.orEmpty())
         // Which sources are common changes what the compiler accepts, so it belongs in the context hash: a
         // module that gains or loses multiplatform mode must fully rebuild, not reuse the other mode's output.
         val context = contextHash(javaSig, classpath, bootClasspath, jvmTarget, compilerPlugins, pluginOptions, commonSources, optIns)
         val srcHash = kt.associateWith { fileHash(it) }
+        perf.info("kotlin: inputs of ${kt.size} source(s), ${classpath.size} classpath entries hashed in ${msSince(started)}ms")
 
         // No usable baseline, the interop/classpath context moved, or a source was deleted → full rebuild.
         val removed = prev != null && (prev.srcHash.keys - srcHash.keys).isNotEmpty()
         if (prev == null || prev.context != context || removed) {
+            perf.info("kotlin: full compile, " + if (prev == null) "no state" else if (removed) "a source was removed" else "the compile context changed")
             return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns, status)
         }
 
@@ -86,6 +89,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         // depends on (a spurious "unresolved reference"). A full rebuild is the only safe move. (Generalizes the
         // old dirty-empty-only tamper check to every path.)
         if (currentClasses(outputDir).toSet() != prev.abi.keys) {
+            perf.info("kotlin: full compile, the output dir does not match the state")
             return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, commonSources, friendPaths, optIns, status)
         }
 
@@ -113,6 +117,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         clearDir(outputDir)
         Files.createDirectories(outputDir)
         status("Full compile of ${kt.size} Kotlin file(s) against ${classpath.size} classpath entries")
+        val compileStarted = System.nanoTime()
         val r = compiler.compile(
             KotlinCompileRequest(
                 kotlinSources = kt, javaSources = javaSources, classpath = classpath, outputDir = outputDir,
@@ -130,9 +135,12 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
             state(outputDir).delete()
             return Result(false, r.messages, Mode.FULL, kt, r.diagnostics)
         }
+        val compileMs = msSince(compileStarted)
+        val recordStarted = System.nanoTime()
         val srcToOut = relativizeMapping(r.outputs, outputDir, srcHash.keys)
         val abi = snapshotAll(outputDir)
         state(outputDir).write(State(context, srcHash, srcToOut, abi, javaSig))
+        perf.info("kotlin: full compile of ${kt.size} file(s): compiler=${compileMs}ms state=${msSince(recordStarted)}ms (${abi.size} classes)")
         return Result(true, r.messages, Mode.FULL, kt, r.diagnostics)
     }
 
@@ -155,7 +163,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
     ): Result? {
         val dirtyOwned = dirty.flatMap { prev.srcToOut[it].orEmpty() }.toSet()           // their prior outputs
         val cleanOwned = (kt - dirty.toSet()).flatMap { prev.srcToOut[it].orEmpty() }.toSet()
-        if (dirtyOwned.any { it in cleanOwned }) return null                              // shared facade → full
+        if (dirtyOwned.any { it in cleanOwned }) return abandoned("a class is shared by a changed and an unchanged file")
+        val prepStarted = System.nanoTime()
 
         val stateDir = state(outputDir).dir
         val cleanDir = stateDir.resolve("clean")
@@ -181,6 +190,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
 
         // friendPaths=[cleanDir] keeps same-module `internal` access working across the source/binary split.
         status("Recompiling ${dirty.size} changed Kotlin file(s)")
+        val prepMs = msSince(prepStarted)
+        val compileStarted = System.nanoTime()
         val r = compiler.compile(
             KotlinCompileRequest(
                 kotlinSources = dirty, javaSources = javaSources, classpath = listOf(cleanDir) + classpath,
@@ -197,14 +208,22 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         // saw a now-clean file as SOURCE in a prior compile can fail to resolve it as a BINARY here — see
         // `kotlin-compile-speed-art`); a real user error still surfaces from the full recompile. Never hard-fail
         // here, or such a false negative becomes a spurious "unresolved reference" with no recovery.
-        if (!r.success) { clearDir(cleanDir); clearDir(stagingDir); return null }
+        val compileMs = msSince(compileStarted)
+        if (!r.success) {
+            clearDir(cleanDir); clearDir(stagingDir)
+            return abandoned("the changed files alone did not compile (${compileMs}ms): ${r.messages.firstOrNull().orEmpty().take(200)}")
+        }
+        val checkStarted = System.nanoTime()
 
         val newMapping = relativizeMapping(r.outputs, stagingDir, dirty.toSet())
         val produced = currentClasses(stagingDir)
 
         // A class a dirty source used to own but no longer produces is a structural (removal) change.
         val stillOwned = newMapping.values.flatten().toSet()
-        if (dirtyOwned.any { it !in stillOwned }) { clearDir(cleanDir); clearDir(stagingDir); return null }
+        if (dirtyOwned.any { it !in stillOwned }) {
+            clearDir(cleanDir); clearDir(stagingDir)
+            return abandoned("a class is no longer produced: ${dirtyOwned.first { it !in stillOwned }} (compiler=${compileMs}ms)")
+        }
 
         // An ABI change on any pre-existing class can affect dependents → full. A brand-new class cannot
         // (nothing referenced it yet), so it does not trip the fast path.
@@ -213,7 +232,10 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
             val abi = KotlinAbi.snapshot(Files.readAllBytes(stagingDir.resolve(rel)))
             newAbi[rel] = abi
             val before = prev.abi[rel]
-            if (before != null && before != abi) { clearDir(cleanDir); clearDir(stagingDir); return null }
+            if (before != null && before != abi) {
+                clearDir(cleanDir); clearDir(stagingDir)
+                return abandoned("the ABI of $rel changed (compiler=${compileMs}ms)")
+            }
         }
 
         // Commit: stage → output, then refresh the manifest entries for the dirty sources only.
@@ -225,8 +247,22 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         val abi = HashMap(prev.abi).apply { putAll(newAbi) }
         state(outputDir).write(State(context, HashMap(prev.srcHash).apply { putAll(srcHash) }, srcToOut, abi, javaSig))
         clearDir(cleanDir); clearDir(stagingDir)
+        perf.info(
+            "kotlin: recompiled ${dirty.size} of ${kt.size} file(s): prepare=${prepMs}ms compiler=${compileMs}ms " +
+                "check+commit=${msSince(checkStarted)}ms (${produced.size} classes)",
+        )
         return Result(true, r.messages, Mode.INCREMENTAL, dirty, r.diagnostics)
     }
+
+    /** The fast path gave up; the caller compiles the whole module. Says why, since that doubles the compile. */
+    private fun abandoned(reason: String): Result? {
+        perf.info("kotlin: recompile of the changed files abandoned for a full compile: $reason")
+        return null
+    }
+
+    private fun msSince(startNanos: Long): Long = (System.nanoTime() - startNanos) / 1_000_000
+
+    private val perf by lazy { dev.ide.platform.log.Log.logger("build.perf") }
 
     // ---- helpers -----------------------------------------------------------------------------------------
 
