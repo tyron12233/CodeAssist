@@ -261,6 +261,12 @@ internal fun DesignCanvas(
         canvasSize.height / 2f + shownPan.value.y + (card.y - cardH / 2f) * shownScale.value,
     )
     val drag = state.drag
+    // A strip is a touch target on the screen, so its size is the screen's: in the frame's pixels it grows as
+    // the canvas is zoomed out, where a size in the device's own dp shrank to half a fingertip at "fit".
+    val framePerScreenPx = 1f / (k * scale.coerceAtLeast(0.01f))
+    val zoneSide = with(density) { DROP_ZONE_DP.dp.toPx() } * framePerScreenPx
+    // The middle of the dragged view's label, which DragGhost draws this far above the finger.
+    val labelAbove = with(density) { DRAG_LABEL_ABOVE_DP.dp.toPx() } * framePerScreenPx
     drag.canvasTarget = { root ->
         val local = root - canvasOrigin
         val t = tree
@@ -268,17 +274,17 @@ internal fun DesignCanvas(
         else {
             val c = cardPointOf(root)
             val moving = (drag.payload as? DragPayload.Move)?.element
-            dropTargetAt(t, document, c.x / k, c.y / k, isViewGroup, moving, minZone = DROP_ZONE_DP * state.device.density)
+            dropTargetAt(t, document, c.x / k, c.y / k, isViewGroup, moving, minZone = zoneSide, labelAbove = labelAbove)
         }
     }
-    val hover: DropTarget? = drag.payload?.let { drag.canvasTarget?.invoke(drag.position) }
     // During a drag, the containers there is nowhere to drop on, each as a strip to drop on.
     val dragging = drag.payload
-    val zones = remember(tree, document, dragging) {
+    val zones = remember(tree, document, dragging, zoneSide) {
         val t = tree
         if (dragging == null || t == null) emptyList()
-        else dropZones(t, document, DROP_ZONE_DP * state.device.density, isViewGroup, (dragging as? DragPayload.Move)?.element)
+        else dropZones(t, document, zoneSide, isViewGroup, (dragging as? DragPayload.Move)?.element)
     }
+    val hover: DropTarget? = drag.payload?.let { drag.canvasTarget?.invoke(drag.position) }
     // The frame with the dragged view where the finger rests, when there is one (see DesignerState.dragPreview).
     val preview = state.dragPreview
     val previewImage = remember(preview) { preview?.image?.toImageBitmap() }
@@ -561,8 +567,11 @@ private fun EmptyLayoutHint(root: LayoutElement, modifier: Modifier) {
 /** How long a designer edit's frame takes to arrive from the one before. */
 private const val TRANSITION_MS = 240
 
-/** The least side of the strip an empty container shows during a drag, in the device's dp: a comfortable touch target. */
+/** The least side of the strip an empty container shows during a drag, in the screen's dp: a comfortable touch target. */
 internal const val DROP_ZONE_DP = 48f
+
+/** How far above the finger the middle of the dragged view's label is (DragGhost: 44dp tall, its top 64dp above). */
+internal const val DRAG_LABEL_ABOVE_DP = 42f
 
 /**
  * One step of a frame transition at [p] (0..1): the new frame with the old one fading out over it, and each

@@ -108,11 +108,18 @@ internal fun dropTargetAt(
     moving: LayoutElement? = null,
     /** The side of the strip a container too small to hit is given ([dropZones]); 0 for none. */
     minZone: Float = 0f,
+    /**
+     * How far above the point the dragged view's label is drawn. A strip is as thin as a touch target gets, and
+     * the label rides above the finger so the finger does not hide it: whoever lays the label on a strip has
+     * the finger below it. A strip takes the drop when either is on it.
+     */
+    labelAbove: Float = 0f,
 ): DropTarget? {
     // A strip over a container with nowhere to drop comes first: it lies over its neighbours, and is the only
     // way into that container. The innermost one, when they overlap.
-    dropZones(root, document, minZone, isViewGroup, moving)
-        .lastOrNull { z -> x >= z.rect[0] && x < z.rect[2] && y >= z.rect[1] && y < z.rect[3] }
+    val zones = dropZones(root, document, minZone, isViewGroup, moving)
+    fun zoneAt(py: Float) = zones.lastOrNull { z -> x >= z.rect[0] && x < z.rect[2] && py >= z.rect[1] && py < z.rect[3] }
+    (zoneAt(y) ?: if (labelAbove > 0f) zoneAt(y - labelAbove) else null)
         ?.let { z ->
             val w = (z.node.right - z.node.left).toFloat()
             val h = (z.node.bottom - z.node.top).toFloat()

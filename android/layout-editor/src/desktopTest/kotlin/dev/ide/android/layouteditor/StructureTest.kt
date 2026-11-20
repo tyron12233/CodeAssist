@@ -150,6 +150,10 @@ class StructureTest {
         assertEquals(0, into.index)
         // Outside the strip the list still takes the drop, and a container that has children shows none.
         assertEquals(root, dropTargetAt(tree, doc, 50f, 90f, isGroup, minZone = 40f)!!.parent)
+        // The label of what is dragged rides above the finger: laid on the strip, with the finger below it, it
+        // is a drop on the strip too.
+        assertEquals(empty, dropTargetAt(tree, doc, 50f, 90f, isGroup, minZone = 40f, labelAbove = 30f)!!.parent)
+        assertEquals(root, dropTargetAt(tree, doc, 50f, 130f, isGroup, minZone = 40f, labelAbove = 30f)!!.parent)
         // The container being moved is not somewhere to drop itself.
         assertEquals(emptyList(), dropZones(tree, doc, 40f, isGroup, moving = empty))
         // At the frame's edge the strip stays inside the frame.
