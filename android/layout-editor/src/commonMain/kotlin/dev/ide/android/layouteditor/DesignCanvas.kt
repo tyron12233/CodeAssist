@@ -495,8 +495,9 @@ private fun DrawScope.drawDropTarget(t: DropTarget, k: Float, accent: Color) {
             drawLine(accent, Offset(line[0] * k, line[1] * k), Offset(line[2] * k, line[3] * k), strokeWidth = w)
             drawCircle(accent, 4.dp.toPx(), Offset(line[0] * k, line[1] * k))
             drawCircle(accent, 4.dp.toPx(), Offset(line[2] * k, line[3] * k))
-        } else {
-            // A free or constraint layout: mark the point it will be pinned at.
+        } else if (containerKind(t.parent) == ContainerKind.CONSTRAINT) {
+            // A constraint layout: mark the point it will be pinned at. Any other container places the view
+            // itself, and a mark under the finger would point at somewhere it does not go.
             val c = Offset((a.left + t.x) * k, (a.top + t.y) * k)
             val arm = 8.dp.toPx()
             drawLine(accent, c - Offset(arm, 0f), c + Offset(arm, 0f), strokeWidth = 2.dp.toPx())

@@ -125,7 +125,9 @@ internal fun lerp(a: Rect, b: Rect, t: Float): Rect = Rect(
 
 /**
  * Where a view dropped on [target] will show, in frame pixels, before any frame has it: across a vertical
- * list at the insertion line, in a row at the line, at the drop point elsewhere. [size] is the view's size when
+ * list at the insertion line, in a row at the line, at the drop point in a container that pins a view where it
+ * is dropped (a ConstraintLayout), and at the container's top-start corner in any other, which is where a
+ * FrameLayout or a CoordinatorLayout puts a view whatever point it was dropped on. [size] is the view's size when
  * known (a moved view), else a typical one at [density].
  */
 internal fun ghostRect(target: DropTarget, size: Pair<Float, Float>?, density: Float): Rect {
@@ -144,8 +146,9 @@ internal fun ghostRect(target: DropTarget, size: Pair<Float, Float>?, density: F
             Rect(line[0] - w / 2f, line[1], line[0] + w / 2f, line[1] + h)
         }
         else -> {
-            val x = (area?.left ?: 0) + target.x
-            val y = (area?.top ?: 0) + target.y
+            val pinned = containerKind(target.parent) == ContainerKind.CONSTRAINT
+            val x = (area?.left ?: 0) + if (pinned) target.x else 0f
+            val y = (area?.top ?: 0) + if (pinned) target.y else 0f
             val w = size?.first ?: (120f * density)
             val h = size?.second ?: typicalH
             Rect(x, y, x + w, y + h)

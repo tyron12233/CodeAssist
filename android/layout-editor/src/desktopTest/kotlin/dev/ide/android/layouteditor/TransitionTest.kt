@@ -86,6 +86,21 @@ class TransitionTest {
     }
 
     @Test
+    fun aGhostSitsWhereTheContainerWillPutTheView() {
+        val area = LayoutViewNode("x", null, 10, 20, 410, 820, 0)
+        // A FrameLayout puts a view at its top-start corner, whatever point it was dropped on.
+        val frame = parseTestLayout("<FrameLayout/>").root!!
+        val free = ghostRect(DropTarget(frame, 0, area, null, 200f, 300f), null, density = 2f)
+        assertEquals(10f, free.left)
+        assertEquals(20f, free.top)
+        // A ConstraintLayout pins it at the drop point.
+        val constraint = parseTestLayout("<androidx.constraintlayout.widget.ConstraintLayout/>").root!!
+        val pinned = ghostRect(DropTarget(constraint, 0, area, null, 200f, 300f), null, density = 2f)
+        assertEquals(210f, pinned.left)
+        assertEquals(320f, pinned.top)
+    }
+
+    @Test
     fun aGhostSitsOnTheInsertionLineOfAVerticalList() {
         val area = node("LinearLayout", 0, 0, 100, 140, 10)
         val target = DropTarget(parseTestLayout("<LinearLayout/>").root!!, 1, area, floatArrayOf(0f, 40f, 100f, 40f), 10f, 40f)
