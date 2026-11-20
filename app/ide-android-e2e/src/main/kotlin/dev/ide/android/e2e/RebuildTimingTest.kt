@@ -2,6 +2,7 @@ package dev.ide.android.e2e
 
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -14,13 +15,20 @@ import org.junit.runner.RunWith
 class RebuildTimingTest : E2eTest() {
     override val clearAppData = true
 
+    // A full-screen ad over a build holds the install back until it is closed and plays a video beside the
+    // compile, so the timings would measure the ad. The app's first launch has recorded its install stamp by
+    // the time the seed is written, so this value is not reset.
+    // `-e kotlincMode inprocess` compiles Kotlin in the build process instead of the compiler VM, to compare them.
+    override fun seed() = DEFAULT_SEED + ("ads.interstitials.enabled" to "false") +
+        listOfNotNull(InstrumentationRegistry.getArguments().getString("kotlincMode")?.let { "settings.buildRuntime.kotlincMode" to it })
+
     @Test
     fun editAndRebuild() {
         val name = uniqueName("Loop")
         val pkg = createProject("Jetpack Compose App", name)
         val dir = projectDir(name)
         poll(PROJECT_TIMEOUT * 2, 2_000) {
-            shell("cat $dir/.platform/libraries.json $dir/.platform/workspace.json").takeIf { "material3" in it }
+            (readNow("$dir/.platform/libraries.json") + readNow("$dir/.platform/workspace.json")).takeIf { "material3" in it }
         } ?: failWithScreen("Compose never resolved")
         poll(PROJECT_TIMEOUT) { findNow("Resolving dependencies…").let { if (it == null) true else null } }
 
@@ -42,18 +50,23 @@ class RebuildTimingTest : E2eTest() {
         val pkg = createProject("Jetpack Compose App", name)
         val dir = projectDir(name)
         poll(PROJECT_TIMEOUT * 2, 2_000) {
-            shell("cat $dir/.platform/libraries.json $dir/.platform/workspace.json").takeIf { "material3" in it }
+            (readNow("$dir/.platform/libraries.json") + readNow("$dir/.platform/workspace.json")).takeIf { "material3" in it }
         } ?: failWithScreen("Compose never resolved")
         poll(PROJECT_TIMEOUT) { findNow("Resolving dependencies…").let { if (it == null) true else null } }
 
         build("run, first", task = "Run Debug · app", installer = true)
         val main = "$dir/app/src/main/kotlin/${pkg.replace('.', '/')}/MainActivity.kt"
         val source = readDeviceFile(main)
-        val edited = Regex("\"Hello[^\"]*\"").find(source)?.let { source.replaceFirst(it.value, "\"Hello, run\"") }
-            ?: source.replaceFirst("setContent", "/* edited */ setContent")
-        writeDeviceFile(main, edited)
-        Thread.sleep(3_000)
-        build("run, one-string edit", task = "Run Debug · app", installer = true)
+        // `-e edits N` repeats the edit-and-run, for a mean over more than one sample.
+        val edits = InstrumentationRegistry.getArguments().getString("edits")?.toIntOrNull() ?: 1
+        repeat(edits) { i ->
+            val text = if (edits == 1) "Hello, run" else "Hello, run ${i + 1}"
+            val edited = Regex("\"Hello[^\"]*\"").find(source)?.let { source.replaceFirst(it.value, "\"$text\"") }
+                ?: source.replaceFirst("setContent", "/* edited ${i + 1} */ setContent")
+            writeDeviceFile(main, edited)
+            Thread.sleep(3_000)
+            build(if (edits == 1) "run, one-string edit" else "run, one-string edit ${i + 1}", task = "Run Debug · app", installer = true)
+        }
     }
 
     private fun build(label: String, task: String = "bundleDebug (.aab) · app", installer: Boolean = false) {
@@ -63,8 +76,9 @@ class RebuildTimingTest : E2eTest() {
             // The build ends where the system installer takes over; time the build, then dismiss the installer.
             poll(BUILD_TIMEOUT, 1_000) { shell("logcat -d -s System.out:I").takeIf { "' peak:" in it } }
                 ?: failWithScreen("$label: the build never finished")
-            Thread.sleep(2_000)
-            device.pressBack(); Thread.sleep(500); device.pressBack()
+            // The installer's sheet can take several seconds to come up; cancel it when it does.
+            poll(15_000, 500) { Interruptions.dismissOne(this); findNow("Cancel") }?.let { clickObject(it) }
+                ?: run { device.pressBack(); Thread.sleep(500); device.pressBack() }
             launchApp(); Interruptions.dismissAll(this)
         } else {
             awaitBuildSucceeded()

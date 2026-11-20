@@ -158,8 +158,16 @@ abstract class E2eTest {
         entries.forEach { (k, v) -> props.setProperty(k, v) }
         val staged = File(instrumentation.context.externalMediaDirs.first().apply { mkdirs() }, "prefs.properties")
         staged.outputStream().use { props.store(it, "seeded by :ide-android-e2e") }
-        shell("cp ${staged.absolutePath} $target")
-        check(entries.keys.all { it in shell("cat $target") }) { "seeding $target did not take" }
+        // The app writes the file itself, through its documents provider. A shell `cp` over it is the fallback:
+        // on an API 37 emulator that copy, just after a data wipe, can abort the storage daemon ("Check failed:
+        // active_nodes_.find(node)") and take shared storage away until it restarts.
+        fun copyTook(): Boolean {
+            writeThroughProvider(staged, target)
+            if (entries.keys.all { it in readNow(target) }) return true
+            shell("cp ${staged.absolutePath} $target")
+            return entries.keys.all { it in readNow(target) }
+        }
+        check(copyTook() || poll(30_000, 1_000) { copyTook().takeIf { it } } == true) { "seeding $target did not take" }
     }
 
     @After
@@ -185,7 +193,7 @@ abstract class E2eTest {
      * show up to the shell, and reading one as empty must not turn into writing an edit over it.
      */
     fun readDeviceFile(path: String, timeoutMs: Long = 60_000): String =
-        poll(timeoutMs, 1_000) { shell("cat $path").takeIf { it.isNotBlank() } }
+        poll(timeoutMs, 1_000) { readNow(path).takeIf { it.isNotBlank() } }
             ?: error("$path never became readable: ${shell("ls -la ${path.substringBeforeLast('/')}")}")
 
     /**
@@ -198,8 +206,29 @@ abstract class E2eTest {
         val staged = File(instrumentation.context.externalMediaDirs.first().apply { mkdirs() }, "staged-${path.hashCode()}")
         staged.writeText(text)
         shell("cp ${staged.absolutePath} $path")
-        check(shell("cat $path") == text) { "writing $path did not take" }
+        if (shell("cat $path") == text) return
+        // Owner-only file (see readNow): have the app write it, through its documents provider. `content write`
+        // takes the bytes on stdin and executeShellCommand has no redirection, so the command goes in a script.
+        writeThroughProvider(staged, path)
+        check(readNow(path) == text) { "writing $path did not take" }
     }
+
+    private fun writeThroughProvider(staged: File, path: String) {
+        val script = File(staged.parentFile, "write-${path.hashCode()}.sh")
+        script.writeText("content write --uri '${documentUri(path)}' < '${staged.absolutePath}'\n")
+        shell("sh ${script.absolutePath}")
+    }
+
+    /**
+     * The text of a file in the app's storage, or blank. The shell reads most of it directly, but a file the app
+     * wrote through a temporary file is owner-only (mode 600) and the shell is refused; the app's own documents
+     * provider (document id = absolute path) still serves it to the shell.
+     */
+    fun readNow(path: String): String =
+        shell("cat $path").ifBlank { shell("content read --uri ${documentUri(path)}") }
+
+    private fun documentUri(path: String): String =
+        "content://$APP.documents/document/" + android.net.Uri.encode(path.replaceFirst("/sdcard/", "/storage/emulated/0/"))
 
     /**
      * Stops the app (so files edited behind its back with [writeDeviceFile] are read fresh), relaunches it and
