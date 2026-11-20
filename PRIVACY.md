@@ -50,7 +50,7 @@ We keep a daily count of results per app build, with no device or account identi
 
 ### Ads
 
-The app shows native, banner, and occasional full-screen ads from Google AdMob. To fill them, AdMob may use partner networks: Meta Audience Network, Pangle, Mintegral, and Unity Ads. These services may collect your device's advertising ID, IP address, and information about the device and the ads you see and tap, and use it to show and measure ads, and, where you have agreed, to personalize them. In the European Economic Area, the United Kingdom, and Switzerland, the app asks for your consent through Google's consent form before personalized ads are requested, and you can change your choice later in Settings, Privacy and data.
+The app shows native, banner, and occasional full-screen ads from Google AdMob. To fill them, AdMob may use partner networks: Meta Audience Network, Pangle, Mintegral, Unity Ads, and AppLovin. These services may collect your device's advertising ID, IP address, and information about the device and the ads you see and tap, and use it to show and measure ads, and, where you have agreed, to personalize them. In the European Economic Area, the United Kingdom, and Switzerland, the app asks for your consent through Google's consent form before personalized ads are requested, and you can change your choice later in Settings, Privacy and data.
 
 You can turn the app's passive ads off in Settings at any time. You can also reset or delete your advertising ID in your device's settings. See Google's policy at https://policies.google.com/technologies/ads.
 

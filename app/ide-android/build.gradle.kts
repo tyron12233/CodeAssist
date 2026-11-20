@@ -1306,6 +1306,9 @@ dependencies {
     // it never bids.
     implementation(libs.admob.mediation.unity)
     implementation(libs.unity.ads)
+    // AppLovin: interstitial + rewarded demand only (no native since its adapter 9.14.4.0). It does nothing
+    // until AppLovin is added as a bidding source in AdMob and mapped to those units with the account's SDK key.
+    implementation(libs.admob.mediation.applovin)
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our
     // app-private project files for Share / "Open with", and grants read access on inbound intents.
     implementation(libs.androidx.core)
