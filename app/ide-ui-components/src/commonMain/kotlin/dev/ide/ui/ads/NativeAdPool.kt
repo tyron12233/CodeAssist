@@ -11,6 +11,13 @@ const val NATIVE_AD_MAX_AGE_MS = 55 * 60_000L
  */
 const val NATIVE_AD_REFRESH_AFTER_MS = 60_000L
 
+/**
+ * How long after its impression an ad that is still on screen is replaced in place (see [NativeAdPool.refresh]).
+ * Longer than [NATIVE_AD_REFRESH_AFTER_MS]: a slot coming back is a new look at the page, an ad changing under
+ * the user's eyes is not, and ad networks treat anything much under a minute as refreshing too fast.
+ */
+const val NATIVE_AD_VISIBLE_REFRESH_MS = 90_000L
+
 /** After a failed request (usually NO_FILL), a placement waits this long before asking again. */
 const val NATIVE_AD_FAILURE_BACKOFF_MS = 20_000L
 
@@ -23,7 +30,8 @@ const val NATIVE_AD_MAX_IDLE_PER_PLACEMENT = 2
  * A slot used to request a fresh ad every time it entered composition and destroy it on leaving, so closing
  * the sidebar, finishing a build or scrolling a list threw away ads that had loaded but were never seen. The
  * pool instead hands each visible slot a [Lease]: the slot reuses an idle ad when one is ready and only requests
- * a new one when none is, or when the one it got has already been seen for [NATIVE_AD_REFRESH_AFTER_MS]. When a
+ * a new one when none is, or when the one it got has already been seen for [NATIVE_AD_REFRESH_AFTER_MS]. A slot
+ * that simply stays on screen keeps its ad until the host asks for a [refresh]. When a
  * slot goes away, its ad (or its still-running request) goes back to the pool for the next slot of the same
  * placement instead of being destroyed.
  *
@@ -114,6 +122,24 @@ class NativeAdPool<A : Any>(
         val entry = takeIdle(lease.placement)
         if (entry != null) show(lease, entry)
         if (entry == null || entry.dueForRefresh()) request(lease)
+    }
+
+    /**
+     * The slot is still on screen and still in front of the user: replace its ad if that one has been seen for
+     * [NATIVE_AD_VISIBLE_REFRESH_MS]. The old ad stays up until the new one arrives, and stays for good if the
+     * request fails. Returns whether a replacement was asked for.
+     *
+     * The clock starts at the impression, which the ad network reports, so an ad the network never counted as
+     * seen is never replaced: a slot the user cannot actually see stops asking after one ad.
+     *
+     * Whether the user is there at all (app in front, screen touched lately) is the host's call, before this.
+     */
+    fun refresh(lease: Lease): Boolean {
+        if (closed || !lease.acquired || lease.request != null) return false
+        val entry = lease.entry ?: return false
+        if (entry.impressionAt == NO_IMPRESSION || now() - entry.impressionAt < NATIVE_AD_VISIBLE_REFRESH_MS) return false
+        request(lease)
+        return lease.request != null
     }
 
     /** The slot has left composition: its ad and any pending request go back to the pool. */

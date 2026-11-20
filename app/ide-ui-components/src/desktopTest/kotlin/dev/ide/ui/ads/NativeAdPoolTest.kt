@@ -300,6 +300,80 @@ class NativeAdPoolTest {
         assertNull(waiting.ad)
     }
 
+    /** An ad that stays on screen is replaced in place once it has been seen long enough, and not before. */
+    @Test
+    fun anAdStillOnScreenIsReplacedOnceItHasBeenSeenLongEnough() {
+        val net = FakeNetwork()
+        val slot = net.pool.lease(AdPlacement.SIDEBAR)
+        net.pool.acquire(slot)
+        val (first, seen) = net.fill()
+        seen.impression()
+
+        net.clock += NATIVE_AD_VISIBLE_REFRESH_MS - 1
+        assertFalse(net.pool.refresh(slot))
+        net.clock += 1
+        assertTrue(net.pool.refresh(slot))
+        // One request, however often the host asks while it is in flight; the old ad stays up meanwhile.
+        assertFalse(net.pool.refresh(slot))
+        assertEquals(1, net.pending.size)
+        assertSame(first, slot.ad)
+
+        val (second, _) = net.fill()
+        assertSame(second, slot.ad)
+        net.pool.bound(slot)
+        assertEquals(listOf(first), net.destroyed)
+        // The new ad has no impression yet, so it is not replaced however long it sits there.
+        net.clock += 10 * NATIVE_AD_VISIBLE_REFRESH_MS
+        assertFalse(net.pool.refresh(slot))
+    }
+
+    /** No impression means nobody saw the ad: the slot keeps it and asks for nothing more. */
+    @Test
+    fun anAdNeverCountedAsSeenIsNotReplaced() {
+        val net = FakeNetwork()
+        val slot = net.pool.lease(AdPlacement.SIDEBAR)
+        net.pool.acquire(slot)
+        net.fill()
+        net.clock += 10 * NATIVE_AD_VISIBLE_REFRESH_MS
+        assertFalse(net.pool.refresh(slot))
+        assertTrue(net.pending.isEmpty())
+    }
+
+    /** A failed replacement leaves the ad where it is, and the placement's backoff holds the next try. */
+    @Test
+    fun aFailedReplacementKeepsTheAdAndBacksOff() {
+        val net = FakeNetwork()
+        val slot = net.pool.lease(AdPlacement.PROJECTS)
+        net.pool.acquire(slot)
+        val (ad, seen) = net.fill()
+        seen.impression()
+        net.clock += NATIVE_AD_VISIBLE_REFRESH_MS
+        assertTrue(net.pool.refresh(slot))
+        net.failOldest()
+
+        assertSame(ad, slot.ad)
+        assertFalse(slot.nativeFailed)
+        assertFalse(net.pool.refresh(slot))
+        net.clock += NATIVE_AD_FAILURE_BACKOFF_MS
+        assertTrue(net.pool.refresh(slot))
+    }
+
+    /** A slot with no ad, or one that has left, has nothing to replace. */
+    @Test
+    fun refreshIsOnlyForASlotShowingAnAd() {
+        val net = FakeNetwork()
+        val slot = net.pool.lease(AdPlacement.STORE)
+        assertFalse(net.pool.refresh(slot))
+        net.pool.acquire(slot)
+        assertFalse(net.pool.refresh(slot))
+        val (_, seen) = net.fill()
+        seen.impression()
+        net.clock += NATIVE_AD_VISIBLE_REFRESH_MS
+        net.pool.release(slot)
+        assertFalse(net.pool.refresh(slot))
+        assertTrue(net.pending.isEmpty())
+    }
+
     @Test
     fun releasingASlotKeepsItsAdForTheNextOne() {
         val net = FakeNetwork()

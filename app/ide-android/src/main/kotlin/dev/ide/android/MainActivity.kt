@@ -437,6 +437,12 @@ open class MainActivity : ComponentActivity() {
         data.addAll(AppKeyboardShortcuts.groups())
     }
 
+    /** Any touch or key reaching this window: lets an ad on screen tell a user from a phone left on the desk. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        UserPresence.touched()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

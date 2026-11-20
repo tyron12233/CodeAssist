@@ -30,9 +30,12 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
@@ -51,6 +54,7 @@ import dev.ide.platform.DeviceMemory
 import dev.ide.platform.MemoryTier
 import dev.ide.platform.log.Log
 import dev.ide.ui.ads.NativeAdPool
+import kotlinx.coroutines.delay
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.NativeAdCard
@@ -68,6 +72,25 @@ private val adLog = Log.logger("ide.ads")
  */
 private val webViewAvailable: Boolean by lazy {
     runCatching { android.webkit.WebView.getCurrentWebViewPackage() != null }.getOrDefault(false)
+}
+
+/** How often a native slot on screen checks whether its ad is due to be replaced. */
+private const val NATIVE_REFRESH_CHECK_MS = 15_000L
+
+/** A native ad on screen is only replaced if the screen was touched this recently. */
+private const val NATIVE_REFRESH_PRESENCE_MS = 2 * 60_000L
+
+/**
+ * When the user last touched the app, from `Activity.onUserInteraction`. Typing on the soft keyboard does not
+ * count (those touches go to the keyboard's own window), which is why the window that reads this is minutes long.
+ */
+internal object UserPresence {
+    @Volatile var lastTouchMs: Long = SystemClock.elapsedRealtime()
+        private set
+
+    fun touched() {
+        lastTouchMs = SystemClock.elapsedRealtime()
+    }
 }
 
 /**
@@ -387,6 +410,19 @@ class AndroidAdHost(
         banners.close()
     }
 
+    /**
+     * Whether an ad swapped in now would be seen by a person: the app is in front, nothing full-screen covers it,
+     * and the screen was touched in the last [NATIVE_REFRESH_PRESENCE_MS]. Without the last, a phone left on the
+     * desk with a build running would go on fetching ads for nobody, which is what ad networks call invalid
+     * traffic. A device short of memory is left alone, as with the other ads that load next to the IDE's work.
+     */
+    private fun someoneIsLooking(): Boolean {
+        if (lowMemoryDevice || interstitialShowing) return false
+        val owner = activityProvider() as? LifecycleOwner ?: return false
+        if (!owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return false
+        return SystemClock.elapsedRealtime() - UserPresence.lastTouchMs < NATIVE_REFRESH_PRESENCE_MS
+    }
+
     // Banners: the fallback for a native slot nothing filled, and the build console's footer during a build.
     private val banners = BannerAds(contextProvider = { activityProvider() })
 
@@ -449,11 +485,21 @@ class AndroidAdHost(
             }
             onDispose { nativeAds.release(lease) }
         }
+        // Where the marker is now, for the refresh below: `onScreen` latches, this does not.
+        val marker = remember(lease) { arrayOfNulls<LayoutCoordinates>(1) }
         LaunchedEffect(lease, onScreen) {
-            if (onScreen) {
-                nativeAds.acquire(lease)
-                ad = lease.ad
-                nativeFailed = lease.nativeFailed
+            if (!onScreen) return@LaunchedEffect
+            nativeAds.acquire(lease)
+            ad = lease.ad
+            nativeFailed = lease.nativeFailed
+            // A slot that stays on screen (the sidebar, the project list) used to keep its first ad for as long
+            // as it stayed. Replace it once it has been seen for a while, but only while someone is looking: the
+            // pool times it from the ad's impression, and [someoneIsLooking] covers the rest.
+            while (true) {
+                delay(NATIVE_REFRESH_CHECK_MS)
+                val at = marker[0]
+                val visible = at != null && at.isAttached && at.boundsInWindow().height > 0f
+                if (visible && someoneIsLooking()) nativeAds.refresh(lease)
             }
         }
 
@@ -466,6 +512,7 @@ class AndroidAdHost(
         Column(Modifier.fillMaxWidth()) {
             Box(
                 Modifier.fillMaxWidth().height(markerHeight).onGloballyPositioned { coordinates ->
+                    marker[0] = coordinates
                     if (!onScreen && coordinates.isAttached && coordinates.boundsInWindow().height > 0f) onScreen = true
                 }
             )
