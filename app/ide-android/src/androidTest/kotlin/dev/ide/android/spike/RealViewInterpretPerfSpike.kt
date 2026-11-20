@@ -43,6 +43,9 @@ class RealViewInterpretPerfSpike {
             val layout = File(services.store.rootPath.toFile(), "app/src/main/res/layout/activity_main.xml")
             val text = layout.readText()
             val req = PreviewRequest(widthPx = 1080, heightPx = 2140, density = 2.75f, realViews = true)
+            // The engine warms the preview once the project's index pass is done (see the `layout preview
+            // warmed` line): give it the time a user takes to reach a layout.
+            Thread.sleep(20_000)
 
             // #1 is cold. #2-#3 repeat the same text (every cache hits). #4 on each render an EDITED buffer (a
             // changed attribute value, as a keystroke would), so the relink runs: that is the per-edit cost.
@@ -55,8 +58,37 @@ class RealViewInterpretPerfSpike {
                 val ms = (System.nanoTime() - t0) / 1_000_000
                 log("render #${i + 1} ${if (i == 0) "cold" else if (i < 3) "same" else "edit"} wall=${ms}ms rendered=${r?.renderedNativeImage != null} problems=${r?.problems?.size}")
             }
+
+            // A saved resource other than the layout: the project's own resources compile again and the table
+            // links in full, the libraries' stay as they are.
+            val strings = File(services.store.rootPath.toFile(), "app/src/main/res/values/strings.xml")
+            repeat(2) { i ->
+                strings.writeText(strings.readText().replace("</resources>", "    <string name=\"perf_added_$i\">Added</string>\n</resources>"))
+                val t0 = System.nanoTime()
+                val r = services.layoutPreview(layout.toPath(), text, req)
+                log("render after a saved string #${i + 1} wall=${(System.nanoTime() - t0) / 1_000_000}ms rendered=${r?.renderedNativeImage != null}")
+            }
         } finally {
             runCatching { services.close() }
+        }
+
+        // A second project on the same libraries: what its first layout costs once the first has paid for them.
+        val second = pm.create("android-material-you", emptyMap())
+        val secondBackend = IdeServicesBackend(initial = second)
+        try {
+            secondBackend.deps.startPendingDependencyResolution()
+            val deadline = System.currentTimeMillis() + 180_000
+            Thread.sleep(2_000)
+            while (secondBackend.deps.depsState.value.resolving && System.currentTimeMillis() < deadline) Thread.sleep(1_000)
+            val layout = File(second.store.rootPath.toFile(), "app/src/main/res/layout/activity_main.xml")
+            val req = PreviewRequest(widthPx = 1080, heightPx = 2140, density = 2.75f, realViews = true)
+            repeat(2) { i ->
+                val t0 = System.nanoTime()
+                val r = second.layoutPreview(layout.toPath(), layout.readText(), req)
+                log("second project render #${i + 1} wall=${(System.nanoTime() - t0) / 1_000_000}ms rendered=${r?.renderedNativeImage != null} root=${second.store.rootPath}")
+            }
+        } finally {
+            runCatching { second.close() }
         }
     }
 }

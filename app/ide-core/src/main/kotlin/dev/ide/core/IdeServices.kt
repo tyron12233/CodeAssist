@@ -1189,6 +1189,8 @@ class IdeServices private constructor(
                 indexService.ensureUpToDate(scope)
             }
             if (DeviceMemory.isLow) prewarmResourceRepositories()
+            // After the pass, not beside it: the editor waits for the indexes, nothing waits for this.
+            prewarmLayoutPreview()
             val end = System.nanoTime()
             val pass = (indexService as? IndexServiceImpl)?.lastPass
             val kinds = pass?.built.orEmpty().map { it to builtKind(it, store.rootPath, sharedCachesRoot) }
@@ -4622,17 +4624,21 @@ class IdeServices private constructor(
         if (realView) {
             // realViewPreview publishes its pipeline stage to _realViewProgress (the status chip); clear it
             // here so every exit path (success or owned fallback) leaves the chip idle.
+            // One at a time: the link works in the module's own folders, and a render the user is waiting for
+            // that arrives during the warm-up ([prewarmLayoutPreview]) waits for it and then finds its work done.
             return try {
-                realViewPreview(
-                    module,
-                    repo,
-                    cached.fingerprint,
-                    themeName,
-                    title,
-                    file,
-                    text,
-                    request
-                )
+                synchronized(realViewLock) {
+                    realViewPreview(
+                        module,
+                        repo,
+                        cached.fingerprint,
+                        themeName,
+                        title,
+                        file,
+                        text,
+                        request
+                    )
+                }
             } finally {
                 _realViewProgress.value = null
             }
@@ -4702,6 +4708,8 @@ class IdeServices private constructor(
 
     @Volatile private var previewAapt2Daemon: dev.ide.android.support.tools.Aapt2Daemon? = null
 
+    private val realViewLock = Any()
+
     /** Relinks the build's compiled resources with the live editor buffer for the real-view preview, so the
      *  edited (or newly added) layout renders. Null when no Android tooling is wired (desktop). */
     private val previewResourceLinker: PreviewResourceLinker? by lazy {
@@ -4712,6 +4720,8 @@ class IdeServices private constructor(
         PreviewResourceLinker(
             // A long-lived aapt2: the preview relinks one layout per edit, and two process launches were most of that.
             Aapt2Subprocess(sdk.aapt2, dev.ide.android.support.tools.Aapt2Daemon(sdk.aapt2).also { previewAapt2Daemon = it }), t.androidJar, cache,
+            // The cache is every project's: two with an `app` module must not link into one folder.
+            projectId = Integer.toHexString(store.rootPath.toAbsolutePath().normalize().toString().hashCode()),
         )
     }
 
@@ -5630,6 +5640,55 @@ class IdeServices private constructor(
         if (android.isEmpty()) return
         indexScope.launch(Dispatchers.IO) {
             for (m in android) runCatching { resourceRepository(m) }
+        }
+    }
+
+    /** What [prewarmLayoutPreview] last rendered for (the module and its libraries), so a pass that changed neither does not render again. */
+    @Volatile private var warmedLayoutPreview: String? = null
+
+    /**
+     * Render one of the project's layouts in the background once it has opened, so the first layout the user
+     * opens does not pay for what only the first render does: the libraries' resources compiled and the table
+     * linked, the `R` jar made, the preview process started, the libraries' jars opened and their view classes
+     * read (3.3 s of a first render on an emulator, against 40 ms for the next). What is rendered is thrown away;
+     * what it left behind is what the user's layout needs, whichever one it is.
+     *
+     * Only for the runtime that links a table (a device's), only for a project that has a layout, and not where
+     * memory is tight: it starts the preview process, which a project that never shows a layout would not.
+     * Again when the libraries change, since most of that work is theirs.
+     */
+    private fun prewarmLayoutPreview() {
+        val runtime = realViewRuntime ?: return
+        if (runtime.readsSourceResources || DeviceMemory.isLow) return
+        indexScope.launch(Dispatchers.IO) {
+            runCatching {
+                for (m in modules()) {
+                    val facet = m.facets.get(AndroidFacet.KEY) ?: continue
+                    if (!facet.isApplication) continue
+                    val layout = AndroidResources.projectResourceDirs(m, store.workspace).asReversed().firstNotNullOfOrNull { res ->
+                        val dir = res.resolve("layout")
+                        if (!Files.isDirectory(dir)) null
+                        else Files.list(dir).use { files -> files.filter { it.toString().endsWith(".xml") }.sorted().findFirst().orElse(null) }
+                    } ?: continue
+                    val key = m.id.value + "|" + AndroidResources.libraryResourceDirs(m, store.workspace).joinToString("|")
+                    // Claimed before it is rendered: two passes that end together must not both render.
+                    synchronized(realViewLock) {
+                        if (key == warmedLayoutPreview) return@runCatching
+                        warmedLayoutPreview = key
+                    }
+                    val started = System.nanoTime()
+                    val warmed = layoutPreview(
+                        layout, Files.readString(layout),
+                        dev.ide.preview.PreviewRequest(widthPx = 1080, heightPx = 2140, density = 2.75f, realViews = true),
+                    )
+                    Log.logger("ide.preview").info(
+                        "layout preview warmed with '${layout.fileName}' in ${(System.nanoTime() - started) / 1_000_000}ms" +
+                            if (warmed?.renderedNativeImage == null && warmed?.renderedImage == null) " (it did not render)" else ""
+                    )
+                    // One module: the process, the libraries' classes and their compiled resources are shared.
+                    return@runCatching
+                }
+            }.onFailure { Log.logger("ide.preview").info("layout preview not warmed: $it") }
         }
     }
 
