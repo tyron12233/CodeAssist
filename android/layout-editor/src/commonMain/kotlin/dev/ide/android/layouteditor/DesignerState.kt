@@ -63,6 +63,13 @@ internal class DesignerState(initialLandscape: Boolean, initialNight: Boolean) {
     /** The view just dropped, drawn where it goes until the frame that has it lands. */
     var ghost by mutableStateOf<Ghost?>(null)
 
+    /**
+     * The layout as it would be with the dragged view dropped where the finger rests: drawn in place of the
+     * frame while the drag goes on, and after the drop until the frame of the edit lands. The buffer is not
+     * touched for it. Null when the finger is moving, or over nothing.
+     */
+    var dragPreview by mutableStateOf<dev.ide.android.layout.LayoutRenderResult?>(null)
+
     /** The step from the last frame to the one a designer edit produced, while the canvas animates it. */
     var transition by mutableStateOf<FrameTransition?>(null)
 

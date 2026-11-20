@@ -124,6 +124,40 @@ class StructureTest {
     }
 
     @Test
+    fun anEmptyContainerDrawnWithNoHeightTakesADropOnItsStrip() {
+        // A LinearLayout just added: as wide as its parent, as tall as its content, which is nothing.
+        val doc = parseTestLayout("<LinearLayout><TextView android:id=\"@+id/a\"/><LinearLayout android:id=\"@+id/empty\"/><TextView android:id=\"@+id/b\"/></LinearLayout>")
+        val root = doc.root!!
+        val (a, empty, b) = root.children
+        val tree = LayoutViewNode(
+            "LinearLayout", null, 0, 0, 100, 300, root.start,
+            children = listOf(
+                LayoutViewNode("TextView", "a", 0, 0, 100, 50, a.start),
+                LayoutViewNode("LinearLayout", "empty", 0, 50, 100, 50, empty.start),
+                LayoutViewNode("TextView", "b", 0, 50, 100, 100, b.start),
+            ),
+        )
+        val isGroup = { e: dev.ide.android.layout.LayoutElement -> e.tag == "LinearLayout" }
+        // Without a strip there is no pixel of it to drop on: the drop goes to the list around it.
+        assertEquals(root, dropTargetAt(tree, doc, 50f, 50f, isGroup)!!.parent)
+
+        val zone = dropZones(tree, doc, 40f, isGroup).single()
+        assertEquals(empty, zone.element)
+        // Its own bounds, grown to the least side about their centre.
+        assertEquals(listOf(0f, 30f, 100f, 70f), zone.rect.toList())
+        val into = dropTargetAt(tree, doc, 50f, 65f, isGroup, minZone = 40f)!!
+        assertEquals(empty, into.parent)
+        assertEquals(0, into.index)
+        // Outside the strip the list still takes the drop, and a container that has children shows none.
+        assertEquals(root, dropTargetAt(tree, doc, 50f, 90f, isGroup, minZone = 40f)!!.parent)
+        // The container being moved is not somewhere to drop itself.
+        assertEquals(emptyList(), dropZones(tree, doc, 40f, isGroup, moving = empty))
+        // At the frame's edge the strip stays inside the frame.
+        val top = LayoutViewNode("LinearLayout", null, 0, 0, 100, 300, root.start, children = listOf(LayoutViewNode("LinearLayout", "empty", 0, 0, 100, 0, empty.start)))
+        assertEquals(listOf(0f, 0f, 100f, 40f), dropZones(top, doc, 40f, isGroup).single().rect.toList())
+    }
+
+    @Test
     fun newViewsGetAnIdASizeAndAPlaceInAConstraintLayout() {
         val text = "<androidx.constraintlayout.widget.ConstraintLayout><Button android:id=\"@+id/button\"/></androidx.constraintlayout.widget.ConstraintLayout>"
         val doc = parseTestLayout(text)

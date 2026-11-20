@@ -55,7 +55,44 @@ internal class DropTarget(
     val line: FloatArray?,
     val x: Float,
     val y: Float,
+    /** The strip the drop was made on (left, top, right, bottom, image pixels), for a container too small to hit; see [dropZones]. */
+    val zone: FloatArray? = null,
 )
+
+/** A container with nowhere to drop a view, and the strip drawn over it during a drag to drop one on. */
+internal class DropZone(val element: LayoutElement, val node: LayoutViewNode, val rect: FloatArray)
+
+/**
+ * The containers a drag could not otherwise reach, each with a strip at least [min] pixels on a side to drop
+ * on: a container with no children that is drawn thinner than that. A `LinearLayout` just added is as wide as
+ * its parent and as tall as its content, which is nothing, so there is no pixel of it to drop a view on. The
+ * strip is the container's own bounds grown about their centre, kept inside the frame. Outermost first.
+ */
+internal fun dropZones(
+    root: LayoutViewNode,
+    document: LayoutDocument,
+    min: Float,
+    isViewGroup: (LayoutElement) -> Boolean,
+    moving: LayoutElement? = null,
+): List<DropZone> {
+    if (min <= 0f) return emptyList()
+    val inside = moving?.walk()?.toSet().orEmpty()
+    return document.elements().mapNotNull { el ->
+        if (el in inside || !isViewGroup(el) || el.children.any { it !== moving }) return@mapNotNull null
+        val n = nodeFor(root, el) ?: return@mapNotNull null
+        val w = (n.right - n.left).toFloat()
+        val h = (n.bottom - n.top).toFloat()
+        if (w >= min && h >= min) return@mapNotNull null
+        fun grown(lo: Float, size: Float, limitLo: Float, limitHi: Float): Pair<Float, Float> {
+            if (size >= min) return lo to lo + size
+            val start = (lo + size / 2f - min / 2f).coerceIn(limitLo, maxOf(limitLo, limitHi - min))
+            return start to start + min
+        }
+        val (l, r) = grown(n.left.toFloat(), w, root.left.toFloat(), root.right.toFloat())
+        val (t, b) = grown(n.top.toFloat(), h, root.top.toFloat(), root.bottom.toFloat())
+        DropZone(el, n, floatArrayOf(l, t, r, b))
+    }.toList()
+}
 
 /**
  * The drop target at ([x], [y]) in image pixels: the deepest view there that holds children ([isViewGroup]
@@ -69,7 +106,21 @@ internal fun dropTargetAt(
     y: Float,
     isViewGroup: (LayoutElement) -> Boolean,
     moving: LayoutElement? = null,
+    /** The side of the strip a container too small to hit is given ([dropZones]); 0 for none. */
+    minZone: Float = 0f,
 ): DropTarget? {
+    // A strip over a container with nowhere to drop comes first: it lies over its neighbours, and is the only
+    // way into that container. The innermost one, when they overlap.
+    dropZones(root, document, minZone, isViewGroup, moving)
+        .lastOrNull { z -> x >= z.rect[0] && x < z.rect[2] && y >= z.rect[1] && y < z.rect[3] }
+        ?.let { z ->
+            val w = (z.node.right - z.node.left).toFloat()
+            val h = (z.node.bottom - z.node.top).toFloat()
+            return DropTarget(
+                z.element, z.element.children.size, z.node, null,
+                (x - z.node.left).coerceIn(0f, w), (y - z.node.top).coerceIn(0f, h), zone = z.rect,
+            )
+        }
     val inside = moving?.walk()?.toSet().orEmpty()
     // The mapped views under the point, outermost first.
     val chain = ArrayList<Pair<LayoutViewNode, LayoutElement>>()

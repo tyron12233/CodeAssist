@@ -58,6 +58,10 @@ import dev.ide.android.layout.ElementRef
 import dev.ide.android.layout.LayoutDocument
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.roundToInt
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -66,6 +70,20 @@ import org.jetbrains.compose.resources.stringResource
 
 /** Debounce before a render, so a burst of typing in the code view becomes one render. */
 private const val RENDER_DEBOUNCE_MS = 200L
+
+/** How long the finger rests on a place before the layout is rendered with the dragged view there. */
+private const val DROP_PREVIEW_REST_MS = 140L
+
+/** How long a drop made on its preview keeps that frame while waiting for its own. */
+private const val PREVIEW_HOLD_MS = 1500L
+
+/** Where a dragged view would go, as what a preview of the drop is rendered for: equal while the drop would be the same. */
+private class DropPlace(val payload: DragPayload, val target: DropTarget, val parent: SelectionKey, val index: Int, val gx: Int, val gy: Int) {
+    override fun equals(other: Any?): Boolean =
+        other is DropPlace && other.payload === payload && other.parent == parent && other.index == index && other.gx == gx && other.gy == gy
+
+    override fun hashCode(): Int = 31 * (31 * (31 * parent.hashCode() + index) + gx) + gy
+}
 
 /** How often a designer with no project services yet asks for them again, and how many asks before it says so. */
 private const val SERVICE_RETRY_MS = 300L
@@ -156,6 +174,9 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     // what the step between frames is animated for. A property's new frame is the answer to a tap on a value:
     // it shows the moment it is drawn.
     val restructured = remember(path) { BooleanArray(1) }
+    // Whether the drop just made was already on screen as the drag's preview (DesignerState.dragPreview): its
+    // frame then replaces that picture as it lands, with nothing to animate from.
+    val previewDropped = remember(path) { BooleanArray(1) }
     val designerText = remember(path) { arrayOfNulls<String>(1) }
     // What the render reads besides the buffer (compiled project views, prepared libraries): a change renders again.
     val inputs by renderer.inputs.collectAsState()
@@ -182,7 +203,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
             val before = render
             // Animate only a frame of exactly what the designer's edits made: typing since then, or a frame that
             // could not be drawn, just swaps in.
-            if (before?.image != null && next.image != null && restructured[0] && designerEdits.isNotEmpty() && request.text == designerText[0]) {
+            if (before?.image != null && next.image != null && restructured[0] && !previewDropped[0] && designerEdits.isNotEmpty() && request.text == designerText[0]) {
                 state.transition = FrameTransition(
                     before, next, designerEdits.toList(),
                     designerPins.toList() + listOfNotNull(state.ghost?.let { Pin(it.rect, it.becomes, fromPicture = false) }),
@@ -193,6 +214,10 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         designerEdits.clear()
         designerPins.clear()
         restructured[0] = false
+        if (state.drag.payload == null) {
+            state.dragPreview = null
+            previewDropped[0] = false
+        }
         state.ghost = null
         rendered = true
         if (!next.librariesNeedPreparing) preparing = false
@@ -356,40 +381,97 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
 
     fun pathOf(el: LayoutElement): List<Int> = SelectionKey.of(el).path
 
+    /**
+     * The edits that put [payload] at [dropped] in [doc], with the selection to make after them; null when what
+     * was dragged or dropped on is gone. With [show], the view is also drawn where it goes until its frame
+     * lands (a ghost, and for a moved view where it travels from): for a drop, not for a preview of one.
+     */
+    fun dropEdits(doc: LayoutDocument, payload: DragPayload, dropped: DropTarget, show: Boolean): Pair<List<LayoutEdit>, SelectionKey?>? {
+        val density = state.device.density
+        val parent = dropped.parent.within(doc) ?: return null
+        val target = DropTarget(parent, dropped.index, dropped.area, dropped.line, dropped.x, dropped.y)
+        return when (payload) {
+            is DragPayload.New -> {
+                val taken = doc.elements().mapNotNull { it.id }.toSet()
+                val attrs = defaultAttributes(payload.cls.tag, payload.cls.isViewGroup, target, taken, density)
+                val id = attrs.firstOrNull { it.first == "android:id" }?.second?.substringAfter('/')
+                val key = SelectionKey(id, pathOf(parent) + target.index)
+                // Shown at once where the view will go; the frame that has it replaces it.
+                if (show) state.ghost = Ghost(ghostRect(dropped, null, density), payload.cls.tag, key)
+                insertElementEdits(doc, parent, target.index, payload.cls.tag, attrs) to key
+            }
+            is DragPayload.Move -> {
+                val el = payload.element.within(doc) ?: return null
+                val edits = moveElementEdits(doc, el, parent, target.index, target, density)
+                val sameParent = el.parent === parent
+                val oldIndex = el.parent?.children?.indexOf(el) ?: 0
+                val newIndex = if (sameParent && oldIndex < target.index) target.index - 1 else target.index
+                // The parent's own path shifts when the element leaves from before it among its siblings.
+                val key = SelectionKey(el.id, if (el.id == null) pathOf(parent) + newIndex else emptyList())
+                // The moved view travels from where it was drawn; until its frame lands, it shows where it goes.
+                if (show) render?.root?.let { root -> nodeFor(root, payload.element) }?.let { node ->
+                    val was = node.frameRect()
+                    designerPins += Pin(was, key, fromPicture = true)
+                    state.ghost = Ghost(ghostRect(dropped, was.width to was.height, density), el.tag, key)
+                }
+                edits to key
+            }
+        }
+    }
+
     /** Insert a new view, or move one, to [dropped]; then select it where it landed. */
     fun drop(payload: DragPayload, dropped: DropTarget?) {
         if (dropped == null || !ctx.canEdit) return
-        val density = state.device.density
-        restructure { doc ->
-            val parent = dropped.parent.within(doc) ?: return@restructure null
-            val target = DropTarget(parent, dropped.index, dropped.area, dropped.line, dropped.x, dropped.y)
-            when (payload) {
-                is DragPayload.New -> {
-                    val taken = doc.elements().mapNotNull { it.id }.toSet()
-                    val attrs = defaultAttributes(payload.cls.tag, payload.cls.isViewGroup, target, taken, density)
-                    val id = attrs.firstOrNull { it.first == "android:id" }?.second?.substringAfter('/')
-                    val key = SelectionKey(id, pathOf(parent) + target.index)
-                    // Shown at once where the view will go; the frame that has it replaces it.
-                    state.ghost = Ghost(ghostRect(dropped, null, density), payload.cls.tag, key)
-                    insertElementEdits(doc, parent, target.index, payload.cls.tag, attrs) to key
-                }
-                is DragPayload.Move -> {
-                    val el = payload.element.within(doc) ?: return@restructure null
-                    val edits = moveElementEdits(doc, el, parent, target.index, target, density)
-                    val sameParent = el.parent === parent
-                    val oldIndex = el.parent?.children?.indexOf(el) ?: 0
-                    val newIndex = if (sameParent && oldIndex < target.index) target.index - 1 else target.index
-                    // The parent's own path shifts when the element leaves from before it among its siblings.
-                    val key = SelectionKey(el.id, if (el.id == null) pathOf(parent) + newIndex else emptyList())
-                    // The moved view travels from where it was drawn; until its frame lands, it shows where it goes.
-                    render?.root?.let { root -> nodeFor(root, payload.element) }?.let { node ->
-                        val was = node.frameRect()
-                        designerPins += Pin(was, key, fromPicture = true)
-                        state.ghost = Ghost(ghostRect(dropped, was.width to was.height, density), el.tag, key)
-                    }
-                    edits to key
-                }
+        // The frame on screen may already be this drop (the drag's preview): it stays until the edit's own
+        // frame replaces it, and nothing is drawn in between. Let go of if that frame never comes.
+        val shown = state.dragPreview != null
+        previewDropped[0] = shown
+        if (shown) scope.launch {
+            delay(PREVIEW_HOLD_MS)
+            if (previewDropped[0]) { previewDropped[0] = false; state.dragPreview = null }
+        }
+        restructure { doc -> dropEdits(doc, payload, dropped, show = !shown) }
+    }
+
+    // ---- The drop, before it is made ------------------------------------------------------------------------
+    // While a view is dragged and the finger rests on a place it could go, the layout is rendered with it there
+    // and that frame is shown: what the drop will do, seen before letting go. The buffer is not edited. The
+    // place is the container and the position among its children (and the point, where the container pins a
+    // view to one), so the frame holds while the finger moves about inside one slot and goes when it leaves.
+    LaunchedEffect(path, renderer) {
+        snapshotFlow {
+            val payload = state.drag.payload ?: return@snapshotFlow null
+            val target = state.drag.targetAt(state.drag.position) ?: return@snapshotFlow null
+            val pinned = containerKind(target.parent) == ContainerKind.CONSTRAINT
+            val grid = 8f * state.device.density
+            DropPlace(
+                payload, target, SelectionKey.of(target.parent), target.index,
+                if (pinned) (target.x / grid).roundToInt() else 0, if (pinned) (target.y / grid).roundToInt() else 0,
+            )
+        }.distinctUntilChanged().collectLatest { place ->
+            if (place == null) {
+                // Let go, or over nothing. A drop keeps the frame it was made on until its own lands.
+                if (!previewDropped[0]) state.dragPreview = null
+                return@collectLatest
             }
+            state.dragPreview = null
+            if (!currentCtx.canEdit) return@collectLatest
+            delay(DROP_PREVIEW_REST_MS)
+            val doc = currentDocument()
+            val (edits, _) = dropEdits(doc, place.payload, place.target, show = false) ?: return@collectLatest
+            if (edits.isEmpty()) return@collectLatest
+            val text = edits.sortedByDescending { it.start }.fold(doc.text) { t, e -> t.substring(0, e.start) + e.newText + t.substring(e.end) }
+            if (text == doc.text) return@collectLatest
+            val frame = runCatching {
+                renderer.render(
+                    LayoutRenderRequest(
+                        path = path, text = text, widthPx = state.widthPx, heightPx = state.heightPx,
+                        density = state.device.density, night = state.night, scale = state.renderScale,
+                    ),
+                )
+            }.getOrNull() ?: return@collectLatest
+            // Still the same place, and still dragging: a frame that arrives after the drop is the drop's own job.
+            if (frame.image != null && frame.resourceErrors.isEmpty() && state.drag.payload === place.payload) state.dragPreview = frame
         }
     }
 
