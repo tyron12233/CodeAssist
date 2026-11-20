@@ -49,6 +49,14 @@ internal const val LONG_BUILD_THRESHOLD_MS = 5_000L
 /** Minimum gap between two build interstitials, so an edit-and-run loop doesn't pop an ad on every build. */
 private const val BUILD_INTERSTITIAL_MIN_INTERVAL_MS = 4 * 60_000L
 
+/**
+ * How long after a failed build the next long one gets no ad: the rebuild that follows a failure straight away is
+ * the user chasing an error. The skip used to last until a build succeeded, however long that took, and was the
+ * most common reason a long build got no ad (1,184 skipped against 1,685 shown in one week), most of them long
+ * after the failure had stopped being what the user was looking at.
+ */
+internal const val AFTER_FAILURE_QUIET_MS = 2 * 60_000L
+
 /** Long builds an install runs before its first full-screen ad. */
 internal const val FREE_LONG_BUILDS = 3
 
@@ -125,7 +133,7 @@ private const val RESULT_NOTICE_MS = 4_000L
  * the ad is skipped when:
  * - the device is short of memory (the ad's WebView competes with the build),
  * - this is the first launch after a fresh install, or one of the install's first [FREE_LONG_BUILDS] long builds,
- * - the previous build failed (the user is fixing errors),
+ * - the previous build failed less than [AFTER_FAILURE_QUIET_MS] ago (the user is fixing errors),
  * - one showed less than [BUILD_INTERSTITIAL_MIN_INTERVAL_MS] ago.
  *
  * The long-build count is persisted through [persist] until it reaches [FREE_LONG_BUILDS], so the grace is per
@@ -140,8 +148,15 @@ class BuildAdPacing(
     private var seen = longBuildsSeen
     private var lastShownMs: Long? = null
 
-    /** Whether the most recent finished build failed. */
-    var lastBuildFailed = false
+    /** When the most recent finished build failed, or null when it succeeded. */
+    private var lastFailedMs: Long? = null
+
+    /** A build finished, failing or succeeding. A stopped build is neither and is not reported. */
+    fun buildFinished(failed: Boolean) {
+        lastFailedMs = if (failed) nowMs() else null
+    }
+
+    private fun justFailed(): Boolean = lastFailedMs?.let { nowMs() - it < AFTER_FAILURE_QUIET_MS } ?: false
 
     /** Whether an ad could show over a later build this session, cooldown and last outcome aside: whether
      *  loading one is worth it. */
@@ -154,7 +169,7 @@ class BuildAdPacing(
      */
     fun wouldShow(lowMemory: Boolean): Boolean {
         val last = lastShownMs
-        return !lowMemory && !firstSession && seen >= FREE_LONG_BUILDS && !lastBuildFailed &&
+        return !lowMemory && !firstSession && seen >= FREE_LONG_BUILDS && !justFailed() &&
             (last == null || nowMs() - last >= BUILD_INTERSTITIAL_MIN_INTERVAL_MS)
     }
 
@@ -170,7 +185,7 @@ class BuildAdPacing(
             lowMemory -> "low_memory"
             firstSession -> "first_session"
             grace -> "grace"
-            lastBuildFailed -> "after_failure"
+            justFailed() -> "after_failure"
             last != null && nowMs() - last < BUILD_INTERSTITIAL_MIN_INTERVAL_MS -> "cooldown"
             else -> null
         }
@@ -214,8 +229,8 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
                 val wait = idleWait
                 idleWait = IDLE_PRELOAD_DELAY_MS
                 if (status != RunStatus.Running) {
-                    if (status == RunStatus.Failed) pacing.lastBuildFailed = true
-                    if (status == RunStatus.Succeeded) pacing.lastBuildFailed = false
+                    if (status == RunStatus.Failed) pacing.buildFinished(failed = true)
+                    if (status == RunStatus.Succeeded) pacing.buildFinished(failed = false)
                     // Idle: load the next ad now, so its WebView never starts up next to a running build.
                     preloadWhileIdle(
                         firstDelayMs = wait,

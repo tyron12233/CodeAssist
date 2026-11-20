@@ -43,9 +43,9 @@ class BuildAdPacingTest {
         val p = pacing()
         assertTrue(p.wouldShow(lowMemory = false))
         assertFalse(p.wouldShow(lowMemory = true))
-        p.lastBuildFailed = true
+        p.buildFinished(failed = true)
         assertFalse(p.wouldShow(lowMemory = false))
-        p.lastBuildFailed = false
+        p.buildFinished(failed = false)
         assertNull(p.skipReason(lowMemory = false))
         p.shown()
         assertFalse(p.wouldShow(lowMemory = false))
@@ -71,10 +71,34 @@ class BuildAdPacingTest {
     @Test
     fun aFailedBuildSkipsTheNextAdUntilABuildSucceeds() {
         val p = pacing()
-        p.lastBuildFailed = true
+        p.buildFinished(failed = true)
         assertEquals("after_failure", p.skipReason(lowMemory = false))
-        p.lastBuildFailed = false
+        p.buildFinished(failed = false)
         assertNull(p.skipReason(lowMemory = false))
+    }
+
+    /** A rebuild straight after a failure gets no ad; one started once the failure is old does. */
+    @Test
+    fun aFailureOnlyHoldsTheAdBackForAWhile() {
+        val p = pacing()
+        p.buildFinished(failed = true)
+        now += AFTER_FAILURE_QUIET_MS - 1
+        assertEquals("after_failure", p.skipReason(lowMemory = false))
+        assertFalse(p.wouldShow(lowMemory = false))
+        now += 1
+        assertTrue(p.wouldShow(lowMemory = false))
+        assertNull(p.skipReason(lowMemory = false))
+    }
+
+    /** Each failure starts the wait again, so a run of failing builds never reaches an ad. */
+    @Test
+    fun aSecondFailureStartsTheWaitAgain() {
+        val p = pacing()
+        p.buildFinished(failed = true)
+        now += AFTER_FAILURE_QUIET_MS - 1
+        p.buildFinished(failed = true)
+        now += AFTER_FAILURE_QUIET_MS - 1
+        assertEquals("after_failure", p.skipReason(lowMemory = false))
     }
 
     @Test
