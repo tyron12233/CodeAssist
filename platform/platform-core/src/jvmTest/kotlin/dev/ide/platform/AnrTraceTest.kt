@@ -124,11 +124,38 @@ class AnrTraceTest {
         assertNull(t.lockHolder)
     }
 
+    /**
+     * A layout pass recurses through the same few methods. Listing each once leaves room, inside the cap, for
+     * the frame that says which part of the screen the main thread was measuring.
+     */
+    @Test
+    fun `a frame repeated by recursion is listed once`() {
+        val layout = buildString {
+            appendLine("\"main\" prio=5 tid=1 Runnable")
+            appendLine("  at android.text.SpannableStringInternal.removeSpan(SpannableStringInternal.java:275)")
+            repeat(60) {
+                appendLine("  at androidx.compose.ui.node.LayoutModifierNodeCoordinator.measure(LayoutModifierNodeCoordinator.kt:182)")
+                appendLine("  at androidx.compose.ui.node.NodeCoordinator.measure(NodeCoordinator.kt:41)")
+            }
+            appendLine("  at androidx.compose.foundation.lazy.LazyListMeasureKt.measureLazyList(LazyListMeasure.kt:90)")
+        }
+        val main = assertNotNull(AnrTrace.parse(layout)?.main)
+        assertEquals(
+            listOf(
+                "android.text.SpannableStringInternal.removeSpan:275",
+                "androidx.compose.ui.node.LayoutModifierNodeCoordinator.measure:182",
+                "androidx.compose.ui.node.NodeCoordinator.measure:41",
+                "androidx.compose.foundation.lazy.LazyListMeasureKt.measureLazyList:90",
+            ),
+            main.frames,
+        )
+    }
+
     @Test
     fun `the own frame is found past the frame cap`() {
         val deep = buildString {
             appendLine("\"main\" prio=5 tid=1 Runnable")
-            repeat(40) { appendLine("  at androidx.compose.ui.Node.f$it(Node.kt:$it)") }
+            repeat(AnrTrace.MAX_FRAMES + 20) { appendLine("  at androidx.compose.ui.Node.f$it(Node.kt:$it)") }
             appendLine("  at dev.ide.ui.Editor.draw(Editor.kt:77)")
         }
         val main = assertNotNull(AnrTrace.parse(deep)?.main)

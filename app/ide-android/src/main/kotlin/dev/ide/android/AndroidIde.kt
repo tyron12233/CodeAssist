@@ -41,6 +41,9 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
+/** The most of one thread's frames an ANR report carries: room for `AnrTrace.MAX_FRAMES` Compose-length frames. */
+private const val ANR_FRAMES_CHARS = 4_000
+
 /**
  * On-device bootstrap for the IDE engine, the Android counterpart to :ide-desktop's wiring. ART has no
  * JDK to detect, so the Android SDK's `android.jar` (signatures for `java.*` + `android.*`) ships as an
@@ -970,14 +973,14 @@ object AndroidIde {
                     trace?.let { put("threads", it.threadCount.toString()) }
                     main?.let {
                         put("main_state", it.state)
-                        put("main_frames", it.frames.joinToString("\n").take(1500))
+                        put("main_frames", it.frames.joinToString("\n").take(ANR_FRAMES_CHARS))
                         it.nativeFrames.ifEmpty { null }?.let { v -> put("main_native", v.joinToString(" < ").take(500)) }
                         it.firstOwnFrame?.let { v -> put("main_own_frame", v) }
                     }
                     holder?.let {
                         put("lock_holder", it.name)
                         put("lock_holder_state", it.state)
-                        put("lock_holder_frames", it.frames.joinToString("\n").take(1500))
+                        put("lock_holder_frames", it.frames.joinToString("\n").take(ANR_FRAMES_CHARS))
                         it.firstOwnFrame?.let { v -> put("lock_holder_own_frame", v) }
                     }
                     crumb?.let {

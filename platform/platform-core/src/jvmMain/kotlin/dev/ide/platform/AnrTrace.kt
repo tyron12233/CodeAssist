@@ -21,7 +21,9 @@ import java.util.zip.GZIPInputStream
  * This keeps those two threads and drops the rest. Java frames are kept only for code that holds no user data
  * ([SAFE_PREFIXES]: this app, the platform and the libraries it bundles; the user's own program runs on the
  * interpreter VM, never as host frames), and a run of any other frames collapses to `… (n frames)`, the same
- * rule `CrashScrub` applies to exceptions. Native frames are reduced to `libname.so!symbol`, so no install
+ * rule `CrashScrub` applies to exceptions. A frame already listed for the thread is not listed again: a layout
+ * or draw pass recurses through the same few methods, and repeating them would spend the [MAX_FRAMES] cap
+ * before reaching the frame that says which part of the screen it was in. Native frames are reduced to `libname.so!symbol`, so no install
  * path is reported. Lock addresses, register state, thread ids and CPU accounting are never carried over.
  *
  * ## Parsing
@@ -45,7 +47,7 @@ data class AnrTrace(
         /** ART's thread state: `Runnable`, `Blocked`, `Waiting`, `TimedWaiting`, `Sleeping`, `Native`, ... */
         val state: String,
         /** Java frames, innermost first, as `pkg.Class.method:line` (`-2` for a native method, `-1` unknown),
-         *  with runs of frames outside [SAFE_PREFIXES] collapsed to `… (n frames)`. */
+         *  with runs of frames outside [SAFE_PREFIXES] collapsed to `… (n frames)` and each frame listed once. */
         val frames: List<String>,
         /** Native frames, innermost first, as `libname.so!symbol`. */
         val nativeFrames: List<String>,
@@ -60,8 +62,12 @@ data class AnrTrace(
          *  thread comes first and a lock holder is rarely far behind. */
         const val MAX_BYTES: Int = 2 * 1024 * 1024
 
-        /** Java frames kept per thread (after collapsing), and native frames. */
-        const val MAX_FRAMES: Int = 14
+        /**
+         * Java frames kept per thread (after collapsing and dropping repeats), and native frames. It was 14,
+         * which a text measured during layout used up inside Compose's text classes: three ANRs in one week
+         * ended in `SpannableString.removeSpan` with nothing to say which screen the text was on.
+         */
+        const val MAX_FRAMES: Int = 40
         const val MAX_NATIVE_FRAMES: Int = 4
 
         /** Package prefixes whose frames are safe to report: this app, the platform, and bundled libraries. */
@@ -137,6 +143,7 @@ data class AnrTrace(
 
         private class Raw(val name: String, val tid: Int, val state: String) {
             val java = ArrayList<String>()
+            val listed = HashSet<String>()
             val native = ArrayList<String>()
             var firstOwn: String? = null
             var waitingOn: Int? = null
@@ -199,7 +206,8 @@ data class AnrTrace(
                 t.collapsed = 0
                 if (t.java.size >= MAX_FRAMES) return
             }
-            t.java += "$method:${lineOf(source)}"
+            val frame = "$method:${lineOf(source)}"
+            if (t.listed.add(frame)) t.java += frame
         }
 
         private fun finish(t: Raw) {
