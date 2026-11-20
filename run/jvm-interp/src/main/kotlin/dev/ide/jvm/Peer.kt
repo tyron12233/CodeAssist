@@ -106,6 +106,18 @@ interface PeerFactory {
     fun reflectionClass(className: String, constructorDescriptors: List<String>): Class<*>
 
     /**
+     * [reflectionClass], also declaring a NON-public constructor for each of [hiddenConstructorDescriptors], so
+     * `getDeclaredConstructor(...)` finds the ones `getConstructor(...)` must not. A library that opens another
+     * library's private constructor reflectively needs this (Room builds JavaPoet's `TypeVariableName` that
+     * way). The default declares the public ones only, which is what a factory did before this existed.
+     */
+    fun reflectionClass(
+        className: String,
+        constructorDescriptors: List<String>,
+        hiddenConstructorDescriptors: List<String>,
+    ): Class<*> = reflectionClass(className, constructorDescriptors)
+
+    /**
      * A real class that MIRRORS interpreted class [className]'s declared [methods] and [fields] as members of the
      * same names, modifiers and (realized) types, so the VM can hand interpreted code real [java.lang.reflect.Method]
      * and [java.lang.reflect.Field] objects for them. It is separate from the [reflectionClass] stand-in, so
@@ -122,6 +134,15 @@ interface PeerFactory {
         recordComponents: List<ReflectedField> = emptyList(),
     ): Class<*> =
         throw UnsupportedOperationException("this PeerFactory cannot mirror classes for reflection")
+
+    /**
+     * A real object implementing [iface] whose abstract methods all forward to [target] (itself an [iface]),
+     * or null when this factory cannot make one. It exists to run a DEFAULT method of [iface] on behalf of a
+     * [java.lang.reflect.Proxy]: where the platform has no `InvocationHandler.invokeDefault` (Android), a proxy
+     * cannot run a default method itself, but a real class inherits them, and its calls back to the abstract
+     * methods reach the proxy through [target].
+     */
+    fun defaultMethodHost(iface: Class<*>, target: Any): Any? = null
 
     /** The interpreted internal name a [reflectionClass] result stands for, or null if [cls] is not one. */
     fun interpretedNameOf(cls: Class<*>): String?

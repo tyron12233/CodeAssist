@@ -133,6 +133,29 @@ class TestRunnerArtSpike {
             "ReflectMembers.methods" to "[hello@Base, own@Child, run@Child]|true|base|true",
             "ReflectMembers.generics" to "true,true,T,true,true,true,true,true,E,? extends E,T[],E",
             "ReflectMembers.annotations" to "cls3Atrue0,f7true,mB[x, y],2:1:p:0,true,false,2,true,false,true,3",
+            "ReflectNesting.nesting" to "true,dev.ide.jvm.fixtures.ReflectNesting\$Inner,null,dev.ide.jvm.fixtures.ReflectNesting.Inner.Deep,true,false,null,null,true",
+            "ReflectNesting.privateConstructor" to "a2,public,hidden,2",
+            // java.lang.invoke: ART refuses a `MethodHandles.lookup()` whose caller is the reflection machinery
+            // ("illegal lookupClass: class java.lang.reflect.Method"), which is what Javalin and Spring Boot hit.
+            "Handles.lookupClass" to "dev.ide.jvm.fixtures.Handles,true,Louder,true",
+            "Handles.atClassInit" to "dev.ide.jvm.fixtures.Handles",
+            "Handles.findStatic" to "HI bob|hi ann|hi cy",
+            "Handles.findVirtual" to "A3|!b|C7",
+            "Handles.findConstructor" to "D9",
+            "Handles.platform" to "4,12",
+            "Handles.missing" to "NoSuchMethodException",
+            "Handles.unreflect" to "hi e",
+            "Handles.fields" to "5,8,t",
+            "Handles.thrown" to "caught code 4",
+            "VarHandles.fields" to "true,false,5,8,true,301,303,10,15,15,a,true,null,true,true",
+            "VarHandles.statics" to "4,true,6,6,x,y",
+            "VarHandles.arrays" to "true,3,true,[1, 20, 8][z, y],1,AIOOBE",
+            "VarHandles.contended" to "8000,8000",
+            "Updaters.ints" to "true,false,6,6,15,15,35,35,true,400,400,401,401",
+            "Updaters.longs" to "1099511627776,true,21,21,121,121",
+            "Updaters.references" to "true,false,b,d!,d!,d!?,d!?",
+            "Updaters.missing" to "NoSuchFieldException",
+            "Updaters.contended" to "8000,16000",
         )
         val failures = ArrayList<String>()
         for ((probe, want) in expected) {

@@ -25,6 +25,10 @@ internal object HostBackports {
     /** Test hook: answer from here even when the host has the method, so a desktop JVM exercises the entries. */
     @Volatile var preferBackports: Boolean = false
 
+    /** Test hook: run a lambda proxy's default methods through [PeerFactory.defaultMethodHost] even where the
+     *  platform has `InvocationHandler.invokeDefault`, so a desktop JVM exercises what a phone does. */
+    @Volatile var preferDefaultMethodHost: Boolean = false
+
     /** The stand-in for static `owner.name descriptor`, taking the real (marshalled) arguments, or null. */
     fun static(owner: String, name: String, descriptor: String): ((Array<Any?>) -> Any?)? = when (owner) {
         "java/lang/Math" -> if (name != "clamp") null else when (descriptor) {
@@ -165,6 +169,13 @@ internal object HostBackports {
                     }
                     if (!any) Stream.empty<Any?>() else Stream.concat(Stream.of(first), streamOf(elements))
                 }
+                else -> null
+            }
+            // Java 9's polite `setAccessible`, which Android's reflection never gained. Room opens a private
+            // constructor with it.
+            is java.lang.reflect.AccessibleObject -> when (key) {
+                "trySetAccessible()Z" -> { r, _ -> runCatching { (r as java.lang.reflect.AccessibleObject).isAccessible = true }.isSuccess }
+                "canAccess(Ljava/lang/Object;)Z" -> { r, _ -> @Suppress("DEPRECATION") (r as java.lang.reflect.AccessibleObject).isAccessible }
                 else -> null
             }
             is Optional<*> -> when (key) {

@@ -47,6 +47,8 @@ internal class RunBridge(
     // A console run propagates lambda failures (no proxyExceptionSink) — unlike a preview, which degrades them.
     private val delegate = ReflectiveBridge(loader)
 
+    override fun defaultMethodHost(host: (iface: Class<*>, target: Any) -> Any?) = delegate.defaultMethodHost(host)
+
     override fun invokeStatic(owner: String, name: String, descriptor: String, args: List<Any?>): Any? {
         if (owner == "java/lang/System" && name == "exit" && descriptor == "(I)V") throw ControlledExit(args[0] as Int)
         // `kotlin.system.exitProcess` is bridged like the rest of `kotlin/`, so its `System.exit` would run as

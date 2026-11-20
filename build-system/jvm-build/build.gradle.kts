@@ -28,6 +28,23 @@ dependencies {
     testImplementation(libs.junit4)
     // RunResourcesTest drives the REAL Compose resource reader a desktop run redirects (see run/RunResources.kt).
     testImplementation(libs.compose.resources.desktop)
+    // JavalinRunTest's program is compiled against Javalin but must not find it on the test JVM's own
+    // classpath: the run interprets it from the jars below, as a phone does.
+    testCompileOnly("io.javalin:javalin:6.3.0")
+}
+
+// A real web framework's closure (Javalin on Jetty, with an SLF4J binding), handed to JavalinRunTest as the
+// program's runtime classpath.
+val javalinRun: Configuration by configurations.creating
+dependencies {
+    javalinRun("io.javalin:javalin:6.3.0")
+    javalinRun("org.slf4j:slf4j-simple:2.0.16")
+}
+tasks.named<Test>("test") {
+    // The programs are what the run tests interpret, not tests; JavalinHello cannot even be loaded here, its
+    // library being absent from this JVM on purpose, and test discovery fails outright on a class like that.
+    filter { excludeTestsMatching("dev.ide.build.jvm.run.programs.*") }
+    doFirst { systemProperty("javalin.run.classpath", javalinRun.asPath) }
 }
 
 // `test/fixtures` holds tests FOR the IDE's test runner, several failing on purpose; the module's own test task

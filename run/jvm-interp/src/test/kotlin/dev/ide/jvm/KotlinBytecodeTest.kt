@@ -35,6 +35,12 @@ class KotlinBytecodeTest {
 
     private fun call(name: String, desc: String, vararg args: Any?): Any? = vm.invokeStatic(KFX, name, desc, args.toList())
 
+    /** `Foo::class.qualifiedName` names the interpreted class, not the generated class standing for it. An
+     *  annotation processor finds its annotation by this name. */
+    @Test fun kotlinClassNamesAreTheInterpretedClasses() {
+        assertEquals(dev.ide.jvm.kfixtures.kotlinClassNames(), vm.invokeStatic("dev/ide/jvm/kfixtures/KClassNamesKt", "kotlinClassNames", "()Ljava/lang/String;"))
+    }
+
     @Test fun proxyFakesAnInterpretedKotlinInterface() {
         assertEquals(dev.ide.jvm.kfixtures.kotlinProxyFake(), vm.invokeStatic("dev/ide/jvm/kfixtures/KProxyKt", "kotlinProxyFake", "()Ljava/lang/String;"))
     }

@@ -245,6 +245,8 @@ val bundleTestRunSpikeAsset = tasks.register<Copy>("bundleTestRunSpikeAsset") {
     }
     from(project(":jvm-interp").layout.buildDirectory.dir("classes/java/test")) {
         include("dev/ide/jvm/fixtures/ReflectMethods*.class", "dev/ide/jvm/fixtures/ReflectMembers*.class")
+        include("dev/ide/jvm/fixtures/ReflectNesting*.class", "dev/ide/jvm/fixtures/Handles*.class")
+        include("dev/ide/jvm/fixtures/VarHandles*.class", "dev/ide/jvm/fixtures/Updaters*.class")
         into("classes")
     }
     from(testRunSpikeJars) { into("jars") }

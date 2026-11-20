@@ -29,6 +29,13 @@ interface NativeBridge {
     fun construct(owner: String, descriptor: String, args: List<Any?>): Any?
 
     /**
+     * Gives the bridge a way to run an interface's DEFAULT method for a proxy it made, on a platform whose
+     * proxies cannot (see [PeerFactory.defaultMethodHost], which is what the VM passes). A bridge that makes no
+     * proxies ignores it; one that wraps another passes it on.
+     */
+    fun defaultMethodHost(host: (iface: Class<*>, target: Any) -> Any?) {}
+
+    /**
      * The real value an interpreter value takes as an ELEMENT of a real array of [elementDescriptor]. An array
      * argument reaches the methods above already real, so what they do for a lone argument has to be done here
      * for each element: a lambda in a `vararg` of functions (`compareBy({ it.a }, { it.b })`) is stored as the
@@ -63,6 +70,12 @@ class ReflectiveBridge(
      *  bridged class (an Android-only constructor reached on the desktop). */
     private val missingConstructor: ((owner: String, descriptor: String, args: List<Any?>) -> Any?)? = null,
 ) : NativeBridge {
+
+    @Volatile private var defaultHost: ((Class<*>, Any) -> Any?)? = null
+
+    override fun defaultMethodHost(host: (iface: Class<*>, target: Any) -> Any?) {
+        defaultHost = host
+    }
 
     // Reflection resolution is deterministic given the class + name + descriptor and is repeated on every
     // bridged call (a composable makes many per recomposition), so cache each lookup. Real classes are
@@ -345,7 +358,21 @@ class ReflectiveBridge(
                 "hashCode" -> System.identityHashCode(lambda)
                 else -> callArgs?.getOrNull(0).let { it === proxy || lambdaBehind(it) === lambda } // equals
             }
-            if (method.isDefault) invokeDefaultMethod?.let { return it(proxy, method, callArgs) }
+            if (method.isDefault) {
+                if (!HostBackports.preferDefaultMethodHost) invokeDefaultMethod?.let { return it(proxy, method, callArgs) }
+                // No `invokeDefault` here (Android): run the default on a real object of the interface, whose
+                // calls to the abstract method come back to this proxy. Without it the call fell through to the
+                // lambda body, so `iterable.spliterator()` on a lambda returned its ITERATOR.
+                val iface = proxy.javaClass.interfaces.firstOrNull { method.declaringClass.isAssignableFrom(it) }
+                val host = iface?.let { defaultHost?.invoke(it, proxy) }
+                if (host != null) {
+                    return try {
+                        method.invoke(host, *(callArgs ?: emptyArray()))
+                    } catch (e: InvocationTargetException) {
+                        throw e.targetException ?: e
+                    }
+                }
+            }
             val paramTypes = method.parameterTypes
             val vmArgs = (callArgs ?: emptyArray()).mapIndexed { i, a -> realArgToVm(a, paramTypes[i]) }
             // invokeSamReal (not invokeSam): the result crosses to platform code here, so an interpreted object

@@ -68,6 +68,14 @@ internal class InterpretedReflection(private val vm: Vm) {
     private val mirrors = ConcurrentHashMap<String, Mirror>()
     private val byMirrorClass = ConcurrentHashMap<Class<*>, Mirror>()
 
+    /** The interpreted class and method a mirror's [method] stands for, or null when it is a real method. */
+    fun mirrored(method: Method): Pair<String, MethodNode>? =
+        byMirrorClass[method.declaringClass]?.let { m -> m.methods[method]?.let { m.internalName to it } }
+
+    /** The interpreted class and field a mirror's [field] stands for, or null when it is a real field. */
+    fun mirrored(field: Field): Pair<String, FieldNode>? =
+        byMirrorClass[field.declaringClass]?.let { m -> m.fields[field.name]?.let { m.internalName to it } }
+
     /** Dispatches a reflective call on [receiver]; [args] are real values (peers for interpreted objects). */
     fun intercept(receiver: Any?, name: String, descriptor: String, args: List<Any?>): Any? {
         // A handled call may legitimately answer null (a void invoke, a field set, an interface's superclass).
@@ -116,6 +124,11 @@ internal class InterpretedReflection(private val vm: Vm) {
             // Null for a type that is not sealed, as the platform answers.
             "getPermittedSubclasses" -> cls.permittedSubclasses.takeIf { it.isNotEmpty() }?.map(::classOfName)?.toTypedArray()
             "getRecordComponents" -> if (cls.isRecord) recordComponents(cls) else null
+            // The stand-in is a top-level class, so the real answer is null for every nested type, and a
+            // library that walks the nesting to name a type (kotlinpoet's `asClassName`) loses the outer
+            // classes. Read off the binary name: the class file's InnerClasses table is not kept.
+            "getEnclosingClass", "getDeclaringClass" -> enclosingOf(internal, membersOnly = name == "getDeclaringClass")
+            "isMemberClass" -> Marshalling.realPrimToVm(enclosingOf(internal, membersOnly = true) != null)
             else -> annotationQuery(name, descriptor, args, "class:$internal") { classAnnotations(cls) }
         }
     }
@@ -396,10 +409,21 @@ internal class InterpretedReflection(private val vm: Vm) {
 
     /** The class a reflective result shows for internal name [internal]: its stand-in when interpreted, else the
      *  real class, else `Object` when neither exists. */
+    /** The class [internal] is nested in, by its binary name (`a/b/Outer$Inner` -> `Outer`), or null for a
+     *  top-level class. A local or anonymous class (`Outer$1`, `Outer$1Local`) has an enclosing class but no
+     *  declaring one, hence [membersOnly]. */
+    private fun enclosingOf(internal: String, membersOnly: Boolean): Class<*>? {
+        val cut = internal.lastIndexOf('$')
+        if (cut <= internal.lastIndexOf('/') + 1 || cut == internal.length - 1) return null
+        if (membersOnly && internal[cut + 1].isDigit()) return null
+        val outer = internal.substring(0, cut)
+        return if (vm.resolve(outer) != null) classOfName(outer) else null
+    }
+
     private fun classOfName(internal: String): Class<*> =
         vm.classForInterpreted(internal) ?: runCatching { vm.loadReal(internal) }.getOrDefault(Any::class.java)
 
-    private fun classOfDesc(desc: String): Class<*> = when (desc) {
+    internal fun classOfDesc(desc: String): Class<*> = when (desc) {
         "V" -> Void.TYPE
         "Z" -> java.lang.Boolean.TYPE
         "B" -> java.lang.Byte.TYPE

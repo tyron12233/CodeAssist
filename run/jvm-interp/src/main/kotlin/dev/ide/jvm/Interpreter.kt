@@ -40,6 +40,7 @@ private const val K_DOUBLE: Byte = 4
 
 /** Owner of Kotlin's reification marker intrinsic. */
 private const val REIFIED_MARKER_OWNER = "kotlin/jvm/internal/Intrinsics"
+private const val LOOKUP_DESC = "()Ljava/lang/invoke/MethodHandles\$Lookup;"
 
 /** `ReifiedTypeInliner.OperationKind` ids the interpreter can reproduce: NEW_ARRAY(0), AS(1), SAFE_AS(2),
  *  IS(3), JAVA_CLASS(4, `T::class.java`). ENUM(5, `enumValues`)/TYPE_OF(6, `typeOf`) are handled ahead of the
@@ -266,6 +267,10 @@ internal class Interpreter(private val vm: Vm) {
 
         @JvmField
         var sig: String = "" // the method this frame runs, for diagnostics
+
+        /** The class whose method this frame runs: what a caller-sensitive platform method should see. */
+        @JvmField
+        var declaring: VmClass? = null
 
         /** Size the arrays for a method and reset. Reference cells are cleared so a pooled frame does not keep
          *  the previous invocation's objects reachable. */
@@ -526,6 +531,7 @@ internal class Interpreter(private val vm: Vm) {
         exec: Exec,
         declaring: VmClass
     ): Any? {
+        frame.declaring = declaring
         val monitor = if (block.isSynchronized) enterSyncMethod(block, frame, declaring) else null
         try {
             return runLoop(block, frame, caller, exec)
@@ -599,13 +605,7 @@ internal class Interpreter(private val vm: Vm) {
         // `MyException : RuntimeException`) is caught by `catch (Throwable)` / `catch (Exception)`, which name
         // only real ancestors that [Vm.isSubtype]'s by-name walk never reaches.
         is VmObject -> vm.isSubtype(thrown.vmClass, catchType) || vm.isRealInstance(thrown.vmClass, catchType)
-        is Throwable -> runCatching {
-            Class.forName(
-                catchType.replace('/', '.'),
-                false,
-                javaClass.classLoader
-            ).isInstance(thrown)
-        }.getOrDefault(false)
+        is Throwable -> vm.realClassOrNull(catchType)?.isInstance(thrown) ?: false
 
         else -> false
     }
@@ -1193,8 +1193,10 @@ internal class Interpreter(private val vm: Vm) {
     private fun staticSite(f: FieldInsnNode, pc: Int, block: MethodBlock): StaticSite {
         val epoch = vm.epoch
         (block.sites[pc] as? StaticSite)?.let { if (it.epoch == epoch) return it }
-        val cls = vm.resolve(f.owner)
-        val site = StaticSite(epoch, cls, cls?.let { ownerHolding(it, f.name) }?.staticCells?.get(f.name))
+        // The class to initialize is the one that DECLARES the field: reading an interface's constant through
+        // a class that implements it does not initialize the interface along with that class.
+        val holder = vm.resolve(f.owner)?.let { ownerHolding(it, f.name) }
+        val site = StaticSite(epoch, holder, holder?.staticCells?.get(f.name))
         block.sites[pc] = site
         return site
     }
@@ -1238,7 +1240,7 @@ internal class Interpreter(private val vm: Vm) {
     private fun staticGet(owner: String, name: String, desc: String): Any? {
         val cls = vm.resolve(owner) ?: return vm.bridge.getStatic(owner, name, desc)
         vm.ensureInitialized(cls)
-        val cell = ownerHolding(cls, name)?.staticCells?.get(name)
+        val cell = ownerHolding(cls, name)?.also { vm.ensureInitialized(it) }?.staticCells?.get(name)
             ?: return vm.bridge.getStatic(vm.realSuperName(cls), name, desc)
         return if (cell.kind == FieldKinds.VOLATILE) (cell.ref as AtomicReference<*>).get() else cell.boxed()
     }
@@ -1248,7 +1250,7 @@ internal class Interpreter(private val vm: Vm) {
         val cls =
             vm.resolve(owner) ?: return vm.bridge.putStatic(owner, name, desc, vm.toReal(value))
         vm.ensureInitialized(cls)
-        val cell = ownerHolding(cls, name)?.staticCells?.get(name)
+        val cell = ownerHolding(cls, name)?.also { vm.ensureInitialized(it) }?.staticCells?.get(name)
             ?: return vm.bridge.putStatic(vm.realSuperName(cls), name, desc, vm.toReal(value))
         if (cell.kind == FieldKinds.VOLATILE) (cell.ref as AtomicReference<Any?>).set(value) else cell.store(value)
     }
@@ -1259,7 +1261,11 @@ internal class Interpreter(private val vm: Vm) {
     private fun ownerHolding(start: VmClass, name: String): VmClass? {
         var c: VmClass? = start
         while (c != null) {
-            if (name in c.staticFieldDescs) return c; c = c.superName?.let { vm.resolve(it) }
+            if (name in c.staticFieldDescs) return c
+            // An interface's constant, read through a class (or interface) that inherits it: the class's own
+            // superinterfaces come before its superclass, as field resolution orders them.
+            for (iface in c.interfaces) vm.resolve(iface)?.let { ownerHolding(it, name) }?.let { return it }
+            c = c.superName?.let { vm.resolve(it) }
         }
         return null
     }
@@ -1370,6 +1376,11 @@ internal class Interpreter(private val vm: Vm) {
         vm.staticRedirect?.hostOwner(insn.owner, insn.name, insn.desc)?.let { hostOwner ->
             val sh = shape(insn.desc)
             pushResult(sh, vm.bridgeStatic(hostOwner, insn.name, insn.desc, popBoxedArgs(sh, frame)), frame)
+            return
+        }
+        // Caller-sensitive: the lookup is the running class's, which only the interpreter knows.
+        if (insn.name == "lookup" && insn.owner == "java/lang/invoke/MethodHandles" && insn.desc == LOOKUP_DESC) {
+            frame.pushRef(vm.handles.lookupFor(frame.declaring))
             return
         }
         val sh = shape(insn.desc)
@@ -1529,7 +1540,7 @@ internal class Interpreter(private val vm: Vm) {
     }
 
     /** Invoke an instance method by virtual dispatch on the receiver's runtime type, with boxed arguments. */
-    private fun dispatchVirtual(
+    internal fun dispatchVirtual(
         name: String,
         descriptor: String,
         rawReceiver: Any?,
@@ -1995,9 +2006,7 @@ internal class Interpreter(private val vm: Vm) {
         // An array target naming real classes all the way down is checked exactly (an `int[]` is not a
         // `long[]`, nor an `Object[]`).
         else -> if (target.startsWith("[") && v.javaClass.isArray) vm.realArrayClass(target)?.isInstance(v) ?: true
-        else runCatching {
-            Class.forName(target.replace('/', '.'), false, javaClass.classLoader).isInstance(v)
-        }.getOrDefault(false)
+        else vm.realClassOrNull(target)?.isInstance(v) ?: false
     }
 
     /** The only non-array types an array is an instance of (JLS 4.10.3). */

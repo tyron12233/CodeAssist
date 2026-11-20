@@ -8,6 +8,12 @@ import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
+/** Stands for "no such class" in [Vm.realClassOrNull]'s memory, which cannot hold a null. */
+private val NO_CLASS = Any()
+
+/** The name prefix of a generated peer's trampoline to the real implementation its interpreted class overrides. */
+private const val SUPER_PREFIX = "super$"
+
 /** Supplies a class's bytecode by internal name (`dev/ide/jvm/Foo`), or null when no such class is available. */
 fun interface ClassBytesSource {
     fun bytesFor(internalName: String): ByteArray?
@@ -160,6 +166,16 @@ class Vm(
     private val interpreter = Interpreter(this)
     private val reflection = InterpretedReflection(this)
     private val proxies = InterpretedProxies(this, reflection)
+    internal val handles = InterpretedHandles(this, reflection)
+    private val services = InterpretedServices(this)
+
+    /** Calls [name][descriptor] on [receiver], an interpreter value (an interpreted object, a lambda, or a real
+     *  object), with [args] in the interpreter's form, by virtual dispatch as `invokevirtual` would. */
+    internal fun callVirtual(receiver: Any?, name: String, descriptor: String, args: List<Any?>): Any? =
+        interpreter.dispatchVirtual(name, descriptor, receiver, args)
+
+    /** The class a value of [descriptor] has as reflection reports it: an interpreted type's stand-in. */
+    internal fun classForDescriptor(descriptor: String): Class<*> = reflection.classOfDesc(descriptor)
 
     /** Stored for a name known NOT to be interpreted (bridged or absent): [classes] is a [java.util.concurrent
      *  .ConcurrentHashMap], which cannot hold a null value, so [resolve] uses this sentinel and maps it back to
@@ -203,6 +219,12 @@ class Vm(
      *  no-name ones, requires a non-null name). */
     private val threadCounter = AtomicInteger()
 
+    /** Calls interpreted code made into real code (a static or instance method of a bridged class), for
+     *  attributing a run's time: each is a reflective call with its arguments converted, far dearer than an
+     *  interpreted instruction. A plain counter written from every thread, so approximate under contention. */
+    @Volatile var bridgedCalls: Long = 0
+        private set
+
     /** Total bytecode instructions the interpreter has executed (diagnostics / throughput measurement). */
     val steps: Long get() = interpreter.steps
 
@@ -225,6 +247,7 @@ class Vm(
 
     init {
         installPlatformStandIns()
+        bridge.defaultMethodHost { iface, target -> peerFactory.defaultMethodHost(iface, target) }
     }
     private val peerDispatch = PeerDispatch { peer, vmObject, name, descriptor, args ->
         val obj = vmObject as VmObject
@@ -517,9 +540,71 @@ class Vm(
         descriptor: String,
         vmArgs: List<Any?>
     ): Any? {
+        bridgedCalls++
         val real = vmArgs.map { toReal(it) }
         interceptReflection(null, owner, name, descriptor, real)?.let { return it.value }
         return bridge.invokeStatic(owner, name, descriptor, real).also { syncArraysBack(vmArgs) }
+    }
+
+    /**
+     * Runs the default method [name][descriptor] of one of [proxy]'s interfaces on it, skipping the interpreted
+     * override that is making this `super` call. A Kotlin class implementing an interface whose method has a
+     * body gets a compiler-written override that only calls the interface's (KSP's `SymbolProcessor.finish`,
+     * which most processors never write themselves).
+     */
+    private fun proxyDefault(proxy: Any, name: String, descriptor: String, vmArgs: List<Any?>): Any? {
+        val seen = HashSet<Class<*>>()
+        val queue = ArrayDeque(proxy.javaClass.interfaces.toList())
+        var target: java.lang.reflect.Method? = null
+        while (queue.isNotEmpty() && target == null) {
+            val iface = queue.removeFirst()
+            if (!seen.add(iface)) continue
+            target = iface.declaredMethods.firstOrNull { it.isDefault && it.name == name && Type.getMethodDescriptor(it) == descriptor }
+            queue.addAll(iface.interfaces)
+        }
+        if (target == null) {
+            // `super.equals(o)` and its siblings reach `Object`, which a Proxy does not extend usefully: its
+            // own would call back into the override. They are Object's, on the peer as the instance's identity.
+            when (name + descriptor) {
+                "equals(Ljava/lang/Object;)Z" -> return if (toReal(vmArgs[0]) === proxy) 1 else 0
+                "hashCode()I" -> return System.identityHashCode(proxy)
+                TO_STRING -> return ((proxy as? VmPeer)?.vmObject() as? VmObject)?.let { defaultToString(it) } ?: proxy.toString()
+            }
+        }
+        val method = target ?: throw VmUnsupportedException("no default method $name$descriptor on ${proxy.javaClass.interfaces.joinToString { it.name }}")
+        val params = Descriptors.paramTypes(descriptor)
+        val real = vmArgs.mapIndexed { i, a -> Marshalling.toRealArg(toReal(a), params[i]) }.toTypedArray()
+        val result = try {
+            java.lang.reflect.InvocationHandler.invokeDefault(proxy, method, *real)
+        } catch (e: VmException) {
+            throw e
+        } catch (e: VmUnsupportedException) {
+            throw e
+        } catch (e: VmInterruptedException) {
+            throw e
+        } catch (e: Throwable) {
+            throw VmException(e)
+        }
+        return Marshalling.realToVm(result, Descriptors.returnType(descriptor))
+    }
+
+    private fun driverManager(name: String, descriptor: String, args: List<Any?>): Reflected? = try {
+        when (name + descriptor) {
+            // The driver is the program's own object when it registered one: handed back as that, not as the
+            // peer the platform held for it.
+            "getDriver(Ljava/lang/String;)Ljava/sql/Driver;" -> Reflected(Marshalling.realToVm(java.sql.DriverManager.getDriver(args[0] as String?)))
+            "getConnection(Ljava/lang/String;)Ljava/sql/Connection;" -> Reflected(java.sql.DriverManager.getConnection(args[0] as String?))
+            "getConnection(Ljava/lang/String;Ljava/util/Properties;)Ljava/sql/Connection;" ->
+                Reflected(java.sql.DriverManager.getConnection(args[0] as String?, args[1] as java.util.Properties?))
+            "getConnection(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/sql/Connection;" ->
+                Reflected(java.sql.DriverManager.getConnection(args[0] as String?, args[1] as String?, args[2] as String?))
+            "getDrivers()Ljava/util/Enumeration;" ->
+                Reflected(java.util.Collections.enumeration(java.sql.DriverManager.getDrivers().toList().map { Marshalling.realToVm(it) }))
+            "deregisterDriver(Ljava/sql/Driver;)V" -> Reflected(java.sql.DriverManager.deregisterDriver(args[0] as java.sql.Driver?).let { null })
+            else -> null
+        }
+    } catch (e: java.sql.SQLException) {
+        throw VmException(e)
     }
 
     private val internalNames = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()
@@ -534,6 +619,16 @@ class Vm(
         descriptor: String,
         vmArgs: List<Any?>
     ): Any? {
+        bridgedCalls++
+        // A var handle over interpreted storage works on the interpreter's own values, so it is answered before
+        // anything is converted for real code (which would also make a peer for every object it is handed).
+        if (receiver is VmVarHandle) return receiver.invoke(name, descriptor, vmArgs)
+        if (receiver is VmFieldUpdater) return receiver.invoke(name, descriptor, vmArgs)
+        // A `super` call into an interface's default method, on a peer that is a Proxy: it has no generated
+        // `super$` trampoline to run the default with, so the default is invoked on it directly.
+        if (name.startsWith(SUPER_PREFIX) && java.lang.reflect.Proxy.isProxyClass(receiver.javaClass)) {
+            return proxyDefault(receiver, name.removePrefix(SUPER_PREFIX), descriptor, vmArgs)
+        }
         val real = vmArgs.map { toReal(it) }
         interceptReflection(receiver, internalNameOf(receiver.javaClass), name, descriptor, real)?.let { return it.value }
         return bridge.invokeVirtual(receiver, name, descriptor, real)
@@ -572,6 +667,10 @@ class Vm(
         }
         programResources?.let { resources ->
             programResource(resources, receiver, owner, name, descriptor, args)?.let { return it }
+            // Service providers and message bundles on the program's classpath (see [InterpretedServices]).
+            if (receiver == null && (owner == "java/util/ServiceLoader" || owner == "java/util/ResourceBundle")) {
+                services.intercept(resources, owner, name, args).let { if (it !== InterpretedServices.NOT_HANDLED) return Reflected(it) }
+            }
         }
         // Class.asSubclass(Base.class) on a reflection Class: verify against the interpreted hierarchy.
         if (receiver is Class<*> && name == "asSubclass") {
@@ -598,8 +697,19 @@ class Vm(
                 when (name) {
                     "getName", "getTypeName" -> return Reflected(internal.replace('/', '.'))
                     "getSimpleName" -> return Reflected(simpleNameOf(internal))
+                    "getCanonicalName" -> return Reflected(canonicalNameOf(internal))
                     "toString" -> return Reflected(classToStringOf(internal))
                 }
+            }
+        }
+        // The same question asked of the Kotlin view of that class: `Foo::class.qualifiedName` is answered by
+        // the (bridged) Kotlin runtime from the real Class it wraps, which is the stand-in. An annotation
+        // processor looks its annotation up by exactly this name, and found nothing under the stand-in's.
+        if (receiver is kotlin.jvm.internal.ClassBasedDeclarationContainer && receiver is kotlin.reflect.KClass<*> &&
+            descriptor == "()Ljava/lang/String;" && (name == "getQualifiedName" || name == "getSimpleName")
+        ) {
+            peerFactory.interpretedNameOf(receiver.jClass)?.let { internal ->
+                return Reflected(if (name == "getSimpleName") simpleNameOf(internal).ifEmpty { null } else canonicalNameOf(internal))
             }
         }
 
@@ -642,6 +752,19 @@ class Vm(
             }
             if (result !== InterpretedReflection.NOT_HANDLED) return Reflected(result)
         }
+        // `java.sql.DriverManager` hands out only the drivers its CALLER's class loader can see, and a call
+        // forwarded through reflection has the reflection machinery for a caller: every driver the program
+        // registered was hidden from it ("No suitable driver"). Called from here, the caller is the VM.
+        if (receiver == null && owner == "java/sql/DriverManager") {
+            driverManager(name, descriptor, args)?.let { return it }
+        }
+        // Method handles: found on an interpreted class, or invoked (see [InterpretedHandles]).
+        if (receiver is java.lang.invoke.MethodHandle || receiver is java.lang.invoke.MethodHandles.Lookup ||
+            (receiver == null && (owner == "java/lang/invoke/MethodHandles" ||
+                (name == "newUpdater" && owner.startsWith("java/util/concurrent/atomic/"))))
+        ) {
+            handles.intercept(receiver, owner, name, descriptor, args).let { if (it !== InterpretedHandles.NOT_HANDLED) return Reflected(it) }
+        }
         // Members, supertypes, generic signatures and annotations of an interpreted type, and the use of a
         // mirrored Method/Field: see [InterpretedReflection].
         reflection.intercept(receiver, name, descriptor, args).let { if (it !== InterpretedReflection.NOT_HANDLED) return Reflected(it) }
@@ -649,7 +772,7 @@ class Vm(
         if (receiver is java.lang.reflect.Constructor<*> && name == "newInstance") {
             val internal = peerFactory.interpretedNameOf(receiver.declaringClass) ?: return null
             val ctorArgs = (args.getOrNull(0) as? Array<*>)?.toList() ?: emptyList()
-            return Reflected(constructReflectively(internal, ctorArgs))
+            return Reflected(constructReflectively(internal, ctorArgs, Type.getConstructorDescriptor(receiver)))
         }
         // Array.newInstance(C, length) / (C, dimensions) where C is the reflection class STANDING FOR an
         // interpreted type: a real array of that stand-in could hold nothing the program creates (its elements
@@ -728,6 +851,14 @@ class Vm(
     internal fun simpleNameOf(internalName: String): String =
         internalName.substringAfterLast('/').substringAfterLast('$').dropWhile { it.isDigit() }
 
+    /** `a.b.Outer.Inner` for interpreted internal name `a/b/Outer$Inner`; null for an anonymous or local class,
+     *  which has no canonical name. */
+    internal fun canonicalNameOf(internalName: String): String? {
+        val nested = internalName.substringAfterLast('/').split('$')
+        if (nested.any { it.isEmpty() || it[0].isDigit() }) return null
+        return internalName.replace('/', '.').replace('$', '.')
+    }
+
     /** What `Class.toString` reports for interpreted internal name [internalName]: `class a.b.C`, or
      *  `interface a.b.I` for an interface (which an annotation type also is). */
     private fun classToStringOf(internalName: String): String {
@@ -764,14 +895,13 @@ class Vm(
         // also the class the constants' peers report from `getClass()`, so `x.getClass() == E.class` holds as it
         // does for real.
         enumBaseOf(cls)?.let { return enumPeerClass(it) }
-        val ctors = cls.methods
-            .filter { it.name == "<init>" && it.access and Opcodes.ACC_PUBLIC != 0 }
-            .map {
-                "(" + Descriptors.paramTypes(it.desc)
-                    .joinToString("") { p -> realizeType(p) } + ")V"
-            }
-        return peerFactory.reflectionClass(internalName, ctors)
+        val (public, hidden) = cls.methods.filter { it.name == "<init>" }
+            .partition { it.access and Opcodes.ACC_PUBLIC != 0 }
+        return peerFactory.reflectionClass(internalName, public.map(::realizedCtorDescriptor), hidden.map(::realizedCtorDescriptor))
     }
+
+    internal fun realizedCtorDescriptor(ctor: org.objectweb.asm.tree.MethodNode): String =
+        "(" + Descriptors.paramTypes(ctor.desc).joinToString("") { p -> realizeType(p) } + ")V"
 
     /** A parameter descriptor with any INTERPRETED reference type replaced by `Object` (no real class exists for
      *  it), so a reflection-class stub constructor uses only loadable parameter types. */
@@ -792,11 +922,15 @@ class Vm(
      *  constructor matching the argument count, marshal the real arguments in, run its `<init>`, and return the
      *  interpreted object (the interpreted caller uses it directly; it becomes a peer only if it later crosses to
      *  real code). */
-    private fun constructReflectively(internalName: String, realArgs: List<Any?>): Any = surfacing {
+    private fun constructReflectively(internalName: String, realArgs: List<Any?>, standInDescriptor: String? = null): Any = surfacing {
         val cls = resolve(internalName)
             ?: throw VmUnsupportedException("$internalName is not interpreted")
         ensureInitialized(cls)
-        val ctor = cls.methods.firstOrNull {
+        // The constructor the program picked, by the stand-in constructor it was handed: that one was declared
+        // from exactly this descriptor. Failing that (a factory whose stand-in types parameters differently),
+        // the first public one of the right arity, as before.
+        val ctor = cls.methods.firstOrNull { it.name == "<init>" && realizedCtorDescriptor(it) == standInDescriptor }
+            ?: cls.methods.firstOrNull {
             it.name == "<init>" && it.access and Opcodes.ACC_PUBLIC != 0 && Descriptors.paramTypes(
                 it.desc
             ).size == realArgs.size
@@ -949,7 +1083,7 @@ class Vm(
             when {
                 fromClass != null -> isSubtype(fromClass, to) || isRealInstance(fromClass, to)
                 resolve(to) != null -> false // a platform class is never a subtype of an interpreted one
-                else -> runCatching { loadReal(to).isAssignableFrom(loadReal(from)) }.getOrDefault(true)
+                else -> realClassOrNull(to)?.let { t -> realClassOrNull(from)?.let { f -> t.isAssignableFrom(f) } } ?: true
             }
         }
     }
@@ -975,7 +1109,7 @@ class Vm(
             is VmArray -> name == "java/lang/Cloneable" || name == "java/io/Serializable"
             is VmLambda -> true
             else -> if (resolve(name) != null) true
-            else runCatching { loadReal(name).isInstance(value) }.getOrDefault(true)
+            else realClassOrNull(name)?.isInstance(value) ?: true
         }
     }
 
@@ -1039,7 +1173,9 @@ class Vm(
             ?: if (name + descriptor == TO_STRING) return@surfacing defaultToString(o)
             else throw VmUnsupportedException("no interpreted override $name$descriptor on ${o.vmClass.name}")
         val result = interpreter.execute(declaring, method, o, vmArgs)
-        if (result is VmObject) peerOf(result) else Marshalling.vmToReal(
+        // An array of references is the interpreter's own too, and platform code needs a real one
+        // (`ListResourceBundle` reading the `Object[][]` its subclass returns).
+        if (result is VmObject || result is VmArray) toReal(result) else Marshalling.vmToReal(
             result,
             Descriptors.returnType(descriptor)
         )
@@ -1212,6 +1348,31 @@ class Vm(
     internal fun loadReal(internalName: String): Class<*> =
         Class.forName(internalName.replace('/', '.'), false, loader)
 
+    private val realClasses = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    /**
+     * [loadReal], or null when the host has no such class, remembered either way.
+     *
+     * The misses are the point. Every `instanceof` and `checkcast` against a type the host does not have (any
+     * interpreted class, tested on a value that is not one of its instances) asked the class loader again and
+     * got a `ClassNotFoundException` built for it, stack trace and all. Interpreted calls nest on the host
+     * stack, so that trace is thousands of frames deep: on a phone, walking it for a code generator's
+     * `when (x) { is A -> .. is B -> .. }` chains was most of the run.
+     */
+    internal fun realClassOrNull(internalName: String): Class<*>? {
+        val known = realClasses[internalName]
+        if (known != null) return known as? Class<*>
+        val loaded = try {
+            loadReal(internalName)
+        } catch (_: ClassNotFoundException) {
+            null
+        } catch (_: LinkageError) {
+            null
+        }
+        realClasses[internalName] = loaded ?: NO_CLASS
+        return loaded
+    }
+
     /** The real [Class] a `ldc` class-literal constant names. Only reference and array literals reach here (a
      *  primitive `.class` compiles to a static `TYPE` field read). An interpreted type is represented by its
      *  reflection class — the same object `loadClass`/`Class.forName` return for it and that
@@ -1227,14 +1388,9 @@ class Vm(
      *  superclass or a real interface, transitively). Complements the interpreted-hierarchy check in [isSubtype]
      *  so an `instanceof`/`checkcast` against a real interface reached through a bridged super resolves. */
     internal fun isRealInstance(vmClass: VmClass, targetInternalName: String): Boolean {
-        val target = runCatching { loadReal(targetInternalName) }.getOrNull() ?: return false
-        val realSupers = buildList {
-            add(loadReal(realSuperName(vmClass)))
-            realInterfaceNames(vmClass).forEach {
-                runCatching { loadReal(it) }.getOrNull()?.let(::add)
-            }
-        }
-        return realSupers.any { target.isAssignableFrom(it) }
+        val target = realClassOrNull(targetInternalName) ?: return false
+        if (target.isAssignableFrom(loadReal(realSuperName(vmClass)))) return true
+        return realInterfaceNames(vmClass).any { name -> realClassOrNull(name)?.let { target.isAssignableFrom(it) } == true }
     }
 
     /**
@@ -1248,8 +1404,8 @@ class Vm(
     internal fun lambdaIsA(interfaceType: String, target: String): Boolean {
         if (target == "java/lang/Object" || target == interfaceType) return true
         resolve(interfaceType)?.let { return isSubtype(it, target) || isRealInstance(it, target) }
-        val from = runCatching { loadReal(interfaceType) }.getOrNull() ?: return false
-        val to = runCatching { loadReal(target) }.getOrNull() ?: return false
+        val from = realClassOrNull(interfaceType) ?: return false
+        val to = realClassOrNull(target) ?: return false
         return to.isAssignableFrom(from)
     }
 

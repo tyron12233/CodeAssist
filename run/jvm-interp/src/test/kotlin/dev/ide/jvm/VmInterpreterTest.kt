@@ -167,6 +167,88 @@ class VmInterpreterTest {
         assertEquals(ReflectMethods.missingMethod(), vm.invokeStatic(RM, "missingMethod", str))
     }
 
+    /** Found running real annotation processors interpreted: kotlinpoet names a class by walking
+     *  `getEnclosingClass`, and Room builds a JavaPoet type through a constructor that class keeps private. */
+    @Test fun reflectionSeesNestingAndNonPublicConstructors() {
+        val RN = "dev/ide/jvm/fixtures/ReflectNesting"
+        val str = "()Ljava/lang/String;"
+        assertEquals(dev.ide.jvm.fixtures.ReflectNesting.nesting(), vm.invokeStatic(RN, "nesting", str))
+        assertEquals(dev.ide.jvm.fixtures.ReflectNesting.privateConstructor(), vm.invokeStatic(RN, "privateConstructor", str))
+    }
+
+    /**
+     * Reported from a phone running Javalin (and Spring Boot): `IllegalArgumentException: illegal lookupClass:
+     * class java.lang.reflect.Method`. `MethodHandles.lookup()` is caller-sensitive and was forwarded through
+     * `Method.invoke`, so the caller it saw was the reflection machinery. The lookup is the calling interpreted
+     * class's, and what it finds on an interpreted class runs in the interpreter.
+     */
+    @Test fun methodHandlesLookUpAndInvokeInterpretedMembers() {
+        val H = "dev/ide/jvm/fixtures/Handles"
+        val str = "()Ljava/lang/String;"
+        val real = dev.ide.jvm.fixtures.Handles::class.java
+        for (probe in listOf("lookupClass", "atClassInit", "findStatic", "findVirtual", "findConstructor", "platform", "missing", "unreflect", "fields", "thrown")) {
+            assertEquals(real.getMethod(probe).invoke(null), vm.invokeStatic(H, probe, str), probe)
+        }
+    }
+
+    /**
+     * The rest of what stopped Javalin once the lookup worked. Service providers and message bundles are found
+     * on the PROGRAM's classpath (the host loader, which the real `ServiceLoader` and `ResourceBundle` search,
+     * holds the IDE): SLF4J reported no binding with one on the classpath, and the servlet API failed to
+     * initialize for want of its `LocalStrings`. And a constant an interface declares is readable through a
+     * class that inherits it, where Jetty's request thread died with "no field ... on java.lang.Object".
+     */
+    @Test fun servicesBundlesAndInterfaceConstantsComeFromTheProgram() {
+        val S = "dev/ide/jvm/fixtures/Services"
+        val str = "()Ljava/lang/String;"
+        val real = dev.ide.jvm.fixtures.Services::class.java
+        val vm = Vm()
+        vm.programResources = ProgramResources { name -> real.classLoader.getResources(name).toList() }
+        for (probe in listOf("loaded", "bundle", "classBundle", "inheritedConstant")) {
+            assertEquals(real.getMethod(probe).invoke(null), vm.invokeStatic(S, probe, str), probe)
+        }
+    }
+
+    /** A `VarHandle` over an interpreted field or an array's elements: the storage is the interpreter's, so the
+     *  handle is too (see [VmVarHandle]), and its compound operations are atomic across the program's threads. */
+    @Test fun varHandlesReadAndUpdateInterpretedFieldsAndArrays() {
+        val V = "dev/ide/jvm/fixtures/VarHandles"
+        val str = "()Ljava/lang/String;"
+        val real = dev.ide.jvm.fixtures.VarHandles::class.java
+        for (probe in listOf("fields", "statics", "arrays", "contended")) {
+            assertEquals(real.getMethod(probe).invoke(null), vm.invokeStatic(V, probe, str), probe)
+        }
+    }
+
+    /** `AtomicIntegerFieldUpdater.newUpdater(Foo.class, "x")` and its long and reference siblings, over an
+     *  interpreted class's fields: the real ones look the field up on the class standing for it, which has none. */
+    @Test fun atomicFieldUpdatersUpdateInterpretedFields() {
+        val U = "dev/ide/jvm/fixtures/Updaters"
+        val str = "()Ljava/lang/String;"
+        val real = dev.ide.jvm.fixtures.Updaters::class.java
+        for (probe in listOf("ints", "longs", "references", "missing", "contended")) {
+            assertEquals(real.getMethod(probe).invoke(null), vm.invokeStatic(U, probe, str), probe)
+        }
+    }
+
+    /**
+     * A default method of a platform interface called on a lambda (`iterable.spliterator()`,
+     * `comparator.reversed()`), on a platform that can run it for a proxy and on one that cannot: there (Android)
+     * the call used to fall through to the lambda body, so Dagger's `Iterable` lambda returned its iterator
+     * where a spliterator was wanted. The second pass forces the path a phone takes.
+     */
+    @Test fun defaultMethodsOfAnInterfaceRunOnALambda() {
+        val L = "dev/ide/jvm/fixtures/LambdaDefaults"
+        val expected = dev.ide.jvm.fixtures.LambdaDefaults.onLambdas()
+        assertEquals(expected, Vm().invokeStatic(L, "onLambdas", "()Ljava/lang/String;"))
+        HostBackports.preferDefaultMethodHost = true
+        try {
+            assertEquals(expected, Vm().invokeStatic(L, "onLambdas", "()Ljava/lang/String;"))
+        } finally {
+            HostBackports.preferDefaultMethodHost = false
+        }
+    }
+
     @Test fun reflectionOverFieldsInheritedMethodsGenericsAndAnnotations() {
         val RM = "dev/ide/jvm/fixtures/ReflectMembers"
         val str = "()Ljava/lang/String;"

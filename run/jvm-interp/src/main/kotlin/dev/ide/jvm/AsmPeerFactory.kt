@@ -87,16 +87,15 @@ open class AsmPeerFactory(
      *  superclass is `Object`). A concrete-class extension (`View`, `Thread`) still needs a generated subclass. */
     private fun isProxyable(spec: PeerSpec): Boolean =
         spec.superClass == Any::class.java && spec.interfaces.isNotEmpty() &&
-            (invokeDefaultAvailable || !inheritsDefaultMethod(spec))
+            (invokeDefaultAvailable || !hasDefaultMethod(spec))
 
-    /** Whether [spec]'s interfaces contribute a default method the interpreted class does NOT override — the case a
-     *  [Proxy] peer can only serve via [InvocationHandler.invokeDefault]. When that API is missing (ART), such a
-     *  spec is realized as a generated subclass, which inherits the default natively. Cached per class. */
-    private fun inheritsDefaultMethod(spec: PeerSpec): Boolean = defaultProbeCache.getOrPut(spec.className) {
-        val overridden = spec.methods.mapTo(HashSet()) { it.name + it.descriptor }
-        spec.interfaces.any { iface ->
-            iface.methods.any { m -> m.isDefault && (m.name + Type.getMethodDescriptor(m)) !in overridden }
-        }
+    /** Whether [spec]'s interfaces have a default method at all. One the interpreted class does not override is
+     *  served by a [Proxy] peer only through [InvocationHandler.invokeDefault], and so is one it DOES override
+     *  when that override calls `super` (a Kotlin class gets such an override written for it). When that API is
+     *  missing (ART), such a spec is realized as a generated subclass, which inherits the default natively and
+     *  carries a `super$` trampoline for it. Cached per class. */
+    private fun hasDefaultMethod(spec: PeerSpec): Boolean = defaultProbeCache.getOrPut(spec.className) {
+        spec.interfaces.any { iface -> iface.methods.any { it.isDefault } }
     }
 
     /**
@@ -166,7 +165,15 @@ open class AsmPeerFactory(
         }
 
     override fun reflectionClass(className: String, constructorDescriptors: List<String>): Class<*> =
-        reflectionClasses.getOrPut(className) { defineReflectionClass(className, constructorDescriptors) }
+        reflectionClass(className, constructorDescriptors, emptyList())
+
+    override fun reflectionClass(
+        className: String,
+        constructorDescriptors: List<String>,
+        hiddenConstructorDescriptors: List<String>,
+    ): Class<*> = reflectionClasses.getOrPut(className) {
+        defineReflectionClass(className, constructorDescriptors, hiddenConstructorDescriptors)
+    }
 
     override fun reflectionMirror(
         className: String,
@@ -219,16 +226,18 @@ open class AsmPeerFactory(
      *  constructor per descriptor so `getConstructor` matches. Never instantiated (newInstance is intercepted),
      *  so each constructor simply invokes `Object.<init>` and returns. Its members are mirrored separately, on
      *  demand ([reflectionMirror]). */
-    private fun defineReflectionClass(className: String, ctorDescriptors: List<String>): Class<*> {
+    private fun defineReflectionClass(className: String, ctorDescriptors: List<String>, hiddenCtorDescriptors: List<String>): Class<*> {
         val traceable = traceableSimpleName(className)
         val internalName = "dev/ide/jvm/reflect/${traceable}_R${counter.incrementAndGet()}"
         val cw = object : ClassWriter(COMPUTE_FRAMES) {
             override fun getClassLoader(): ClassLoader = parent
         }
         cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", null)
-        val descriptors = ctorDescriptors.map(::loadableDescriptor).distinct().ifEmpty { listOf("()V") }
-        for (desc in descriptors) {
-            val g = GeneratorAdapter(Opcodes.ACC_PUBLIC, AsmMethod("<init>", desc), null, null, cw)
+        val hidden = hiddenCtorDescriptors.map(::loadableDescriptor).distinct()
+        val public = ctorDescriptors.map(::loadableDescriptor).distinct().ifEmpty { if (hidden.isEmpty()) listOf("()V") else emptyList() }
+        for (desc in public + (hidden - public.toSet())) {
+            val access = if (desc in public) Opcodes.ACC_PUBLIC else Opcodes.ACC_PRIVATE
+            val g = GeneratorAdapter(access, AsmMethod("<init>", desc), null, null, cw)
             g.loadThis()
             g.invokeConstructor(OBJECT, AsmMethod("<init>", "()V"))
             g.returnValue()
@@ -359,6 +368,47 @@ open class AsmPeerFactory(
             }
         }
         cls.getDeclaredField(VALUES_FIELD).set(null, supplier)
+    }
+
+    private val delegateClasses = java.util.concurrent.ConcurrentHashMap<Class<*>, java.lang.reflect.Constructor<*>>()
+
+    override fun defaultMethodHost(iface: Class<*>, target: Any): Any? {
+        if (!iface.isInterface) return null
+        val ctor = delegateClasses.getOrPut(iface) { defineDelegate(iface).getConstructor(iface) }
+        return ctor.newInstance(target)
+    }
+
+    /** `class X implements iface { final iface target; <each abstract method> -> target.method(args) }`: every
+     *  default method of [iface] is inherited as is. Methods `Object` already implements (`Comparator.equals`)
+     *  are left to it. */
+    private fun defineDelegate(iface: Class<*>): Class<*> {
+        val internalName = "dev/ide/jvm/peers/${traceableSimpleName(Type.getInternalName(iface))}_Defaults${counter.incrementAndGet()}"
+        val self = Type.getObjectType(internalName)
+        val ifaceType = Type.getType(iface)
+        val cw = object : ClassWriter(COMPUTE_FRAMES) {
+            override fun getClassLoader(): ClassLoader = parent
+        }
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", arrayOf(ifaceType.internalName))
+        cw.visitField(Opcodes.ACC_PRIVATE or Opcodes.ACC_FINAL, "target", ifaceType.descriptor, null, null).visitEnd()
+        GeneratorAdapter(Opcodes.ACC_PUBLIC, AsmMethod("<init>", Type.getMethodDescriptor(Type.VOID_TYPE, ifaceType)), null, null, cw).apply {
+            loadThis(); invokeConstructor(OBJECT, AsmMethod("<init>", "()V"))
+            loadThis(); loadArg(0); putField(self, "target", ifaceType)
+            returnValue(); endMethod()
+        }
+        val objectMethods = setOf("equals(Ljava/lang/Object;)Z", "hashCode()I", "toString()Ljava/lang/String;")
+        val done = HashSet<String>()
+        for (m in iface.methods) {
+            val method = AsmMethod(m.name, Type.getMethodDescriptor(m))
+            val key = m.name + method.descriptor
+            if (!java.lang.reflect.Modifier.isAbstract(m.modifiers) || key in objectMethods || !done.add(key)) continue
+            GeneratorAdapter(Opcodes.ACC_PUBLIC, method, null, null, cw).apply {
+                loadThis(); getField(self, "target", ifaceType)
+                loadArgs(); invokeInterface(ifaceType, method)
+                returnValue(); endMethod()
+            }
+        }
+        cw.visitEnd()
+        return define(internalName.replace('/', '.'), cw.toByteArray())
     }
 
     /** Turns the generated class-file [bytes] into a loadable class. The JVM defines them directly; an Android
