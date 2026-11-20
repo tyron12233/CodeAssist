@@ -20,6 +20,11 @@ object NativeAapt2 {
 
     fun install() {
         if (System.getProperty("codeassist.aapt2.native") != "true" || Aapt2InProcess.runner != null) return
+        install(::run)
+    }
+
+    /** Makes [run] (aapt2's `main` with its output sent to a file, as [NativeAapt2.run]) the engine's aapt2. */
+    fun install(run: (args: Array<String>, output: String) -> Int) {
         Aapt2InProcess.runner = { args ->
             synchronized(lock) {
                 val output = File.createTempFile("aapt2", ".log")

@@ -17,7 +17,8 @@ class AndroidSdk(
     /** `build-tools/<version>` — holds the native binaries and `lib/{d8,apksigner}.jar`. */
     val buildToolsDir: Path,
     /** JVM home used to launch the pure-Java tools; defaults to the running JVM. */
-    val javaHome: Path = Paths.get(System.getProperty("java.home")),
+    // No home at all in an engine compiled ahead of time, which launches nothing: every tool is in it.
+    val javaHome: Path = Paths.get(System.getProperty("java.home") ?: ""),
     /**
      * The `aapt2` native binary. Defaults to the SDK build-tools location; on-device it is overridden to
      * the per-ABI prebuilt extracted into `nativeLibraryDir` (`libaapt2.so`) — see [forDevice].

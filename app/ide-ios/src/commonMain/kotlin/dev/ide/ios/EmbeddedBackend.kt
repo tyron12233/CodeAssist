@@ -47,6 +47,13 @@ interface EmbeddedJvm {
 
     /** One request of the layout services' byte protocol in, its answer out. Blocks until answered. */
     fun call(request: NSData): NSData
+
+    /**
+     * Whether the engine with the project open is compiled, not interpreted: the app carries it compiled
+     * ahead of time when its build has one, and falls back to the JVM's, which only interprets. Interpreted,
+     * it takes seconds to complete in a Kotlin file, and this host's own analysis answers Kotlin instead.
+     */
+    fun compiledEngine(): Boolean
 }
 
 /**
@@ -128,6 +135,9 @@ internal class EmbeddedBackend(
             null
         }
     }
+
+    /** Whether the engine answers fast enough to be asked on every keystroke in any language; see [EmbeddedJvm.compiledEngine]. */
+    val answersKotlin: Boolean get() = openedRoot != null && openFailure == null && runCatching { jvm.compiledEngine() }.getOrDefault(false)
 
     /** Completion from the engine, or null for the host's own to answer. Blocks until answered. */
     fun complete(path: String, text: String, offset: Int): UiCompletionResult? =

@@ -768,10 +768,14 @@ class IosBackend(
      */
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val empty = UiCompletionResult(emptyList(), offset, offset)
-        // Kotlin is answered by this host's own analysis: the engine in the embedded JVM is only interpreted,
-        // and measured on a phone its Kotlin completion took half a second to four and a half. The languages
-        // this host has no analysis for (Java, XML) are the engine's, where a slow answer beats none.
-        if (!path.isKotlin()) return embedded?.let { withContext(ioDispatcher) { it.complete(path, text, offset) } } ?: empty
+        // The engine answers every language when it is compiled, as the app carries it when it can. Only
+        // interpreted (the embedded JVM's), its Kotlin completion measured half a second to four and a half
+        // on a phone: Kotlin is then this host's own analysis's, and the engine has the languages that
+        // analysis does not know (Java, XML), where a slow answer beats none.
+        val engine = embedded?.takeIf { !path.isKotlin() || it.answersKotlin }
+            ?.let { withContext(ioDispatcher) { it.complete(path, text, offset) } }
+        if (engine != null && (engine.items.isNotEmpty() || !path.isKotlin())) return engine
+        if (!path.isKotlin()) return empty
         return withAnalysis(empty) { it.complete(path, text, offset)?.toUi() ?: empty }
     }
 
@@ -787,7 +791,9 @@ class IosBackend(
      * false errors — but it is also why project-only code is where it earns its keep today.
      */
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
-        if (!path.isKotlin()) return embedded?.let { withContext(ioDispatcher) { it.analyze(path, text) } } ?: emptyList()
+        embedded?.takeIf { !path.isKotlin() || it.answersKotlin }
+            ?.let { withContext(ioDispatcher) { it.analyze(path, text) } }?.let { return it }
+        if (!path.isKotlin()) return emptyList()
         val diagnostics = withAnalysis(emptyList()) { it.analyze(path, text).orEmpty() }
         return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)

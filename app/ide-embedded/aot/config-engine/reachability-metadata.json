@@ -1,0 +1,5946 @@
+{
+  "reflection": [
+    {
+      "type": "android.os.Build$VERSION"
+    },
+    {
+      "type": "androidx.compose.compiler.plugins.kotlin.ComposeCommandLineProcessor",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "androidx.compose.compiler.plugins.kotlin.ComposePluginRegistrar",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "apple.security.AppleProvider",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.AlgorithmIdentifier",
+      "fields": [
+        {
+          "name": "algorithm"
+        },
+        {
+          "name": "parameters"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.ContentInfo",
+      "fields": [
+        {
+          "name": "content"
+        },
+        {
+          "name": "contentType"
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.EncapsulatedContentInfo",
+      "fields": [
+        {
+          "name": "content"
+        },
+        {
+          "name": "contentType"
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.IssuerAndSerialNumber",
+      "fields": [
+        {
+          "name": "certificateSerialNumber"
+        },
+        {
+          "name": "issuer"
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.SignedData",
+      "fields": [
+        {
+          "name": "certificates"
+        },
+        {
+          "name": "crls"
+        },
+        {
+          "name": "digestAlgorithms"
+        },
+        {
+          "name": "encapContentInfo"
+        },
+        {
+          "name": "signerInfos"
+        },
+        {
+          "name": "version"
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.SignerIdentifier",
+      "fields": [
+        {
+          "name": "issuerAndSerialNumber"
+        },
+        {
+          "name": "subjectKeyIdentifier"
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.pkcs7.SignerInfo",
+      "fields": [
+        {
+          "name": "digestAlgorithm"
+        },
+        {
+          "name": "sid"
+        },
+        {
+          "name": "signature"
+        },
+        {
+          "name": "signatureAlgorithm"
+        },
+        {
+          "name": "signedAttrs"
+        },
+        {
+          "name": "unsignedAttrs"
+        },
+        {
+          "name": "version"
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.x509.RSAPublicKey",
+      "fields": [
+        {
+          "name": "modulus"
+        },
+        {
+          "name": "publicExponent"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.android.apksig.internal.x509.SubjectPublicKeyInfo",
+      "fields": [
+        {
+          "name": "algorithmIdentifier"
+        },
+        {
+          "name": "subjectPublicKey"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.android.tools.r8.graph.r1[]"
+    },
+    {
+      "type": "com.android.tools.r8.threading.providers.blocking.ThreadingModuleBlockingProvider",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.apple.eawt._AppEventHandler",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "handleNativeNotification",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.apple.eawt._AppMenuBarHandler",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "initMenuStates",
+          "parameterTypes": [
+            "boolean",
+            "boolean",
+            "boolean",
+            "boolean"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.codeInsight.ContainerProvider"
+    },
+    {
+      "type": "com.intellij.codeInsight.multiverse.CodeInsightContextProvider"
+    },
+    {
+      "type": "com.intellij.codeInsight.multiverse.MultiverseEnabler"
+    },
+    {
+      "type": "com.intellij.openapi.application.impl.ModalityStateEx",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.openapi.editor.event.DocumentListener[]"
+    },
+    {
+      "type": "com.intellij.openapi.extensions.impl.ExtensionPointImpl"
+    },
+    {
+      "type": "com.intellij.openapi.fileTypes.BinaryFileTypeDecompilers",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.openapi.util.SimpleModificationTracker"
+    },
+    {
+      "type": "com.intellij.openapi.vfs.PersistentFSConstants",
+      "fields": [
+        {
+          "name": "ourMaxIntellisenseFileSize"
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.openapi.vfs.transformer.TextPresentationTransformers",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.LanguageSubstitutors",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.PsiElementFinder"
+    },
+    {
+      "type": "com.intellij.psi.SingleRootFileViewProvider"
+    },
+    {
+      "type": "com.intellij.psi.compiled.ClassFileDecompilers",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.compiled.ClassFileDecompilers$Decompiler"
+    },
+    {
+      "type": "com.intellij.psi.impl.source.JavaFileElementType"
+    },
+    {
+      "type": "com.intellij.psi.impl.source.tree.CompositeElement"
+    },
+    {
+      "type": "com.intellij.util.ConcurrentLongObjectHashMap"
+    },
+    {
+      "type": "com.intellij.util.ConcurrentLongObjectHashMap$CounterCell"
+    },
+    {
+      "type": "com.intellij.util.KeyedLazyInstanceEP"
+    },
+    {
+      "type": "com.intellij.util.QueryExecutor"
+    },
+    {
+      "type": "com.sun.crypto.provider.AESCipher$General",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ARCFOURCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ChaCha20Cipher$ChaCha20Poly1305",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DESCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DESedeCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.GaloisCounterMode$AESGCM",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HmacPKCS12PBECore$HmacPKCS12PBE_SHA1",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.PBEKeyFactory$PBEWithMD5AndDES",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.PBEParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.PKCS12PBECipherCore$PBEWithSHA1AndDESede",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.PKCS12PBECipherCore$PBEWithSHA1AndRC2_40",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "gnu.trove.TObjectHashingStrategy"
+    },
+    {
+      "type": "java.awt.event.InputEvent",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getButtonDownMasks",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.io.Serializable"
+    },
+    {
+      "type": "java.lang.Boolean",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getBoolean",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Byte"
+    },
+    {
+      "type": "java.lang.CharSequence"
+    },
+    {
+      "type": "java.lang.Character"
+    },
+    {
+      "type": "java.lang.Class",
+      "methods": [
+        {
+          "name": "getRecordComponents",
+          "parameterTypes": []
+        },
+        {
+          "name": "isSealed",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Cloneable"
+    },
+    {
+      "type": "java.lang.Comparable"
+    },
+    {
+      "type": "java.lang.Double"
+    },
+    {
+      "type": "java.lang.Enum"
+    },
+    {
+      "type": "java.lang.Float"
+    },
+    {
+      "type": "java.lang.Integer"
+    },
+    {
+      "type": "java.lang.Iterable"
+    },
+    {
+      "type": "java.lang.Long"
+    },
+    {
+      "type": "java.lang.Number"
+    },
+    {
+      "type": "java.lang.Object"
+    },
+    {
+      "type": "java.lang.Object[]"
+    },
+    {
+      "type": "java.lang.Runtime",
+      "methods": [
+        {
+          "name": "version",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Runtime$Version",
+      "methods": [
+        {
+          "name": "build",
+          "parameterTypes": []
+        },
+        {
+          "name": "major",
+          "parameterTypes": []
+        },
+        {
+          "name": "minor",
+          "parameterTypes": []
+        },
+        {
+          "name": "pre",
+          "parameterTypes": []
+        },
+        {
+          "name": "security",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Short"
+    },
+    {
+      "type": "java.lang.String"
+    },
+    {
+      "type": "java.lang.System",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getProperty",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "load",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Throwable"
+    },
+    {
+      "type": "java.lang.Void"
+    },
+    {
+      "type": "java.lang.annotation.Annotation"
+    },
+    {
+      "type": "java.lang.reflect.InvocationHandler"
+    },
+    {
+      "type": "java.security.AlgorithmParametersSpi"
+    },
+    {
+      "type": "java.security.KeyStoreSpi"
+    },
+    {
+      "type": "java.security.MessageDigestSpi"
+    },
+    {
+      "type": "java.security.interfaces.RSAPrivateKey"
+    },
+    {
+      "type": "java.security.interfaces.RSAPublicKey"
+    },
+    {
+      "type": "java.util.Collection"
+    },
+    {
+      "type": "java.util.Iterator"
+    },
+    {
+      "type": "java.util.List"
+    },
+    {
+      "type": "java.util.ListIterator"
+    },
+    {
+      "type": "java.util.Map"
+    },
+    {
+      "type": "java.util.Map.Entry"
+    },
+    {
+      "type": "java.util.Optional",
+      "methods": [
+        {
+          "name": "isPresent",
+          "parameterTypes": []
+        },
+        {
+          "name": "orElse",
+          "parameterTypes": [
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.util.Set"
+    },
+    {
+      "type": "java.util.concurrent.ScheduledThreadPoolExecutor"
+    },
+    {
+      "type": "java.util.zip.Inflater",
+      "methods": [
+        {
+          "name": "setInput",
+          "parameterTypes": [
+            "java.nio.ByteBuffer"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "jdk.internal.jrtfs.JrtFileSystemProvider"
+    },
+    {
+      "type": "jdk.internal.vm.VMSupport",
+      "methods": [
+        {
+          "name": "getAgentProperties",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "kotlin.Any"
+    },
+    {
+      "type": "kotlin.Array"
+    },
+    {
+      "type": "kotlin.Metadata",
+      "methods": [
+        {
+          "name": "bv",
+          "parameterTypes": []
+        },
+        {
+          "name": "d1",
+          "parameterTypes": []
+        },
+        {
+          "name": "d2",
+          "parameterTypes": []
+        },
+        {
+          "name": "k",
+          "parameterTypes": []
+        },
+        {
+          "name": "mv",
+          "parameterTypes": []
+        },
+        {
+          "name": "pn",
+          "parameterTypes": []
+        },
+        {
+          "name": "xi",
+          "parameterTypes": []
+        },
+        {
+          "name": "xs",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "kotlin.SafePublicationLazyImpl"
+    },
+    {
+      "type": "kotlin.String"
+    },
+    {
+      "type": "kotlin.jvm.internal.BooleanCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.ByteCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.CharCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.DefaultConstructorMarker"
+    },
+    {
+      "type": "kotlin.jvm.internal.DoubleCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.EnumCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.FloatCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.IntCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.LongCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.ShortCompanionObject"
+    },
+    {
+      "type": "kotlin.jvm.internal.StringCompanionObject"
+    },
+    {
+      "type": "kotlin.metadata.jvm.internal.JvmMetadataExtensions"
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.ReflectionFactoryImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.impl.load.java.ErasedOverridabilityCondition"
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.impl.load.java.FieldOverridabilityCondition"
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.impl.load.java.JavaIncompatibilityRulesOverridabilityCondition"
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.impl.resolve.scopes.DescriptorKindFilter",
+      "fields": [
+        {
+          "name": "ALL"
+        },
+        {
+          "name": "CALLABLES"
+        },
+        {
+          "name": "CLASSIFIERS"
+        },
+        {
+          "name": "Companion"
+        },
+        {
+          "name": "FUNCTIONS"
+        },
+        {
+          "name": "NON_SINGLETON_CLASSIFIERS"
+        },
+        {
+          "name": "PACKAGES"
+        },
+        {
+          "name": "SINGLETON_CLASSIFIERS"
+        },
+        {
+          "name": "TYPE_ALIASES"
+        },
+        {
+          "name": "VALUES"
+        },
+        {
+          "name": "VARIABLES"
+        }
+      ]
+    },
+    {
+      "type": "kotlinx.coroutines.AwaitAll"
+    },
+    {
+      "type": "kotlinx.coroutines.AwaitAll$AwaitAllNode"
+    },
+    {
+      "type": "kotlinx.coroutines.CancellableContinuationImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.CancelledContinuation"
+    },
+    {
+      "type": "kotlinx.coroutines.CompletedExceptionally"
+    },
+    {
+      "type": "kotlinx.coroutines.DispatchedCoroutine"
+    },
+    {
+      "type": "kotlinx.coroutines.EventLoopImplBase"
+    },
+    {
+      "type": "kotlinx.coroutines.InvokeOnCancelling"
+    },
+    {
+      "type": "kotlinx.coroutines.JobSupport"
+    },
+    {
+      "type": "kotlinx.coroutines.JobSupport$Finishing"
+    },
+    {
+      "type": "kotlinx.coroutines.ThreadState"
+    },
+    {
+      "type": "kotlinx.coroutines.channels.BufferedChannel"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.StateFlowImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.ConcurrentLinkedListNode"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.DispatchedContinuation"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LimitedDispatcher"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LockFreeLinkedListNode"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LockFreeTaskQueue"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LockFreeTaskQueueCore"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.Segment"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.ThreadSafeHeap"
+    },
+    {
+      "type": "kotlinx.coroutines.scheduling.CoroutineScheduler"
+    },
+    {
+      "type": "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker"
+    },
+    {
+      "type": "kotlinx.coroutines.scheduling.WorkQueue"
+    },
+    {
+      "type": "kotlinx.coroutines.sync.MutexImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.sync.SemaphoreAndMutexImpl"
+    },
+    {
+      "type": "org.eclipse.jdt.core.compiler.IProblem",
+      "fields": [
+        {
+          "name": "AbstractMethodCannotBeOverridden"
+        },
+        {
+          "name": "AbstractMethodInAbstractClass"
+        },
+        {
+          "name": "AbstractMethodInEnum"
+        },
+        {
+          "name": "AbstractMethodMustBeImplemented"
+        },
+        {
+          "name": "AbstractMethodMustBeImplementedOverConcreteMethod"
+        },
+        {
+          "name": "AbstractMethodsInConcreteClass"
+        },
+        {
+          "name": "AbstractServiceImplementation"
+        },
+        {
+          "name": "AllocationInEarlyConstructionContext"
+        },
+        {
+          "name": "AmbiguousConstructor"
+        },
+        {
+          "name": "AmbiguousConstructorInDefaultConstructor"
+        },
+        {
+          "name": "AmbiguousConstructorInImplicitConstructorCall"
+        },
+        {
+          "name": "AmbiguousField"
+        },
+        {
+          "name": "AmbiguousMethod"
+        },
+        {
+          "name": "AmbiguousType"
+        },
+        {
+          "name": "AnnotatedTypeArgumentToUnannotated"
+        },
+        {
+          "name": "AnnotatedTypeArgumentToUnannotatedSuperHint"
+        },
+        {
+          "name": "AnnotationCannotOverrideMethod"
+        },
+        {
+          "name": "AnnotationCircularity"
+        },
+        {
+          "name": "AnnotationCircularitySelfReference"
+        },
+        {
+          "name": "AnnotationFieldNeedConstantInitialization"
+        },
+        {
+          "name": "AnnotationMembersCannotHaveParameters"
+        },
+        {
+          "name": "AnnotationMembersCannotHaveTypeParameters"
+        },
+        {
+          "name": "AnnotationTypeDeclarationCannotHaveConstructor"
+        },
+        {
+          "name": "AnnotationTypeDeclarationCannotHaveSuperclass"
+        },
+        {
+          "name": "AnnotationTypeDeclarationCannotHaveSuperinterfaces"
+        },
+        {
+          "name": "AnnotationTypeUsedAsSuperInterface"
+        },
+        {
+          "name": "AnnotationValueMustBeAnEnumConstant"
+        },
+        {
+          "name": "AnnotationValueMustBeAnnotation"
+        },
+        {
+          "name": "AnnotationValueMustBeArrayInitializer"
+        },
+        {
+          "name": "AnnotationValueMustBeClassLiteral"
+        },
+        {
+          "name": "AnnotationValueMustBeConstant"
+        },
+        {
+          "name": "AnonymousClassCannotExtendFinalClass"
+        },
+        {
+          "name": "ApplicableMethodOverriddenByInapplicable"
+        },
+        {
+          "name": "ArgumentHidingField"
+        },
+        {
+          "name": "ArgumentHidingLocalVariable"
+        },
+        {
+          "name": "ArgumentIsNeverUsed"
+        },
+        {
+          "name": "ArgumentTypeAmbiguous"
+        },
+        {
+          "name": "ArgumentTypeCannotBeVoid"
+        },
+        {
+          "name": "ArgumentTypeCannotBeVoidArray"
+        },
+        {
+          "name": "ArgumentTypeInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "ArgumentTypeInternalNameProvided"
+        },
+        {
+          "name": "ArgumentTypeNotFound"
+        },
+        {
+          "name": "ArgumentTypeNotVisible"
+        },
+        {
+          "name": "ArrayConstantsOnlyInArrayInitializers"
+        },
+        {
+          "name": "ArrayReferencePotentialNullReference"
+        },
+        {
+          "name": "ArrayReferenceRequired"
+        },
+        {
+          "name": "ArrowInCaseStatementsNotSupported"
+        },
+        {
+          "name": "AssignFieldWithInitializerInEarlyConstructionContext"
+        },
+        {
+          "name": "AssignmentHasNoEffect"
+        },
+        {
+          "name": "AssignmentToMultiCatchParameter"
+        },
+        {
+          "name": "AssignmentToResource"
+        },
+        {
+          "name": "AutoManagedResourceNotBelow17"
+        },
+        {
+          "name": "AutoManagedVariableResourceNotBelow9"
+        },
+        {
+          "name": "BinaryLiteralNotBelow17"
+        },
+        {
+          "name": "BodyForAbstractMethod"
+        },
+        {
+          "name": "BodyForNativeMethod"
+        },
+        {
+          "name": "BoundCannotBeArray"
+        },
+        {
+          "name": "BoundHasConflictingArguments"
+        },
+        {
+          "name": "BoundMustBeAnInterface"
+        },
+        {
+          "name": "BoxingConversion"
+        },
+        {
+          "name": "BytecodeExceeds64KLimit"
+        },
+        {
+          "name": "BytecodeExceeds64KLimitForClinit"
+        },
+        {
+          "name": "BytecodeExceeds64KLimitForConstructor"
+        },
+        {
+          "name": "BytecodeExceeds64KLimitForSwitchTable"
+        },
+        {
+          "name": "CannotAllocateVoidArray"
+        },
+        {
+          "name": "CannotDeclareEnumSpecialMethod"
+        },
+        {
+          "name": "CannotDefineAnnotationInLocalType"
+        },
+        {
+          "name": "CannotDefineDimensionExpressionsWithInit"
+        },
+        {
+          "name": "CannotDefineEnumInLocalType"
+        },
+        {
+          "name": "CannotDefineInterfaceInLocalType"
+        },
+        {
+          "name": "CannotDefineStaticInitializerInLocalType"
+        },
+        {
+          "name": "CannotExtendEnum"
+        },
+        {
+          "name": "CannotHideAnInstanceMethodWithAStaticMethod"
+        },
+        {
+          "name": "CannotImplementIncompatibleNullness"
+        },
+        {
+          "name": "CannotImportPackage"
+        },
+        {
+          "name": "CannotInferElidedTypes"
+        },
+        {
+          "name": "CannotInferInvocationType"
+        },
+        {
+          "name": "CannotInferRecordPatternTypes"
+        },
+        {
+          "name": "CannotInvokeSuperConstructorInEnum"
+        },
+        {
+          "name": "CannotOverrideAStaticMethodWithAnInstanceMethod"
+        },
+        {
+          "name": "CannotReadSource"
+        },
+        {
+          "name": "CannotReturnInInitializer"
+        },
+        {
+          "name": "CannotThrowNull"
+        },
+        {
+          "name": "CannotThrowType"
+        },
+        {
+          "name": "CannotUseDiamondWithAnonymousClasses"
+        },
+        {
+          "name": "CannotUseDiamondWithExplicitTypeArguments"
+        },
+        {
+          "name": "CannotUseSuperInCodeSnippet"
+        },
+        {
+          "name": "ClassExtendFinalClass"
+        },
+        {
+          "name": "ClassExtendFinalRecord"
+        },
+        {
+          "name": "CodeCannotBeReached"
+        },
+        {
+          "name": "CodeSnippetMissingClass"
+        },
+        {
+          "name": "CodeSnippetMissingMethod"
+        },
+        {
+          "name": "ComparingIdentical"
+        },
+        {
+          "name": "Compliance"
+        },
+        {
+          "name": "ConflictingImport"
+        },
+        {
+          "name": "ConflictingInheritedNullAnnotations"
+        },
+        {
+          "name": "ConflictingNullAnnotations"
+        },
+        {
+          "name": "ConflictingPackageFromModules"
+        },
+        {
+          "name": "ConflictingPackageFromOtherModules"
+        },
+        {
+          "name": "ConflictingPackageInModules"
+        },
+        {
+          "name": "ConstNonNullFieldComparisonYieldsFalse"
+        },
+        {
+          "name": "ConstantWithPatternIncompatible"
+        },
+        {
+          "name": "ConstructedArrayIncompatible"
+        },
+        {
+          "name": "ConstructionTypeMismatch"
+        },
+        {
+          "name": "ConstructorCallNotAllowedHere"
+        },
+        {
+          "name": "ConstructorReferenceNotBelow18"
+        },
+        {
+          "name": "ConstructorRelated"
+        },
+        {
+          "name": "ConstructorVarargsArgumentNeedCast"
+        },
+        {
+          "name": "ContainerAnnotationTypeHasNonDefaultMembers"
+        },
+        {
+          "name": "ContainerAnnotationTypeHasShorterRetention"
+        },
+        {
+          "name": "ContainerAnnotationTypeHasWrongValueType"
+        },
+        {
+          "name": "ContainerAnnotationTypeMustHaveValue"
+        },
+        {
+          "name": "ContradictoryNullAnnotations"
+        },
+        {
+          "name": "ContradictoryNullAnnotationsInferred"
+        },
+        {
+          "name": "ContradictoryNullAnnotationsInferredFunctionType"
+        },
+        {
+          "name": "ContradictoryNullAnnotationsOnBound"
+        },
+        {
+          "name": "CorruptedSignature"
+        },
+        {
+          "name": "CyclicModuleDependency"
+        },
+        {
+          "name": "DanglingReference"
+        },
+        {
+          "name": "DeadCode"
+        },
+        {
+          "name": "DefaultMethodNotBelow18"
+        },
+        {
+          "name": "DefaultMethodOverridesObjectMethod"
+        },
+        {
+          "name": "DefaultTrueAndFalseCases"
+        },
+        {
+          "name": "DereferencingNullableExpression"
+        },
+        {
+          "name": "DiamondNotBelow17"
+        },
+        {
+          "name": "DimensionsIllegalOnRecordPattern"
+        },
+        {
+          "name": "DirectInvocationOfAbstractMethod"
+        },
+        {
+          "name": "DisallowedExplicitThisParameter"
+        },
+        {
+          "name": "DisallowedStatementInEarlyConstructionContext"
+        },
+        {
+          "name": "DisallowedTargetForAnnotation"
+        },
+        {
+          "name": "DisallowedTargetForContainerAnnotationType"
+        },
+        {
+          "name": "DiscouragedReference"
+        },
+        {
+          "name": "DiscouragedValueBasedTypeSynchronization"
+        },
+        {
+          "name": "DuplicateAnnotation"
+        },
+        {
+          "name": "DuplicateAnnotationMember"
+        },
+        {
+          "name": "DuplicateAnnotationNotMarkedRepeatable"
+        },
+        {
+          "name": "DuplicateBlankFinalFieldInitialization"
+        },
+        {
+          "name": "DuplicateBoundInIntersectionCast"
+        },
+        {
+          "name": "DuplicateBounds"
+        },
+        {
+          "name": "DuplicateCase"
+        },
+        {
+          "name": "DuplicateDefaultCase"
+        },
+        {
+          "name": "DuplicateExplicitConstructorCall"
+        },
+        {
+          "name": "DuplicateExports"
+        },
+        {
+          "name": "DuplicateField"
+        },
+        {
+          "name": "DuplicateFinalLocalInitialization"
+        },
+        {
+          "name": "DuplicateImport"
+        },
+        {
+          "name": "DuplicateInheritedDefaultMethods"
+        },
+        {
+          "name": "DuplicateInheritedMethods"
+        },
+        {
+          "name": "DuplicateLabel"
+        },
+        {
+          "name": "DuplicateMethod"
+        },
+        {
+          "name": "DuplicateMethodErasure"
+        },
+        {
+          "name": "DuplicateModifierForArgument"
+        },
+        {
+          "name": "DuplicateModifierForField"
+        },
+        {
+          "name": "DuplicateModifierForMethod"
+        },
+        {
+          "name": "DuplicateModifierForType"
+        },
+        {
+          "name": "DuplicateModifierForVariable"
+        },
+        {
+          "name": "DuplicateModuleRef"
+        },
+        {
+          "name": "DuplicateNestedType"
+        },
+        {
+          "name": "DuplicateOpens"
+        },
+        {
+          "name": "DuplicateParameterizedMethods"
+        },
+        {
+          "name": "DuplicateRequires"
+        },
+        {
+          "name": "DuplicateResource"
+        },
+        {
+          "name": "DuplicateServices"
+        },
+        {
+          "name": "DuplicateSuperInterface"
+        },
+        {
+          "name": "DuplicateTargetInTargetAnnotation"
+        },
+        {
+          "name": "DuplicateTypeVariable"
+        },
+        {
+          "name": "DuplicateTypes"
+        },
+        {
+          "name": "DuplicateUses"
+        },
+        {
+          "name": "EmptyControlFlowStatement"
+        },
+        {
+          "name": "EnclosingInstanceInConstructorCall"
+        },
+        {
+          "name": "EndOfSource"
+        },
+        {
+          "name": "EnhancedSwitchMissingDefault"
+        },
+        {
+          "name": "EnumAbstractMethodMustBeImplemented"
+        },
+        {
+          "name": "EnumConstantCannotDefineAbstractMethod"
+        },
+        {
+          "name": "EnumConstantMustImplementAbstractMethod"
+        },
+        {
+          "name": "EnumConstantsCannotBeSurroundedByParenthesis"
+        },
+        {
+          "name": "EnumStaticFieldInInInitializerContext"
+        },
+        {
+          "name": "EnumSwitchCannotTargetField"
+        },
+        {
+          "name": "ErrorUseOfUnderscoreAsAnIdentifier"
+        },
+        {
+          "name": "ExceptionParameterIsNeverUsed"
+        },
+        {
+          "name": "ExceptionTypeAmbiguous"
+        },
+        {
+          "name": "ExceptionTypeInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "ExceptionTypeInternalNameProvided"
+        },
+        {
+          "name": "ExceptionTypeNotFound"
+        },
+        {
+          "name": "ExceptionTypeNotVisible"
+        },
+        {
+          "name": "ExplicitAnnotationTargetRequired"
+        },
+        {
+          "name": "ExplicitThisParameterNotBelow18"
+        },
+        {
+          "name": "ExplicitThisParameterNotInLambda"
+        },
+        {
+          "name": "ExplicitlyClosedAutoCloseable"
+        },
+        {
+          "name": "ExportingForeignPackage"
+        },
+        {
+          "name": "ExpressionInEarlyConstructionContext"
+        },
+        {
+          "name": "ExpressionShouldBeAVariable"
+        },
+        {
+          "name": "ExternalProblemFixable"
+        },
+        {
+          "name": "ExternalProblemNotFixable"
+        },
+        {
+          "name": "FallthroughCase"
+        },
+        {
+          "name": "FalseConstantInGuard"
+        },
+        {
+          "name": "FeatureNotSupported"
+        },
+        {
+          "name": "FieldComparisonYieldsFalse"
+        },
+        {
+          "name": "FieldHidingField"
+        },
+        {
+          "name": "FieldHidingLocalVariable"
+        },
+        {
+          "name": "FieldMissingDeprecatedAnnotation"
+        },
+        {
+          "name": "FieldMustBeFinal"
+        },
+        {
+          "name": "FieldReadInEarlyConstructionContext"
+        },
+        {
+          "name": "FieldRelated"
+        },
+        {
+          "name": "FieldTypeAmbiguous"
+        },
+        {
+          "name": "FieldTypeInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "FieldTypeInternalNameProvided"
+        },
+        {
+          "name": "FieldTypeNotFound"
+        },
+        {
+          "name": "FieldTypeNotVisible"
+        },
+        {
+          "name": "FinalBoundForTypeVariable"
+        },
+        {
+          "name": "FinalFieldAssignment"
+        },
+        {
+          "name": "FinalMethodCannotBeOverridden"
+        },
+        {
+          "name": "FinalOuterLocalAssignment"
+        },
+        {
+          "name": "FinallyMustCompleteNormally"
+        },
+        {
+          "name": "ForbiddenReference"
+        },
+        {
+          "name": "FunctionalInterfaceMayNotbeSealed"
+        },
+        {
+          "name": "GenericConstructorTypeArgumentMismatch"
+        },
+        {
+          "name": "GenericInferenceError"
+        },
+        {
+          "name": "GenericMethodTypeArgumentMismatch"
+        },
+        {
+          "name": "GenericTypeCannotExtendThrowable"
+        },
+        {
+          "name": "HidingEnclosingType"
+        },
+        {
+          "name": "HierarchyCircularity"
+        },
+        {
+          "name": "HierarchyCircularitySelfReference"
+        },
+        {
+          "name": "HierarchyHasProblems"
+        },
+        {
+          "name": "IgnoreCategoriesMask"
+        },
+        {
+          "name": "IllegalAbstractModifierCombinationForMethod"
+        },
+        {
+          "name": "IllegalAccessFromTypeVariable"
+        },
+        {
+          "name": "IllegalAnnotationForBaseType"
+        },
+        {
+          "name": "IllegalArrayOfUnionType"
+        },
+        {
+          "name": "IllegalArrayTypeInIntersectionCast"
+        },
+        {
+          "name": "IllegalBasetypeInIntersectionCast"
+        },
+        {
+          "name": "IllegalCast"
+        },
+        {
+          "name": "IllegalClassLiteralForTypeVariable"
+        },
+        {
+          "name": "IllegalDeclarationOfThisParameter"
+        },
+        {
+          "name": "IllegalDefaultModifierSpecification"
+        },
+        {
+          "name": "IllegalDefinitionToNonNullParameter"
+        },
+        {
+          "name": "IllegalDimension"
+        },
+        {
+          "name": "IllegalEnclosingInstanceSpecification"
+        },
+        {
+          "name": "IllegalExtendedDimensions"
+        },
+        {
+          "name": "IllegalExtendedDimensionsForVarArgs"
+        },
+        {
+          "name": "IllegalFallthroughFromAPattern"
+        },
+        {
+          "name": "IllegalFallthroughToPattern"
+        },
+        {
+          "name": "IllegalGenericArray"
+        },
+        {
+          "name": "IllegalHexaLiteral"
+        },
+        {
+          "name": "IllegalInstanceofParameterizedType"
+        },
+        {
+          "name": "IllegalInstanceofTypeParameter"
+        },
+        {
+          "name": "IllegalModifierCombinationFinalAbstractForClass"
+        },
+        {
+          "name": "IllegalModifierCombinationFinalVolatileForField"
+        },
+        {
+          "name": "IllegalModifierCombinationForInterfaceMethod"
+        },
+        {
+          "name": "IllegalModifierCombinationForPrivateInterfaceMethod9"
+        },
+        {
+          "name": "IllegalModifierCombinationForType"
+        },
+        {
+          "name": "IllegalModifierForAnnotationField"
+        },
+        {
+          "name": "IllegalModifierForAnnotationMemberType"
+        },
+        {
+          "name": "IllegalModifierForAnnotationMethod"
+        },
+        {
+          "name": "IllegalModifierForAnnotationType"
+        },
+        {
+          "name": "IllegalModifierForArgument"
+        },
+        {
+          "name": "IllegalModifierForClass"
+        },
+        {
+          "name": "IllegalModifierForConstructor"
+        },
+        {
+          "name": "IllegalModifierForEnum"
+        },
+        {
+          "name": "IllegalModifierForEnumConstant"
+        },
+        {
+          "name": "IllegalModifierForEnumConstructor"
+        },
+        {
+          "name": "IllegalModifierForField"
+        },
+        {
+          "name": "IllegalModifierForInterface"
+        },
+        {
+          "name": "IllegalModifierForInterfaceField"
+        },
+        {
+          "name": "IllegalModifierForInterfaceMethod"
+        },
+        {
+          "name": "IllegalModifierForInterfaceMethod18"
+        },
+        {
+          "name": "IllegalModifierForInterfaceMethod9"
+        },
+        {
+          "name": "IllegalModifierForLocalClass"
+        },
+        {
+          "name": "IllegalModifierForLocalEnum"
+        },
+        {
+          "name": "IllegalModifierForLocalEnumDeclaration"
+        },
+        {
+          "name": "IllegalModifierForMemberClass"
+        },
+        {
+          "name": "IllegalModifierForMemberEnum"
+        },
+        {
+          "name": "IllegalModifierForMemberInterface"
+        },
+        {
+          "name": "IllegalModifierForMethod"
+        },
+        {
+          "name": "IllegalModifierForModule"
+        },
+        {
+          "name": "IllegalModifierForPatternVariable"
+        },
+        {
+          "name": "IllegalModifierForVariable"
+        },
+        {
+          "name": "IllegalModifiers"
+        },
+        {
+          "name": "IllegalModifiersForElidedType"
+        },
+        {
+          "name": "IllegalParameterNullityRedefinition"
+        },
+        {
+          "name": "IllegalPrimitiveOrArrayTypeForEnclosingInstance"
+        },
+        {
+          "name": "IllegalQualifiedEnumConstantLabel"
+        },
+        {
+          "name": "IllegalQualifiedParameterizedTypeAllocation"
+        },
+        {
+          "name": "IllegalQualifierForExplicitThis"
+        },
+        {
+          "name": "IllegalQualifierForExplicitThis2"
+        },
+        {
+          "name": "IllegalRecordPattern"
+        },
+        {
+          "name": "IllegalRedefinitionOfTypeVariable"
+        },
+        {
+          "name": "IllegalRedefinitionToNonNullParameter"
+        },
+        {
+          "name": "IllegalReturnNullityRedefinition"
+        },
+        {
+          "name": "IllegalReturnNullityRedefinitionFreeTypeVariable"
+        },
+        {
+          "name": "IllegalStaticModifierForMemberType"
+        },
+        {
+          "name": "IllegalStrictfpForAbstractInterfaceMethod"
+        },
+        {
+          "name": "IllegalTotalPatternWithDefault"
+        },
+        {
+          "name": "IllegalTypeAnnotationsInStaticMemberAccess"
+        },
+        {
+          "name": "IllegalTypeArgumentsInRawConstructorReference"
+        },
+        {
+          "name": "IllegalTypeForExplicitThis"
+        },
+        {
+          "name": "IllegalTypeVariableSuperReference"
+        },
+        {
+          "name": "IllegalUnderscorePosition"
+        },
+        {
+          "name": "IllegalUsageOfQualifiedTypeReference"
+        },
+        {
+          "name": "IllegalUsageOfTypeAnnotations"
+        },
+        {
+          "name": "IllegalUseOfUnderscoreAsAnIdentifier"
+        },
+        {
+          "name": "IllegalVararg"
+        },
+        {
+          "name": "IllegalVarargInLambda"
+        },
+        {
+          "name": "IllegalVisibilityModifierCombinationForField"
+        },
+        {
+          "name": "IllegalVisibilityModifierCombinationForMemberType"
+        },
+        {
+          "name": "IllegalVisibilityModifierCombinationForMethod"
+        },
+        {
+          "name": "IllegalVisibilityModifierForInterfaceMemberType"
+        },
+        {
+          "name": "ImplicitClassMissingMainMethod"
+        },
+        {
+          "name": "ImplicitObjectBoundNoNullDefault"
+        },
+        {
+          "name": "ImportAmbiguous"
+        },
+        {
+          "name": "ImportInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "ImportInternalNameProvided"
+        },
+        {
+          "name": "ImportNotFound"
+        },
+        {
+          "name": "ImportNotVisible"
+        },
+        {
+          "name": "ImportRelated"
+        },
+        {
+          "name": "IncompatibleCaseType"
+        },
+        {
+          "name": "IncompatibleExceptionInInheritedMethodThrowsClause"
+        },
+        {
+          "name": "IncompatibleExceptionInThrowsClause"
+        },
+        {
+          "name": "IncompatibleExceptionInThrowsClauseForNonInheritedInterfaceMethod"
+        },
+        {
+          "name": "IncompatibleLambdaParameterType"
+        },
+        {
+          "name": "IncompatibleMethodReference"
+        },
+        {
+          "name": "IncompatibleReturnType"
+        },
+        {
+          "name": "IncompatibleReturnTypeForNonInheritedInterfaceMethod"
+        },
+        {
+          "name": "IncompatibleTypesInConditionalOperator"
+        },
+        {
+          "name": "IncompatibleTypesInEqualityOperator"
+        },
+        {
+          "name": "IncompatibleTypesInForeach"
+        },
+        {
+          "name": "IncorrectArityForParameterizedConstructor"
+        },
+        {
+          "name": "IncorrectArityForParameterizedMethod"
+        },
+        {
+          "name": "IncorrectArityForParameterizedType"
+        },
+        {
+          "name": "IncorrectEnclosingInstanceReference"
+        },
+        {
+          "name": "IncorrectSwitchType"
+        },
+        {
+          "name": "IncorrectSwitchType17"
+        },
+        {
+          "name": "IndirectAccessToStaticField"
+        },
+        {
+          "name": "IndirectAccessToStaticMethod"
+        },
+        {
+          "name": "IndirectAccessToStaticType"
+        },
+        {
+          "name": "InheritedDefaultMethodConflictsWithOtherInherited"
+        },
+        {
+          "name": "InheritedFieldHidesEnclosingName"
+        },
+        {
+          "name": "InheritedIncompatibleReturnType"
+        },
+        {
+          "name": "InheritedMethodHidesEnclosingName"
+        },
+        {
+          "name": "InheritedMethodReducesVisibility"
+        },
+        {
+          "name": "InheritedParameterLackingNonNullAnnotation"
+        },
+        {
+          "name": "InheritedTypeHidesEnclosingName"
+        },
+        {
+          "name": "InitializerMustCompleteNormally"
+        },
+        {
+          "name": "InstanceFieldDuringConstructorInvocation"
+        },
+        {
+          "name": "InstanceMethodDuringConstructorInvocation"
+        },
+        {
+          "name": "InterfaceAmbiguous"
+        },
+        {
+          "name": "InterfaceCannotHaveConstructors"
+        },
+        {
+          "name": "InterfaceCannotHaveInitializers"
+        },
+        {
+          "name": "InterfaceInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "InterfaceInternalNameProvided"
+        },
+        {
+          "name": "InterfaceNotFound"
+        },
+        {
+          "name": "InterfaceNotFunctionalInterface"
+        },
+        {
+          "name": "InterfaceNotVisible"
+        },
+        {
+          "name": "InterfaceStaticMethodInvocationNotBelow18"
+        },
+        {
+          "name": "InterfaceSuperInvocationNotBelow18"
+        },
+        {
+          "name": "Internal"
+        },
+        {
+          "name": "InternalTypeNameProvided"
+        },
+        {
+          "name": "IntersectionCastNotBelow18"
+        },
+        {
+          "name": "InvalidAnnotationMemberType"
+        },
+        {
+          "name": "InvalidArrayConstructorReference"
+        },
+        {
+          "name": "InvalidBinary"
+        },
+        {
+          "name": "InvalidBreak"
+        },
+        {
+          "name": "InvalidCatchBlockSequence"
+        },
+        {
+          "name": "InvalidCharacterConstant"
+        },
+        {
+          "name": "InvalidClassInstantiation"
+        },
+        {
+          "name": "InvalidContinue"
+        },
+        {
+          "name": "InvalidDigit"
+        },
+        {
+          "name": "InvalidEncoding"
+        },
+        {
+          "name": "InvalidEscape"
+        },
+        {
+          "name": "InvalidExplicitConstructorCall"
+        },
+        {
+          "name": "InvalidExpressionAsStatement"
+        },
+        {
+          "name": "InvalidFileNameForPackageAnnotations"
+        },
+        {
+          "name": "InvalidFloat"
+        },
+        {
+          "name": "InvalidHexa"
+        },
+        {
+          "name": "InvalidHighSurrogate"
+        },
+        {
+          "name": "InvalidInput"
+        },
+        {
+          "name": "InvalidLowSurrogate"
+        },
+        {
+          "name": "InvalidNullToSynchronized"
+        },
+        {
+          "name": "InvalidOctal"
+        },
+        {
+          "name": "InvalidOpensStatement"
+        },
+        {
+          "name": "InvalidOperator"
+        },
+        {
+          "name": "InvalidParameterizedExceptionType"
+        },
+        {
+          "name": "InvalidParenthesizedExpression"
+        },
+        {
+          "name": "InvalidServiceImplType"
+        },
+        {
+          "name": "InvalidServiceIntfType"
+        },
+        {
+          "name": "InvalidTypeArguments"
+        },
+        {
+          "name": "InvalidTypeExpression"
+        },
+        {
+          "name": "InvalidTypeForCollection"
+        },
+        {
+          "name": "InvalidTypeForCollectionTarget14"
+        },
+        {
+          "name": "InvalidTypeForStaticImport"
+        },
+        {
+          "name": "InvalidTypeToSynchronized"
+        },
+        {
+          "name": "InvalidTypeVariableExceptionType"
+        },
+        {
+          "name": "InvalidUnaryExpression"
+        },
+        {
+          "name": "InvalidUnicodeEscape"
+        },
+        {
+          "name": "InvalidUnionTypeReferenceSequence"
+        },
+        {
+          "name": "InvalidUsageOfAnnotationDeclarations"
+        },
+        {
+          "name": "InvalidUsageOfAnnotations"
+        },
+        {
+          "name": "InvalidUsageOfEnumDeclarations"
+        },
+        {
+          "name": "InvalidUsageOfForeachStatements"
+        },
+        {
+          "name": "InvalidUsageOfStaticImports"
+        },
+        {
+          "name": "InvalidUsageOfTypeAnnotations"
+        },
+        {
+          "name": "InvalidUsageOfTypeArguments"
+        },
+        {
+          "name": "InvalidUsageOfTypeParameters"
+        },
+        {
+          "name": "InvalidUsageOfTypeParametersForAnnotationDeclaration"
+        },
+        {
+          "name": "InvalidUsageOfTypeParametersForEnumDeclaration"
+        },
+        {
+          "name": "InvalidUsageOfVarargs"
+        },
+        {
+          "name": "InvalidUsageOfWildcard"
+        },
+        {
+          "name": "InvalidVoidExpression"
+        },
+        {
+          "name": "IsClassPathCorrect"
+        },
+        {
+          "name": "IsClassPathCorrectWithReferencingType"
+        },
+        {
+          "name": "JavaVersionNotSupported"
+        },
+        {
+          "name": "JavaVersionTooRecent"
+        },
+        {
+          "name": "Javadoc"
+        },
+        {
+          "name": "JavadocAmbiguousConstructor"
+        },
+        {
+          "name": "JavadocAmbiguousField"
+        },
+        {
+          "name": "JavadocAmbiguousMethod"
+        },
+        {
+          "name": "JavadocAmbiguousMethodReference"
+        },
+        {
+          "name": "JavadocAmbiguousType"
+        },
+        {
+          "name": "JavadocDuplicateParamName"
+        },
+        {
+          "name": "JavadocDuplicateProvidesTag"
+        },
+        {
+          "name": "JavadocDuplicateReturnTag"
+        },
+        {
+          "name": "JavadocDuplicateTag"
+        },
+        {
+          "name": "JavadocDuplicateThrowsClassName"
+        },
+        {
+          "name": "JavadocDuplicateUsesTag"
+        },
+        {
+          "name": "JavadocEmptyReturnTag"
+        },
+        {
+          "name": "JavadocGenericConstructorTypeArgumentMismatch"
+        },
+        {
+          "name": "JavadocGenericMethodTypeArgumentMismatch"
+        },
+        {
+          "name": "JavadocHiddenReference"
+        },
+        {
+          "name": "JavadocIncorrectArityForParameterizedConstructor"
+        },
+        {
+          "name": "JavadocIncorrectArityForParameterizedMethod"
+        },
+        {
+          "name": "JavadocInheritedFieldHidesEnclosingName"
+        },
+        {
+          "name": "JavadocInheritedMethodHidesEnclosingName"
+        },
+        {
+          "name": "JavadocInheritedNameHidesEnclosingTypeName"
+        },
+        {
+          "name": "JavadocInternalTypeNameProvided"
+        },
+        {
+          "name": "JavadocInvalidMemberTypeQualification"
+        },
+        {
+          "name": "JavadocInvalidModule"
+        },
+        {
+          "name": "JavadocInvalidModuleQualification"
+        },
+        {
+          "name": "JavadocInvalidParamName"
+        },
+        {
+          "name": "JavadocInvalidParamTagName"
+        },
+        {
+          "name": "JavadocInvalidParamTagTypeParameter"
+        },
+        {
+          "name": "JavadocInvalidProvidesClass"
+        },
+        {
+          "name": "JavadocInvalidProvidesClassName"
+        },
+        {
+          "name": "JavadocInvalidSeeArgs"
+        },
+        {
+          "name": "JavadocInvalidSeeHref"
+        },
+        {
+          "name": "JavadocInvalidSeeReference"
+        },
+        {
+          "name": "JavadocInvalidSeeUrlReference"
+        },
+        {
+          "name": "JavadocInvalidSnippet"
+        },
+        {
+          "name": "JavadocInvalidSnippetContentNewLine"
+        },
+        {
+          "name": "JavadocInvalidSnippetDuplicateRegions"
+        },
+        {
+          "name": "JavadocInvalidSnippetMissingColon"
+        },
+        {
+          "name": "JavadocInvalidSnippetRegexSubstringTogether"
+        },
+        {
+          "name": "JavadocInvalidSnippetRegionNotClosed"
+        },
+        {
+          "name": "JavadocInvalidTag"
+        },
+        {
+          "name": "JavadocInvalidThrowsClass"
+        },
+        {
+          "name": "JavadocInvalidThrowsClassName"
+        },
+        {
+          "name": "JavadocInvalidUsesClass"
+        },
+        {
+          "name": "JavadocInvalidUsesClassName"
+        },
+        {
+          "name": "JavadocInvalidValueReference"
+        },
+        {
+          "name": "JavadocMalformedSeeReference"
+        },
+        {
+          "name": "JavadocMessagePrefix"
+        },
+        {
+          "name": "JavadocMissing"
+        },
+        {
+          "name": "JavadocMissingHashCharacter"
+        },
+        {
+          "name": "JavadocMissingIdentifier"
+        },
+        {
+          "name": "JavadocMissingParamName"
+        },
+        {
+          "name": "JavadocMissingParamTag"
+        },
+        {
+          "name": "JavadocMissingProvidesClassName"
+        },
+        {
+          "name": "JavadocMissingProvidesTag"
+        },
+        {
+          "name": "JavadocMissingReturnTag"
+        },
+        {
+          "name": "JavadocMissingSeeReference"
+        },
+        {
+          "name": "JavadocMissingTagDescription"
+        },
+        {
+          "name": "JavadocMissingThrowsClassName"
+        },
+        {
+          "name": "JavadocMissingThrowsTag"
+        },
+        {
+          "name": "JavadocMissingUsesClassName"
+        },
+        {
+          "name": "JavadocMissingUsesTag"
+        },
+        {
+          "name": "JavadocNoMessageSendOnArrayType"
+        },
+        {
+          "name": "JavadocNoMessageSendOnBaseType"
+        },
+        {
+          "name": "JavadocNonGenericConstructor"
+        },
+        {
+          "name": "JavadocNonGenericMethod"
+        },
+        {
+          "name": "JavadocNonStaticTypeFromStaticInvocation"
+        },
+        {
+          "name": "JavadocNotAccessibleType"
+        },
+        {
+          "name": "JavadocNotVisibleConstructor"
+        },
+        {
+          "name": "JavadocNotVisibleField"
+        },
+        {
+          "name": "JavadocNotVisibleMethod"
+        },
+        {
+          "name": "JavadocNotVisibleType"
+        },
+        {
+          "name": "JavadocParameterMismatch"
+        },
+        {
+          "name": "JavadocParameterizedConstructorArgumentTypeMismatch"
+        },
+        {
+          "name": "JavadocParameterizedMethodArgumentTypeMismatch"
+        },
+        {
+          "name": "JavadocTypeArgumentsForRawGenericConstructor"
+        },
+        {
+          "name": "JavadocTypeArgumentsForRawGenericMethod"
+        },
+        {
+          "name": "JavadocUndefinedConstructor"
+        },
+        {
+          "name": "JavadocUndefinedField"
+        },
+        {
+          "name": "JavadocUndefinedMethod"
+        },
+        {
+          "name": "JavadocUndefinedType"
+        },
+        {
+          "name": "JavadocUnexpectedTag"
+        },
+        {
+          "name": "JavadocUnexpectedText"
+        },
+        {
+          "name": "JavadocUnterminatedInlineTag"
+        },
+        {
+          "name": "JavadocUsingDeprecatedConstructor"
+        },
+        {
+          "name": "JavadocUsingDeprecatedField"
+        },
+        {
+          "name": "JavadocUsingDeprecatedMethod"
+        },
+        {
+          "name": "JavadocUsingDeprecatedType"
+        },
+        {
+          "name": "LambdaDescriptorMentionsUnmentionable"
+        },
+        {
+          "name": "LambdaExpressionNotBelow18"
+        },
+        {
+          "name": "LambdaParameterIsNeverUsed"
+        },
+        {
+          "name": "LambdaRedeclaresArgument"
+        },
+        {
+          "name": "LambdaRedeclaresLocal"
+        },
+        {
+          "name": "LambdaShapeComputationError"
+        },
+        {
+          "name": "LocalReferencedInGuardMustBeEffectivelyFinal"
+        },
+        {
+          "name": "LocalStaticsIllegalVisibilityModifierForInterfaceLocalType"
+        },
+        {
+          "name": "LocalVariableCanOnlyBeNull"
+        },
+        {
+          "name": "LocalVariableCannotBeNull"
+        },
+        {
+          "name": "LocalVariableHidingField"
+        },
+        {
+          "name": "LocalVariableHidingLocalVariable"
+        },
+        {
+          "name": "LocalVariableIsNeverUsed"
+        },
+        {
+          "name": "LocalVariableMayBeNull"
+        },
+        {
+          "name": "MandatoryCloseNotShown"
+        },
+        {
+          "name": "MandatoryCloseNotShownAtExit"
+        },
+        {
+          "name": "MaskedCatch"
+        },
+        {
+          "name": "MessageSendInEarlyConstructionContext"
+        },
+        {
+          "name": "MethodButWithConstructorName"
+        },
+        {
+          "name": "MethodCanBePotentiallyStatic"
+        },
+        {
+          "name": "MethodCanBeStatic"
+        },
+        {
+          "name": "MethodMissingDeprecatedAnnotation"
+        },
+        {
+          "name": "MethodMustOverride"
+        },
+        {
+          "name": "MethodMustOverrideOrImplement"
+        },
+        {
+          "name": "MethodNameClash"
+        },
+        {
+          "name": "MethodNameClashHidden"
+        },
+        {
+          "name": "MethodReducesVisibility"
+        },
+        {
+          "name": "MethodReferenceNotBelow18"
+        },
+        {
+          "name": "MethodReferenceSwingsBothWays"
+        },
+        {
+          "name": "MethodRelated"
+        },
+        {
+          "name": "MethodRequiresBody"
+        },
+        {
+          "name": "MethodReturnsVoid"
+        },
+        {
+          "name": "MethodVarargsArgumentNeedCast"
+        },
+        {
+          "name": "MisplacedTypeAnnotations"
+        },
+        {
+          "name": "MissingArgumentsForParameterizedMemberType"
+        },
+        {
+          "name": "MissingDefaultCase"
+        },
+        {
+          "name": "MissingEnclosingInstance"
+        },
+        {
+          "name": "MissingEnclosingInstanceForConstructorCall"
+        },
+        {
+          "name": "MissingEnumConstantCase"
+        },
+        {
+          "name": "MissingEnumConstantCaseDespiteDefault"
+        },
+        {
+          "name": "MissingEnumDefaultCase"
+        },
+        {
+          "name": "MissingNonNullByDefaultAnnotationOnPackage"
+        },
+        {
+          "name": "MissingNonNullByDefaultAnnotationOnType"
+        },
+        {
+          "name": "MissingNullAnnotationImplicitlyUsed"
+        },
+        {
+          "name": "MissingOverrideAnnotation"
+        },
+        {
+          "name": "MissingOverrideAnnotationForInterfaceMethodImplementation"
+        },
+        {
+          "name": "MissingRequiresTransitiveForTypeInAPI"
+        },
+        {
+          "name": "MissingReturnType"
+        },
+        {
+          "name": "MissingSemiColon"
+        },
+        {
+          "name": "MissingSerialVersion"
+        },
+        {
+          "name": "MissingSynchronizedModifierInInheritedMethod"
+        },
+        {
+          "name": "MissingTypeInConstructor"
+        },
+        {
+          "name": "MissingTypeInLambda"
+        },
+        {
+          "name": "MissingTypeInMethod"
+        },
+        {
+          "name": "MissingValueForAnnotationMember"
+        },
+        {
+          "name": "MissingValueFromLambda"
+        },
+        {
+          "name": "ModuleNotRead"
+        },
+        {
+          "name": "ModuleRelated"
+        },
+        {
+          "name": "MultiCatchNotBelow17"
+        },
+        {
+          "name": "MultiConstantCaseLabelsNotSupported"
+        },
+        {
+          "name": "MultipleFunctionalInterfaces"
+        },
+        {
+          "name": "MustDefineEitherDimensionExpressionsOrInitializer"
+        },
+        {
+          "name": "MustSpecifyPackage"
+        },
+        {
+          "name": "NamedPatternVariablesDisallowedHere"
+        },
+        {
+          "name": "NativeMethodsCannotBeStrictfp"
+        },
+        {
+          "name": "NeedToEmulateConstructorAccess"
+        },
+        {
+          "name": "NeedToEmulateFieldReadAccess"
+        },
+        {
+          "name": "NeedToEmulateFieldWriteAccess"
+        },
+        {
+          "name": "NeedToEmulateMethodAccess"
+        },
+        {
+          "name": "NestedServiceImpl"
+        },
+        {
+          "name": "NoAdditionalBoundAfterTypeVariable"
+        },
+        {
+          "name": "NoFieldOnBaseType"
+        },
+        {
+          "name": "NoGenericLambda"
+        },
+        {
+          "name": "NoImplicitStringConversionForCharArrayExpression"
+        },
+        {
+          "name": "NoMessageSendOnArrayType"
+        },
+        {
+          "name": "NoMessageSendOnBaseType"
+        },
+        {
+          "name": "NoSuperInInterfaceContext"
+        },
+        {
+          "name": "NonBlankFinalLocalAssignment"
+        },
+        {
+          "name": "NonConstantExpression"
+        },
+        {
+          "name": "NonDenotableTypeArgumentForAnonymousDiamond"
+        },
+        {
+          "name": "NonExternalizedStringLiteral"
+        },
+        {
+          "name": "NonGenericConstructor"
+        },
+        {
+          "name": "NonGenericMethod"
+        },
+        {
+          "name": "NonGenericType"
+        },
+        {
+          "name": "NonNullArrayContentNotInitialized"
+        },
+        {
+          "name": "NonNullDefaultDetailIsNotEvaluated"
+        },
+        {
+          "name": "NonNullExpressionComparisonYieldsFalse"
+        },
+        {
+          "name": "NonNullLocalVariableComparisonYieldsFalse"
+        },
+        {
+          "name": "NonNullMessageSendComparisonYieldsFalse"
+        },
+        {
+          "name": "NonNullMethodTypeVariableFromLegacyMethod"
+        },
+        {
+          "name": "NonNullSpecdFieldComparisonYieldsFalse"
+        },
+        {
+          "name": "NonNullTypeVariableFromLegacyMethod"
+        },
+        {
+          "name": "NonPublicTypeInAPI"
+        },
+        {
+          "name": "NonStaticAccessToStaticField"
+        },
+        {
+          "name": "NonStaticAccessToStaticMethod"
+        },
+        {
+          "name": "NonStaticContextForEnumMemberType"
+        },
+        {
+          "name": "NonStaticFieldFromStaticInvocation"
+        },
+        {
+          "name": "NonStaticOrAlienTypeReceiver"
+        },
+        {
+          "name": "NonStaticTypeFromStaticInvocation"
+        },
+        {
+          "name": "NotAccessibleConstructor"
+        },
+        {
+          "name": "NotAccessibleField"
+        },
+        {
+          "name": "NotAccessibleMethod"
+        },
+        {
+          "name": "NotAccessiblePackage"
+        },
+        {
+          "name": "NotAccessibleType"
+        },
+        {
+          "name": "NotAnnotationType"
+        },
+        {
+          "name": "NotExportedTypeInAPI"
+        },
+        {
+          "name": "NotOwningResourceField"
+        },
+        {
+          "name": "NotVisibleConstructor"
+        },
+        {
+          "name": "NotVisibleConstructorInDefaultConstructor"
+        },
+        {
+          "name": "NotVisibleConstructorInImplicitConstructorCall"
+        },
+        {
+          "name": "NotVisibleField"
+        },
+        {
+          "name": "NotVisibleMethod"
+        },
+        {
+          "name": "NotVisibleType"
+        },
+        {
+          "name": "NullAnnotationAtQualifyingType"
+        },
+        {
+          "name": "NullAnnotationUnsupportedLocation"
+        },
+        {
+          "name": "NullAnnotationUnsupportedLocationAtType"
+        },
+        {
+          "name": "NullExpressionReference"
+        },
+        {
+          "name": "NullLocalVariableComparisonYieldsFalse"
+        },
+        {
+          "name": "NullLocalVariableInstanceofYieldsFalse"
+        },
+        {
+          "name": "NullLocalVariableReference"
+        },
+        {
+          "name": "NullNotCompatibleToFreeTypeVariable"
+        },
+        {
+          "name": "NullSourceString"
+        },
+        {
+          "name": "NullUnboxing"
+        },
+        {
+          "name": "NullableFieldReference"
+        },
+        {
+          "name": "NullityMismatchAgainstFreeTypeVariable"
+        },
+        {
+          "name": "NullityMismatchTypeArgument"
+        },
+        {
+          "name": "NullityMismatchingTypeAnnotation"
+        },
+        {
+          "name": "NullityMismatchingTypeAnnotationSuperHint"
+        },
+        {
+          "name": "NullityUncheckedTypeAnnotation"
+        },
+        {
+          "name": "NullityUncheckedTypeAnnotationDetail"
+        },
+        {
+          "name": "NullityUncheckedTypeAnnotationDetailSuperHint"
+        },
+        {
+          "name": "NumericValueOutOfRange"
+        },
+        {
+          "name": "ObjectCannotBeGeneric"
+        },
+        {
+          "name": "ObjectCannotHaveSuperTypes"
+        },
+        {
+          "name": "ObjectHasNoSuperclass"
+        },
+        {
+          "name": "ObjectMustBeClass"
+        },
+        {
+          "name": "OperandStackExceeds64KLimit"
+        },
+        {
+          "name": "OperandStackSizeInappropriate"
+        },
+        {
+          "name": "OuterLocalMustBeEffectivelyFinal"
+        },
+        {
+          "name": "OuterLocalMustBeFinal"
+        },
+        {
+          "name": "OverrideAddingReturnOwning"
+        },
+        {
+          "name": "OverrideReducingParamterOwning"
+        },
+        {
+          "name": "OverridingDeprecatedMethod"
+        },
+        {
+          "name": "OverridingDeprecatedSinceVersionMethod"
+        },
+        {
+          "name": "OverridingMethodWithoutSuperInvocation"
+        },
+        {
+          "name": "OverridingNonVisibleMethod"
+        },
+        {
+          "name": "OverridingTerminallyDeprecatedMethod"
+        },
+        {
+          "name": "OverridingTerminallyDeprecatedSinceVersionMethod"
+        },
+        {
+          "name": "OwningFieldInNonResourceClass"
+        },
+        {
+          "name": "OwningFieldShouldImplementClose"
+        },
+        {
+          "name": "PackageCollidesWithType"
+        },
+        {
+          "name": "PackageDoesNotExistOrIsEmpty"
+        },
+        {
+          "name": "PackageIsNotExpectedPackage"
+        },
+        {
+          "name": "ParameterAssignment"
+        },
+        {
+          "name": "ParameterLackingNonNullAnnotation"
+        },
+        {
+          "name": "ParameterLackingNullableAnnotation"
+        },
+        {
+          "name": "ParameterMismatch"
+        },
+        {
+          "name": "ParameterizedConstructorArgumentTypeMismatch"
+        },
+        {
+          "name": "ParameterizedMethodArgumentTypeMismatch"
+        },
+        {
+          "name": "ParsingError"
+        },
+        {
+          "name": "ParsingErrorDeleteToken"
+        },
+        {
+          "name": "ParsingErrorDeleteTokens"
+        },
+        {
+          "name": "ParsingErrorInsertToComplete"
+        },
+        {
+          "name": "ParsingErrorInsertToCompletePhrase"
+        },
+        {
+          "name": "ParsingErrorInsertToCompleteScope"
+        },
+        {
+          "name": "ParsingErrorInsertTokenAfter"
+        },
+        {
+          "name": "ParsingErrorInsertTokenBefore"
+        },
+        {
+          "name": "ParsingErrorInvalidToken"
+        },
+        {
+          "name": "ParsingErrorMergeTokens"
+        },
+        {
+          "name": "ParsingErrorMisplacedConstruct"
+        },
+        {
+          "name": "ParsingErrorNoSuggestion"
+        },
+        {
+          "name": "ParsingErrorNoSuggestionForTokens"
+        },
+        {
+          "name": "ParsingErrorOnKeyword"
+        },
+        {
+          "name": "ParsingErrorOnKeywordNoSuggestion"
+        },
+        {
+          "name": "ParsingErrorReplaceTokens"
+        },
+        {
+          "name": "ParsingErrorUnexpectedEOF"
+        },
+        {
+          "name": "PatternDominated"
+        },
+        {
+          "name": "PatternSubtypeOfExpression"
+        },
+        {
+          "name": "PatternSwitchCaseDefaultOnlyAsSecond"
+        },
+        {
+          "name": "PatternSwitchNullOnlyOrFirstWithDefault"
+        },
+        {
+          "name": "PatternTypeMismatch"
+        },
+        {
+          "name": "PatternVariableNotInScope"
+        },
+        {
+          "name": "PatternVariableRedeclared"
+        },
+        {
+          "name": "PatternVariableRedefined"
+        },
+        {
+          "name": "PolymorphicMethodNotBelow17"
+        },
+        {
+          "name": "PossibleAccidentalBooleanAssignment"
+        },
+        {
+          "name": "PotentialHeapPollutionFromVararg"
+        },
+        {
+          "name": "PotentialNullExpressionReference"
+        },
+        {
+          "name": "PotentialNullLocalVariableReference"
+        },
+        {
+          "name": "PotentialNullMessageSendReference"
+        },
+        {
+          "name": "PotentialNullUnboxing"
+        },
+        {
+          "name": "PotentiallyUnclosedCloseable"
+        },
+        {
+          "name": "PotentiallyUnclosedCloseableAtExit"
+        },
+        {
+          "name": "PreviewAPIUsed"
+        },
+        {
+          "name": "PreviewFeatureDisabled"
+        },
+        {
+          "name": "PreviewFeatureNotSupported"
+        },
+        {
+          "name": "PreviewFeatureUsed"
+        },
+        {
+          "name": "PreviewFeaturesNotAllowed"
+        },
+        {
+          "name": "PreviewRelated"
+        },
+        {
+          "name": "ProblemNotAnalysed"
+        },
+        {
+          "name": "ProviderMethodOrConstructorRequiredForServiceImpl"
+        },
+        {
+          "name": "PublicClassMustMatchFileName"
+        },
+        {
+          "name": "RawMemberTypeCannotBeParameterized"
+        },
+        {
+          "name": "RawTypeInRecordPattern"
+        },
+        {
+          "name": "RawTypeReference"
+        },
+        {
+          "name": "RecordAccessorMethodHasThrowsClause"
+        },
+        {
+          "name": "RecordAccessorMethodShouldBePublic"
+        },
+        {
+          "name": "RecordAccessorMethodShouldNotBeGeneric"
+        },
+        {
+          "name": "RecordAccessorMethodShouldNotBeStatic"
+        },
+        {
+          "name": "RecordCannotDefineRecordInLocalType"
+        },
+        {
+          "name": "RecordCannotExtendRecord"
+        },
+        {
+          "name": "RecordCanonicalConstructorHasExplicitConstructorCall"
+        },
+        {
+          "name": "RecordCanonicalConstructorHasReturnStatement"
+        },
+        {
+          "name": "RecordCanonicalConstructorHasThrowsClause"
+        },
+        {
+          "name": "RecordCanonicalConstructorShouldNotBeGeneric"
+        },
+        {
+          "name": "RecordCanonicalConstructorVisibilityReduced"
+        },
+        {
+          "name": "RecordCompactConstructorHasExplicitConstructorCall"
+        },
+        {
+          "name": "RecordCompactConstructorHasReturnStatement"
+        },
+        {
+          "name": "RecordComponentCannotBeVoid"
+        },
+        {
+          "name": "RecordComponentsCannotHaveModifiers"
+        },
+        {
+          "name": "RecordDuplicateComponent"
+        },
+        {
+          "name": "RecordErasureIncompatibilityInCanonicalConstructor"
+        },
+        {
+          "name": "RecordIllegalAccessorReturnType"
+        },
+        {
+          "name": "RecordIllegalComponentNameInRecord"
+        },
+        {
+          "name": "RecordIllegalExplicitFinalFieldAssignInCompactConstructor"
+        },
+        {
+          "name": "RecordIllegalExtendedDimensionsForRecordComponent"
+        },
+        {
+          "name": "RecordIllegalModifierForInnerRecord"
+        },
+        {
+          "name": "RecordIllegalModifierForLocalRecord"
+        },
+        {
+          "name": "RecordIllegalModifierForRecord"
+        },
+        {
+          "name": "RecordIllegalNativeModifierInRecord"
+        },
+        {
+          "name": "RecordIllegalParameterNameInCanonicalConstructor"
+        },
+        {
+          "name": "RecordIllegalStaticModifierForLocalClassOrInterface"
+        },
+        {
+          "name": "RecordIllegalVararg"
+        },
+        {
+          "name": "RecordInstanceInitializerBlockInRecord"
+        },
+        {
+          "name": "RecordMissingExplicitConstructorCallInNonCanonicalConstructor"
+        },
+        {
+          "name": "RecordMultipleCanonicalConstructors"
+        },
+        {
+          "name": "RecordNestedRecordInherentlyStatic"
+        },
+        {
+          "name": "RecordNonStaticFieldDeclarationInRecord"
+        },
+        {
+          "name": "RecordPatternMismatch"
+        },
+        {
+          "name": "RecordStaticReferenceToOuterLocalVariable"
+        },
+        {
+          "name": "RecursiveConstructorInvocation"
+        },
+        {
+          "name": "RedefinedArgument"
+        },
+        {
+          "name": "RedefinedLocal"
+        },
+        {
+          "name": "RedundantLocalVariableNullAssignment"
+        },
+        {
+          "name": "RedundantNullAnnotation"
+        },
+        {
+          "name": "RedundantNullCheckAgainstNonNullType"
+        },
+        {
+          "name": "RedundantNullCheckOnConstNonNullField"
+        },
+        {
+          "name": "RedundantNullCheckOnField"
+        },
+        {
+          "name": "RedundantNullCheckOnNonNullExpression"
+        },
+        {
+          "name": "RedundantNullCheckOnNonNullLocalVariable"
+        },
+        {
+          "name": "RedundantNullCheckOnNonNullMessageSend"
+        },
+        {
+          "name": "RedundantNullCheckOnNonNullSpecdField"
+        },
+        {
+          "name": "RedundantNullCheckOnNullLocalVariable"
+        },
+        {
+          "name": "RedundantNullCheckOnSpecdNonNullLocalVariable"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotation"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotationField"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotationLocal"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotationMethod"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotationModule"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotationPackage"
+        },
+        {
+          "name": "RedundantNullDefaultAnnotationType"
+        },
+        {
+          "name": "RedundantSpecificationOfTypeArguments"
+        },
+        {
+          "name": "RedundantSuperinterface"
+        },
+        {
+          "name": "ReferenceExpressionParameterNullityMismatch"
+        },
+        {
+          "name": "ReferenceExpressionParameterNullityUnchecked"
+        },
+        {
+          "name": "ReferenceExpressionReturnNullRedef"
+        },
+        {
+          "name": "ReferenceExpressionReturnNullRedefUnchecked"
+        },
+        {
+          "name": "ReferenceToForwardField"
+        },
+        {
+          "name": "ReferenceToForwardTypeVariable"
+        },
+        {
+          "name": "RepeatableAnnotationTypeIsDocumented"
+        },
+        {
+          "name": "RepeatableAnnotationTypeIsInherited"
+        },
+        {
+          "name": "RepeatableAnnotationTypeTargetMismatch"
+        },
+        {
+          "name": "RepeatableAnnotationWithRepeatingContainerAnnotation"
+        },
+        {
+          "name": "RepeatedAnnotationWithContainerAnnotation"
+        },
+        {
+          "name": "RequiredNonNullButProvidedFreeTypeVariable"
+        },
+        {
+          "name": "RequiredNonNullButProvidedNull"
+        },
+        {
+          "name": "RequiredNonNullButProvidedPotentialNull"
+        },
+        {
+          "name": "RequiredNonNullButProvidedSpecdNullable"
+        },
+        {
+          "name": "RequiredNonNullButProvidedUnknown"
+        },
+        {
+          "name": "ResourceHasToImplementAutoCloseable"
+        },
+        {
+          "name": "ResourceIsNotAValue"
+        },
+        {
+          "name": "RestrictedTypeName"
+        },
+        {
+          "name": "ReturnTypeAmbiguous"
+        },
+        {
+          "name": "ReturnTypeCannotBeVoidArray"
+        },
+        {
+          "name": "ReturnTypeInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "ReturnTypeInternalNameProvided"
+        },
+        {
+          "name": "ReturnTypeMismatch"
+        },
+        {
+          "name": "ReturnTypeNotFound"
+        },
+        {
+          "name": "ReturnTypeNotVisible"
+        },
+        {
+          "name": "SafeVarargsOnFixedArityMethod"
+        },
+        {
+          "name": "SafeVarargsOnNonFinalInstanceMethod"
+        },
+        {
+          "name": "SafeVarargsOnSyntheticRecordAccessor"
+        },
+        {
+          "name": "SealedAnonymousClassCannotExtendSealedType"
+        },
+        {
+          "name": "SealedDisAllowedNonSealedModifierInClass"
+        },
+        {
+          "name": "SealedDisAllowedNonSealedModifierInInterface"
+        },
+        {
+          "name": "SealedDuplicateTypeInPermits"
+        },
+        {
+          "name": "SealedInterfaceIsSealedAndNonSealed"
+        },
+        {
+          "name": "SealedLocalDirectSuperTypeSealed"
+        },
+        {
+          "name": "SealedMissingClassModifier"
+        },
+        {
+          "name": "SealedMissingInterfaceModifier"
+        },
+        {
+          "name": "SealedMissingSealedModifier"
+        },
+        {
+          "name": "SealedNotDirectSuperClass"
+        },
+        {
+          "name": "SealedNotDirectSuperInterface"
+        },
+        {
+          "name": "SealedPermittedTypeOutsideOfModule"
+        },
+        {
+          "name": "SealedPermittedTypeOutsideOfPackage"
+        },
+        {
+          "name": "SealedSealedTypeMissingPermits"
+        },
+        {
+          "name": "SealedSuperClassDoesNotPermit"
+        },
+        {
+          "name": "SealedSuperInterfaceDoesNotPermit"
+        },
+        {
+          "name": "SealedSuperTypeDisallowed"
+        },
+        {
+          "name": "SealedSuperTypeInDifferentPackage"
+        },
+        {
+          "name": "ServiceImplDefaultConstructorNotPublic"
+        },
+        {
+          "name": "ServiceImplNotDefinedByModule"
+        },
+        {
+          "name": "ShouldImplementHashcode"
+        },
+        {
+          "name": "ShouldMarkMethodAsOwning"
+        },
+        {
+          "name": "ShouldReturnValue"
+        },
+        {
+          "name": "ShouldReturnValueHintMissingDefault"
+        },
+        {
+          "name": "SpecdNonNullLocalVariableComparisonYieldsFalse"
+        },
+        {
+          "name": "StaticInheritedMethodConflicts"
+        },
+        {
+          "name": "StaticInterfaceMethodNotBelow18"
+        },
+        {
+          "name": "StaticMemberOfParameterizedType"
+        },
+        {
+          "name": "StaticMethodRequested"
+        },
+        {
+          "name": "StaticMethodShouldBeAccessedStatically"
+        },
+        {
+          "name": "StaticResourceField"
+        },
+        {
+          "name": "StrictfpNotRequired"
+        },
+        {
+          "name": "StringConstantIsExceedingUtf8Limit"
+        },
+        {
+          "name": "SuperAccessCannotBypassDirectSuper"
+        },
+        {
+          "name": "SuperCallCannotBypassOverride"
+        },
+        {
+          "name": "SuperFieldAssignInEarlyConstructionContext"
+        },
+        {
+          "name": "SuperInterfaceMustBeAnInterface"
+        },
+        {
+          "name": "SuperInterfacesCollide"
+        },
+        {
+          "name": "SuperTypeUsingWildcard"
+        },
+        {
+          "name": "SuperclassAmbiguous"
+        },
+        {
+          "name": "SuperclassInheritedNameHidesEnclosingName"
+        },
+        {
+          "name": "SuperclassInternalNameProvided"
+        },
+        {
+          "name": "SuperclassMustBeAClass"
+        },
+        {
+          "name": "SuperclassNotFound"
+        },
+        {
+          "name": "SuperclassNotVisible"
+        },
+        {
+          "name": "SuperfluousSemicolon"
+        },
+        {
+          "name": "SwitchExpressionBreakMissingValue"
+        },
+        {
+          "name": "SwitchExpressionIllegalLastStatement"
+        },
+        {
+          "name": "SwitchExpressionLastStatementCompletesNormally"
+        },
+        {
+          "name": "SwitchExpressionMissingDefaultCase"
+        },
+        {
+          "name": "SwitchExpressionMissingEnumConstantCase"
+        },
+        {
+          "name": "SwitchExpressionSwitchLabeledBlockCompletesNormally"
+        },
+        {
+          "name": "SwitchExpressionTrailingSwitchLabels"
+        },
+        {
+          "name": "SwitchExpressionaYieldSwitchLabeledBlockCompletesNormally"
+        },
+        {
+          "name": "SwitchExpressionsBreakOutOfSwitchExpression"
+        },
+        {
+          "name": "SwitchExpressionsContinueOutOfSwitchExpression"
+        },
+        {
+          "name": "SwitchExpressionsEmptySwitchBlock"
+        },
+        {
+          "name": "SwitchExpressionsIncompatibleResultExpressionTypes"
+        },
+        {
+          "name": "SwitchExpressionsNoResultExpression"
+        },
+        {
+          "name": "SwitchExpressionsNotSupported"
+        },
+        {
+          "name": "SwitchExpressionsReturnWithinSwitchExpression"
+        },
+        {
+          "name": "SwitchExpressionsYieldBreakNotAllowed"
+        },
+        {
+          "name": "SwitchExpressionsYieldEmptySwitchBlock"
+        },
+        {
+          "name": "SwitchExpressionsYieldIllegalLastStatement"
+        },
+        {
+          "name": "SwitchExpressionsYieldIllegalStatement"
+        },
+        {
+          "name": "SwitchExpressionsYieldIncompatibleResultExpressionTypes"
+        },
+        {
+          "name": "SwitchExpressionsYieldLastStatementCompletesNormally"
+        },
+        {
+          "name": "SwitchExpressionsYieldMissingDefaultCase"
+        },
+        {
+          "name": "SwitchExpressionsYieldMissingEnumConstantCase"
+        },
+        {
+          "name": "SwitchExpressionsYieldMissingValue"
+        },
+        {
+          "name": "SwitchExpressionsYieldNoResultExpression"
+        },
+        {
+          "name": "SwitchExpressionsYieldOutsideSwitchExpression"
+        },
+        {
+          "name": "SwitchExpressionsYieldRestrictedGeneralWarning"
+        },
+        {
+          "name": "SwitchExpressionsYieldTrailingSwitchLabels"
+        },
+        {
+          "name": "SwitchExpressionsYieldTypeDeclarationError"
+        },
+        {
+          "name": "SwitchExpressionsYieldTypeDeclarationWarning"
+        },
+        {
+          "name": "SwitchExpressionsYieldUnqualifiedMethodError"
+        },
+        {
+          "name": "SwitchExpressionsYieldUnqualifiedMethodWarning"
+        },
+        {
+          "name": "SwitchOnEnumNotBelow15"
+        },
+        {
+          "name": "SwitchOnStringsNotBelow17"
+        },
+        {
+          "name": "SwitchPreviewMixedCase"
+        },
+        {
+          "name": "Syntax"
+        },
+        {
+          "name": "SyntheticAccessorNotEnclosingMethod"
+        },
+        {
+          "name": "TargetTypeNotAFunctionalInterface"
+        },
+        {
+          "name": "Task"
+        },
+        {
+          "name": "ThisInEarlyConstructionContext"
+        },
+        {
+          "name": "ThisInStaticContext"
+        },
+        {
+          "name": "ThisSuperDuringConstructorInvocation"
+        },
+        {
+          "name": "ToleratedMisplacedTypeAnnotations"
+        },
+        {
+          "name": "TooManyArgumentSlots"
+        },
+        {
+          "name": "TooManyArrayDimensions"
+        },
+        {
+          "name": "TooManyBytesForStringConstant"
+        },
+        {
+          "name": "TooManyConstantsInConstantPool"
+        },
+        {
+          "name": "TooManyFields"
+        },
+        {
+          "name": "TooManyLocalVariableSlots"
+        },
+        {
+          "name": "TooManyMethods"
+        },
+        {
+          "name": "TooManyParametersForSyntheticMethod"
+        },
+        {
+          "name": "TooManySyntheticArgumentSlots"
+        },
+        {
+          "name": "TypeAnnotationAtQualifiedName"
+        },
+        {
+          "name": "TypeArgumentMismatch"
+        },
+        {
+          "name": "TypeArgumentsForRawGenericConstructor"
+        },
+        {
+          "name": "TypeArgumentsForRawGenericMethod"
+        },
+        {
+          "name": "TypeCollidesWithPackage"
+        },
+        {
+          "name": "TypeHidingType"
+        },
+        {
+          "name": "TypeHidingTypeParameterFromMethod"
+        },
+        {
+          "name": "TypeHidingTypeParameterFromType"
+        },
+        {
+          "name": "TypeMismatch"
+        },
+        {
+          "name": "TypeMissingDeprecatedAnnotation"
+        },
+        {
+          "name": "TypeParameterHidingType"
+        },
+        {
+          "name": "TypeRelated"
+        },
+        {
+          "name": "UnboxingConversion"
+        },
+        {
+          "name": "UncheckedAccessOfValueOfFreeTypeVariable"
+        },
+        {
+          "name": "Unclassified"
+        },
+        {
+          "name": "UnclosedCloseable"
+        },
+        {
+          "name": "UnclosedCloseableAtExit"
+        },
+        {
+          "name": "UndefinedAnnotationMember"
+        },
+        {
+          "name": "UndefinedConstructor"
+        },
+        {
+          "name": "UndefinedConstructorInDefaultConstructor"
+        },
+        {
+          "name": "UndefinedConstructorInImplicitConstructorCall"
+        },
+        {
+          "name": "UndefinedField"
+        },
+        {
+          "name": "UndefinedLabel"
+        },
+        {
+          "name": "UndefinedMethod"
+        },
+        {
+          "name": "UndefinedModule"
+        },
+        {
+          "name": "UndefinedModuleAddReads"
+        },
+        {
+          "name": "UndefinedName"
+        },
+        {
+          "name": "UndefinedType"
+        },
+        {
+          "name": "UndefinedTypeVariable"
+        },
+        {
+          "name": "UnderscoreCannotBeUsedHere"
+        },
+        {
+          "name": "UnderscoresInLiteralsNotBelow17"
+        },
+        {
+          "name": "UndocumentedEmptyBlock"
+        },
+        {
+          "name": "UnexpectedStaticModifierForField"
+        },
+        {
+          "name": "UnexpectedStaticModifierForMethod"
+        },
+        {
+          "name": "UnexpectedTypeinRecordPattern"
+        },
+        {
+          "name": "UnexpectedTypeinSwitchPattern"
+        },
+        {
+          "name": "UnhandledException"
+        },
+        {
+          "name": "UnhandledExceptionInDefaultConstructor"
+        },
+        {
+          "name": "UnhandledExceptionInImplicitConstructorCall"
+        },
+        {
+          "name": "UnhandledExceptionOnAutoClose"
+        },
+        {
+          "name": "UnhandledWarningToken"
+        },
+        {
+          "name": "UninitializedBlankFinalField"
+        },
+        {
+          "name": "UninitializedBlankFinalFieldHintMissingDefault"
+        },
+        {
+          "name": "UninitializedFreeTypeVariableField"
+        },
+        {
+          "name": "UninitializedFreeTypeVariableFieldHintMissingDefault"
+        },
+        {
+          "name": "UninitializedLocalVariable"
+        },
+        {
+          "name": "UninitializedLocalVariableHintMissingDefault"
+        },
+        {
+          "name": "UninitializedNonNullField"
+        },
+        {
+          "name": "UninitializedNonNullFieldHintMissingDefault"
+        },
+        {
+          "name": "UninternedIdentityComparison"
+        },
+        {
+          "name": "UnlikelyCollectionMethodArgumentType"
+        },
+        {
+          "name": "UnlikelyEqualsArgumentType"
+        },
+        {
+          "name": "UnmatchedBracket"
+        },
+        {
+          "name": "UnnamedPackageInNamedModule"
+        },
+        {
+          "name": "UnnamedVariableMustHaveInitializer"
+        },
+        {
+          "name": "UnnecessaryArgumentCast"
+        },
+        {
+          "name": "UnnecessaryCast"
+        },
+        {
+          "name": "UnnecessaryElse"
+        },
+        {
+          "name": "UnnecessaryInstanceof"
+        },
+        {
+          "name": "UnnecessaryNLSTag"
+        },
+        {
+          "name": "UnnecessaryNullCaseInSwitchOverNonNull"
+        },
+        {
+          "name": "UnqualifiedFieldAccess"
+        },
+        {
+          "name": "UnreachableCatch"
+        },
+        {
+          "name": "UnresolvedVariable"
+        },
+        {
+          "name": "UnsafeCast"
+        },
+        {
+          "name": "UnsafeElementTypeConversion"
+        },
+        {
+          "name": "UnsafeGenericArrayForVarargs"
+        },
+        {
+          "name": "UnsafeGenericCast"
+        },
+        {
+          "name": "UnsafeNullnessCast"
+        },
+        {
+          "name": "UnsafeRawConstructorInvocation"
+        },
+        {
+          "name": "UnsafeRawFieldAssignment"
+        },
+        {
+          "name": "UnsafeRawGenericConstructorInvocation"
+        },
+        {
+          "name": "UnsafeRawGenericMethodInvocation"
+        },
+        {
+          "name": "UnsafeRawMethodInvocation"
+        },
+        {
+          "name": "UnsafeReturnTypeOverride"
+        },
+        {
+          "name": "UnsafeTypeConversion"
+        },
+        {
+          "name": "UnstableAutoModuleName"
+        },
+        {
+          "name": "UnterminatedComment"
+        },
+        {
+          "name": "UnterminatedString"
+        },
+        {
+          "name": "UnterminatedTextBlock"
+        },
+        {
+          "name": "UnusedConstructorDeclaredThrownException"
+        },
+        {
+          "name": "UnusedImport"
+        },
+        {
+          "name": "UnusedLabel"
+        },
+        {
+          "name": "UnusedMethodDeclaredThrownException"
+        },
+        {
+          "name": "UnusedObjectAllocation"
+        },
+        {
+          "name": "UnusedPrivateConstructor"
+        },
+        {
+          "name": "UnusedPrivateField"
+        },
+        {
+          "name": "UnusedPrivateMethod"
+        },
+        {
+          "name": "UnusedPrivateType"
+        },
+        {
+          "name": "UnusedTypeArgumentsForConstructorInvocation"
+        },
+        {
+          "name": "UnusedTypeArgumentsForMethodInvocation"
+        },
+        {
+          "name": "UnusedTypeParameter"
+        },
+        {
+          "name": "UnusedWarningToken"
+        },
+        {
+          "name": "UseAssertAsAnIdentifier"
+        },
+        {
+          "name": "UseEnumAsAnIdentifier"
+        },
+        {
+          "name": "UsingDeprecatedConstructor"
+        },
+        {
+          "name": "UsingDeprecatedField"
+        },
+        {
+          "name": "UsingDeprecatedMethod"
+        },
+        {
+          "name": "UsingDeprecatedModule"
+        },
+        {
+          "name": "UsingDeprecatedPackage"
+        },
+        {
+          "name": "UsingDeprecatedSinceVersionConstructor"
+        },
+        {
+          "name": "UsingDeprecatedSinceVersionField"
+        },
+        {
+          "name": "UsingDeprecatedSinceVersionMethod"
+        },
+        {
+          "name": "UsingDeprecatedSinceVersionModule"
+        },
+        {
+          "name": "UsingDeprecatedSinceVersionPackage"
+        },
+        {
+          "name": "UsingDeprecatedSinceVersionType"
+        },
+        {
+          "name": "UsingDeprecatedType"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedConstructor"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedField"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedMethod"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedModule"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedPackage"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedSinceVersionConstructor"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedSinceVersionField"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedSinceVersionMethod"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedSinceVersionModule"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedSinceVersionPackage"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedSinceVersionType"
+        },
+        {
+          "name": "UsingTerminallyDeprecatedType"
+        },
+        {
+          "name": "VarCannotBeMixedWithNonVarParams"
+        },
+        {
+          "name": "VarCannotBeUsedWithTypeArguments"
+        },
+        {
+          "name": "VarIsNotAllowedHere"
+        },
+        {
+          "name": "VarIsReserved"
+        },
+        {
+          "name": "VarIsReservedInFuture"
+        },
+        {
+          "name": "VarLocalCannotBeArray"
+        },
+        {
+          "name": "VarLocalCannotBeArrayInitalizers"
+        },
+        {
+          "name": "VarLocalCannotBeLambda"
+        },
+        {
+          "name": "VarLocalCannotBeMethodReference"
+        },
+        {
+          "name": "VarLocalInitializedToNull"
+        },
+        {
+          "name": "VarLocalInitializedToVoid"
+        },
+        {
+          "name": "VarLocalMultipleDeclarators"
+        },
+        {
+          "name": "VarLocalReferencesItself"
+        },
+        {
+          "name": "VarLocalWithoutInitizalier"
+        },
+        {
+          "name": "VarargsConflict"
+        },
+        {
+          "name": "VarargsElementTypeNotVisible"
+        },
+        {
+          "name": "VarargsElementTypeNotVisibleForConstructor"
+        },
+        {
+          "name": "VariableTypeCannotBeVoid"
+        },
+        {
+          "name": "VariableTypeCannotBeVoidArray"
+        },
+        {
+          "name": "VoidMethodReturnsValue"
+        },
+        {
+          "name": "WildcardConstructorInvocation"
+        },
+        {
+          "name": "WildcardFieldAssignment"
+        },
+        {
+          "name": "WildcardMethodInvocation"
+        },
+        {
+          "name": "WrongCaseType"
+        },
+        {
+          "name": "illFormedParameterizationOfFunctionalInterface"
+        },
+        {
+          "name": "lambdaParameterTypeMismatched"
+        },
+        {
+          "name": "lambdaSignatureMismatched"
+        },
+        {
+          "name": "switchMixedCase"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jdt.internal.compiler.util.Messages",
+      "fields": [
+        {
+          "name": "abort_againstSourceModel"
+        },
+        {
+          "name": "abort_externaAnnotationFile"
+        },
+        {
+          "name": "abort_invalidAttribute"
+        },
+        {
+          "name": "abort_invalidExceptionAttribute"
+        },
+        {
+          "name": "abort_invalidOpcode"
+        },
+        {
+          "name": "abort_missingCode"
+        },
+        {
+          "name": "accept_cannot"
+        },
+        {
+          "name": "ast_missingCode"
+        },
+        {
+          "name": "compilation_beginningToCompile"
+        },
+        {
+          "name": "compilation_done"
+        },
+        {
+          "name": "compilation_internalError"
+        },
+        {
+          "name": "compilation_loadBinary"
+        },
+        {
+          "name": "compilation_process"
+        },
+        {
+          "name": "compilation_processing"
+        },
+        {
+          "name": "compilation_request"
+        },
+        {
+          "name": "compilation_unit"
+        },
+        {
+          "name": "compilation_units"
+        },
+        {
+          "name": "compilation_unresolvedProblem"
+        },
+        {
+          "name": "compilation_unresolvedProblems"
+        },
+        {
+          "name": "compilation_write"
+        },
+        {
+          "name": "constant_cannotCastedInto"
+        },
+        {
+          "name": "constant_cannotConvertedTo"
+        },
+        {
+          "name": "flexible_constructor_bodies"
+        },
+        {
+          "name": "implicit_classes_and_instance_main_methods"
+        },
+        {
+          "name": "markdown_comments"
+        },
+        {
+          "name": "module_imports"
+        },
+        {
+          "name": "output_isFile"
+        },
+        {
+          "name": "output_notValid"
+        },
+        {
+          "name": "output_notValidAll"
+        },
+        {
+          "name": "parser_corruptedFile"
+        },
+        {
+          "name": "parser_endOfConstructor"
+        },
+        {
+          "name": "parser_endOfFile"
+        },
+        {
+          "name": "parser_endOfInitializer"
+        },
+        {
+          "name": "parser_endOfMethod"
+        },
+        {
+          "name": "parser_incorrectPath"
+        },
+        {
+          "name": "parser_missingFile"
+        },
+        {
+          "name": "parser_moveFiles"
+        },
+        {
+          "name": "parser_regularParse"
+        },
+        {
+          "name": "parser_syntaxRecovery"
+        },
+        {
+          "name": "pattern_matching_instanceof"
+        },
+        {
+          "name": "pattern_matching_switch"
+        },
+        {
+          "name": "primitives_in_patterns"
+        },
+        {
+          "name": "problem_atLine"
+        },
+        {
+          "name": "problem_noSourceInformation"
+        },
+        {
+          "name": "record_patterns"
+        },
+        {
+          "name": "records"
+        },
+        {
+          "name": "sealed_types"
+        },
+        {
+          "name": "switch_expression"
+        },
+        {
+          "name": "text_block"
+        },
+        {
+          "name": "unnamed_patterns_and_vars"
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.KtPsiSourceElement"
+    },
+    {
+      "type": "org.jetbrains.kotlin.backend.jvm.extensions.ClassBuilderExtensionAdapter",
+      "methods": [
+        {
+          "name": "getExtensions",
+          "parameterTypes": [
+            "org.jetbrains.kotlin.config.CompilerConfiguration"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.cli.common.ModuleVisibilityHelperImpl"
+    },
+    {
+      "type": "org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments"
+    },
+    {
+      "type": "org.jetbrains.kotlin.cli.common.arguments.CommonToolArguments"
+    },
+    {
+      "type": "org.jetbrains.kotlin.cli.common.arguments.Freezable"
+    },
+    {
+      "type": "org.jetbrains.kotlin.codegen.serialization.JvmSerializationBindings",
+      "fields": [
+        {
+          "name": "DELEGATE_METHOD_FOR_PROPERTY"
+        },
+        {
+          "name": "FIELD_FOR_PROPERTY"
+        },
+        {
+          "name": "METHOD_FOR_FUNCTION"
+        },
+        {
+          "name": "SYNTHETIC_METHOD_FOR_PROPERTY"
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.CollectAdditionalSourcesExtension"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.CollectAdditionalSourcesExtension[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.PreprocessedVirtualFileFactoryExtension"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.PreprocessedVirtualFileFactoryExtension[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.ProcessSourcesBeforeCompilingExtension"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.ProcessSourcesBeforeCompilingExtension[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.StorageComponentContainerContributor"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.StorageComponentContainerContributor[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.internal.TypeResolutionInterceptorExtension"
+    },
+    {
+      "type": "org.jetbrains.kotlin.extensions.internal.TypeResolutionInterceptorExtension[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.kdoc.psi.impl.KDocName",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.kdoc.psi.impl.KDocSection",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.kdoc.psi.impl.KDocTag"
+    },
+    {
+      "type": "org.jetbrains.kotlin.load.java.ErasedOverridabilityCondition"
+    },
+    {
+      "type": "org.jetbrains.kotlin.load.java.FieldOverridabilityCondition"
+    },
+    {
+      "type": "org.jetbrains.kotlin.load.java.JavaIncompatibilityRulesOverridabilityCondition"
+    },
+    {
+      "type": "org.jetbrains.kotlin.load.java.structure.impl.source.JavaFixedElementSourceFactory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtAnnotation"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtAnnotationEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtAnnotationEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtAnnotationUseSiteTarget"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtAnnotationUseSiteTarget[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtAnnotation[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtBackingField"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtBackingField[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtCallExpression",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtCallExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClass",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClassBody",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClassBody[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClassInitializer"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClassInitializer[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClassLiteralExpression"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClassLiteralExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtClass[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtCollectionLiteralExpression"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtCollectionLiteralExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtCompanionBlock"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtCompanionBlock[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtConstantExpression",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtConstantExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtConstructorCalleeExpression",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtConstructorCalleeExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContextReceiver"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContextReceiverList"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContextReceiverList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContextReceiver[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContractEffect"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContractEffectList"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContractEffectList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtContractEffect[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDeclarationModifierList",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDeclarationModifierList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDestructuringDeclaration"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDestructuringDeclaration[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDotQualifiedExpression",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDotQualifiedExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDynamicType"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtDynamicType[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtEnumEntry"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtEnumEntrySuperclassReferenceExpression"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtEnumEntrySuperclassReferenceExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtEnumEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtFileAnnotationList"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtFileAnnotationList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtFunctionType",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtFunctionTypeReceiver"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtFunctionTypeReceiver[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtFunctionType[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtImportAlias"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtImportAlias[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtImportDirective",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtImportDirective[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtImportList",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtImportList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtInitializerList"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtInitializerList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtIntersectionType"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtIntersectionType[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtLambdaArgument",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtLambdaArgument[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtModifierList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtNameReferenceExpression",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtNameReferenceExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtNamedFunction",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtNamedFunction[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtNullableType",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtNullableType[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtObjectDeclaration",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtObjectDeclaration[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtPackageDirective",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtPackageDirective[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtParameter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtParameterList",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtParameterList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtParameter[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtPrimaryConstructor"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtPrimaryConstructor[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtProperty",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtPropertyAccessor"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtPropertyAccessor[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtProperty[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtScript"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtScriptInitializer"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtScriptInitializer[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtScript[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSecondaryConstructor"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSecondaryConstructor[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtStringInterpolationPrefix"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtStringInterpolationPrefix[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtStringTemplateEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtStringTemplateExpression",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtStringTemplateExpression[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSuperTypeCallEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSuperTypeCallEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSuperTypeEntry"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSuperTypeEntry[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSuperTypeList",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtSuperTypeList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeAlias"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeAlias[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeArgumentList",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeArgumentList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeConstraint"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeConstraintList"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeConstraintList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeConstraint[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeParameter"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeParameterList"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeParameterList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeParameter[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeProjection",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeProjection[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeReference",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtTypeReference[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtUserType",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtUserType[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtValueArgument",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtValueArgumentList",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtValueArgumentList[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtValueArgumentName",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtValueArgumentName[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtValueArgument[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.KtWhenCondition[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.impl.KotlinElementTypeProviderImpl",
+      "fields": [
+        {
+          "name": "INSTANCE"
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.psi.stubs.elements.KtFileElementType"
+    },
+    {
+      "type": "org.jetbrains.kotlin.resolve.BindingContext",
+      "fields": [
+        {
+          "name": "ABBREVIATED_TYPE"
+        },
+        {
+          "name": "AMBIGUOUS_LABEL_TARGET"
+        },
+        {
+          "name": "AMBIGUOUS_REFERENCE_TARGET"
+        },
+        {
+          "name": "ANNOTATION"
+        },
+        {
+          "name": "AUTO_CREATED_IT"
+        },
+        {
+          "name": "BACKING_FIELD_REQUIRED"
+        },
+        {
+          "name": "BLOCK"
+        },
+        {
+          "name": "BOUND_INITIALIZER_VALUE"
+        },
+        {
+          "name": "CALL"
+        },
+        {
+          "name": "CAPTURED_IN_CLOSURE"
+        },
+        {
+          "name": "CAST_TYPE_USED_AS_EXPECTED_TYPE"
+        },
+        {
+          "name": "CLASS"
+        },
+        {
+          "name": "COLLECTION_LITERAL_CALL"
+        },
+        {
+          "name": "COMPILER_CONFIGURATION"
+        },
+        {
+          "name": "COMPILE_TIME_VALUE"
+        },
+        {
+          "name": "COMPONENT_RESOLVED_CALL"
+        },
+        {
+          "name": "CONSTRAINT_SYSTEM_COMPLETER"
+        },
+        {
+          "name": "CONSTRUCTOR"
+        },
+        {
+          "name": "CONSTRUCTOR_RESOLVED_DELEGATION_CALL"
+        },
+        {
+          "name": "CONTRACT_NOT_ALLOWED"
+        },
+        {
+          "name": "DATAFLOW_INFO_AFTER_CONDITION"
+        },
+        {
+          "name": "DATA_CLASS_COMPONENT_FUNCTION"
+        },
+        {
+          "name": "DATA_CLASS_COPY_FUNCTION"
+        },
+        {
+          "name": "DATA_FLOW_INFO_BEFORE"
+        },
+        {
+          "name": "DECLARATIONS_TO_DESCRIPTORS"
+        },
+        {
+          "name": "DECLARATION_TO_DESCRIPTOR"
+        },
+        {
+          "name": "DEFERRED_TYPE"
+        },
+        {
+          "name": "DELEGATED_PROPERTY_CALL"
+        },
+        {
+          "name": "DELEGATED_PROPERTY_RESOLVED_CALL"
+        },
+        {
+          "name": "DELEGATE_EXPRESSION_TO_PROVIDE_DELEGATE_CALL"
+        },
+        {
+          "name": "DEPRECATED_SHORT_NAME_ACCESS"
+        },
+        {
+          "name": "DESCRIPTOR_TO_CONTEXT_RECEIVER_MAP"
+        },
+        {
+          "name": "DOUBLE_COLON_LHS"
+        },
+        {
+          "name": "EMPTY"
+        },
+        {
+          "name": "EXHAUSTIVE_WHEN"
+        },
+        {
+          "name": "EXPECTED_EXPRESSION_TYPE"
+        },
+        {
+          "name": "EXPECTED_RETURN_TYPE"
+        },
+        {
+          "name": "EXPRESSION_EFFECTS"
+        },
+        {
+          "name": "EXPRESSION_TYPE_INFO"
+        },
+        {
+          "name": "FQNAME_TO_CLASS_DESCRIPTOR"
+        },
+        {
+          "name": "FUNCTION"
+        },
+        {
+          "name": "IMPLICIT_EXHAUSTIVE_WHEN"
+        },
+        {
+          "name": "IMPLICIT_RECEIVER_SMARTCAST"
+        },
+        {
+          "name": "INDEXED_LVALUE_GET"
+        },
+        {
+          "name": "INDEXED_LVALUE_SET"
+        },
+        {
+          "name": "IS_CONTRACT_DECLARATION_BLOCK"
+        },
+        {
+          "name": "IS_DEFINITELY_NOT_ASSIGNED_IN_CONSTRUCTOR"
+        },
+        {
+          "name": "IS_UNINITIALIZED"
+        },
+        {
+          "name": "LABEL_TARGET"
+        },
+        {
+          "name": "LAMBDA_INVOCATIONS"
+        },
+        {
+          "name": "LEAKING_THIS"
+        },
+        {
+          "name": "LEXICAL_SCOPE"
+        },
+        {
+          "name": "LOOP_RANGE_HAS_NEXT_RESOLVED_CALL"
+        },
+        {
+          "name": "LOOP_RANGE_ITERATOR_RESOLVED_CALL"
+        },
+        {
+          "name": "LOOP_RANGE_NEXT_RESOLVED_CALL"
+        },
+        {
+          "name": "MARKED_EQUALIY_CALL_PROPER_IN_BUILDER_INFERENCE"
+        },
+        {
+          "name": "MUST_BE_LATEINIT"
+        },
+        {
+          "name": "NEW_INFERENCE_CATCH_EXCEPTION_PARAMETER"
+        },
+        {
+          "name": "NEW_INFERENCE_IS_LAMBDA_FOR_OVERLOAD_RESOLUTION_INLINE"
+        },
+        {
+          "name": "NEW_INFERENCE_LAMBDA_INFO"
+        },
+        {
+          "name": "ONLY_RESOLVED_CALL"
+        },
+        {
+          "name": "PACKAGE_TO_FILES"
+        },
+        {
+          "name": "PARTIAL_CALL_RESOLUTION_CONTEXT"
+        },
+        {
+          "name": "PRELIMINARY_VISITOR"
+        },
+        {
+          "name": "PRIMARY_CONSTRUCTOR_PARAMETER"
+        },
+        {
+          "name": "PRIMITIVE_NUMERIC_COMPARISON_INFO"
+        },
+        {
+          "name": "PROCESSED"
+        },
+        {
+          "name": "PROPERTY_ACCESSOR"
+        },
+        {
+          "name": "PROVIDE_DELEGATE_CALL"
+        },
+        {
+          "name": "PROVIDE_DELEGATE_RESOLVED_CALL"
+        },
+        {
+          "name": "QUALIFIER"
+        },
+        {
+          "name": "REFERENCE_TARGET"
+        },
+        {
+          "name": "RESOLVED_CALL"
+        },
+        {
+          "name": "SCRIPT"
+        },
+        {
+          "name": "SCRIPT_SCOPE"
+        },
+        {
+          "name": "SHORT_REFERENCE_TO_COMPANION_OBJECT"
+        },
+        {
+          "name": "SMARTCAST"
+        },
+        {
+          "name": "SMARTCAST_NULL"
+        },
+        {
+          "name": "SUPER_EXPRESSION_FROM_ANY_MIGRATION"
+        },
+        {
+          "name": "THIS_REFERENCE_TARGET"
+        },
+        {
+          "name": "THIS_TYPE_FOR_SUPER_EXPRESSION"
+        },
+        {
+          "name": "TYPE"
+        },
+        {
+          "name": "TYPE_ALIAS"
+        },
+        {
+          "name": "TYPE_PARAMETER"
+        },
+        {
+          "name": "UNSTABLE_SMARTCAST"
+        },
+        {
+          "name": "UNUSED_MAIN_PARAMETER"
+        },
+        {
+          "name": "USED_AS_EXPRESSION"
+        },
+        {
+          "name": "USED_AS_RESULT_OF_LAMBDA"
+        },
+        {
+          "name": "VALUE_PARAMETER"
+        },
+        {
+          "name": "VALUE_PARAMETER_AS_PROPERTY"
+        },
+        {
+          "name": "VARIABLE"
+        },
+        {
+          "name": "VARIABLE_REASSIGNMENT"
+        },
+        {
+          "name": "_static_initializer"
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlin.resolve.diagnostics.DiagnosticSuppressor"
+    },
+    {
+      "type": "org.jetbrains.kotlin.resolve.diagnostics.DiagnosticSuppressor[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.resolve.extensions.SyntheticResolveExtension"
+    },
+    {
+      "type": "org.jetbrains.kotlin.resolve.extensions.SyntheticResolveExtension[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.scripting.compiler.plugin.ScriptingCompilerConfigurationComponentRegistrar"
+    },
+    {
+      "type": "org.jetbrains.kotlin.serialization.DescriptorSerializerPlugin"
+    },
+    {
+      "type": "org.jetbrains.kotlin.serialization.DescriptorSerializerPlugin[]"
+    },
+    {
+      "type": "org.jetbrains.kotlin.serialization.deserialization.builtins.BuiltInsLoaderImpl"
+    },
+    {
+      "type": "org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationComponentRegistrar",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationPluginOptions",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.awt.AWTAutoShutdown",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "notifyToolkitThreadBusy",
+          "parameterTypes": []
+        },
+        {
+          "name": "notifyToolkitThreadFree",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.lwawt.macosx.LWCToolkit",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "installToolkitThreadInJava",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.management.VMManagementImpl",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "compTimeMonitoringSupport"
+        },
+        {
+          "name": "currentThreadCpuTimeSupport"
+        },
+        {
+          "name": "objectMonitorUsageSupport"
+        },
+        {
+          "name": "otherThreadCpuTimeSupport"
+        },
+        {
+          "name": "remoteDiagnosticCommandsSupport"
+        },
+        {
+          "name": "synchronizerUsageSupport"
+        },
+        {
+          "name": "threadAllocatedMemorySupport"
+        },
+        {
+          "name": "threadContentionMonitoringSupport"
+        }
+      ]
+    },
+    {
+      "type": "sun.misc.Unsafe",
+      "fields": [
+        {
+          "name": "theUnsafe"
+        }
+      ],
+      "methods": [
+        {
+          "name": "arrayBaseOffset",
+          "parameterTypes": [
+            "java.lang.Class"
+          ]
+        },
+        {
+          "name": "arrayIndexScale",
+          "parameterTypes": [
+            "java.lang.Class"
+          ]
+        },
+        {
+          "name": "compareAndSwapInt",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "compareAndSwapLong",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "long",
+            "long"
+          ]
+        },
+        {
+          "name": "compareAndSwapObject",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "java.lang.Object",
+            "java.lang.Object"
+          ]
+        },
+        {
+          "name": "copyMemory",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "java.lang.Object",
+            "long",
+            "long"
+          ]
+        },
+        {
+          "name": "getAndAddInt",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "int"
+          ]
+        },
+        {
+          "name": "getObjectVolatile",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long"
+          ]
+        },
+        {
+          "name": "invokeCleaner",
+          "parameterTypes": [
+            "java.nio.ByteBuffer"
+          ]
+        },
+        {
+          "name": "objectFieldOffset",
+          "parameterTypes": [
+            "java.lang.reflect.Field"
+          ]
+        },
+        {
+          "name": "putObjectVolatile",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.net.www.protocol.http.Handler",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.net.www.protocol.jar.Handler",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.nio.fs.MacOSXFileSystem"
+    },
+    {
+      "type": "sun.security.pkcs12.PKCS12KeyStore",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.pkcs12.PKCS12KeyStore$DualFormatPKCS12",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.MD5",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.NativePRNG",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.security.SecureRandomParameters"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA2$SHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA5$SHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.X509Factory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSAKeyFactory$Legacy",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA256withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA384withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.SSLContextImpl$TLSContext",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.TrustManagerFactoryImpl$PKIXFactory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.AuthorityInfoAccessExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.AuthorityKeyIdentifierExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.BasicConstraintsExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.CRLDistributionPointsExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.CertificatePoliciesExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.ExtendedKeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.KeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.NetscapeCertTypeExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.PrivateKeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.SubjectKeyIdentifierExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.text.resources.cldr.FormatData"
+    },
+    {
+      "type": "sun.text.resources.cldr.FormatData_en"
+    },
+    {
+      "type": {
+        "proxy": [
+          "com.intellij.openapi.command.CommandListener"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "com.intellij.openapi.vfs.VirtualFileListener"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "com.intellij.psi.util.PsiModificationTracker$Listener"
+        ]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/allow-configuring-from-environment"
+    },
+    {
+      "glob": "META-INF/compiler.version"
+    },
+    {
+      "glob": "META-INF/services/com.intellij.platform.diagnostic.telemetry.TelemetryManager"
+    },
+    {
+      "glob": "META-INF/services/java.net.spi.URLStreamHandlerProvider"
+    },
+    {
+      "glob": "META-INF/services/java.nio.file.spi.FileSystemProvider"
+    },
+    {
+      "glob": "META-INF/services/java.time.zone.ZoneRulesProvider"
+    },
+    {
+      "glob": "META-INF/services/java.util.spi.ResourceBundleControlProvider"
+    },
+    {
+      "glob": "META-INF/services/javax.xml.parsers.DocumentBuilderFactory"
+    },
+    {
+      "glob": "META-INF/services/javax.xml.parsers.SAXParserFactory"
+    },
+    {
+      "glob": "META-INF/services/kotlin.metadata.internal.extensions.MetadataExtensions"
+    },
+    {
+      "glob": "META-INF/services/kotlin.reflect.jvm.internal.impl.resolve.ExternalOverridabilityCondition"
+    },
+    {
+      "glob": "META-INF/services/kotlin.reflect.jvm.internal.impl.util.ModuleVisibilityHelper"
+    },
+    {
+      "glob": "META-INF/services/org.jetbrains.kotlin.builtins.BuiltInsLoader"
+    },
+    {
+      "glob": "META-INF/services/org.jetbrains.kotlin.resolve.ExternalOverridabilityCondition"
+    },
+    {
+      "glob": "META-INF/services/org.jetbrains.kotlin.util.ModuleVisibilityHelper"
+    },
+    {
+      "glob": "META-INF/services/org.slf4j.spi.SLF4JServiceProvider"
+    },
+    {
+      "glob": "android-api-levels.bin"
+    },
+    {
+      "glob": "android-docs.bin"
+    },
+    {
+      "glob": "android-permissions.txt"
+    },
+    {
+      "glob": "kotlin/annotation/annotation.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/collections/collections.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/concurrent/atomics/atomics.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/coroutines/coroutines.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/internal/internal.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/kotlin.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/ranges/ranges.kotlin_builtins"
+    },
+    {
+      "glob": "kotlin/reflect/reflect.kotlin_builtins"
+    },
+    {
+      "glob": "ksp-thin.jar"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/batch/messages.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/batch/messages_en.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/batch/messages_en_PH.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/messages.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/messages_en.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/messages_en_PH.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser1.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser10.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser11.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser12.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser13.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser14.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser15.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser16.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser17.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser18.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser19.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser2.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser20.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser21.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser22.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser23.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser24.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser3.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser4.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser5.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser6.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser7.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser8.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/parser9.rsc"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/parser/readableNames.props"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/problem/messages.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/problem/messages_en.properties"
+    },
+    {
+      "glob": "org/eclipse/jdt/internal/compiler/problem/messages_en_PH.properties"
+    },
+    {
+      "glob": "org/jetbrains/kotlin/utils/PathUtil.class"
+    },
+    {
+      "glob": "org/slf4j/impl/StaticLoggerBinder.class"
+    },
+    {
+      "glob": "r8-version.properties"
+    },
+    {
+      "glob": "swing/swing-api-stubs.jar"
+    },
+    {
+      "module": "java.base",
+      "glob": "jdk/internal/icu/impl/data/icudt76b/nfc.nrm"
+    },
+    {
+      "module": "java.base",
+      "glob": "jdk/internal/icu/impl/data/icudt76b/nfkc.nrm"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "sun/awt/resources/awt_en.properties"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "sun/awt/resources/awt_en_PH.properties"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "sun/awt/resources/awtosx_en.properties"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "sun/awt/resources/awtosx_en_PH.properties"
+    },
+    {
+      "bundle": "org.eclipse.jdt.internal.compiler.batch.messages"
+    },
+    {
+      "bundle": "org.eclipse.jdt.internal.compiler.problem.messages"
+    },
+    {
+      "bundle": "sun.awt.resources.awt"
+    },
+    {
+      "bundle": "sun.awt.resources.awtosx"
+    }
+  ]
+}

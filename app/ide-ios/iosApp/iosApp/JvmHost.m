@@ -111,9 +111,13 @@ static void *aotIsolate;
 static int (*aotAttach)(void *, void **);
 static int (*aotDetach)(void *);
 static AotEntry aotD8, aotKotlinc;
+// The engine itself, in the same image (see EmbeddedEngineHost): a project opened, one request answered.
+static void (*aotEngineProperty)(void *, const char *, const char *);
+static void (*aotEngineAapt2)(void *, int (*)(int, char **, const char *));
+static int (*aotEngineOpen)(void *, const char *, char *, int);
+static char *(*aotEngineCall)(void *, const char *, int, int *);
 
-/// Starts the tools' runtime. After the VM, which then has first call on the app's address space: without
-/// the tools the build still runs, each of them in the VM as before.
+/// Starts the image's runtime, once. Without it everything still runs, in the VM as before.
 static BOOL loadAotTools(void) {
     if (aotIsolate) return YES;
     NSString *path = [[NSBundle mainBundle].privateFrameworksPath stringByAppendingPathComponent:@"libaottools.dylib"];
@@ -136,8 +140,69 @@ static BOOL loadAotTools(void) {
     aotDetach(thread);
     aotD8 = dlsym(library, "aot_d8");
     aotKotlinc = dlsym(library, "aot_kotlinc");
+    aotEngineProperty = dlsym(library, "aot_engine_property");
+    aotEngineAapt2 = dlsym(library, "aot_engine_aapt2");
+    aotEngineOpen = dlsym(library, "aot_engine_open");
+    aotEngineCall = dlsym(library, "aot_engine_call");
     aotIsolate = isolate;
     return YES;
+}
+
+/// What the backends print (a stack trace, a fatal error) has no console on a phone. It goes to a file in
+/// Documents, started afresh with each launch, where the Files app and a debugger can both read it.
+static void redirectLog(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+        NSString *log = [documents stringByAppendingPathComponent:@"embedded-backend.log"];
+        freopen(log.fileSystemRepresentation, "w", stderr);
+        dup2(fileno(stderr), fileno(stdout));
+        setvbuf(stderr, NULL, _IONBF, 0);
+        setvbuf(stdout, NULL, _IOLBF, 0);
+    });
+}
+
+static BOOL loadAapt2(void);
+static int aapt2RunTo(int argc, char **argv, const char *output);
+
+/// The engine compiled ahead of time, ready to open a project: started, told where it may write and where
+/// the Android toolchain is, and given the app's aapt2. NO when this build has none, or it would not start.
+static BOOL startAotEngine(void) {
+    static BOOL started;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        redirectLog();
+        if (!loadAotTools() || !aotEngineProperty || !aotEngineOpen || !aotEngineCall) return;
+        void *thread = NULL;
+        if (aotAttach(aotIsolate, &thread) != 0) return;
+        NSString *app = [NSBundle mainBundle].bundlePath;
+        NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+        aotEngineProperty(thread, "java.io.tmpdir", [NSTemporaryDirectory() stringByStandardizingPath].fileSystemRepresentation);
+        aotEngineProperty(thread, "user.home", documents.fileSystemRepresentation);
+        aotEngineProperty(thread, "user.dir", documents.fileSystemRepresentation);
+        // The class library the engine reads the Java platform's own types from: the one the VM runs on.
+        aotEngineProperty(thread, "java.home", [app stringByAppendingPathComponent:@"lib"].fileSystemRepresentation);
+        NSString *toolchain = [app stringByAppendingPathComponent:@"android-toolchain"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:[toolchain stringByAppendingPathComponent:@"android.jar"]]) {
+            aotEngineProperty(thread, "codeassist.android.toolchain", toolchain.fileSystemRepresentation);
+        }
+        if (aotEngineAapt2 && loadAapt2()) aotEngineAapt2(thread, aapt2RunTo);
+        aotDetach(thread);
+        started = YES;
+        fprintf(stderr, "the engine compiled ahead of time is in this process\n");
+    });
+    return started;
+}
+
+/// One request answered by the engine compiled ahead of time, on the calling thread.
+static NSData *callAotEngine(NSData *request) {
+    void *thread = NULL;
+    if (aotAttach(aotIsolate, &thread) != 0) return [NSData data];
+    int length = 0;
+    char *reply = aotEngineCall(thread, request.bytes, (int)request.length, &length);
+    aotDetach(thread);
+    if (!reply) return [NSData data];
+    return [NSData dataWithBytesNoCopy:reply length:(NSUInteger)length freeWhenDone:YES];
 }
 
 /// A tool on the calling thread, which may be any of the build's.
@@ -159,6 +224,22 @@ static jint JNICALL d8Run(JNIEnv *env, jclass cls, jstring argFile, jstring log)
 /// `NativeKotlinc.run(String requestFile, String resultFile)`.
 static jint JNICALL kotlincRun(JNIEnv *env, jclass cls, jstring request, jstring result) { return runAotTool(aotKotlinc, env, request, result); }
 
+/// aapt2's main with `argv` (program name first), what it prints sent to the file at `output`.
+static int aapt2RunTo(int argc, char **argv, const char *output) {
+    if (!aapt2Main) return -1;
+    int file = open(output, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    // One process, one stdout: it is the file for as long as the tool runs, then what it was again.
+    fflush(stdout); fflush(stderr);
+    int savedOut = dup(STDOUT_FILENO), savedErr = dup(STDERR_FILENO);
+    if (file >= 0) { dup2(file, STDOUT_FILENO); dup2(file, STDERR_FILENO); }
+    int code = aapt2Main(argc, argv);
+    fflush(stdout); fflush(stderr);
+    dup2(savedOut, STDOUT_FILENO); dup2(savedErr, STDERR_FILENO);
+    close(savedOut); close(savedErr);
+    if (file >= 0) close(file);
+    return code;
+}
+
 /// `NativeAapt2.run(String[] args, String output)`: aapt2's main, with what it prints sent to `output`.
 static jint JNICALL aapt2Run(JNIEnv *env, jclass cls, jobjectArray args, jstring output) {
     if (!aapt2Main) return -1;
@@ -173,17 +254,8 @@ static jint JNICALL aapt2Run(JNIEnv *env, jclass cls, jobjectArray args, jstring
         (*env)->DeleteLocalRef(env, arg);
     }
     const char *path = (*env)->GetStringUTFChars(env, output, NULL);
-    int file = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    int code = aapt2RunTo((int)count + 1, argv, path);
     (*env)->ReleaseStringUTFChars(env, output, path);
-    // One process, one stdout: it is the file for as long as the tool runs, then what it was again.
-    fflush(stdout); fflush(stderr);
-    int savedOut = dup(STDOUT_FILENO), savedErr = dup(STDERR_FILENO);
-    if (file >= 0) { dup2(file, STDOUT_FILENO); dup2(file, STDERR_FILENO); }
-    int code = aapt2Main((int)count + 1, argv);
-    fflush(stdout); fflush(stderr);
-    dup2(savedOut, STDOUT_FILENO); dup2(savedErr, STDERR_FILENO);
-    close(savedOut); close(savedErr);
-    if (file >= 0) close(file);
     for (jsize i = 0; i <= count; i++) free(argv[i]);
     free(argv);
     return code;
@@ -269,6 +341,10 @@ _Static_assert(sizeof(DigestContext) <= 256, "NativeDigests.STATE_BYTES is too s
     // wait behind a layout being rendered or a build being asked how it is doing.
     NSCondition *_editorPending;
     NSMutableArray<dispatch_block_t> *_editorJobs;
+    // The project the engine compiled ahead of time has open, when it is the one answering; and the one the
+    // VM's own engine has open, which it only opens for a layout.
+    NSString *_engineRoot;
+    NSString *_vmRoot;
     JavaVM *_vm;
     JNIEnv *_env;
     jclass _host;
@@ -404,18 +480,15 @@ static void *runEditorJobs(void *context) {
         @"--enable-native-access=ALL-UNNAMED",
         @"-XX:+UseSerialGC",
         @"-Xshare:off",
-        @"-Xmx2g",
+        // With the engine compiled ahead of time, this VM only renders layouts.
+        _engineRoot ? @"-Xmx1g" : @"-Xmx2g",
         // An app's address space is a few gigabytes, and the default class space alone reserves one of them:
         // with the heap and the tools compiled ahead of time (each reserving its own) the VM could not start.
         @"-XX:CompressedClassSpaceSize=256m",
     ];
     // What the VM and the backend print (a stack trace, a fatal error) has no console on a phone. It goes to a
     // file in Documents, started afresh with each VM, where the Files app and a debugger can both read it.
-    NSString *log = [documents stringByAppendingPathComponent:@"embedded-backend.log"];
-    freopen(log.fileSystemRepresentation, "w", stderr);
-    dup2(fileno(stderr), fileno(stdout));
-    setvbuf(stderr, NULL, _IONBF, 0);
-    setvbuf(stdout, NULL, _IOLBF, 0);
+    redirectLog();
     // The engine's parsers post to Swing's event thread as they start, and there is no AWT toolkit here to
     // run one: the build's java.desktop patch replaces that one class (see :ide-embedded).
     NSString *desktopPatch = [app stringByAppendingPathComponent:@"jvm-patch/java.desktop.jar"];
@@ -505,37 +578,83 @@ static void *runEditorJobs(void *context) {
     return message;
 }
 
+/// Java thread only. Opens `projectRoot` in the VM's own engine, starting the VM first; empty, or why not.
+- (NSString *)openInVm:(NSString *)projectRoot {
+    if (![self startIfNeeded]) return _startFailure;
+    if ([_vmRoot isEqualToString:projectRoot]) return @"";
+    NSString *answer = @"";
+    JNIEnv *env = _env;
+    (*env)->PushLocalFrame(env, 16);
+    NSString *home = [[NSBundle mainBundle].bundlePath stringByAppendingPathComponent:@"layoutlib"];
+    NSString *caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+    jstring result = (jstring)(*env)->CallStaticObjectMethod(env, _host, _open,
+        (*env)->NewStringUTF(env, projectRoot.UTF8String),
+        (*env)->NewStringUTF(env, home.UTF8String),
+        (*env)->NewStringUTF(env, [caches stringByAppendingPathComponent:@"layout-preview"].UTF8String));
+    NSString *thrown = [self takeException];
+    fprintf(stderr, "open %s -> %s\n", projectRoot.UTF8String, thrown ? thrown.UTF8String : "returned");
+    if (thrown) {
+        answer = thrown;
+    } else if (result) {
+        const char *utf = (*env)->GetStringUTFChars(env, result, NULL);
+        answer = [NSString stringWithUTF8String:utf] ?: @"";
+        (*env)->ReleaseStringUTFChars(env, result, utf);
+    }
+    (*env)->PopLocalFrame(env, NULL);
+    if (answer.length) fprintf(stderr, "open failed: %s\n", answer.UTF8String);
+    else _vmRoot = projectRoot;
+    return answer;
+}
+
 - (NSString *)openProjectProjectRoot:(NSString *)projectRoot {
     __block NSString *answer = @"";
     [self onJavaThread:^{
-        if (![self startIfNeeded]) { answer = self->_startFailure; return; }
-        JNIEnv *env = self->_env;
-        (*env)->PushLocalFrame(env, 16);
-        NSString *home = [[NSBundle mainBundle].bundlePath stringByAppendingPathComponent:@"layoutlib"];
-        NSString *caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
-        jstring result = (jstring)(*env)->CallStaticObjectMethod(env, self->_host, self->_open,
-            (*env)->NewStringUTF(env, projectRoot.UTF8String),
-            (*env)->NewStringUTF(env, home.UTF8String),
-            (*env)->NewStringUTF(env, [caches stringByAppendingPathComponent:@"layout-preview"].UTF8String));
-        NSString *thrown = [self takeException];
-        fprintf(stderr, "open %s -> %s\n", projectRoot.UTF8String, thrown ? thrown.UTF8String : "returned");
-        if (thrown) {
-            answer = thrown;
-        } else if (result) {
-            const char *utf = (*env)->GetStringUTFChars(env, result, NULL);
-            answer = [NSString stringWithUTF8String:utf] ?: @"";
-            (*env)->ReleaseStringUTFChars(env, result, utf);
+        // The engine compiled ahead of time opens the project when the build has one. The VM is then not
+        // started here at all: it comes up when a layout is first asked for.
+        if (startAotEngine()) {
+            void *thread = NULL;
+            char why[512] = { 0 };
+            CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
+            if (aotAttach(aotIsolate, &thread) == 0) {
+                int failed = aotEngineOpen(thread, projectRoot.fileSystemRepresentation, why, (int)sizeof(why));
+                aotDetach(thread);
+                fprintf(stderr, "engine open %s -> %s in %.0f ms\n", projectRoot.UTF8String, failed ? why : "opened", (CFAbsoluteTimeGetCurrent() - started) * 1000);
+                if (!failed) { self->_engineRoot = projectRoot; return; }
+            }
         }
-        (*env)->PopLocalFrame(env, NULL);
-        if (answer.length) fprintf(stderr, "open failed: %s\n", answer.UTF8String);
+        self->_engineRoot = nil;
+        answer = [self openInVm:projectRoot];
     }];
     return answer;
 }
 
+- (BOOL)compiledEngine {
+    return _engineRoot != nil;
+}
+
 - (NSData *)callRequest:(NSData *)request {
-    if (request.length >= 4 && memcmp(request.bytes, "EDT1", 4) == 0) return [self callEditorRequest:request];
+    BOOL editor = request.length >= 4 && memcmp(request.bytes, "EDT1", 4) == 0;
+    BOOL engine = editor || (request.length >= 4 && (memcmp(request.bytes, "BLD1", 4) == 0 || memcmp(request.bytes, "FTRE", 4) == 0));
+    NSString *engineRoot = _engineRoot;
+    if (engine && engineRoot) {
+        // The build's state and the tree are quick to answer and are asked from the caller's thread. The
+        // editor's calls run deep, and get the editor thread's stack.
+        if (!editor) return callAotEngine(request);
+        __block NSData *answer = [NSData data];
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        [_editorPending lock];
+        [_editorJobs addObject:^{ answer = callAotEngine(request); dispatch_semaphore_signal(done); }];
+        [_editorPending signal];
+        [_editorPending unlock];
+        dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+        return answer;
+    }
+    if (editor) return [self callEditorRequest:request];
     __block NSData *answer = [NSData data];
     [self onJavaThread:^{
+        // A layout, with the engine compiled ahead of time answering the rest: the VM's engine opens the
+        // project now, the first time one is asked for.
+        if (engineRoot && [self openInVm:engineRoot].length) return;
         // With no VM there is no dispatcher to say why; the caller has already been told by openProject.
         if (![self startIfNeeded]) return;
         answer = [self call:request env:self->_env];

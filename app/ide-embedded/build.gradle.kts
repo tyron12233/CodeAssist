@@ -111,3 +111,14 @@ val assembleKotlincAot by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("aot/kotlinc/jars"))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// The engine itself for the same image: this module and everything the embedded JVM carries except layoutlib,
+// which needs classes loaded at run time and so stays in the JVM (see EmbeddedEngineHost).
+/** `build/aot/engine/jars`: the class path of the engine's image, the tools above included. */
+val assembleEngineAot by tasks.registering(Sync::class) {
+    from(tasks.named("jar"))
+    from(iosPayload) { exclude { it.name.startsWith("realview-layoutlib-") || (it.name.startsWith("layoutlib-") && !it.name.startsWith("layoutlib-api-")) } }
+    from(kotlincAot)
+    into(layout.buildDirectory.dir("aot/engine/jars"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
