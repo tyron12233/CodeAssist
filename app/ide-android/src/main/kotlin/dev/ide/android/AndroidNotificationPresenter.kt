@@ -25,12 +25,21 @@ internal class AndroidNotificationPresenter(private val context: Context) : Noti
 
     override fun present(notification: UiNotification) {
         if (!notification.kind.deservesTray()) return
+        post(notification)
+    }
+
+    /**
+     * Raise the tray entry whatever the notification's kind, for a caller that has already decided it is worth
+     * one (a reminder to come back is the app's own message, and the tray is the only place it can be seen).
+     * True when the system took it.
+     */
+    fun post(notification: UiNotification): Boolean {
         // Denied or switched off in system settings: the in-app list still has it, so there is nothing to
         // recover from and nothing to tell the user.
-        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
 
-        runCatching {
-            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        return runCatching {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return false
             if (manager.getNotificationChannel(CHANNEL_ID) == null) {
                 manager.createNotificationChannel(
                     NotificationChannel(CHANNEL_ID, "Updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -65,7 +74,8 @@ internal class AndroidNotificationPresenter(private val context: Context) : Noti
             // Keyed notifications replace their tray entry too, for the same reason they replace in the
             // list: it is one fact, not a stream of them.
             manager.notify(tag, TRAY_ID, built)
-        }
+            true
+        }.getOrDefault(false)
     }
 
     private fun UiNotificationKind.deservesTray(): Boolean = when (this) {
@@ -77,8 +87,8 @@ internal class AndroidNotificationPresenter(private val context: Context) : Noti
         UiNotificationKind.STORE_UPDATE, UiNotificationKind.LEARN, UiNotificationKind.SYSTEM -> false
     }
 
-    private companion object {
-        const val CHANNEL_ID = "codeassist.updates"
+    internal companion object {
+        private const val CHANNEL_ID = "codeassist.updates"
 
         /** One id per tag; the tag is what distinguishes entries, so this is a constant. */
         const val TRAY_ID = 4201

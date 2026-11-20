@@ -123,6 +123,8 @@ class IdeServicesBackend(
         manager?.applicationContainer?.getServiceOrNull(ANALYTICS_SERVICE) ?: dev.ide.analytics.NoopAnalyticsService
 
     override val separateProcessBuildsSupported: Boolean get() = buildRunnerFactory != null
+    override val returnRemindersSupported: Boolean
+        get() = manager?.applicationContainer?.getServiceOrNull(RETURN_NUDGE_HOST) != null
 
     /** Per-engine build-runner cache: the chosen runner (remote daemon OR in-process) is decided once per
      *  engine and memoized, so [engineFlow]'s selector and the imperative methods always agree on the same
@@ -623,6 +625,15 @@ class IdeServicesBackend(
                 dev.ide.platform.BuildActivity.set(false)
             }
         }
+        // Which project is open, for a reminder about one that was left unbuilt. Epoch 0 is no project.
+        analyticsScope.launch {
+            projectEpoch.collect { epoch ->
+                if (epoch > 0) runCatching {
+                    manager?.applicationContainer?.getServiceOrNull(RETURN_NUDGE_HOST)
+                        ?.projectOpened(project.rootPath, project.name)
+                }
+            }
+        }
         // Emit build_result (the performance signal) when a build/run reaches a terminal status, watched off the
         // live buildState so it captures every trigger (Run button, task picker, android run). `build` is this
         // backend's BuildBackend, which follows the ACTIVE runner and re-points on a project swap: an engine's own
@@ -633,6 +644,15 @@ class IdeServicesBackend(
             build.buildState.collect { bs ->
                 val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
                 if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
+                    // A reminder to come back is decided from how the last build ended. A build the user stopped
+                    // ends as Failed too, and is not a failure to remind anyone of.
+                    if (!bs.stopped) runCatching {
+                        manager?.applicationContainer?.getServiceOrNull(RETURN_NUDGE_HOST)?.buildFinished(
+                            projectRoot = project.rootPath,
+                            projectName = project.name,
+                            succeeded = bs.status == dev.ide.ui.backend.RunStatus.Succeeded,
+                        )
+                    }
                     // Attach this build's heap peak (Phase-0 build-isolation instrumentation) when it ran in this
                     // process: the in-process service measured it. A daemon build's peak is the daemon's, and the
                     // in-process value would be an earlier build's.

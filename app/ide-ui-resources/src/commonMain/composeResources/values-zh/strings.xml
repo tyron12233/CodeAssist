@@ -2837,4 +2837,14 @@
     <string name="learn_v_ide_todo">还没完成。尚需完成：%1$s。</string>
     <string name="learn_v_list_sep">、</string>
     <string name="learn_v_rule_sep">；</string>
+    <string name="nudge_failed_title">%1$s 等待修复</string>
+    <string name="nudge_failed_body">上次构建失败。打开项目查看原因。</string>
+    <string name="nudge_never_title">构建你的第一个应用</string>
+    <string name="nudge_never_body">选择一个模板并点击运行，大约需要一分钟。</string>
+    <string name="nudge_unbuilt_title">继续完成 %1$s</string>
+    <string name="nudge_unbuilt_body">它还没有构建过。打开它并点击运行。</string>
+    <string name="nudge_first_title">继续开发 %1$s</string>
+    <string name="nudge_first_body">你的第一次构建成功了。打开项目，添加下一个功能。</string>
+    <string name="set_privacy_reminders">提醒</string>
+    <string name="set_privacy_reminders_desc">偶尔提醒你尚未完成的项目，每周最多一次。</string>
 </resources>

@@ -292,7 +292,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     override fun settingsPages(): List<UiSettingsPage> {
         val svc = ctx.servicesOrNull
-        val builtIn = BuiltInSettingsPages.all(ctx.analyticsAvailable())
+        val builtIn = BuiltInSettingsPages.all(ctx.analyticsAvailable(), ctx.returnRemindersSupported)
         // With no project open (the picker's Settings & Tools hub) only the app-scoped built-in pages are
         // available — the project-scoped built-ins (e.g. Build) and any plugin-contributed pages need an
         // engine, so they're added only once a project is open. (The hub shows the app pages; the in-project
@@ -406,11 +406,11 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
     private fun settingKey(pageId: String, key: String) = settingsKey(pageId, key)
 
     private fun findPage(pageId: String): SettingsPage? =
-        BuiltInSettingsPages.all(ctx.analyticsAvailable()).firstOrNull { it.id == pageId }
+        BuiltInSettingsPages.all(ctx.analyticsAvailable(), ctx.returnRemindersSupported).firstOrNull { it.id == pageId }
             ?: ctx.servicesOrNull?.settingsPages()?.firstOrNull { it.id == pageId }
 
     private fun isBuiltIn(pageId: String): Boolean =
-        BuiltInSettingsPages.all(ctx.analyticsAvailable()).any { it.id == pageId }
+        BuiltInSettingsPages.all(ctx.analyticsAvailable(), ctx.returnRemindersSupported).any { it.id == pageId }
 
     /** Read a control's raw stored value (scoped store), or null to fall back to the control default. */
     private fun readSetting(pageId: String, key: String, project: Boolean): String? {

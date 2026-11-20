@@ -2706,4 +2706,14 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="learn_v_ide_todo">Belum. Masih harus dikerjakan: %1$s.</string>
     <string name="learn_v_list_sep">,</string>
     <string name="learn_v_rule_sep">;</string>
+    <string name="nudge_failed_title">%1$s menunggu perbaikan</string>
+    <string name="nudge_failed_body">Build terakhirnya gagal. Buka proyek untuk melihat apa yang menghentikannya.</string>
+    <string name="nudge_never_title">Buat aplikasi pertama Anda</string>
+    <string name="nudge_never_body">Pilih templat lalu tekan Jalankan. Hanya perlu sekitar satu menit.</string>
+    <string name="nudge_unbuilt_title">Lanjutkan pekerjaan Anda di %1$s</string>
+    <string name="nudge_unbuilt_body">Proyek ini belum pernah di-build. Buka lalu tekan Jalankan.</string>
+    <string name="nudge_first_title">Lanjutkan %1$s</string>
+    <string name="nudge_first_body">Build pertama Anda berhasil. Buka proyek dan tambahkan bagian berikutnya.</string>
+    <string name="set_privacy_reminders">Pengingat</string>
+    <string name="set_privacy_reminders_desc">Notifikasi sesekali tentang proyek yang belum Anda selesaikan. Paling banyak sekali seminggu.</string>
 </resources>

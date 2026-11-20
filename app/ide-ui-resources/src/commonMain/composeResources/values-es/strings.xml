@@ -2869,4 +2869,14 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="learn_v_ide_todo">Aún no. Falta: %1$s.</string>
     <string name="learn_v_list_sep">,</string>
     <string name="learn_v_rule_sep">;</string>
+    <string name="nudge_failed_title">%1$s espera una corrección</string>
+    <string name="nudge_failed_body">Su última compilación falló. Abre el proyecto para ver qué la detuvo.</string>
+    <string name="nudge_never_title">Compila tu primera app</string>
+    <string name="nudge_never_body">Elige una plantilla y pulsa Ejecutar. Tarda alrededor de un minuto.</string>
+    <string name="nudge_unbuilt_title">Continúa donde lo dejaste en %1$s</string>
+    <string name="nudge_unbuilt_body">Todavía no se ha compilado. Ábrelo y pulsa Ejecutar.</string>
+    <string name="nudge_first_title">Sigue con %1$s</string>
+    <string name="nudge_first_body">Tu primera compilación funcionó. Abre el proyecto y añade lo siguiente.</string>
+    <string name="set_privacy_reminders">Recordatorios</string>
+    <string name="set_privacy_reminders_desc">Una notificación ocasional sobre un proyecto que dejaste sin terminar. Como máximo una por semana.</string>
 </resources>

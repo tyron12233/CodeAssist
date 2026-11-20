@@ -2838,4 +2838,14 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="learn_v_ide_todo">Ainda não. Falta fazer: %1$s.</string>
     <string name="learn_v_list_sep">,</string>
     <string name="learn_v_rule_sep">;</string>
+    <string name="nudge_failed_title">%1$s está esperando uma correção</string>
+    <string name="nudge_failed_body">A última compilação falhou. Abra o projeto para ver o que a interrompeu.</string>
+    <string name="nudge_never_title">Compile seu primeiro app</string>
+    <string name="nudge_never_body">Escolha um modelo e toque em Executar. Leva cerca de um minuto.</string>
+    <string name="nudge_unbuilt_title">Continue de onde parou em %1$s</string>
+    <string name="nudge_unbuilt_body">Ele ainda não foi compilado. Abra e toque em Executar.</string>
+    <string name="nudge_first_title">Continue com %1$s</string>
+    <string name="nudge_first_body">Sua primeira compilação funcionou. Abra o projeto e adicione a próxima parte.</string>
+    <string name="set_privacy_reminders">Lembretes</string>
+    <string name="set_privacy_reminders_desc">Uma notificação ocasional sobre um projeto que você deixou inacabado. No máximo uma por semana.</string>
 </resources>

@@ -2861,4 +2861,14 @@
     <string name="learn_v_ide_todo">Пока нет. Осталось сделать: %1$s.</string>
     <string name="learn_v_list_sep">,</string>
     <string name="learn_v_rule_sep">;</string>
+    <string name="nudge_failed_title">%1$s ждёт исправления</string>
+    <string name="nudge_failed_body">Последняя сборка завершилась ошибкой. Откройте проект, чтобы увидеть, что её остановило.</string>
+    <string name="nudge_never_title">Соберите своё первое приложение</string>
+    <string name="nudge_never_body">Выберите шаблон и нажмите «Запустить». Это займёт около минуты.</string>
+    <string name="nudge_unbuilt_title">Продолжите с того места, где остановились в %1$s</string>
+    <string name="nudge_unbuilt_body">Проект ещё не собирался. Откройте его и нажмите «Запустить».</string>
+    <string name="nudge_first_title">Продолжайте работу над %1$s</string>
+    <string name="nudge_first_body">Первая сборка прошла успешно. Откройте проект и добавьте следующую часть.</string>
+    <string name="set_privacy_reminders">Напоминания</string>
+    <string name="set_privacy_reminders_desc">Редкое уведомление о проекте, который вы оставили незаконченным. Не чаще одного раза в неделю.</string>
 </resources>

@@ -42,6 +42,10 @@ internal interface BackendContext {
      *  build-notification permission action, which is meaningless where builds are always in-process. */
     val separateProcessBuildsSupported: Boolean
 
+    /** Whether this host reminds someone who stopped using the app (it registered a `RETURN_NUDGE_HOST`).
+     *  Gates the switch for it on the Privacy page. */
+    val returnRemindersSupported: Boolean get() = false
+
     /** The single serialized worker the editor's language calls run on. */
     val engineDispatcher: CoroutineDispatcher
 

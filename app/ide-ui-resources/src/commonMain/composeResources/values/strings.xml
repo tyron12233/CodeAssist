@@ -2872,4 +2872,14 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="learn_v_ide_todo">Not yet. Still to do: %1$s.</string>
     <string name="learn_v_list_sep">,</string>
     <string name="learn_v_rule_sep">;</string>
+    <string name="nudge_failed_title">%1$s is waiting on a fix</string>
+    <string name="nudge_failed_body">Its last build failed. Open the project to see what stopped it.</string>
+    <string name="nudge_never_title">Build your first app</string>
+    <string name="nudge_never_body">Pick a template and press Run. It takes about a minute.</string>
+    <string name="nudge_unbuilt_title">Pick up where you left off in %1$s</string>
+    <string name="nudge_unbuilt_body">It has not been built yet. Open it and press Run.</string>
+    <string name="nudge_first_title">Keep going with %1$s</string>
+    <string name="nudge_first_body">Your first build worked. Open the project and add the next piece.</string>
+    <string name="set_privacy_reminders">Reminders</string>
+    <string name="set_privacy_reminders_desc">An occasional notification about a project you left unfinished. At most one a week.</string>
 </resources>

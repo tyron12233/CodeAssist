@@ -125,6 +125,9 @@ object Events {
     const val COLD_START = "cold_start"          // app bootstrap time (per launch)
     const val INDEX_PERF = "index_perf"           // index build duration (per build/reindex)
     const val BUILD_RESULT = "build_result"       // build/run outcome + duration (per build)
+    // A reminder to come back (see ReturnNudges): `phase` due (with `outcome` shown, withheld for the holdout, or
+    // blocked by the system) and returned (the app was opened after one, `hours_after`). `kind` says which.
+    const val RETURN_REMINDER = "return_reminder"
     // Aggregated latency summaries (count + mean/p50/p95/max over a window), NOT one event per keystroke.
     // The `_perf` suffix is what [categoryOf] keys on, so new latency metrics classify as PERFORMANCE for free.
     const val COMPLETION_PERF = "completion_perf"
@@ -164,7 +167,7 @@ object Events {
     /** The category an event name belongs to: PERFORMANCE unless it is a stability, usage or ad event. */
     fun categoryOf(name: String): EventCategory = when {
         name == APP_CRASH || name == ERROR_LOGGED || name == APP_ANR || name == MAIN_STALL -> EventCategory.CRASH
-        name == FEATURE_USED -> EventCategory.USAGE
+        name == FEATURE_USED || name == RETURN_REMINDER -> EventCategory.USAGE
         name.startsWith("ad_") || name.startsWith("ads_") -> EventCategory.ADS
         else -> EventCategory.PERFORMANCE
     }

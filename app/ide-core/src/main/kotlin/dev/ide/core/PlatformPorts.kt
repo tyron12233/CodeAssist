@@ -116,6 +116,24 @@ interface NotificationPresenter {
 }
 
 /**
+ * A host that reminds someone who stopped using the app of what they left (see
+ * [dev.ide.core.reengage.ReturnNudges]). It is told how each build ended, which is what the reminders are
+ * decided from; the deciding and the showing happen in the launcher, when the engine may not be running.
+ *
+ * Optional: a host with no notifications (desktop, tests) registers none.
+ */
+val RETURN_NUDGE_HOST = ServiceKey<ReturnNudgeHost>("platform.returnNudges")
+
+/** Implemented by the launcher; see [RETURN_NUDGE_HOST]. */
+interface ReturnNudgeHost {
+    /** A build or run of the project at [projectRoot] ended. A build the user stopped is not reported. */
+    fun buildFinished(projectRoot: String, projectName: String, succeeded: Boolean)
+
+    /** The project at [projectRoot] became the one that is open. */
+    fun projectOpened(projectRoot: String, projectName: String) {}
+}
+
+/**
  * A host that can restart the whole application.
  *
  * Plugins are loaded once per process, so a plugin the user installs, updates, uninstalls or toggles takes

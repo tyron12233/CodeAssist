@@ -133,6 +133,13 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(NOTIFICATION_PRESENTER) {
             AndroidNotificationPresenter(appContext)
         }
+        // Reminders for someone who stopped using the app. The plugin sandbox is a second copy of the IDE over
+        // the same files, and what is built there says nothing about the user's own use.
+        if (!sandbox) {
+            ReturnReminders.attach(appContext)
+            manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.RETURN_NUDGE_HOST) { ReturnReminders }
+            ReturnReminders.flushEvents(appContext, analytics)
+        }
         val supabaseAccounts = buildStoreAccounts(appContext)
         val storeAccounts: dev.ide.store.StoreAccountService =
             supabaseAccounts ?: dev.ide.store.StoreAccountService.Unsupported

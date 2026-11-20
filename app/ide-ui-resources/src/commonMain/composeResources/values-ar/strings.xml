@@ -3044,4 +3044,14 @@
     <string name="learn_sync_title">احتفظ بتقدّمك في كل مكان</string>
     <string name="learn_sync_body">سجّل الدخول لحفظ دروسك في حسابك، والمتابعة من أي جهاز، والحفاظ على سلسلة أيامك المتتالية.</string>
     <string name="learn_sign_in">تسجيل الدخول</string>
+    <string name="nudge_failed_title">%1$s بانتظار إصلاح</string>
+    <string name="nudge_failed_body">فشل آخر بناء له. افتح المشروع لترى ما الذي أوقفه.</string>
+    <string name="nudge_never_title">ابنِ تطبيقك الأول</string>
+    <string name="nudge_never_body">اختر قالبًا واضغط تشغيل. يستغرق ذلك نحو دقيقة.</string>
+    <string name="nudge_unbuilt_title">تابع من حيث توقفت في %1$s</string>
+    <string name="nudge_unbuilt_body">لم يُبنَ بعد. افتحه واضغط تشغيل.</string>
+    <string name="nudge_first_title">واصل العمل على %1$s</string>
+    <string name="nudge_first_body">نجح أول بناء لك. افتح المشروع وأضف الجزء التالي.</string>
+    <string name="set_privacy_reminders">التذكيرات</string>
+    <string name="set_privacy_reminders_desc">إشعار من حين لآخر عن مشروع تركته غير مكتمل. مرة واحدة في الأسبوع على الأكثر.</string>
 </resources>

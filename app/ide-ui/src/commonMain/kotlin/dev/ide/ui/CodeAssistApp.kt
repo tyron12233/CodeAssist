@@ -50,6 +50,9 @@ import dev.ide.ui.theme.rememberJetBrainsMono
 import dev.ide.ui.theme.rememberUiFont
 import org.jetbrains.compose.resources.stringResource
 
+/** How long a project is open before the notification prompt comes up (see `IdeUiState.offerNotifications`). */
+private const val NOTIFICATION_PROMPT_DELAY_MS = 6_000L
+
 /**
  * Root of the reusable IDE UI. Hosts pick the toolkit (Compose Desktop window, Android activity) and
  * supply an [IdeBackend] plus optional brand fonts and a [FileActions] bridge; the screens, theme,
@@ -130,6 +133,14 @@ fun CodeAssistApp(
         openNotificationTarget?.let { app.openNotificationTarget(it); onNotificationTargetHandled() }
     }
     LaunchedEffect(app.projectOpen) { onProjectOpenChange(app.projectOpen) }
+    // The notification prompt, a moment into a project and not on top of its opening. Leaving the project
+    // before then cancels it, and it comes up the next time one is opened.
+    LaunchedEffect(app.projectOpen, state) {
+        if (app.projectOpen) {
+            kotlinx.coroutines.delay(NOTIFICATION_PROMPT_DELAY_MS)
+            state.offerNotifications()
+        }
+    }
 
     // The chosen interface language, around everything that reads a string. The state above is kept across a
     // language change; the content below is rebuilt in the new language.

@@ -437,6 +437,26 @@ open class MainActivity : ComponentActivity() {
         data.addAll(AppKeyboardShortcuts.groups())
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (!inSandbox) ReturnReminders.used(this, entering = true, returnRemindersEnabled(), returnRemindersHoldout())
+    }
+
+    override fun onStop() {
+        // Leaving is when a reminder is scheduled from: the app was in use until now.
+        if (!inSandbox) ReturnReminders.used(this, entering = false, returnRemindersEnabled(), returnRemindersHoldout())
+        super.onStop()
+    }
+
+    /** The switch in Settings, or null before the engine is up, when the last value read stands. */
+    private fun returnRemindersEnabled(): Boolean? {
+        val settings = session?.backend?.settings ?: return null
+        return runCatching { settings.preference(ReturnReminders.ENABLED_PREF) != "false" }.getOrNull()
+    }
+
+    private fun returnRemindersHoldout(): Boolean? =
+        runCatching { session?.backend?.settings?.preference(ReturnReminders.HOLDOUT_PREF)?.toBooleanStrictOrNull() }.getOrNull()
+
     /** Any touch or key reaching this window: lets an ad on screen tell a user from a phone left on the desk. */
     override fun onUserInteraction() {
         super.onUserInteraction()

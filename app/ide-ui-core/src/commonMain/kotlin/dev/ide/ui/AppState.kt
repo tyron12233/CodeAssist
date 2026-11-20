@@ -852,6 +852,16 @@ class IdeUiState(
         runConflict = PendingRun(action)
     }
 
+    /**
+     * Ask for the notification permission now, with nothing waiting on the answer. Called once a project has
+     * been open for a moment. The prompt used to come only with the first build, so someone who never got as far
+     * as building was never asked, and a reminder about the project they left could not be shown to them. It is
+     * the same one-time prompt: whoever answers it here is not asked again at their first build.
+     */
+    fun offerNotifications() {
+        if (isMobilePlatform && !notifPromptResolved && notifGate == null) notifGate = PendingRun {}
+    }
+
     /** Whether the one-time first-build notification prompt has already run (persisted app-globally). */
     private val notifPromptResolved: Boolean
         get() = backend.settings.preference(NOTIF_BUILD_PROMPT_RESOLVED_PREF)?.toBooleanStrictOrNull() == true

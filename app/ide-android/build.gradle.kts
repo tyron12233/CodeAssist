@@ -1329,6 +1329,7 @@ dependencies {
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our
     // app-private project files for Share / "Open with", and grants read access on inbound intents.
     implementation(libs.androidx.core)
+    implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.core)
 
     // The on-device Kotlin interpreter (:interp-core) + its Compose bridge/render surface (:interp-compose,

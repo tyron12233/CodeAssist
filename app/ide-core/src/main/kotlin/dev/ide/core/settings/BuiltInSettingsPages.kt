@@ -155,6 +155,10 @@ object BuiltInSettingsPages {
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
+
+    /** Toggle key on the [PRIVACY] page: whether the app may remind someone who stopped using it of a project
+     *  they left (default on). Read by the launcher that shows them (`ReturnReminders`, :ide-android). */
+    const val RETURN_REMINDERS = "returnReminders"
     const val CLEAR_CACHES = "clearCaches"
     const val VIEW_LOGS = "viewLogs"
     const val BACKUP = "backup"
@@ -166,10 +170,11 @@ object BuiltInSettingsPages {
 
     private val d = IdeSettings()
 
-    /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page.
+    /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page,
+     *  and [returnReminders] the reminders switch there (only a host that can show them lists it).
      *  Code Style is not here: it has its own dedicated screen (the formatting profiles are per-language). */
-    fun all(analyticsAvailable: Boolean): List<SettingsPage> = listOf(
-        appearance, editor, completion, analysis, preview, build, buildRuntime, privacy(analyticsAvailable),
+    fun all(analyticsAvailable: Boolean, returnReminders: Boolean = false): List<SettingsPage> = listOf(
+        appearance, editor, completion, analysis, preview, build, buildRuntime, privacy(analyticsAvailable, returnReminders),
     )
 
     private val appearance = page(APPEARANCE, "Appearance", "moon", 0) {
@@ -448,8 +453,11 @@ object BuiltInSettingsPages {
         )
     }
 
-    private fun privacy(analyticsAvailable: Boolean) = page(PRIVACY, "Privacy & Data", "info", 50) {
+    private fun privacy(analyticsAvailable: Boolean, returnReminders: Boolean) = page(PRIVACY, "Privacy & Data", "info", 50) {
         buildList {
+            if (returnReminders) {
+                add(SettingControl.Toggle(RETURN_REMINDERS, "Reminders", "An occasional notification about a project you left unfinished. At most one a week.", default = true, group = "Privacy"))
+            }
             if (analyticsAvailable) {
                 add(SettingControl.Toggle(ANALYTICS, "Share performance analytics", "Anonymous performance metrics only — never your code or file names", default = false, group = "Privacy"))
             }
