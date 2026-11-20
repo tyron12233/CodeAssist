@@ -5653,13 +5653,16 @@ class IdeServices private constructor(
      * read (3.3 s of a first render on an emulator, against 40 ms for the next). What is rendered is thrown away;
      * what it left behind is what the user's layout needs, whichever one it is.
      *
-     * Only for the runtime that links a table (a device's), only for a project that has a layout, and not where
-     * memory is tight: it starts the preview process, which a project that never shows a layout would not.
-     * Again when the libraries change, since most of that work is theirs.
+     * Only for the runtime that links a table (a device's) and only for a project that has a layout. Where
+     * memory is tight the table is linked and nothing is rendered: that is half of the first render's time and
+     * starts no process, where the render starts the preview's, which a project that never shows a layout
+     * would not. Not before the project's libraries are there (a new project's are still being downloaded when
+     * its first pass ends, and the pass that follows them comes back here). Again when the libraries change,
+     * since most of that work is theirs.
      */
     private fun prewarmLayoutPreview() {
         val runtime = realViewRuntime ?: return
-        if (runtime.readsSourceResources || DeviceMemory.isLow) return
+        if (runtime.readsSourceResources) return
         indexScope.launch(Dispatchers.IO) {
             runCatching {
                 for (m in modules()) {
@@ -5670,20 +5673,38 @@ class IdeServices private constructor(
                         if (!Files.isDirectory(dir)) null
                         else Files.list(dir).use { files -> files.filter { it.toString().endsWith(".xml") }.sorted().findFirst().orElse(null) }
                     } ?: continue
-                    val key = m.id.value + "|" + AndroidResources.libraryResourceDirs(m, store.workspace).joinToString("|")
+                    val selected = AndroidVariants.select(m, activeVariant(m)) ?: AndroidVariants.defaultVariant(m)
+                    val variant = selected?.name ?: "debug"
+                    val libraries = AndroidResources.libraryResourceDirs(m, store.workspace)
+                    val declaresLibraries = m.dependencies.any { it is dev.ide.model.LibraryDependency }
+                    if (declaresLibraries && previewRuntimeLibs(m, AndroidBuildSystem.explodedAarPath(m, variant), selected?.configurations).isNullOrEmpty()) {
+                        return@runCatching
+                    }
+                    val key = m.id.value + "|" + libraries.joinToString("|")
                     // Claimed before it is rendered: two passes that end together must not both render.
                     synchronized(realViewLock) {
                         if (key == warmedLayoutPreview) return@runCatching
                         warmedLayoutPreview = key
                     }
                     val started = System.nanoTime()
-                    val warmed = layoutPreview(
-                        layout, Files.readString(layout),
-                        dev.ide.preview.PreviewRequest(widthPx = 1080, heightPx = 2140, density = 2.75f, realViews = true),
-                    )
+                    val text = Files.readString(layout)
+                    val how = if (DeviceMemory.isLow) {
+                        synchronized(realViewLock) {
+                            previewResourceLinker?.link(
+                                m, variant, AndroidResources.resourceDirs(m, store.workspace), layout, text,
+                                facet.namespace, facet.minSdk, facet.targetSdk, libraryResDirs = libraries,
+                            )
+                        }
+                        "linked"
+                    } else {
+                        val warmed = layoutPreview(
+                            layout, text,
+                            dev.ide.preview.PreviewRequest(widthPx = 1080, heightPx = 2140, density = 2.75f, realViews = true),
+                        )
+                        if (warmed?.renderedNativeImage == null && warmed?.renderedImage == null) "tried (it did not render)" else "rendered"
+                    }
                     Log.logger("ide.preview").info(
-                        "layout preview warmed with '${layout.fileName}' in ${(System.nanoTime() - started) / 1_000_000}ms" +
-                            if (warmed?.renderedNativeImage == null && warmed?.renderedImage == null) " (it did not render)" else ""
+                        "layout preview warmed: '${layout.fileName}' $how in ${(System.nanoTime() - started) / 1_000_000}ms"
                     )
                     // One module: the process, the libraries' classes and their compiled resources are shared.
                     return@runCatching
