@@ -152,6 +152,10 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
     val designerEdits = remember(path) { ArrayList<List<LayoutEdit>>() }
     val designerPins = remember(path) { ArrayList<Pin>() }
     val renderNow = remember(path) { BooleanArray(1) }
+    // Whether an edit since the frame on screen changed the tree itself (a drop, a move, a delete), which is
+    // what the step between frames is animated for. A property's new frame is the answer to a tap on a value:
+    // it shows the moment it is drawn.
+    val restructured = remember(path) { BooleanArray(1) }
     val designerText = remember(path) { arrayOfNulls<String>(1) }
     // What the render reads besides the buffer (compiled project views, prepared libraries): a change renders again.
     val inputs by renderer.inputs.collectAsState()
@@ -178,7 +182,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
             val before = render
             // Animate only a frame of exactly what the designer's edits made: typing since then, or a frame that
             // could not be drawn, just swaps in.
-            if (before?.image != null && next.image != null && designerEdits.isNotEmpty() && request.text == designerText[0]) {
+            if (before?.image != null && next.image != null && restructured[0] && designerEdits.isNotEmpty() && request.text == designerText[0]) {
                 state.transition = FrameTransition(
                     before, next, designerEdits.toList(),
                     designerPins.toList() + listOfNotNull(state.ghost?.let { Pin(it.rect, it.becomes, fromPicture = false) }),
@@ -188,6 +192,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         }
         designerEdits.clear()
         designerPins.clear()
+        restructured[0] = false
         state.ghost = null
         rendered = true
         if (!next.librariesNeedPreparing) preparing = false
@@ -266,6 +271,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
             editLock.withLock {
                 val (edits, selection) = compute(currentDocument()) ?: return@withLock
                 if (edits.isEmpty()) return@withLock
+                restructured[0] = true
                 apply(edits)
                 state.selection = selection
             }

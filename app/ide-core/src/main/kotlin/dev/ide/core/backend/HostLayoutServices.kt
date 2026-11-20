@@ -96,7 +96,22 @@ internal class HostLayoutRenderer(
             realViews = true,
             renderScale = request.scale,
         )
-        val r = ctx.preview("layoutRender") { services.layoutPreview(Paths.get(request.path), request.text, preview) }
+        // How long the render waited for its turn and how long it then took: the two are told apart because
+        // only the first is the editor's doing.
+        val asked = System.nanoTime()
+        var began = asked
+        // With the editor's own passes, not behind them: a preview waits for the editor to have been quiet for a
+        // spell, which suits a Compose preview lowering a file while it is typed in, and was half of what a tap
+        // on a property waited for here (50 ms of 110 on an emulator). A render is tens of milliseconds and
+        // reads nothing the editor's passes write; a completion still goes first.
+        val rendered = ctx.background("layoutRender") {
+            began = System.nanoTime()
+            services.layoutPreview(Paths.get(request.path), request.text, preview)
+        }
+        dev.ide.platform.log.Log.logger("ide.preview").info(
+            "layout render: waited=${(began - asked) / 1_000_000}ms ran=${(System.nanoTime() - began) / 1_000_000}ms"
+        )
+        val r = rendered
             ?: return LayoutRenderResult(image = null, root = null, problems = listOf(LayoutProblem(null, "This file is not a layout of an Android module.")))
         val errors = r.resourceErrors.map { LayoutResourceError(it.file, it.line, it.message) }
         val problems = r.problems.map { LayoutProblem(it.tag, it.message) }
@@ -218,9 +233,14 @@ internal class HostAndroidLayoutModel(
 
     override suspend fun setAttribute(
         path: String, text: String, element: ElementRef, attribute: String, value: String,
-    ): List<LayoutEdit> = ctx.background("layoutSetAttribute") {
-        services.setLayoutAttributeEdits(Paths.get(path), text, element.offset, element.id, attribute, value)
-    }.map { LayoutEdit(it.range.start, it.range.end, it.newText) }
+    ): List<LayoutEdit> {
+        val asked = System.nanoTime()
+        return ctx.background("layoutSetAttribute") {
+            services.setLayoutAttributeEdits(Paths.get(path), text, element.offset, element.id, attribute, value)
+        }.map { LayoutEdit(it.range.start, it.range.end, it.newText) }.also {
+            dev.ide.platform.log.Log.logger("ide.preview").info("layout set $attribute: ${(System.nanoTime() - asked) / 1_000_000}ms")
+        }
+    }
 
     override suspend fun removeAttribute(
         path: String, text: String, element: ElementRef, attribute: String,
