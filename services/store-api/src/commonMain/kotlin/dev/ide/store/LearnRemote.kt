@@ -18,8 +18,19 @@ interface LearnRemoteService {
     fun latestCatalog(sinceVersion: Long, format: Int): StoreResult<LearnCatalogPayload?> =
         StoreResult.Unavailable("Learn is not connected in this build")
 
-    /** The signed-in account's id, or null when signed out. Progress syncs only for an account. */
+    /**
+     * The signed-in account's id, or null when signed out. Progress syncs only for an account.
+     *
+     * May go to the network: after a restart the remembered sign-in is exchanged for a session here, with a
+     * network timeout behind it. Never call it on the UI thread; [accountKnown] is the question to ask there.
+     */
     fun accountId(): String? = null
+
+    /**
+     * Whether someone is signed in or remembered as signed in, answered without the network and without
+     * waiting for a request that is in flight. It says a sync is worth starting, not that it will succeed.
+     */
+    fun accountKnown(): Boolean = accountId() != null
 
     /**
      * Upload [steps] and the [completedTracks] this device knows, and get back the account's whole state.

@@ -65,6 +65,8 @@ class SupabaseLearnService(
 
     override fun accountId(): String? = accounts?.current()?.userId
 
+    override fun accountKnown(): Boolean = accounts?.hasStoredSession() == true
+
     override fun syncProgress(
         steps: List<LearnStepRecord>,
         completedTracks: List<String>,

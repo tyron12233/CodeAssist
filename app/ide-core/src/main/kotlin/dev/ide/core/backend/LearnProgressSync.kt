@@ -101,7 +101,8 @@ internal class LearnProgressSync(
     }
 
     private fun scheduleSync() {
-        if (!remote.learnRemoteAvailable() || remote.accountId() == null) return
+        // Called from the UI thread when a step is finished, so only the question that stays off the network.
+        if (!remote.learnRemoteAvailable() || !remote.accountKnown()) return
         pendingJob?.cancel()
         pendingJob = scope.launch {
             delay(debounceMs)

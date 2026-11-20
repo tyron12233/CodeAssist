@@ -30,8 +30,12 @@ class LearnProgressSyncTest {
         val uploads = ArrayList<List<LearnStepRecord>>()
         var streak = LearnStreak(3, 5, activeToday = false)
 
+        /** How often the id was asked for: the call that may go to the network. */
+        var idAsked = 0
+
         override fun learnRemoteAvailable() = true
-        override fun accountId() = user
+        override fun accountId(): String? { idAsked++; return user }
+        override fun accountKnown() = user != null
         override fun syncProgress(steps: List<LearnStepRecord>, completedTracks: List<String>, timeZone: String): StoreResult<LearnAccountState> {
             if (down) return StoreResult.Unavailable("offline")
             uploads += steps
@@ -48,6 +52,18 @@ class LearnProgressSyncTest {
         clock = { 1_000L },
         debounceMs = 60_000, // tests sync explicitly
     )
+
+    /**
+     * Finishing a step runs on the UI thread. Asking for the account id there exchanges a remembered sign-in
+     * for a session, and on a connection that hangs the screen froze for as long as the request did.
+     */
+    @Test
+    fun finishingAStepDoesNotAskForTheAccountId() {
+        val server = FakeServer().apply { user = "u1" }
+        val sync = newSync(server, HashMap())
+        assertTrue(sync.stepCompleted(lessonA.id, lessonA.steps[0].id))
+        assertEquals(0, server.idAsked)
+    }
 
     @Test
     fun signedOutProgressIsKeptAndUploadedOnFirstSignIn() = runBlocking {

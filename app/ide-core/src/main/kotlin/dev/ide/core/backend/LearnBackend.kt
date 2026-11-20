@@ -246,7 +246,7 @@ internal class LearnBackend(
     private fun shareSolutionLater(lessonId: String, stepId: String, code: String) {
         val step = findStep(lessonId, stepId) as? LearnStepDef.Interactive ?: return
         if (step.check.ide.isNotEmpty()) return // a tour step's "solution" is what the learner did, not code
-        if (!community.available() || remote.accountId() == null || !shareSolutions()) return
+        if (!community.available() || !remote.accountKnown() || !shareSolutions()) return
         backgroundScope.launch { community.submitSolution(lessonId, stepId, code, step.language) }
     }
 
@@ -780,7 +780,9 @@ internal class LearnBackend(
     override suspend fun syncProgress(): Boolean = runCatching { progressSync.sync() }.getOrDefault(false)
 
     override fun account(): UiLearnAccount {
-        val signedIn = remote.learnRemoteAvailable() && remote.accountId() != null
+        // Read while the Learn tab composes, on the UI thread: `accountId` would exchange the remembered sign-in
+        // for a session right here, and on a connection that hangs the tab froze until the request timed out.
+        val signedIn = remote.learnRemoteAvailable() && remote.accountKnown()
         if (!signedIn) return UiLearnAccount(signedIn = false, available = remote.learnRemoteAvailable())
         val state = progressSync.account
         val streak = state?.streak ?: progressSync.cachedStreak() ?: dev.ide.store.LearnStreak()
