@@ -18,13 +18,33 @@ internal class KotlinAutoImport(private val kt: KtFile, fileContext: FileContext
 
     private val visiblePackages = (DefaultImports.STAR_PACKAGES + fileContext.packageName +
         fileContext.imports.filter { it.isStar }.map { it.packageName }).toHashSet()
-    private val explicitImports = fileContext.imports.filter { !it.isStar }.map { it.fqn }.toHashSet()
+    // An import under another name (`import a.B as C`) does not make `B` visible by its own name.
+    private val explicitImports = fileContext.imports
+        .filter { !it.isStar && (it.alias == null || it.alias == it.fqn.substringAfterLast('.')) }
+        .map { it.fqn }.toHashSet()
     private val planner = KotlinImportEdits.Planner(kt)
 
     private val ownPackage = fileContext.packageName
     /** The names this file declares at top level: a package scope symbol of one of them is this file's. */
     private val ownTopLevel: Set<String> by lazy { kt.declarations.mapNotNullTo(HashSet()) { (it as? KtNamedDeclaration)?.name } }
     private val starPackages = fileContext.imports.filter { it.isStar }.map { it.packageName }.toHashSet()
+    /** The packages something is imported from by name: their other declarations are "sibling imported". */
+    private val explicitImportPackages = fileContext.imports.filter { !it.isStar }.map { it.packageName }.toHashSet()
+    /** What the file imports under another name (`import a.B as C`): the original name is hidden in this file. */
+    private val aliasedAway = fileContext.imports
+        .filter { !it.isStar && it.alias != null && it.alias != it.fqn.substringAfterLast('.') }
+        .map { it.fqn }.toHashSet()
+
+    /**
+     * IntelliJ's `NotImportedWeigher` tiers (its `ImportableFqNameClassifier`) for [fqn], a declaration whose
+     * acceptance adds an import: 0 a sibling of something already imported by name (same package), 1 not
+     * imported, 2 not to be used by this name (the file imports it under an alias).
+     */
+    fun notImportedTier(fqn: String): Int = when {
+        fqn in aliasedAway -> 2
+        fqn.substringBeforeLast('.', "") in explicitImportPackages -> 0
+        else -> 1
+    }
 
     /**
      * The scope a top-level callable `pkg.name` is visible through, nearest first as IntelliJ orders them: 0
@@ -44,7 +64,8 @@ internal class KotlinAutoImport(private val kt: KtFile, fileContext: FileContext
     fun editForType(fqn: String): List<TextEdit> {
         if ('.' !in fqn) return emptyList()
         val pkg = fqn.substringBeforeLast('.')
-        if (pkg in visiblePackages || fqn in explicitImports) return emptyList()
+        // A name the file imports under an alias is not visible by its own name, star imports notwithstanding.
+        if ((pkg in visiblePackages && fqn !in aliasedAway) || fqn in explicitImports) return emptyList()
         val plan = planner.plan(fqn) ?: return emptyList()
         return listOf(TextEdit(TextRange(plan.offset, plan.offset), plan.text))
     }

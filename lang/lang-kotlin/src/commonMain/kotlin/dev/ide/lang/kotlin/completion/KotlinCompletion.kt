@@ -45,6 +45,8 @@ import dev.ide.kotlin.syntax.psi.KtPrimaryConstructor
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
+import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
 import dev.ide.kotlin.syntax.psi.KtSimpleNameStringTemplateEntry
 import dev.ide.kotlin.syntax.psi.KtStringTemplateEntry
@@ -55,6 +57,8 @@ import dev.ide.kotlin.syntax.psi.KtSuperTypeList
 import dev.ide.kotlin.syntax.psi.KtSuperTypeListEntry
 import dev.ide.kotlin.syntax.psi.KtThisExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
+import dev.ide.kotlin.syntax.psi.KtIsExpression
+import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtTypeParameter
 import dev.ide.kotlin.syntax.psi.KtTypeReference
 import dev.ide.kotlin.syntax.psi.KtUserType
@@ -161,6 +165,8 @@ class KotlinCompletion(
         // The graded matcher every candidate gate below shares: exact/prefix/camel-hump/substring, so
         // `mDL` reaches `myDynamicList` through the same filter chain a plain prefix takes.
         val matcher = PrefixMatcher(prefix)
+        // IntelliJ's completion matcher, for the sources that match the way it does (see [KotlinNameMatcher]).
+        val wordMatcher = KotlinNameMatcher(prefix)
         val replaceRange = TextRange(offset - prefix.length, offset)
         // The first non-whitespace char after the identifier token the editor will replace (it extends the
         // replacement forward over the rest of the word) — lets an item avoid inserting a second `(`/`{` when
@@ -276,7 +282,7 @@ class KotlinCompletion(
                     val sealedSubject = sealedWhenSubject(markerLeaf, resolver)
                     if (sealedSubject != null) {
                         val subs = service.sealedSubtypeCandidates(sealedSubject.qualifiedName, prefix).orEmpty()
-                        PositionResult(subs + syms, expected = sealedSubject, keywordContext = true, capped = it.capped)
+                        PositionResult(subs + syms, expected = sealedSubject, keywordContext = true, capped = it.capped, preferSubtypes = true)
                     } else {
                         // A `catch (e: <caret>)` parameter is a Throwable: its subclasses rank first.
                         val caught = if (inCatchParameterType(markerLeaf)) service.typeByFqn("kotlin.Throwable") else null
@@ -300,7 +306,12 @@ class KotlinCompletion(
         }
         // An annotation's argument is a compile-time constant, so only what can be one is offered there.
         val constantsOnly = insideAnnotationArguments(markerLeaf)
-        val raw = if (constantsOnly) compileTimeConstants(pos.raw, pos.expected, pos.receiverChain.firstOrNull(), resolver) else pos.raw
+        // `super.` (IntelliJ's `K2SuperMemberCompletionContributor`): a member several supertypes provide, once per
+        // supertype, each inserted through `super<T>.`; and a call passing the parameters of the override being
+        // written through to the member it overrides.
+        val superItems = if (pos.memberAccess) KotlinPerf.span("super") { superMemberItems(nameRef, matcher, resolver, followingChar) } else null
+        val raw0 = if (constantsOnly) compileTimeConstants(pos.raw, pos.expected, pos.receiverChain.firstOrNull(), resolver) else pos.raw
+        val raw = if (superItems == null) raw0 else superItems.members.filter { it.name !in superItems.replaced }
 
         // Inside a @Composable context (a `setContent`/`Column` content lambda, a @Composable function body),
         // float @Composable callables to the top — Android Studio's Compose weigher. NOT a filter: non-composable
@@ -332,6 +343,23 @@ class KotlinCompletion(
             // The local functions in scope, by name: their symbols look like top-level ones (no owner, no
             // package), but they rank with the locals. The walk allocates nothing when there are none.
             val localFunctions = if (nameReference) resolver.localFunctionsInScope(offset).mapTo(HashSet()) { it.name } else emptySet()
+            // The smart casts at the caret, for the values the expected type would judge by them: a bare name, or
+            // a member read through an explicit receiver whose path a check can name (`box.value`).
+            val smartCasts = if (expected == null) null else {
+                val q = nameRef?.parent as? KtQualifiedExpression
+                val receiverPath = if (q != null && q.selectorExpression === nameRef) completionAccessPath(q.receiverExpression) else null
+                if (q != null && q.selectorExpression === nameRef && receiverPath == null) null
+                else SmartCasts(resolver, offset, receiverPath)
+            }
+            // The overrides being written around the caret, for IntelliJ's `PreferContextualCallablesWeigher`; after
+            // `super.` they outrank even the expected type, as there.
+            val contextualOverrides = contextualOverrides(markerLeaf)
+            val receiverLevels = if (nameReference) ImplicitReceiverLevels(resolver, offset) else null
+            // The local classes in scope, which `ClassifierWeigher` puts before every other classifier.
+            val localTypes by lazy { runCatching { resolver.localTypesInScope(offset).values.toHashSet() }.getOrDefault(emptySet()) }
+            val superReceiver = (nameRef?.parent as? KtQualifiedExpression)?.let { q ->
+                q.selectorExpression === nameRef && q.receiverExpression is KtSuperExpression
+            } == true
             fun isLocal(s: KotlinSymbol) = s.kind == SymbolKind.METHOD && s.owner == null && s.packageName == null &&
                 s.origin.fromSource && s.name in localFunctions
             for ((index, s) in raw.withIndex()) {
@@ -340,7 +368,8 @@ class KotlinCompletion(
                 // `sumOf` has seven overloads that differ only in what the selector returns; each is typed
                 // the same way, so one row stands for all of them (see [lambdaOnlyOverloads]).
                 lambdaTwins[lambdaShapeKey(s)]?.let { kept -> if (kept !== s) continue }
-                val grade = matcher.grade(name) ?: continue
+                // A middle match the local scope let through (see [KotlinNameMatcher]) ranks after every other.
+                val grade = matcher.grade(name) ?: if (wordMatcher.matches(name)) PrefixMatcher.Grade.SUBSTRING else continue
                 if (!firstLetterCaseAgrees(prefix, name)) continue
                 if (!visibility.visible(s)) continue
                 if (initializing != null && name == initializing.name && isDeclaredBy(s, initializing)) continue
@@ -354,27 +383,48 @@ class KotlinCompletion(
                     if (s.kind in TYPE_KINDS) "T#" + ((s.type as? KotlinType)?.qualifiedName?.let { q -> if (q.substringAfterLast('.') == name) q else "$q#$name" } ?: name)
                     else name + "#" + s.kind + "#" + (s.signature ?: "")
                 if (!seen.add(dedupKey)) continue
-                val verdict = if (expected == null) UNTYPED else expectedVerdict(s, expected, nameReference, resolver, offset)
+                val verdict = if (expected == null) UNTYPED else expectedVerdict(s, expected, nameReference, resolver, offset, smartCasts)
+                val deprecated = deprecatedForRanking(s)
+                val contextual = contextualOverrides.isNotEmpty() && s.kind == SymbolKind.METHOD && !s.isExtension &&
+                    (name to s.paramNames.size) in contextualOverrides
                 val fits = verdict == FITS
                 val local = s.kind == SymbolKind.LOCAL_VARIABLE || s.kind == SymbolKind.PARAMETER || isLocal(s)
+                // A local class is in scope where it is offered at all, and no import can name it.
+                val importEdit = if (packageCompletion || (pos.memberAccess && s.kind in TYPE_KINDS) || s in pos.aliased ||
+                    (s.kind in TYPE_KINDS && s.origin.fromSource && (s.type as? KotlinType)?.qualifiedName in localTypes)
+                ) emptyList()
+                else importEditFor(s, autoImport)
                 out += Candidate(
                     symbol = s,
-                    importEdit = if (packageCompletion || (pos.memberAccess && s.kind in TYPE_KINDS) || s in pos.aliased) emptyList()
-                    else importEditFor(s, autoImport),
-                    fitsExpected = fits,
+                    importEdit = importEdit,
+                    fitsExpected = fits || (contextual && superReceiver),
                     grade = grade.ordinal,
                     boosted = composableContext && s.isComposable,
-                    group = memberGroup(s),
+                    group = if (chain.isEmpty()) memberGroup(s) else receiverCallableGroup(s, chain),
                     proximity = expectedBand(verdict) * BAND + proximityOf(s, nameReference, objectAsValue = fits && isObjectValue(s), local = local),
                     scopeOrder = when {
                         local -> localScopeOrder(s, index)
                         // A name the file imports explicitly under an alias is nearer than the class's own name.
                         s in pos.aliased -> -1
                         nameReference && isTopLevelSymbol(s) -> importScopeOf(s, autoImport)
+                        // A top-level classifier by the scope that brings it in, as IntelliJ's `ClassifierWeigher`
+                        // orders them by their scope's index in the tower: an explicit import before a star one.
+                        s.kind in TYPE_KINDS && !packageCompletion && !pos.memberAccess ->
+                            if ((s.type as? KotlinType)?.qualifiedName in localTypes) -2 else topLevelClassifierScope(s, autoImport)
                         else -> 0
                     },
                     functionKey = if (nameReference && s.kind == SymbolKind.METHOD) 1 else 0,
-                    popularity = when {
+                    importTier = if (importEdit.isEmpty()) 0 else importFqnOf(s)?.let(autoImport::notImportedTier) ?: 1,
+                    deprecated = deprecated,
+                    contextual = if (contextual) 0 else 1,
+                    receiverLevel = receiverLevels?.levelOf(s) ?: 0,
+                    // IntelliJ's `kotlin.deprecated` weigher comes right after the expected type: a deprecated
+                    // candidate sinks below every other one that fits as well, which the popularity key carries
+                    // here (the engine's own deprecation key is compared last).
+                    popularity = (if (deprecated) -DEPRECATED_PENALTY else 0) + (if (contextual && superReceiver) CONTEXTUAL_SUPER_BONUS else 0) + when {
+                        // A strict subtype of the preferred sealed type over the type itself, both over the rest
+                        // (the expected-type key already put both first).
+                        pos.preferSubtypes -> if (fits && (s.type as? KotlinType)?.qualifiedName != expected?.qualifiedName) 1 else 0
                         chain.isEmpty() -> if (referenceNames.isEmpty()) 0 else KotlinCompletionWeighing.nameSimilarity(name, referenceNames)
                         s.kind == SymbolKind.METHOD && accessedProperty(name) in properties -> MemberPopularity.of(chain, name) / 2
                         else -> MemberPopularity.of(chain, name)
@@ -494,7 +544,9 @@ class KotlinCompletion(
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
-        val head = pos.extra.distinctBy { it.kind to it.label }
+        // `[]` / `()` for the indexing and invoke operators of a `receiver.` (IntelliJ's bracket-operator items).
+        val bracketItems = if (prefix.isEmpty() && pos.memberAccess) bracketOperatorItems(nameRef, raw, original, offset, followingChar) else emptyList()
+        val head = (bracketItems + superItems?.items.orEmpty() + pos.extra.distinctBy { it.kind to it.label })
             .filter { item -> (item.symbol as? KotlinSymbol)?.let(visibility::visible) != false } + conditionItems
         val items =
             (head.take(keep) + tail)
@@ -586,6 +638,9 @@ class KotlinCompletion(
         val typeInsert: Boolean = false,
         /** Candidates already imported under another name (`import a.B as C`), which need no import edit. */
         val aliased: Set<KotlinSymbol> = emptySet(),
+        /** The [expected] type is a sealed type whose strict subtypes rank ahead of it (IntelliJ's
+         *  `PreferredSubtypeWeigher`: PREFERRED_SUBTYPE, then PREFERRED_EXACT_TYPE, then the rest). */
+        val preferSubtypes: Boolean = false,
     )
 
     private fun classifyPosition(
@@ -659,7 +714,7 @@ class KotlinCompletion(
         // classes are not reached through an alias (KT-34281).
         val aliasTarget = aliasReceiverTarget(receiver, resolver)
         val recvType = aliasTarget?.let { service.typeByFqn(it) } ?: KotlinPerf.span("infer") {
-            resolver.inferType(receiver)
+            (resolver.inferType(receiver) ?: contextParameterPathType(receiver, resolver))
                 ?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) }
         }
         if (recvType != null) {
@@ -725,6 +780,7 @@ class KotlinCompletion(
             }
             return PositionResult(
                 hideAccessorDuplicates(raw, prefix, properties),
+                extra = if (typeReceiver) emptyList() else extensionFunctionValueItems(recvType, offset, matcher, resolver),
                 expected = expected,
                 memberAccess = true,
                 receiverChain = supertypeChain(recvType),
@@ -960,7 +1016,9 @@ class KotlinCompletion(
         expected?.let { extra += expectedExtras(it, matcher, autoImport) }
         val types = KotlinPerf.span("typeNames") { service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path) }
         // The root packages too: an expression may start with a fully-qualified name (`kotlin.math.PI`).
-        val scope = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
+        // The local scope matched as IntelliJ matches it, at any word of a name (`ba` finds `fooBar`).
+        val wordMatcher = KotlinNameMatcher(prefix)
+        val scope = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix, localNameFilter = wordMatcher::matches) } +
             contextParametersInScope(markerLeaf, matcher, resolver) + implicitReceiverSingletonExtensions(offset, prefix, resolver)
         val aliases = importAliases(resolver, matcher, typesOnly = false)
         val raw = withContextArguments(scope, markerLeaf, offset, resolver) + types.symbols + aliases + service.knownRootPackages(prefix)
@@ -1286,6 +1344,36 @@ class KotlinCompletion(
         return out
     }
 
+    /**
+     * The type of a receiver rooted at a named context parameter (`second.`, `holder.box.`), which the resolver's
+     * scope does not list: the parameter's declared type, then each further name read as a property of the type
+     * before it. Null for any other shape. One exact member lookup per segment.
+     */
+    private fun contextParameterPathType(receiver: KtExpression, resolver: KotlinResolver): KotlinType? {
+        val names = ArrayList<String>()
+        var e: KtExpression? = receiver
+        while (true) {
+            while (e is KtParenthesizedExpression) e = e.expression
+            when (e) {
+                is KtDotQualifiedExpression -> {
+                    names += (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+                    e = e.receiverExpression
+                }
+                is KtNameReferenceExpression -> { names += e.getReferencedName(); break }
+                else -> return null
+            }
+        }
+        names.reverse()
+        val root = contextParametersInScope(receiver, PrefixMatcher(names[0]), resolver).firstOrNull { it.name == names[0] }
+        var type = root?.type as? KotlinType ?: return null
+        for (name in names.drop(1)) {
+            val member = service.membersForCompletion(type.qualifiedName, type.typeArguments, name)
+                .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD } ?: return null
+            type = member.type as? KotlinType ?: return null
+        }
+        return type
+    }
+
     private fun contextListOf(decl: KtDeclaration): KtContextReceiverList? =
         (decl.children.asSequence() + decl.modifierList?.children.orEmpty().asSequence())
             .firstOrNull { it is KtContextReceiverList } as? KtContextReceiverList
@@ -1377,6 +1465,12 @@ class KotlinCompletion(
             if (!ok) return emptyList()
         }
         val out = LinkedHashMap<String, CompletionItem>()
+        // How each suggestion ranks, IntelliJ's order for them (`K2VariableOrParameterNameWithTypeCompletionContributor`
+        // and the weighers before its `VariableOrParameterNameWithTypeWeigher`): a deprecated type last, then one
+        // needing an import (a sibling of an imported one first), then the priority: a name and type this file's
+        // parameters already use, the more often the earlier, before a name made from a type, the shorter the kept
+        // user prefix the earlier; then by name.
+        val rankOf = HashMap<String, IntArray>()
         fun fits(m: PrefixMatcher, name: String): Boolean =
             m.grade(name).let { it != null && it != PrefixMatcher.Grade.SUBSTRING }
 
@@ -1411,6 +1505,7 @@ class KotlinCompletion(
                         if (hidden.any { tp -> Regex("\\b${Regex.escape(tp)}\\b").containsMatchIn(typeText) }) continue
                         val text = "$name: $typeText"
                         out.getOrPut(text) { paramNameTypeItem(text, null, emptyList()) }
+                        rankOf.getOrPut(text) { intArrayOf(0, 0, 0, 0) }[3]--
                     }
                     if (d is KtClassOrObject) visit(d.declarations, declared)
                 }
@@ -1453,13 +1548,27 @@ class KotlinCompletion(
                     for (h in hits) {
                         val name = if (head.isEmpty()) h else head + h.replaceFirstChar { it.uppercaseChar() }
                         val text = "$name: ${s.name}"
-                        out.getOrPut(text) { paramNameTypeItem(text, if (generic) "<>" else null, importEditFor(s, autoImport)) }
+                        if (text in out) continue
+                        val edit = importEditFor(s, autoImport)
+                        out[text] = paramNameTypeItem(text, if (generic) "<>" else null, edit)
+                        rankOf[text] = intArrayOf(
+                            if (deprecatedForRanking(s)) 1 else 0,
+                            if (edit.isEmpty()) 0 else 1,
+                            if (edit.isEmpty()) 0 else autoImport.notImportedTier(fqn),
+                            head.length,
+                        )
                     }
                     break
                 }
             }
         }
-        return out.values.toList()
+        val none = IntArray(4)
+        return out.entries.sortedWith { a, b ->
+            val ra = rankOf[a.key] ?: none
+            val rb = rankOf[b.key] ?: none
+            for (i in ra.indices) if (ra[i] != rb[i]) return@sortedWith ra[i] - rb[i]
+            a.key.substringBefore(':').compareTo(b.key.substringBefore(':'))
+        }.map { it.value }
     }
 
     /** The operator-convention names (`plus`, `get`, `invoke`, …) at the name of an `operator fun` that is a
@@ -1989,6 +2098,22 @@ class KotlinCompletion(
      *  position where only the subject's subclasses are relevant), else null — not an `is` pattern, a
      *  subjectless `when`, an unresolved subject, or a subject that is not a known sealed type. */
     private fun sealedWhenSubject(leaf: KtElement?, resolver: KotlinResolver): KotlinType? {
+        // `x is <caret>`, `x as <caret>`, `x as? <caret>` on a sealed `x`: its inheritors first, as IntelliJ's
+        // `PreferredSubtypeWeigher` ranks them (the preferred type is the one `getPreferredSealedType` reads).
+        val typeRef = climbTo<KtTypeReference>(leaf)
+        val castSubject = when (val owner = typeRef?.parent) {
+            is KtIsExpression -> owner.leftHandSide.takeIf { owner.typeReference === typeRef }
+            is KtBinaryExpressionWithTypeRHS -> owner.left.takeIf {
+                owner.right === typeRef && owner.operationReference.getReferencedNameElementType().let { op ->
+                    op == KtTokens.AS_KEYWORD || op == KtTokens.AS_SAFE
+                }
+            }
+            else -> null
+        }
+        if (castSubject != null) {
+            val t = resolver.inferType(castSubject) ?: return null
+            return if (service.sealedSubclassesOf(t.qualifiedName) != null) t.withNullable(false) else null
+        }
         climbTo<KtWhenConditionIsPattern>(leaf) ?: return null
         val whenExpr = climbTo<KtWhenExpression>(leaf) ?: return null
         val subject = whenExpr.subjectExpression ?: return null
@@ -2319,6 +2444,15 @@ class KotlinCompletion(
         val scopeOrder: Int = 0,
         /** 1 for a function in a bare name position, which IntelliJ lists after the variables of its rank. */
         val functionKey: Int = 0,
+        /** For a candidate that needs an import, IntelliJ's not-imported tier ([KotlinAutoImport.notImportedTier]). */
+        val importTier: Int = 0,
+        /** Deprecated where it is used (see [deprecatedForRanking]). */
+        val deprecated: Boolean = false,
+        /** 0 for a member the function being written overrides too (see [contextualOverrides]), else 1. */
+        val contextual: Int = 1,
+        /** For a bare name read through an implicit receiver, that receiver's index, innermost first (see
+         *  [ImplicitReceiverLevels]); 0 otherwise. */
+        val receiverLevel: Int = 0,
     ) {
         /** No auto-import needed (already visible) — the in-scope-before-needs-import rank key, computed once. */
         val inScope: Boolean = importEdit.isEmpty()
@@ -2328,7 +2462,7 @@ class KotlinCompletion(
             contextBoost = boosted,
             callableWeight = group,
             inScope = inScope,
-            deprecated = symbol.isDeprecated,
+            deprecated = deprecated,
             proximity = proximity,
             popularity = popularity,
             receiverDistance = distance,
@@ -2389,6 +2523,7 @@ class KotlinCompletion(
      */
     private fun expectedVerdict(
         s: KotlinSymbol, expected: KotlinType, nameReference: Boolean, resolver: KotlinResolver, offset: Int,
+        smartCast: SmartCasts? = null,
     ): Int {
         if (matchesExpected(s, expected) || (nameReference && companionFits(s, expected))) return FITS
         if (s.kind in TYPE_KINDS) return UNTYPED
@@ -2398,11 +2533,43 @@ class KotlinCompletion(
             runCatching { resolver.smartCastTypeAt(s.name, offset) }.getOrNull()
         } else null
         if (narrowed != null && typeFits(narrowed, expected)) return FITS
+        // IntelliJ's `ExpectedTypeWeigher` judges a value by its smart-cast type at the caret: a null check, an
+        // intersection of `is` checks, a checked member path (`box.value is String`), a context parameter.
+        if (smartCast != null) {
+            val declared = s.type as? KotlinType
+            val (proven, nonNull) = smartCast.of(s, declared, expected)
+            if (proven.any { typeFits(it, expected) }) return FITS
+            if (nonNull && declared != null && declared.nullable && typeFits(declared.withNullable(false), expected)) return FITS
+        }
         val t = narrowed ?: (s.type as? KotlinType) ?: return UNTYPED
         if (expected.isTypeParameter) return UNTYPED
         if (t.nullable && !expected.nullable && typeFits(t.withNullable(false), expected)) return FITS_NON_NULL
         return MISMATCH
     }
+
+    /**
+     * The smart casts in effect at the caret for the values a completion offers, asked lazily and only of a value
+     * whose declared type misses the expected one (see [expectedVerdict]). [receiverPath] is the access path of an
+     * explicit receiver (`box.` in `box.value<caret>`), null for a bare name. The file's `is`/`as` targets are read
+     * once, on the first question.
+     */
+    private inner class SmartCasts(private val resolver: KotlinResolver, private val offset: Int, private val receiverPath: String?) {
+        private val targets by lazy { runCatching { resolver.completionCastTargets() }.getOrDefault(emptyMap()) }
+
+        fun of(s: KotlinSymbol, declared: KotlinType?, expected: KotlinType): Pair<List<KotlinType>, Boolean> {
+            if (s.kind != SymbolKind.LOCAL_VARIABLE && s.kind != SymbolKind.PARAMETER && s.kind != SymbolKind.FIELD) return NO_SMART_CAST
+            if (declared == null || declared.isTypeParameter) return NO_SMART_CAST
+            val path = if (receiverPath != null) receiverPath + "." + s.name else s.name
+            // Only a question whose answer can change the verdict is asked: a checked path, or a nullable value
+            // whose non-null type would fit.
+            val checked = targets[path].orEmpty().isNotEmpty()
+            val nullMatters = declared.nullable && typeFits(declared.withNullable(false), expected)
+            if (!checked && !nullMatters) return NO_SMART_CAST
+            return runCatching { resolver.completionSmartCast(path, offset, if (checked) targets else emptyMap()) }.getOrDefault(NO_SMART_CAST)
+        }
+    }
+
+    private val NO_SMART_CAST: Pair<List<KotlinType>, Boolean> = emptyList<KotlinType>() to false
 
     /**
      * Whether the local `var` [s] is assigned anywhere between its declaration and [offset]: an assignment
@@ -2501,6 +2668,42 @@ class KotlinCompletion(
      * so all share group 0 and this key is inert there — it only re-orders the `receiver.` member list, where
      * extensions used to interleave with (and routinely precede) real members purely on the shorter name.
      */
+    /**
+     * The callable group of [s] on an explicit receiver whose type and supertypes are [chain], ported from IntelliJ's
+     * `CallableWeigher` and the kinds its `CallableMetadataProvider` assigns, lowest first:
+     *  0 a member the receiver's own class declares (THIS_CLASS_MEMBER);
+     *  1 a member of a supertype, or an override (BASE_CLASS_MEMBER: "override members are considered as
+     *    non-immediate in completion"), `equals`/`hashCode`/`toString` among them;
+     *  2..5 an extension on the receiver's own type (THIS_TYPE_EXTENSION), then on a supertype, `Any` included
+     *    (BASE_TYPE_EXTENSION): the project's before the libraries', as before, so a page cut at the item cap
+     *    keeps them (IntelliJ prefers them later, by its proximity weigher, and has no cap);
+     *  6 an extension on a bare type parameter, `fun <T> T.also()` (TYPE_PARAMETER_EXTENSION).
+     */
+    private fun receiverCallableGroup(s: KotlinSymbol, chain: List<String>): Int {
+        if (!s.isExtension) {
+            // A project member may know its class by simple name only.
+            val owner = s.declaringClassFqn?.replace('$', '.') ?: ((s.owner as? KotlinSymbol)?.type as? KotlinType)?.qualifiedName
+                ?: s.owner?.name
+            fun names(fqn: String) = owner == fqn || ('.' !in owner.orEmpty() && fqn.substringAfterLast('.') == owner)
+            return when {
+                s.name in OBJECT_METHODS -> 1
+                owner != null && !names(chain[0]) && chain.any(::names) -> 1
+                // A project member the receiver's class declares as an `override`, read from its declaration.
+                s.origin.fromSource && isOverride(s) -> 1
+                else -> 0
+            }
+        }
+        if (s.receiverTypeParam != null) return 6
+        val exact = s.receiverTypeFqn == chain[0]
+        return (if (s.origin.fromSource) 2 else 4) + (if (exact) 0 else 1)
+    }
+
+    /** Whether the source declaration of [s] is an `override`. */
+    private fun isOverride(s: KotlinSymbol): Boolean {
+        val decl = (runCatching { s.declaration() }.getOrNull() as? KotlinDomNode)?.psi as? KtDeclaration ?: return false
+        return decl.hasModifier(KtTokens.OVERRIDE_KEYWORD)
+    }
+
     private fun memberGroup(s: KotlinSymbol): Int = when {
         s.name in OBJECT_METHODS -> 4
         !s.isExtension -> 0
@@ -2527,7 +2730,10 @@ class KotlinCompletion(
 
     /** How far up [chain] the member [s] is declared (0 = the receiver's own class); 0 when unknown. */
     private fun distanceIn(chain: List<String>, s: KotlinSymbol): Int {
-        val owner = s.declaringClassFqn?.replace('$', '.') ?: return 0
+        val owner = s.declaringClassFqn?.replace('$', '.')
+        // `equals`/`hashCode`/`toString` are `Any`'s, the root of every chain, whatever class re-declares them.
+        if (s.name in OBJECT_METHODS && (owner == null || owner == "kotlin.Any" || owner == "java.lang.Object")) return chain.size
+        if (owner == null) return 0
         return chain.indexOf(owner).coerceAtLeast(0)
     }
 
@@ -2632,7 +2838,273 @@ class KotlinCompletion(
     // --- auto-import (symbol -> FQN; the visibility/anchor work lives in KotlinAutoImport) ---
 
     private fun importEditFor(s: KotlinSymbol, autoImport: KotlinAutoImport): List<TextEdit> {
-        val fqn = when {
+        val fqn = importFqnOf(s) ?: return emptyList()
+        return autoImport.editForType(fqn)
+    }
+
+    /** The scope a top-level classifier is visible through (see [KotlinAutoImport.scopeOf]); a nested one, which
+     *  is reached through its outer class, after them all. */
+    private fun topLevelClassifierScope(s: KotlinSymbol, autoImport: KotlinAutoImport): Int {
+        val fqn = (s.type as? KotlinType)?.qualifiedName ?: return 0
+        val pkg = s.packageName ?: fqn.substringBeforeLast('.', "")
+        if (fqn != (if (pkg.isEmpty()) s.name else "$pkg.${s.name}")) return 6
+        return autoImport.scopeOf(pkg, s.name, s.origin.fromSource)
+    }
+
+    /**
+     * Whether [s] ranks as deprecated (IntelliJ's `DeprecatedWeigher`, which asks the symbol's deprecation status):
+     * a `@Deprecated` declaration, a source class included, unless its `@DeprecatedSinceKotlin` versions all lie
+     * ahead of the language version (`warningSince = "999.999"` deprecates nothing yet). Reads the declaration
+     * only for a source symbol that may be deprecated, so a page of library candidates costs nothing.
+     */
+    private fun deprecatedForRanking(s: KotlinSymbol): Boolean {
+        if (!s.origin.fromSource || (!s.isDeprecated && s.kind !in TYPE_KINDS)) return s.isDeprecated
+        val decl = (runCatching { s.declaration() }.getOrNull() as? KotlinDomNode)?.psi as? KtDeclaration ?: return s.isDeprecated
+        val entries = decl.annotationEntries
+        if (entries.none { it.shortName?.asString() == "Deprecated" }) return s.isDeprecated
+        val since = entries.firstOrNull { it.shortName?.asString() == "DeprecatedSinceKotlin" } ?: return true
+        val versions = since.valueArguments.mapNotNull { a ->
+            a.getArgumentExpression()?.text?.trim()?.removeSurrounding("\"")
+        }
+        if (versions.isEmpty()) return true
+        return versions.any { v -> compareVersions(v, CURRENT_LANGUAGE_VERSION) <= 0 }
+    }
+
+    /** `1.9` against `2.0` by numeric components; a missing component counts as 0. */
+    private fun compareVersions(a: String, b: String): Int {
+        val x = a.split('.').map { it.toIntOrNull() ?: 0 }
+        val y = b.split('.').map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val c = (x.getOrElse(i) { 0 }).compareTo(y.getOrElse(i) { 0 })
+            if (c != 0) return c
+        }
+        return 0
+    }
+
+    /**
+     * Which implicit receiver a member read by a bare name comes through, the innermost first: the scope index
+     * IntelliJ's `CallableWeigher` compares between the kind and the member/extension split
+     * (`CallableMetadataProvider.callableWeightByReceiver`). A member every receiver has (`equals`) gets no index
+     * and goes last. The receivers' supertype chains are walked once, on the first member asked about, and only
+     * when there is more than one receiver to choose between.
+     */
+    private inner class ImplicitReceiverLevels(private val resolver: KotlinResolver, private val offset: Int) {
+        private val chains: List<List<String>> by lazy {
+            val receivers = runCatching { resolver.implicitReceiversAt(offset) }.getOrDefault(emptyList())
+            if (receivers.size < 2) emptyList() else receivers.map { supertypeChain(it) }
+        }
+
+        fun levelOf(s: KotlinSymbol): Int {
+            if (s.isExtension || (s.kind != SymbolKind.METHOD && s.kind != SymbolKind.FIELD)) return 0
+            val owner = s.declaringClassFqn?.replace('$', '.') ?: ((s.owner as? KotlinSymbol)?.type as? KotlinType)?.qualifiedName
+                ?: s.owner?.name ?: return 0
+            if (chains.isEmpty()) return 0
+            fun names(fqn: String) = owner == fqn || ('.' !in owner && fqn.substringAfterLast('.') == owner)
+            val levels = chains.indices.filter { i -> chains[i].any(::names) }
+            if (levels.isEmpty()) return 0
+            return if (levels.size == chains.size || s.name in OBJECT_METHODS) MAX_CHAIN else levels.first()
+        }
+    }
+
+    /**
+     * The values in scope whose type is an extension function type the receiver can be passed to (`foo: Int.(String)
+     * -> Char` after `i.`), which are called like members: `i.foo("")`. IntelliJ offers them on the receiver (its
+     * callable contributor treats such a value as a functional-variable call with that receiver). An extension
+     * property is not one of them: it needs its own receiver. Inserted as a call, the caret inside its parentheses
+     * when it takes arguments. Read from the scope the caret's bare names see, filtered by the typed prefix.
+     */
+    private fun extensionFunctionValueItems(
+        recvType: KotlinType, offset: Int, matcher: PrefixMatcher, resolver: KotlinResolver,
+    ): List<CompletionItem> {
+        val receiver = recvType.withNullable(false)
+        val values = runCatching { resolver.scopeSymbolsAt(offset, matcher.prefix) }.getOrDefault(emptyList()) +
+            contextParametersInScope(resolver.elementAt(offset), matcher, resolver)
+        val out = ArrayList<CompletionItem>()
+        val seen = HashSet<String>()
+        for (v in values) {
+            if (v.isExtension || (v.kind != SymbolKind.LOCAL_VARIABLE && v.kind != SymbolKind.PARAMETER && v.kind != SymbolKind.FIELD)) continue
+            val t = v.type as? KotlinType ?: continue
+            if (!t.isExtensionFunctionType || t.typeArguments.size < 2 || !matcher.matches(v.name) || !seen.add(v.name)) continue
+            val wanted = (t.typeArguments[0] as? KotlinType)?.withNullable(false) ?: continue
+            val fits = wanted.qualifiedName == receiver.qualifiedName || wanted.qualifiedName == "kotlin.Any" ||
+                runCatching { wanted.isAssignableFrom(receiver) }.getOrDefault(false)
+            if (!fits) continue
+            val params = t.typeArguments.subList(1, t.typeArguments.size - 1)
+            val call = v.name + "()"
+            out += CompletionItem(
+                label = v.name,
+                insertText = call,
+                kind = CompletionItemKind.METHOD,
+                detail = (t.typeArguments.last() as? KotlinType)?.toString(),
+                symbol = v,
+                caret = if (params.isEmpty()) CaretAction.AtEnd else CaretAction.At(v.name.length + 1),
+                relevance = CompletionRelevance(proximity = PROXIMITY_MEMBER),
+            )
+        }
+        return out
+    }
+
+    /**
+     * IntelliJ's bracket-operator items (`createOperatorLookupElement` in the K2 contributors' utils): after
+     * `receiver.` with nothing typed, an `operator fun get`/`set` is also offered as `[]` and an `operator fun
+     * invoke` as `()`, accepted by replacing the `.` with the brackets, the caret inside; they rank first
+     * (`ItemPriority.BRACKET_OPERATOR`). Not after `?.`, where the operator call cannot be written. The operator
+     * modifier is read from a project declaration; a library one counts when the stdlib declares it (`List.get`,
+     * a function type's `invoke`), as Java methods are not operators by declaration.
+     */
+    private fun bracketOperatorItems(
+        nameRef: KtNameReferenceExpression?, raw: List<KotlinSymbol>, text: String, offset: Int, followingChar: Char?,
+    ): List<CompletionItem> {
+        val q = nameRef?.parent as? KtDotQualifiedExpression ?: return emptyList()
+        if (q.selectorExpression !== nameRef || text.getOrNull(offset - 1) != '.') return emptyList()
+        val out = ArrayList<CompletionItem>()
+        val seen = HashSet<String>()
+        for (sym in raw) {
+            if (sym.kind != SymbolKind.METHOD) continue
+            val arity = maxOf(sym.paramNames.size, sym.paramTypes.size)
+            val brackets = when (sym.name) {
+                "get" -> if (arity >= 1) "[]" else null
+                "set" -> if (arity >= 2) "[]" else null
+                "invoke" -> "()"
+                else -> null
+            } ?: continue
+            if (!isOperatorFunction(sym) || !seen.add(sym.name + "#" + (sym.signature ?: ""))) continue
+            val base = KotlinCompletionItems.toItem(sym, emptyList(), followingChar, CompletionRelevance(contextBoost = true, proximity = PROXIMITY_MEMBER))
+            out += base.copy(
+                label = brackets + base.label.removePrefix(sym.name),
+                insertText = brackets,
+                caret = CaretAction.At(1),
+                additionalEdits = listOf(TextEdit(TextRange(offset - 1, offset), "")),
+                symbol = null,
+            )
+        }
+        return out
+    }
+
+    /** Whether [s] is declared `operator`: read from a project declaration, assumed for the stdlib's own. */
+    private fun isOperatorFunction(s: KotlinSymbol): Boolean {
+        if (s.origin.fromSource) {
+            val decl = (runCatching { s.declaration() }.getOrNull() as? KotlinDomNode)?.psi as? KtNamedFunction ?: return false
+            return decl.hasModifier(KtTokens.OPERATOR_KEYWORD)
+        }
+        // A builtin member (`List.get`, `Function1.invoke`) arrives without a JVM owner, or under its bare
+        // builtin name; a Java method carries its class's qualified name.
+        val owner = s.declaringClassFqn ?: s.packageName ?: return true
+        return owner.startsWith("kotlin.") || '.' !in owner
+    }
+
+    /** What `super.` offers (see [superMemberItems]): the members to rank as usual, the names among them offered
+     *  per supertype instead, and the finished items for those and for the pass-through calls. */
+    private class SuperItems(val members: List<KotlinSymbol>, val replaced: Set<String>, val items: List<CompletionItem>)
+
+    /**
+     * IntelliJ's `K2SuperMemberCompletionContributor` for a bare `super.` ([nameRef] its selector): the members of
+     * every supertype the enclosing class lists, abstract ones left out where there are several supertypes; a name
+     * more than one supertype provides (`Any`'s members aside, which never need it) is offered once per supertype,
+     * inserted through `super<T>.` ([SuperItems.replaced]); and for each override around the caret, a call to the
+     * member it overrides passing its own parameters (`super.foo(j)`), ranked first. Null for anything but an
+     * unqualified, unlabeled `super` in a class with known supertypes.
+     */
+    private fun superMemberItems(
+        nameRef: KtNameReferenceExpression?, matcher: PrefixMatcher, resolver: KotlinResolver, followingChar: Char?,
+    ): SuperItems? {
+        val q = nameRef?.parent as? KtDotQualifiedExpression ?: return null
+        if (q.selectorExpression !== nameRef) return null
+        val sup = q.receiverExpression as? KtSuperExpression ?: return null
+        if (sup.superTypeQualifier != null || sup.getLabelName() != null) return null
+        val cls = climbTo<KtClassOrObject>(sup) ?: return null
+        val supertypes = cls.superTypeListEntries.mapNotNull { e ->
+            val text = e.typeReference?.text ?: return@mapNotNull null
+            runCatching { service.typeFromText(text, resolver.fileContext, cls.fqName?.asString()) }.getOrNull()
+        }.distinctBy { it.qualifiedName }
+        if (supertypes.isEmpty()) return null
+        val prefix = matcher.prefix
+        val several = supertypes.size > 1
+        val perType = supertypes.map { t ->
+            t to service.membersForCompletion(t.qualifiedName, t.typeArguments, prefix).filter { m ->
+                !m.isExtension && matcher.matches(m.name) && (!several || Modifier.ABSTRACT !in m.modifiers)
+            }
+        }
+        // A name counts once per supertype it is reached through; `Any`'s members are one symbol everywhere.
+        val counts = HashMap<String, Int>()
+        for ((_, members) in perType) for (name in members.filter { it.name !in OBJECT_METHODS }.map { it.name }.toSet()) {
+            counts[name] = (counts[name] ?: 0) + 1
+        }
+        val replaced = counts.filterValues { it > 1 }.keys
+        fun key(m: KotlinSymbol) = m.name + "#" + m.kind + "#" + (m.signature ?: "")
+        val seen = HashSet<String>()
+        val all = perType.flatMap { it.second }.filter { m -> seen.add(key(m)) }
+        // A Java getter a Kotlin property stands for is left to the property, as on any receiver.
+        val members = hideAccessorDuplicates(all, prefix, gettableProperties(all))
+        val hidden = if (members.size == all.size) emptySet() else (all - members.toSet()).mapTo(HashSet(), ::key)
+        val superRange = TextRange(sup.textRange.startOffset, sup.textRange.endOffset)
+        // The overrides being written around the caret, innermost first, with the arguments that pass their
+        // parameters on (a vararg spread).
+        val overrides = ArrayList<Pair<KtNamedFunction, List<String>>>()
+        forEachAncestor(nameRef) { n ->
+            val fn = n as? KtNamedFunction ?: return@forEachAncestor
+            if (!fn.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return@forEachAncestor
+            val args = fn.valueParameters.mapNotNull { p -> p.name?.let { if (p.isVarArg) "*$it" else it } }
+            if (args.size == fn.valueParameters.size) overrides += fn to args
+        }
+        val items = ArrayList<CompletionItem>()
+        val withArgs = ArrayList<CompletionItem>()
+        val relevance = CompletionRelevance(proximity = PROXIMITY_MEMBER)
+        for ((type, list) in perType) {
+            val qualifier = type.qualifiedName.substringAfterLast('.')
+            for (m in list) {
+                if (key(m) in hidden) continue
+                val disambiguate = several && m.name in replaced
+                val edits = if (disambiguate) listOf(TextEdit(superRange, "super<$qualifier>")) else emptyList()
+                fun decorate(item: CompletionItem) =
+                    if (disambiguate) item.copy(
+                        additionalEdits = item.additionalEdits + edits,
+                        detail = listOfNotNull(item.detail, "for $qualifier").joinToString(" "),
+                        // One item per supertype: the container keeps them apart where items are de-duplicated.
+                        container = type.qualifiedName,
+                    )
+                    else item
+                if (disambiguate) {
+                    val plain = decorate(KotlinCompletionItems.toItem(m, emptyList(), followingChar, relevance))
+                    KotlinCompletionItems.trailingLambdaVariant(m, plain, followingChar)?.let { items += decorate(it) }
+                    items += plain
+                }
+                // The pass-through call: a function with parameters that an override around the caret matches.
+                if (m.kind != SymbolKind.METHOD || m.paramNames.isEmpty()) continue
+                val match = overrides.firstOrNull { (fn, _) -> fn.name == m.name && fn.valueParameters.size == m.paramNames.size } ?: continue
+                if (!disambiguate && withArgs.any { it.label.substringBefore('(') == m.name }) continue
+                val call = m.name + "(" + match.second.joinToString(", ") + ")"
+                withArgs += decorate(
+                    KotlinCompletionItems.toItem(m, emptyList(), followingChar, relevance.copy(contextBoost = true)).copy(
+                        label = call, insertText = call, caret = CaretAction.AtEnd,
+                    ),
+                )
+            }
+        }
+        if (withArgs.isEmpty() && replaced.isEmpty()) return SuperItems(members, emptySet(), emptyList())
+        return SuperItems(members, if (several) replaced else emptySet(), withArgs + items)
+    }
+
+    /**
+     * The functions around [leaf] that override something, by name and parameter count: a member they override
+     * is "contextual" (IntelliJ's `PreferContextualCallablesWeigher`: `super.fo<caret>` inside `override fun foo2`
+     * offers `foo2` first). A member counts when it has the name and arity of one of them, which stands in for
+     * "overridden by a callable containing the position". A short parent walk; empty outside any override.
+     */
+    private fun contextualOverrides(leaf: KtElement?): Set<Pair<String, Int>> {
+        var out: HashSet<Pair<String, Int>>? = null
+        forEachAncestor(leaf) { n ->
+            val fn = n as? KtNamedFunction ?: return@forEachAncestor
+            if (!fn.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return@forEachAncestor
+            val name = fn.name ?: return@forEachAncestor
+            (out ?: HashSet<Pair<String, Int>>().also { out = it }) += name to fn.valueParameters.size
+        }
+        return out ?: emptySet()
+    }
+
+    /** The name an `import` of [s] would spell, or null when no import reaches it (see [importEditFor]). */
+    private fun importFqnOf(s: KotlinSymbol): String? {
+        return when {
             s.kind in TYPE_KINDS -> (s.type as? KotlinType)?.qualifiedName
             // A top-level callable (println, listOf, ln, …) or top-level extension (`Int.dp`, `String.trim`) is
             // imported by its own FQN `package.name` — Kotlin imports the callable, not a facade class. `ln`/`PI`
@@ -2651,8 +3123,7 @@ class KotlinCompletion(
                 singletonContainerFqn(s)?.let { "$it.${s.name}" }
 
             else -> null
-        } ?: return emptyList()
-        return autoImport.editForType(fqn)
+        }
     }
 
     /** The SINGLETON container an importable member extension is reached through: an `object` or `companion
@@ -3123,7 +3594,13 @@ class KotlinCompletion(
             if (c != 0) return@Comparator c
             c = (if (a.inScope) 0 else 1) - (if (b.inScope) 0 else 1)
             if (c != 0) return@Comparator c
+            c = a.importTier - b.importTier
+            if (c != 0) return@Comparator c
             c = a.proximity - b.proximity
+            if (c != 0) return@Comparator c
+            c = a.receiverLevel - b.receiverLevel
+            if (c != 0) return@Comparator c
+            c = a.contextual - b.contextual
             if (c != 0) return@Comparator c
             // Among the locals, the one declared in the innermost scope first, and among the top-level callables
             // the explicitly imported, then the package's, then the star-imported, then the default ones
@@ -3196,6 +3673,15 @@ class KotlinCompletion(
         private const val UNTYPED = 2
         private const val MISMATCH = 3
         private const val BAND = KotlinCompletionWeighing.BAND
+
+        /** What a contextual member after `super.` adds to its popularity key, over any member's own popularity. */
+        private const val CONTEXTUAL_SUPER_BONUS = 10_000
+
+        /** What deprecation takes off a candidate's popularity key: more than any popularity a candidate has. */
+        private const val DEPRECATED_PENALTY = 1_000_000
+
+        /** The Kotlin language version `@DeprecatedSinceKotlin` versions are compared with. */
+        private const val CURRENT_LANGUAGE_VERSION = "2.4"
 
         private const val PROXIMITY_LOCAL = 0
         private const val PROXIMITY_MEMBER = 1

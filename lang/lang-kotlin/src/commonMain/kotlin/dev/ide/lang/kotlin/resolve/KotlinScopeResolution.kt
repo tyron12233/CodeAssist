@@ -1092,7 +1092,11 @@ internal fun enclosingClassFqnOf(element: KtElement): String? {
 fun KotlinResolver.scopeSymbolsAt(
     offset: Int,
     namePrefix: String = "",
-    exactName: Boolean = false
+    exactName: Boolean = false,
+    /** Completion's own name filter for the local part (locals, receivers' members, this file's declarations),
+     *  in place of the prefix one: IntelliJ matches those at any word of a name. The top-level part is still
+     *  looked up by prefix. */
+    localNameFilter: ((String) -> Boolean)? = null,
 ): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
     // The resolution probe wants one name, and only completion needs every local typed.
@@ -1128,6 +1132,7 @@ fun KotlinResolver.scopeSymbolsAt(
     val scoped = when {
         namePrefix.isEmpty() -> out
         exactName -> out.filter { it.name == namePrefix }
+        localNameFilter != null -> out.filter { m.matches(it.name) || localNameFilter(it.name) }
         else -> out.filter { m.matches(it.name) }
     }
     // A `private` top-level declaration is file-scoped: from ANOTHER file it must not be offered. Same-file

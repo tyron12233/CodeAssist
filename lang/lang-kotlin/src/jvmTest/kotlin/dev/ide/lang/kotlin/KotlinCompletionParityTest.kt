@@ -544,6 +544,98 @@ class KotlinCompletionParityTest {
         assertFalse("fun" in kws || "val" in kws, "no declaration keywords; got $kws")
     }
 
+    // --- ported weighers and contributors ---
+
+    @Test
+    fun aNullCheckedOrIntersectedValueRanksByItsSmartCastType() {
+        val nullCheck = ranked("package w1\nfun test(valueA: String?, valueZ: String?): String {\n  if (valueZ != null) {\n    return value|\n  }\n  return \"\"\n}")
+        assertEquals(listOf("valueZ", "valueA"), nullCheck.take(2), "got $nullCheck")
+        val member = ranked("package w2\nclass Box(val valueA: Any, val valueZ: Any)\nfun test(box: Box): String {\n  if (box.valueZ is String) {\n    return box.value|\n  }\n  return \"\"\n}")
+        assertEquals(listOf("valueZ", "valueA"), member.take(2), "got $member")
+    }
+
+    @Test
+    fun aSealedSubjectOfAnIsCheckRanksItsInheritorsFirst() {
+        val ls = ranked("package w3\nclass A1\nsealed class Foo\nclass Bar : Foo()\nclass Baz : Foo()\nfun f(foo: Foo) {\n  if (foo is |) {}\n}")
+        assertEquals(listOf("Bar", "Baz", "Foo"), ls.take(3), "got ${ls.take(6)}")
+    }
+
+    @Test
+    fun aDeprecatedCandidateSinksUnlessItsDeprecationLiesAhead() {
+        val ls = ranked(
+            "package w4\nfun foo1() {}\n@Deprecated(\"\")\n@DeprecatedSinceKotlin(warningSince = \"1.0\")\nfun foo2() {}\n" +
+                "@Deprecated(\"\")\n@DeprecatedSinceKotlin(warningSince = \"999.999\")\nfun foo3() {}\nfun foo4() {}\nfun test() {\n  foo|\n}",
+        )
+        assertEquals(listOf("foo1", "foo3", "foo4", "foo2"), ls.take(4), "got $ls")
+    }
+
+    @Test
+    fun ownMembersThenOverridesAndAnysMembersThenExtensions() {
+        val ls = ranked(
+            "package w5\ninterface Common { fun xxFun1() }\nclass A : Common {\n  override fun xxFun1() {}\n  fun xxFun2() {}\n}\n" +
+                "fun test(a: A) {\n  a.|\n}",
+        )
+        assertEquals(listOf("xxFun2", "xxFun1", "equals", "hashCode", "toString"), ls.take(5), "got ${ls.take(8)}")
+    }
+
+    @Test
+    fun theNearerImplicitReceiversMembersComeFirst() {
+        val ls = ranked(
+            "package w6\nclass A { fun fooA() {} }\nclass B { fun fooB(): Int = 3 }\nfun <T> myWith(t: T, init: T.() -> Unit) {}\n" +
+                "fun main() {\n  myWith(A()) {\n    myWith(B()) {\n      foo|\n    }\n  }\n}",
+        )
+        assertEquals(listOf("fooB", "fooA"), ls.take(2), "got $ls")
+    }
+
+    @Test
+    fun aMemberSeveralSupertypesProvideIsOfferedOncePerSupertype() {
+        val items = runBlocking {
+            analyzer.completeAtCaret(
+                srcDir, "Use.kt",
+                "package w7\ninterface A { fun foo(i: Int) {} }\ninterface B { fun foo(i: Int) {} }\nfun A.bar() {}\n" +
+                    "class C : A, B {\n  override fun foo(j: Int) {\n    super.fo|\n  }\n}",
+            )
+        }.items.filter { it.label.startsWith("foo") }
+        assertEquals(4, items.size, "foo(i: Int) and foo(j), each for A and for B; got ${items.map { it.label + " " + it.detail }}")
+        assertTrue(items.any { it.label == "foo(j)" && it.additionalEdits.any { e -> e.newText == "super<B>" } }, "got $items")
+    }
+
+    @Test
+    fun anIndexingOperatorIsOfferedAsBrackets() {
+        val items = runBlocking {
+            analyzer.completeAtCaret(srcDir, "Use.kt", "package w8\nclass T {\n  operator fun get(a: Int): Int = 0\n}\nfun f(t: T) {\n  t.|\n}")
+        }.items
+        val brackets = items.firstOrNull { it.label.startsWith("[]") }
+        assertTrue(brackets != null, "got ${items.map { it.label }}")
+        assertEquals("[]", brackets!!.insertText)
+        assertTrue(runBlocking { analyzer.completeAtCaret(srcDir, "Use.kt", "package w9\nclass T {\n  operator fun get(a: Int): Int = 0\n}\nfun f(t: T?) {\n  t?.|\n}") }
+            .items.none { it.label.startsWith("[]") }, "not after a safe call")
+    }
+
+    @Test
+    fun aValueOfExtensionFunctionTypeIsOfferedOnItsReceiver() {
+        val ls = labels("package w10\nfun test(i: Int, foo: Int.(String) -> Char, fooS: String.() -> Unit) {\n  i.fo|\n}")
+        assertTrue("foo" in ls, "got $ls")
+        assertFalse("fooS" in ls, "a String receiver is not an Int; got $ls")
+    }
+
+    @Test
+    fun theLocalScopeMatchesAtAnyWordOfAName() {
+        val ls = labels("package w11\nfun foo() {\n  ba|\n}\nfun fooBar() {}")
+        assertTrue(ls.any { it.startsWith("fooBar") }, "got $ls")
+    }
+
+    @Test
+    fun intellijsNameMatcherMatchesWordStartsAndTheFirstLettersCase() {
+        fun m(p: String, n: String) = dev.ide.lang.kotlin.completion.KotlinNameMatcher(p).matches(n)
+        assertTrue(m("ba", "fooBar") && m("S", "IllegalStateException") && m("i", "buildList"))
+        assertTrue(m("fB", "fooBar") && m("old", "folder"))
+        assertFalse(m("s", "IllegalStateException"), "the first letter's case must agree")
+        assertFalse(m("Ch", "char"))
+        assertTrue(dev.ide.lang.kotlin.completion.KotlinNameMatcher("foo").isStartMatch("fooBar"))
+        assertFalse(dev.ide.lang.kotlin.completion.KotlinNameMatcher("bar").isStartMatch("fooBar"))
+    }
+
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))

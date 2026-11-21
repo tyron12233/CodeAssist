@@ -19,6 +19,7 @@ import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtPostfixExpression
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtValueArgument
@@ -172,6 +173,12 @@ internal fun KotlinResolver.enclosingFunctionReturnType(from: KtElement): Kotlin
             return if (node.hasBlockBody()) service.typeByFqn("kotlin.Unit") else null
         }
         if (node is KtLambdaExpression) return null // a return@label leaves the lambda's type to inference
+        // A getter's block body returns its property's declared type (`val text: String get() { return … }`).
+        if (node is KtPropertyAccessor) {
+            if (!node.isGetter || !node.hasBlockBody()) return null
+            val type = (node.typeReference ?: node.property?.typeReference)?.text ?: return null
+            return service.typeFromText(type, fileContext)
+        }
         node = node.parent
     }
     return null

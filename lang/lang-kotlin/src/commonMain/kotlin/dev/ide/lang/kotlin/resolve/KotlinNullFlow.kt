@@ -320,6 +320,77 @@ internal fun KotlinResolver.flowProvenNull(ref: KtNameReferenceExpression): Bool
 }
 
 /**
+ * The access path [e] reads, for completion's smart-cast ranking: a simple name, an unlabeled `this`, or a chain of
+ * names over one (`holder.box.value`), parentheses, labels and `!!` looked through. Null for anything else (a call,
+ * an index, a safe call), which completion does not narrow.
+ */
+internal fun completionAccessPath(e: KtElement?): String? = when (val s = stripAll(e)) {
+    is KtNameReferenceExpression -> s.getReferencedName()
+    is KtThisExpression -> if (s.getLabelName() == null) "this" else null
+    is KtPostfixExpression -> if (s.operationToken == KtTokens.EXCLEXCL) completionAccessPath(s.baseExpression) else null
+    is KtDotQualifiedExpression -> {
+        val sel = s.selectorExpression as? KtNameReferenceExpression
+        val recv = completionAccessPath(s.receiverExpression)
+        if (sel != null && recv != null) recv + "." + sel.getReferencedName() else null
+    }
+    else -> null
+}
+
+/** The `is`/`as`/`when`-pattern targets this file tests each access path ([completionAccessPath]) against. A walk of the
+ *  whole file: completion asks it once per request, and only where an expected type ranks the candidates. */
+internal fun KotlinResolver.completionCastTargets(): Map<String, List<KtTypeReference>> {
+    val out = HashMap<String, MutableList<KtTypeReference>>()
+    fun add(subject: KtElement?, ref: KtTypeReference?) {
+        val path = completionAccessPath(subject) ?: return
+        out.getOrPut(path) { ArrayList() } += ref ?: return
+    }
+    fun visit(p: KtElement) {
+        when (p) {
+            is KtIsExpression -> add(p.leftHandSide, p.typeReference)
+            is KtBinaryExpressionWithTypeRHS -> add(p.left, p.right)
+            is KtWhenExpression -> {
+                val subject = p.subjectExpression
+                for (entry in p.entries) for (c in entry.conditions) {
+                    if (c is KtWhenConditionIsPattern) add(subject, c.typeReference)
+                }
+            }
+        }
+        var c = p.firstChild
+        while (c != null) { visit(c); c = c.nextSibling }
+    }
+    visit(ktFile)
+    return out
+}
+
+/**
+ * What the flow proves at [offset] about the value read by the access path [path] (see [completionAccessPath]), for
+ * completion's expected-type ranking (IntelliJ's smart-cast info on a candidate, `ExpectedTypeWeigher`): the types
+ * the checks in [targets] ([completionCastTargets]) prove it to be there, and whether a null check proves it
+ * non-null. The same walk the editor's own smart casts take, asked from the caret for a name not yet written there.
+ * A path through a value that is not stable is answered as the walk sees it: this only ranks, it never decides
+ * what code means.
+ */
+internal fun KotlinResolver.completionSmartCast(
+    path: String, offset: Int, targets: Map<String, List<KtTypeReference>>,
+): Pair<List<KotlinType>, Boolean> {
+    val start = elementAt(offset) ?: return emptyList<KotlinType>() to false
+    val root = path.substringBefore('.')
+    val matches: Matcher = { e -> completionAccessPath(e) == path }
+    val types = ArrayList<KotlinType>()
+    val seen = HashSet<String>()
+    for (target in targets[path].orEmpty()) {
+        if (target.textRange.startOffset >= offset) continue
+        val key = erasedTypeText(target.text ?: continue)
+        if (!seen.add(key)) continue
+        val g = Goal(matches, key, deep = true, name = root.takeIf { '.' !in path })
+        if (flowProvenAt(start, offset, g, root, stopAt = null)) typeFromIsTarget(target)?.let { types += it }
+    }
+    val nonNull = types.isNotEmpty() ||
+        flowProvenAt(start, offset, Goal(matches, type = null, deep = true, name = root.takeIf { '.' !in path }), root, stopAt = null)
+    return types to nonNull
+}
+
+/**
  * The names this file writes a shallow null proof against: the operand of `!!`, of an equality, of `is`/`as`, the
  * left of `?:`, the root of a `?.` chain, a `when` subject, the receiver of `isNullOrEmpty`/`isNullOrBlank`, the
  * argument of a precondition. A proof without resolution ([Goal.deep] off) always names its value in one of these

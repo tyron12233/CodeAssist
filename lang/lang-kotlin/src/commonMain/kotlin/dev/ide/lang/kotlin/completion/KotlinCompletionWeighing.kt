@@ -223,7 +223,10 @@ internal object KotlinCompletionWeighing {
         }
         val ref = leaf?.parent as? KtNameReferenceExpression ?: return emptyList()
         val arg = ref.parent as? KtValueArgument ?: return emptyList()
-        arg.getArgumentName()?.asName?.identifier?.let { return emptyList() } // a named argument's name is being typed
+        // The value of a named argument (`User(name = <caret>)`) is compared with the name it is given.
+        arg.getArgumentName()?.asName?.identifier?.let { named ->
+            return if (arg.getArgumentExpression() === ref) listOf(named) else emptyList()
+        }
         val list = arg.parent as? KtValueArgumentList ?: return emptyList()
         val call = list.parent as? KtCallExpression ?: return emptyList()
         val index = list.arguments.indexOf(arg)

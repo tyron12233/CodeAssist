@@ -35,7 +35,9 @@ class KotlinCompletionShapesTest {
 
     @Test
     fun aFunctionValueOffersInvoke() {
-        assertEquals("invoke(p1: Int)", labels("fun g() { val f: (Int) -> String = { it.toString() }; f.| }").first())
+        // The invoke operator comes first as IntelliJ's `()` bracket item, then the plain call.
+        val onValue = labels("fun g() { val f: (Int) -> String = { it.toString() }; f.| }")
+        assertEquals(listOf("()(p1: Int)", "invoke(p1: Int)"), onValue.take(2), "got $onValue")
         assertTrue(labels("typealias Cb = (String) -> Unit\nfun g(cb: Cb?) { cb?.inv| }").offers("invoke"))
     }
 
