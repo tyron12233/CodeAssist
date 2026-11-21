@@ -455,6 +455,95 @@ class KotlinCompletionParityTest {
         assertTrue("foo: Foo" in ls && "foo: BarFoo" in ls, "got $ls")
     }
 
+    // --- matching, visibility, declaration names, receivers ---
+
+    @Test
+    fun theFirstLetterTypedKeepsItsCase() {
+        val lower = labels("package s26\nclass SomeType\nclass someRareType\nfun test(a: s|) {}")
+        assertTrue("someRareType" in lower, "got $lower")
+        assertFalse("SomeType" in lower, "a lowercase first letter does not reach a capitalized name; got $lower")
+        val upper = labels("package s27\nclass SomeType\nclass someRareType\nfun test(a: S|) {}")
+        assertTrue("SomeType" in upper && "someRareType" !in upper, "got $upper")
+    }
+
+    @Test
+    fun protectedAndPrivateMembersAreOfferedOnlyWhereTheyAreVisible() {
+        val outside = labels("package s28\nclass Some {\n  val pub = 1\n  protected val prot = 1\n  private val priv = 1\n}\nfun t() { Some().| }")
+        assertTrue("pub" in outside, "got $outside")
+        assertFalse("prot" in outside || "priv" in outside, "got $outside")
+        val sub = labels("package s29\nopen class Some {\n  protected val prot = 1\n  private val priv = 1\n}\nclass Sub : Some() {\n  fun t() { | }\n}")
+        assertTrue("prot" in sub, "a subclass sees the protected member; got ${sub.take(20)}")
+        assertFalse("priv" in sub, "but not the superclass's private one; got ${sub.take(20)}")
+        val companion = labels("package s30\nopen class Base {\n  companion object {\n    val pubVal = 1\n    protected val protVal = 1\n  }\n}\nfun t() { Base.| }")
+        assertTrue("pubVal" in companion && "protVal" !in companion, "got $companion")
+    }
+
+    @Test
+    fun aDeclarationIsNamedAfterAnUnresolvedReference() {
+        val fn = labels("package s31\nfun foo() {\n  unresolvedCall()\n  val v = unresolvedValue\n}\nfun |")
+        assertTrue("unresolvedCall" in fn, "a function is named after a call; got $fn")
+        assertFalse("unresolvedValue" in fn, "not after a value read; got $fn")
+        val cls = labels("package s32\nfun foo(p: Missing1) {\n  val x = Missing2()\n}\nclass |")
+        assertTrue("Missing1" in cls && "Missing2" in cls, "a class after a type and a constructor call; got $cls")
+    }
+
+    @Test
+    fun aTopLevelClassIsOfferedTheFileName() {
+        val ls = runBlocking { analyzer.completeAtCaret(srcDir, "Gadget.kt", "package s33\nclass |") }.items.map { it.label }
+        assertTrue("Gadget" in ls, "got $ls")
+    }
+
+    @Test
+    fun theExpectedClassAlsoCompletesAsAConstructorCall() {
+        val items = runBlocking {
+            analyzer.completeAtCaret(srcDir, "Use.kt", "package s34\nclass Widget(a: Int)\nfun create(): Widget {\n  return Widg|\n}")
+        }.items.filter { it.label.startsWith("Widget") }
+        assertTrue(items.any { it.label == "Widget" && it.insertText == "Widget" }, "the class inserts bare; got $items")
+        assertTrue(items.any { it.label == "Widget(a: Int)" && it.insertText.startsWith("Widget(") }, "got $items")
+    }
+
+    @Test
+    fun aTypealiasReceiverReachesWhatItAliases() {
+        val enumLs = labels("package s35\nenum class A { ONE; class B }\ntypealias AA = A\ntypealias AAA = AA\nfun t() { AAA.| }")
+        assertTrue("ONE" in enumLs, "got $enumLs")
+        assertFalse("B" in enumLs, "a nested class is not reached through an alias; got $enumLs")
+        val obj = labels("package s36\nobject Obj { val inObject = 1 }\ntypealias TA = Obj\nval u = TA.|")
+        assertTrue("inObject" in obj, "got $obj")
+    }
+
+    @Test
+    fun aDotAfterATemplateEntryCompletesItsMembers() {
+        val items = runBlocking {
+            analyzer.completeAtCaret(srcDir, "Use.kt", "package s37\nfun foo(param: String) {\n  val s = \"\$param.len|bla\"\n}")
+        }.items
+        val length = items.firstOrNull { it.label == "length" }
+        assertTrue(length != null, "got ${items.map { it.label }}")
+        assertEquals("length}", length!!.insertText, "the entry becomes a block")
+        assertTrue(length.additionalEdits.any { it.newText == "{" }, "got ${length.additionalEdits}")
+    }
+
+    @Test
+    fun strayRangeDotsOfferNothing() {
+        assertTrue(labels("package s38\nclass Test..|").isEmpty())
+        val ls = labels("package s39\nclass Foo\nclass Bar\nfun Foo.rangeTo(bar: Bar): IntRange = IntRange.EMPTY\nfun t() {\n  val bar = Bar()\n  Foo()..|\n}")
+        assertTrue(ls.isEmpty(), "a rangeTo without `operator` is no range; got $ls")
+        val range = labels("package s40\nfun t() {\n  val b2 = 2\n  val b = 3..|\n}")
+        assertTrue("b2" in range, "got $range")
+    }
+
+    @Test
+    fun aPropertyIsNotOfferedInItsOwnInitializer() {
+        val ls = labels("package s41\nclass A {\n  val xxx: Int = this.xx|\n}")
+        assertFalse("xxx" in ls, "got $ls")
+    }
+
+    @Test
+    fun aClassTypeParameterTakesOnlyItsModifiers() {
+        val kws = keywords("package s42\nclass T<|>")
+        assertTrue(kws.containsAll(listOf("in", "out", "reified")), "got $kws")
+        assertFalse("fun" in kws || "val" in kws, "no declaration keywords; got $kws")
+    }
+
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))

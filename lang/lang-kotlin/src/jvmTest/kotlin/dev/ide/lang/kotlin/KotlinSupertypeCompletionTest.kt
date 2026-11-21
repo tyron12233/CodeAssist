@@ -86,8 +86,17 @@ class KotlinSupertypeCompletionTest {
 
     @Test fun lambdaStatementClassStaysBare() = assertEquals("Base", insertOf("fun f() { run { Ba| } }", "Base"))
 
-    @Test fun argumentClassInsertsConstructorCall() =
-        assertEquals("Base()", insertOf("fun g(b: Base) {}\nfun f() { g(Ba|) }", "Base"))
+    // The class the argument expects completes twice, as IntelliJ has it: the class inserted bare, and a
+    // constructor-call item right after it.
+    @Test fun argumentClassInsertsConstructorCall() {
+        val code = "fun g(b: Base) {}\nfun f() { g(Ba|) }"
+        val items = runBlocking { analyzer.completeAtCaret(srcDir, "Use.kt", "$PRELUDE\n$code") }.items
+        assertEquals("Base", items.first { it.label == "Base" }.insertText)
+        assertEquals("Base()", items.first { it.label == "Base()" }.insertText)
+    }
+
+    @Test fun argumentOfAnotherTypeStillInsertsTheCall() =
+        assertEquals("Base()", insertOf("fun g(b: Any) {}\nfun f() { g(Ba|) }", "Base"))
 
     // ---- type-annotation position ----
 

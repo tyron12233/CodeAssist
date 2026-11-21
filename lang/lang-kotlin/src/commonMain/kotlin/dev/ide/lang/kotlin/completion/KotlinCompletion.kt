@@ -195,9 +195,11 @@ class KotlinCompletion(
         val resolver = KotlinResolver(kt, parsed, service)
 
         val markerLeaf = kt.findElementAt(offset)
+        val visibility = KotlinCompletionVisibility(markerLeaf, service, document.file.path, resolver.fileContext.packageName)
         // Don't complete inside a string literal's text (but DO inside ${ ... } template entries — that's code).
         // A character literal (`'a|'`) holds a character, not code: a `'` before the token only opens one.
         if (insideStringLiteral(markerLeaf) || original.getOrNull(offset - prefix.length - 1) == '\'') {
+            if (insideStringLiteral(markerLeaf)) templateDotCompletion(document, original, offset, prefix)?.let { return it }
             return CompletionResult(
                 emptyList(), isIncomplete = false, replacementRange = replaceRange
             )
@@ -221,6 +223,17 @@ class KotlinCompletion(
             return CompletionResult(labelItems, isIncomplete = false, replacementRange = replaceRange)
         }
         val nameRef = climbTo<KtNameReferenceExpression>(markerLeaf)
+        // A `..` that is not a range (`class Test..`, `package a..`, `val b..`), or a range whose left side has
+        // no `rangeTo` operator: IntelliJ leaves the position to command completion and offers nothing.
+        if (strayRangeDots(original, offset - prefix.length, nameRef, resolver)) {
+            return CompletionResult(emptyList(), isIncomplete = false, replacementRange = replaceRange)
+        }
+        // A `.` with nothing before it to be the receiver (`{ .<caret> }`): there is no member to complete.
+        if (nameRef != null && original.getOrNull(offset - prefix.length - 1) == '.' &&
+            original.getOrNull(offset - prefix.length - 2) != '.' && danglingDot(nameRef)
+        ) {
+            return CompletionResult(emptyList(), isIncomplete = false, replacementRange = replaceRange)
+        }
         // A callable REFERENCE — `::foo`, `receiver::foo`, `this::foo` — completes the name after `::`. A function
         // there must insert its BARE name (`::foo`), never a call (`::foo()`) or a trailing lambda: a `::` reference
         // is a function value, not an invocation. Covers the unbound `::name` (a NameReference position) and the
@@ -296,6 +309,9 @@ class KotlinCompletion(
             resolver.composableContextAt(offset) == ComposableContext.COMPOSABLE
         }
 
+        // The property whose initializer the caret is in (`val xxx: String = <caret>`): it cannot read itself
+        // there, so it is not offered.
+        val initializing = propertyBeingInitialized(markerLeaf)
         // How many candidates matched the prefix before the page was cut to MAX_ITEMS (see isIncomplete).
         var matchedCount = 0
         val candidates = KotlinPerf.span("rank") {
@@ -325,6 +341,9 @@ class KotlinCompletion(
                 // the same way, so one row stands for all of them (see [lambdaOnlyOverloads]).
                 lambdaTwins[lambdaShapeKey(s)]?.let { kept -> if (kept !== s) continue }
                 val grade = matcher.grade(name) ?: continue
+                if (!firstLetterCaseAgrees(prefix, name)) continue
+                if (!visibility.visible(s)) continue
+                if (initializing != null && name == initializing.name && isDeclaredBy(s, initializing)) continue
                 // Dedup overloads by name+kind+signature, but TYPES by fully-qualified name: two DISTINCT
                 // classes sharing a simple name (`androidx.compose.ui.Modifier` vs `java.lang.reflect.Modifier`)
                 // must BOTH survive. The bytecode index records every type as kind "class", so a name+kind key
@@ -395,9 +414,20 @@ class KotlinCompletion(
             .filter { it.symbol.documentation().isNullOrBlank() && !it.symbol.origin.fromSource }
             .take(MAX_ITEMS)
             .forEach { c -> service.typeDocForCompletion(c.symbol)?.let { typeDocs[c.symbol] = it } }
+        // The class a value position expects (`return Foo█` in a function returning `Foo`) completes twice, as
+        // IntelliJ's type-instantiation contributor has it: the class itself, inserted bare, and right after it
+        // a constructor call (`Foo(a: Int)`). Any other class in a value position keeps inserting the call.
+        val expectedClass = pos.expected?.qualifiedName?.takeIf { valuePosition && followingChar != '.' && !pos.memberAccess }
         val symbolItems = candidates.flatMap { c ->
+            val instantiated = expectedClass != null && c.symbol.kind == SymbolKind.CLASS &&
+                (c.symbol.type as? KotlinType)?.qualifiedName == expectedClass
             val (typeParamCount, ctorRequiredArgs) =
-                typeInsertFacts(c.symbol, superTypeEntry, valuePosition, typePosition, followingChar)
+                typeInsertFacts(c.symbol, superTypeEntry, valuePosition && !instantiated, typePosition, followingChar)
+            val ctorItem = if (instantiated) constructorCallItem(c, followingChar) else null
+            if (ctorItem != null) return@flatMap listOf(
+                KotlinCompletionItems.toItem(c.symbol, c.importEdit, followingChar, c.relevance(), typeParamCount = typeParamCount),
+                ctorItem,
+            )
             KotlinCompletionItems.toItem(
                 c.symbol,
                 c.importEdit,
@@ -437,6 +467,7 @@ class KotlinCompletion(
                 hasType = service::isKnownType,
             )
             refineReceiverKeywords(tail, markerLeaf, offset, prefix, resolver)
+            tail.retainAll { it.kind != CompletionItemKind.KEYWORD || firstLetterCaseAgrees(prefix, it.label) }
             if (constantsOnly) tail.retainAll { it.kind != CompletionItemKind.KEYWORD || it.label in CONSTANT_KEYWORDS }
             // A plain `return` leaves the enclosing function, which only an inlined lambda may do; inside any
             // other lambda only its labeled `return@…` is legal.
@@ -463,7 +494,8 @@ class KotlinCompletion(
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
-        val head = pos.extra.distinctBy { it.kind to it.label } + conditionItems
+        val head = pos.extra.distinctBy { it.kind to it.label }
+            .filter { item -> (item.symbol as? KotlinSymbol)?.let(visibility::visible) != false } + conditionItems
         val items =
             (head.take(keep) + tail)
                 // Include `container` so two distinct types with the same simple name (different packages) both
@@ -622,12 +654,16 @@ class KotlinCompletion(
         val enclosing = enclosingClasses(receiver)
         // A bare type-parameter receiver (`t.` where `t: T`, `<T : Bound>`) completes against the parameter's
         // upper bound; a normal type is unchanged, an unbounded parameter drops to the package/empty path.
-        val recvType = KotlinPerf.span("infer") {
+        // A project typealias named as the receiver (`typealias AA = A`, then `AA.`) stands for the class it
+        // aliases, chains of aliases included: an object's members, or a class's statics and companion. Nested
+        // classes are not reached through an alias (KT-34281).
+        val aliasTarget = aliasReceiverTarget(receiver, resolver)
+        val recvType = aliasTarget?.let { service.typeByFqn(it) } ?: KotlinPerf.span("infer") {
             resolver.inferType(receiver)
                 ?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) }
         }
         if (recvType != null) {
-            val typeReceiver = resolver.isTypeReceiver(receiver)
+            val typeReceiver = if (aliasTarget != null) !service.isSingletonObject(aliasTarget) else resolver.isTypeReceiver(receiver)
             val members = KotlinPerf.span("members") {
                 service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
             }.filter { callableRef || memberVisibleOn(it, typeReceiver, enclosing) }
@@ -646,7 +682,7 @@ class KotlinCompletion(
                 // A SOURCE type's nested types (`Outer.Nested`, a sealed interface's nested subclasses) are kept
                 // out of its member list by SourceIndex, so — unlike a classpath binary's — they don't arrive
                 // through `membersForCompletion`; add them explicitly so `Outer.` surfaces them.
-                val nestedTypes = service.nestedTypesOf(recvType.qualifiedName, prefix)
+                val nestedTypes = if (aliasTarget != null) emptyList() else service.nestedTypesOf(recvType.qualifiedName, prefix)
                 // A JVM type NAMED BY ITS JAVA FQN (`java.lang.String.valueOf`, `java.lang.Integer.parseInt`): its
                 // statics live on the JVM class, but Kotlin maps the type to a classifier whose API omits them, so
                 // they never arrive through `members`. Offered ONLY when the receiver is SPELLED as the fully-
@@ -704,6 +740,15 @@ class KotlinCompletion(
             service.packageMembers(pkg, prefix), packageCompletion = true, bareCallable = inImportOrPackage
         )
         else PositionResult(emptyList())
+    }
+
+    /** The class a receiver written as a project typealias's name stands for (see [memberAccessCandidates]), or
+     *  null when the receiver is anything else (a local of that name shadows the alias). */
+    private fun aliasReceiverTarget(receiver: KtExpression, resolver: KotlinResolver): String? {
+        val name = (receiver as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        if (name.firstOrNull()?.isUpperCase() != true || !service.isProjectTypeAlias(name)) return null
+        if (resolver.localsAt(receiver.textRange.startOffset, name).isNotEmpty()) return null
+        return runCatching { service.typeAliasChainTargetFqn(name, resolver.fileContext) }.getOrNull()
     }
 
     /**
@@ -831,7 +876,7 @@ class KotlinCompletion(
         // Member-declaration position in a class body → offer overridable inherited members as stubs. The stub
         // carries the member line's indent (so its body lines up) and the range of any `override`/`fun`/`val`
         // already typed before the name (so accepting REPLACES it rather than duplicating `override fun`).
-        if (isOverridePosition(markerLeaf)) {
+        if (isOverridePosition(markerLeaf) && (markerLeaf?.parent as? KtCallableDeclaration)?.receiverTypeReference == null) {
             val (indent, leadingDelete) = overrideInsertContext(markerLeaf, offset)
             resolver.overridableMembersAt(offset).filter { matcher.matches(it.name) }
                 .forEach { extra += KotlinCompletionItems.overrideItem(it, indent, leadingDelete) }
@@ -894,12 +939,14 @@ class KotlinCompletion(
         if (declName == DeclNameKind.DECL) extra += parameterNameAndTypeItems(markerLeaf, prefix, resolver, autoImport)
         // The name of an `operator fun` that can be one (a member, or an extension): the operator conventions.
         if (declName == DeclNameKind.DECL) extra += operatorNameItems(markerLeaf, matcher)
+        // The names of unresolved references nearby, and a top-level class's file name.
+        if (declName != DeclNameKind.NONE) extra += KotlinDeclarationNameItems(service, resolver).items(markerLeaf, offset, matcher, resolver.fileContext.path)
         if (declName != DeclNameKind.NONE) {
             // …with ONE exception: a `fun`/`val` name may be preceded by a RECEIVER TYPE (`fun String.shout()`,
             // `val List<T>.second`), which is the only way to declare an extension. So type names do belong at
             // `fun <caret>`; nothing offered them, leaving only the buffer-word guesses, with no way to reach
             // (or auto-import) the receiver type from the popup. See [receiverTypeCandidates] for the gate.
-            val types = receiverTypeCandidates(markerLeaf, declName, prefix, resolver)
+            val types = receiverTypeCandidates(markerLeaf, declName, prefix, resolver, offset)
             return PositionResult(
                 types?.symbols.orEmpty(), extra = extra,
                 keywordContext = declName == DeclNameKind.PARAM,
@@ -1477,10 +1524,12 @@ class KotlinCompletion(
      * typed, turning the declaration into an extension (`fun <caret>` → `fun String.shout()`). Null (offer
      * nothing, as before) when this isn't such a spot:
      *  - a parameter / type-parameter / class / object / typealias name, none of which takes a receiver;
-     *  - a declaration that ALREADY has its receiver (`fun String.na<caret>`): the user is naming it now;
+     *  - a declaration that ALREADY has its receiver (`fun String.na<caret>`): the user is naming it now, so
+     *    only the receiver's nested classes and companion (`fun Outer.Nested.f()`) continue the type;
      *  - a LOCAL `val`/`var`, since Kotlin forbids a local extension property (a local `fun` is fine);
      *  - a prefix that starts lowercase, which by convention is a name being invented, not a type being
-     *    reached for, and the popup must not start suggesting types while someone types `fun render…`.
+     *    reached for, and the popup must not start suggesting types while someone types `fun render…`
+     *    (IntelliJ's automatic popup offers none either).
      * An empty prefix still offers them, so an explicitly-invoked popup at `fun ` lists the receiver options.
      */
     private fun receiverTypeCandidates(
@@ -1488,16 +1537,32 @@ class KotlinCompletion(
         declName: DeclNameKind,
         prefix: String,
         resolver: KotlinResolver,
+        offset: Int,
     ): KotlinSymbolService.TypeNameCandidates? {
         if (declName != DeclNameKind.DECL) return null
-        if (prefix.isNotEmpty() && !prefix.first().isUpperCase()) return null
-        val takesReceiver = when (val decl = markerLeaf?.parent) {
-            is KtNamedFunction -> decl.receiverTypeReference == null
-            is KtProperty -> decl.receiverTypeReference == null && !decl.isLocal
-            else -> false
+        val decl = markerLeaf?.parent as? KtCallableDeclaration ?: return null
+        if (decl !is KtNamedFunction && decl !is KtProperty) return null
+        if (decl is KtProperty && decl.isLocal) return null
+        decl.receiverTypeReference?.let { receiver ->
+            val type = receiver.typeElement as? KtUserType ?: return null
+            if (type.typeArgumentList != null) return null
+            // A type parameter (`fun <F> F.f()`) has no nested classes, whatever class shares its name.
+            if (type.qualifier == null && (decl.typeParameters.any { it.name == type.referencedName } ||
+                    resolver.isTypeParameterInScope(type.referencedName ?: "", offset))
+            ) return null
+            val fqn = runCatching { service.resolveTypeName(type.text, resolver.fileContext, resolver.enclosingClassFqn(offset)) }
+                .getOrNull()?.takeIf { service.isKnownType(it) } ?: return null
+            val nested = service.nestedTypesOf(fqn, prefix) +
+                listOfNotNull(service.companionObjectSymbol(fqn)?.takeIf { PrefixMatcher(prefix).matches(it.name) })
+            return KotlinSymbolService.TypeNameCandidates(nested, capped = false)
         }
-        if (!takesReceiver) return null
-        return service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path)
+        if (prefix.isNotEmpty() && !prefix.first().isUpperCase()) return null
+        val types = service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path)
+        // The local classes declared in the enclosing blocks, which no index holds.
+        val matcher = PrefixMatcher(prefix)
+        val local = resolver.localTypesInScope(offset).filter { (name, _) -> matcher.matches(name) }
+            .map { (name, fqn) -> KotlinSymbol(name, SymbolKind.CLASS, type = service.typeByFqn(fqn), origin = SymbolOrigin(fromSource = true, file = null)) }
+        return KotlinSymbolService.TypeNameCandidates(local + types.symbols, types.capped)
     }
 
     // --- override / named-argument / expected-type extras ---
@@ -1565,6 +1630,8 @@ class KotlinCompletion(
 
                 is KtProperty -> if (prev != null && prev === n.initializer) return false
                 is KtNamedFunction -> if (prev != null && prev === n.bodyExpression) return false
+                // The name of a nested class or object being declared.
+                is KtClassOrObject -> if (prev != null && prev === n.nameIdentifier) return false
             }
             prev = n
             n = n.parent
@@ -2726,6 +2793,142 @@ class KotlinCompletion(
         return typeParamCount to ctorRequiredArgs
     }
 
+    /**
+     * `"$param.<caret>"`: a simple template entry followed by a dot completes the entry's members, as IntelliJ
+     * does, by completing `"${param.<caret>}"` instead; accepting an item turns the entry into the block form
+     * (`${param.length}`), since `$param.length` would print the text `.length` after the value.
+     */
+    private fun templateDotCompletion(document: DocumentSnapshot, original: String, offset: Int, prefix: String): CompletionResult? {
+        val tokenStart = offset - prefix.length
+        val head = original.substring((tokenStart - TEMPLATE_LOOKBEHIND).coerceAtLeast(0), tokenStart)
+        val match = TEMPLATE_DOT.find(head) ?: return null
+        val dollar = tokenStart - head.length + match.range.first
+        if (original.getOrNull(dollar - 1) == '\\') return null
+        val rewritten = original.substring(0, dollar + 1) + "{" + original.substring(dollar + 1, offset) + "}" + original.substring(offset)
+        val snapshot = object : DocumentSnapshot {
+            override val file = document.file
+            override val version = document.version
+            override val text: CharSequence = rewritten
+            override fun length() = rewritten.length
+        }
+        val inner = completeInner(snapshot, offset + 1)
+        fun shift(e: TextEdit) = if (e.range.start <= dollar) e else e.copy(range = TextRange(e.range.start - 1, e.range.end - 1))
+        val open = TextEdit(TextRange(dollar + 1, dollar + 1), "{")
+        val items = inner.items.filter { it.caret !is CaretAction.ExpandSnippet }.map { item ->
+            item.copy(insertText = item.insertText + "}", additionalEdits = item.additionalEdits.map(::shift) + open)
+        }
+        return CompletionResult(items, inner.isIncomplete, TextRange(tokenStart, offset))
+    }
+
+    /** The non-local property whose initializer holds [leaf] directly, not inside a lambda or an object body
+     *  (where it could run later and read the property). */
+    private fun propertyBeingInitialized(leaf: KtElement?): KtProperty? {
+        var prev: KtElement? = null
+        var n: KtElement? = leaf
+        while (n != null) {
+            when (n) {
+                is KtLambdaExpression, is KtClassBody, is KtNamedFunction, is KtPropertyAccessor -> return null
+                is KtProperty -> return n.takeIf { !it.isLocal && prev != null && prev === it.initializer }
+            }
+            prev = n
+            n = n.parent
+        }
+        return null
+    }
+
+    /** Whether [s] is the declaration [property] (the same source declaration, matched by where it starts). */
+    private fun isDeclaredBy(s: KotlinSymbol, property: KtProperty): Boolean {
+        val psi = (s.declaration() as? KotlinDomNode)?.psi as? KtProperty
+        if (psi != null) return psi === property || psi.textRange.startOffset == property.textRange.startOffset
+        // A top-level property reached through the package's index carries no tree: the same name, package and
+        // file make it the same one.
+        val file = property.parent as? KtFile ?: return false
+        return s.origin.fromSource && s.owner == null && (s.packageName ?: "") == file.packageFqName.asString() &&
+            s.origin.file?.path?.substringAfterLast('/')?.let { it == file.name } != false
+    }
+
+    /** Whether [nameRef], written right after a `.`, has no receiver: it is not the selector of a qualified
+     *  expression or a callable reference, nor a segment of an `import`/`package` directive. */
+    private fun danglingDot(nameRef: KtNameReferenceExpression): Boolean {
+        if (climbTo<KtImportDirective>(nameRef) != null || climbTo<KtPackageDirective>(nameRef) != null) return false
+        if (qualifiedMemberReceiver(nameRef) != null) return false
+        val parent = nameRef.parent
+        if (parent is KtCallableReferenceExpression || parent is KtUserType) return false
+        return true
+    }
+
+    /**
+     * Whether the `..` right before the token at [tokenStart] is not a range IntelliJ would complete after: not the
+     * operator of a range expression at all (a class, package or variable name followed by `..`), or one whose
+     * left operand has no `rangeTo` operator (a plain `fun rangeTo` without `operator`, or none). An operand of
+     * an unknown type keeps completion on.
+     */
+    private fun strayRangeDots(text: String, tokenStart: Int, nameRef: KtNameReferenceExpression?, resolver: KotlinResolver): Boolean {
+        if (tokenStart < 2 || text[tokenStart - 1] != '.' || text[tokenStart - 2] != '.') return false
+        if (tokenStart >= 3 && text[tokenStart - 3] == '.') return false
+        val bin = nameRef?.parent as? KtBinaryExpression
+        if (bin == null || bin.operationToken != KtTokens.RANGE || bin.right !== nameRef) return true
+        val left = bin.left ?: return false
+        val type = runCatching { resolver.inferType(left)?.let { resolver.receiverForMembers(it, left.textRange.startOffset) } }
+            .getOrNull() ?: return false
+        if (type.isTypeParameter) return false
+        val comparable = runCatching { service.typeByFqn("kotlin.Comparable").isAssignableFrom(type) }.getOrDefault(true)
+        if (comparable) return false
+        val candidates = runCatching { service.membersNamed(type.qualifiedName, type.typeArguments, "rangeTo") }.getOrDefault(emptyList())
+            .filter { it.name == "rangeTo" } +
+            runCatching { resolver.scopeMemberExtensions(left.textRange.startOffset, type, "rangeTo") }.getOrDefault(emptyList())
+                .filter { it.name == "rangeTo" }
+        // A library function is taken to be the operator; a project one is read off its declaration, and a copy
+        // of it that arrives without one (the same function through another index) does not decide anything.
+        val judged = candidates.filter { !it.origin.fromSource || it.declaration() is KotlinDomNode }
+        if (judged.isEmpty()) return candidates.isEmpty()
+        return judged.none { c ->
+            val fn = (c.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction
+            fn == null || fn.hasModifier(KtTokens.OPERATOR_KEYWORD)
+        }
+    }
+
+    /** The constructor-call item for the class candidate [c] (see `expectedClass` in [completeInner]): labelled
+     *  with the one callable constructor's parameters, or `(...)` for several; null when the class cannot be
+     *  constructed here (abstract, an object, a value type, no constructor the caller can reach). */
+    private fun constructorCallItem(c: Candidate, followingChar: Char?): CompletionItem? {
+        val fqn = (c.symbol.type as? KotlinType)?.qualifiedName ?: return null
+        if (fqn in NOT_CONSTRUCTED || service.isNonInstantiableType(fqn) != false || service.isObject(fqn)) return null
+        val required = ctorRequiredArgsOf(fqn, forSubclass = false)
+        if (required < 0) return null
+        val params = constructorParameterLists(fqn) ?: return null
+        val shown = if (params.size == 1) params.single() else "..."
+        val typeParamCount = service.classTypeParameters(fqn).size
+        val call = KotlinCompletionItems.toItem(
+            c.symbol, c.importEdit, followingChar, c.relevance(), typeParamCount = typeParamCount, ctorRequiredArgs = required,
+        )
+        return call.copy(label = c.symbol.name + "(" + shown + ")", kind = CompletionItemKind.CONSTRUCTOR)
+    }
+
+    /** The parameter lists (`a: Int, b: String`) of [fqn]'s constructors a caller outside the class can call, an
+     *  implicit no-arg one included; null when it has none. Filtered the way [ctorRequiredArgsOf] filters. */
+    private fun constructorParameterLists(fqn: String): List<String>? {
+        service.sourceClass(fqn)?.let { rc ->
+            if (rc.constructors.isEmpty()) return listOf("")
+            return rc.constructors.filter { it.visibility != "private" && it.visibility != "protected" }
+                .map { ctor -> ctor.paramTexts.joinToString(", ") { (n, t) -> if (t == null) n else "$n: $t" } }
+                .takeIf { it.isNotEmpty() }
+        }
+        val java = service.isJavaType(fqn)
+        return service.constructorsOf(fqn).filter {
+            when {
+                Modifier.PRIVATE in it.modifiers || Modifier.PROTECTED in it.modifiers || it.isInternal -> false
+                java -> Modifier.PUBLIC in it.modifiers
+                else -> true
+            }
+        }.map { ctor ->
+            ctor.paramTypes.indices.joinToString(", ") { i ->
+                val type = (ctor.paramTypes[i] as? KotlinType)?.toString() ?: "?"
+                (ctor.paramNames.getOrNull(i) ?: "p$i") + ": " + type
+            }
+        }.takeIf { it.isNotEmpty() }
+    }
+
     /** The required (non-defaulted, non-vararg) argument count of [fqn]'s cheapest constructor the completion
      *  site can call, which decides whether the caret lands inside the inserted `()`. -1 when it can call none
      *  (`System`, `Math`, a `private constructor` factory class), so the type completes bare. [forSubclass] is a
@@ -2794,6 +2997,12 @@ class KotlinCompletion(
     }
 
     private companion object {
+        /** A simple string-template entry and its dotted path ending in a dot (`$param.`, `$foo.bar.`). */
+        private val TEMPLATE_DOT = Regex("""\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.$""")
+
+        /** How far back [TEMPLATE_DOT] looks for the entry. */
+        private const val TEMPLATE_LOOKBEHIND = 200
+
         /** The default-imported packages that declare annotation classes. */
         private val DEFAULT_ANNOTATION_PACKAGES = listOf("kotlin", "kotlin.annotation", "kotlin.jvm", "java.lang")
 
@@ -3008,4 +3217,17 @@ class KotlinCompletion(
         // of a member-access list (IntelliJ does the same) rather than competing with the type's real members.
         val OBJECT_METHODS = setOf("equals", "hashCode", "toString")
     }
+}
+
+/**
+ * IntelliJ's default "match case: first letter" rule: the first letter typed must have the case of the name's
+ * first letter (underscores skipped on both sides), so `s` offers `someValue` and `toString` but not `SomeType`,
+ * and `S` offers `SomeType` but not `someValue`. A character without a case (a digit, an empty prefix) agrees
+ * with anything.
+ */
+internal fun firstLetterCaseAgrees(prefix: String, name: String): Boolean {
+    val p = prefix.firstOrNull { it != '_' } ?: return true
+    val n = name.firstOrNull { it != '_' } ?: return true
+    if (!p.isLetter() || !n.isLetter() || p.isUpperCase() == p.isLowerCase()) return true
+    return p.isUpperCase() == n.isUpperCase()
 }

@@ -180,7 +180,10 @@ internal object KotlinKeywords {
         // Type-parameter variance/`reified` (`class Box<█>`, `inline fun <█>`) — a [Place.NONE] position.
         typeParamSpot(leaf)?.let { ctx ->
             kw("in", trailingSpace = true); kw("out", trailingSpace = true)
-            if (ctx.inlineFun) kw("reified", trailingSpace = true)
+            if (ctx.inlineFun || ctx.ofClass) kw("reified", trailingSpace = true)
+            // A class's type parameter being written (not its bound) admits nothing else; IntelliJ also lists
+            // `reified` (the compiler rejects it there) and `context`.
+            if (ctx.ofClass && ctx.atName) { kw("context"); return out }
         }
         // `where` clause after a generic declaration's signature (`class Box<T> █`, `fun <T> f() █`). Detected
         // from the preceding text like `by`: the half-typed `where` parses as a separate sibling declaration,
@@ -661,14 +664,19 @@ internal object KotlinKeywords {
      *  optionally preceded by visibility modifiers. Anchored to the literal `constructor` keyword. */
     private val CTOR_DELEGATION_RE = Regex("""(?:[a-z]+\s+)*constructor\s*\([^)]*\)\s*:\s*""")
 
-    private class TypeParamCtx(val inlineFun: Boolean)
+    private class TypeParamCtx(val inlineFun: Boolean, val ofClass: Boolean, val atName: Boolean)
 
     /** Inside a type-parameter list (`class Box<█>`, `fun <█> f()`): offers `in`/`out` variance, plus `reified`
-     *  when the owner is an `inline` function. */
+     *  when the owner is an `inline` function or a class (as IntelliJ offers it). */
     private fun typeParamSpot(leaf: KtElement?): TypeParamCtx? {
         val list = leaf?.getParentOfType<KtTypeParameterList>(strict = false) ?: return null
         val fn = list.getParentOfType<KtNamedFunction>(strict = true)
-        return TypeParamCtx(inlineFun = fn?.hasModifier(KtTokens.INLINE_KEYWORD) == true)
+        val inBound = generateSequence(leaf as KtElement?) { it.parent }.takeWhile { it !== list }.any { it is KtTypeReference }
+        return TypeParamCtx(
+            inlineFun = fn?.hasModifier(KtTokens.INLINE_KEYWORD) == true,
+            ofClass = list.parent is KtClassOrObject,
+            atName = !inBound,
+        )
     }
 
     /**

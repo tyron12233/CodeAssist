@@ -4467,6 +4467,24 @@ class KotlinSymbolService(
         }
     }
 
+    /** [typeAliasTargetFqn] through a chain of aliases (`typealias AAA = AA`, `typealias AA = A`): the class the
+     *  last one names, or null when [simpleName] is no alias visible in [ctx] or the chain ends in a generic or
+     *  unknown type. */
+    fun typeAliasChainTargetFqn(simpleName: String, ctx: FileContext?): String? {
+        var name = simpleName
+        var context = ctx
+        repeat(ALIAS_EXPAND_LIMIT) {
+            val alias = visibleTypeAlias(name, context)
+                ?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() } ?: return null
+            val target = alias.targetText.substringBefore('<').removeSuffix("?").trim()
+            resolveTypeName(target, alias.ctx)?.takeIf { isKnownType(it) }?.let { return it }
+            if ('.' in target) return null
+            name = target
+            context = alias.ctx
+        }
+        return null
+    }
+
     fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
 
     /** Whether [fqn] names a project typealias, a nested one (`Outer.TA`) included. */
