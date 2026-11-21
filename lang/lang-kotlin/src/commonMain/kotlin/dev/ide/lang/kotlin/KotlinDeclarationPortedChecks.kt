@@ -244,10 +244,33 @@ internal fun valueParameterWithoutType(p: KtParameter): Diagnostic? {
 
 private fun noExpectedType(e: KtElement): Boolean {
     val parent = e.parent
-    if (parent is KtProperty) return parent.initializer === e && parent.typeReference == null && !parent.hasDelegate()
-    if (parent is KtBlockExpression) return parent.parent is KtNamedFunction && (parent.parent as KtNamedFunction).bodyBlockExpression === parent
+    if (parent is KtProperty) {
+        return parent.initializer === e && !parent.hasDelegate() &&
+            (parent.typeReference == null || e is KtLambdaExpression && declaresPlainValueType(parent))
+    }
+    if (parent is KtBlockExpression) {
+        if (parent.parent is KtNamedFunction && (parent.parent as KtNamedFunction).bodyBlockExpression === parent) return true
+        // A lambda written as a statement that is not a block's last (its value) is never expected to be anything.
+        return e is KtLambdaExpression && parent.statements.lastOrNull() !== e
+    }
+    // A lambda called on the spot (`{ a -> a }(1)`) is analyzed before the call that would type it.
+    if (e is KtLambdaExpression && parent is dev.ide.kotlin.syntax.psi.KtCallExpression) return parent.calleeExpression === e
     return false
 }
+
+/** `val x: String = …`: a property declared as one of the builtin value types, which no function type or SAM
+ *  interface can be, when this file declares no classifier of that name. */
+private fun declaresPlainValueType(p: KtProperty): Boolean {
+    val type = p.typeReference?.typeElement as? KtUserType ?: return false
+    if (type.qualifier != null || type.typeArgumentList != null) return false
+    val name = type.referencedName ?: return false
+    if (name !in PLAIN_VALUE_TYPES) return false
+    val file = p.containingKtFile
+    return file.importDirectives.none { it.aliasName == name } &&
+        file.declarations.none { (it is KtClassOrObject || it is dev.ide.kotlin.syntax.psi.KtTypeAlias) && (it as KtNamedDeclaration).name == name }
+}
+
+private val PLAIN_VALUE_TYPES = setOf("String", "Int", "Long", "Short", "Byte", "Double", "Float", "Boolean", "Char")
 
 // --- FirPrimaryConstructorSuperTypeChecker (interface branch) ---
 
@@ -750,7 +773,7 @@ internal fun constructorDelegation(cls: KtClassOrObject): List<Diagnostic> {
     fun target(ctor: KtSecondaryConstructor): KtDeclaration? {
         val call = ctor.getDelegationCall()
         if (call.isImplicit || call.calleeExpression?.isThis != true) return null
-        return delegationTarget(call, all)
+        return delegationTarget(call, all, ctor)
     }
     val cyclic = LinkedHashSet<KtSecondaryConstructor>()
     for (start in secondaries) {
@@ -779,7 +802,7 @@ internal fun constructorDelegation(cls: KtClassOrObject): List<Diagnostic> {
     return out
 }
 
-private fun delegationTarget(call: KtConstructorDelegationCall, all: List<KtDeclaration>): KtDeclaration? {
+private fun delegationTarget(call: KtConstructorDelegationCall, all: List<KtDeclaration>, from: KtSecondaryConstructor): KtDeclaration? {
     val args = call.valueArguments
     if (args.any { it.isSpread || it.getArgumentName() != null }) return null
     fun params(d: KtDeclaration): List<KtParameter> = when (d) {
@@ -793,7 +816,14 @@ private fun delegationTarget(call: KtConstructorDelegationCall, all: List<KtDecl
         args.size <= ps.size && ps.drop(args.size).all { it.hasDefaultValue() }
     }
     if (byArity.size <= 1) return byArity.singleOrNull()
-    val literalTypes = args.map { literalTypeName(it.getArgumentExpression()) ?: return null }
+    // A literal names its type; so does a parameter of the delegating constructor, by its declared type.
+    val literalTypes = args.map { a ->
+        val e = a.getArgumentExpression()
+        literalTypeName(e)
+            ?: (e as? KtNameReferenceExpression)?.getReferencedName()
+                ?.let { n -> from.valueParameters.singleOrNull { it.name == n }?.typeReference?.text?.filterNot { c -> c.isWhitespace() } }
+            ?: return null
+    }
     return byArity.filter { d ->
         val ps = params(d)
         literalTypes.indices.all { i -> ps[i].typeReference?.text?.filterNot { it.isWhitespace() } == literalTypes[i] }

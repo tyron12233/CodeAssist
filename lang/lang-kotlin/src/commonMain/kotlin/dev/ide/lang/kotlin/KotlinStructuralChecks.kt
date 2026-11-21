@@ -141,7 +141,7 @@ internal object KotlinStructuralChecks {
     /** The declaration a `return` leaves: its label's function or lambda, or for a bare `return` the nearest
      *  enclosing function, accessor or constructor (the file when there is none). Null when the label names
      *  nothing this can read. */
-    private fun returnTarget(ret: KtReturnExpression): KtElement? {
+    internal fun returnTarget(ret: KtReturnExpression): KtElement? {
         val label = ret.getLabelName()
         var node = ret.parent
         while (node != null) {

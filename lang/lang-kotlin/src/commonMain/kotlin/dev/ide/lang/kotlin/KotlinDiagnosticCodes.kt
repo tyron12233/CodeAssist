@@ -296,6 +296,106 @@ object KotlinDiagnosticCodes {
      *  spot, where its non-local returns cannot work (NON_LOCAL_RETURN_NOT_ALLOWED). */
     const val NON_LOCAL_RETURN_NOT_ALLOWED = "kt.nonLocalReturnNotAllowed"
 
+    // Round 6 of the K2 ports (KotlinRound6PortedChecks.kt), one code per K2 diagnostic.
+    /** `foo<*>()` / `A<in Int>()`: a projection among a call's type arguments (PROJECTION_ON_NON_CLASS_TYPE_ARGUMENT). */
+    const val PROJECTION_ON_NON_CLASS_TYPE_ARGUMENT = "kt.projectionOnNonClassTypeArgument"
+    /** `super.f()` in a public-API inline function (SUPER_CALL_FROM_PUBLIC_INLINE). */
+    const val SUPER_CALL_FROM_PUBLIC_INLINE = "kt.superCallFromPublicInline"
+    /** `In1<out A>` where the alias expands to a class with an `in` parameter there (CONFLICTING_PROJECTION_IN_TYPEALIAS_EXPANSION). */
+    const val CONFLICTING_PROJECTION_IN_TYPEALIAS_EXPANSION = "kt.conflictingProjectionInTypealiasExpansion"
+    /** `fun f() = run { return 1 }`: a return out of an expression body with no declared type
+     *  (RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY_AND_IMPLICIT_TYPE). */
+    const val RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY_AND_IMPLICIT_TYPE = "kt.returnInExpressionBodyWithImplicitType"
+    /** `A1(A2)` / `val x = A` in an enum: an entry read before it is built (UNINITIALIZED_ENUM_ENTRY). */
+    const val UNINITIALIZED_ENUM_ENTRY = "kt.uninitializedEnumEntry"
+    /** A `fun interface` without exactly one plain abstract function (FUN_INTERFACE_* shape errors). */
+    const val FUN_INTERFACE_SHAPE = "kt.funInterfaceShape"
+    /** `<A : Array<Any>>` (UPPER_BOUND_CANNOT_BE_ARRAY). */
+    const val UPPER_BOUND_CANNOT_BE_ARRAY = "kt.upperBoundCannotBeArray"
+    /** `String & Any`, `T & String` (INCORRECT_LEFT/RIGHT_COMPONENT_OF_INTERSECTION). */
+    const val DEFINITELY_NOT_NULL_COMPONENT = "kt.definitelyNotNullComponent"
+    /** `interface A<T : A<*>>` (FINITE_BOUNDS_VIOLATION). */
+    const val FINITE_BOUNDS_VIOLATION = "kt.finiteBoundsViolation"
+    /** `super<String>` in a class that does not extend it (NOT_A_SUPERTYPE). */
+    const val NOT_A_SUPERTYPE = "kt.notASupertype"
+    /** `val x = T` for a type parameter `T` (TYPE_PARAMETER_IS_NOT_AN_EXPRESSION). */
+    const val TYPE_PARAMETER_IS_NOT_AN_EXPRESSION = "kt.typeParameterIsNotAnExpression"
+    /** `override fun <reified T> f()` (REIFIED_TYPE_PARAMETER_IN_OVERRIDE). */
+    const val REIFIED_TYPE_PARAMETER_IN_OVERRIDE = "kt.reifiedTypeParameterInOverride"
+    /** `@JvmName("with.dot")` (ILLEGAL_JVM_NAME). */
+    const val ILLEGAL_JVM_NAME = "kt.illegalJvmName"
+    /** `class A private (val x: Int)` (MISSING_CONSTRUCTOR_KEYWORD). */
+    const val MISSING_CONSTRUCTOR_KEYWORD = "kt.missingConstructorKeyword"
+    /** `@file:Foo` on a declaration (INAPPLICABLE_FILE_TARGET). */
+    const val INAPPLICABLE_FILE_TARGET = "kt.inapplicableFileTarget"
+    /** `x++` through an `inc()` returning Unit (INC_DEC_SHOULD_NOT_RETURN_UNIT). */
+    const val INC_DEC_SHOULD_NOT_RETURN_UNIT = "kt.incDecShouldNotReturnUnit"
+    /** `Int::ext` for a member extension (EXTENSION_IN_CLASS_REFERENCE_NOT_ALLOWED). */
+    const val EXTENSION_IN_CLASS_REFERENCE_NOT_ALLOWED = "kt.extensionInClassReference"
+    /** An accessor's visibility against its property's (GETTER_VISIBILITY_DIFFERS_FROM_PROPERTY_VISIBILITY,
+     *  SETTER_VISIBILITY_INCONSISTENT_WITH_PROPERTY_VISIBILITY). */
+    const val ACCESSOR_VISIBILITY = "kt.accessorVisibility"
+    /** `val <T> a = 0` or `inline fun` in a block (LOCAL_VARIABLE_WITH_TYPE_PARAMETERS,
+     *  NOT_YET_SUPPORTED_LOCAL_INLINE_FUNCTION). */
+    const val LOCAL_DECLARATION_SHAPE = "kt.localDeclarationShape"
+    /** `when (var x = …)` (ILLEGAL_DECLARATION_IN_WHEN_SUBJECT). */
+    const val ILLEGAL_DECLARATION_IN_WHEN_SUBJECT = "kt.illegalDeclarationInWhenSubject"
+    /** `E(1)` for an enum class `E` (ENUM_CLASS_CONSTRUCTOR_CALL). */
+    const val ENUM_CLASS_CONSTRUCTOR_CALL = "kt.enumClassConstructorCall"
+    /** An inline function calling itself (RECURSION_IN_INLINE). */
+    const val RECURSION_IN_INLINE = "kt.recursionInInline"
+    /** `value class A(val a: A)` (VALUE_CLASS_CANNOT_BE_RECURSIVE). */
+    const val VALUE_CLASS_CANNOT_BE_RECURSIVE = "kt.valueClassCannotBeRecursive"
+    /** `annotation class A(val x: Int = nonConst)` (ANNOTATION_PARAMETER_DEFAULT_VALUE_MUST_BE_CONSTANT). */
+    const val ANNOTATION_PARAMETER_DEFAULT_VALUE_MUST_BE_CONSTANT = "kt.annotationDefaultNotConstant"
+    /** `suspend fun() {}` (ANONYMOUS_SUSPEND_FUNCTION). */
+    const val ANONYMOUS_SUSPEND_FUNCTION = "kt.anonymousSuspendFunction"
+    /** `noinline x: Int`, or `noinline` in a function that is not inline (ILLEGAL_INLINE_PARAMETER_MODIFIER). */
+    const val ILLEGAL_INLINE_PARAMETER_MODIFIER = "kt.illegalInlineParameterModifier"
+    /** `@set:` on a `val`, `@get:` on a function, `@delegate:` without a delegate (INAPPLICABLE_TARGET_ON_PROPERTY,
+     *  INAPPLICABLE_TARGET_PROPERTY_IMMUTABLE, INAPPLICABLE_TARGET_PROPERTY_HAS_NO_DELEGATE). */
+    const val PROPERTY_USE_SITE_TARGET = "kt.propertyUseSiteTarget"
+    /** `c += x` through a `plusAssign` returning a value (ASSIGNMENT_OPERATOR_SHOULD_RETURN_UNIT). */
+    const val ASSIGNMENT_OPERATOR_SHOULD_RETURN_UNIT = "kt.assignmentOperatorShouldReturnUnit"
+    /** `var x: Int … set(value: Long)` (WRONG_SETTER_PARAMETER_TYPE). */
+    const val WRONG_SETTER_PARAMETER_TYPE = "kt.wrongSetterParameterType"
+    /** An enum entry leaving an abstract member unimplemented (ABSTRACT_MEMBER_NOT_IMPLEMENTED_BY_ENUM_ENTRY). */
+    const val ABSTRACT_MEMBER_NOT_IMPLEMENTED_BY_ENUM_ENTRY = "kt.abstractMemberNotImplementedByEnumEntry"
+    /** `private open fun`, `Foo<in out T>`: the compatibility table's pairs not covered by [MODIFIERS] (INCOMPATIBLE_MODIFIERS). */
+    const val INCOMPATIBLE_MODIFIERS = "kt.incompatibleModifiers"
+    /** `::class` with nothing on its left (UNSUPPORTED_CLASS_LITERALS_WITH_EMPTY_LHS). */
+    const val UNSUPPORTED_CLASS_LITERALS_WITH_EMPTY_LHS = "kt.emptyLhsClassLiteral"
+    /** `typealias X<T> = T` (TYPEALIAS_SHOULD_EXPAND_TO_CLASS). */
+    const val TYPEALIAS_SHOULD_EXPAND_TO_CLASS = "kt.typealiasShouldExpandToClass"
+    /** `typealias A<T : Number> = …` (BOUND_ON_TYPE_ALIAS_PARAMETER_NOT_ALLOWED). */
+    const val BOUND_ON_TYPE_ALIAS_PARAMETER_NOT_ALLOWED = "kt.boundOnTypeAliasParameter"
+    /** `val f = fun ()` without a body (NON_MEMBER_FUNCTION_NO_BODY). */
+    const val NON_MEMBER_FUNCTION_NO_BODY = "kt.nonMemberFunctionNoBody"
+    /** `val a by d` with `get() = …` (ACCESSOR_FOR_DELEGATED_PROPERTY). */
+    const val ACCESSOR_FOR_DELEGATED_PROPERTY = "kt.accessorForDelegatedProperty"
+    /** `inline fun f(p: (() -> Unit)?)` (NULLABLE_INLINE_PARAMETER). */
+    const val NULLABLE_INLINE_PARAMETER = "kt.nullableInlineParameter"
+    /** `T<Int>` for a type parameter `T` (TYPE_ARGUMENTS_NOT_ALLOWED). */
+    const val TYPE_ARGUMENTS_NOT_ALLOWED = "kt.typeArgumentsNotAllowed"
+    /** `_@ expr`, `fun f(_: Int)` (UNDERSCORE_IS_RESERVED). */
+    const val UNDERSCORE_IS_RESERVED = "kt.underscoreIsReserved"
+    /** `@ExtensionFunctionType () -> Int` (WRONG_EXTENSION_FUNCTION_TYPE). */
+    const val WRONG_EXTENSION_FUNCTION_TYPE = "kt.wrongExtensionFunctionType"
+    /** `override val` over a `var` (VAR_OVERRIDDEN_BY_VAL). */
+    const val VAR_OVERRIDDEN_BY_VAL = "kt.varOverriddenByVal"
+    /** `@SinceKotlin("1")` (ILLEGAL_KOTLIN_VERSION_STRING_VALUE). */
+    const val ILLEGAL_KOTLIN_VERSION_STRING_VALUE = "kt.illegalKotlinVersionString"
+    /** `@JvmExposeBoxed` on a private declaration (JVM_EXPOSE_BOXED_CANNOT_EXPOSE_PRIVATE). */
+    const val JVM_EXPOSE_BOXED_CANNOT_EXPOSE_PRIVATE = "kt.jvmExposeBoxedPrivate"
+    /** `val a by A()` where `A` has no `getValue` (DELEGATE_SPECIAL_FUNCTION_MISSING). */
+    const val DELEGATE_SPECIAL_FUNCTION_MISSING = "kt.delegateSpecialFunctionMissing"
+    /** A captured local `val` assigned in a lambda or local function (CAPTURED_VAL_INITIALIZATION). */
+    const val CAPTURED_VAL_INITIALIZATION = "kt.capturedValInitialization"
+    /** `v += x` where both `plusAssign` and `plus` apply (ASSIGN_OPERATOR_AMBIGUITY). */
+    const val ASSIGN_OPERATOR_AMBIGUITY = "kt.assignOperatorAmbiguity"
+    /** `A()` calling a protected constructor from a subclass body (PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL). */
+    const val PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL = "kt.protectedConstructorNotInSuperCall"
+
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"
 

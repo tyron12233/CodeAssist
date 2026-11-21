@@ -319,6 +319,383 @@ class KotlinCompilerParityTest {
         clean("private val R = Regex(\"x\")\nfun d(s: String?): String? = s?.let(R::find)?.groupValues?.get(1)")
     }
 
+    /** A call's type arguments are types, never projections: `foo<*>()`, `A<in Int>()`. */
+    @Test
+    fun projectionsAmongACallsTypeArgumentsAreReported() {
+        val code = KotlinDiagnosticCodes.PROJECTION_ON_NON_CLASS_TYPE_ARGUMENT
+        assertCodes("fun <T> getT(): T? = null\nfun t() { getT<*>() }", code)
+        assertCodes("class A<T, R>\nfun t() { A<in Int, out String>() }", code, code)
+        clean("fun <T> getT(): T? = null\nclass A<T>\nfun t(): A<*>? { getT<Int>(); val l: List<out Number> = listOf(1); return null }")
+    }
+
+    /** A public-API inline function cannot make a `super` call; an object literal's own `super` is local. */
+    @Test
+    fun superCallsFromPublicInlineFunctionsAreReported() {
+        val code = KotlinDiagnosticCodes.SUPER_CALL_FROM_PUBLIC_INLINE
+        assertCodes("open class A { open fun f() = 1 }\nclass B : A() { inline fun g() = super.f() }", code)
+        assertCodes("open class A { open fun f() = 1 }\nclass B : A() { inline fun g() { run { super.f() } } }", code)
+        clean("open class A { open fun f() = 1 }\nclass B : A() { private inline fun g() = super.f(); fun h() = super.f() + g() }")
+        clean("open class A { open fun f() = 1 }\nclass B : A() { inline fun g() = object : A() { override fun f() = super.f() }.f() }")
+        clean("open class A { open fun f() = 1 }\nclass B : A() { internal inline fun g() = super.f() }")
+    }
+
+    /** A projection written on a typealias argument conflicts with the variance its expansion puts there. */
+    @Test
+    fun conflictingProjectionsThroughATypeAliasAreReported() {
+        val code = KotlinDiagnosticCodes.CONFLICTING_PROJECTION_IN_TYPEALIAS_EXPANSION
+        val decls = "class In<in T>\nclass Out<out T>\nclass Inv<T>\ntypealias In1<T> = In<T>\ntypealias Out1<T> = Out<T>\n" +
+            "typealias Inv2<T> = Inv<in T>\ntypealias InAlias<T> = In1<T>\n"
+        assertCodes(decls + "fun f(x: In1<out Int>) = x", code)
+        assertCodes(decls + "fun f(x: Out1<in Int>) = x", code)
+        assertCodes(decls + "fun f(x: Inv2<out Int>) = x", code)
+        assertCodes(decls + "fun f(x: InAlias<out Int>) = x", code)
+        clean(decls + "fun f(a: In1<Int>, b: Out1<*>, c: Inv2<in Int>, d: InAlias<Int>) {}")
+    }
+
+    /** A lambda called on the spot, or written as a statement whose value nobody reads, gets no parameter types
+     *  from anywhere. */
+    @Test
+    fun lambdaParametersWithoutAnExpectedTypeNeedTypes() {
+        val code = KotlinDiagnosticCodes.PARAMETER_TYPE_REQUIRED
+        assertCodes("val larg = { a -> }(123)", code)
+        assertCodes("fun t() { { a -> }\n println() }", code)
+        clean("val larg = { a: Int -> a }(123)\nfun t(): (Int) -> Int { return { a -> a } }\nval f: (Int) -> Unit = { a -> }")
+    }
+
+    /** `private` with `open`/`abstract` is fine on a class but not on a member, and `in out` is no variance. */
+    @Test
+    fun privateOpenMembersAndInOutProjectionsAreIncompatible() {
+        val code = KotlinDiagnosticCodes.INCOMPATIBLE_MODIFIERS
+        assertCodes("open class A { private open fun f() {} }", code, code)
+        assertCodes("class Foo<T>\nfun t(foo: Foo<in out Int>) = foo", code, code)
+        clean("private open class A { private fun f() {} }\nprivate abstract class B")
+    }
+
+    /** An enum entry named `name` or `ordinal` clashes with what `Enum` declares. */
+    @Test
+    fun enumEntriesNamedLikeEnumPropertiesAreRedeclarations() {
+        val code = KotlinDiagnosticCodes.CONFLICTING_DECLARATION
+        assertCodes("enum class A { name, B }", code, code)
+        clean("enum class A { NAME, Ordinal }")
+    }
+
+    /** A `return` out of an expression body needs the function's type written down. */
+    @Test
+    fun returnsFromImplicitlyTypedExpressionBodiesAreReported() {
+        val code = KotlinDiagnosticCodes.RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY_AND_IMPLICIT_TYPE
+        assertCodes("fun f(b: Boolean) = run { if (b) return 1; 2 }", code)
+        clean("fun f(b: Boolean): Int = run { if (b) return 1; 2 }\nfun g(b: Boolean) = run { fun h(): Int { return 1 }; h() }\n" +
+            "fun k(xs: List<Int>) = xs.map l@{ if (it > 1) return@l 0; it }")
+    }
+
+    /** Enum entries are built in order, and a member initializer runs inside every entry's constructor. */
+    @Test
+    fun enumEntriesReadBeforeTheyAreBuiltAreReported() {
+        val code = KotlinDiagnosticCodes.UNINITIALIZED_ENUM_ENTRY
+        assertCodes("enum class A(val v: A?) { A1(A2), A2(A1) }", code)
+        assertCodes("enum class E { X, Y; val n = when (this) { X -> 1; else -> 2 } }", code)
+        clean("enum class E { X, Y; val n by lazy { when (this) { X -> 1; else -> 2 } }; fun f() = X }\n" +
+            "enum class F(val f: () -> F) { A({ B }), B({ A }) }")
+    }
+
+    /** A fun interface has exactly one abstract function, which is neither generic nor defaulted. */
+    @Test
+    fun funInterfaceShapesAreChecked() {
+        val code = KotlinDiagnosticCodes.FUN_INTERFACE_SHAPE
+        assertCodes("fun interface Foo1", code)
+        assertCodes("fun interface Foo3 { fun foo(); fun bar() }", code)
+        assertCodes("fun interface Foo8 { fun <T> invoke(x: T) }", code)
+        assertCodes("fun interface Foo5 { fun f(); val prop: Int }", code)
+        clean("interface Base { fun base() }\nfun interface Good : Base\nfun interface Good2 : Base { fun more() {} }\n" +
+            "fun interface Good3 { fun run(); val p: Int get() = 1 }\nfun interface Good4 : Comparable<Int>")
+    }
+
+    /** No array type bounds a type parameter. */
+    @Test
+    fun arrayUpperBoundsAreReported() {
+        val code = KotlinDiagnosticCodes.UPPER_BOUND_CANNOT_BE_ARRAY
+        assertCodes("fun <A : Array<Any>> f1() {}", code)
+        assertCodes("fun <T> f5() where T : IntArray {}", code)
+        clean("fun <T : List<Any>> f() {}\nfun <T> g(a: Array<T>) = a")
+    }
+
+    /** `T & Any` takes a nullable type parameter on the left and `Any` on the right. */
+    @Test
+    fun definitelyNotNullComponentsAreChecked() {
+        val code = KotlinDiagnosticCodes.DEFINITELY_NOT_NULL_COMPONENT
+        assertCodes("fun <T : Any> foo(x: T & Any) {}", code)
+        assertCodes("fun <F> bar(x: F & String) {}", code)
+        clean("fun <T> f(x: T & Any) {}\nfun <K : Comparable<K>?> g(x: K & Any) {}\nfun <R : T & Any, T> h() {}")
+    }
+
+    /** Bounds that reach back to their own parameter through projections never finish expanding. */
+    @Test
+    fun finiteBoundViolationsAreReported() {
+        val code = KotlinDiagnosticCodes.FINITE_BOUNDS_VIOLATION
+        assertCodes("interface A1<T : A1<*>>", code)
+        assertCodes("interface B0<T : B1<*>>\ninterface B1<T : B0<*>>", code, code)
+        clean("interface A<T : A<T>>\nclass E<T : Comparable<*>>\nabstract class S<T : S<T>> : Comparable<S<*>>")
+    }
+
+    /** A `const val` holds a primitive, an unsigned value or a String, never a range or an enum. */
+    @Test
+    fun constValTypesAreChecked() {
+        val code = KotlinDiagnosticCodes.CONST_MISUSE
+        assertCodes("const val r = 1..2", code)
+        assertCodes("enum class E { A }\nconst val e: E = E.A", code)
+        clean("const val a = 1\nconst val b: Long = 2\nconst val s = \"x\" + a\nconst val c = a + 3")
+    }
+
+    /** `super<X>` names one of the class's own supertypes. */
+    @Test
+    fun superQualifiersMustBeOwnSupertypes() {
+        val code = KotlinDiagnosticCodes.NOT_A_SUPERTYPE
+        assertCodes("open class A { open fun f() {} }\nclass B : A() { fun g() { super<String>.hashCode() } }", code)
+        assertCodes("interface G<T> { fun foo() {} }\nclass CG : G<Int> { fun t() { super<G<String>>.foo() } }", code)
+        clean("interface G<T> { fun foo() {} }\nopen class C { open fun bar() {} }\ntypealias CC = C\n" +
+            "class CG : CC(), G<Int> { fun t() { super<G>.foo(); super<G<Int>>.foo(); super<C>.bar(); super<CC>.bar() } }")
+    }
+
+    /** A type parameter's name is not a value. */
+    @Test
+    fun typeParametersAreNotExpressions() {
+        val code = KotlinDiagnosticCodes.TYPE_PARAMETER_IS_NOT_AN_EXPRESSION
+        assertCodes("fun <T> f() { val x = T }", code)
+        clean("fun <T> f(x: T): T { val y: T = x; return y }\ninline fun <reified T> g() = T::class")
+    }
+
+    /** An override cannot make its type parameters reified. */
+    @Test
+    fun reifiedTypeParametersOfOverridesAreReported() {
+        val code = KotlinDiagnosticCodes.REIFIED_TYPE_PARAMETER_IN_OVERRIDE
+        // The parameter is reified outside an inline function too, which is its own error.
+        assertCodes("interface I { fun <T> q(x: T) }\nclass C : I { override fun <reified T> q(x: T) {} }", code, KotlinDiagnosticCodes.TYPE_PARAMETER_SHAPE)
+        clean("inline fun <reified T> q(x: T) = x")
+    }
+
+    /** A JVM name is a method name the JVM accepts. */
+    @Test
+    fun illegalJvmNamesAreReported() {
+        assertCodes("@JvmName(\"with.dot\") fun foo1() {}", KotlinDiagnosticCodes.ILLEGAL_JVM_NAME)
+        clean("@JvmName(\"fine_name\") fun foo2() {}")
+    }
+
+    /** A primary constructor with modifiers needs its `constructor` keyword. */
+    @Test
+    fun primaryConstructorModifiersNeedTheKeyword() {
+        assertCodes("class A private (val x: Int)", KotlinDiagnosticCodes.MISSING_CONSTRUCTOR_KEYWORD)
+        clean("class A private constructor(val x: Int)\nclass B(val y: Int)")
+    }
+
+    /** `@file:` annotations belong before the package directive. */
+    @Test
+    fun fileTargetsOnDeclarationsAreReported() {
+        assertCodes("annotation class Foo\n@file:Foo\nfun f() {}", KotlinDiagnosticCodes.INAPPLICABLE_FILE_TARGET)
+    }
+
+    /** `x++` assigns what `inc()` returns, so it cannot be Unit. */
+    @Test
+    fun incrementsThroughUnitReturningIncAreReported() {
+        val code = KotlinDiagnosticCodes.INC_DEC_SHOULD_NOT_RETURN_UNIT
+        assertCodes("class U { operator fun inc(): Unit {} }\nfun t() { var x = U(); x++ }", KotlinDiagnosticCodes.INAPPLICABLE_OPERATOR, code)
+        clean("class V { operator fun inc(): V = this }\nfun t() { var x = V(); x++; ++x }")
+    }
+
+    /** A member extension cannot be referenced with `::`. */
+    @Test
+    fun referencesToMemberExtensionsAreReported() {
+        assertCodes("class A { fun Int.extInt() = 42\n fun main() { Int::extInt } }", KotlinDiagnosticCodes.EXTENSION_IN_CLASS_REFERENCE_NOT_ALLOWED)
+        clean("fun Int.ext() = 1\nclass A { fun main() = Int::ext }")
+    }
+
+    /** A getter shares its property's visibility; a setter is at most as visible. */
+    @Test
+    fun accessorVisibilitiesAreChecked() {
+        val code = KotlinDiagnosticCodes.ACCESSOR_VISIBILITY
+        assertCodes("class My { private var y: Int = 1\n public set }", code)
+        assertCodes("abstract class My { abstract val y: Int\n protected get }", code)
+        clean("class My { var x: Int = 0\n private set\n protected var z: Int = 2\n private set\n val w: Int\n public get() = 1 }")
+    }
+
+    /** A local variable has no type parameters, and a local function is not inline. */
+    @Test
+    fun localDeclarationShapesAreChecked() {
+        val code = KotlinDiagnosticCodes.LOCAL_DECLARATION_SHAPE
+        assertCodes("fun t() { val <T> a0 = 0 }", code)
+        assertCodes("fun t() { inline fun a() {} }", code)
+    }
+
+    /** A `when` subject declares one `val` with an initializer. */
+    @Test
+    fun illegalWhenSubjectDeclarationsAreReported() {
+        val code = KotlinDiagnosticCodes.ILLEGAL_DECLARATION_IN_WHEN_SUBJECT
+        assertCodes("fun foo(): Any = 1\nfun t() { when (var y = foo()) { else -> {} } }", code)
+        clean("fun foo(): Any = 1\nfun t() { when (val y = foo()) { is String -> y.length; else -> {} } }")
+    }
+
+    /** Only an enum's entries construct it. */
+    @Test
+    fun enumConstructorCallsAreReported() {
+        assertCodes("enum class A(val c: Int) { ONE(1); fun make(): A = A(10) }", KotlinDiagnosticCodes.ENUM_CLASS_CONSTRUCTOR_CALL)
+        clean("enum class A(val c: Int) { ONE(1) }\nclass B(val a: Int)\nval b = B(1)")
+    }
+
+    /** An inline function cannot call itself. */
+    @Test
+    fun recursiveInlineFunctionsAreReported() {
+        assertCodes("inline fun f(s: (Int) -> Unit) { f(s) }", KotlinDiagnosticCodes.RECURSION_IN_INLINE)
+        clean("fun g(n: Int): Int = if (n > 0) g(n - 1) else 0")
+    }
+
+    /** A value class cannot contain itself. */
+    @Test
+    fun recursiveValueClassesAreReported() {
+        val code = KotlinDiagnosticCodes.VALUE_CLASS_CANNOT_BE_RECURSIVE
+        assertCodes("@JvmInline value class A(val x: B)\n@JvmInline value class B(val x: A)", code, code)
+        clean("@JvmInline value class C(val x: List<C>)\n@JvmInline value class D(val x: Int)")
+    }
+
+    /** An annotation parameter's default is a constant. */
+    @Test
+    fun annotationParameterDefaultsMustBeConstant() {
+        val code = KotlinDiagnosticCodes.ANNOTATION_PARAMETER_DEFAULT_VALUE_MUST_BE_CONSTANT
+        assertCodes("val iVal = 42\nannotation class Test4(val x: Int = iVal)", code)
+        clean("const val iConst = 42\nannotation class Test2(val x: Int = iConst + 1)\nannotation class T3(val s: Array<String> = arrayOf(\"a\"))")
+    }
+
+    /** An anonymous function cannot be `suspend`. */
+    @Test
+    fun anonymousSuspendFunctionsAreReported() {
+        assertCodes("fun t() { suspend fun() {} }", KotlinDiagnosticCodes.ANONYMOUS_SUSPEND_FUNCTION)
+    }
+
+    /** `noinline`/`crossinline` belong to function-typed parameters of inline functions. */
+    @Test
+    fun inlineParameterModifiersAreChecked() {
+        val code = KotlinDiagnosticCodes.ILLEGAL_INLINE_PARAMETER_MODIFIER
+        assertCodes("inline fun foo(noinline x: Int) {}", code)
+        assertCodes("fun gav(noinline x: (Int) -> Unit) {}", code)
+        clean("inline fun correct(noinline x: (Int) -> Unit, crossinline y: (String) -> Int, noinline z: (() -> Unit)?) {}")
+    }
+
+    /** Property use-site targets apply to properties, `@set:` to mutable ones, `@delegate:` to delegated ones. */
+    @Test
+    fun propertyUseSiteTargetsAreChecked() {
+        val code = KotlinDiagnosticCodes.PROPERTY_USE_SITE_TARGET
+        assertCodes("annotation class Ann\nclass C { @set:Ann val p: String = \"\" }", code)
+        assertCodes("annotation class Ann\nclass C { @delegate:Ann val p: String = \"\" }", code)
+        assertCodes("annotation class Ann\nclass C { val p: Int\n @get:Ann get() = 5 }", code)
+        clean("annotation class Ann\nclass C(@set:Ann var a: Int) { @set:Ann var p: String = \"\"; @get:Ann val q = 1; @delegate:Ann val r by lazy { 1 } }")
+    }
+
+    /** `c += x` through a `plusAssign` that returns a value. */
+    @Test
+    fun valueReturningAssignmentOperatorsAreReported() {
+        assertCodes(
+            "class B { operator fun plusAssign(o: B): String = \"s\" }\nfun t() { val c = B(); c += B() }",
+            KotlinDiagnosticCodes.INAPPLICABLE_OPERATOR, KotlinDiagnosticCodes.ASSIGNMENT_OPERATOR_SHOULD_RETURN_UNIT,
+        )
+        clean("class B { operator fun plusAssign(o: B) {} }\nfun t() { val c = B(); c += B() }")
+    }
+
+    /** A setter's parameter has its property's type. */
+    @Test
+    fun setterParameterTypesMatchTheProperty() {
+        assertCodes("class C { var x: Int = 1\n set(value: Long) {} }", KotlinDiagnosticCodes.WRONG_SETTER_PARAMETER_TYPE)
+        clean("class C { var x: Int = 1\n set(value: Int) { field = value }\n var y: String = \"\"\n set(v) { field = v } }")
+    }
+
+    /** Every enum entry implements its enum's abstract members. */
+    @Test
+    fun enumEntriesImplementAbstractMembers() {
+        val code = KotlinDiagnosticCodes.ABSTRACT_MEMBER_NOT_IMPLEMENTED_BY_ENUM_ENTRY
+        assertCodes("enum class E { A { override fun f() = 1 }, B; abstract fun f(): Int }", code)
+        clean("enum class E { A { override fun f() = 1 }; abstract fun f(): Int }\ninterface I { fun g() }\nenum class F : I { X; override fun g() {} }")
+    }
+
+    /** Declaration forms K2 rejects on sight: `::class` alone, an alias to a type parameter or with bounds, a
+     *  bodiless anonymous function, accessors on a delegated property, `T<Int>`, `_` as a label or parameter name,
+     *  a misplaced `@ExtensionFunctionType`. */
+    @Test
+    fun smallDeclarationFormsAreReported() {
+        assertCodes("fun t() { ::class }", KotlinDiagnosticCodes.UNSUPPORTED_CLASS_LITERALS_WITH_EMPTY_LHS)
+        assertCodes("typealias ToTypeParam1<T> = T", KotlinDiagnosticCodes.TYPEALIAS_SHOULD_EXPAND_TO_CLASS)
+        assertCodes("typealias WithBounds1<T : Number> = List<T>", KotlinDiagnosticCodes.BOUND_ON_TYPE_ALIAS_PARAMETER_NOT_ALLOWED)
+        assertCodes("val bas = fun ()", KotlinDiagnosticCodes.NON_MEMBER_FUNCTION_NO_BODY)
+        assertCodes("val a: Int by lazy { 1 }\n get() = 1", KotlinDiagnosticCodes.ACCESSOR_FOR_DELEGATED_PROPERTY)
+        assertCodes("fun <T> foo(t: T<String>) {}", KotlinDiagnosticCodes.TYPE_ARGUMENTS_NOT_ALLOWED)
+        assertCodes("interface I { fun x(a: Int): String }\nclass A : I { override fun x(_: Int) = \"\" }", KotlinDiagnosticCodes.UNDERSCORE_IS_RESERVED)
+        assertCodes("fun f6(x: @ExtensionFunctionType () -> Int) {}", KotlinDiagnosticCodes.WRONG_EXTENSION_FUNCTION_TYPE)
+        clean("typealias L<T> = List<T>\nval f = fun() {}\nval b: Int by lazy { 1 }\nfun <T> g(t: List<T>) = t\n" +
+            "fun h(x: @ExtensionFunctionType (String) -> Int) {}\nfun k() = listOf(1).map { _ -> 1 }")
+    }
+
+    /** An inline function's function-typed parameter that may be null cannot be inlined. */
+    @Test
+    fun nullableInlineParametersAreReported() {
+        assertCodes("inline fun test(s: () -> Unit, p: (() -> Unit)?) { s(); p?.invoke() }", KotlinDiagnosticCodes.NULLABLE_INLINE_PARAMETER)
+        clean("inline fun test(s: () -> Unit, noinline p: (() -> Unit)?) { s(); p?.invoke() }")
+    }
+
+    /** A `var` stays a `var` in its overrides. */
+    @Test
+    fun varsOverriddenByValsAreReported() {
+        assertCodes("open class Var { open var v: Int = 1 }\nclass Val : Var() { override val v: Int = 1 }", KotlinDiagnosticCodes.VAR_OVERRIDDEN_BY_VAL)
+        clean("open class A { open val v: Int = 1 }\nclass B : A() { override var v: Int = 2 }")
+    }
+
+    /** A Kotlin version string is `major.minor` or `major.minor.patch`. */
+    @Test
+    fun kotlinVersionStringsAreChecked() {
+        assertCodes("@SinceKotlin(\"1\") fun f() {}", KotlinDiagnosticCodes.ILLEGAL_KOTLIN_VERSION_STRING_VALUE)
+        clean("@SinceKotlin(\"1.3\") fun g() {}\n@SinceKotlin(\"1.9.20\") fun h() {}")
+    }
+
+    /** A function type is an interface: a supertype list cannot call it. */
+    @Test
+    fun functionTypeSupertypesHaveNoConstructor() {
+        assertCodes("abstract class C : Function0<Int>()", KotlinDiagnosticCodes.NO_CONSTRUCTOR)
+        clean("abstract class D : () -> Int")
+    }
+
+    /** A delegate needs `getValue`, and `setValue` for a `var`. */
+    @Test
+    fun delegatesWithoutOperatorsAreReported() {
+        assertCodes("class A\nval a: Int by A()", KotlinDiagnosticCodes.DELEGATE_SPECIAL_FUNCTION_MISSING)
+        clean("import kotlin.reflect.KProperty\nclass A { operator fun getValue(t: Any?, p: KProperty<*>): Int = 1 }\nval a: Int by A()")
+    }
+
+    /** A captured `val` cannot be initialized where the code may run any number of times. */
+    @Test
+    fun capturedValInitializationIsReported() {
+        assertCodes("fun exec(f: () -> Unit) = f()\nfun bar() { val x: Int\n exec { x = 13 } }", KotlinDiagnosticCodes.CAPTURED_VAL_INITIALIZATION)
+        clean("fun bar(): Int { val x: Int\n run { x = 13 }\n return x }\nfun baz() { var y: Int\n listOf(1).forEach { y = it } }")
+    }
+
+    /** `v += x` on a `var` whose class has both `plus` and `plusAssign` cannot choose. */
+    @Test
+    fun ambiguousAssignmentOperatorsAreReported() {
+        val decls = "class C\noperator fun C.plus(a: Any): C = this\noperator fun C.plusAssign(a: Any) {}\n"
+        assertCodes(decls + "fun t() { var c1 = C(); c1 += \"\" }", KotlinDiagnosticCodes.ASSIGN_OPERATOR_AMBIGUITY)
+        clean(decls + "fun t() { val c = C(); c += \"\" }")
+    }
+
+    /** A protected constructor is reachable from a subclass only through a super call. */
+    @Test
+    fun protectedConstructorsOutsideSuperCallsAreReported() {
+        val decls = "open class A protected constructor(x: Int) { public constructor(x: Double) : this(3) }\n"
+        assertCodes(decls + "class B : A(1) { fun foo() { A(1) } }", KotlinDiagnosticCodes.PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL)
+        clean(decls + "class B : A(1) { fun foo() { A(5.0); object : A(1) {} } }")
+    }
+
+    /** A delegation cycle is followed through parameters passed on, not only literals. */
+    @Test
+    fun constructorDelegationCyclesThroughParametersAreReported() {
+        val code = KotlinDiagnosticCodes.CONSTRUCTOR_SHAPE
+        assertCodes("class X<T>(val t: T) { constructor(t: String) : this(t) }", code)
+        clean("class Y(val t: Int) { constructor(t: String) : this(t.length) }")
+    }
+
     private fun clean(code: String) {
         val errors = errors(code)
         assertTrue(errors.isEmpty(), "expected `$code` clean, got $errors")

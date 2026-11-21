@@ -182,7 +182,10 @@ class KotlinCompilerTestDataSweepTest {
         println(summary)
         // `-Dkt.testDataOut=<file>` keeps concurrent sweeps (several worktrees) from overwriting one details file.
         val details = System.getProperty("kt.testDataOut")?.let(::File) ?: File(System.getProperty("java.io.tmpdir"), "kt-testdata-sweep.txt")
-        details.writeText(summary + "\n" + out)
+        // The whole recall table, every name with a hit or a miss, as `RECALLNAME <missed> <hit> <name>` lines: the
+        // console keeps to the top 60, and a name's hits are not recoverable from the MISS lines alone.
+        val fullTable = recall.joinToString("") { (n, p) -> "RECALLNAME ${p.second} ${p.first} $n\n" }
+        details.writeText(summary + "\n" + fullTable + out)
         println("details: $details")
     }
 
@@ -362,7 +365,7 @@ class KotlinCompilerTestDataSweepTest {
             "kt.expressionExpected" to setOf("EXPRESSION_EXPECTED"),
             "kt.argumentMapping" to setOf("MIXING_NAMED_AND_POSITIONAL_ARGUMENTS", "ARGUMENT_PASSED_TWICE", "NON_VARARG_SPREAD", "VARARG_OUTSIDE_PARENTHESES", "MANY_LAMBDA_EXPRESSION_ARGUMENTS", "NAMED_ARGUMENTS_NOT_ALLOWED"),
             "kt.constMisuse" to setOf("CONST_VAL_WITH_NON_CONST_INITIALIZER", "NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION", "CONST_VAL_NOT_TOP_LEVEL_OR_OBJECT", "CONST_VAL_WITH_GETTER", "CONST_VAL_WITH_DELEGATE", "CONST_VAL_WITHOUT_INITIALIZER", "TYPE_CANT_BE_USED_FOR_CONST_VAL", "WRONG_MODIFIER_TARGET"),
-        ) + PORTED_DECLARATION_K2_NAMES
+        ) + PORTED_DECLARATION_K2_NAMES + ROUND6_K2_NAMES
         val SKIP_DIRECTIVE = Regex(
             """^// ?(MODULE|LANGUAGE|API_VERSION|ALLOW_KOTLIN_PACKAGE|WITH_REFLECT|TARGET_PLATFORM|TARGET_BACKEND|JDK_KIND|""" +
                 """LANGUAGE_VERSION|OPT_IN|WITH_COROUTINES|FULL_JDK|LANGUAGE_FEATURE_TOGGLED|EXPLICIT_API_MODE|JVM_TARGET|""" +

@@ -366,7 +366,7 @@ internal object KotlinInlineChecks {
 
     /** Effective visibility at least as wide as public API: no `private`, `internal` only with `@PublishedApi`,
      *  not local, through every enclosing class. */
-    private fun isPublicApi(decl: KtDeclaration): Boolean {
+    internal fun isPublicApi(decl: KtDeclaration): Boolean {
         var node: KtElement? = decl
         while (node != null && node !is KtFile) {
             when (node) {

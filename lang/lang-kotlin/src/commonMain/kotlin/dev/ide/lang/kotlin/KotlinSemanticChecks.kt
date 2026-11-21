@@ -521,7 +521,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers() + expressionPortedCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -4372,7 +4372,7 @@ internal class KotlinSemanticChecks(
     /** The declaration-site variance of the classifier named [name] in [userType] (`"out"`/`"in"`/`""` per
      *  parameter), or null when unknown (a type-parameter name, an unresolvable name, or a classpath binary) so
      *  the caller backs off. Builtins first, then the source model. */
-    private fun declaredVarianceOf(userType: KtUserType, name: String, resolver: KotlinResolver): List<String>? {
+    internal fun declaredVarianceOf(userType: KtUserType, name: String, resolver: KotlinResolver): List<String>? {
         if (resolver.isTypeParameterInScope(name, userType.textRange.startOffset)) return null
         val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return null
         BUILTIN_TYPE_VARIANCE[fqn]?.let { return it }
