@@ -2054,6 +2054,16 @@ internal class KotlinSemanticChecks(
      *  - more than one visibility modifier (`private public`) — REDUNDANT/INCOMPATIBLE visibility.
      * Each offending keyword is flagged on its own range (so the editor underlines each).
      */
+    /** Whether a repeat of [entry] is an error: its annotation class is declared in this file without
+     *  `@Repeatable`/`@JvmRepeatable`, or it is a well-known annotation that is not repeatable. An annotation this
+     *  file does not declare may be `@Repeatable` where it is declared, so it is left alone. */
+    private fun isKnownNonRepeatable(entry: KtAnnotationEntry, decl: KtDeclaration): Boolean {
+        val name = entry.shortName?.asString() ?: return false
+        val local = decl.containingKtFile.declarations.firstOrNull { it is KtClass && it.isAnnotation() && it.name == name } as? KtClass
+        if (local != null) return local.annotationEntries.none { it.shortName?.asString().let { n -> n == "Repeatable" || n == "JvmRepeatable" } }
+        return name in NON_REPEATABLE_ANNOTATIONS
+    }
+
     private fun modifierConflicts(decl: KtDeclaration): List<Diagnostic> {
         val ml = decl.modifierList ?: return emptyList()
         val present = LinkedHashMap<KtModifierKeywordToken, KtElement>()
@@ -2085,7 +2095,7 @@ internal class KotlinSemanticChecks(
                 }
             } else if (c is KtAnnotationEntry) {
                 val key = c.text.trim()
-                if (key in annotations) {
+                if (key in annotations && isKnownNonRepeatable(c, decl)) {
                     val r = c.textRange
                     out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Repeated '$key' modifier", KotlinDiagnosticCodes.MODIFIERS)
                 } else {
@@ -2264,9 +2274,20 @@ internal class KotlinSemanticChecks(
             // (`import a.process; import b.process`) is never flagged — the false positive — while a genuine type
             // clash (`java.util.Date` vs `java.sql.Date`) still is. (A same-named capitalized factory function is
             // a rare residual; resolving classifier-ness precisely needs the classpath, which may be absent here.)
-            if (!name.first().isUpperCase()) continue
-            // Only a genuine ambiguity — two DIFFERENT targets sharing one name — conflicts.
-            if (imports.mapNotNullTo(HashSet()) { it.importedFqName?.asString() }.size < 2) continue
+            // Only a genuine ambiguity: two DIFFERENT classifiers sharing one name. Decided by what each target IS
+            // when the model knows (a lowercase `class someFun` clashes too); a target known to be a top-level
+            // FUNCTION (a capitalized factory, `fun X()`) overloads instead of conflicting. With nothing known,
+            // the capitalization convention is the guess.
+            val targets = imports.mapNotNullTo(HashSet()) { it.importedFqName?.asString() }
+            if (targets.size < 2) continue
+            val classifiers = targets.count { service.isKnownType(it) }
+            if (classifiers < 2) {
+                if (!name.first().isUpperCase()) continue
+                val functions = service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
+                    .mapNotNullTo(HashSet()) { f -> f.packageName?.let { "$it.$name" } }
+                if (targets.count { it !in functions && !service.isKnownType(it) } + classifiers < 2) continue
+                if (targets.any { it in functions && !service.isKnownType(it) }) continue
+            }
             for (imp in imports) {
                 val r = (imp.importedReference ?: imp).textRange
                 out += Diagnostic(
@@ -2687,6 +2708,8 @@ internal class KotlinSemanticChecks(
             val java = c.declaringClassFqn?.let { service.isJavaType(it) } == true
             java || argTypes.indices.all { i -> argTypes[i] != null || (c.paramTypes.getOrNull(i) as? KotlinType)?.nullable != false }
         }
+        // A member always wins over an extension of the same name, so only members can tie with each other.
+        distinct.filter { !it.isExtension }.let { members -> if (members.isNotEmpty()) distinct = members }
         if (distinct.size < 2) return null
         if (uniqueMostSpecific(distinct) != null) return null // a most-specific overload resolves it
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
@@ -2754,7 +2777,13 @@ internal class KotlinSemanticChecks(
         if (trailingLambda != null && vararg < 0) {
             if (paramCount == 0) return Applicability.LambdaNotApplicable
             val lpt = c.paramTypes.getOrNull(paramCount - 1) as? KotlinType
-            if (lpt != null && service.isKnownType(lpt.qualifiedName) && !isFunctional(lpt) && service.functionalShape(lpt) == null)
+            // `Any`/`Any?` (and a type parameter, never known here) takes a lambda as it takes any value: `fun foo(a:
+            // Any)` called as `foo { }` is valid.
+            // Not a lambda with untyped parameters, though: nothing in `Any` says what `{ x -> }`'s `x` is.
+            val untypedParams = trailingLambda.getLambdaExpression()?.valueParameters?.any { it.typeReference == null } == true
+            val takesAnyValue = (lpt?.qualifiedName == "kotlin.Any" || lpt?.qualifiedName == "java.lang.Object") && !untypedParams
+            if (lpt != null && service.isKnownType(lpt.qualifiedName) && !isFunctional(lpt) && service.functionalShape(lpt) == null &&
+                !takesAnyValue)
                 return Applicability.LambdaNotApplicable
         }
         val supplied = HashSet<Int>()
@@ -4806,3 +4835,10 @@ private val NON_EXHAUSTIVE_SUBJECT_TYPES = setOf(
 
 /** A class literal's class name in source text: `Marker` of `Marker::class`, `pkg.Marker` of `pkg.Marker::class`. */
 private val CLASS_LITERAL = Regex("""([A-Za-z_][A-Za-z0-9_.]*)\s*::\s*class""")
+
+/** Annotations every Kotlin/JVM/Compose project meets that may not be repeated on one element. */
+private val NON_REPEATABLE_ANNOTATIONS = setOf(
+    "Deprecated", "Suppress", "JvmStatic", "JvmField", "JvmName", "JvmOverloads", "JvmInline", "Volatile",
+    "Transient", "Synchronized", "Throws", "Target", "Retention", "MustBeDocumented", "DslMarker",
+    "RequiresOptIn", "PublishedApi", "Composable", "Stable", "Immutable",
+)

@@ -86,15 +86,17 @@ internal object KotlinStructuralChecks {
      * check backs off the moment one is crossed.
      */
     fun unresolvedReturnLabel(ret: KtReturnExpression): Diagnostic? {
-        val label = ret.getLabelName() ?: return null
+        // Compared without backticks: ``return@`yield` `` names `fun `yield`()` and a `` `yield`@ `` label.
+        fun bare(n: String?) = n?.removeSurrounding("`")
+        val label = bare(ret.getLabelName()) ?: return null
         var node = ret.parent
         while (node != null) {
             when (node) {
-                is KtLabeledExpression -> if (node.getLabelName() == label) return null
-                is KtNamedFunction -> if (node.name == label) return null
+                is KtLabeledExpression -> if (bare(node.getLabelName()) == label) return null
+                is KtNamedFunction -> if (bare(node.name) == label) return null
                 is KtFunctionLiteral -> when (val name = implicitLambdaLabel(node)) {
                     null -> return null // an implicit label that cannot be read: do not guess
-                    else -> if (name == label) return null
+                    else -> if (bare(name) == label) return null
                 }
                 is KtClassOrObject, is KtFile -> break
                 else -> {}

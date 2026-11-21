@@ -98,6 +98,18 @@ class KotlinCompilerParityTest {
         assertCodes("@RequiresOptIn annotation class MyOptIn\n@MyOptIn fun foo() {}\nfun t() { foo() }", KotlinDiagnosticCodes.OPT_IN_USAGE_ERROR)
     }
 
+    /** Small K2 rules: `@Repeatable` repeats, a trailing lambda fits `Any`, backticked labels, data-class
+     *  generated members, JVM-mapped members implemented the Kotlin way, members beating extensions. */
+    @Test
+    fun smallResolutionRulesMatchK2() {
+        clean("@Repeatable annotation class repann\n@repann @repann class DoubleAnnotated")
+        assertCodes("annotation class single\n@single @single class Twice", KotlinDiagnosticCodes.MODIFIERS)
+        clean("fun foo(a: Any) {}\nfun f() { foo { } }")
+        clean("fun `yield`(): Unit { return@`yield` }")
+        clean("interface T { fun component1(): Int }\ndata class A(val x: Int) : T")
+        clean("class C { fun t(x: UInt) {} }\nfun C.t(x: ULong) {}\nfun g(c: C) { c.t(9U) }")
+    }
+
     /** A classifier is looked up through every enclosing class, including a local or anonymous one, and through
      *  its own companion and (transitive, typealiased) superCLASSES. */
     @Test

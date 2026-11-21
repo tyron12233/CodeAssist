@@ -200,7 +200,9 @@ val compilerTestPattern = "dev.ide.lang.kotlin.compile.*"
 // suites into the fast gate.
 tasks.named<Test>("jvmTest") {
     filter { excludeTestsMatching(compilerTestPattern) }
-    maxHeapSize = "1536m"
+    // 2g since the parity suites (compiler/IDE-plugin test data) brought the class count past what 1536m held:
+    // the whole suite died with "Java heap space" in the shared fork.
+    maxHeapSize = "2g"
     // Point the real-foundation reproduction/regression test at the extracted classes.jar (self-gates if absent).
     dependsOn(extractComposeFoundationClasses)
     systemProperty("compose.foundation.classes.jar", composeFoundationJar.get().asFile.absolutePath)

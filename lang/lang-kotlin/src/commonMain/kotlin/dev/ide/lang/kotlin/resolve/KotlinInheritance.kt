@@ -393,5 +393,23 @@ internal fun KotlinResolver.ownMemberKeys(cls: KtClassOrObject): Set<String> {
         }
     }
     cls.primaryConstructorParameters.forEach { p -> if (p.hasValOrVar()) p.name?.let { out += "P:$it" } }
+    // A data class's generated members implement abstract ones of the same shape (`interface T { fun
+    // component1(): Int }` is satisfied by `data class A(val x: Int) : T`).
+    if (cls is dev.ide.kotlin.syntax.psi.KtClass && cls.isData()) {
+        val n = cls.primaryConstructorParameters.count { it.hasValOrVar() }
+        for (i in 1..n) out += "M:component$i/0"
+        out += "M:copy/$n"; out += "M:toString/0"; out += "M:hashCode/0"; out += "M:equals/1"
+    }
+    // The JVM spelling of a mapped member the class implements the Kotlin way: an `override val size` is also
+    // the `size()` a Java `AbstractList` supertype declares abstract.
+    for (k in out.toList()) {
+        if (k.startsWith("P:")) KOTLIN_TO_JVM_PROPERTY[k.removePrefix("P:")]?.let { out += "M:$it/0" }
+        if (k == "M:removeAt/1") out += "M:remove/1"
+        if (k == "M:get/1") out += "M:charAt/1"
+    }
     return out
 }
+
+private val KOTLIN_TO_JVM_PROPERTY = mapOf(
+    "size" to "size", "length" to "length", "entries" to "entrySet", "keys" to "keySet", "values" to "values",
+)
