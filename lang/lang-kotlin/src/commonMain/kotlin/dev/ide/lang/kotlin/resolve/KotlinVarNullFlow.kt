@@ -146,7 +146,7 @@ private class FlowState(
     companion object { val EMPTY = FlowState(emptyMap(), emptyMap(), emptySet(), emptyMap()) }
 }
 
-private enum class InPlace { EXACTLY_ONCE, AT_LEAST_ONCE, AT_MOST_ONCE, UNKNOWN }
+internal enum class InPlace { EXACTLY_ONCE, AT_LEAST_ONCE, AT_MOST_ONCE, UNKNOWN }
 
 internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
     private val flow = KotlinControlFlow(resolver)
@@ -958,7 +958,7 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
      * function is inlined at the call, unless `noinline` or `crossinline`); the stdlib's scope functions are
      * known by name, and any other library function by whether it is `inline`.
      */
-    private fun inPlaceKind(lambda: KtLambdaExpression): InPlace? = inPlaceCache.getOrPut(lambda) {
+    internal fun inPlaceKind(lambda: KtLambdaExpression): InPlace? = inPlaceCache.getOrPut(lambda) {
         val call = callOf(lambda) ?: return@getOrPut null
         if (call.calleeExpression !is KtNameReferenceExpression) return@getOrPut null
         val name = (call.calleeExpression as KtNameReferenceExpression).getReferencedName()

@@ -66,6 +66,10 @@ object KotlinDiagnosticCodes {
     const val MISSING_RETURN = "kt.missingReturn"
     const val WHEN_EXHAUSTIVE = "kt.whenExhaustive"
     const val UNSAFE_NULLABLE = "kt.unsafeNullable"
+    /** A member reached through a check (`if (x is String) x.length`, `if (x != null) x.foo()`) on a value the
+     *  compiler cannot smart cast: a `var` or open/custom-getter/delegated property, or a local `var` a closure
+     *  may change. */
+    const val SMARTCAST_IMPOSSIBLE = "kt.smartcastImpossible"
     const val USELESS_CAST = "kt.uselessCast"
     const val USELESS_ELVIS = "kt.uselessElvis"
     const val UNREACHABLE = "kt.unreachable"
@@ -129,6 +133,9 @@ object KotlinDiagnosticCodes {
     /** A use-site projection that conflicts with the type parameter's declaration-site variance
      *  (`Comparable<out T>` where `Comparable<in T>`, `List<in T>` where `List<out E>`) — CONFLICTING_PROJECTION. */
     const val CONFLICTING_PROJECTION = "kt.conflictingProjection"
+    /** A member whose parameter takes the class's `T`, called on a receiver that projects `T` out (`out` or `*`:
+     *  `MutableList<out Number>.add(42)`), so the parameter accepts nothing a real argument can be. */
+    const val MEMBER_PROJECTED_OUT = "kt.memberProjectedOut"
 
     // --- unused (warnings / hints) ---
     const val UNUSED_IMPORT = "kt.unusedImport"

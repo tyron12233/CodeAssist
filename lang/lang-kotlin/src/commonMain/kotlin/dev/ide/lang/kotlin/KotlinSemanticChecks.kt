@@ -362,7 +362,10 @@ internal class KotlinSemanticChecks(
                     val countBad = argumentCountMismatch(psi, resolver)
                     val notApplicable = if (countBad == null) callNotApplicable(psi, resolver) else emptyList()
                     if (notApplicable.isNotEmpty()) reportAll(notApplicable)
-                    else report(countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver))
+                    else report(
+                        countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver)
+                            ?: if (resolveReady) memberProjectedOut(psi, resolver) else null,
+                    )
                 }
                 KotlinPerf.span("call.ambiguity") { if (resolveReady) report(overloadAmbiguity(psi, resolver)) }
                 KotlinPerf.span("call.typeArgBounds") {
@@ -400,7 +403,11 @@ internal class KotlinSemanticChecks(
         },
         // `unsafeNullableAccess` infers the receiver's type — another per-node resolution cost, so spanned.
         KotlinChecker(KtDotQualifiedExpression::class) { psi ->
-            KotlinPerf.span("sem.qualified") { report(unsafeNullableAccess(psi as KtDotQualifiedExpression, resolver)) }
+            KotlinPerf.span("sem.qualified") {
+                // An impossible smart cast is the precise form of what would otherwise read as an unsafe call.
+                val impossible = if (resolveReady) smartCastImpossible(psi as KtDotQualifiedExpression, resolver) else null
+                report(impossible ?: unsafeNullableAccess(psi as KtDotQualifiedExpression, resolver))
+            }
             KotlinPerf.span("sem.newApi") {
                 if (resolveReady) apiContext()?.let { report(apiLevelCheck.accessorProperty(psi as KtDotQualifiedExpression, resolver, it)) }
             }
@@ -3321,6 +3328,61 @@ internal class KotlinSemanticChecks(
             is KtCallExpression -> (sel.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
             else -> null
         }
+
+    /**
+     * `x.member` where `member` exists only because a check narrowed `x` (`if (x is String) x.length`, or
+     * `if (x != null) x.foo()` for a member of the non-null type), but `x` is a value K2 will not smart cast
+     * ([smartCastInstability]: a `var` or an open, custom-getter or delegated property, a delegated local, or a
+     * local `var` a closure may change). The editor's own narrowing is position-based and applies regardless, so
+     * without this the member resolved and nothing was reported where the compiler reports SMARTCAST_IMPOSSIBLE.
+     *
+     * Reported only when the member is missing on the declared type (an `is` check) or the declared type is
+     * nullable and the member is a real member of the non-null one (a null check: an extension that accepts the
+     * nullable receiver, `let`, resolves without a smart cast). Any write of the name between the check and the
+     * use stands the check back, since K2 then knows the assigned value instead.
+     */
+    private fun smartCastImpossible(expr: KtDotQualifiedExpression, resolver: KotlinResolver): Diagnostic? {
+        val ref = unwrapParen(expr.receiverExpression) as? KtNameReferenceExpression ?: return null
+        val member = selectorName(expr) ?: return null
+        val name = ref.getReferencedName()
+        val offset = ref.textRange.startOffset
+        val narrowing = resolver.isNarrowingWithSite(name, offset)
+        // Cheap gate first: most receivers are not narrowed at all.
+        val nullSite = if (narrowing == null) resolver.nullCheckSiteAt(name, offset) ?: return null else null
+        val declared = resolver.declaredTypeOfName(ref)?.takeIf { !it.isTypeParameter } ?: return null
+        if (!service.isKnownType(declared.qualifiedName)) return null
+        val ctx = resolver.fileContext
+        val selectorAt = expr.selectorExpression?.textRange?.startOffset ?: return null
+        fun has(t: KotlinType, membersOnly: Boolean): Boolean =
+            service.membersNamedForCheck(t.qualifiedName, t.typeArguments, member)
+                .any { it.name == member && (!it.isExtension || (!membersOnly && extensionInScope(it, ctx))) } ||
+                (!membersOnly && resolver.scopeMemberExtensions(selectorAt, t, member).any { it.name == member })
+        val target: KotlinType
+        val site: Int
+        val viaIs: Boolean
+        val isType = narrowing?.first
+        if (isType != null && !isType.isTypeParameter && isType.qualifiedName != declared.qualifiedName &&
+            service.isKnownType(isType.qualifiedName) && !has(declared, membersOnly = false)
+        ) {
+            if (!has(isType, membersOnly = false)) return null
+            target = isType; site = narrowing.second; viaIs = true
+        } else {
+            if (!declared.nullable) return null
+            val nonNull = declared.withNullable(false)
+            if (!has(nonNull, membersOnly = true)) return null
+            target = nonNull
+            site = narrowing?.second ?: nullSite ?: return null
+            viaIs = false
+        }
+        if (resolver.reassignedBefore(ref, site)) return null
+        val reason = resolver.smartCastInstability(ref, if (viaIs) target else null) ?: return null
+        val r = ref.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Smart cast to '${renderType(target)}' is impossible, because '$name' is a ${reason.description}",
+            KotlinDiagnosticCodes.SMARTCAST_IMPOSSIBLE,
+        )
+    }
 
     /**
      * `recv.member` on a nullable receiver without `?.`/`!!` (`val s: String? = …; s.length`). Conservative:

@@ -285,6 +285,8 @@ class KotlinCompilerTestDataSweepTest {
             "kt.constructorArgs" to setOf("TOO_MANY_ARGUMENTS", "NO_VALUE_FOR_PARAMETER", "NONE_APPLICABLE", "INAPPLICABLE_CANDIDATE", "ARGUMENT_TYPE_MISMATCH"),
             "kt.missingReturn" to setOf("NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY"),
             "kt.unsafeNullable" to setOf("UNSAFE_CALL", "UNSAFE_INFIX_CALL", "UNSAFE_OPERATOR_CALL", "UNSAFE_IMPLICIT_INVOKE_CALL"),
+            "kt.smartcastImpossible" to setOf("SMARTCAST_IMPOSSIBLE", "SMARTCAST_IMPOSSIBLE_ON_IMPLICIT_INVOKE_RECEIVER"),
+            "kt.memberProjectedOut" to setOf("MEMBER_PROJECTED_OUT"),
             "kt.whenExhaustive" to setOf("NO_ELSE_IN_WHEN"),
             "kt.abstractNotImplemented" to setOf("ABSTRACT_MEMBER_NOT_IMPLEMENTED", "ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED", "MANY_IMPL_MEMBER_NOT_IMPLEMENTED", "MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED", "INVISIBLE_ABSTRACT_MEMBER_FROM_SUPER"),
             "kt.valReassign" to setOf("VAL_REASSIGNMENT", "VAL_REASSIGNMENT_VIA_BACKING_FIELD"),
