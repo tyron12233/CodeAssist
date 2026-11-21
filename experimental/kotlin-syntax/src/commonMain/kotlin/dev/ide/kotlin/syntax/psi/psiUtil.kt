@@ -87,11 +87,22 @@ fun KtFile.findElementAt(offset: Int): KtElement? {
     while (true) {
         // Indexed, on plain offsets: this runs per caret query and per resolution step, and the iterator plus
         // a TextRange per child per level were most of what it allocated.
+        // Children are in source order and never overlap, so the one covering [offset] is found by bisection:
+        // a class body or a long block has hundreds of children, and the resolver asks for an element by
+        // offset at nearly every step, which made the linear scan a tenth of a diagnostics pass.
         val children = current.children
         var next: KtElement? = null
-        for (i in children.indices) {
-            val c = children[i]
-            if (covers(c, offset)) { next = c; break }
+        var lo = 0
+        var hi = children.size - 1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            val c = children[mid]
+            val start = c.textOffset
+            when {
+                offset < start -> hi = mid - 1
+                offset >= start + c.textLength -> lo = mid + 1
+                else -> { next = c; break }
+            }
         }
         current = next ?: return current
     }

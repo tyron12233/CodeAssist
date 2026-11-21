@@ -47,9 +47,17 @@ open class KtElement internal constructor(
 
     override val parent: KtElement?
         get() {
+            // Kept once found: every ancestor walk (`getParentOfType`, scope and flow walks) steps through this,
+            // and resolving the wrapper through the session's cache each step was a sixth of a diagnostics pass.
+            if (parentKnown) return parentCache
             val p = session.tree.parentIndex(node)
-            return if (p == LightSyntaxTree.NO_INDEX) null else session.psi(LightNode(p))
+            val e = if (p == LightSyntaxTree.NO_INDEX) null else session.psi(LightNode(p))
+            parentCache = e
+            parentKnown = true
+            return e
         }
+    private var parentCache: KtElement? = null
+    private var parentKnown = false
 
     /**
      * Children, trivia excluded, computed once per element.
@@ -582,7 +590,10 @@ class KtClassBody internal constructor(session: KtTreeSession, node: LightNode) 
      * `E.A` unresolved everywhere it appeared. [KtClass.enumEntries] is the typed filter for callers that want
      * only the entries.
      */
-    val declarations: List<KtDeclaration> get() = childrenOfType()
+    val declarations: List<KtDeclaration> get() = declarationsCache ?: childrenOfType<KtDeclaration>().also { declarationsCache = it }
+    // Kept once built (see KtBlockExpression.statements): member lookups walk a class body's declarations per
+    // reference.
+    private var declarationsCache: List<KtDeclaration>? = null
     val properties: List<KtProperty> get() = childrenOfType()
     val functions: List<KtNamedFunction> get() = childrenOfType()
     val lBrace: KtElement? get() = child(KtTokens.LBRACE)

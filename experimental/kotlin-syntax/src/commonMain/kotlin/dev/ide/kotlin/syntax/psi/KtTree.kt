@@ -55,7 +55,7 @@ class KtTreeSession internal constructor(
     private val host: KtTreeSession? = null,
 ) {
 
-    private val wrappers = HashMap<Int, KtElement>()
+    private val wrappers = IntKeyedMap<KtElement>()
 
     /** The file element. A sub-parse answers with the file it was parsed out of. */
     val file: KtFile by lazy {

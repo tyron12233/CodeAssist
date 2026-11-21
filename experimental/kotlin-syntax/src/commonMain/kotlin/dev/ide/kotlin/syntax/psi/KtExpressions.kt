@@ -18,7 +18,10 @@ open class KtExpression internal constructor(session: KtTreeSession, node: Light
 
 /** A code block, mirroring `KtBlockExpression`. */
 class KtBlockExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
-    val statements: List<KtExpression> get() = childrenOfType()
+    // Kept once built, like [children] it is filtered from: scope and flow walks read a block's statements at
+    // every step, and refiltering them was one of a diagnostics pass's largest allocations.
+    val statements: List<KtExpression> get() = statementsCache ?: childrenOfType<KtExpression>().also { statementsCache = it }
+    private var statementsCache: List<KtExpression>? = null
     val lBrace: KtElement? get() = child(KtTokens.LBRACE)
     val rBrace: KtElement? get() = child(KtTokens.RBRACE)
 }
