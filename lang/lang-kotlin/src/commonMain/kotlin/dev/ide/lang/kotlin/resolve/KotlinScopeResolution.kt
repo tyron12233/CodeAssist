@@ -110,6 +110,14 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
                             ?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
                     if (fqn != null) out += service.typeByFqn(fqn)
                 }
+                // The class's companion object, then each superclass's, are implicit receivers after the instance:
+                // a `fun A.Companion.foo()` is a bare call inside `A` and inside a subclass. Singletons, so they
+                // stay reachable from the header and from nested classes, where the instance is not.
+                if (!(node is KtObjectDeclaration && node.isCompanion())) node.fqName?.asString()?.let { fqn ->
+                    for (owner in listOf(fqn) + service.supertypesOf(fqn).map { it.qualifiedName }) {
+                        service.companionObjectFqn(owner)?.let { out += service.typeByFqn(it) }
+                    }
+                }
                 if (closesOuterInstanceScope(node)) outerInstanceClosed = true
             }
 
@@ -756,6 +764,7 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // why only the cross-file one read as unresolved. Suppression only, so a genuinely missing import of an
     // alias under-reports rather than the reverse.
     if (service.isProjectTypeAlias(name)) return true
+    if (service.isNestedTypeAliasInScope(name, enclosingClassFqn(offset))) return true
     // Members of an ENCLOSING class of the live buffer — the symbol service indexes disk, not the file
     // being edited, so a same-file member (`field`, `helper()`) won't appear in membersOf() below.
     if (enclosingClassMembersContain(offset, name)) return true
@@ -771,6 +780,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
                 .any { !it.isExtension || extensionInScope(it) }
         }
     ) return true
+    // An enclosing class's companion member, or an enclosing enum's `values()`/`valueOf()`/`entries`, read bare
+    // from a scope that has no instance of it (the enum's own companion object).
+    if (enclosingCompanionMember(name, offset) != null) return true
     // A LOCAL extension function called bare on an implicit `this` of its receiver type — in practice its own
     // recursive self-call (`fun String.twice(): String = if (n == 0) this else twice()`). Locals of that shape
     // are deliberately kept out of [localsAt] (an extension is not bare-callable in general), so without this
@@ -956,9 +968,21 @@ fun KotlinResolver.enclosingCompanionMember(name: String, offset: Int): KotlinSy
                     ?.let { return it }
             }
         }
+        enclosingEnumStatics(node, name).firstOrNull()?.let { return it }
         node = node.parent
     }
     return null
+}
+
+/** An enclosing `enum class`'s synthesized statics (`values()`, `valueOf()`, `entries`), which its body and
+ *  its companion reach without a qualifier, as they do a companion's members. Empty for anything else. */
+private fun KotlinResolver.enclosingEnumStatics(node: KtElement?, name: String?): List<KotlinSymbol> {
+    val cls = node as? KtClass ?: return emptyList()
+    if (!cls.isEnum()) return emptyList()
+    val fqn = cls.fqName?.asString() ?: return emptyList()
+    if (name != null && name != "values" && name != "valueOf" && name != "entries") return emptyList()
+    return service.membersNamed(fqn, emptyList(), name ?: "")
+        .filter { Modifier.STATIC in it.modifiers && (name == null || it.name == name) }
 }
 
 /** All bare-accessible members of every enclosing class's companion object — for completion of an unqualified
@@ -969,6 +993,7 @@ internal fun KotlinResolver.enclosingCompanionMembers(offset: Int): List<KotlinS
     while (node != null) {
         if (node is KtClassOrObject && node.companionObjects.isNotEmpty())
             node.fqName?.asString()?.let { out += service.companionMembersFor(it) }
+        for (n in listOf("values", "valueOf", "entries")) out += enclosingEnumStatics(node, n)
         node = node.parent
     }
     return out

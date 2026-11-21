@@ -38,6 +38,8 @@ import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtThisExpression
+import dev.ide.kotlin.syntax.psi.KtUnaryExpression
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
 import dev.ide.kotlin.syntax.psi.KtSafeQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
@@ -53,6 +55,7 @@ import dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.KtWhileExpressionBase
 import dev.ide.kotlin.syntax.psi.getStrictParentOfType
+import dev.ide.kotlin.syntax.psi.parents
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
@@ -608,6 +611,24 @@ internal fun KotlinSemanticChecks.privateMemberAccess(ref: KtNameReferenceExpres
     )
 }
 
+/** `import a.foo` of a top-level declaration that is `private` in another file of the project: a private
+ *  top-level declaration is visible only inside its own file, so the import names nothing usable here. */
+internal fun KotlinSemanticChecks.privateTopLevelImports(file: KtFile): List<Diagnostic> {
+    val out = ArrayList<Diagnostic>()
+    val here = file.name.substringAfterLast('/')
+    for (imp in file.importDirectives) {
+        if (imp.isAllUnder) continue
+        val fqn = imp.importedFqName?.asString()?.takeIf { '.' in it } ?: continue
+        val files = service.privateTopLevelSourceFiles(fqn) ?: continue
+        if (files.any { it.substringAfterLast('/') == here }) continue
+        val ref = imp.importedReference ?: continue
+        val leaf = (ref as? dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression)?.selectorExpression ?: ref
+        val name = fqn.substringAfterLast('.')
+        out += error(leaf, "Cannot access '$name': it is private in file", KotlinDiagnosticCodes.INVISIBLE_REFERENCE)
+    }
+    return out
+}
+
 /** A public top-level or member declaration whose signature names a `private` top-level class of this file
  *  (`private class P` + `fun make(): P`): callers elsewhere could not name the type. */
 internal fun KotlinSemanticChecks.exposedPrivateType(decl: KtCallableDeclaration): Diagnostic? {
@@ -679,9 +700,11 @@ private fun isValDeclaration(psi: KtElement?): Boolean = when (psi) {
  * An assignment in a constructor or initializer is the property's initialization and is left alone.
  */
 internal fun KotlinSemanticChecks.valMemberReassignment(e: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
+    if (e.operationToken in VAL_COMPOUND_ASSIGN) return valCompoundReassignment(e, resolver)
     if (e.operationToken != KtTokens.EQ) return null
     when (val left = e.left) {
-        is KtDotQualifiedExpression -> {
+        is KtDotQualifiedExpression, is KtSafeQualifiedExpression -> {
+            left as KtQualifiedExpression
             val selector = left.selectorExpression as? KtNameReferenceExpression ?: return null
             val name = selector.getReferencedName()
             val receiver = left.receiverExpression
@@ -694,27 +717,166 @@ internal fun KotlinSemanticChecks.valMemberReassignment(e: KtBinaryExpression, r
                 return error(selector, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
             }
             if (!service.isSourceClass(recvType.qualifiedName)) return null
-            // `this.x = …` in a constructor or initializer initializes the property.
-            if (unwrapParen(receiver).text == "this" && insideInitialization(e)) return null
             val members = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name).filter { it.name == name }
-            if (members.isEmpty() || members.any { it.isExtension || it.kind != SymbolKind.FIELD || !isValDeclaration(it.sourcePsi()) }) return null
+            if (members.isEmpty() || members.all { it.isExtension }) {
+                // `some.y = …` where `y` is a `val` extension property: it has no field, and no setter.
+                val extVals = members.isNotEmpty() && members.all { m ->
+                    (m.sourcePsi() as? KtProperty)?.let { !it.isVar && it.receiverTypeReference != null } == true
+                }
+                return if (extVals || extensionValNamed(resolver, name, recvType.qualifiedName)) {
+                    error(selector, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
+                } else null
+            }
+            if (members.any { it.isExtension || it.kind != SymbolKind.FIELD || !isValDeclaration(it.sourcePsi()) }) return null
             if (resolver.scopeMemberExtensions(selector.textRange.startOffset, recvType, name).any { it.name == name }) return null
+            // `this.x = …` in a constructor or initializer of the class declaring `x` initializes it, when it
+            // was declared without a value. Through `next?.x` or any other instance it never does.
+            val r = unwrapParen(receiver)
+            if (left is KtDotQualifiedExpression && r is KtThisExpression && r.getLabelName() == null &&
+                members.all { deferredMemberVal(it.sourcePsi()) && insideInitializationOf(e, declaringClass(it.sourcePsi())) }
+            ) return null
             return error(selector, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
         }
-        is KtNameReferenceExpression -> {
-            val name = left.getReferencedName()
-            val offset = left.textRange.startOffset
-            if (resolver.localsAt(offset, name).isNotEmpty() || insideInitialization(e)) return null
-            if (e.getStrictParentOfType<KtNamedFunction>() == null) return null
-            val member = resolver.implicitReceiverMember(name, offset) ?: return null
-            if (member.kind != SymbolKind.FIELD || member.isExtension) return null
-            val psi = member.sourcePsi() as? KtProperty ?: return null
-            // A `val` with neither initializer nor getter is assigned exactly once somewhere this cannot see.
-            if (psi.isVar || psi.isLocal || !(psi.hasInitializer() || psi.hasDelegate() || psi.getter != null)) return null
-            return error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
-        }
+        is KtNameReferenceExpression -> return bareNameValReassignment(left, e, resolver)
         else -> return null
     }
+}
+
+/**
+ * An assignment ([at]) to the bare name [left] that reaches a `val` that is not a local: a member `val` with a
+ * value (or one declared without, outside its own class's constructor), a `val` constructor property, a `val`
+ * extension property of an implicit receiver, or a top-level `val`.
+ */
+private fun KotlinSemanticChecks.bareNameValReassignment(left: KtNameReferenceExpression, at: KtElement, resolver: KotlinResolver): Diagnostic? {
+    val e = at
+    val name = left.getReferencedName()
+    val offset = left.textRange.startOffset
+    if (resolver.localsAt(offset, name).isNotEmpty()) return null
+    if (nearestLocalDecl(name, offset, left) != null) return null
+    val member = resolver.implicitReceiverMember(name, offset)
+    if (member != null) {
+        if (member.kind != SymbolKind.FIELD) return null
+        if (member.isExtension) {
+            // A `val` extension property has no field and no setter.
+            val psi = member.sourcePsi() as? KtProperty ?: return null
+            return if (!psi.isVar && psi.receiverTypeReference != null) error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN) else null
+        }
+        return when (val psi = member.sourcePsi()) {
+            // A `val` constructor property already holds the argument.
+            is KtParameter -> if (isValDeclaration(psi)) error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN) else null
+            is KtProperty -> when {
+                psi.isVar || psi.isLocal -> null
+                hasValue(psi) ->
+                    error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
+                // Declared without a value: initialized by the constructor of its own class, and assigned
+                // nowhere else (a member function, an accessor, another class's initializer).
+                insideInitializationOf(e, declaringClass(psi)) -> null
+                else -> error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
+            }
+            else -> null
+        }
+    }
+    // A top-level `val` with a value, or a `val` extension property of an implicit receiver.
+    val tops = service.topLevelByName(name).filter { it.name == name }
+    if (tops.isEmpty() || tops.any { it.kind != SymbolKind.FIELD }) return null
+    val receivers = resolver.implicitReceiversAt(offset).map { it.qualifiedName.substringAfterLast('.') }
+    val allVals = tops.all { t ->
+        val psi = t.sourcePsi() as? KtProperty ?: return@all false
+        if (psi.isVar) return@all false
+        // One declared without a value is initialized by a top-level initializer, never by a function.
+        if (!(hasValue(psi))) {
+            return@all psi.receiverTypeReference == null &&
+                e.parents.takeWhile { it !is KtFile }.any { it is KtNamedFunction || it is KtPropertyAccessor }
+        }
+        val recv = psi.receiverTypeReference?.text ?: return@all true
+        recv.substringBefore('<').removeSuffix("?").substringAfterLast('.').trim() in receivers
+    }
+    return if (allVals) error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN) else null
+}
+
+/** `a++` / `--a` on a `val` that is not a local (see [bareNameValReassignment]). */
+internal fun KotlinSemanticChecks.valMemberIncDec(e: KtUnaryExpression, resolver: KotlinResolver): Diagnostic? {
+    if (e.operationToken != KtTokens.PLUSPLUS && e.operationToken != KtTokens.MINUSMINUS) return null
+    val base = unwrapParen(e.baseExpression ?: return null) as? KtNameReferenceExpression ?: return null
+    return bareNameValReassignment(base, e, resolver)
+}
+
+private val VAL_COMPOUND_ASSIGN = setOf(KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ)
+
+/** The types whose `+=` and the like can only mean `x = x + y`: they declare no `plusAssign` family operator. */
+private val NO_ASSIGN_OPERATOR_TYPES = setOf(
+    "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Double", "kotlin.Float", "kotlin.Char",
+    "kotlin.String", "kotlin.Boolean", "kotlin.UInt", "kotlin.ULong",
+)
+
+/**
+ * `x += 1` on a `val` whose type has no `plusAssign` (a number, a `String`): the operator can only be read as
+ * `x = x + 1`, a reassignment. A local `val`, a parameter (a `for` variable included), or a member `val`.
+ */
+private fun KotlinSemanticChecks.valCompoundReassignment(e: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
+    val left = unwrapParen(e.left ?: return null) as? KtNameReferenceExpression ?: return null
+    val name = left.getReferencedName()
+    val offset = left.textRange.startOffset
+    val local = nearestLocalDecl(name, offset, left)
+    val isVal = when (local) {
+        is KtProperty -> !local.isVar && (local.hasInitializer() || local.hasDelegate())
+        is KtParameter -> !local.hasValOrVar()
+        null -> {
+            if (resolver.localsAt(offset, name).isNotEmpty()) return null
+            val member = resolver.implicitReceiverMember(name, offset) ?: return null
+            if (member.kind != SymbolKind.FIELD || member.isExtension) return null
+            val psi = member.sourcePsi()
+            (psi is KtProperty && !psi.isVar && (hasValue(psi))) ||
+                (psi is KtParameter && isValDeclaration(psi))
+        }
+        else -> false
+    }
+    if (!isVal) return null
+    val t = resolver.inferType(left) ?: return null
+    if (t.isTypeParameter || canonicalName(t) !in NO_ASSIGN_OPERATOR_TYPES) return null
+    return error(left, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
+}
+
+/** Whether a source `val` extension property named [name] exists for a receiver named like [receiverFqn]. */
+private fun KotlinSemanticChecks.extensionValNamed(resolver: KotlinResolver, name: String, receiverFqn: String): Boolean {
+    val tops = service.topLevelByName(name).filter { it.name == name }
+    if (tops.isEmpty()) return false
+    val simple = receiverFqn.substringAfterLast('.')
+    return tops.all { t ->
+        val psi = t.sourcePsi() as? KtProperty ?: return@all false
+        val recv = psi.receiverTypeReference?.text ?: return@all false
+        !psi.isVar && recv.substringBefore('<').removeSuffix("?").substringAfterLast('.').trim() == simple
+    }
+}
+
+/** Whether a `val` holds a value of its own: an initializer, a delegate, or a getter that reads no field. */
+private fun hasValue(psi: KtProperty): Boolean =
+    psi.hasInitializer() || psi.hasDelegate() || (psi.getter != null && !hasBackingField(psi))
+
+/** A member `val` declared without a value (initialized by the constructor). */
+private fun deferredMemberVal(psi: KtElement?): Boolean =
+    psi is KtProperty && !psi.isVar && !hasValue(psi)
+
+private fun declaringClass(psi: KtElement?): KtClassOrObject? = (psi?.parent as? KtClassBody)?.parent as? KtClassOrObject
+
+/**
+ * Whether [e] runs as part of constructing an instance of [cls]: in one of its `init` blocks, its secondary
+ * constructors or its property initializers, and not inside a function, an accessor or another class there.
+ */
+private fun insideInitializationOf(e: KtElement, cls: KtClassOrObject?): Boolean {
+    if (cls == null) return false
+    var node = e.parent
+    while (node != null) {
+        when (node) {
+            is KtNamedFunction, is KtPropertyAccessor -> return false
+            is KtSecondaryConstructor -> return node.getStrictParentOfType<KtClassOrObject>() == cls
+            is KtClassOrObject -> return node == cls
+            is KtFile -> return false
+            else -> {}
+        }
+        node = node.parent
+    }
+    return false
 }
 
 private fun insideInitialization(e: KtElement): Boolean {

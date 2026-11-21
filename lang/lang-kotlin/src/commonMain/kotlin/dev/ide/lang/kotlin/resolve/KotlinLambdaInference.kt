@@ -154,6 +154,7 @@ internal fun KotlinResolver.expectedFunctionTypeFor(lambda: KtLambdaExpression):
     // A lambda declared with an explicit functional type (a `val`/param/return annotation) is typed by that
     // type, not by an enclosing call — so `val f: Scope.() -> Unit = { }` establishes its receiver.
     contextualFunctionType(lambda)?.let { return it }
+    infixLambdaFunctionType(lambda)?.let { return it }
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
     // A CONSTRUCTOR is not a function callee, so it falls to [constructorCallee] — a lambda argument of
     // `EditorPainter(paint = { … })` carries a receiver exactly as a function's does.
@@ -196,6 +197,7 @@ internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): Kot
     // typed parameter default, a function expression body) is typed by that declaration — its `it`/named params
     // come from the declared `(P…) -> R`, not from an enclosing call (there is none).
     contextualFunctionType(lambda)?.let { ft -> service.functionalShape(ft)?.let { return it } }
+    infixLambdaFunctionType(lambda)?.let { ft -> service.functionalShape(ft)?.let { return it } }
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
     // A SAM constructor (`Comparator<String> { a, b -> … }`, a project `fun interface`) has no callee FUNCTION —
     // the lambda IS the interface's single-abstract-method body. Fall back to that method's shape.
@@ -269,6 +271,24 @@ internal fun KotlinResolver.samConstructorShape(call: KtCallExpression): KotlinS
 
 /** The call a lambda argument belongs to + its parameter index. `KtCallExpression.valueArguments`
  *  ALREADY includes the trailing lambda, so the index is its position in that list. */
+/** The function type a lambda written as the RIGHT operand of an infix call fills (`x checkType { … }`,
+ *  `x shouldSatisfy { … }`): the infix function's single parameter, its receiver type parameter bound from the
+ *  left operand. Null for any other position or an unresolved infix function. */
+internal fun KotlinResolver.infixLambdaFunctionType(lambda: KtLambdaExpression): KotlinType? {
+    var e: KtElement = lambda
+    while (e.parent is KtLabeledExpression || e.parent is KtAnnotatedExpression || e.parent is KtParenthesizedExpression) {
+        e = e.parent as KtElement
+    }
+    val bin = e.parent as? dev.ide.kotlin.syntax.psi.KtBinaryExpression ?: return null
+    if (bin.right !== e || bin.operationToken != dev.ide.kotlin.syntax.psi.KtTokens.IDENTIFIER) return null
+    val sym = resolveInfixFunction(bin) ?: return null
+    val raw = sym.paramTypes.firstOrNull() as? KotlinType ?: return null
+    if (!TypeRendering.isFunctionType(raw.qualifiedName) && !raw.isExtensionFunctionType) return null
+    val bindings = HashMap<String, TypeRef>()
+    sym.receiverTypeParam?.let { tp -> bin.left?.let { inferType(it) }?.let { bindings[tp] = it } }
+    return service.substitute(raw, bindings) as? KotlinType
+}
+
 internal fun KotlinResolver.enclosingCallAndParamIndex(lambda: KtLambdaExpression): Pair<KtCallExpression, Int>? {
     // A labeled or annotated lambda (`build l1@{ emit(1) }`, `run @Ann { }`) sits one node down from its argument:
     // it fills the same parameter and gets the same receiver.

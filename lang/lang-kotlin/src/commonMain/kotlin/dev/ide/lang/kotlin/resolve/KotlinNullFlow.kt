@@ -92,7 +92,7 @@ import dev.ide.kotlin.syntax.psi.KtWhileExpressionBase
 
 /** Whether the simple name [name] used at [offset] is smart-cast to a non-null value — honouring the stability
  *  rules above. Combines a null-guard ([nullGuardedNonNullAt]) and an `is T` narrowing (both imply non-null). */
-internal fun KotlinResolver.smartCastNonNull(ref: KtNameReferenceExpression): Boolean {
+internal fun KotlinResolver.smartCastNonNull(ref: KtNameReferenceExpression, strict: Boolean = false): Boolean {
     val name = ref.getReferencedName()
     val offset = ref.textRange.startOffset
     if (stableForSmartCast(name, offset, ref)) {
@@ -101,11 +101,14 @@ internal fun KotlinResolver.smartCastNonNull(ref: KtNameReferenceExpression): Bo
         if (nullGuardedNonNullAt(name, offset, aliasPathOf(ref))) return true
         val narrowed =
             smartCastTypeAt(name, offset) // an `is T` narrowing yields a non-null classifier
-        return narrowed != null && !narrowed.nullable
+        if (narrowed != null && !narrowed.nullable) return true
+        // The data-flow pass also tracks immutable values, and sees what the walk above does not: a check made
+        // through an alias (`var y = x; require(y is String)`), or one inside a lambda called in place.
+        return varSmartCastNonNull(ref, strict)
     }
     // Otherwise: an effectively-immutable local `var` may still be smart-cast — that needs reassignment-aware
     // control-flow (a guard is invalidated by a later `x = …`), handled by the CFG var-nullability pass.
-    return varSmartCastNonNull(ref)
+    return varSmartCastNonNull(ref, strict)
 }
 
 /**
@@ -167,9 +170,18 @@ internal fun KotlinResolver.stableForSmartCast(
                 MemberStability.UNSTABLE -> return false
                 // A plain primary-constructor parameter read by a property initializer or an `init` block is a
                 // parameter like any other, and as immutable (`class A(a: String?) { val b = if (a != null) a.length else 1 }`).
-                MemberStability.ABSENT -> if (!inMember &&
-                    node.primaryConstructor?.valueParameters?.any { it.name == name && !it.hasValOrVar() } == true
-                ) return true
+                MemberStability.ABSENT -> {
+                    if (!inMember &&
+                        node.primaryConstructor?.valueParameters?.any { it.name == name && !it.hasValOrVar() } == true
+                    ) return true
+                    // Inherited from a source superclass: as stable as it is there (`protected val x` read in a
+                    // subclass of the same module).
+                    when (inheritedValMemberKind(node, name)) {
+                        MemberStability.STABLE -> return true
+                        MemberStability.UNSTABLE -> return false
+                        MemberStability.ABSENT -> {}
+                    }
+                }
             }
         }
         node = node.parent
@@ -205,6 +217,23 @@ private val ASSIGNMENTS = setOf(
 )
 
 private enum class MemberStability { STABLE, UNSTABLE, ABSENT }
+
+/** [stableValMemberKind] of [name] in the nearest source superclass of [cls] that declares it. */
+private fun KotlinResolver.inheritedValMemberKind(cls: KtClassOrObject, name: String): MemberStability {
+    val start = cls.fqName?.asString() ?: return MemberStability.ABSENT
+    val seen = HashSet<String>()
+    val queue = ArrayDeque(service.supertypesOf(start).map { it.qualifiedName })
+    while (queue.isNotEmpty() && seen.size < 16) {
+        val fqn = queue.removeFirst()
+        if (!seen.add(fqn)) continue
+        val raw = service.sourceClass(fqn) ?: continue
+        val psi = (raw.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject ?: continue
+        val kind = stableValMemberKind(psi, name)
+        if (kind != MemberStability.ABSENT) return kind
+        service.supertypesOf(fqn).forEach { queue.addLast(it.qualifiedName) }
+    }
+    return MemberStability.ABSENT
+}
 
 /** Whether a `val` member [name] of [cls] is a stable smart-cast sink: a property with a backing field (no
  *  custom getter, no delegate) that is not `var`/`open`/`abstract`/`override`, or a final `val` primary-

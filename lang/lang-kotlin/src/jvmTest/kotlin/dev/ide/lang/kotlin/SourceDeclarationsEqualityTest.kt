@@ -70,7 +70,7 @@ class SourceDeclarationsEqualityTest {
         // carries a declaration over; update all of them, then these counts.
         assertEquals(27, instanceFields(RawCallable::class.java), "RawCallable gained or lost a field: update sameDeclarations and carried")
         assertEquals(26, instanceFields(RawClass::class.java), "RawClass gained or lost a field: update sameDeclarations and carried")
-        assertEquals(4, instanceFields(TypeAliasDecl::class.java), "TypeAliasDecl gained or lost a field: update sameDeclarations")
+        assertEquals(5, instanceFields(TypeAliasDecl::class.java), "TypeAliasDecl gained or lost a field: update sameDeclarations")
     }
 
     @Test

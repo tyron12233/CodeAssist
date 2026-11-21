@@ -290,17 +290,20 @@ class KotlinCallApplicabilityTest {
 
     @Test
     fun whenStatementIsNotFlagged() {
-        // Statement position (its value is unused) carries no exhaustiveness requirement.
+        // Statement position (its value is unused) carries no exhaustiveness requirement for a plain subject
+        // type. Over an enum, sealed or Boolean subject it does since Kotlin 1.7 (K2's NO_ELSE_IN_WHEN).
         val d = diagnose(
             """
             package p
             enum class E { A, B }
-            fun f(e: E) {
+            fun f(e: E, n: Int) {
+                when (n) { 1 -> println("a") }
                 when (e) { E.A -> println("a") }
             }
             """.trimIndent(),
         )
-        assertTrue(d.none { it.code == "kt.whenExhaustive" }, "a `when` STATEMENT must NOT be flagged; got $d")
+        val flagged = d.filter { it.code == "kt.whenExhaustive" }
+        assertTrue(flagged.size == 1, "only the enum `when` STATEMENT is flagged; got $d")
     }
 
     @Test

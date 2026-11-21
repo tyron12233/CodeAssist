@@ -142,10 +142,13 @@ class KotlinControlFlowTest {
     }
 
     @Test
-    fun assignedInLoopIsNotFlagged() {
-        // A back-edge could have assigned it → dropped from the analysis (conservative, no false positive).
+    fun assignedOnlyInALoopIsNotDefinite() {
+        // The loop may run zero times, so a read after it is uninitialized (as in Kotlin); a `break` after the
+        // assignment is the only way out of `while (true)`, so a read after that one is not.
         val d = diagnose("UA6.kt", b("fun f(c: Boolean) {\n  var x: Int\n  while (c) { x = 1 }\n  println(x)\n}"))
-        assertTrue(d.none { it.code == "kt.uninitializedVariable" }, "a loop-assigned var is not flagged; got $d")
+        assertTrue(d.any { it.code == "kt.uninitializedVariable" }, "a var assigned only in a loop is not definitely assigned; got $d")
+        val e = diagnose("UA6b.kt", b("fun f(c: Boolean) {\n  var x: Int\n  while (true) { x = 1; if (c) break }\n  println(x)\n}"))
+        assertTrue(e.none { it.code == "kt.uninitializedVariable" }, "assigned before every break; got $e")
     }
 
     @Test

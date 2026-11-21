@@ -748,3 +748,33 @@ object O { const val IN_OBJECT = TOP + 1 }
 class C { companion object { const val IN_COMPANION = O.IN_OBJECT == 2 } }
 @Target(AnnotationTarget.EXPRESSION) @Retention(AnnotationRetention.SOURCE) annotation class OnExpr
 fun f(x: Int) = @OnExpr x + TOP
+//// construction-order
+enum class E(val x: Int) {
+    A(1) { override fun g() = foo() }, B(2) { override fun g() = 0 };
+    abstract fun g(): Int
+    val later get() = foo()
+    fun h() = Companion.foo() + E.foo()
+    companion object { fun foo() = 42 }
+}
+open class Base(val v: Int)
+class H(val p: Int = H.DEFAULT) : Base(p) {
+    constructor(s: String) : this(s.length + make())
+    val q = p
+    companion object { const val DEFAULT = 1; fun make() = 2 }
+}
+//// inline-bodies
+inline fun twice(block: () -> Unit) { block(); block.invoke() }
+inline fun pass(block: () -> Unit) = twice(block)
+inline fun keep(noinline block: () -> Unit): () -> Unit = block
+@PublishedApi internal fun helper() = 1
+inline fun usesHelper() = helper()
+private fun hidden() = 2
+internal inline fun usesHidden() = hidden()
+//// when-statements
+enum class Mode { On, Off }
+fun w(m: Mode, n: Int, flag: Boolean): Int {
+    when (n) { 1 -> println() }
+    when { n > 2 -> println() }
+    when (flag) { true -> println(); false -> println() }
+    return when (m) { Mode.On -> 1; Mode.Off -> 0 }
+}

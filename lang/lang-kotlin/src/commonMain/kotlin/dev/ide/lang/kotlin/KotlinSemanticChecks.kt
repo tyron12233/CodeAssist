@@ -1,5 +1,14 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.kotlin.syntax.psi.KtStringTemplateEntry
+import dev.ide.kotlin.syntax.psi.KtLoopExpression
+import dev.ide.kotlin.syntax.psi.KtContainerNodeForControlStructureBody
+import dev.ide.kotlin.syntax.psi.KtWhenEntry
+import dev.ide.kotlin.syntax.psi.KtAnnotatedExpression
+import dev.ide.kotlin.syntax.psi.KtLabeledExpression
+import dev.ide.kotlin.syntax.psi.KtPropertyDelegate
+import dev.ide.lang.kotlin.resolve.flowProvenTypes
+import dev.ide.lang.kotlin.resolve.flowProvenNonNull
 import dev.ide.kotlin.syntax.psi.KtAnnotated
 import dev.ide.kotlin.syntax.psi.KtAnnotationEntry
 import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
@@ -143,6 +152,7 @@ internal class KotlinSemanticChecks(
         out += unusedImports(ktFile, refNames)
         out += conflictingImports(ktFile)
         out += unresolvedImports(ktFile)
+        out += privateTopLevelImports(ktFile)
         unusedPrivateDeclarations(ktFile, refNames, out)
         return out
     }
@@ -203,6 +213,12 @@ internal class KotlinSemanticChecks(
                 KotlinPerf.span("prop.typeMismatch") { report(typeMismatch(psi.typeReference?.text, psi.initializer, resolver)) }
                 if (!skipCrossStatement) report(unusedLocal(psi))
                 report(missingInitializer(psi))
+                // The file's top-level initialization order is judged once, from its first property.
+                (psi.parent as? KtFile)?.let { file ->
+                    if (file.declarations.firstOrNull { it is KtProperty } === psi) {
+                        reportAll(uninitializedMemberReads(memberReadsBeforeInitialization(file.declarations, emptySet())))
+                    }
+                }
                 report(noTypeNoInitializer(psi))
                 report(lateinitMisuse(psi))
                 report(abstractMisuse(psi))
@@ -213,6 +229,7 @@ internal class KotlinSemanticChecks(
                 report(KotlinModifierChecks.privateSetter(psi))
                 report(localNameShadowing(psi)) // a cheap per-declaration ancestor walk, not a whole-body scan
                 report(exposedPrivateType(psi))
+                reportAll(KotlinInlineChecks.nonPublicCallFromPublicInline(psi))
             }
         },
         KotlinChecker(KtParameter::class) { psi ->
@@ -245,6 +262,8 @@ internal class KotlinSemanticChecks(
                 report(exposedPrivateType(psi))
                 reportAll(unusedParameters(psi)) // function-level (whole-body), so not gated by skipCrossStatement
                 reportAll(uninitializedVariables(psi, resolver)) // CFG definite-assignment (whole-body)
+                reportAll(KotlinInlineChecks.usageIsNotInlinable(psi))
+                reportAll(KotlinInlineChecks.nonPublicCallFromPublicInline(psi))
             }
         },
         KotlinChecker(KtAnnotationEntry::class) { psi ->
@@ -348,6 +367,7 @@ internal class KotlinSemanticChecks(
                 KotlinPerf.span("call.permission") { if (resolveReady) permissionContext()?.let { report(permissionCheck.call(psi, resolver, it)) } }
                 KotlinPerf.span("call.inferType") { report(cannotInferType(psi, resolver)) }
                 KotlinPerf.span("call.abstractInst") { if (resolveReady) report(abstractInstantiation(psi, resolver)) }
+                KotlinPerf.span("call.dslScope") { if (resolveReady) report(dslScopeViolation(psi, resolver)) }
             }
         },
         // `unsafeNullableAccess` infers the receiver's type — another per-node resolution cost, so spanned.
@@ -366,11 +386,11 @@ internal class KotlinSemanticChecks(
         KotlinChecker(KtPostfixExpression::class) { psi ->
             psi as KtPostfixExpression
             KotlinPerf.span("sem.notNull") { report(redundantNotNull(psi, resolver)) }
-            KotlinPerf.span("sem.valIncDec") { report(valIncDecReassignment(psi) ?: incrementTargetExpected(psi)) }
+            KotlinPerf.span("sem.valIncDec") { report(valIncDecReassignment(psi) ?: incrementTargetExpected(psi) ?: (if (resolveReady) valMemberIncDec(psi, resolver) else null)) }
         },
         KotlinChecker(KtPrefixExpression::class) { psi ->
             psi as KtPrefixExpression
-            KotlinPerf.span("sem.valIncDec") { report(valIncDecReassignment(psi) ?: incrementTargetExpected(psi)) }
+            KotlinPerf.span("sem.valIncDec") { report(valIncDecReassignment(psi) ?: incrementTargetExpected(psi) ?: (if (resolveReady) valMemberIncDec(psi, resolver) else null)) }
             KotlinPerf.span("sem.unaryOp") { if (resolveReady) report(undefinedUnaryOperator(psi, resolver)) }
         },
         KotlinChecker(KtTryExpression::class) { psi ->
@@ -424,11 +444,21 @@ internal class KotlinSemanticChecks(
         },
         KotlinChecker(KtClassBody::class) { psi ->
             KotlinPerf.span("sem.dup") { reportAll(duplicateDeclarations((psi as KtClassBody).declarations)) }
+            KotlinPerf.span("sem.initOrder") {
+                val ctorParams = (psi.parent as? KtClassOrObject)?.primaryConstructor?.valueParameters.orEmpty().mapNotNullTo(HashSet()) { it.name }
+                val reassigned = ArrayList<KtNameReferenceExpression>()
+                reportAll(uninitializedMemberReads(memberReadsBeforeInitialization((psi as KtClassBody).declarations, ctorParams, reassigned)))
+                reportAll(reassigned.map { ref ->
+                    val r = ref.textRange
+                    Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
+                })
+            }
         },
         // Declaration-site variance conflicts (an `out` param in an `in` position, etc.). On KtClass (only a
         // class/interface can declare variant type parameters); resolution-gated because nested-generic
         // composition resolves other classifiers' variance.
         KotlinChecker(KtClass::class) { psi ->
+            KotlinPerf.span("sem.enumCompanion") { reportAll(KotlinInitializationChecks.uninitializedEnumCompanion(psi as KtClass)) }
             KotlinPerf.span("sem.variance") { if (resolveReady) reportAll(declarationSiteVarianceConflicts(psi as KtClass, resolver)) }
             KotlinPerf.span("sem.dataClass") { reportAll(KotlinStructuralChecks.dataClassShape(psi as KtClass)) }
             KotlinPerf.span("sem.annotationClass") { reportAll(KotlinModifierChecks.nullableAnnotationMember(psi as KtClass)) }
@@ -445,6 +475,7 @@ internal class KotlinSemanticChecks(
                 }
             }
             KotlinPerf.span("sem.superInit") { reportAll(supertypeNotInitialized(psi, resolver)) }
+            KotlinPerf.span("sem.headerAccess") { reportAll(KotlinInitializationChecks.instanceAccessBeforeSuperCall(psi)) }
             KotlinPerf.span("sem.classPlacement") { report(KotlinModifierChecks.classPlacement(psi)) }
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
@@ -1320,12 +1351,21 @@ internal class KotlinSemanticChecks(
         )
     }
 
-    /** Reads of a local declared without an initializer that the control-flow analysis proves are (on some path)
-     *  not yet assigned — Kotlin's "Variable must be initialized". Sound + conservative (see
-     *  [KotlinControlFlow.uninitializedReads]); purely PSI, so it runs in dumb mode. */
+    /** Reads of a local declared without an initializer that is not assigned on every path to them, Kotlin's
+     *  "Variable must be initialized" (see
+     *  [KotlinDefiniteAssignment]), and assignments to a deferred local `val` that may not be its first. */
+    private fun uninitializedMemberReads(refs: List<KtNameReferenceExpression>): List<Diagnostic> = refs.map { ref ->
+        val r = ref.textRange
+        Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Variable '${ref.getReferencedName()}' must be initialized before it is used",
+            KotlinDiagnosticCodes.UNINITIALIZED_VARIABLE,
+        )
+    }
+
     private fun uninitializedVariables(fn: KtNamedFunction, resolver: KotlinResolver): List<Diagnostic> {
         val body = fn.bodyBlockExpression ?: return emptyList()
-        return KotlinControlFlow(resolver).uninitializedReads(body).map { ref ->
+        val uninitialized = KotlinDefiniteAssignment(resolver).uninitializedReads(body).map { ref ->
             val r = ref.textRange
             Diagnostic(
                 TextRange(r.startOffset, r.endOffset), Severity.ERROR,
@@ -1333,6 +1373,12 @@ internal class KotlinSemanticChecks(
                 KotlinDiagnosticCodes.UNINITIALIZED_VARIABLE,
             )
         }
+        // A `val` declared without a value and assigned where an earlier assignment may already have run.
+        val reassigned = KotlinValReassignFlow(resolver).reassignments(body).map { ref ->
+            val r = ref.textRange
+            Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
+        }
+        return uninitialized + reassigned
     }
 
     /** The nearest in-scope local property / parameter named [name] declared before [offset], or null if the
@@ -1620,7 +1666,7 @@ internal class KotlinSemanticChecks(
         is KtStringTemplateExpression -> true
         is KtConstantExpression -> expr.text.trim() != "null"
         is KtThisExpression -> true
-        is KtNameReferenceExpression -> explicitNonNullLocalOrParam(expr) || resolver.smartCastNonNull(expr)
+        is KtNameReferenceExpression -> explicitNonNullLocalOrParam(expr) || resolver.smartCastNonNull(expr, strict = true)
         else -> false
     }
 
@@ -1662,35 +1708,51 @@ internal class KotlinSemanticChecks(
     )
 
     /**
-     * A property that Kotlin requires to be initialized but isn't — a top-level or concrete-class property with
-     * no initializer, delegate, or getter (`class C { val x: Int }`). Skips locals (deferred init is legal),
-     * `abstract`/`lateinit`/`expect`/`external`, and members of an interface/abstract/expect class. A class
-     * member that is definitely assigned in an `init { }` block or a secondary constructor
-     * (`val x: Int; init { x = 1 }`) is legal deferred initialization, so it backs off there too.
+     * A property that Kotlin requires to be initialized but isn't: a top-level or member property with a backing
+     * field and no initializer or delegate (`class C { val x: Int }`). Skips locals (deferred init is legal),
+     * `abstract`/`lateinit`/`expect`/`external`, extension properties, and members of an interface or an expect
+     * class.
+     *
+     * A property has a backing field when an accessor that is not written out (`get;`, `private set`, or none at
+     * all) would read or write one, or when a written accessor names `field` (K2's `hasBackingField`); one whose
+     * accessors never touch `field` has nothing to initialize (`var x: Int get() = 1; set(v) {}`).
+     *
+     * A class member assigned in an `init { }` block or a secondary constructor (`val x: Int; init { x = 1 }`) is
+     * legal deferred initialization, so it backs off there, except in the two cases Kotlin rejects whatever the
+     * constructor does: a `var` with a custom setter (the assignment would call the setter, not initialize the
+     * field), and an `open` property of a class that can be subclassed (an override could have no field).
      */
     private fun missingInitializer(prop: KtProperty): Diagnostic? {
-        if (prop.hasInitializer() || prop.hasDelegate() || prop.getter != null || prop.setter != null) return null
+        if (prop.hasInitializer() || prop.hasDelegate()) return null
         if (prop.typeReference == null) return null // no type AND no initializer won't parse as a property
+        // An extension property has no field to initialize; one without accessors is still an error (K2 names it
+        // EXTENSION_PROPERTY_MUST_HAVE_ACCESSORS_OR_BE_ABSTRACT).
+        if (prop.receiverTypeReference != null && (prop.getter != null || prop.setter != null)) return null
         if (prop.hasModifier(KtTokens.ABSTRACT_KEYWORD) || prop.hasModifier(KtTokens.LATEINIT_KEYWORD) ||
             prop.hasModifier(KtTokens.EXPECT_KEYWORD) || prop.hasModifier(KtTokens.EXTERNAL_KEYWORD)
         ) return null
+        if (!hasBackingField(prop)) return null
+        val customSetter = prop.isVar && prop.setter?.bodyExpression != null
         val owner = prop.parent
         when (owner) {
-            is KtFile -> {}
+            // A top-level `val g: Int` may be initialized by a later top-level initializer (`val h = 1.also { g = 2 }`).
+            is KtFile -> if (!customSetter) prop.name?.let { n ->
+                if (owner.declarations.any { it is KtProperty && it !== prop && it.initializer?.let { i -> assignsName(i, n) } == true }) return null
+            }
             is KtClassBody -> {
                 val cls = owner.parent as? KtClassOrObject ?: return null
-                if (cls is KtClass &&
-                    (cls.isInterface() || cls.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
-                        cls.hasModifier(KtTokens.SEALED_KEYWORD))
-                ) return null
+                if (cls is KtClass && cls.isInterface()) return null
                 // Same `expect object` blind spot as [functionWithoutBody]: an `expect` declaration's
                 // properties have no initializer by construction, and an `object` is not a `KtClass`.
                 if (declaredOrEnclosingExpectExternal(prop)) return null
+                val subclassable = cls is KtClass && (cls.hasModifier(KtTokens.OPEN_KEYWORD) ||
+                    cls.hasModifier(KtTokens.ABSTRACT_KEYWORD) || cls.hasModifier(KtTokens.SEALED_KEYWORD))
+                val openInOpenClass = subclassable && prop.hasModifier(KtTokens.OPEN_KEYWORD)
                 // Deferred initialization in the constructor (`val x: Int; init { x = … }` or a secondary
                 // constructor body) is legal. Conservative: any assignment to the name in an init block or
                 // secondary constructor backs off (no full definite-assignment analysis), so a real "not on
                 // every path" gap is missed rather than false-flagged — matching the parse-only model's contract.
-                prop.name?.let { if (assignedInConstructor(cls, it)) return null }
+                if (!customSetter && !openInOpenClass) prop.name?.let { if (assignedInConstructor(cls, it)) return null }
             }
             else -> return null // local / other: deferred init is legal
         }
@@ -1700,11 +1762,13 @@ internal class KotlinSemanticChecks(
     }
 
     /** Whether [name] is the target of a plain assignment (`name = …` or `this.name = …`) anywhere in one of
-     *  [cls]'s `init { }` blocks or secondary-constructor bodies — the deferred-initialization forms. */
+     *  [cls]'s `init { }` blocks, secondary-constructor bodies or property initializers (which run as part of the
+     *  constructor: `val y = run { x = 1; 2 }`): the deferred-initialization forms. */
     private fun assignedInConstructor(cls: KtClassOrObject, name: String): Boolean {
         val bodies = ArrayList<KtElement>()
         cls.getAnonymousInitializers().mapNotNullTo(bodies) { it.body }
         cls.secondaryConstructors.mapNotNullTo(bodies) { it.bodyExpression }
+        cls.declarations.filterIsInstance<KtProperty>().mapNotNullTo(bodies) { it.initializer }
         return bodies.any { assignsName(it, name) }
     }
 
@@ -2794,26 +2858,67 @@ internal class KotlinSemanticChecks(
      * nullable subject (the extra `null` branch isn't modeled), and any other / cross-file-sealed subject type —
      * so it never false-positives.
      */
+    /**
+     * A `when` that is not exhaustive where it has to be (NO_ELSE_IN_WHEN). K2 demands exhaustiveness of every
+     * `when` whose value is used, and, since 1.7, of every `when` STATEMENT over an enum, sealed or Boolean
+     * subject. A `when` with no subject is exhaustive only through an `else`; one over a value of a
+     * plain type (a string, a number) likewise, since its constants can never cover the type.
+     */
     private fun whenNotExhaustive(expr: KtWhenExpression, resolver: KotlinResolver): Diagnostic? {
-        val subject = expr.subjectExpression ?: return null
         if (expr.entries.any { it.isElse }) return null
-        if (!whenUsedAsExpression(expr)) return null
+        val used = whenValueUsed(expr)
+        val subject = expr.subjectExpression
+        if (subject == null) {
+            if (!used) return null
+            return whenDiag(expr, "'when' expression must be exhaustive. Add an 'else' branch.")
+        }
         // Back off if any branch uses a condition we can't map to a concrete label/type — a range (`in …`), a
         // negated `!is`, or a computed expression. We can't tell what it covers, so we must not claim
         // non-exhaustiveness (soundness over completeness).
         if (expr.entries.any { e -> e.conditions.any { !isModeledWhenCondition(it) } }) return null
         val type = resolver.inferType(subject) ?: return null
-        if (type.nullable) return null
+        val found = subjectWhenNotExhaustive(expr, subject, type, used, resolver) ?: return null
+        // The flow questions are asked only of a `when` about to be reported, since they are the costly part.
+        // A subject smart cast to a narrower type is exhaustive over that type, which the inferred type does
+        // not show: back off from any subject the flow narrows.
+        val subjectRef = unwrapParen(subject) as? KtNameReferenceExpression ?: return found
+        // K2 also counts the cases an earlier check has already ruled out (`if (s != A) return`, `s !is B`):
+        // back off when the subject is compared or type-checked anywhere else in the function.
+        if (subjectCheckedElsewhere(expr, subjectRef.getReferencedName())) return null
+        if (resolver.flowProvenTypes(subjectRef, deep = true).isNotEmpty()) return null
+        return found
+    }
+
+    private fun subjectWhenNotExhaustive(
+        expr: KtWhenExpression, subject: KtExpression, type: KotlinType, used: Boolean, resolver: KotlinResolver,
+    ): Diagnostic? {
         val covered = coveredConstants(expr)
-        if (type.qualifiedName == "kotlin.Boolean") {
-            if ("true" in covered && "false" in covered) return null
-            return whenDiag(expr, "'when' on a Boolean must be exhaustive; add 'true'/'false' branches or an 'else'")
+        // A nullable subject needs a `null` branch on top of the type's own cases. Only claimed when nothing
+        // could have smart cast the value to non-null on the way here.
+        if (type.nullable) {
+            if ("null" in covered) return null
+            if (!nullableSubjectIsReliable(subject, resolver)) return null
         }
+        val missingNull = type.nullable
+        if (type.qualifiedName == "kotlin.Boolean") {
+            if ("true" in covered && "false" in covered && !missingNull) return null
+            return whenDiag(expr, "'when' expression must be exhaustive. Add ${missingCasesText(listOfNotNull("'true'".takeIf { "true" !in covered }, "'false'".takeIf { "false" !in covered }), missingNull)}.")
+        }
+        if (type.qualifiedName in NON_EXHAUSTIVE_SUBJECT_TYPES) {
+            // A string or a number: no set of constants covers it, so only an `is` of its own type would.
+            if (!used || expr.entries.any { e -> e.conditions.any { it is KtWhenConditionIsPattern } }) return null
+            return whenDiag(expr, "'when' expression must be exhaustive. Add an 'else' branch.")
+        }
+        if (type.qualifiedName.startsWith("kotlin.") && service.isBuiltinType(type.qualifiedName)) return null
         val enumConsts = runCatching { service.enumConstantsOf(type.qualifiedName) }.getOrDefault(emptyList())
         if (enumConsts.isNotEmpty()) {
+            // `is E` (or a supertype) covers everything; `is E.A` names an entry, which is an error of its own and
+            // covers nothing.
+            val entryNames = enumConsts.map { it.name }.toHashSet()
+            if (coveredTypeNames(expr).any { it !in entryNames }) return null
             val missing = enumConsts.map { it.name }.filter { it !in covered }
-            if (missing.isEmpty()) return null
-            return whenDiag(expr, "'when' expression must be exhaustive; add branches for ${missing.joinToString(", ")} or an 'else'")
+            if (missing.isEmpty() && !missingNull) return null
+            return whenDiag(expr, "'when' expression must be exhaustive. Add ${missingCasesText(missing.map { "'$it'" }, missingNull)}.")
         }
         // Cross-file sound: a sealed type's subclasses are same-module, so the project model enumerates them
         // ALL (null → not a known source sealed type → back off, e.g. a library sealed class).
@@ -2827,6 +2932,9 @@ internal class KotlinSemanticChecks(
         // `is Ev.Ui.Scroll ->` cover `Ev.Ui`), as Kotlin's exhaustiveness checker expands it.
         fun isCovered(fqn: String, depth: Int = 0): Boolean {
             if (fqn.substringAfterLast('.') in coveredTypes) return true
+            // An enum subclass is covered by a branch for each of its entries (`C.A ->`, `C.B ->`).
+            val entries = runCatching { service.enumConstantsOf(fqn) }.getOrDefault(emptyList())
+            if (entries.isNotEmpty() && entries.all { it.name in covered }) return true
             // A branch on any SUPERTYPE covers it too: in a sealed-interface hierarchy one class can sit under two
             // sealed parents (`class H : G(), C`), and `is G` covers `H` wherever `C` lists it.
             if (service.supertypesOf(fqn).any { it.qualifiedName.substringAfterLast('.') in coveredTypes }) return true
@@ -2835,8 +2943,51 @@ internal class KotlinSemanticChecks(
             return subs.all { isCovered(it, depth + 1) }
         }
         val missing = sealedSubs.filter { !isCovered(it) }
-        if (missing.isEmpty()) return null
-        return whenDiag(expr, "'when' expression must be exhaustive; add branches for ${missing.joinToString(", ") { it.substringAfterLast('.') }} or an 'else'")
+        if (missing.isEmpty() && !missingNull) return null
+        return whenDiag(expr, "'when' expression must be exhaustive. Add ${missingCasesText(missing.map { "'is ${it.substringAfterLast('.')}'" }, missingNull)}.")
+    }
+
+    private fun subjectCheckedElsewhere(expr: KtWhenExpression, name: String): Boolean {
+        val owner: KtElement = expr.getStrictParentOfType<KtNamedFunction>() ?: expr.getStrictParentOfType<KtClassOrObject>() ?: return true
+        val start = expr.textRange.startOffset - owner.textRange.startOffset
+        val end = expr.textRange.endOffset - owner.textRange.startOffset
+        val text = owner.text
+        if (start < 0 || end > text.length) return true
+        // Only a check that runs before the `when` can narrow it; inside a loop, a later one can too.
+        var inLoop = false
+        var node: KtElement? = expr.parent
+        while (node != null && node !== owner) {
+            if (node is KtLoopExpression) inLoop = true
+            node = node.parent
+        }
+        val outside = if (inLoop) text.substring(0, start) + text.substring(end) else text.substring(0, start)
+        val n = Regex.escape(name)
+        // A comparison with `null` only narrows nullability, which the subject's type already accounts for.
+        if (Regex("""\b$n\s*!?is\b""").containsMatchIn(outside)) return true
+        if (Regex("""\b$n\s*[!=]==?\s*([\w.]+)""").findAll(outside).any { it.groupValues[1] != "null" }) return true
+        return Regex("""([\w.]+)\s*[!=]==?\s*$n\b""").findAll(outside).any { it.groupValues[1] != "null" }
+    }
+
+    private fun missingCasesText(cases: List<String>, missingNull: Boolean): String {
+        val all = cases + listOfNotNull("'null'".takeIf { missingNull })
+        if (all.isEmpty()) return "an 'else' branch"
+        return "the necessary ${all.joinToString(", ")} branch${if (all.size > 1) "es" else ""} or an 'else' branch instead"
+    }
+
+    /** A nullable subject the flow could not have narrowed: not a plain or qualified name whose value is checked
+     *  against null (or scoped through `?.let` and friends) anywhere in the function. */
+    private fun nullableSubjectIsReliable(subject: KtExpression, resolver: KotlinResolver): Boolean {
+        val s = unwrapParen(subject)
+        val name = when (s) {
+            is KtNameReferenceExpression -> s.getReferencedName()
+            is KtDotQualifiedExpression -> (s.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return true
+            else -> return true
+        }
+        if (s is KtNameReferenceExpression && resolver.flowProvenNonNull(s)) return false
+        if (hasUnmodeledNullGuard(subject, name)) return false
+        val fn = subject.getStrictParentOfType<KtNamedFunction>() ?: return false
+        val n = Regex.escape(name)
+        return !Regex("""\b$n\s*(!!|[!=]==?\s*null|\?\.|\?:)|null\s*[!=]==?\s*$n\b|\b$n\s+(is|!is|as)\b|\b$n\s*=[^=]""").containsMatchIn(fn.text)
     }
 
     private fun whenDiag(expr: KtWhenExpression, msg: String): Diagnostic {
@@ -2855,6 +3006,51 @@ internal class KotlinSemanticChecks(
         is KtBinaryExpression -> parent.left === expr || parent.right === expr
         is KtNamedFunction -> parent.bodyExpression === expr && !parent.hasBlockBody()
         else -> false
+    }
+
+    /**
+     * [whenUsedAsExpression] widened the way K2 decides it: the value of a branch, of the last statement of a
+     * branch's block, or of a `try` block is used when the enclosing `when`/`if`/`try` is; a property accessor's
+     * expression body, an operand, a receiver, a string template entry and a thrown value are used. A lambda's
+     * last statement is not followed (whether it is used depends on the lambda's expected type).
+     */
+    private fun whenValueUsed(expr: KtExpression, depth: Int = 0): Boolean {
+        if (depth > 16) return false
+        var holder: KtElement = expr
+        while (true) {
+            val p = holder.parent ?: return false
+            if (p is KtParenthesizedExpression || p is KtLabeledExpression || p is KtAnnotatedExpression) holder = p else break
+        }
+        return when (val parent = holder.parent) {
+            is KtProperty -> parent.initializer === holder || parent.delegateExpression === holder
+            is KtPropertyDelegate -> true
+            is KtReturnExpression -> parent.returnedExpression === holder
+            is KtValueArgument -> parent !is KtLambdaArgument
+            is KtBinaryExpression -> parent.left === holder || parent.right === holder
+            is KtNamedFunction -> parent.bodyExpression === holder && !parent.hasBlockBody()
+            is KtPropertyAccessor -> parent.bodyExpression === holder && !parent.hasBlockBody()
+            is KtQualifiedExpression -> parent.receiverExpression === holder
+            is KtStringTemplateEntry, is KtThrowExpression, is KtBinaryExpressionWithTypeRHS, is KtIsExpression,
+            is KtPrefixExpression, is KtPostfixExpression -> true
+            is KtWhenEntry -> parent.expression === holder && (parent.parent as? KtWhenExpression)?.let { whenValueUsed(it, depth + 1) } == true
+            is KtContainerNodeForControlStructureBody -> {
+                val ifExpr = parent.parent as? KtIfExpression ?: return false
+                ifExpr.`else` != null && whenValueUsed(ifExpr, depth + 1)
+            }
+            is KtBlockExpression -> {
+                if (parent.statements.lastOrNull() !== holder) return false
+                when (val owner = parent.parent) {
+                    is KtWhenEntry -> owner.expression === parent && (owner.parent as? KtWhenExpression)?.let { whenValueUsed(it, depth + 1) } == true
+                    is KtContainerNodeForControlStructureBody -> {
+                        val ifExpr = owner.parent as? KtIfExpression ?: return false
+                        ifExpr.`else` != null && whenValueUsed(ifExpr, depth + 1)
+                    }
+                    is KtTryExpression -> owner.tryBlock === parent && whenValueUsed(owner, depth + 1)
+                    else -> false
+                }
+            }
+            else -> false
+        }
     }
 
     /** A `when` branch condition this check can reason about: a simple label (a name / qualified name / literal,
@@ -3345,7 +3541,7 @@ internal class KotlinSemanticChecks(
     private fun uselessElvis(expr: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
         if (expr.operationToken != KtTokens.ELVIS) return null
         val left = expr.left
-        val nonNull = isStructurallyNonNull(left) || (left is KtNameReferenceExpression && resolver.smartCastNonNull(left))
+        val nonNull = isStructurallyNonNull(left) || (left is KtNameReferenceExpression && resolver.smartCastNonNull(left, strict = true))
         if (!nonNull) return null
         val op = expr.operationReference.textRange
         return Diagnostic(
@@ -3914,6 +4110,7 @@ internal class KotlinSemanticChecks(
         SYNTHETIC_FUNCTION_FAMILIES.firstOrNull { (pkg, re) -> re.matches(name) && ctx.imports.any { it.isStar && it.packageName == pkg } }
             ?.let { return null }
         if (name in localAliases || service.isProjectTypeAlias(name)) return null // a typealias, not a class
+        if (service.isNestedTypeAliasInScope(name, resolver.enclosingClassFqn(userType.textRange.startOffset))) return null
         val off = userType.textRange.startOffset
         if (resolver.isTypeParameterInScope(name, off)) return null
         if (resolver.localTypesInScope(off).containsKey(name)) return null // a local `class Foo` / `object O` in scope
@@ -3960,6 +4157,13 @@ internal class KotlinSemanticChecks(
         // appears in membersOf. Probe the candidate nested FQN (mirrors KotlinResolver.nestedType) so a chain
         // bottoming out at an icon extension property (`Icons.AutoMirrored.Filled.List`) isn't falsely flagged.
         if (name.isNotEmpty() && service.isKnownType("${recvType.qualifiedName}.$name")) return null
+        // `Outer.TA` / `Outer.TA()`: a typealias nested in the receiver type, when the receiver names that class
+        // itself. Through an alias (`C.Self.Nested` with `typealias Self = C`) nothing nested is reachable.
+        resolver.typeDenotationFqn(receiver)?.let { owner ->
+            val written = (unwrapParen(receiver) as? KtNameReferenceExpression)?.getReferencedName()
+                ?: (unwrapParen(receiver) as? KtQualifiedExpression)?.selectorExpression?.text
+            if (written == owner.substringAfterLast('.') && service.isProjectTypeAliasFqn("$owner.$name")) return null
+        }
         // A static enum-constant access (`SomeEnum.A`): the entry resolves on the enum type, but enum entries
         // aren't instance members so membersNamed misses them. Resolve via the TYPE DENOTATION (not the
         // inferred [recvType], which can be a value shadowing the type — e.g. an enum `E` shadowed by the
@@ -4328,3 +4532,38 @@ private fun isCallTypeArgument(userType: KtUserType): Boolean {
         as? dev.ide.kotlin.syntax.psi.KtTypeArgumentList ?: return false
     return list.parent is dev.ide.kotlin.syntax.psi.KtCallExpression
 }
+
+/** Whether [prop] has a backing field: an accessor left to its default uses one, and a written one does when
+ *  its body names `field`. */
+internal fun hasBackingField(prop: KtProperty): Boolean {
+    fun usesField(acc: dev.ide.kotlin.syntax.psi.KtPropertyAccessor?): Boolean {
+        val body = acc?.bodyExpression ?: return true
+        // A setter parameter or a local named `field` hides the backing field (`set(field) { y = field }`).
+        val params = generateSequence(acc.firstChild) { it.nextSibling }
+            .filterIsInstance<dev.ide.kotlin.syntax.psi.KtParameterList>().flatMap { it.parameters }
+        if (params.any { it.name == "field" }) return false
+        var found = false
+        var shadowed = false
+        fun rec(e: KtElement) {
+            if (found || shadowed) return
+            if (e is KtProperty && e.name == "field") { shadowed = true; return }
+            if (e is KtNameReferenceExpression && e.getReferencedName() == "field") {
+                // `this.field` is a member called so, not the backing field.
+                val parent = e.parent
+                if (!(parent is KtQualifiedExpression && parent.selectorExpression === e)) { found = true; return }
+            }
+            if (e is KtClassOrObject || e is KtNamedFunction) return
+            var c = e.firstChild
+            while (c != null && !found) { rec(c); c = c.nextSibling }
+        }
+        rec(body)
+        return found
+    }
+    return usesField(prop.getter) || (prop.isVar && usesField(prop.setter))
+}
+
+/** Subject types no set of `when` constants can cover: a `when` over one needs an `else` to be exhaustive. */
+private val NON_EXHAUSTIVE_SUBJECT_TYPES = setOf(
+    "kotlin.String", "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Char", "kotlin.Double",
+    "kotlin.Float", "kotlin.UInt", "kotlin.ULong",
+)

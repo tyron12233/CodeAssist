@@ -68,9 +68,12 @@ class KotlinResolverCaches {
     val composeCtx = HashMap<KtElement, ComposableContext>()
     val suspendCtx = HashMap<KtElement, SuspendContext>()
 
-    /** Per-flow-root result of the CFG var-nullability pass: the var references it proves non-null (see
-     *  [KotlinVarNullFlow]). Keyed by the analysed body block. */
-    val varNonNull = HashMap<KtElement, Set<KtElement>>()
+    /** Per-flow-root result of the data-flow nullability pass: the variable reads it proves non-null (see
+     *  [KotlinVarNullFlow]). Keyed by the analysed function. */
+    internal val varNonNull = HashMap<KtElement, Map<KtElement, VarNul>>()
+
+    /** The roots whose data-flow pass is running, so a re-entrant ask answers instead of recursing. */
+    val varFlowInProgress = HashSet<KtElement>()
 
     /** Per file: the `is`/`as`/`when`-pattern type references written against each simple name, the candidates
      *  [flowProvenTypes] tries to prove at a use. Keyed by the file. */

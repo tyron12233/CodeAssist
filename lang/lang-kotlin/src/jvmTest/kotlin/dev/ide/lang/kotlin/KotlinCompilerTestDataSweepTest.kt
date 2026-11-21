@@ -165,8 +165,10 @@ class KotlinCompilerTestDataSweepTest {
             append("\n")
         }
         println(summary)
-        File(System.getProperty("java.io.tmpdir"), "kt-testdata-sweep.txt").writeText(summary + "\n" + out)
-        println("details: " + File(System.getProperty("java.io.tmpdir"), "kt-testdata-sweep.txt"))
+        // `-Dkt.testDataOut=<file>` keeps concurrent sweeps (several worktrees) from overwriting one details file.
+        val details = System.getProperty("kt.testDataOut")?.let(::File) ?: File(System.getProperty("java.io.tmpdir"), "kt-testdata-sweep.txt")
+        details.writeText(summary + "\n" + out)
+        println("details: $details")
     }
 
     /** The case a test-data file describes, or the reason it is skipped. */
@@ -293,6 +295,7 @@ class KotlinCompilerTestDataSweepTest {
             "kt.overrideRequired" to setOf("VIRTUAL_MEMBER_HIDDEN"),
             "kt.overridingFinal" to setOf("OVERRIDING_FINAL_MEMBER"),
             "kt.unresolvedLabel" to setOf("UNRESOLVED_LABEL"),
+            "kt.dslScopeViolation" to setOf("DSL_SCOPE_VIOLATION"),
             "kt.overloadAmbiguity" to setOf("OVERLOAD_RESOLUTION_AMBIGUITY", "AMBIGUOUS_CALL"),
             "kt.cannotInferType" to setOf("CANNOT_INFER_PARAMETER_TYPE", "CANNOT_INFER_VALUE_PARAMETER_TYPE", "NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER"),
             "kt.invisibleReference" to setOf("INVISIBLE_REFERENCE", "INVISIBLE_SETTER"),
@@ -307,6 +310,10 @@ class KotlinCompilerTestDataSweepTest {
             "kt.wrongAnnotationTarget" to setOf("WRONG_ANNOTATION_TARGET", "WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET"),
             "kt.notConstant" to setOf("ANNOTATION_ARGUMENT_MUST_BE_CONST", "NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION", "CONST_VAL_WITH_NON_CONST_INITIALIZER"),
             "kt.cannotWeakenAccess" to setOf("CANNOT_WEAKEN_ACCESS_PRIVILEGE", "CANNOT_CHANGE_ACCESS_PRIVILEGE"),
+            "kt.uninitializedEnumCompanion" to setOf("UNINITIALIZED_ENUM_COMPANION"),
+            "kt.instanceAccessBeforeSuperCall" to setOf("INSTANCE_ACCESS_BEFORE_SUPER_CALL"),
+            "kt.usageIsNotInlinable" to setOf("USAGE_IS_NOT_INLINABLE"),
+            "kt.nonPublicCallFromPublicInline" to setOf("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE", "NON_PUBLIC_INLINE_CALL_FROM_PUBLIC_INLINE", "PRIVATE_CLASS_MEMBER_FROM_INLINE"),
             "kt.constMisuse" to setOf("CONST_VAL_WITH_NON_CONST_INITIALIZER", "NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION", "CONST_VAL_NOT_TOP_LEVEL_OR_OBJECT", "CONST_VAL_WITH_GETTER", "CONST_VAL_WITH_DELEGATE", "CONST_VAL_WITHOUT_INITIALIZER", "TYPE_CANT_BE_USED_FOR_CONST_VAL", "WRONG_MODIFIER_TARGET"),
         )
         val SKIP_DIRECTIVE = Regex(

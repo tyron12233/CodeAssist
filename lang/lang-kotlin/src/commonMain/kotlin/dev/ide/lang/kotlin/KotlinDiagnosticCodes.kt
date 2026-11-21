@@ -207,6 +207,22 @@ object KotlinDiagnosticCodes {
     const val LAMBDA_PARAMETERS = "kt.lambdaParameters"
     /** An instance member reached through its class name (`A.m()`), with no instance. */
     const val INSTANCE_ACCESS = "kt.instanceAccessViaType"
+    /** A bare call that reaches past a closer implicit receiver carrying the same `@DslMarker`. */
+    const val DSL_SCOPE_VIOLATION = "kt.dslScopeViolation"
+
+    // --- construction order and inline bodies (see KotlinInitializationChecks, KotlinInlineChecks) ---
+    /** An enum's companion object reached from the enum's own initialization (an entry's arguments or body
+     *  initializers, the enum's property initializers), before the companion exists (UNINITIALIZED_ENUM_COMPANION). */
+    const val UNINITIALIZED_ENUM_COMPANION = "kt.uninitializedEnumCompanion"
+    /** `this`, `super` or an instance member used in a constructor's header: a parameter default, a delegation
+     *  call's arguments or the superclass call's (INSTANCE_ACCESS_BEFORE_SUPER_CALL). */
+    const val INSTANCE_ACCESS_BEFORE_SUPER_CALL = "kt.instanceAccessBeforeSuperCall"
+    /** An inline function's inlinable functional parameter used other than by calling it or passing it on to
+     *  another inline function (USAGE_IS_NOT_INLINABLE). */
+    const val USAGE_IS_NOT_INLINABLE = "kt.usageIsNotInlinable"
+    /** A public-API inline function's body touching a declaration outside the public API: private, internal
+     *  without `@PublishedApi`, or a member of such (NON_PUBLIC_CALL_FROM_PUBLIC_INLINE). */
+    const val NON_PUBLIC_CALL_FROM_PUBLIC_INLINE = "kt.nonPublicCallFromPublicInline"
 
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"

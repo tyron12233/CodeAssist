@@ -127,14 +127,16 @@ class KotlinSmartCastFlowTest {
 
     @Test
     fun varAssignedInLoopIsNotSmartCast() {
-        // A var written in a loop is not effectively immutable (a back-edge) → excluded → not smart-cast.
-        val d = diagnose("J3.kt", body("fun f(c: Boolean) {\n  var s: String? = \"x\"\n  while (c) { s = null }\n  if (s != null) { s!! }\n}"))
+        // A var the loop writes is forgotten on entry to it (the back edge may bring the write round), so the
+        // `s!!` before the write in the body is not redundant, though one before the loop proved it.
+        val d = diagnose("J3.kt", body("fun f(c: Boolean) {\n  var s: String? = \"x\"\n  s!!\n  while (c) { s!!; s = null }\n}"))
         assertTrue(d.none { it.code == "kt.redundantNotNull" }, "a loop-assigned var must not be smart-cast; got $d")
     }
 
     @Test
     fun varAssignedInClosureIsNotSmartCast() {
-        val d = diagnose("J4.kt", body("fun f() {\n  var s: String? = \"x\"\n  run { s = null }\n  if (s != null) { s!! }\n}"))
+        // A lambda that may run at any time makes what it writes unstable from its creation on.
+        val d = diagnose("J4.kt", body("fun f() {\n  var s: String? = \"x\"\n  val l = { s = null }\n  if (s != null) { s!! }\n}"))
         assertTrue(d.none { it.code == "kt.redundantNotNull" }, "a closure-assigned var must not be smart-cast; got $d")
     }
 

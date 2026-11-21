@@ -310,3 +310,25 @@ const val Y = 1 === 2
 //// kt.wrongAnnotationTarget
 annotation class Plain
 fun f(x: Int) = @Plain x
+//// kt.uninitializedEnumCompanion
+enum class E(val x: Int) { A(foo()); companion object { fun foo() = 1 } }
+//// kt.uninitializedEnumCompanion
+enum class E(val x: Int) { A(1); val y = x + Companion.K; companion object { val K = 2 } }
+//// kt.instanceAccessBeforeSuperCall
+class A(val x: Int) { constructor() : this(y); val y = 1 }
+//// kt.instanceAccessBeforeSuperCall
+open class B(val v: Int)
+class C : B(z) { val z = 1 }
+//// kt.usageIsNotInlinable
+inline fun g(block: () -> Unit) { val x = block }
+//// kt.usageIsNotInlinable
+fun store(f: () -> Unit) {}
+inline fun g(block: () -> Unit) { store(block) }
+//// kt.nonPublicCallFromPublicInline
+private fun hidden() = 1
+inline fun g() = hidden()
+//// kt.whenExhaustive
+fun g(n: Int) = when { n > 0 -> 1 }
+//// kt.whenExhaustive
+enum class E { A, B }
+fun g(e: E) { when (e) { E.A -> println() } }

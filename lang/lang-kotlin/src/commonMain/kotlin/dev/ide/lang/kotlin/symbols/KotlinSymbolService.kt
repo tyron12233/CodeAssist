@@ -1050,7 +1050,7 @@ class KotlinSymbolService(
     }
 
     private fun typeFromTextUncached(text: String, ctx: FileContext?, enclosingClassFqn: String?): KotlinType? {
-        val trimmed = text.trim()
+        val trimmed = stripTypeDecorations(text.trim())
         // A function type (`(A) -> B`, `T.() -> R`, `suspend (…) -> …`, `@Composable (…) -> …`) maps to a
         // `kotlin.FunctionN` carrying the extension-receiver / composable flags — so a content-lambda parameter
         // (`Row(content: RowScope.() -> Unit)`) establishes its implicit `this` receiver during resolution.
@@ -1076,7 +1076,8 @@ class KotlinSymbolService(
         // to normal resolution (no unsound substitution). The target is resolved in the ALIAS's own file context
         // (its imports/package), and [aliasExpandDepth] bounds a cyclic/deep alias chain.
         if (argText.isBlank() && aliasExpandDepth.get().value < ALIAS_EXPAND_LIMIT) {
-            visibleTypeAlias(head, ctx)?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() }?.let { alias ->
+            (nestedTypeAlias(head, enclosingClassFqn) ?: visibleTypeAlias(head, ctx))
+                ?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() }?.let { alias ->
                 aliasExpandDepth.get().value++
                 try {
                     typeFromText(alias.targetText, alias.ctx)?.let { return if (nullable) it.withNullable(true) else it }
@@ -1153,6 +1154,34 @@ class KotlinSymbolService(
      * receiver (`Receiver.(params) -> R`, possibly generic), value parameters, the result type, and an outer
      * `?`. Returns null when [text] is not a function type, so the caller falls through to plain-type parsing.
      */
+    /** [t] without what does not change the type it names: leading annotations (`@L1 A`, a DSL marker) and
+     *  parentheses around the whole of it (`(@L1 A)`, `(A)?` -> `A?`). A function type keeps both, since its own
+     *  parser reads `@Composable` and a nullable `((A) -> B)?`. */
+    private fun stripTypeDecorations(t: String): String {
+        var s = t
+        while (true) {
+            if (topLevelArrowIndex(s) != null) return s
+            val before = s
+            if (s.startsWith("@")) {
+                var rest = s.drop(1).dropWhile { it.isLetterOrDigit() || it == '.' || it == '_' || it == ':' }
+                if (rest.startsWith("(")) {
+                    val close = matchingParen(rest, 0)
+                    if (close >= 0) rest = rest.substring(close + 1)
+                }
+                s = rest.trim()
+            } else if (s.startsWith("(")) {
+                val close = matchingParen(s, 0)
+                val tail = if (close >= 0) s.substring(close + 1).trim() else "x"
+                val inner = if (close > 0) s.substring(1, close).trim() else ""
+                // `((A) -> B)?` is a nullable FUNCTION; unwrapped it would read as one returning `B?`.
+                if (close > 0 && (tail.isEmpty() || tail == "?") && !(tail == "?" && topLevelArrowIndex(inner) != null)) {
+                    s = inner + tail
+                }
+            }
+            if (s == before || s.isEmpty()) return if (s.isEmpty()) t else s
+        }
+    }
+
     private fun functionTypeFromText(text: String, ctx: FileContext?, enclosingClassFqn: String? = null): KotlinType? {
         var s = text.trim()
         val nullable = isNullableFunctionType(s)
@@ -1181,7 +1210,7 @@ class KotlinSymbolService(
         // extension receiver (`Map<K, V>.() -> …`).
         val open = if (left.endsWith(")")) openOfFinalGroup(left) else return null
         if (open < 0) return null
-        val receiverText = left.take(open).trim().removeSuffix(".").trim()
+        val receiverText = stripTypeDecorations(left.take(open).trim().removeSuffix(".").trim())
         val paramsInner = left.substring(open + 1, left.length - 1).trim()
         val params =
             if (paramsInner.isBlank()) emptyList() else splitTopLevelParens(paramsInner).mapNotNull {
@@ -3539,6 +3568,28 @@ class KotlinSymbolService(
      *  missing index as ready (for checks that degrade gracefully without one). */
     fun classpathIndexReady(): Boolean = index?.status?.ready == true
 
+    /**
+     * The declaring files (paths) of the project-source top-level declarations named by [fqn] when EVERY one of
+     * them is `private`, so only its own file can see it; null when any is visible beyond its file, when [fqn]
+     * names a nested or local class, or when the source declares nothing by that name.
+     */
+    fun privateTopLevelSourceFiles(fqn: String): Set<String>? {
+        val pkg = fqn.substringBeforeLast('.', "")
+        val leaf = fqn.substringAfterLast('.')
+        val m = model()
+        val files = HashSet<String>()
+        m.classByFqn[fqn]?.let { c ->
+            if (c.isLocal || c.isCompanion || c.ctx.packageName != pkg || !c.isPrivate) return null
+            files += c.ctx.path
+        }
+        for (t in m.topLevel) {
+            if (t.name != leaf || t.ctx.packageName != pkg) continue
+            if (t.visibility != "private") return null
+            files += t.ctx.path
+        }
+        return files.takeIf { it.isNotEmpty() }
+    }
+
     fun topLevelByName(name: String): List<KotlinSymbol> {
         // Not filtered by visibility — see [topLevelCallables]; cross-file private is enforced at the use sites
         // (completion / the unresolved-reference diagnostic), so same-file private resolution keeps working.
@@ -3599,6 +3650,19 @@ class KotlinSymbolService(
      * public types declared directly in it (classpath via the `java.packages`/`java.packageTypes` indices,
      * plus same-project source classes), each filtered by [prefix]. Powers `java.<caret>` / `java.ut<caret>`.
      */
+    /** The annotation classes declared directly in [packageFqn] whose name matches [prefix], from the index's
+     *  per-package type lists (annotation completion's default-import set). */
+    fun annotationTypesIn(packageFqn: String, prefix: String): List<KotlinSymbol> {
+        val idx = index ?: return emptyList()
+        val m = PrefixMatcher(prefix)
+        return idx.exactAll<ClassNameValue>(PACKAGE_TYPES, packageFqn).mapNotNull { v ->
+            if (classNameKind(v.kind) != SymbolKind.ANNOTATION_TYPE) return@mapNotNull null
+            val simple = v.fqn.substringAfterLast('.')
+            if (prefix.isNotEmpty() && !m.matches(simple)) return@mapNotNull null
+            KotlinSymbol(simple, SymbolKind.ANNOTATION_TYPE, typeByFqn(v.fqn), origin = BINARY)
+        }.toList()
+    }
+
     fun packageMembers(packageFqn: String, prefix: String, limit: Int = 100): List<KotlinSymbol> {
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
@@ -4372,6 +4436,31 @@ class KotlinSymbolService(
     }
 
     fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
+
+    /** Whether [fqn] names a project typealias, a nested one (`Outer.TA`) included. */
+    fun isProjectTypeAliasFqn(fqn: String): Boolean = fqn in model().typeAliasByFqn
+
+    /** A typealias nested in [enclosingClassFqn] or one of its outer classes, reached by its simple [name] from
+     *  inside them, innermost first. */
+    /** Whether [name] is a typealias nested in [enclosingClassFqn] or an outer class of it. */
+    fun isNestedTypeAliasInScope(name: String, enclosingClassFqn: String?): Boolean = nestedTypeAlias(name, enclosingClassFqn) != null
+
+    private fun nestedTypeAlias(name: String, enclosingClassFqn: String?): TypeAliasDecl? {
+        val byFqn = model().typeAliasByFqn
+        if (byFqn.isEmpty()) return null
+        val classes = model().classByFqn
+        var owner = enclosingClassFqn
+        while (!owner.isNullOrEmpty()) {
+            byFqn["$owner.$name"]?.let { return it }
+            // Inherited from a superCLASS, as nested classes are (`typealias/inheritedNestedTypeAlias.kt`).
+            for (sup in kotlinSupertypesMemo(owner)) {
+                if (classes[sup]?.isInterface == true) continue
+                byFqn["$sup.$name"]?.let { return it }
+            }
+            owner = owner.substringBeforeLast('.', "").ifEmpty { null }
+        }
+        return null
+    }
 
     /**
      * The project typealias that [simpleName] denotes in the file [ctx], by Kotlin's scope order: an explicit

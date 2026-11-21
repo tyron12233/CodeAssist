@@ -6,6 +6,7 @@ import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtTypeAlias
+import dev.ide.kotlin.syntax.psi.getStrictParentOfType
 import dev.ide.kotlin.syntax.psi.KtTypeReference
 
 /**
@@ -59,7 +60,9 @@ fun typeAliasNamesIn(file: KtFile): Set<String> {
     if (!file.text.contains("typealias")) return emptySet()
     val out = HashSet<String>()
     fun rec(p: KtElement) {
-        if (p is KtTypeAlias) p.name?.let { out += it }
+        // A typealias nested in a class is visible by simple name only inside it, which the class-scoped lookup
+        // (KotlinSymbolService.isNestedTypeAliasInScope) answers; this set is the file-wide one.
+        if (p is KtTypeAlias && p.getStrictParentOfType<dev.ide.kotlin.syntax.psi.KtClassOrObject>() == null) p.name?.let { out += it }
         var c = p.firstChild
         while (c != null) { rec(c); c = c.nextSibling }
     }

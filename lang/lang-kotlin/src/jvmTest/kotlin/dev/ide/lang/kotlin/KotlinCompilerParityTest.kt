@@ -26,6 +26,63 @@ class KotlinCompilerParityTest {
         clean("val p = Pair<String, String>::first")
     }
 
+    /** An enum's `values()`/`valueOf()`/`entries` are bare inside its body and its companion, and nowhere else. */
+    @Test
+    fun enumStaticsAreBareInsideTheEnum() {
+        clean(
+            "enum class E {\n ENTRY;\n companion object { fun bar(): Array<E> = values(); fun baz(): E = valueOf(\"ENTRY\") }\n" +
+                " fun rab(): Array<E> = values()\n fun n(): Int = entries.size\n}",
+        )
+        assertCodes("fun x() = values()", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** Kotlin 2.3's nested type aliases resolve inside their class and through it. */
+    @Test
+    fun nestedTypeAliasesResolve() {
+        clean("class Box { class Inner(val v: Int); typealias I = Inner; fun make(): I = I(1); fun n(): Int = make().v }")
+        clean("class Class { class Annotated1; typealias TA = Annotated1 }\nval x: Class.TA = Class.TA()")
+        assertCodes("class Box { class Inner; typealias I = Inner }\nfun f(): I? = null", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("open class Base { class Cell(val v: Int); typealias CT = Cell }\nclass Sub : Base() { val test1: CT = Cell(42) }")
+    }
+
+    /** A class's companion, and its superclasses' companions, are implicit receivers in its body. */
+    @Test
+    fun companionsAreImplicitReceiversInTheirClass() {
+        clean(
+            "open class A { companion object { fun bar() = 1 }; init { val a: Int = foo(); val b: Int = bar() } }\n" +
+                "open class B: A() { companion object { fun bar() = \"\" }; init { val a: String = foo(); val b: String = bar() } }\n" +
+                "fun A.Companion.foo() = 1\nfun B.Companion.foo() = \"\"\nclass C: A() { init { val a: Int = foo() } }",
+        )
+        assertCodes("open class A { companion object }\nfun A.Companion.foo() = 1\nfun t() = foo()", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** A lambda on the right of an infix call fills its parameter, receiver included, and an annotated,
+     *  parenthesized receiver type (`(@Marker A).() -> Unit`) is still that receiver. */
+    @Test
+    fun infixLambdasAndAnnotatedReceiverTypes() {
+        clean("class Inv<T> { fun get(): T = TODO() }\ninfix fun <T> T.check(f: Inv<T>.() -> Unit) {}\nfun t(s: String) { s check { get().length } }")
+        clean("@DslMarker @Target(AnnotationTarget.TYPE) annotation class L1\nclass A { fun a() = 1 }\nfun foo1(x: (@L1 A).() -> Unit) {}\nfun t() { foo1 { a() } }")
+        clean("fun f(g: ((Int) -> String)?): String? = g?.invoke(1)")
+    }
+
+    /** `@DslMarker`: a bare call reaching past a closer receiver with the same marker is a DSL scope violation,
+     *  whether the marker sits on the receiver class or on the function type's receiver. */
+    @Test
+    fun dslMarkersStopCallsThroughOuterReceivers() {
+        val v = KotlinDiagnosticCodes.DSL_SCOPE_VIOLATION
+        assertCodes(
+            "@DslMarker annotation class Html\n@Html class Body { fun p() {} }\n@Html class Head { fun title() {} }\n" +
+                "fun body(b: Body.() -> Unit) {}\nfun head(h: Head.() -> Unit) {}\nfun t() { body { p(); head { title(); p() } } }",
+            v,
+        )
+        assertCodes(
+            "@DslMarker @Target(AnnotationTarget.TYPE) annotation class L1\nclass A { fun a() = 1 }\nclass B { fun b() = 2 }\n" +
+                "fun foo1(x: (@L1 A).() -> Unit) {}\nfun bar1(x: (@L1 B).() -> Unit) {}\nfun t() { foo1 { a(); bar1 { b(); a() } } }",
+            v,
+        )
+        clean("class X { fun x() {} }\nclass Y { fun y() {} }\nfun xs(b: X.() -> Unit) {}\nfun ys(b: Y.() -> Unit) {}\nfun t() { xs { ys { x(); y() } } }")
+    }
+
     /** A classifier is looked up through every enclosing class, including a local or anonymous one, and through
      *  its own companion and (transitive, typealiased) superCLASSES. */
     @Test
