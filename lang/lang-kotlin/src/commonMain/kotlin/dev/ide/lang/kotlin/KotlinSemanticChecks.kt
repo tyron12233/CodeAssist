@@ -520,7 +520,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    )
+    ) + declarationPortedCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -568,7 +568,8 @@ internal class KotlinSemanticChecks(
             val userType = entry.typeReference?.typeElement as? KtUserType ?: continue
             val name = userType.referenceExpression?.getReferencedName() ?: continue
             if (resolver.isTypeParameterInScope(name, entry.textRange.startOffset)) continue
-            val fqn = service.resolveTypeName(name, resolver.fileContext) ?: continue
+            // The whole written name, from where it is written: a nested `FinalNested` or a qualified `B.Inner`.
+            val fqn = entry.typeReference?.let { classifierFqnOf(it, resolver) } ?: continue
             if (service.isFinalType(fqn) != true) continue // open/abstract/sealed/interface/unknown → back off
             val r = (entry.typeReference ?: entry).textRange // underline just the type name, not its `()`
             out += Diagnostic(

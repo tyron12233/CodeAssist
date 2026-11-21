@@ -1153,13 +1153,18 @@ internal fun KotlinSemanticChecks.lambdaNotInlined(lambda: KtLambdaExpression, r
 
 // --- overrides ----------------------------------------------------------------------------------------------
 
+private fun mentionsJavaObject(t: KotlinType): Boolean =
+    t.qualifiedName == "java.lang.Object" || t.typeArguments.any { (it as? KotlinType)?.let(::mentionsJavaObject) != false }
+
 private fun mentionsTypeParameter(t: KotlinType): Boolean =
     t.isTypeParameter || t.typeArguments.any { (it as? KotlinType)?.let(::mentionsTypeParameter) != false }
 
 /**
- * An `override` whose declared type no overridden member accepts (`override fun f(): String` over
- * `fun f(): Int`). Each candidate's type must be concrete: one that mentions a type parameter is spelled
- * differently in the subclass than in the supertype, and is not compared.
+ * An `override` whose declared type some overridden member does not accept (`override fun f(): String` over
+ * `fun f(): Int`): as in K2's `FirOverrideChecker`, the type must be a subtype of EVERY overridden member's, so
+ * `override fun f(): Z` over a `fun f(): W` is wrong even where a further-up `fun f(): X` would take a `Z`. Each
+ * candidate's type must be concrete: one that mentions a type parameter is spelled differently in the subclass
+ * than in the supertype, and is not compared.
  */
 internal fun KotlinSemanticChecks.overrideReturnTypeMismatch(
     member: KtCallableDeclaration, candidates: List<KotlinSymbol>, resolver: KotlinResolver,
@@ -1172,8 +1177,9 @@ internal fun KotlinSemanticChecks.overrideReturnTypeMismatch(
     for (c in candidates) {
         val superType = c.type as? KotlinType ?: return null
         if (mentionsTypeParameter(superType) || c.typeParameters.isNotEmpty()) return null
-        if (!isMismatch(superType, declared)) return null
-        expected = expected ?: superType
+        // A Java member read without its type arguments (`Iterator<Object>` for `Iterator<E>`) is erased, not concrete.
+        if (mentionsJavaObject(superType)) return null
+        if (isMismatch(superType, declared)) expected = expected ?: superType
     }
     expected ?: return null
     val what = if (member is KtNamedFunction) "Return type" else "Type"

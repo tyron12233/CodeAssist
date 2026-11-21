@@ -468,7 +468,7 @@ object B15 : A2(1), I
 class B17 : Thread("name")
 class B18 : A2 { constructor() : super(1) }
 enum class En(val v: Int) : I { X(1), Y(2) }
-val anon = object : A2(3), I {}
+private val anon = object : A2(3), I {}
 val anon2 = object : I {}
 class Outer { open class In(x: Int); class Sub : In(1) }
 typealias AliasA2 = A2
@@ -778,3 +778,48 @@ fun w(m: Mode, n: Int, flag: Boolean): Int {
     when (flag) { true -> println(); false -> println() }
     return when (m) { Mode.On -> 1; Mode.Off -> 0 }
 }
+//// ported declaration rules
+open class Base
+interface Iface
+interface Other : Iface
+class Impl : Base(), Iface, Other
+val typedLambda: (Int) -> Unit = { a -> println(a) }
+@PublishedApi internal fun published() = 1
+open class Opener {
+    inline fun finalInline() {}
+    private inline fun privateInline() {}
+}
+val <T> List<T>.second: T get() = this[1]
+fun <T> bounded() where T : Base, T : Iface {}
+val withField: Int = 0
+    get() = field + 1
+val Int.doubled: Int get() = this * 2
+class Ctors(val x: Int) {
+    constructor(s: String) : this(s.length)
+    constructor(b: Boolean) : this(if (b) "y" else "n")
+}
+annotation class Ann(val a: Int, val b: String, val c: Array<String>, val d: IntArray)
+val anonymous = fun(p: Int) = p
+interface Named { fun name(): String = "n" }
+inline fun inlineWithObject() { object : Any() { fun inside() {} } }
+class Outer<T> {
+    inner class Inner
+    fun take(i: Inner) {}
+}
+typealias Strings = List<String>
+class Holder private constructor(private val p: Hidden) { private class Hidden }
+internal class InternalType
+internal fun useInternal(i: InternalType) = i
+//// ported declaration rules, part two
+interface DefaultA { fun f() = 1 }
+interface DefaultB { fun f() = 2 }
+class BothOverridden : DefaultA, DefaultB { override fun f() = 3 }
+fun alwaysThrows(): Nothing = throw IllegalStateException()
+interface Mark1
+interface Mark2
+private val privateAnon = object : Mark1, Mark2 {}
+val typedAnon: Mark1 = object : Mark1, Mark2 {}
+inline fun <reified T> reifiedOk(x: Any) = x is T
+class OneCompanion { companion object }
+open class NeedsArg(x: Int)
+class Delegating : NeedsArg { constructor() : super(1) }

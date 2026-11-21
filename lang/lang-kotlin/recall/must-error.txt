@@ -332,3 +332,71 @@ fun g(n: Int) = when { n > 0 -> 1 }
 //// kt.whenExhaustive
 enum class E { A, B }
 fun g(e: E) { when (e) { E.A -> println() } }
+//// kt.parameterTypeRequired
+fun g(a) {}
+//// kt.supertypeList
+open class C
+interface I : C
+//// kt.supertypeList
+open class C
+open class D
+class E : C(), D()
+//// kt.publishedApi
+@PublishedApi fun g() = 1
+//// kt.inlineDeclaration
+open class A { open inline fun g() {} }
+//// kt.inlineDeclaration
+inline fun g() { fun local() {} }
+//// kt.typeParameterShape
+val <T> x: Int get() = 0
+//// kt.typeParameterShape
+interface I
+fun <T> g() where T : I, T : I {}
+//// kt.typeParameterShape
+typealias L = List<L>
+//// kt.propertyShape
+interface I { val a: Int = 1 }
+//// kt.propertyShape
+val Int.c: Int = 1
+//// kt.constructorShape
+class B {
+    constructor(a: Int) : this("x")
+    constructor(a: String) : this(1)
+}
+//// kt.constructorShape
+class A(val x: Int) { constructor(b: Boolean) {} }
+//// kt.constructorShape
+object O { constructor() }
+//// kt.annotationClassShape
+annotation class A(x: Int)
+//// kt.annotationClassShape
+annotation class A(val x: Any)
+//// kt.functionShape
+val f = fun(p: Int = 3) {}
+//// kt.functionShape
+interface I { override fun toString(): String = "I" }
+//// kt.exposedVisibility
+class A {
+    private class P
+    fun f(p: P) {}
+}
+//// kt.exposedVisibility
+internal class I
+fun f(): I? = null
+//// kt.abstractNotImplemented
+interface A { fun f() = 1 }
+interface B { fun f() = 2 }
+class C : A, B
+//// kt.functionShape
+fun g() = throw IllegalStateException()
+//// kt.functionShape
+interface I1
+interface I2
+val o = object : I1, I2 {}
+//// kt.typeParameterShape
+fun <reified T> g() {}
+//// kt.declarationForm
+interface I { init {} }
+//// kt.constructorShape
+open class Base(x: Int)
+class A : Base { constructor() }

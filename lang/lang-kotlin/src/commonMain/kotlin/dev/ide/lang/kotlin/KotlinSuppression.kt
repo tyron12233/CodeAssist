@@ -125,5 +125,5 @@ internal object KotlinSuppression {
         "kt.nameShadowing" to setOf("NAME_SHADOWING"),
         "kt.varCouldBeVal" to setOf("CAN_BE_VAL"),
         "kt.whenExhaustiveWarning" to setOf("NON_EXHAUSTIVE_WHEN_STATEMENT"),
-    )
+    ) + PORTED_DECLARATION_K2_NAMES
 }

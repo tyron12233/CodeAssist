@@ -237,6 +237,34 @@ object KotlinDiagnosticCodes {
      *  without `@PublishedApi`, or a member of such (NON_PUBLIC_CALL_FROM_PUBLIC_INLINE). */
     const val NON_PUBLIC_CALL_FROM_PUBLIC_INLINE = "kt.nonPublicCallFromPublicInline"
 
+    // --- declaration and type rules ported from K2's declaration/type checkers (see KotlinDeclarationPortedChecks) ---
+    /** A parameter with no type where nothing can supply one: a named function's or a constructor's, or a lambda's
+     *  with no expected type (VALUE_PARAMETER_WITHOUT_EXPLICIT_TYPE). */
+    const val PARAMETER_TYPE_REQUIRED = "kt.parameterTypeRequired"
+    /** A supertype list the class kind does not allow: an interface extending or initializing a class, two
+     *  classes, a supertype written twice, a projection or an extension function type as a supertype. */
+    const val SUPERTYPE_LIST = "kt.supertypeList"
+    /** `@PublishedApi` on a declaration that is not `internal` (NON_INTERNAL_PUBLISHED_API). */
+    const val PUBLISHED_API = "kt.publishedApi"
+    /** An inline declaration the compiler cannot inline: a virtual member (DECLARATION_CANT_BE_INLINED), a local
+     *  function or class in an inline body (NOT_YET_SUPPORTED_IN_INLINE). */
+    const val INLINE_DECLARATION = "kt.inlineDeclaration"
+    /** A malformed type parameter: one a property's receiver never mentions, a repeated bound, two class bounds. */
+    const val TYPE_PARAMETER_SHAPE = "kt.typeParameterShape"
+    /** A property initializer with nowhere to go: in an interface, without a backing field, on an extension. */
+    const val PROPERTY_SHAPE = "kt.propertyShape"
+    /** A constructor that cannot be: in an object or an interface, with the wrong visibility for an enum or a sealed
+     *  class, delegating in a cycle, or not delegating to the primary one. */
+    const val CONSTRUCTOR_SHAPE = "kt.constructorShape"
+    /** An annotation class with supertypes, members, a non-`val` parameter or a parameter of a type annotations
+     *  cannot hold. */
+    const val ANNOTATION_CLASS_SHAPE = "kt.annotationClassShape"
+    /** A function of a shape the compiler rejects: nameless where a name is required, an anonymous function with
+     *  type parameters or default values, an interface implementing a method of `Any`. */
+    const val FUNCTION_SHAPE = "kt.functionShape"
+    /** A class body holding what its kind cannot: a second companion object, an `init` block in an interface. */
+    const val DECLARATION_FORM = "kt.declarationForm"
+
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"
 

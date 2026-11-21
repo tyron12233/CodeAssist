@@ -89,7 +89,9 @@ class KotlinFunctionPropertyCallTest {
         val cases = listOf(
             "class F : (Int) -> Unit { override fun invoke(p: Int) {} }\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())",
             "class F : Function1<Int, Unit> { override fun invoke(p: Int) {} }\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())",
-            "class F : String.() -> Int { override fun invoke(p: String) = 1 }\nfun take(f: String.() -> Int) {}\nfun t() = take(F())",
+            // Not `class F : String.() -> Int`: an extension function type is no supertype (K2's
+            // SUPERTYPE_IS_EXTENSION_OR_CONTEXT_FUNCTION_TYPE). `Function1<String, Int>` is the same type, spelled legally.
+            "class F : Function1<String, Int> { override fun invoke(p: String) = 1 }\nfun take(f: String.() -> Int) {}\nfun t() = take(F())",
             "open class Base : (Int) -> Unit { override fun invoke(p: Int) {} }\nclass F : Base()\nfun take(f: (Int) -> Unit) {}\nfun t() = take(F())",
             "class F : (Int) -> Unit { override fun invoke(p: Int) {} }\nfun t() { val f: (Int) -> Unit = F() }",
             "class F : (Int) -> Unit { override fun invoke(p: Int) {} }\nfun t() { F()(1) }",
