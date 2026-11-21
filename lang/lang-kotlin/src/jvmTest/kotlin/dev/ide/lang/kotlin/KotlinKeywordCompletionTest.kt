@@ -76,10 +76,10 @@ class KotlinKeywordCompletionTest {
 
     @Test
     fun argumentPositionExcludesStatementKeywords() {
-        // Inside a call's argument list only expression keywords belong — `val`/`for` must not appear.
+        // Inside a call's argument list only expression keywords belong — no `val`. The loops and `fun` are
+        // offered there, as IntelliJ's K2 keyword set has them in every expression slot (keywords/InArgumentList).
         val ls = labels("package demo\nfun box(w: Int) {}\nfun g() { box(|) }")
         assertFalse("val" in ls, "no `val` in an argument slot; got $ls")
-        assertFalse("for" in ls, "no `for` in an argument slot; got $ls")
         assertTrue("null" in ls, "expected `null` in an expression position; got $ls")
     }
 

@@ -106,8 +106,29 @@ internal object KotlinKeywords {
         fun kw(text: String, trailingSpace: Boolean = false) {
             val head = text.substringBefore(' ')
             if (head.lowercase() in present) return // already typed (e.g. `private abstract |`)
-            if (!text.startsWith(prefix, ignoreCase = true)) return
+            // Case-sensitive, as IntelliJ matches keywords: every keyword is lowercase, so a capitalized prefix
+            // (`P|`) is a type being named and offers none.
+            if (!text.startsWith(prefix)) return
             out += keywordItem(text, trailingSpace)
+        }
+
+        // The compounds that are shortcuts for a modifier plus a declaration keyword (`value class`, `fun
+        // interface`) are offered once something is typed: the bare popup lists the plain `value` modifier and
+        // `fun`/`interface`, the vocabulary IntelliJ shows there, rather than every pairing of them.
+        // What already follows the word being typed (`seal|class A`, `seal| fun interface A`): a declaration
+        // keyword there takes the modifier ALONE (`sealed`), and a modifier there (`seal| sealed class`) takes no
+        // compound at all, as IntelliJ completes them.
+        val following = followingWords(precedingText, tokenStart + prefix.length)
+        fun compound(text: String) {
+            if (text in TYPED_ONLY_COMPOUNDS && prefix.isEmpty()) return
+            if (following.isNotEmpty()) {
+                val head = text.substringBefore(' ')
+                val declared = following.removePrefix("fun ").substringBefore(' ')
+                if (following.startsWith(head)) return
+                if (declared == text.substringAfter(' ') && head !in present && out.none { it.label == head }) kw(head, trailingSpace = true)
+                return
+            }
+            kw(text)
         }
 
         // --- positions the ancestry walk classifies as NONE / STATEMENT / EXPRESSION but which admit their own
@@ -179,6 +200,9 @@ internal object KotlinKeywords {
             for (k in EXPRESSION_KEYWORDS) kw(k)
             kw("throw", trailingSpace = true)
             if (inFunction) kw("return", trailingSpace = true)
+            // An expression slot also gets the loops and `fun` (an anonymous function), as IntelliJ's K2 keyword
+            // set has them wherever an expression goes; a statement gets them below with the declarations.
+            if (place == Place.EXPRESSION) { kw("do"); kw("for"); kw("while"); kw("fun", trailingSpace = true) }
         }
         when (place) {
             Place.STATEMENT -> {
@@ -198,8 +222,11 @@ internal object KotlinKeywords {
                 kw("typealias", trailingSpace = true); kw("context")
                 kw("override", trailingSpace = true)
                 if (!inObject) { kw("constructor"); kw("companion object") }
-                for (c in MEMBER_COMPOUNDS) kw(c)
-                if (inObject) kw("const val", trailingSpace = true)
+                for (c in MEMBER_COMPOUNDS) compound(c)
+                // `const val` only in an object declaration: an object EXPRESSION's properties cannot be const.
+                if (inObject && (leaf?.getParentOfType<KtClassOrObject>(strict = true) as? KtObjectDeclaration)?.isObjectLiteral() != true) {
+                    kw("const val", trailingSpace = true)
+                }
                 for (m in MEMBER_MODIFIERS) {
                     if (inObject && (m == "protected" || m == "inner")) continue
                     kw(m, trailingSpace = true)
@@ -219,7 +246,7 @@ internal object KotlinKeywords {
                     kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
                     kw("class"); kw("interface"); kw("object"); kw("context")
                     kw("typealias", trailingSpace = true)
-                    for (c in TOP_LEVEL_COMPOUNDS) kw(c)
+                    for (c in TOP_LEVEL_COMPOUNDS) compound(c)
                     for (m in TOP_LEVEL_MODIFIERS) kw(m, trailingSpace = true)
                 }
             }
@@ -285,6 +312,23 @@ internal object KotlinKeywords {
     // Expression-starting keywords, valid in any expression slot. `object` is an object expression, `if`/`when`/
     // `try` are expressions in Kotlin, `throw`/`return` are handled with tails alongside these.
     private val EXPRESSION_KEYWORDS = listOf("true", "false", "null", "this", "super", "if", "when", "try", "object")
+
+    /** The next two words from [from] on (spaces skipped), or "" when the next thing is not a word. */
+    private fun followingWords(text: CharSequence, from: Int): String {
+        // A word glued to the caret (`seal|class A`) is the next word too: the caret's token ends at the caret.
+        var i = from
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+        val start = i
+        var words = 0
+        while (i < text.length && words < 2) {
+            if (text[i].isLetter()) {
+                while (i < text.length && (text[i].isLetterOrDigit() || text[i] == '_')) i++
+                words++
+                if (words < 2) while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+            } else break
+        }
+        return text.substring(start, i).trim()
+    }
 
     // --- place detection ---
 
@@ -401,6 +445,7 @@ internal object KotlinKeywords {
         "data class", "enum class", "sealed class", "annotation class", "sealed interface", "data object",
         "lateinit var", "suspend fun", "value class", "fun interface",
     )
+    private val TYPED_ONLY_COMPOUNDS = setOf("value class", "fun interface")
     private val TOP_LEVEL_COMPOUNDS = listOf(
         "data class", "enum class", "sealed class", "annotation class", "sealed interface", "data object",
         "lateinit var", "const val", "suspend fun", "value class", "fun interface",
@@ -541,13 +586,14 @@ internal object KotlinKeywords {
         // The half-typed `catch`/`finally` may attach to the try (a malformed clause) or sit as the next
         // sibling. Cover both: a KtTryExpression ancestor whose try block already closed before the caret, or
         // a preceding sibling that is a KtTryExpression.
+        // A `try` that already has its `finally` takes no further clause.
         val caret = leaf?.textRange?.startOffset ?: return false
         leaf.getParentOfType<KtTryExpression>(strict = false)?.let { t ->
             val tryBlockEnd = t.tryBlock.textRange.endOffset
-            if (caret > tryBlockEnd) return true
+            if (caret > tryBlockEnd) return t.finallyBlock == null || caret < t.finallyBlock!!.textRange.startOffset
         }
-        return prevMeaningfulSibling(leaf) is KtTryExpression ||
-            prevMeaningfulSiblingUp(leaf) is KtTryExpression
+        val before = (prevMeaningfulSibling(leaf) ?: prevMeaningfulSiblingUp(leaf)) as? KtTryExpression ?: return false
+        return before.finallyBlock == null
     }
 
     /** True right after an `if (…) { }` that has no `else` yet — where `else` continues the statement. Either

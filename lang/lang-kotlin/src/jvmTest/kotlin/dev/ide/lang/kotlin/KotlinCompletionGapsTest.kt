@@ -24,14 +24,15 @@ class KotlinCompletionGapsTest {
     @Test
     fun returnLabelOffersEnclosingLambdaName() {
         val ls = labels("package demo\nfun f() { listOf(1).forEach { return@| } }")
-        assertTrue("forEach" in ls, "return@ should offer the enclosing lambda's implicit label; got $ls")
+        // Listed whole, as IntelliJ lists it (keywords/ReturnWithLabelPrefix.kt); only the label is inserted.
+        assertTrue("return@forEach" in ls, "return@ should offer the enclosing lambda's implicit label; got $ls")
         assertTrue("listOf" !in ls, "a label position must NOT offer scope symbols; got $ls")
     }
 
     @Test
     fun continueLabelOffersLoopLabel() {
         val ls = labels("package demo\nfun f() { loop@ for (i in 1..2) { continue@| } }")
-        assertTrue("loop" in ls, "continue@ should offer the enclosing labeled loop; got $ls")
+        assertTrue("continue@loop" in ls, "continue@ should offer the enclosing labeled loop; got $ls")
     }
 
     // --- annotation-argument enum values ---

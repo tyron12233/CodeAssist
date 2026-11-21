@@ -340,6 +340,9 @@ class KotlinCompletionTestDataSweepTest {
                     analyzer.complete(CompletionRequest(doc, case.caret, CompletionTrigger.Explicit))
                 }.items
                 val ranked = rank(all, doc, case.caret)
+                if (System.getProperty("kt.completionDebug") != null) {
+                    for (it in ranked.take(12)) println("    ${it.label} kind=${it.kind} sp=${it.sortPriority} rel=${it.relevance} sym=${(it.symbol as? dev.ide.lang.kotlin.symbols.KotlinSymbol)?.let { s -> "owner=${s.owner?.name} pkg=${s.packageName} decl=${s.declaringClassFqn} src=${s.origin.fromSource} file=${s.origin.file?.path} tp=${s.typeParameters} b=${s.typeParameterBounds.map { (it as? dev.ide.lang.kotlin.symbols.KotlinType)?.let { t -> t.qualifiedName + ":" + t.isTypeParameter } }} rta=${s.receiverTypeArgs.map { (it as? dev.ide.lang.kotlin.symbols.KotlinType)?.let { t -> t.qualifiedName + ":" + t.isTypeParameter } }} rtp=${s.receiverTypeParam} rf=${s.receiverTypeFqn} dn=${s.declaration()?.let { d -> d::class.simpleName + ":" + ((d as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi?.let { p -> p::class.simpleName }) }}" }}")
+                }
                 return judge(case, ranked)
             } finally {
                 runCatching { analyzer.dispose() }
