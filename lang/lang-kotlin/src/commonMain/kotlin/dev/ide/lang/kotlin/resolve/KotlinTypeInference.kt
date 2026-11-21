@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.kotlin.syntax.psi.KtClassOrObject
+import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
@@ -403,7 +405,11 @@ internal fun KotlinResolver.superType(expr: KtSuperExpression): KotlinType? {
     expr.superTypeQualifier?.text?.let {
         service.typeFromText(it, fileContext)?.let { t -> return t }
     }
-    val cls = enclosingClassOrObject(expr.textRange.startOffset) ?: return null
+    // `super@Outer.bar()`: the supertypes of the class the label names, not of the innermost one.
+    val label = expr.getLabelName()?.removeSurrounding("`")
+    val cls = (if (label != null) generateSequence(expr.parent as? KtElement) { it.parent as? KtElement }
+        .filterIsInstance<KtClassOrObject>().firstOrNull { it.name == label } else null)
+        ?: enclosingClassOrObject(expr.textRange.startOffset) ?: return null
     val owner = enclosingClassFqnOf(cls)
     val supers = cls.superTypeListEntries.mapNotNull { e -> e.typeReference?.text?.let { service.typeFromText(it, fileContext, owner) } }
     // An unqualified `super.m()` reaches `m` in WHICHEVER supertype declares it, the interfaces included:

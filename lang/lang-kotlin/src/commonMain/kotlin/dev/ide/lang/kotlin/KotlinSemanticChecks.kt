@@ -4488,6 +4488,9 @@ internal class KotlinSemanticChecks(
         // universal `T`-receiver extensions (`let`/`run`/…) would falsely "resolve" everything, so back off.
         val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return null
         if (recvType.isTypeParameter) return null
+        // A `Nothing` receiver (`todo().bar(1)`) is never evaluated: the call is dead code, and K2 resolves it
+        // against `Nothing`, which takes any member.
+        if (recvType.qualifiedName == "kotlin.Nothing") return null
         val name = expr.getReferencedName()
         if (name.isEmpty()) return null // an incomplete `recv.` — not a real member reference (and avoids a full scan)
         // An ALIASED import (`import other.baz as bazbaz`) names the extension by a name no lookup can find.
@@ -4654,6 +4657,11 @@ internal class KotlinSemanticChecks(
             }
         ) return emptyList()
         val known = targets.flatMapTo(HashSet()) { it.paramNames.filter { n -> n.isNotEmpty() } }
+        // `Case2(a = x)` where `Case2`'s companion declares `operator fun invoke(a: A)`: the call may bind to
+        // that invoke, so its parameter names count too.
+        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+            ?.let { resolver.constructorTypeFqn(it, call.textRange.startOffset) }
+            ?.let { fqn -> service.companionMembersFor(fqn, "invoke").forEach { inv -> known += inv.paramNames } }
         return named.mapNotNull { argName ->
             val id = argName.asName?.identifier ?: return@mapNotNull null
             if (id in known) return@mapNotNull null

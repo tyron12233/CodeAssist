@@ -120,6 +120,16 @@ class KotlinCompilerParityTest {
         clean("class Generic<T>\nclass Klass<T> { var mutableProperty: Generic<T> = Generic() }\nfun t() { val mp = Klass<Int>::mutableProperty; mp.set(Klass<Int>(), Generic<Int>()) }")
     }
 
+    /** `super@Label` uses the labeled class's supertypes, a `Nothing` receiver takes any member, and a
+     *  companion `invoke` contributes its parameter names to a call through the class name. */
+    @Test
+    fun labeledSuperNothingReceiversAndCompanionInvokeNames() {
+        clean("open class Base { open fun bar() = 1 }\nopen class B2 { open fun baz() = 2 }\nclass Outer : Base() { inner class In : B2() { val s = super@Outer.bar() + super.baz() } }")
+        clean("fun todo(): Nothing = TODO()\nfun t() { todo().bar(1) }")
+        clean("class A\nclass Case2 { companion object { operator fun invoke(a: A) = \"\" } }\nfun t(a: A) { Case2(a = a) }")
+        assertCodes("class Case3(val x: Int)\nfun t() { Case3(y = 1) }", KotlinDiagnosticCodes.NAMED_ARGUMENT)
+    }
+
     /** A classifier is looked up through every enclosing class, including a local or anonymous one, and through
      *  its own companion and (transitive, typealiased) superCLASSES. */
     @Test
