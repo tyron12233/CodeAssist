@@ -636,6 +636,28 @@ class KotlinCompletionParityTest {
         assertFalse(dev.ide.lang.kotlin.completion.KotlinNameMatcher("bar").isStartMatch("fooBar"))
     }
 
+    // --- typealias type names, annotation array literals, smart-cast receivers of function values ---
+
+    @Test
+    fun aProjectTypealiasIsOfferedAsATypeName() {
+        val type = labels("package u1\nclass MyClass\ntypealias MyAlias = MyClass\nval x: MyA|")
+        assertTrue("MyAlias" in type, "got $type")
+        val annotation = labels("package u2\nannotation class Anno\ntypealias TypedAnno = Anno\n@Typed|\nfun f() {}")
+        assertTrue("TypedAnno" in annotation, "an alias of an annotation class completes after `@`; got $annotation")
+    }
+
+    @Test
+    fun anAnnotationsArrayLiteralOffersItsElements() {
+        val ls = labels("package u3\nenum class MyEnum { FIRST, SECOND }\nannotation class Ann(val enums: Array<MyEnum>)\n@Ann(enums = [|])\nfun method() {}")
+        assertTrue(ls.any { it.endsWith("FIRST") } && ls.any { it.endsWith("SECOND") }, "got ${ls.take(10)}")
+    }
+
+    @Test
+    fun aSmartCastReceiverKeepsItsDeclaredTypeForFunctionValues() {
+        val ls = labels("package u4\ninterface I\ninterface J\nfun test(p: I, fooI: I.() -> Unit, fooJ: J.() -> Unit) {\n  if (p is J) {\n    p.fo|\n  }\n}")
+        assertTrue("fooI" in ls && "fooJ" in ls, "got $ls")
+    }
+
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))

@@ -4508,6 +4508,20 @@ class KotlinSymbolService(
 
     fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
 
+    /**
+     * The project's top-level typealiases whose name [prefix] fits, as type-name candidates (`typealias MyAlias =
+     * MyClass` completes `MyAlias`): typed by the alias itself, so accepting one imports the alias, and of the
+     * kind of the class it finally denotes (an alias of an annotation class completes after `@`). A source-model
+     * walk, like [typeNameCandidates]' source half.
+     */
+    fun typeAliasCandidates(prefix: String): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
+        return model().typeAliasByFqn.values.filter { !it.isNested && (prefix.isEmpty() || m.matches(it.simpleName)) }.map { a ->
+            val target = projectAliasClassifier(a.simpleName, a.ctx)?.let { model().classByFqn[it] }
+            KotlinSymbol(a.simpleName, target?.let(::rawClassKind) ?: SymbolKind.CLASS, typeByFqn(a.fqn), origin = SOURCE)
+        }
+    }
+
     /** Whether [fqn] names a project typealias, a nested one (`Outer.TA`) included. */
     fun isProjectTypeAliasFqn(fqn: String): Boolean = fqn in model().typeAliasByFqn
 

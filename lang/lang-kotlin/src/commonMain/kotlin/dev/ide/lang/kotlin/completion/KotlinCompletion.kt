@@ -22,6 +22,7 @@ import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.lang.completion.CaretAction
 import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtCollectionLiteralExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtNullableType
 import dev.ide.kotlin.syntax.psi.KtFunctionType
@@ -272,9 +273,9 @@ class KotlinCompletion(
                     val syms = if (inAnnotationNamePosition(markerLeaf))
                         // A bare name also sees the default-imported ones; a qualified one (`@kotlin.<caret>`) the
                         // annotation classes of the package it names.
-                        (it.symbols + annotationsAt(original, offset - prefix.length, prefix)).filter { s -> s.kind == SymbolKind.ANNOTATION_TYPE } +
-                            service.knownRootPackages(prefix)
-                    else it.symbols + aliases + service.knownRootPackages(prefix)
+                        (it.symbols + annotationsAt(original, offset - prefix.length, prefix) + service.typeAliasCandidates(prefix))
+                            .filter { s -> s.kind == SymbolKind.ANNOTATION_TYPE } + service.knownRootPackages(prefix)
+                    else it.symbols + service.typeAliasCandidates(prefix) + aliases + service.knownRootPackages(prefix)
                     // `when (subject) { is <caret> }` on a SEALED subject → surface its subclasses. They're
                     // assignable to the subject type, so passing it as `expected` floats them above every other
                     // classifier (the rank's fits-expected key); adding them explicitly guarantees they appear
@@ -780,7 +781,7 @@ class KotlinCompletion(
             }
             return PositionResult(
                 hideAccessorDuplicates(raw, prefix, properties),
-                extra = if (typeReceiver) emptyList() else extensionFunctionValueItems(recvType, offset, matcher, resolver),
+                extra = if (typeReceiver) emptyList() else extensionFunctionValueItems(recvType, offset, matcher, resolver, declaredTypeOf(receiver, resolver)),
                 expected = expected,
                 memberAccess = true,
                 receiverChain = supertypeChain(recvType),
@@ -1012,7 +1013,9 @@ class KotlinCompletion(
         // The first word of a lambda that declares no parameters may be its parameter list (`{ entry -> `).
         extra += lambdaSignatureItems(markerLeaf, matcher, resolver)
         // The type the context wants → offer literals/enum constants and rank assignable candidates first.
-        val expected = resolver.expectedTypeAt(offset) ?: KotlinCompletionWeighing.operandExpectedType(climbTo<KtNameReferenceExpression>(markerLeaf), resolver)
+        // In an annotation's array literal the element is what is written, not the array the argument is.
+        val expected = annotationArrayElementType(markerLeaf, resolver) ?: resolver.expectedTypeAt(offset)
+            ?: KotlinCompletionWeighing.operandExpectedType(climbTo<KtNameReferenceExpression>(markerLeaf), resolver)
         expected?.let { extra += expectedExtras(it, matcher, autoImport) }
         val types = KotlinPerf.span("typeNames") { service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path) }
         // The root packages too: an expression may start with a fully-qualified name (`kotlin.math.PI`).
@@ -1021,7 +1024,8 @@ class KotlinCompletion(
         val scope = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix, localNameFilter = wordMatcher::matches) } +
             contextParametersInScope(markerLeaf, matcher, resolver) + implicitReceiverSingletonExtensions(offset, prefix, resolver)
         val aliases = importAliases(resolver, matcher, typesOnly = false)
-        val raw = withContextArguments(scope, markerLeaf, offset, resolver) + types.symbols + aliases + service.knownRootPackages(prefix)
+        val raw = withContextArguments(scope, markerLeaf, offset, resolver) + types.symbols + service.typeAliasCandidates(prefix) +
+            aliases + service.knownRootPackages(prefix)
         return PositionResult(
             raw, extra = extra, expected = expected, keywordContext = true,
             nameReference = true, capped = types.capped, aliased = aliases.toHashSet(),
@@ -2906,6 +2910,33 @@ class KotlinCompletion(
         }
     }
 
+    /** The declared type of a receiver that names a parameter or a local (`p` in `p.`), or null. */
+    private fun declaredTypeOf(receiver: KtExpression, resolver: KotlinResolver): KotlinType? {
+        val name = (receiver as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        return runCatching { resolver.scopeSymbolsAt(receiver.textRange.startOffset, name, exactName = true) }.getOrDefault(emptyList())
+            .firstOrNull { it.name == name && (it.kind == SymbolKind.PARAMETER || it.kind == SymbolKind.LOCAL_VARIABLE) }
+            ?.type as? KotlinType
+    }
+
+    /**
+     * The element type an annotation argument's array literal holds (`@A(enums = [<caret>])` on an
+     * `Array<MyEnum>` parameter -> `MyEnum`), from the parameter the argument fills; null elsewhere.
+     */
+    private fun annotationArrayElementType(leaf: KtElement?, resolver: KotlinResolver): KotlinType? {
+        val literal = climbTo<KtCollectionLiteralExpression>(leaf) ?: return null
+        val arg = literal.parent as? KtValueArgument ?: return null
+        val list = arg.parent as? KtValueArgumentList ?: return null
+        val entry = list.parent as? KtAnnotationEntry ?: return null
+        val params = runCatching { resolver.annotationParameters(entry) }.getOrDefault(emptyList())
+        val param = arg.getArgumentName()?.asName?.identifier?.let { n -> params.firstOrNull { it.name == n } }
+            ?: params.getOrNull(list.arguments.indexOf(arg))
+            ?: return null
+        val type = param.type ?: return null
+        (type.typeArguments.firstOrNull() as? KotlinType)?.takeIf { type.qualifiedName == "kotlin.Array" }?.let { return it }
+        val element = PRIMITIVE_ARRAY_ELEMENTS[type.qualifiedName] ?: return null
+        return service.typeByFqn(element)
+    }
+
     /**
      * The values in scope whose type is an extension function type the receiver can be passed to (`foo: Int.(String)
      * -> Char` after `i.`), which are called like members: `i.foo("")`. IntelliJ offers them on the receiver (its
@@ -2915,8 +2946,11 @@ class KotlinCompletion(
      */
     private fun extensionFunctionValueItems(
         recvType: KotlinType, offset: Int, matcher: PrefixMatcher, resolver: KotlinResolver,
+        /** The receiver's declared type when a smart cast narrows it (`p is J` keeps `p: I`), which fits too. */
+        declared: KotlinType? = null,
     ): List<CompletionItem> {
         val receiver = recvType.withNullable(false)
+        val receivers = listOfNotNull(receiver, declared?.withNullable(false))
         val values = runCatching { resolver.scopeSymbolsAt(offset, matcher.prefix) }.getOrDefault(emptyList()) +
             contextParametersInScope(resolver.elementAt(offset), matcher, resolver)
         val out = ArrayList<CompletionItem>()
@@ -2926,8 +2960,9 @@ class KotlinCompletion(
             val t = v.type as? KotlinType ?: continue
             if (!t.isExtensionFunctionType || t.typeArguments.size < 2 || !matcher.matches(v.name) || !seen.add(v.name)) continue
             val wanted = (t.typeArguments[0] as? KotlinType)?.withNullable(false) ?: continue
-            val fits = wanted.qualifiedName == receiver.qualifiedName || wanted.qualifiedName == "kotlin.Any" ||
-                runCatching { wanted.isAssignableFrom(receiver) }.getOrDefault(false)
+            val fits = wanted.qualifiedName == "kotlin.Any" || receivers.any { r ->
+                wanted.qualifiedName == r.qualifiedName || runCatching { wanted.isAssignableFrom(r) }.getOrDefault(false)
+            }
             if (!fits) continue
             val params = t.typeArguments.subList(1, t.typeArguments.size - 1)
             val call = v.name + "()"
@@ -3523,6 +3558,13 @@ class KotlinCompletion(
             "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is",
             "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias", "typeof",
             "val", "var", "when", "while",
+        )
+
+        /** The element type of each primitive array type. */
+        private val PRIMITIVE_ARRAY_ELEMENTS = mapOf(
+            "kotlin.IntArray" to "kotlin.Int", "kotlin.LongArray" to "kotlin.Long", "kotlin.ShortArray" to "kotlin.Short",
+            "kotlin.ByteArray" to "kotlin.Byte", "kotlin.CharArray" to "kotlin.Char", "kotlin.BooleanArray" to "kotlin.Boolean",
+            "kotlin.FloatArray" to "kotlin.Float", "kotlin.DoubleArray" to "kotlin.Double",
         )
 
         /** The keywords that start a compile-time constant (an annotation argument). */
