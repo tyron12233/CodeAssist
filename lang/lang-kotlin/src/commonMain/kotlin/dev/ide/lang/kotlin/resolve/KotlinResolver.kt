@@ -321,10 +321,20 @@ class KotlinResolver(
         (t as? KotlinType)?.qualifiedName?.substringAfterLast('.')?.takeIf { it.isNotEmpty() }
 
     internal fun elementAt(offset: Int): KtElement? {
+        // One resolution step asks for the same offset several times running (the local scope, the accessor
+        // scope and the constructor scope each start from it), so the last answer is kept. The tree is fixed for
+        // this resolver's snapshot, so the answer cannot go stale.
+        if (offset == lastElementOffset) return lastElement
         val len = ktFile.textLength
         if (len == 0) return null
-        return ktFile.findElementAt(if (offset >= len) len - 1 else offset.coerceAtLeast(0))
+        val e = ktFile.findElementAt(if (offset >= len) len - 1 else offset.coerceAtLeast(0))
+        lastElementOffset = offset
+        lastElement = e
+        return e
     }
+
+    private var lastElementOffset = Int.MIN_VALUE
+    private var lastElement: KtElement? = null
 
 }
 

@@ -114,7 +114,7 @@ internal class KotlinDeclarationNameItems(
             if (receiverType == null || !runCatching { receiverType.isAssignableFrom(recv) }.getOrDefault(false)) return false
             val members = runCatching { service.membersNamed(recv.qualifiedName, recv.typeArguments, name) }.getOrDefault(emptyList())
             if (members.any { it.name == name }) return false
-            if (runCatching { resolver.scopeMemberExtensions(at, recv, name) }.getOrDefault(emptyList()).any { it.name == name }) return false
+            if (runCatching { resolver.scopeMemberExtensions(at, recv, name, exactName = true) }.getOrDefault(emptyList()).any { it.name == name }) return false
             return !runCatching { resolver.bareNameResolves(name, at) }.getOrDefault(true)
         }
         if (runCatching { resolver.bareNameResolves(name, at) || resolver.companionMemberInScope(name, at) }.getOrDefault(true)) return false

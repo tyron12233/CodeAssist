@@ -52,12 +52,15 @@ internal fun KotlinResolver.extensionInScope(sym: KotlinSymbol): Boolean {
 fun KotlinResolver.scopeMemberExtensions(
     offset: Int,
     receiverType: KotlinType,
-    namePrefix: String = ""
+    namePrefix: String = "",
+    /** [namePrefix] is the whole name (a resolution probe): only that name is looked up, where a prefix would
+     *  fuzzy-match and receiver-bind every extension starting with it for the caller to drop. */
+    exactName: Boolean = false,
 ): List<KotlinSymbol> {
     if (receiverType.isTypeParameter) return emptyList()
     val recvTargets = receiverTargetsOf(receiverType)
 
-    fun matches(n: String) = namePrefix.isEmpty() || n.startsWith(namePrefix, ignoreCase = true)
+    fun matches(n: String) = namePrefix.isEmpty() || (if (exactName) n == namePrefix else n.startsWith(namePrefix, ignoreCase = true))
     val out = ArrayList<KotlinSymbol>()
     val liveOwners = HashSet<String>()
     // A declared extension whose receiver matches → a bound symbol in [out]. Shared by the class-member and
@@ -96,7 +99,7 @@ fun KotlinResolver.scopeMemberExtensions(
     //     saved / cross-file enclosing class) — query their members for matching extensions.
     for (scope in implicitReceiversAt(offset)) {
         if (scope.qualifiedName in liveOwners) continue // already covered from the live buffer above
-        service.membersForCompletion(scope.qualifiedName, scope.typeArguments, namePrefix)
+        service.membersForCompletion(scope.qualifiedName, scope.typeArguments, namePrefix, exactName && namePrefix.isNotEmpty())
             .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
             .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
     }
@@ -106,7 +109,7 @@ fun KotlinResolver.scopeMemberExtensions(
     //     does reach (a regular class's member extension can never be imported). Cases (a)/(b) are
     //     import-free by construction, which is why the seam had no import path at all and the whole OkHttp /
     //     Retrofit idiom read as an unresolved reference.
-    out += importedSingletonExtensions(recvTargets, receiverType, namePrefix, liveOwners)
+    out += importedSingletonExtensions(recvTargets, receiverType, namePrefix, liveOwners, exactName)
     // (d) An enclosing class's COMPANION object, an implicit receiver throughout that class's body, by the same
     //     rule that makes `companion object { const val TAG }` bare-accessible. So a member extension
     //     declared in it applies here with NO import: `class H { companion object { fun String.c() … }; fun
@@ -118,7 +121,7 @@ fun KotlinResolver.scopeMemberExtensions(
     for (ownerFqn in enclosingClasses) {
         for (fqn in listOf(ownerFqn) + sourceSupertypeFqns(ownerFqn)) {
             val comp = service.sourceCompanionFqn(fqn)?.takeIf { it !in liveOwners } ?: continue
-            service.membersForCompletion(comp, emptyList(), namePrefix)
+            service.membersForCompletion(comp, emptyList(), namePrefix, exactName && namePrefix.isNotEmpty())
                 .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
                 .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
         }
@@ -174,21 +177,24 @@ private fun KotlinResolver.importedSingletonExtensions(
     receiverType: KotlinType,
     namePrefix: String,
     liveOwners: Set<String>,
+    exactName: Boolean = false,
 ): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
     for (imp in fileContext.imports) {
-        val container = if (imp.isStar) imp.fqn else imp.fqn.substringBeforeLast('.', "")
+        if (!imp.containerCapitalized) continue
+        val container = imp.container
         if (container.isEmpty() || container in liveOwners) continue
-        if (container.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) continue
         // A non-star import names ONE member, so a prefix that can't match it skips the lookup entirely.
-        val member = if (imp.isStar) null else imp.fqn.substringAfterLast('.')
-        if (member != null && namePrefix.isNotEmpty() && !member.startsWith(namePrefix, ignoreCase = true)) continue
+        val member = if (imp.isStar) null else imp.lastSegment
+        if (member != null && namePrefix.isNotEmpty() &&
+            !(if (exactName) member == namePrefix else member.startsWith(namePrefix, ignoreCase = true))) continue
+        val exact = exactName && namePrefix.isNotEmpty() && member == null
         val candidates =
-            if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+            if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix, exact)
             // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`),
             // or, for a Java container, its statics.
             else service.companionMembersFor(container, member ?: namePrefix)
-                .ifEmpty { service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+                .ifEmpty { service.membersForCompletion(container, emptyList(), member ?: namePrefix, exact)
                     .filter { Modifier.STATIC in it.modifiers } }
         candidates.asSequence()
             .filter { member == null || it.name == member }
@@ -226,12 +232,11 @@ internal fun KotlinResolver.importedSingletonMembers(
 ): List<KotlinSymbol> {
     var out: ArrayList<KotlinSymbol>? = null
     for (imp in fileContext.imports) {
-        if (imp.alias != null) continue
-        val container = if (imp.isStar) imp.fqn else imp.fqn.substringBeforeLast('.', "")
+        if (imp.alias != null || !imp.containerCapitalized) continue
+        val container = imp.container
         if (container.isEmpty()) continue
-        if (container.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) continue
         // A non-star import names ONE member, so a name that can't match it skips the lookup entirely.
-        val member = if (imp.isStar) null else imp.fqn.substringAfterLast('.')
+        val member = if (imp.isStar) null else imp.lastSegment
         if (member != null && namePrefix.isNotEmpty()) {
             if (exactName) {
                 if (member != namePrefix) continue

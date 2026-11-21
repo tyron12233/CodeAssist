@@ -788,7 +788,7 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // are deliberately kept out of [localsAt] (an extension is not bare-callable in general), so without this
     // the recursion read as unresolved. Needs no import check: a local is always in its own scope.
     if (localFunctionsInScope(offset, name).any { it.receiverTypeReference != null } &&
-        implicitReceiversAt(offset).any { recv -> scopeMemberExtensions(offset, recv, name).any { it.name == name } }
+        implicitReceiversAt(offset).any { recv -> scopeMemberExtensions(offset, recv, name, exactName = true).any { it.name == name } }
     ) return true
     // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in
     // scope — explicitly imported, star-imported, same-package, or default-imported. A classpath
@@ -1107,9 +1107,14 @@ fun KotlinResolver.scopeSymbolsAt(
     // [bareNameResolves] so a reference that ISN'T flagged unresolved also COMPLETES.
     out += sameFileScopeSymbols(offset, if (exactName && namePrefix.isNotEmpty()) namePrefix else null)
     // Members of every implicit `this` (apply/with/run block, extension fn, enclosing class).
+    // A resolution probe asks for ONE name, so the receivers' members are looked up by it: listing every member
+    // and extension of each receiver (every `Any` extension on the classpath, each bound to the receiver) only
+    // for the exact-name filter below to keep one was the largest allocation of a diagnostics pass. The
+    // name-filtered lookup keeps the same symbols in the same order.
+    val probe = exactName && namePrefix.isNotEmpty()
     implicitReceiversAt(offset).forEach { recv ->
-        out += service.membersOf(recv.qualifiedName, recv.typeArguments, null)
-            .filterIsInstance<KotlinSymbol>()
+        out += if (probe) service.membersForCompletion(recv.qualifiedName, recv.typeArguments, namePrefix, exactName = true)
+        else service.membersOf(recv.qualifiedName, recv.typeArguments, null).filterIsInstance<KotlinSymbol>()
     }
     // Bare-accessible members of an enclosing class's companion object (`CONST`, a companion `factory()`).
     out += enclosingCompanionMembers(offset)

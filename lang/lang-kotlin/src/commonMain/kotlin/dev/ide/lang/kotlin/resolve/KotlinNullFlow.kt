@@ -26,6 +26,8 @@ import dev.ide.kotlin.syntax.psi.KtLabeledExpression
 import dev.ide.kotlin.syntax.psi.KtLoopExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtFile
+import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtParameter
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtPostfixExpression
@@ -280,7 +282,7 @@ private fun isBareOrThisReceiver(ref: KtElement): Boolean {
 internal fun KotlinResolver.flowProvenTypes(ref: KtNameReferenceExpression, deep: Boolean): List<KotlinType> {
     val name = ref.getReferencedName()
     val alias = aliasPathOf(ref)
-    val targets = castTargetsByName()
+    val targets = castTargetsByName(flowTableScope(ref))
     val candidates = targets[name].orEmpty() + (alias?.let { targets[it] }.orEmpty())
     val offset = ref.textRange.startOffset
     if (candidates.none { it.textRange.startOffset < offset }) return emptyList()
@@ -396,7 +398,7 @@ internal fun KotlinResolver.completionSmartCast(
  * argument of a precondition. A proof without resolution ([Goal.deep] off) always names its value in one of these
  * shapes (or through a `val` whose initializer does), so a name outside the set needs no walk.
  */
-private fun KotlinResolver.flowCheckedNames(): Set<String> = caches.flowCheckedNames.getOrPut(ktFile) {
+private fun KotlinResolver.flowCheckedNames(scope: KtElement): Set<String> = caches.flowCheckedNames.getOrPut(scope) {
     val out = HashSet<String>()
     fun add(e: KtElement?) {
         var cur = stripAll(e)
@@ -423,13 +425,36 @@ private fun KotlinResolver.flowCheckedNames(): Set<String> = caches.flowCheckedN
         var c = p.firstChild
         while (c != null) { visit(c); c = c.nextSibling }
     }
-    visit(ktFile)
+    visit(scope)
     out
+}
+
+/**
+ * The subtree the per-name flow tables ([flowCheckedNames], [castTargetsByName]) are built over for a value read at
+ * [ref]: the member FUNCTION, accessor or secondary constructor holding it when there is one, else the file.
+ *
+ * A null check or cast proves something only inside the flow it is written in, and no flow crosses from one
+ * member function into another, so a function's own checks are all its reads can use. Building the tables over
+ * the whole file instead made typing ONE declaration of another file walk all of that file, parsing every lazily
+ * collapsed body and wrapping every node, which then stayed in memory with the file's parse. Property
+ * initializers and `init` blocks share the constructor's flow, so a read there keeps the whole-file table.
+ */
+private fun flowTableScope(ref: KtElement): KtElement {
+    var e: KtElement? = ref.parent
+    var member: KtElement? = null
+    while (e != null) {
+        when (e) {
+            is KtPropertyAccessor, is KtSecondaryConstructor -> member = e
+            is KtNamedFunction -> if (e.parent is KtClassBody || e.parent is KtFile) member = e
+        }
+        e = e.parent
+    }
+    return member ?: ref.containingKtFile
 }
 
 /** Whether [ref]'s name, or the value it is a `val` copy of, is in [flowCheckedNames]. */
 private fun KotlinResolver.flowMayCheck(ref: KtNameReferenceExpression): Boolean {
-    val names = flowCheckedNames()
+    val names = flowCheckedNames(flowTableScope(ref))
     if (ref.getReferencedName() in names) return true
     val alias = aliasPathOf(ref) ?: return false
     return alias.substringBefore('.') in names
@@ -438,7 +463,7 @@ private fun KotlinResolver.flowMayCheck(ref: KtNameReferenceExpression): Boolean
 private val PRECONDITIONS = setOf("requireNotNull", "checkNotNull", "require", "check")
 
 /** The type references each simple name is tested or cast against in this file (see [KotlinResolverCaches.castTargets]). */
-private fun KotlinResolver.castTargetsByName(): Map<String, List<KtTypeReference>> = caches.castTargets.getOrPut(ktFile) {
+private fun KotlinResolver.castTargetsByName(scope: KtElement): Map<String, List<KtTypeReference>> = caches.castTargets.getOrPut(scope) {
     val out = HashMap<String, MutableList<KtTypeReference>>()
     fun add(subject: KtElement?, ref: KtTypeReference?) {
         val name = (stripAll(subject) as? KtNameReferenceExpression)?.getReferencedName() ?: return
@@ -460,7 +485,7 @@ private fun KotlinResolver.castTargetsByName(): Map<String, List<KtTypeReference
         var c = p.firstChild
         while (c != null) { visit(c); c = c.nextSibling }
     }
-    visit(ktFile)
+    visit(scope)
     out
 }
 

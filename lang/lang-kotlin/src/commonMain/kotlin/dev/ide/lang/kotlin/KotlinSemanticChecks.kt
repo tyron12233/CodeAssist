@@ -896,7 +896,7 @@ internal class KotlinSemanticChecks(
         for (recv in resolver.implicitReceiversAt(off)) {
             val candidates = service.membersNamedForCheck(recv.qualifiedName, recv.typeArguments, name)
                 .filter { !it.isExtension || extensionInScope(it, ctx) } +
-                resolver.scopeMemberExtensions(off, recv, name).filter { it.name == name }
+                resolver.scopeMemberExtensions(off, recv, name, exactName = true).filter { it.name == name }
             for (c in candidates) if (c.kind == SymbolKind.METHOD) function = true else return null
         }
         // Enclosing-class members of the LIVE buffer, kind-aware (a member `val`/ctor-param/enum const → value).
@@ -1601,7 +1601,10 @@ internal class KotlinSemanticChecks(
 
     /** Reset the per-pass caches (PSI-keyed, so they must not survive a reparse). Called at the start of each
      *  analyze pass by [IncrementalSemanticAnalysis.diagnostics]. */
-    fun resetPassCaches() { blockUsageMemo.clear() }
+    fun resetPassCaches() { blockUsageMemo.clear(); redeclaredMemo = null }
+
+    /** The file [redeclaredClassifiers] last answered for, and its answer; dropped with the pass caches. */
+    internal var redeclaredMemo: Pair<KtFile, Set<String>>? = null
 
     private fun usageOf(block: KtBlockExpression): BlockUsage = blockUsageMemo.getOrPut(block) {
         val refs = HashMap<String, Int>()

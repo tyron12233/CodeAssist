@@ -198,15 +198,12 @@ internal fun KotlinSemanticChecks.classifierFqnOf(typeRef: KtTypeReference, reso
     return fqn.takeIf { service.isKnownType(it) }
 }
 
-private class RedeclaredNames(val file: KtFile, val names: Set<String>)
-
-// The last file asked about: the checks of one pass all ask about the same file.
-private var redeclaredMemo: RedeclaredNames? = null
-
 /** The classifier names declared more than once in [file]: which declaration a use of one means is the
- *  redeclaration error's business, and every judgement that needs the class backs off. */
-private fun redeclaredClassifiers(file: KtFile): Set<String> {
-    redeclaredMemo?.takeIf { it.file === file }?.let { return it.names }
+ *  redeclaration error's business, and every judgement that needs the class backs off. Kept for the pass in
+ *  [KotlinSemanticChecks.redeclaredMemo] (the checks of one pass all ask about the same file). It was a global
+ *  once, which pinned the last file's whole tree for the life of the process and was shared by every thread. */
+private fun KotlinSemanticChecks.redeclaredClassifiers(file: KtFile): Set<String> {
+    redeclaredMemo?.takeIf { it.first === file }?.let { return it.second }
     val counts = HashMap<String, Int>()
     fun rec(e: KtElement) {
         if (e is KtClassOrObject || e is dev.ide.kotlin.syntax.psi.KtTypeAlias) (e as KtNamedDeclaration).name?.let { counts.merge(it, 1, Int::plus) }
@@ -215,7 +212,7 @@ private fun redeclaredClassifiers(file: KtFile): Set<String> {
     }
     rec(file)
     val names = counts.filterValues { it > 1 }.keys
-    redeclaredMemo = RedeclaredNames(file, names)
+    redeclaredMemo = file to names
     return names
 }
 

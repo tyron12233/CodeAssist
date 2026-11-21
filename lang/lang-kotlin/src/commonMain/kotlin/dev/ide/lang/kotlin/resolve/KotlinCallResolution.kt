@@ -120,7 +120,7 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                 .filter { it.kind == SymbolKind.METHOD }
         // A member-extension declared in an enclosing scope (`fun Map<…>.printMap()` in this class) resolves
         // on a matching receiver without an import — same seam completion/diagnostics use.
-        val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
+        val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name, exactName = true)
             .filter { it.name == name && it.kind == SymbolKind.METHOD }
         // A COMPANION-object function reached through the class name (`MyClass.create()`): the companion is a
         // distinct classifier the instance member lookup misses. Only for a `Type.` (not instance) receiver.
@@ -628,7 +628,7 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         // because `RowScope` (the content lambda's receiver) declares `fun Modifier.weight()`, and a
         // `fun Map<…>.printMap()` declared in the enclosing class resolves on a `Map`. Scope-gated, so the
         // extension never leaks onto a receiver outside its declaring scope.
-        val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
+        val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name, exactName = true)
             .filter { it.name == name && it.kind == SymbolKind.METHOD }
         val companionMethods = if (q != null && isTypeReceiver(q.receiverExpression))
             service.companionMembersFor(receiverType.qualifiedName, name)

@@ -249,7 +249,7 @@ internal fun KotlinSemanticChecks.memberAccessVisibility(ref: KtNameReferenceExp
     val members = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name).filter { it.name == name } +
         (if (typeReceiver) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList())
     if (members.isEmpty() || members.any { it.isExtension || !it.origin.fromSource }) return null
-    if (resolver.scopeMemberExtensions(ref.textRange.startOffset, recvType, name).any { it.name == name }) return null
+    if (resolver.scopeMemberExtensions(ref.textRange.startOffset, recvType, name, exactName = true).any { it.name == name }) return null
     // Through a type parameter the receiver's class is only a bound; whether the private rule's "own class"
     // holds is not known.
     // A smart-cast receiver keeps the member its declared type sees (`a.prv()` inside `if (a is B)` with

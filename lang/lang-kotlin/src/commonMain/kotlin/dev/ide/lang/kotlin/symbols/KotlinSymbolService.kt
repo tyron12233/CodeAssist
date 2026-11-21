@@ -16,6 +16,7 @@ import dev.ide.index.fuzzyAll
 import dev.ide.index.prefixAll
 import dev.ide.kotlin.syntax.psi.KtDeclaration
 import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.lang.completion.PrefixMatcher
@@ -28,6 +29,7 @@ import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
 import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
 import dev.ide.lang.kotlin.index.PkgDecl
 import dev.ide.lang.kotlin.parse.KotlinDomNode
+import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.approximateEscapingLocalType
 import dev.ide.lang.kotlin.resolve.delegatedValueType
@@ -190,6 +192,46 @@ class KotlinSymbolService(
     // of that, not a different guarantee.
     private val inferredBodyTypeMemo = ConcurrentMap<RawCallable, Holder<KotlinType>>()
     private val inferringBody = ThreadLocalValue { HashSet<RawCallable>() }
+
+    /**
+     * The resolver caches body inference uses for each source file, so the many declarations of one file it
+     * types share them: a file's per-file tables (the cast targets and null-checked names its flow analysis
+     * walks the whole file for, the symbols of its locals and declarations) used to be rebuilt for EVERY
+     * declaration typed, which on a large file is a full tree walk per implicitly typed member. Valid for one
+     * source model (a rebuilt model starts over, as [inferredBodyTypeMemo] may) and for one thread: the caches
+     * are plain maps, and a completion and an analysis pass can infer bodies on different threads, so a thread
+     * other than the one that built them gets fresh caches, as every inference did before.
+     *
+     * Held HERE, not in a thread-local: a thread-local's value outlives the service on a long-lived thread,
+     * and through the model it reaches the service itself, which pinned every analyzer ever made on that
+     * thread (the compiler test-data sweep, one analyzer per case, ran out of heap). The thread-local holds
+     * only an identity token.
+     */
+    private class BodyResolverCaches(val thread: Any, val model: ModuleSourceModel, val epoch: Int) {
+        val byFile = HashMap<KtFile, dev.ide.lang.kotlin.resolve.KotlinResolverCaches>()
+    }
+
+    @Volatile
+    private var bodyResolverCaches: BodyResolverCaches? = null
+
+    /** Bumped by [releaseMemory], so the [bodyResolverCaches] start over on next use. */
+    @Volatile
+    private var bodyCachesEpoch = 0
+
+    private fun bodyResolverCachesFor(owner: KotlinParsedFile): dev.ide.lang.kotlin.resolve.KotlinResolverCaches {
+        val thread = THREAD_TOKEN.get()
+        val model = model()
+        val epoch = bodyCachesEpoch
+        val held = bodyResolverCaches
+        val current = when {
+            held != null && held.thread === thread && held.model === model && held.epoch == epoch -> held
+            // Another thread's caches are live: leave them, and use throwaway ones.
+            held != null && held.thread !== thread && held.model === model && held.epoch == epoch ->
+                return dev.ide.lang.kotlin.resolve.KotlinResolverCaches()
+            else -> BodyResolverCaches(thread, model, epoch).also { bodyResolverCaches = it }
+        }
+        return current.byFile.getOrPut(owner.ktFile) { dev.ide.lang.kotlin.resolve.KotlinResolverCaches() }
+    }
 
     /**
      * How deep [inferReturnFromBody] may nest before it answers "unknown" instead of recursing further.
@@ -473,6 +515,8 @@ class KotlinSymbolService(
      */
     fun releaseMemory() {
         clearClasspathMemos()
+        sourceExtReceiverMemo = null
+        bodyCachesEpoch++
         inferredBodyTypeMemo.clear()
         stateLock.withLock {
             sourceSupertypeMemo = ConcurrentMap()
@@ -1602,7 +1646,46 @@ class KotlinSymbolService(
      */
     fun membersNamed(typeFqn: String, typeArgs: List<TypeRef>, name: String): List<KotlinSymbol> {
         if (name.isEmpty()) return emptyList()
-        return membersForCompletion(typeFqn, typeArgs, name, exactName = true)
+        val memo = membersNamedMemo(typeFqn) ?: return membersForCompletion(typeFqn, typeArgs, name, exactName = true)
+        val key = MembersNamedKey(typeFqn, name, typeArgs)
+        memo.map[key]?.let { return it }
+        return membersForCompletion(typeFqn, typeArgs, name, exactName = true).also { memo.map[key] = it }
+    }
+
+    /**
+     * [membersNamed] answers for one source model, classpath epoch and Java source stamp, on one thread. A
+     * diagnostics pass asks the same receiver for the same name at every use (every `list.size`, `s.length`,
+     * each operator and iteration convention), and each answer listed and receiver-bound the type's matching
+     * members and extensions afresh: the largest remaining allocation of a pass. Not kept while the classpath
+     * is building (partial answers), for a synthetic type (resource-driven), or while any declaration's type is
+     * being inferred on this thread (a member caught mid-inference reads untyped, and must not be pinned so).
+     * Held on the service rather than in a thread-local, for the reason [BodyResolverCaches] gives.
+     */
+    private class MembersNamedMemo(
+        val thread: Any, val model: ModuleSourceModel, val epoch: Int, val classpath: Long, val javaStamp: Long,
+    ) {
+        val map = HashMap<MembersNamedKey, List<KotlinSymbol>>()
+    }
+
+    private data class MembersNamedKey(val fqn: String, val name: String, val typeArgs: List<TypeRef>)
+
+    @Volatile
+    private var membersNamedMemo: MembersNamedMemo? = null
+
+    private fun membersNamedMemo(typeFqn: String): MembersNamedMemo? {
+        if (inferringBody.get().isNotEmpty() || inferringMemberOwners.get().isNotEmpty()) return null
+        if (queryIndex?.let { classpathCacheUsable(it) } == false) return null
+        if (isSyntheticType(typeFqn)) return null
+        val thread = THREAD_TOKEN.get()
+        val model = model()
+        val epoch = bodyCachesEpoch
+        val classpath = classpathEpoch
+        val javaStamp = javaSourceStamp()
+        val held = membersNamedMemo
+        if (held != null && held.model === model && held.epoch == epoch && held.classpath == classpath &&
+            held.javaStamp == javaStamp
+        ) return if (held.thread === thread) held else null
+        return MembersNamedMemo(thread, model, epoch, classpath, javaStamp).also { membersNamedMemo = it }
     }
 
     /** Same-named members for the diagnostics existence / extension-in-scope check. Cached for a CLASSPATH
@@ -2322,9 +2405,7 @@ class KotlinSymbolService(
             val scan = reader.scan(this)
             targets.flatMap { scan.extensionsByReceiver[it].orEmpty() }.filter { matches(it.name) }
         }
-        val fromSource = model().extensions
-            .filter { matches(it.name) && sourceReceiverFqn(it, null) in targets }
-            .map { toSymbol(it, null) }
+        val fromSource = sourceExtensionsOn(targets, ::matches)
         // Cross-file source extensions from the persistent `kotlin.callables.source` index — available as
         // soon as the file is index-synced, without waiting on the in-memory source model to warm. The
         // completion dedup folds an entry together with its model twin once both exist.
@@ -2346,6 +2427,62 @@ class KotlinSymbolService(
             .filterNot { isImplementationCallable(it) }
             .map { bindExtensionReceiver(it, fqn, typeArgs) }
     }
+
+    /**
+     * The model's top-level source extensions whose receiver is one of [targets] and whose name [matches], in
+     * declaration order. Resolving an extension's receiver text is the expensive half (type names, typealias
+     * expansion through the file's imports), and it used to be redone for EVERY source extension on EVERY
+     * receiver lookup: the analyzer's hottest path on a project with many extensions. The receiver of each is
+     * now resolved once per source model (a model is rebuilt whenever a declaration can have changed) and per
+     * classpath epoch, and only while the classpath answers are stable ([classpathCacheUsable]); before that,
+     * each lookup resolves them afresh as it did.
+     */
+    private fun sourceExtensionsOn(targets: Set<String>, matches: (String) -> Boolean): List<KotlinSymbol> {
+        val model = model()
+        val all = model.extensions
+        if (all.isEmpty()) return emptyList()
+        val stable = queryIndex?.let { classpathCacheUsable(it) } ?: true
+        if (!stable) return all.filter { matches(it.name) && sourceReceiverFqn(it, null) in targets }.map { toSymbol(it, null) }
+        // A receiver can name a project JAVA class, which the source model does not cover: its stamp keys it too.
+        val javaStamp = javaSourceStamp()
+        val memo = sourceExtReceiverMemo.let { memo ->
+            if (memo != null && memo.model === model && memo.epoch == classpathEpoch && memo.javaStamp == javaStamp) memo
+            else {
+                val epoch = classpathEpoch
+                val map = HashMap<String, MutableList<Int>>()
+                all.forEachIndexed { i, rc -> sourceReceiverFqn(rc, null)?.let { map.getOrPut(it) { ArrayList(2) } += i } }
+                SourceExtReceivers(model, epoch, javaStamp, map, arrayOfNulls(all.size)).also { sourceExtReceiverMemo = it }
+            }
+        }
+        val byReceiver = memo.byReceiver
+        var picked: MutableList<Int>? = null
+        for (t in targets) byReceiver[t]?.let { (picked ?: ArrayList<Int>().also { picked = it }).addAll(it) }
+        val indices = picked ?: return emptyList()
+        if (indices.size > 1) indices.sort()
+        val out = ArrayList<KotlinSymbol>(indices.size)
+        var last = -1
+        for (i in indices) {
+            if (i == last) continue
+            last = i
+            val rc = all[i]
+            // The unbound symbol is the same for every lookup under one model; binding to the receiver is the
+            // caller's, per lookup.
+            if (matches(rc.name)) out += memo.symbols[i] ?: toSymbol(rc, null).also { memo.symbols[i] = it }
+        }
+        return out
+    }
+
+    private class SourceExtReceivers(
+        val model: ModuleSourceModel,
+        val epoch: Long,
+        val javaStamp: Long,
+        val byReceiver: Map<String, List<Int>>,
+        /** Each extension's unbound symbol, built on first use. */
+        val symbols: Array<KotlinSymbol?>,
+    )
+
+    @Volatile
+    private var sourceExtReceiverMemo: SourceExtReceivers? = null
 
     /**
      * Member extensions an `import` can bring into scope, applicable to a receiver in [receiverTargets] and
@@ -2396,10 +2533,19 @@ class KotlinSymbolService(
         // extension/overload candidate, so its count is a direct readout of an overload-scoring blowup
         // (surfaced as `resolveOps=N` in the kotlin-perf trace lines). No-op unless timing is enabled.
         KotlinPerf.bump()
-        val pkg = s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")
-            ?.takeIf { it.isNotEmpty() } ?: return false
-        return IMPLEMENTATION_PACKAGES.any { pkg == it || pkg.startsWith("$it.") }
+        // Read in place rather than through `substringBeforeLast` and a `"$it."` per package: this runs for every
+        // extension and overload candidate, and those two strings were a measurable share of a pass's garbage.
+        val pkg = s.packageName
+        if (pkg != null) return IMPLEMENTATION_PACKAGES.any { inPackage(pkg, pkg.length, it) }
+        val owner = s.declaringClassFqn ?: return false
+        val end = owner.lastIndexOf('.')
+        if (end <= 0) return false
+        return IMPLEMENTATION_PACKAGES.any { inPackage(owner, end, it) }
     }
+
+    /** Whether the first [length] chars of [text] are package [pkg] or a subpackage of it. */
+    private fun inPackage(text: String, length: Int, pkg: String): Boolean =
+        length >= pkg.length && text.startsWith(pkg) && (length == pkg.length || text[pkg.length] == '.')
 
     /**
      * What a bare `Type.` reference can see through [typeFqnRaw]'s companion object: the companion behaves as
@@ -2889,8 +3035,10 @@ class KotlinSymbolService(
             )
         }
         // A SAM: the unique abstract, non-static instance method (Object's methods don't count).
+        // Declared and inherited members only: an extension is never abstract, so listing the receiver's
+        // extensions (and binding each) only to drop them all was wasted work on every lambda argument.
         val abstracts =
-            membersOf(type.qualifiedName, type.typeArguments, null).filterIsInstance<KotlinSymbol>()
+            ownAndInheritedCached(type.qualifiedName, type.typeArguments)
                 .filter {
                     it.kind == SymbolKind.METHOD && Modifier.ABSTRACT in it.modifiers &&
                             Modifier.STATIC !in it.modifiers && it.name !in OBJECT_METHODS
@@ -4090,7 +4238,8 @@ class KotlinSymbolService(
                 )
             }
         }
-        return membersOf(fqn, emptyList(), null).filterIsInstance<KotlinSymbol>().filter {
+        // Entries and static fields are declared members; the type's extensions can be neither.
+        return ownAndInheritedCached(fqn, emptyList()).filter {
             it.kind == SymbolKind.ENUM_CONSTANT ||
                     (it.kind == SymbolKind.FIELD && Modifier.STATIC in it.modifiers && (it.type as? KotlinType)?.qualifiedName == fqn)
         }
@@ -4559,13 +4708,12 @@ class KotlinSymbolService(
         val m = model()
         val candidates = m.typeAliasesBySimpleName[simpleName]
         if (ctx == null) return candidates?.singleOrNull()
-        ctx.imports.firstOrNull { !it.isStar && it.simpleName == simpleName }?.let { return m.typeAliasByFqn[it.fqn] }
+        ctx.explicitImportsBySimpleName[simpleName]?.let { return m.typeAliasByFqn[it.fqn] }
         if (candidates == null) return null
         candidates.firstOrNull { it.fqn.substringBeforeLast('.', "") == ctx.packageName }?.let { return it }
-        return candidates.firstOrNull { a ->
-            val pkg = a.fqn.substringBeforeLast('.', "")
-            ctx.imports.any { it.isStar && it.fqn == pkg }
-        }
+        val stars = ctx.starImportPackages
+        if (stars.isEmpty()) return null
+        return candidates.firstOrNull { a -> a.fqn.substringBeforeLast('.', "") in stars }
     }
 
     /**
@@ -4746,7 +4894,7 @@ class KotlinSymbolService(
         if (ownerFqn != null) pushInferringOwner(ownerFqn)
         val result = try {
             val resolver =
-                KotlinResolver(dom.owner.ktFile, dom.owner, this)
+                KotlinResolver(dom.owner.ktFile, dom.owner, this, bodyResolverCachesFor(dom.owner))
             val inferred =
                 if (delegate != null) resolver.delegatedValueType(delegate) else resolver.inferType(
                     body
@@ -4918,6 +5066,10 @@ class KotlinSymbolService(
 }
 
 /** How long [KotlinSymbolService]'s walk of its source roots is reused before the tree is walked again. */
+/** One identity object per thread, for [KotlinSymbolService]'s body-inference caches to tell threads apart. A bare
+ *  object, so the thread-local holds nothing that could keep a service alive. */
+private val THREAD_TOKEN = ThreadLocalValue { Any() }
+
 private val SOURCE_WALK_TTL = 2.seconds
 private val SOURCE_WALK_MAX_AGE = 30.seconds
 
