@@ -101,6 +101,20 @@ class KotlinSymbol(
     override fun declaration(): DomNode? = declarationNode
     override fun documentation(): String? = doc
 
+    /** A copy under another [name] (an `import a.b.c as d` alias), every other fact kept. */
+    fun renamed(name: String): KotlinSymbol =
+        KotlinSymbol(
+            name = name, kind = kind, type = type, owner = owner, modifiers = modifiers, origin = origin,
+            receiverTypeFqn = receiverTypeFqn, signature = signature, typeParameters = typeParameters,
+            typeParameterBounds = typeParameterBounds, typeParamBoundNames = typeParamBoundNames,
+            typeParamLowerBounds = typeParamLowerBounds, paramTypes = paramTypes, paramNames = paramNames,
+            receiverTypeArgs = receiverTypeArgs, receiverTypeParam = receiverTypeParam, packageName = packageName,
+            declaringClassFqn = declaringClassFqn, isInternal = isInternal, isComposable = isComposable,
+            isInline = isInline, isInfix = isInfix, isSuspend = isSuspend, isDeprecated = isDeprecated,
+            annotationFqns = annotationFqns, varargParamIndex = varargParamIndex, paramHasDefault = paramHasDefault,
+            declarationNode = declarationNode, doc = doc,
+        )
+
     /** A copy with source-recovered facts spliced in (real parameter [names], rebuilt [sig], [docText]) — used
      *  to enrich a binary symbol from attached sources without re-reading its shape. Other fields are preserved. */
     fun withSourceDoc(

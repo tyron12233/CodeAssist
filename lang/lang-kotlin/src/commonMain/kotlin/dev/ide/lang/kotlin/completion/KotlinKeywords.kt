@@ -2,8 +2,10 @@ package dev.ide.lang.kotlin.completion
 
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtCallableDeclaration
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtClassBody
+import dev.ide.kotlin.syntax.psi.KtConstructorCalleeExpression
 import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtFile
@@ -24,8 +26,11 @@ import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtSuperTypeList
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTryExpression
+import dev.ide.kotlin.syntax.psi.KtTypeArgumentList
 import dev.ide.kotlin.syntax.psi.KtTypeParameterList
+import dev.ide.kotlin.syntax.psi.KtTypeProjection
 import dev.ide.kotlin.syntax.psi.KtTypeReference
+import dev.ide.kotlin.syntax.psi.KtUserType
 import dev.ide.kotlin.syntax.psi.KtValueArgumentList
 import dev.ide.kotlin.syntax.psi.KtWhenEntry
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
@@ -112,6 +117,14 @@ internal object KotlinKeywords {
             out += keywordItem(text, trailingSpace)
         }
 
+        // `context`, and the context-parameter list it starts written out (`context(|)`), at a declaration.
+        fun contextList() {
+            kw("context")
+            if ("context".startsWith(prefix) && "context" !in present) {
+                out += keywordItem("context", trailingSpace = false).copy(insertText = "context()", detail = "(...)", caret = CaretAction.At(8))
+            }
+        }
+
         // The compounds that are shortcuts for a modifier plus a declaration keyword (`value class`, `fun
         // interface`) are offered once something is typed: the bare popup lists the plain `value` modifier and
         // `fun`/`interface`, the vocabulary IntelliJ shows there, rather than every pairing of them.
@@ -135,6 +148,18 @@ internal object KotlinKeywords {
         //     keyword, so they're detected explicitly and offered BEFORE the [place] switch ---
 
         val declRun = precedingDeclRun(precedingText, tokenStart)
+
+        // Right after an annotation's `@` (`@<caret>`, `class C(@<caret>)`): the use-site targets (`file:`,
+        // `get:`, `param:`, …), the only keywords an annotation's name may start with.
+        if (annotationStartSpot(precedingText, tokenStart)) {
+            for (t in USE_SITE_TARGETS) kw("$t:")
+            return out
+        }
+        // After a `!` that follows an operand (`v !<caret>`): the negated `in`/`is` operators.
+        if (negatedOperatorSpot(precedingText, tokenStart)) {
+            kw("in", trailingSpace = true); kw("is", trailingSpace = true)
+            return out
+        }
 
         // Exclusive positions — the slot admits ONLY the position's own keyword(s), so they're offered and
         // returned before the [place] switch (whose enclosing-block walk would otherwise leak `do`/`if`/`val`
@@ -161,16 +186,45 @@ internal object KotlinKeywords {
         // from the preceding text like `by`: the half-typed `where` parses as a separate sibling declaration,
         // so it isn't visible in the marker's PSI ancestry.
         if (whereSpot(declRun)) kw("where", trailingSpace = true)
+        // An import on the line before may still take its alias (`import a.B` / `as C`).
+        if (importOnLineBefore(precedingText, tokenStart)) kw("as", trailingSpace = true)
         // `catch`/`finally` after a `try { }` block (or after an existing catch) at statement level.
-        if (tryContinuationSpot(leaf)) { kw("catch"); kw("finally") }
+        val afterTry = tryContinuationSpot(leaf)
+        if (afterTry) { kw("catch"); kw("finally") }
         // `else` after an `if (…) { }` that has no else yet; `while` after a `do { }` missing its while.
-        if (elseContinuationSpot(leaf)) kw("else", trailingSpace = true)
+        val afterIf = elseContinuationSpot(leaf)
+        if (afterIf) kw("else", trailingSpace = true)
+        // The `if`/`try` just closed is an expression the next line may still cast (`if (a) {} as T`), so the
+        // cast operators fit there too, as IntelliJ's keyword completion has them after either.
+        if ((afterTry || afterIf) && leaf?.getParentOfType<KtBlockExpression>(strict = false) != null) {
+            kw("as", trailingSpace = true); kw("as?", trailingSpace = true)
+        }
         if (doWhileContinuationSpot(leaf)) kw("while")
         // `get`/`set` property accessors after a property declaration (`val x: Int █`). Only the accessors the
         // property still lacks — a `val` has no setter.
-        accessorTarget(leaf)?.let { p ->
-            if (p.accessors.none { a -> a.isGetter }) kw("get")
-            if (p.isVar && p.accessors.none { a -> a.isSetter }) kw("set")
+        accessorTarget(leaf)?.takeUnless { it.isLocal }?.let { p ->
+            fun accessor(head: String, parameters: String) {
+                kw(head)
+                if (!head.startsWith(prefix)) return
+                // The accessor written out, as an expression body or a block body.
+                out += keywordItem("$head$parameters = ...", trailingSpace = false).copy(insertText = "$head$parameters = ")
+                out += keywordItem("$head$parameters {...}", trailingSpace = false)
+                    .copy(insertText = "$head$parameters {  }", caret = CaretAction.At(head.length + parameters.length + 3))
+            }
+            if (p.accessors.none { a -> a.isGetter }) accessor("get", "()")
+            if (p.isVar && p.accessors.none { a -> a.isSetter }) accessor("set", "(value)")
+            // An explicit backing field (`field = …`) may follow the property too.
+            kw("field", trailingSpace = true)
+            // A property with neither an initializer nor accessors may still be delegated on the next line.
+            if (p.initializer == null && !p.hasDelegate() && p.accessors.isEmpty() && out.none { it.label == "by" }) kw("by", trailingSpace = true)
+            // A property that ends in an expression (`= 1`, `get() = 0`) may still have it cast.
+            val last = p.accessors.lastOrNull()
+            if (if (last != null) last.equalsToken != null else p.initializer != null) {
+                kw("as", trailingSpace = true); kw("as?", trailingSpace = true)
+            }
+            // On the property's own line only its continuations fit: no declaration starts there.
+            val end = p.textRange.endOffset.coerceAtMost(tokenStart)
+            if (end <= tokenStart && (end until tokenStart).none { precedingText[it] == '\n' || precedingText[it] == ';' }) return out
         }
 
         // `when`-entry label position (`when (x) { … █ -> … }`). `else` is always valid; the type/range checks
@@ -189,6 +243,15 @@ internal object KotlinKeywords {
         // but its catch / accessor reading (already in [out]) must win.
         if (out.isEmpty() && infixOperatorSpot(leaf)) {
             for (op in INFIX_OPERATORS) kw(op, trailingSpace = true)
+            return out
+        }
+
+        // A type (`val a: █`, `fun f(p: █)`, `List<█>`) may start with `suspend` (a suspend function type) or
+        // `context(…)` (a function type with context parameters), and a type argument of another type with its
+        // variance (`in`/`out`), as IntelliJ offers them in any type position but a receiver or a supertype call.
+        typeReferenceSpot(leaf)?.let { argumentOfType ->
+            if (argumentOfType) { kw("in", trailingSpace = true); kw("out", trailingSpace = true) }
+            kw("suspend", trailingSpace = true); kw("context")
             return out
         }
 
@@ -219,7 +282,7 @@ internal object KotlinKeywords {
                 val inObject = leaf?.getParentOfType<KtClassOrObject>(strict = true) is KtObjectDeclaration
                 kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
                 kw("init"); kw("object"); kw("class"); kw("interface")
-                kw("typealias", trailingSpace = true); kw("context")
+                kw("typealias", trailingSpace = true); contextList()
                 kw("override", trailingSpace = true)
                 if (!inObject) { kw("constructor"); kw("companion object") }
                 for (c in MEMBER_COMPOUNDS) compound(c)
@@ -236,7 +299,10 @@ internal object KotlinKeywords {
                 // A file is `package`, then `import`s, then declarations, in that order: before an import only
                 // `package`/`import` fit, and once a declaration is written neither does.
                 val file = leaf?.getParentOfType<KtFile>(strict = false)
-                val importAfter = file?.importDirectives?.any { it.textRange.startOffset >= tokenStart } == true
+                // An import further down may not parse as one, the caret's word between them having broken the
+                // import list, so the text is asked too.
+                val importAfter = file?.importDirectives?.any { it.textRange.startOffset >= tokenStart } == true ||
+                    IMPORT_LINE.containsMatchIn(precedingText.subSequence((tokenStart + prefix.length).coerceAtMost(precedingText.length), precedingText.length))
                 val importBefore = file?.importDirectives?.any { it.textRange.endOffset <= tokenStart } == true
                 val declarationBefore = file?.declarations?.any { it.textRange.endOffset <= tokenStart } == true
                 val packageWritten = file?.packageDirective?.let { it.textLength > 0 && it.textRange.endOffset <= tokenStart } == true
@@ -244,10 +310,24 @@ internal object KotlinKeywords {
                 if (!declarationBefore && !importBefore && !packageWritten) kw("package", trailingSpace = true)
                 if (!importAfter) {
                     kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
-                    kw("class"); kw("interface"); kw("object"); kw("context")
+                    kw("class"); kw("interface"); kw("object"); contextList()
                     kw("typealias", trailingSpace = true)
                     for (c in TOP_LEVEL_COMPOUNDS) compound(c)
                     for (m in TOP_LEVEL_MODIFIERS) kw(m, trailingSpace = true)
+                    // The class a file is named for, when it does not declare it yet (`class Foo` in `Foo.kt`).
+                    fileClassName(file)?.let { name ->
+                        for (head in FILE_CLASS_HEADS) {
+                            if (out.none { it.kind == CompletionItemKind.KEYWORD && it.label == head }) continue
+                            out += if (head == "data class") CompletionItem(
+                                label = head,
+                                insertText = "$head $name()",
+                                kind = CompletionItemKind.KEYWORD,
+                                detail = "$name(...)",
+                                sortPriority = 50,
+                                caret = CaretAction.At(head.length + name.length + 2),
+                            ) else keywordItem("$head $name", trailingSpace = false)
+                        }
+                    }
                 }
             }
             // A primary-constructor parameter may be promoted to a property (`val`/`var`), restricted by a
@@ -451,6 +531,60 @@ internal object KotlinKeywords {
         "lateinit var", "const val", "suspend fun", "value class", "fun interface",
     )
 
+    /** A line that is an import directive. */
+    private val IMPORT_LINE = Regex("""(?m)^[ \t]*import\s""")
+
+    /** Whether the last line written before [tokenStart] (past blank ones) is an import directive that is
+     *  neither aliased nor a star import, and the caret is on a later line. Reads back from the caret only. */
+    private fun importOnLineBefore(text: CharSequence, tokenStart: Int): Boolean {
+        var end = tokenStart.coerceAtMost(text.length)
+        var sawBreak = false
+        while (end > 0 && text[end - 1].isWhitespace()) { if (text[end - 1] == '\n') sawBreak = true; end-- }
+        if (!sawBreak || end == 0) return false
+        var start = end
+        while (start > 0 && text[start - 1] != '\n') start--
+        return IMPORT_DIRECTIVE.matches(text.subSequence(start, end))
+    }
+    private val IMPORT_DIRECTIVE = Regex("""[ \t]*import[ \t]+[\w.`]+""")
+
+    /** The declaration heads offered with the file's own name too (see [fileClassName]). */
+    private val FILE_CLASS_HEADS = listOf(
+        "class", "interface", "object", "enum class", "sealed class", "sealed interface", "annotation class",
+        "data class", "data object",
+    )
+
+    /** The name of [file] when it can name a class the file does not declare yet: a capitalized identifier. */
+    private fun fileClassName(file: KtFile?): String? {
+        val name = file?.name?.substringAfterLast('/')?.substringBeforeLast('.') ?: return null
+        if (name.isEmpty() || !name[0].isUpperCase() || !name.all { it.isLetterOrDigit() || it == '_' }) return null
+        if (file.declarations.any { it is KtClassOrObject && it.name == name }) return null
+        return name
+    }
+
+    /** The annotation use-site targets, in IntelliJ's order. */
+    private val USE_SITE_TARGETS = listOf(
+        "file", "field", "get", "set", "param", "setparam", "property", "receiver", "delegate", "all",
+    )
+
+    /** Whether the token at [tokenStart] directly follows an annotation's `@`: not a label's (`loop@`,
+     *  `return@`), whose `@` is glued to a name. */
+    private fun annotationStartSpot(text: CharSequence, tokenStart: Int): Boolean {
+        if (text.getOrNull(tokenStart - 1) != '@') return false
+        val before = text.getOrNull(tokenStart - 2) ?: return true
+        return !(before.isLetterOrDigit() || before == '_' || before == '`')
+    }
+
+    /** Whether the token at [tokenStart] follows a `!` written after an operand (`v !<caret>`, `it !i<caret>`),
+     *  where only `!in`/`!is` continue: a `!` that starts an operand (`!flag`, `(!x`) does not count. */
+    private fun negatedOperatorSpot(text: CharSequence, tokenStart: Int): Boolean {
+        if (text.getOrNull(tokenStart - 1) != '!') return false
+        var i = tokenStart - 2
+        if (i < 0 || !text[i].isWhitespace()) return false
+        while (i >= 0 && (text[i] == ' ' || text[i] == '\t')) i--
+        val c = text.getOrNull(i) ?: return false
+        return c.isLetterOrDigit() || c == '_' || c == ')' || c == ']' || c == '"'
+    }
+
     // --- `by` delegation (offered independent of [Place]) ---
 
     // `by` delegation is detected from the preceding declaration TEXT, not the PSI: a half-typed `val x █` /
@@ -535,6 +669,24 @@ internal object KotlinKeywords {
         val list = leaf?.getParentOfType<KtTypeParameterList>(strict = false) ?: return null
         val fn = list.getParentOfType<KtNamedFunction>(strict = true)
         return TypeParamCtx(inlineFun = fn?.hasModifier(KtTokens.INLINE_KEYWORD) == true)
+    }
+
+    /**
+     * Whether [leaf] is the name of an unqualified type in a type reference that admits a type-starting keyword:
+     * null when it is not (no type reference, a qualified `a.B`, an extension receiver `fun A.f()`, or the type
+     * of a supertype or annotation call `A()`); otherwise whether the type is an argument of another type
+     * (`List<█>`), where a variance projection also fits. A call's type arguments (`listOf<█>()`) take no
+     * projection.
+     */
+    private fun typeReferenceSpot(leaf: KtElement?): Boolean? {
+        val ref = leaf?.getParentOfType<KtTypeReference>(strict = false) ?: return null
+        val type = ref.typeElement as? KtUserType ?: return null
+        if (type.qualifier != null || leaf.getParentOfType<KtUserType>(strict = false) !== type) return null
+        val parent = ref.parent
+        if (parent is KtCallableDeclaration && parent.receiverTypeReference === ref) return null
+        if (parent is KtConstructorCalleeExpression) return null
+        val arguments = (parent as? KtTypeProjection)?.parent as? KtTypeArgumentList
+        return arguments?.parent is KtUserType && arguments.parent?.parent is KtTypeReference
     }
 
     // --- `when`-entry condition (`else`/`is`/`in`/`!is`/`!in`) ---

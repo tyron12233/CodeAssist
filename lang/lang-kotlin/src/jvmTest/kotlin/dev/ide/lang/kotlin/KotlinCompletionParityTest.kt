@@ -328,6 +328,133 @@ class KotlinCompletionParityTest {
         assertTrue(labels("package r23\nclass T {\n  fun f() {\n    '|'\n  }\n}").isEmpty(), "a character literal holds no code")
     }
 
+    // --- keywords: type positions, casts, use-site targets, accessors, the file's class, return labels ---
+
+    @Test
+    fun aTypeMayStartWithSuspendOrContextAndAnArgumentWithItsVariance() {
+        val plain = keywords("package s1\nfun f(a: |) {}")
+        assertTrue("suspend" in plain && "context" in plain, "got $plain")
+        assertFalse("in" in plain || "out" in plain, "a parameter's own type takes no projection; got $plain")
+        val argument = keywords("package s2\nclass Box<T>\nfun f(a: Box<|>) {}")
+        assertTrue("in" in argument && "out" in argument && "suspend" in argument, "got $argument")
+        val call = keywords("package s3\nfun f() { mutableListOf<|>() }")
+        assertFalse("in" in call, "a call's type argument takes no projection; got $call")
+    }
+
+    @Test
+    fun anElseLessIfOrATryMayStillBeCast() {
+        val ks = keywords("package s4\nfun f(p: Int) {\n  if (p > 0) {\n  }\n  |\n}")
+        assertTrue("as" in ks && "as?" in ks && "else" in ks, "got $ks")
+        assertFalse("as" in keywords("package s5\nfun f() {\n  val x = 1\n  |\n}"), "a declaration is no operand")
+    }
+
+    @Test
+    fun anAnnotationStartOffersTheUseSiteTargets() {
+        val ks = keywords("package s6\nannotation class Ann\nclass C(@|)")
+        assertTrue(listOf("file:", "get:", "param:", "field:").all { it in ks }, "got $ks")
+        val negated = keywords("package s7\nfun f(v: String) {\n  if (v !|) {}\n}")
+        assertTrue("in" in negated && "is" in negated, "got $negated")
+        assertFalse("if" in negated || "val" in negated, "only the negated operators follow a `!` after an operand; got $negated")
+    }
+
+    @Test
+    fun aPropertyIsContinuedByItsAccessorsWrittenOut() {
+        val ks = keywords("package s8\nclass Some {\n  var a: Int = 1\n    |\n}")
+        assertTrue(listOf("get", "get() = ...", "get() {...}", "set(value) = ...", "as").all { it in ks }, "got $ks")
+        val sameLine = keywords("package s9\nclass Some {\n  var a: Int |\n}")
+        assertFalse("fun" in sameLine, "no declaration starts on the property's own line; got $sameLine")
+    }
+
+    @Test
+    fun aTopLevelClassIsOfferedUnderTheFilesName() {
+        val ks = keywords("package s10\n|")
+        assertTrue("class Use" in ks && "sealed interface Use" in ks, "the file is Use.kt; got $ks")
+        val declared = keywords("package s11\nclass Use\n|")
+        assertFalse("class Use" in declared, "the file already declares it; got $declared")
+    }
+
+    @Test
+    fun aReturnLabelStopsAtTheFirstLambdaThatIsNotInlined() {
+        val ks = keywords(
+            "package s12\nfun takeHandler1(handler: () -> Unit) {}\nfun takeHandler2(handler: () -> Unit) {}\n" +
+                "fun foo() {\n  takeHandler1 {\n    takeHandler2 { | }\n  }\n}",
+        )
+        assertTrue("return@takeHandler2" in ks, "got $ks")
+        assertFalse("return@takeHandler1" in ks, "no return reaches past a lambda that is not inlined; got $ks")
+        val quoted = keywords("package s13\ninline fun `fun`(handler: () -> Unit) {}\nfun foo() {\n  `fun` { ret| }\n}")
+        assertTrue("return@`fun`" in quoted, "a keyword label is quoted; got $quoted")
+    }
+
+    // --- what a position offers ---
+
+    @Test
+    fun aContextualFunctionIsOfferedOnlyWhereItsContextIsAvailable() {
+        val code = "package s14\ncontext(_: String)\nfun fooString() {}\ncontext(_: Int)\nfun fooInt() {}\nfun fooNone() {}\n"
+        val none = labels(code + "fun test() {\n  foo|\n}")
+        assertTrue(none.any { it.startsWith("fooNone") }, "got $none")
+        assertFalse(none.any { it.startsWith("fooString") || it.startsWith("fooInt") }, "no context value in scope; got $none")
+        val withString = labels(code + "fun test() {\n  with(\"\") {\n    foo|\n  }\n}")
+        assertTrue(withString.any { it.startsWith("fooString") }, "got $withString")
+        assertFalse(withString.any { it.startsWith("fooInt") }, "got $withString")
+    }
+
+    @Test
+    fun aContextParameterIsAValueInItsBody() {
+        val ls = labels("package s15\ninterface Logger\ncontext(logger: Logger)\nfun log() {\n  logge|\n}")
+        assertTrue("logger" in ls, "got $ls")
+    }
+
+    @Test
+    fun anAnnotationArgumentOffersOnlyCompileTimeConstants() {
+        val code = "package s16\nconst val constInt: Int = 1\nval nonConstInt: Int = 1\nfun foo(): Int = 1\n" +
+            "annotation class A(val n: Int)\n@A(|)\nclass B"
+        val ls = labels(code)
+        assertTrue("constInt" in ls, "got ${ls.take(20)}")
+        assertFalse("nonConstInt" in ls || ls.any { it.startsWith("foo(") }, "got ${ls.take(20)}")
+        val ks = keywords(code)
+        assertTrue("true" in ks && "when" in ks, "got $ks")
+        assertFalse("null" in ks || "for" in ks || "throw" in ks, "got $ks")
+    }
+
+    @Test
+    fun anImportAliasIsOfferedByItsAlias() {
+        val ls = labels("package s17\nimport kotlin.collections.ArrayList as KotlinArrayList\nfun foo(): KotAr|")
+        assertTrue("KotlinArrayList" in ls, "got $ls")
+    }
+
+    @Test
+    fun aLambdaOffersItsParameterList() {
+        val named = labels("package s18\nfun <T> T.foo(block: (reference: T) -> Unit) {}\nfun bar() {\n  42.foo { | }\n}")
+        assertTrue("reference" in named, "the function type names it; got ${named.take(10)}")
+        val made = labels("package s19\nclass FooBar\nfun bar() {\n  FooBar().let { | }\n}")
+        assertTrue("fooBar" in made && "bar" in made, "named after the type; got ${made.take(10)}")
+        val destructured = labels("package s20\ndata class P(val x: Int, val y: String)\nfun bar() {\n  P(1, \"\").let { | }\n}")
+        assertTrue("(x, y)" in destructured, "got ${destructured.take(10)}")
+        val rest = labels("package s21\nfun <T, U> foo(a: T, b: U, block: (first: T, second: U) -> Unit) {}\nfun bar() {\n  foo(1, \"\") { first, | }\n}")
+        assertTrue("second" in rest, "the rest of the list; got $rest")
+        val own = labels("package s22\nfun <T, U> foo(a: T, b: U, block: (first: T, second: U) -> Unit) {}\nfun bar() {\n  foo(1, \"\") { acc, | }\n}")
+        assertFalse("second" in own, "names of the writer's own are not continued; got $own")
+    }
+
+    @Test
+    fun anObjectsExtensionAppliesToAnImplicitReceiver() {
+        val ls = labels("package s23\nclass T\nobject A {\n  fun T.fooExtension() {}\n}\nfun T.usage() {\n  foo|\n}")
+        assertTrue(ls.any { it.startsWith("fooExtension") }, "got $ls")
+    }
+
+    @Test
+    fun aQualifiedTypeOffersWhatItsQualifierHolds() {
+        val ls = labels("package s24\nclass Outer {\n  class Nested\n}\nval x: Outer.|")
+        assertTrue("Nested" in ls, "got $ls")
+        assertFalse("Any" in ls, "not every type by name; got ${ls.take(10)}")
+    }
+
+    @Test
+    fun anUntypedLateinitIsNamedWithItsType() {
+        val ls = labels("package s25\nclass Foo\nclass BarFoo\nlateinit var f|")
+        assertTrue("foo: Foo" in ls && "foo: BarFoo" in ls, "got $ls")
+    }
+
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))

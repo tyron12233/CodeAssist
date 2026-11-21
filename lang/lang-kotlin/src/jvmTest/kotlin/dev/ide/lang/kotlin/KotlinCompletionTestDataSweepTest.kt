@@ -425,6 +425,8 @@ class KotlinCompletionTestDataSweepTest {
     private fun keys(item: CompletionItem): Set<String> = buildSet {
         add(primaryKey(item))
         add(item.label)
+        // A use-site target is shown `get:` and looked up by `get`.
+        if (item.kind == CompletionItemKind.KEYWORD && item.label.endsWith(":")) add(item.label.removeSuffix(":"))
         add(item.label.substringBefore('(').substringBefore(" {").trim())
         add(item.insertText.trim())
         add(item.insertText.substringBefore('(').substringBefore('<').trim())
@@ -598,7 +600,7 @@ class KotlinCompletionTestDataSweepTest {
             "basic/common,basic/java,basic/fullJdk,basic/skipRangeTo,basic/multifile,keywords,smart,weighers/basic,weighers/smart"
         private const val TIMEOUT_SECONDS = 30L
 
-        private val UNRELEASED_FEATURES = listOf("CompanionBlocks", "CompanionExtensions", "RichErrors", "ExplicitBackingFields")
+        private val UNRELEASED_FEATURES = listOf("CompanionBlocks", "CompanionExtensions", "RichErrors", "ExplicitBackingFields", "ExplicitContextArguments")
 
         private val JSON_FIELD = Regex(""""?(\w+)"?\s*:\s*("(?:[^"\\]|\\.)*"|null)""")
 

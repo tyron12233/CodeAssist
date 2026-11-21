@@ -3780,6 +3780,8 @@ class KotlinSymbolService(
      *  for a bare `import <caret>` (before any dot). Drilling into one (`androidx.<caret>`) then routes through
      *  [packageMembers]. */
     fun rootPackages(prefix: String, limit: Int = 200): List<KotlinSymbol> {
+        // The index answers no empty-prefix query, so with nothing typed the usual roots are probed by name.
+        if (prefix.isEmpty()) return knownRootPackages(prefix).take(limit)
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
         index?.prefixAll<String>(PACKAGES, m.indexPrefix, 1000)?.forEach { hit ->
@@ -3794,6 +3796,36 @@ class KotlinSymbolService(
                 out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = SOURCE) }
         }
         return out.values.take(limit)
+    }
+
+    /**
+     * The root packages matching [prefix] that a bare name in code or in a type can start (`kotlin.`, `java.`),
+     * bounded for a per-keystroke call: the common classpath roots are probed by exact key, as is the typed
+     * prefix itself (an unusual library root once it is spelled out), and the project's own roots come from
+     * the source model. No prefix scan of the package index.
+     */
+    fun knownRootPackages(prefix: String): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
+        // The first letter's case counts, as IntelliJ matches it: `Testin` names the class, not `testing.`.
+        fun fits(seg: String) = prefix.isEmpty() || (seg[0] == prefix[0] && m.matches(seg))
+        val out = LinkedHashMap<String, KotlinSymbol>()
+        val idx = index
+        if (idx != null) {
+            for (root in COMMON_ROOT_PACKAGES) {
+                if (fits(root) && idx.exactAll<String>(PACKAGES, root).any()) {
+                    out[root] = KotlinSymbol(root, SymbolKind.PACKAGE, origin = BINARY)
+                }
+            }
+            if (prefix.isNotEmpty() && prefix !in out && '.' !in prefix && idx.exactAll<String>(PACKAGES, prefix).any()) {
+                out[prefix] = KotlinSymbol(prefix, SymbolKind.PACKAGE, origin = BINARY)
+            }
+        }
+        model().classByFqn.keys.forEach { fqn ->
+            val seg = fqn.substringBefore('.')
+            if (seg.isNotEmpty() && seg != fqn && fits(seg))
+                out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = SOURCE) }
+        }
+        return out.values.toList()
     }
 
     /**
@@ -4792,6 +4824,12 @@ class KotlinSymbolService(
         private const val MAX_ALIAS_DEPTH = 3
         private val BUILTINS = IndexId("kotlin.builtins")
         private val PACKAGES = PackagesIndex.ALL
+
+        /** The root packages a classpath commonly has, probed by exact key (see [knownRootPackages]). */
+        private val COMMON_ROOT_PACKAGES = listOf(
+            "android", "androidx", "com", "dalvik", "io", "java", "javax", "jdk", "junit", "kotlin", "kotlinx",
+            "net", "okhttp3", "okio", "org", "retrofit2", "sun",
+        )
         private val PACKAGE_TYPES = PackageTypesIndex.ALL
         private val MEMBERS_BY_OWNER = IndexId("java.membersByOwner")
         private val JAVA_STATIC_MEMBERS = IndexId("java.staticMembers")
