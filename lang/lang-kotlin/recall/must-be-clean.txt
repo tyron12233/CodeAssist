@@ -823,3 +823,62 @@ inline fun <reified T> reifiedOk(x: Any) = x is T
 class OneCompanion { companion object }
 open class NeedsArg(x: Int)
 class Delegating : NeedsArg { constructor() : super(1) }
+//// ported-expression-lookalikes
+fun `__`() {}
+fun <T> id(): T? = null
+enum class E1 { A, B }
+interface Shape
+enum class E3 : Shape { C }
+class G<T>
+open class Base { open fun g() {} }
+interface Named { fun name(): String = "n" }
+@Deprecated("soft") fun soft() {}
+fun pair(a: Int, b: Int = 0, vararg rest: Int) = a + b + rest.size
+class Lookalikes(`_`: Int) : Base(), Named {
+    override fun g() { super.g() }
+    override fun name() = super.name()
+    fun f(e: E1, s: Shape, a: Any, l: List<Int>, x: Long, arr: IntArray) {
+        val big = 9223372036854775807L + 0x7FL + 1_000 + 0b1L
+        val d = 1.5e3 + 1_0.0_1
+        val chars = listOf('a', '\n', 'A', '\\', '\'', '$')
+        val str = "tab\tquote\"dollar\$uA"
+        `__`(); val n: Int? = id<_>(); listOf(1).forEach { _ -> }
+        e == E1.A; e != E1.B; E3.C == s; a == e; e === E1.A
+        when (e) { E1.A -> {}; E1.B -> {} }
+        a is List<*>; a is G<*>; l is ArrayList; l is ArrayList<Int>; a is List<Any?>; a as? G<Int>
+        pair(1, b = 2); pair(a = 1, 2); pair(1, 2, *arr); pair(1, 2, 3, 4)
+        soft()
+        if (big > d && chars.isNotEmpty() && str.isNotEmpty() && n == null) while (x > 0) { break }
+    }
+}
+//// ported-operator-literal-inline-lookalikes
+class Money(val cents: Long) { operator fun plus(o: Money) = Money(cents + o.cents); fun minus(o: Money) = Money(cents - o.cents) }
+abstract class Shape { abstract operator fun times(k: Int): Shape }
+class Square : Shape() { override fun times(k: Int) = this }
+inline fun <reified R> klass() = R::class
+inline fun runTwice(block: () -> Unit, crossinline later: () -> Unit) {
+    block(); run { block() }
+    val r = object : Runnable { override fun run() { later() } }
+    r.run()
+}
+fun money(a: Money, s: Square) {
+    val sum = a + a
+    val diff = a.minus(a)
+    val scaled = s * 2
+    val k1 = Money::class
+    val k2 = klass<String>()
+    val k3 = arrayOf<Int>(1)
+    val k4 = Array<String>::class
+    runTwice({ println(sum.cents + diff.cents) }) { println(scaled) }
+    println(listOf(k1, k2, k3.size, k4))
+}
+//// ported-labels-conditions-lookalikes
+class Outer {
+    inner class Inner { fun o() = this@Outer; fun i() = this@Inner }
+    fun Int.ext() = this@ext + this@Outer.hashCode()
+    val String.len get() = this@len.length
+    fun lambdas(xs: List<Int>) = xs.map { this@Outer }.let { with(it) { this@with.size } }
+    companion object { fun c() = this@Companion }
+}
+fun conds(b: Boolean, n: Int?) = b && n != null || (n ?: 0) > 1
+fun subjectless(n: Int) = when { n > 0 -> 1; n == 0 -> 0; else -> -1 }

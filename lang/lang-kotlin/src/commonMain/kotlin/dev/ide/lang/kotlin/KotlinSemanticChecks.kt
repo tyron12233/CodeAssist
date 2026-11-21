@@ -153,6 +153,7 @@ internal class KotlinSemanticChecks(
         out += unusedImports(ktFile, refNames)
         out += conflictingImports(ktFile)
         out += unresolvedImports(ktFile)
+        out += allUnderImportFromSingleton(ktFile)
         out += privateTopLevelImports(ktFile)
         unusedPrivateDeclarations(ktFile, refNames, out)
         return out
@@ -318,7 +319,7 @@ internal class KotlinSemanticChecks(
                 report(uselessElvis(psi, resolver))
                 report(assignmentTypeMismatch(psi, resolver) ?: numericCompoundAssignment(psi, resolver))
                 report(senselessNullComparison(psi, resolver))
-                if (resolveReady) report(incomparableEquality(psi, resolver) ?: forbiddenIdentityEquals(psi, resolver))
+                if (resolveReady) report(KotlinEqualityChecks.binary(this@KotlinSemanticChecks, psi, resolver) ?: incomparableEquality(psi, resolver) ?: forbiddenIdentityEquals(psi, resolver))
                 if (resolveReady) report(unresolvedInfixOperator(psi, resolver))
                 if (resolveReady) {
                     report(undefinedBinaryOperator(psi, resolver) ?: operatorOnNullable(psi, resolver))
@@ -331,7 +332,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.when") {
                 report(whenNotExhaustive(psi, resolver))
                 reportAll(duplicateWhenBranches(psi))
-                if (resolveReady) reportAll(incompatibleWhenConditions(psi, resolver))
+                if (resolveReady) reportAll(incompatibleWhenConditions(psi, resolver) + KotlinEqualityChecks.whenConditions(this@KotlinSemanticChecks, psi, resolver))
             }
         },
         KotlinChecker(KtBinaryExpressionWithTypeRHS::class) { psi ->
@@ -392,7 +393,7 @@ internal class KotlinSemanticChecks(
                 KotlinPerf.span("call.propertyAccess") { report(usePropertyAccess(psi, resolver)) }
                 KotlinPerf.span("call.composable") { report(composableInvocation(psi, resolver)) }
                 KotlinPerf.span("call.suspend") { report(suspendInvocation(psi, resolver)) }
-                KotlinPerf.span("call.deprecation") { if (resolveReady) report(deprecatedCall(psi, resolver)) }
+                KotlinPerf.span("call.deprecation") { if (resolveReady) report(KotlinDeprecationChecks.call(this@KotlinSemanticChecks, psi, resolver) ?: deprecatedCall(psi, resolver)) }
                 KotlinPerf.span("call.optIn") { if (resolveReady) report(optInCallUsage(psi, resolver)) }
                 KotlinPerf.span("call.newApi") { if (resolveReady) apiContext()?.let { report(apiLevelCheck.call(psi, resolver, it)) } }
                 KotlinPerf.span("call.permission") { if (resolveReady) permissionContext()?.let { report(permissionCheck.call(psi, resolver, it)) } }
@@ -520,7 +521,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED

@@ -400,3 +400,62 @@ interface I { init {} }
 //// kt.constructorShape
 open class Base(x: Int)
 class A : Base { constructor() }
+//// kt.illegalLiteral
+val a = 1l
+//// kt.illegalLiteral
+val c = 'ab'
+//// kt.illegalLiteral
+val s = "a\qb"
+//// kt.illegalSelector
+fun g() { 1."s" }
+//// kt.superMisuse
+open class B
+class C : B() { fun g() { super } }
+//// kt.superMisuse
+abstract class A { abstract fun f() }
+class C : A() { override fun f() { super.f() } }
+//// kt.superMisuse
+interface I { fun a() {} }
+interface J { fun a() {} }
+class C : I, J { override fun a() { super.a() } }
+//// kt.underscoreUsage
+fun `__`() {}
+fun g() { __() }
+//// kt.expressionExpected
+fun g() = while (true) {}
+//// kt.argumentMapping
+fun foo(a: Int, b: Int) {}
+fun g() { foo(b = 1, 2) }
+//// kt.argumentMapping
+fun foo(a: Int) {}
+fun g() { foo(a = 1, a = 2) }
+//// kt.argumentMapping
+fun v(vararg xs: Int) {}
+fun g() { v {} }
+//// kt.incomparableEquality
+enum class E1 { A }
+enum class E2 { B }
+fun g(a: E1, b: E2) = a == b
+//// kt.castErased
+class Box<T>
+fun g(a: Any) = a is Box<String>
+//// kt.castErased
+class G<T>
+fun g(a: Any) = a is G
+//// kt.deprecation
+@Deprecated("gone", level = DeprecationLevel.ERROR) fun old() {}
+fun g() { old() }
+//// kt.operatorModifierRequired
+class V { fun plus(o: V) = o }
+fun g(a: V) = a + a
+//// kt.classLiteral
+class A<T>
+val k = A<String>::class
+//// kt.classLiteral
+fun <T> g() = T::class
+//// kt.nonLocalReturnNotAllowed
+inline fun g(p: () -> Unit) { val o = object { fun a() { p() } } }
+//// kt.typeMismatch
+fun g(b: Boolean, n: Int) = b && n
+//// kt.unresolvedLabel
+class A { fun f() = this@f }

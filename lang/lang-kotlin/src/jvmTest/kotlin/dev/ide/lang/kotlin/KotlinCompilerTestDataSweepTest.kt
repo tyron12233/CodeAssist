@@ -37,7 +37,19 @@ import kotlin.test.Test
 class KotlinCompilerTestDataSweepTest {
 
     private class Marker(val start: Int, val end: Int, val names: List<String>)
-    private class Case(val path: String, val stage: String, val files: List<Pair<String, String>>, val checkType: Boolean, val inferenceHelpers: Boolean = false)
+    private class Case(
+        val path: String, val stage: String, val files: List<Pair<String, String>>, val checkType: Boolean,
+        /** The diagnostics a `// DIAGNOSTICS: -NAME` directive turns off, which the file then does not mark. */
+        val disabled: Set<String>,
+        val inferenceHelpers: Boolean = false,
+    )
+
+    /** Whether every K2 diagnostic our [code] can stand for is turned off for the case, as the compiler's test
+     *  runner does for a `// DIAGNOSTICS: -NAME` directive. */
+    private fun disabledByDirective(code: String?, disabled: Set<String>): Boolean {
+        val names = KotlinSuppression.K2_NAMES[code ?: return false] ?: return false
+        return names.isNotEmpty() && names.all { it in disabled }
+    }
 
     @Test
     fun theCheckersAgreeWithTheCompilersDiagnosticTestData() {
@@ -84,7 +96,9 @@ class KotlinCompilerTestDataSweepTest {
                         val doc = SnippetDoc(s.first, DiskFile(src.resolve(name)))
                         runBlocking {
                             a.incrementalParser.parseFull(doc)
-                            name to a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR }
+                            name to a.analyze(doc.file).diagnostics.filter {
+                                it.severity == Severity.ERROR && !disabledByDirective(it.code, case.disabled)
+                            }
                         }
                     }
                 } finally { runCatching { a.dispose() } }
@@ -189,8 +203,14 @@ class KotlinCompilerTestDataSweepTest {
         if (files.any { !it.first.endsWith(".kt") }) return null to "nonKotlinFile"
         if (files.map { it.first }.toSet().size != files.size) return null to "dupFile"
         val checkType = Regex("""^// ?CHECK_TYPE""", RegexOption.MULTILINE).containsMatchIn(text)
+        val disabled = Regex("""^// ?DIAGNOSTICS:(.*)$""", RegexOption.MULTILINE).findAll(text)
+            .flatMap { it.groupValues[1].split(' ', ',') }.map { it.trim() }.filter { it.startsWith("-") }
+            .map { it.removePrefix("-") }.toHashSet()
+        // The runner also turns UNDERSCORE_USAGE_WITHOUT_BACKTICKS off for a `// CHECK_TYPE` file, whose `_<T>()`
+        // helper calls would otherwise all report it.
+        if (checkType) disabled += "UNDERSCORE_USAGE_WITHOUT_BACKTICKS"
         val inferenceHelpers = Regex("""^// ?INFERENCE_HELPERS""", RegexOption.MULTILINE).containsMatchIn(text)
-        return Case(rel, stage, files.map { (n, t) -> sanitize(n) to t }, checkType, inferenceHelpers) to null
+        return Case(rel, stage, files.map { (n, t) -> sanitize(n) to t }, checkType, disabled, inferenceHelpers) to null
     }
 
     private fun sanitize(name: String) = name.trimStart('/').replace("..", "_")
@@ -328,6 +348,19 @@ class KotlinCompilerTestDataSweepTest {
             "kt.instanceAccessBeforeSuperCall" to setOf("INSTANCE_ACCESS_BEFORE_SUPER_CALL"),
             "kt.usageIsNotInlinable" to setOf("USAGE_IS_NOT_INLINABLE"),
             "kt.nonPublicCallFromPublicInline" to setOf("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE", "NON_PUBLIC_INLINE_CALL_FROM_PUBLIC_INLINE", "PRIVATE_CLASS_MEMBER_FROM_INLINE"),
+            "kt.incomparableEquality" to setOf("EQUALITY_NOT_APPLICABLE", "INCOMPATIBLE_TYPES", "INCOMPATIBLE_ENUM_COMPARISON_ERROR"),
+            "kt.castErased" to setOf("CANNOT_CHECK_FOR_ERASED", "NO_TYPE_ARGUMENTS_ON_RHS"),
+            "kt.deprecation" to setOf("DEPRECATION_ERROR"),
+            "kt.illegalLiteral" to setOf("ILLEGAL_ESCAPE", "WRONG_LONG_SUFFIX", "ILLEGAL_UNDERSCORE", "INT_LITERAL_WITH_LEADING_ZEROS", "INT_LITERAL_OUT_OF_RANGE", "EMPTY_CHARACTER_LITERAL", "TOO_MANY_CHARACTERS_IN_CHARACTER_LITERAL", "INCORRECT_CHARACTER_LITERAL"),
+            "kt.illegalSelector" to setOf("ILLEGAL_SELECTOR", "NO_RECEIVER_ALLOWED"),
+            "kt.superMisuse" to setOf("SUPER_IS_NOT_AN_EXPRESSION", "SUPER_NOT_AVAILABLE", "AMBIGUOUS_SUPER", "ABSTRACT_SUPER_CALL"),
+            "kt.importFromSingleton" to setOf("CANNOT_ALL_UNDER_IMPORT_FROM_SINGLETON"),
+            "kt.operatorModifierRequired" to setOf("OPERATOR_MODIFIER_REQUIRED"),
+            "kt.nonLocalReturnNotAllowed" to setOf("NON_LOCAL_RETURN_NOT_ALLOWED"),
+            "kt.classLiteral" to setOf("NULLABLE_TYPE_IN_CLASS_LITERAL_LHS", "EXPRESSION_OF_NULLABLE_TYPE_IN_CLASS_LITERAL_LHS", "CLASS_LITERAL_LHS_NOT_A_CLASS", "TYPE_PARAMETER_AS_REIFIED"),
+            "kt.underscoreUsage" to setOf("UNDERSCORE_USAGE_WITHOUT_BACKTICKS"),
+            "kt.expressionExpected" to setOf("EXPRESSION_EXPECTED"),
+            "kt.argumentMapping" to setOf("MIXING_NAMED_AND_POSITIONAL_ARGUMENTS", "ARGUMENT_PASSED_TWICE", "NON_VARARG_SPREAD", "VARARG_OUTSIDE_PARENTHESES", "MANY_LAMBDA_EXPRESSION_ARGUMENTS", "NAMED_ARGUMENTS_NOT_ALLOWED"),
             "kt.constMisuse" to setOf("CONST_VAL_WITH_NON_CONST_INITIALIZER", "NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION", "CONST_VAL_NOT_TOP_LEVEL_OR_OBJECT", "CONST_VAL_WITH_GETTER", "CONST_VAL_WITH_DELEGATE", "CONST_VAL_WITHOUT_INITIALIZER", "TYPE_CANT_BE_USED_FOR_CONST_VAL", "WRONG_MODIFIER_TARGET"),
         ) + PORTED_DECLARATION_K2_NAMES
         val SKIP_DIRECTIVE = Regex(

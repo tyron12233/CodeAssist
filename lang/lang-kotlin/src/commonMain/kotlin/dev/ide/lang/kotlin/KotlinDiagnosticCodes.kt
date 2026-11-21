@@ -264,6 +264,37 @@ object KotlinDiagnosticCodes {
     const val FUNCTION_SHAPE = "kt.functionShape"
     /** A class body holding what its kind cannot: a second companion object, an `init` block in an interface. */
     const val DECLARATION_FORM = "kt.declarationForm"
+    // --- ported from K2's expression and syntax checkers and its call resolution (see KotlinLiteralChecks,
+    // KotlinExpressionPortedChecks, KotlinArgumentMappingChecks) ---
+    /** A literal whose text denotes no value: a bad escape, a lowercase `l` suffix, a misplaced `_`, leading
+     *  zeros, an integer past `Long`, an empty or overlong character literal (ILLEGAL_ESCAPE and kin). */
+    const val ILLEGAL_LITERAL = "kt.illegalLiteral"
+    /** Something other than a name or a call after a dot, `1."s"` or `a.{ }` (ILLEGAL_SELECTOR). */
+    const val ILLEGAL_SELECTOR = "kt.illegalSelector"
+    /** `super` used other than as a member access receiver, or where no class encloses it
+     *  (SUPER_IS_NOT_AN_EXPRESSION, SUPER_NOT_AVAILABLE). */
+    const val SUPER_MISUSE = "kt.superMisuse"
+    /** A name made only of underscores used without backticks (UNDERSCORE_USAGE_WITHOUT_BACKTICKS). */
+    const val UNDERSCORE_USAGE = "kt.underscoreUsage"
+    /** A loop or a declaration where only an expression can stand, `val x = while (c) {}` (EXPRESSION_EXPECTED). */
+    const val EXPRESSION_EXPECTED = "kt.expressionExpected"
+    /** Arguments that cannot be mapped onto the callee's parameters: a positional one after a misplaced named
+     *  one, a parameter given twice, a spread outside a vararg, a vararg or a second lambda outside the
+     *  parentheses, a name where names are forbidden (MIXING_NAMED_AND_POSITIONAL_ARGUMENTS and kin). */
+    const val ARGUMENT_MAPPING = "kt.argumentMapping"
+    /** `x is List<String>` or `x is T` the runtime cannot check, or `x is List` whose arguments `x`'s type does
+     *  not supply (CANNOT_CHECK_FOR_ERASED, NO_TYPE_ARGUMENTS_ON_RHS). */
+    const val CAST_ERASED = "kt.castErased"
+    /** `import a.O.*` from an `object` (CANNOT_ALL_UNDER_IMPORT_FROM_SINGLETON). */
+    const val IMPORT_FROM_SINGLETON = "kt.importFromSingleton"
+    /** `a + b` by convention on a `plus` not declared `operator` (OPERATOR_MODIFIER_REQUIRED). */
+    const val OPERATOR_MODIFIER_REQUIRED = "kt.operatorModifierRequired"
+    /** `A?::class`, `A<String>::class`, `T::class` or `foo<T>()` for a non-reified `T` where a class is needed
+     *  (NULLABLE_TYPE_IN_CLASS_LITERAL_LHS, CLASS_LITERAL_LHS_NOT_A_CLASS, TYPE_PARAMETER_AS_REIFIED). */
+    const val CLASS_LITERAL = "kt.classLiteral"
+    /** An inline function's lambda parameter called from an object, a local function or a lambda invoked on the
+     *  spot, where its non-local returns cannot work (NON_LOCAL_RETURN_NOT_ALLOWED). */
+    const val NON_LOCAL_RETURN_NOT_ALLOWED = "kt.nonLocalReturnNotAllowed"
 
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"
@@ -290,6 +321,7 @@ object KotlinDiagnosticCodes {
         ARGUMENT_COUNT,
         CONSTRUCTOR_ARGS,
         NAMED_ARGUMENT,
+        ARGUMENT_MAPPING,
         NOT_CALLABLE,
         CANNOT_INFER_TYPE,
         OVERLOAD_AMBIGUITY,
