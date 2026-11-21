@@ -117,6 +117,7 @@ import dev.ide.lang.resolve.ApiLevelContext
 import dev.ide.lang.resolve.JavaApiMissingOnAndroid
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
+import dev.ide.lang.resolve.TypeRef
 import dev.ide.kotlin.syntax.psi.Variance
 
 /**
@@ -269,6 +270,7 @@ internal class KotlinSemanticChecks(
         KotlinChecker(KtAnnotationEntry::class) { psi ->
             KotlinPerf.span("sem.annotationArgs") {
                 reportAll(KotlinConstChecks.annotationArguments(psi as KtAnnotationEntry))
+                reportAll(annotationNumericArguments(psi, resolver))
                 report(KotlinModifierChecks.annotationTarget(psi))
             }
         },
@@ -298,7 +300,7 @@ internal class KotlinSemanticChecks(
                 report(variableExpected(psi))
                 report(assignmentInExpression(psi))
                 report(uselessElvis(psi, resolver))
-                report(assignmentTypeMismatch(psi, resolver))
+                report(assignmentTypeMismatch(psi, resolver) ?: numericCompoundAssignment(psi, resolver))
                 report(senselessNullComparison(psi, resolver))
                 if (resolveReady) report(incomparableEquality(psi, resolver))
                 if (resolveReady) report(unresolvedInfixOperator(psi, resolver))
@@ -341,10 +343,10 @@ internal class KotlinSemanticChecks(
                     // The same-file PSI arity check first (precise for a unique same-file function); then the
                     // overload-aware applicability check (wrong-typed / too-many args for an overloaded, library,
                     // or member call); then the missing-required check (which the applicability check defers to).
-                    report(
-                        argumentCountMismatch(psi, resolver) ?: callNotApplicable(psi, resolver)
-                            ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver),
-                    )
+                    val countBad = argumentCountMismatch(psi, resolver)
+                    val notApplicable = if (countBad == null) callNotApplicable(psi, resolver) else emptyList()
+                    if (notApplicable.isNotEmpty()) reportAll(notApplicable)
+                    else report(countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver))
                 }
                 KotlinPerf.span("call.ambiguity") { if (resolveReady) report(overloadAmbiguity(psi, resolver)) }
                 KotlinPerf.span("call.typeArgBounds") { if (resolveReady) reportAll(callTypeArgumentBoundViolation(psi, resolver)) }
@@ -2382,7 +2384,10 @@ internal class KotlinSemanticChecks(
         object LambdaNotApplicable : Applicability // a trailing lambda with no function-typed last parameter to land on
         /** A positional argument's type isn't assignable to its parameter; [prefix] = how many leading
          *  arguments this overload matched (higher = better fit, used to pick the overload to report against). */
-        class TypeBad(val arg: KtExpression, val expected: KotlinType, val actual: KotlinType, val prefix: Int) : Applicability
+        class TypeBad(val arg: KtExpression, val expected: KotlinType, val actual: KotlinType, val prefix: Int) : Applicability {
+            /** The mismatched arguments after the first, in order. */
+            val more = ArrayList<TypeBad>()
+        }
     }
 
     /**
@@ -2408,7 +2413,19 @@ internal class KotlinSemanticChecks(
      * that matched the most leading arguments — so `Text("x", 1231)` blames the `1231`, not the `"x"`), else a
      * "too many arguments". Reused codes (`kt.typeMismatch` / `kt.argumentCount`) keep quick-fixes uniform.
      */
-    private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+    private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
+        val (first, tb) = callNotApplicableFirst(call, resolver) ?: return emptyList()
+        // A call with one candidate has each of its mismatched arguments reported, as the compiler does; with
+        // several it is the call that fits none of them.
+        if (tb == null) return listOf(first)
+        return listOf(first) + tb.more.map { m ->
+            val r = m.arg.textRange
+            mismatchDiagnostic(r.startOffset, r.endOffset, m.actual, m.expected)
+        }
+    }
+
+    /** The call's first applicability error, with the type mismatch behind it when the call has one candidate. */
+    private fun callNotApplicableFirst(call: KtCallExpression, resolver: KotlinResolver): Pair<Diagnostic, Applicability.TypeBad?>? {
         if (call.valueArguments.any { it.getSpreadElement() != null }) return null
         val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
         // A same-named constructor overload might accept the call even when no function does — the method-only
@@ -2421,8 +2438,12 @@ internal class KotlinSemanticChecks(
         if (verdicts.any { it is Applicability.Ok }) return null // some overload accepts the call
         // Prefer the precise type mismatch from the overload that matched the most leading arguments.
         verdicts.filterIsInstance<Applicability.TypeBad>().maxByOrNull { it.prefix }?.let { tb ->
+            val distinct = candidates.distinctBy { c ->
+                val at = (c.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi?.textRange?.startOffset
+                if (c.origin.fromSource && at != null) Pair(c.origin.file?.toString(), at) else c
+            }
             val r = tb.arg.textRange
-            return mismatchDiagnostic(r.startOffset, r.endOffset, tb.actual, tb.expected)
+            return mismatchDiagnostic(r.startOffset, r.endOffset, tb.actual, tb.expected) to tb.takeIf { distinct.size == 1 }
         }
         // The trailing lambda can't be placed in ANY overload (every one's last parameter is non-functional) —
         // `Text("Title") { }`. Reported only when unanimous, so a sibling overload that DOES take a lambda (which
@@ -2430,10 +2451,10 @@ internal class KotlinSemanticChecks(
         if (verdicts.all { it is Applicability.LambdaNotApplicable }) {
             val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
             val r = (call.valueArguments.lastOrNull() as? KtLambdaArgument)?.textRange ?: return null
-            return Diagnostic(
+            return Pair<Diagnostic, Applicability.TypeBad?>(Diagnostic(
                 TextRange(r.startOffset, r.endOffset), Severity.ERROR,
                 "'${callee.getReferencedName()}' has no function-type parameter for this trailing lambda", KotlinDiagnosticCodes.ARGUMENT_COUNT,
-            )
+            ), null)
         }
         // No candidate failed on a type; defer the named/missing cases to their dedicated checks and only own the
         // "too many arguments" verdict (which no other check reports for an overloaded / library / member call).
@@ -2444,10 +2465,10 @@ internal class KotlinSemanticChecks(
             }.distinct().sorted().joinToString("/")
             val r = call.valueArgumentList?.textRange ?: callee.textRange
             val expected = if (arities.isEmpty()) "" else " (expected $arities)"
-            return Diagnostic(
+            return Pair<Diagnostic, Applicability.TypeBad?>(Diagnostic(
                 TextRange(r.startOffset, r.endOffset), Severity.ERROR,
                 "Too many arguments for '${callee.getReferencedName()}'$expected", KotlinDiagnosticCodes.ARGUMENT_COUNT,
-            )
+            ), null)
         }
         return null
     }
@@ -2594,6 +2615,12 @@ internal class KotlinSemanticChecks(
         val supplied = HashSet<Int>()
         var typeBad: Applicability.TypeBad? = null
         var prefix = 0
+        // Type arguments written at the call (`checkSubtype<Int>(x)`) are taken verbatim, so a parameter typed
+        // by one of them is that type exactly.
+        val explicit: Map<String, TypeRef> = call.typeArgumentList?.arguments
+            ?.takeIf { c.typeParameters.isNotEmpty() && it.size == c.typeParameters.size }
+            ?.let { resolver.inferTypeArguments(c, call).takeIf { b -> b.size == c.typeParameters.size } }
+            .orEmpty()
         call.valueArguments.forEachIndexed { i, arg ->
             val named = arg.getArgumentName()?.asName?.identifier
             val idx = when {
@@ -2608,7 +2635,20 @@ internal class KotlinSemanticChecks(
             // anything folding into it) is open-typed here — left to other reasoning.
             if (arg !is KtLambdaArgument && (vararg < 0 || idx < vararg)) {
                 val expr = arg.getArgumentExpression()
-                val pt = c.paramTypes.getOrNull(idx) as? KotlinType
+                val pt = (c.paramTypes.getOrNull(idx) as? KotlinType)?.let { p ->
+                    when {
+                        explicit.isEmpty() -> p
+                        // Checked against a written type argument only where the argument's own type is read, not
+                        // inferred: these calls (`checkSubtype<Int>(x)`) are mostly asking what a smart cast or an
+                        // inference made of `x`, which is where this model is weakest.
+                        expr == null || !typeReadOffTheTree(expr, resolver) -> p
+                        // A symbol read back from the index may name its type parameter without marking it one.
+                        p.typeArguments.isEmpty() && p.qualifiedName in explicit ->
+                            (explicit.getValue(p.qualifiedName) as? KotlinType)?.let { t -> if (p.nullable) t.withNullable(true) else t } ?: p
+                        explicit.keys.any { resolver.mentionsTypeParam(p, it) } -> service.substitute(p, explicit) as? KotlinType ?: p
+                        else -> p
+                    }
+                }
                 val at = expr?.let { resolver.inferType(it) }
                 // A FUNCTIONAL argument (lambda / callable reference / function-typed value) is left unchecked:
                 // its shape vs. the expected type is too imprecise to flag soundly, and these dominate Compose
@@ -2616,7 +2656,12 @@ internal class KotlinSemanticChecks(
                 // ordinary assignability rule, and against a FUNCTION parameter as a category error — a concrete
                 // non-function value can never be a `() -> R` (the `onClick = handler()` missing-lambda mistake,
                 // which otherwise silently binds a `Unit`/null the clickable NPE-crashes on at tap time).
-                if (expr != null && pt != null && at != null && !isFunctional(at)) {
+                if (expr != null && pt != null && isFunctionLiteral(expr) && neverAFunction(pt)) {
+                    // A lambda or anonymous function handed to a parameter no function value can fill.
+                    // Inference types a lambda from what is expected of it, so it may have no type of its own here.
+                    val shown = at ?: KotlinType("kotlin.Function")
+                    Applicability.TypeBad(expr, pt, shown, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
+                } else if (expr != null && pt != null && at != null && !isFunctional(at)) {
                     // A parameter typed by one of the callee's own type parameters is checked against that
                     // parameter's upper bound (`f("s")` for `fun <T : Number> f(x: T)`).
                     val bound = calleeTypeParameterBound(c, pt, resolver)
@@ -2624,10 +2669,12 @@ internal class KotlinSemanticChecks(
                         isFunctional(pt) -> isConcreteNonFunction(at)
                         bound != null -> !pt.nullable && !at.nullable && boundViolated(at, bound)
                         else -> (isMismatch(pt, at) ||
-                            (plainNonNullSourceParameter(c, idx) && nullableForNonNull(pt, at, expr, resolver))) &&
+                            (plainNonNullSourceParameter(c, idx) && nullableForNonNull(pt, at, expr, resolver)) ||
+                            ((plainNumericSourceParameter(c, idx) != null || pt !== c.paramTypes.getOrNull(idx)) &&
+                                numericMismatch(pt, at, expr, resolver))) &&
                             !flowFits(pt, expr, resolver)
                     }
-                    if (bad) { if (typeBad == null) typeBad = Applicability.TypeBad(expr, bound ?: pt, at, prefix) }
+                    if (bad) Applicability.TypeBad(expr, bound ?: pt, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
                     else if (typeBad == null) prefix++ // a matched leading argument (only before the first mismatch)
                 }
             } else if (arg !is KtLambdaArgument && vararg >= 0 && idx >= vararg && arg.getSpreadElement() == null) {
@@ -2635,8 +2682,10 @@ internal class KotlinSemanticChecks(
                 val expr = arg.getArgumentExpression()
                 val pt = c.paramTypes.getOrNull(vararg) as? KotlinType
                 val at = expr?.let { resolver.inferType(it) }
-                if (expr != null && pt != null && at != null && arrayForVarargElement(pt, at) && typeBad == null) {
-                    typeBad = Applicability.TypeBad(expr, pt, at, prefix)
+                val numericBad = expr != null && pt != null && plainNumericSourceParameter(c, vararg) != null &&
+                    numericMismatch(pt, at, expr, resolver)
+                if (expr != null && pt != null && at != null && (arrayForVarargElement(pt, at) || numericBad)) {
+                    Applicability.TypeBad(expr, pt, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
                 }
             }
         }
@@ -2681,8 +2730,12 @@ internal class KotlinSemanticChecks(
         if (left !is KtNameReferenceExpression && left !is KtDotQualifiedExpression) return null
         val right = expr.right ?: return null
         val declared = assignmentTargetType(left, resolver) ?: return null
+        // Numbers are judged strictly only for a local whose number type is written: that target type is a fact.
+        val localNumber = left is KtNameReferenceExpression &&
+            (nearestLocalDecl(left.getReferencedName(), left.textRange.startOffset, left) as? KtProperty)
+                ?.typeReference?.text?.trim()?.removePrefix("kotlin.") in setOf("Int", "Long", "Short", "Byte", "Double", "Float")
         return valueMismatch(
-            declared, right, resolver, platformTarget = isJavaDeclaredProperty(left, resolver), strictNumeric = false,
+            declared, right, resolver, platformTarget = isJavaDeclaredProperty(left, resolver), strictNumeric = localNumber,
         )
     }
 

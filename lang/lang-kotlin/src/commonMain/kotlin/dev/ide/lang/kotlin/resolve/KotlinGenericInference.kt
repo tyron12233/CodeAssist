@@ -3,13 +3,24 @@ package dev.ide.lang.kotlin.resolve
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
-import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
-import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtClass
+import dev.ide.kotlin.syntax.psi.KtClassInitializer
+import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
+import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
+import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
+import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
+import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.siblings
+import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -169,6 +180,8 @@ internal fun KotlinResolver.inferTypeArguments(
  *  - it constrains some value parameter, EVERY one of which received no argument — so no argument could
  *    have bound it. This distinguishes the omitted-argument case from `mutableStateOf(x)` where an
  *    argument is present and inference merely (best-effort) failed.
+ * A type parameter no value parameter mentions at all (`fun <T> materialize(): T`) qualifies instead when the
+ * call sits where nothing outside it can constrain it either (see [noOuterConstraintAt]).
  * Backs off entirely when a concrete expected type drives the inference (`val s: MutableState<String> =
  * mutableStateOf()`), a spread argument is present, or the callee can't be resolved — conservative, so it
  * never reports a type Kotlin would accept. Shared by the editor diagnostic and the interpreter lowering.
@@ -178,7 +191,7 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
     if (call.valueArguments.any { it.getSpreadElement() != null }) return emptyList()
     val sym = resolveCalleeFunction(call) ?: return emptyList()
     if (sym.typeParameters.isEmpty()) return emptyList()
-    val ret = sym.type as? KotlinType ?: return emptyList()
+    val ret = sym.type as? KotlinType
     // A concrete expected type at this position can drive the inference, so it isn't uninferable.
     expectedTypeAt(call.textRange.startOffset)?.let { exp ->
         if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
@@ -192,10 +205,102 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
     val supplied = suppliedValueParameterIndices(sym, call)
     return sym.typeParameters.filter { tp ->
         if (tp in bound || tp == sym.receiverTypeParam) return@filter false
-        if (!mentionsTypeParam(ret, tp)) return@filter false
         val mentioning = sym.paramTypes.indices.filter { mentionsTypeParam(sym.paramTypes[it], tp) }
-        mentioning.isNotEmpty() && mentioning.none { it in supplied }
+        if (mentioning.isEmpty()) {
+            // No value parameter can ever pin it (`fun <T> materialize(): T`, `emptyList()`), so it is
+            // uninferable exactly when nothing outside the call constrains it either: the receiver does not
+            // mention it and the call sits where Kotlin gives it no expected type.
+            if (sym.receiverTypeArgs.any { mentionsTypeParam(it, tp) }) return@filter false
+            return@filter noOuterConstraintAt(call, sym, tp)
+        }
+        if (ret == null || !mentionsTypeParam(ret, tp)) return@filter false
+        mentioning.none { it in supplied }
     }
+}
+
+/**
+ * Whether [call] to [sym] sits where nothing outside it can constrain the callee's type parameter [tp], which
+ * no argument can pin either. That is a statement whose value is discarded (any block statement but a
+ * lambda's or a branch's last), and the initializer or expression body of a declaration with no written type.
+ * Anything else (an argument, a return, an operand, a lambda result, an if/when branch) may carry an expected
+ * type our model does not see, so it does not qualify.
+ *
+ * The rest is read off the declaration where there is one, since a symbol reaches here with its receiver's
+ * type arguments already substituted: the callee must be the call's only candidate, neither its receiver nor
+ * any value parameter may mention [tp], and no type parameter bound may name another type parameter
+ * (`R : List<T>` lets inference reach one parameter through another). A library callee qualifies only as a
+ * plain top-level or static function, never an extension or a member reached through a receiver.
+ */
+private fun KotlinResolver.noOuterConstraintAt(call: KtCallExpression, sym: KotlinSymbol, tp: String): Boolean {
+    val q = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
+    val e: KtExpression = q ?: call
+    val positionFree = when (val parent = e.parent) {
+        is KtBlockExpression -> {
+            val last = parent.statements.lastOrNull() === e
+            !last || when (parent.parent) {
+                is KtNamedFunction, is KtPropertyAccessor, is KtClassInitializer, is KtSecondaryConstructor -> true
+                else -> false
+            }
+        }
+        is KtProperty -> parent.initializer === e && parent.typeReference == null && !parent.hasDelegate()
+        // Not an anonymous function (`run(fun() = make())`): its result type comes from what is expected of it.
+        is KtNamedFunction -> parent.nameIdentifier != null && parent.bodyExpression === e && !parent.hasBlockBody() &&
+            parent.typeReference == null && parent.modifierList?.hasModifier(KtTokens.OVERRIDE_KEYWORD) != true
+        else -> false
+    }
+    if (!positionFree) return false
+    // Inside a lambda or an anonymous function the call may belong to a builder inference (`buildList { val x =
+    // make(); add(x) }`), which infers a local's type from how it is used later in the lambda.
+    var up: KtElement? = e.parent
+    while (up != null && !(up is KtNamedFunction && up.nameIdentifier != null) && up !is KtClassOrObject) {
+        if (up is KtLambdaExpression || up is KtNamedFunction) return false
+        up = up.parent
+    }
+    // The same declaration can be listed twice (from the file and from the project index).
+    val targets = runCatching { callTargets(call) }.getOrDefault(emptyList())
+        .filter { it.kind == SymbolKind.METHOD || it.kind == SymbolKind.CONSTRUCTOR }
+        .distinctBy { t ->
+            val at = ((t.declaration() as? KotlinDomNode)?.psi)?.textRange?.startOffset
+            if (t.origin.fromSource && at != null) Pair(t.origin.file?.toString(), at) else t
+        }
+    if (targets.size != 1 || targets[0].typeParameters != sym.typeParameters) return false
+    if (sym.typeParamBoundNames.any { it != null }) return false
+    if (!sym.origin.fromSource) {
+        if (sym.kind != SymbolKind.METHOD || sym.isExtension || sym.receiverTypeFqn != null) return false
+        if (q != null && !isTypeReceiver(q.receiverExpression)) return false
+        if (sym.paramTypes.any { it == null }) return false
+        // An erased binary bound may hide a path from one type parameter to another: nothing may pin any.
+        val supplied = suppliedValueParameterIndices(sym, call)
+        return supplied.none { i -> sym.typeParameters.any { mentionsTypeParam(sym.paramTypes.getOrNull(i), it) } }
+    }
+    val fn = (sym.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction ?: return false
+    if (fn.typeConstraints.isNotEmpty()) return false
+    val own = setOf(tp)
+    if (mentionsAnyName(fn.receiverTypeReference, own)) return false
+    if (fn.valueParameters.any { it.typeReference == null || mentionsAnyName(it.typeReference, own) }) return false
+    // Every type parameter the bounds could name: the function's own and its enclosing classes'.
+    val typeParamNames = HashSet<String>()
+    fn.typeParameters.mapNotNullTo(typeParamNames) { it.name }
+    var owner: KtElement? = fn.parent
+    while (owner != null) {
+        if (owner is KtClass) owner.typeParameters.mapNotNullTo(typeParamNames) { it.name }
+        owner = owner.parent
+    }
+    return fn.typeParameters.none { p -> mentionsAnyName(p.extendsBound, typeParamNames) }
+}
+
+/** Whether the type text under [t] names any of [names] (a written bound such as `List<T>`). */
+private fun mentionsAnyName(t: KtElement?, names: Set<String>): Boolean {
+    if (t == null) return false
+    var found = false
+    fun rec(e: KtElement) {
+        if (found) return
+        if (e is KtNameReferenceExpression && e.getReferencedName() in names) { found = true; return }
+        var c = e.firstChild
+        while (c != null && !found) { (c as? KtElement)?.let(::rec); c = c.nextSibling }
+    }
+    rec(t)
+    return found
 }
 
 /** The return type a lambda expects when [call] (or the qualified expression it ends) is that lambda's LAST

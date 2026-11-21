@@ -176,12 +176,21 @@ internal fun KotlinSemanticChecks.valueMismatch(
         }
         return null
     }
+    if (isFunctionLiteral(e) && neverAFunction(declared)) {
+        // Inference types a lambda from what is expected of it, so with no function type expected it may have none.
+        resolver.inferType(e)?.let { return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, it, declared) }
+        return error(e, "Type mismatch: a function value is not a ${renderType(declared)}", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
     val actual = resolver.inferType(e)
     // A branch of a choice is judged on its own only when its type is one to rely on: a literal, or a local
     // whose type was just read off its declaration. The whole expression (depth 0) keeps the rule it had.
     val trusted = depth == 0 || plainlyTyped(e)
-    if (trusted && (isMismatch(declared, actual) || (strictNumeric && numericMismatch(declared, actual, e)))) {
-        return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, actual!!, declared)
+    if (trusted && actual != null && isMismatch(declared, actual)) {
+        return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, actual, declared)
+    }
+    if (trusted && strictNumeric && numericMismatch(declared, actual, e, resolver)) {
+        val shown = actual ?: numericConst(e, resolver)?.let { service.typeByFqn(it.default) } ?: return null
+        return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, shown, declared)
     }
     if (depth < 6) {
         val alternatives: List<KtExpression?> = when (e) {
@@ -201,6 +210,28 @@ internal fun KotlinSemanticChecks.valueMismatch(
         return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, actual!!.withNullable(true), declared)
     }
     return null
+}
+
+/** A lambda or an anonymous function: a function value by its very shape, whatever inference makes of it. */
+internal fun isFunctionLiteral(e: KtExpression): Boolean = when (val u = unwrapParen(e)) {
+    is KtLambdaExpression -> true
+    is KtNamedFunction -> u.nameIdentifier == null
+    is KtLabeledExpression -> u.baseExpression?.let(::isFunctionLiteral) == true
+    else -> false
+}
+
+/**
+ * Whether no function value can ever be a [declared]: a known class, not an interface (a lambda is a
+ * `Serializable`, and a fun interface takes one through SAM conversion), not `Any`, and no function type.
+ */
+internal fun KotlinSemanticChecks.neverAFunction(declared: KotlinType): Boolean {
+    if (declared.isTypeParameter) return false
+    val d = canonicalTypeForCheck(declared)
+    // A lambda's value may be coerced to Unit where Unit is expected of it, so leave Unit out too.
+    if (d.qualifiedName == "kotlin.Any" || d.qualifiedName == UNIT || isFunctional(d) || TypeRendering.isFunctionType(d.qualifiedName)) return false
+    if (d.qualifiedName.startsWith("kotlin.jvm.internal.") || d.qualifiedName == "kotlin.Function") return false
+    if (service.isInterfaceType(d.qualifiedName) != false) return false
+    return isConcreteNonFunction(d)
 }
 
 /**
@@ -295,9 +326,15 @@ internal fun KotlinSemanticChecks.reliablyNullable(value: KtExpression, resolver
  * expression is not: a constant one (`1 + 2`) adapts like a literal, and the promotion rules for the rest
  * are a guess this check does not need to make.
  */
-internal fun KotlinSemanticChecks.numericMismatch(declared: KotlinType?, actual: KotlinType?, value: KtExpression): Boolean {
-    if (declared == null || actual == null) return false
+internal fun KotlinSemanticChecks.numericMismatch(
+    declared: KotlinType?, actual: KotlinType?, value: KtExpression, resolver: KotlinResolver? = null,
+): Boolean {
+    if (declared == null || declared.isTypeParameter) return false
     val d = canonicalName(declared)
+    // A number expression read off the tree (literals in range, arithmetic on them, conversions, plainly
+    // typed names) settles it whatever inference made of it.
+    if (d in NUMERIC && resolver != null) numericConst(value, resolver)?.let { return d !in it.types }
+    if (actual == null) return false
     val a = canonicalName(actual)
     if (d !in NUMERIC || a !in NUMERIC || d == a) return false
     var e = unwrapParen(value)
@@ -1194,6 +1231,24 @@ internal fun KotlinSemanticChecks.explicitTypeTextOf(ref: KtNameReferenceExpress
         else -> null
     } ?: return null
     return typeRef.text.trim().removeSuffix("?").trim()
+}
+
+/**
+ * Whether [e]'s type is a fact no smart cast can change: a literal, a number expression, or a local or
+ * parameter whose written type is a final class (a cast can only narrow it to itself).
+ */
+internal fun KotlinSemanticChecks.typeReadOffTheTree(e: KtExpression, resolver: KotlinResolver): Boolean {
+    val u = unwrapParen(e)
+    if (isLiteral(u)) return true
+    if (u !is KtNameReferenceExpression) return false
+    val text = explicitTypeTextOf(u) ?: return false
+    val decl = nearestLocalDecl(u.getReferencedName(), u.textRange.startOffset, u)
+    if (decl is KtProperty && decl.isVar) return false
+    if ((decl as? KtProperty)?.typeReference?.text?.trim()?.endsWith("?") == true) return false
+    if ((decl as? KtParameter)?.typeReference?.text?.trim()?.endsWith("?") == true) return false
+    if ('<' in text) return false
+    val fqn = service.resolveTypeName(text, resolver.fileContext) ?: return false
+    return service.isFinalType(fqn) == true
 }
 
 /** A literal, or a local/parameter with a written type: an expression whose type is read, not inferred. */
